@@ -429,6 +429,43 @@ def _print_retrograde_embed_history(payload: Dict[str, Any]) -> None:
             print(f"  - chunk {result.get('chunk_id')}: {result.get('job_id')}")
 
 
+def _print_retrograde_transition(retrograde: Dict[str, Any]) -> None:
+    """Print a compact wizard-transition Retrograde outcome summary."""
+
+    print("Retrograde cold-start history:")
+    if not retrograde.get("enabled"):
+        print(f"  skipped ({retrograde.get('skip_reason')})")
+        return
+    weird = retrograde.get("weird") or {}
+    surface = retrograde.get("surface") or {}
+    visible = surface.get("visible") or {}
+    hidden = surface.get("hidden_counts") or {}
+    print(f"  model: {retrograde.get('model')}")
+    print(f"  weird: {weird.get('level')} ({weird.get('genre')})")
+    for entity in visible.get("entities") or []:
+        print(
+            f"  - {entity.get('kind')}: {entity.get('name')} "
+            f"({entity.get('status')})"
+        )
+    for relationship in visible.get("relationships") or []:
+        print(
+            f"  - relationship: {relationship.get('subject')} "
+            f"--{relationship.get('relationship_type')}--> "
+            f"{relationship.get('object')}"
+        )
+    print(
+        "  hidden: "
+        f"{hidden.get('world_events', 0)} events, "
+        f"{hidden.get('entity_tags', 0)} tags, "
+        f"{hidden.get('pair_tags', 0)} pair tags, "
+        f"{hidden.get('deferred_seeds', 0)} deferred seeds"
+    )
+    embedded = retrograde.get("embedded_chunk_ids") or []
+    print(f"  embedded summary chunks: {len(embedded)}")
+    for timing in retrograde.get("timings") or []:
+        print(f"  timing {timing.get('stage')}: {timing.get('seconds'):.1f}s")
+
+
 def _print_faction_audit(payload: Dict[str, Any]) -> None:
     """Print a dry-run faction table migration audit in a compact CLI format."""
 
@@ -807,6 +844,10 @@ def emit_output(payload: Dict[str, Any], as_json: bool, truncate: bool = False) 
         _print_retrograde_embed_history(payload)
         print()
 
+    if payload.get("retrograde"):
+        _print_retrograde_transition(payload["retrograde"])
+        print()
+
     if payload.get("faction_audit"):
         _print_faction_audit(payload)
         print()
@@ -970,6 +1011,25 @@ def run_load(args: argparse.Namespace) -> Dict[str, Any]:
         return {"success": False, "error": str(e)}
 
 
+def _transition_timeout_seconds() -> int:
+    """Read the wizard transition HTTP timeout from nexus.toml.
+
+    Retrograde cold-start generation (frontier seed + expansion calls plus
+    persistence and embedding) runs inside the transition request, so the
+    budget is minutes, not the seconds ordinary wizard turns need.
+    """
+
+    from nexus.config import load_settings
+
+    orrery_settings = load_settings().orrery
+    if orrery_settings is None:
+        raise ValueError(
+            "nexus.toml is missing the [orrery] section required for the "
+            "wizard transition timeout"
+        )
+    return orrery_settings.retrograde.wizard.transition_timeout_seconds
+
+
 def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
     """
     Advance the story (wizard or narrative).
@@ -978,6 +1038,7 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
     - Wizard mode: /api/story/new/chat
     - Narrative mode: /api/narrative/continue
     """
+    retrograde_info: Optional[Dict[str, Any]] = None
     try:
         # First, get slot state to determine mode
         state_url = f"{get_api_url()}/api/slot/{args.slot}/state"
@@ -1013,16 +1074,21 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
         if state.get("is_wizard_mode"):
             # Check if wizard is ready for transition to narrative
             if state.get("phase") == "ready":
-                # Call transition endpoint, then bootstrap
+                # Call transition endpoint, then bootstrap. Retrograde
+                # cold-start generation runs inside the transition, so the
+                # timeout comes from orrery.retrograde.wizard settings.
                 transition_url = f"{get_api_url()}/api/story/new/transition"
                 transition_response = requests.post(
-                    transition_url, json={"slot": args.slot}, timeout=60
+                    transition_url,
+                    json={"slot": args.slot},
+                    timeout=_transition_timeout_seconds(),
                 )
                 if not transition_response.ok:
                     return {
                         "success": False,
                         "error": f"Transition failed: {transition_response.text}",
                     }
+                retrograde_info = transition_response.json().get("retrograde")
 
                 # Transition complete - refresh state and continue to narrative
                 state_response = requests.get(state_url, timeout=30)
@@ -1211,9 +1277,14 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                         # Seed phase complete → transition to narrative mode
                         transition_url = f"{get_api_url()}/api/story/new/transition"
                         transition_response = requests.post(
-                            transition_url, json={"slot": args.slot}, timeout=60
+                            transition_url,
+                            json={"slot": args.slot},
+                            timeout=_transition_timeout_seconds(),
                         )
                         if transition_response.ok:
+                            result["retrograde"] = transition_response.json().get(
+                                "retrograde"
+                            )
                             # Bootstrap narrative by calling continue endpoint
                             continue_url = f"{get_api_url()}/api/narrative/continue"
                             continue_payload = {"slot": args.slot, "user_text": ""}
@@ -1270,12 +1341,15 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                         if _is_terminal_generation_status(status.get("status")):
                             # Fetch incubator for result
                             load_result = run_load(args)
-                            return {
+                            terminal_result = {
                                 "success": True,
                                 "message": load_result.get("message"),
                                 "choices": load_result.get("choices", []),
                                 "chunk_id": status.get("chunk_id"),
                             }
+                            if retrograde_info:
+                                terminal_result["retrograde"] = retrograde_info
+                            return terminal_result
                         elif status.get("status") == "error":
                             return {
                                 "success": False,
@@ -1284,11 +1358,14 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                     time.sleep(1)
                 return {"success": False, "error": "Generation timed out"}
 
-            return {
+            no_session_result = {
                 "success": True,
                 "message": data.get("message"),
                 "session_id": session_id,
             }
+            if retrograde_info:
+                no_session_result["retrograde"] = retrograde_info
+            return no_session_result
 
     except requests.exceptions.ConnectionError:
         return {

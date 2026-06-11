@@ -3,11 +3,22 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Literal, Mapping, Optional, cast
+from typing import Annotated, Any, Literal, Mapping, Optional, cast
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from nexus.agents.orrery.retrograde_vocabulary import SeedEligibleVocabulary
+from nexus.agents.orrery.retrograde_vocabulary import (
+    ENTITY_REF_MAX_LENGTH,
+    SeedEligibleVocabulary,
+)
+
+EntityRef = Annotated[str, Field(min_length=1, max_length=ENTITY_REF_MAX_LENGTH)]
+"""Prompt-local entity ref: a proper name, never a description.
+
+Bounded because refs become canonical ``name`` values when persistence
+stages minimum-viable stubs (``characters.name``/``places.name`` are
+``varchar(50)``).
+"""
 
 SeedCandidateSchemaVersion = Literal["orrery_retrograde_seed_candidates.v0"]
 SEED_CANDIDATE_RESPONSE_SCHEMA_VERSION: SeedCandidateSchemaVersion = (
@@ -35,9 +46,13 @@ class RetrogradeSeedEventHint(BaseModel):
         max_length=600,
         description="Brief natural-language event summary.",
     )
-    participating_entities: list[str] = Field(
+    participating_entities: list[EntityRef] = Field(
         default_factory=list,
-        description="Prompt-local entity names or refs involved in the event.",
+        description=(
+            "Prompt-local entity names involved in the event. Each entry is a "
+            f"proper name of at most {ENTITY_REF_MAX_LENGTH} characters, never "
+            "a descriptive phrase."
+        ),
     )
 
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
@@ -46,9 +61,11 @@ class RetrogradeSeedEventHint(BaseModel):
 class RetrogradeSingleEntityTagHint(BaseModel):
     """One proposed single-entity tag outcome for a candidate seed."""
 
-    entity_ref: str = Field(
-        min_length=1,
-        description="Prompt-local entity name or ref receiving the tag.",
+    entity_ref: EntityRef = Field(
+        description=(
+            "Prompt-local entity name receiving the tag: a proper name of at "
+            f"most {ENTITY_REF_MAX_LENGTH} characters, never a description."
+        ),
     )
     entity_kind: str = Field(
         min_length=1,
@@ -77,10 +94,10 @@ class RetrogradeSingleEntityTagHint(BaseModel):
 class RetrogradePairTagHint(BaseModel):
     """One proposed directed multi-entity tag outcome."""
 
-    subject_ref: str = Field(min_length=1)
+    subject_ref: EntityRef
     subject_kind: str = Field(min_length=1)
     tag: str = Field(min_length=1)
-    object_ref: str = Field(min_length=1)
+    object_ref: EntityRef
     object_kind: str = Field(min_length=1)
     rationale: Optional[str] = Field(default=None, max_length=500)
 
@@ -90,10 +107,10 @@ class RetrogradePairTagHint(BaseModel):
 class RetrogradeRelationshipHint(BaseModel):
     """One proposed relationship primitive implied by a candidate seed."""
 
-    subject_ref: str = Field(min_length=1)
+    subject_ref: EntityRef
     subject_kind: str = Field(min_length=1)
     relationship_type: str = Field(min_length=1)
-    object_ref: str = Field(min_length=1)
+    object_ref: EntityRef
     object_kind: str = Field(min_length=1)
     rationale: Optional[str] = Field(default=None, max_length=500)
 
@@ -379,6 +396,10 @@ def _response_contract_issues(
         policy: set(tags)
         for policy, tags in vocabulary.get("registered_tags_by_seed_policy", {}).items()
     }
+    tags_by_entity_kind = {
+        kind: set(tags)
+        for kind, tags in vocabulary.get("registered_tags_by_entity_kind", {}).items()
+    }
 
     for candidate in response.candidates:
         issues.extend(
@@ -391,6 +412,7 @@ def _response_contract_issues(
                 pair_definitions=pair_definitions,
                 registered_tags=registered_tags,
                 tags_by_seed_policy=tags_by_seed_policy,
+                tags_by_entity_kind=tags_by_entity_kind,
             )
         )
 
@@ -407,6 +429,7 @@ def _candidate_contract_issues(
     pair_definitions: Mapping[str, Mapping[str, Any]],
     registered_tags: set[str],
     tags_by_seed_policy: Mapping[str, set[str]],
+    tags_by_entity_kind: Mapping[str, set[str]],
 ) -> list[str]:
     issues: list[str] = []
     candidate_prefix = f"candidate {candidate.seed_id!r}"
@@ -443,6 +466,7 @@ def _candidate_contract_issues(
                 entity_kinds=entity_kinds,
                 registered_tags=registered_tags,
                 tags_by_seed_policy=tags_by_seed_policy,
+                tags_by_entity_kind=tags_by_entity_kind,
                 events_by_ref=events_by_ref,
             )
         )
@@ -477,6 +501,7 @@ def _single_tag_issues(
     entity_kinds: set[str],
     registered_tags: set[str],
     tags_by_seed_policy: Mapping[str, set[str]],
+    tags_by_entity_kind: Mapping[str, set[str]],
     events_by_ref: Mapping[str, RetrogradeSeedEventHint],
 ) -> list[str]:
     issues: list[str] = []
@@ -489,6 +514,19 @@ def _single_tag_issues(
         issues.append(
             f"{candidate_prefix} proposes unregistered single-entity tag "
             f"{tag_hint.tag!r}"
+        )
+        return issues
+    # Persistence resolves tag <-> entity-kind compatibility through the
+    # slot's tag_category_registry; enforce the same constraint here so an
+    # incompatible hint is repaired at generation time instead of blocking
+    # the wizard transition. Only enforceable when the live registry mapping
+    # is present in the vocabulary (i.e., enumeration ran against a slot).
+    if tags_by_entity_kind and tag_hint.tag not in tags_by_entity_kind.get(
+        tag_hint.entity_kind, set()
+    ):
+        issues.append(
+            f"{candidate_prefix} tag {tag_hint.tag!r} is not registered for "
+            f"entity_kind {tag_hint.entity_kind!r}"
         )
         return issues
 
@@ -612,6 +650,11 @@ def _prompt_vocabulary(vocabulary: SeedEligibleVocabulary) -> dict[str, Any]:
         "registered_tags_by_seed_policy": vocabulary.get(
             "registered_tags_by_seed_policy", {}
         ),
+        # The validator enforces per-kind tag registration, so Skald must see
+        # the same mapping up front; otherwise kind mismatches burn retries.
+        "registered_tags_by_entity_kind": vocabulary.get(
+            "registered_tags_by_entity_kind", {}
+        ),
         "multi_entity_tag_definitions": vocabulary["multi_entity_tag_definitions"],
     }
 
@@ -668,9 +711,21 @@ def _hard_validation_rules() -> list[str]:
             "from multi_entity_tag_definitions."
         ),
         (
+            "Single-entity tags must be registered for the tagged entity_kind "
+            "in registered_tags_by_entity_kind; a tag listed only under another "
+            "kind is illegal."
+        ),
+        (
             "selected_seed_ids and rejected_seed_ids must reference returned "
             "candidate seed_id values, and a seed cannot be both selected and "
             "rejected."
+        ),
+        (
+            "Entity refs (entity_ref, subject_ref, object_ref, "
+            "participating_entities) are proper names of at most "
+            f"{ENTITY_REF_MAX_LENGTH} characters -- never sentences or "
+            "descriptive phrases. Implied new entities get a short invented "
+            "name, not a description."
         ),
         "If a hint is marginal or cannot satisfy these rules, omit the hint.",
     ]

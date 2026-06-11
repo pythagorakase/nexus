@@ -20,6 +20,7 @@ from nexus.agents.orrery.retrograde_markers import (
     RETROGRADE_SUMMARY_MARKER,
     retrograde_event_marker,
 )
+from nexus.agents.orrery.retrograde_vocabulary import normalize_entity_ref
 
 RETROGRADE_PERSISTENCE_SCHEMA_VERSION = "orrery_retrograde_persistence_plan.v1"
 RETROGRADE_SOURCE_KIND = "retrograde"
@@ -190,7 +191,7 @@ def _build_plan(
         inserted_stub_keys=inserted_stub_keys,
     )
     creatable_refs = frozenset(
-        (row["entity_kind"], _normalize_ref(row["entity_ref"]))
+        (row["entity_kind"], normalize_entity_ref(row["entity_ref"]))
         for row in entity_stub_rows
         if row["status"] in {"would_insert", "inserted"}
     )
@@ -1354,7 +1355,7 @@ def _load_entity_index(cur: Any) -> dict[tuple[str, str], list[_EntityRecord]]:
             place_id=_optional_int(_row_value(row, "place_id", 5)),
         )
         index.setdefault(
-            (record.entity_kind, _normalize_ref(record.name)),
+            (record.entity_kind, normalize_entity_ref(record.name)),
             [],
         ).append(record)
     return index
@@ -1481,7 +1482,7 @@ def _collect_expansion_entity_refs(
     ) -> None:
         if not entity_ref or not entity_kind:
             return
-        key = (str(entity_kind), _normalize_ref(str(entity_ref)))
+        key = (str(entity_kind), normalize_entity_ref(str(entity_ref)))
         entry = refs.setdefault(
             key,
             {
@@ -1590,7 +1591,7 @@ def _insert_missing_entity_stubs(
             _insert_faction_stub(cur, entity_ref=entity_ref, sources=row["sources"])
         else:
             raise ValueError(f"Unsupported Retrograde stub entity kind {entity_kind!r}")
-        inserted.add((entity_kind, _normalize_ref(entity_ref)))
+        inserted.add((entity_kind, normalize_entity_ref(entity_ref)))
     return frozenset(inserted)
 
 
@@ -1794,7 +1795,7 @@ def _resolve_entity(
     role: str,
     creatable_refs: frozenset[tuple[str, str]],
 ) -> dict[str, Any]:
-    key = (entity_kind, _normalize_ref(entity_ref))
+    key = (entity_kind, normalize_entity_ref(entity_ref))
     matches = list(entity_index.get(key, []))
     base = {
         "entity_ref": entity_ref,
@@ -1865,24 +1866,42 @@ def _prologue_anchor_plan(
     }
 
 
+_BLOCKER_DETAIL_LIMIT = 8
+
+
+def _blocker_details(parts: list[str]) -> str:
+    """Join blocker item details, truncating very long lists."""
+
+    shown = parts[:_BLOCKER_DETAIL_LIMIT]
+    suffix = "" if len(parts) <= _BLOCKER_DETAIL_LIMIT else ", ..."
+    return ", ".join(shown) + suffix
+
+
 def _append_reference_blockers(
     execute_blockers: list[dict[str, str]],
     reference_issues: Sequence[Mapping[str, Any]],
 ) -> None:
     if not reference_issues:
         return
-    unresolved_count = sum(
-        1
+    unresolved = [
+        issue
         for issue in reference_issues
         if issue.get("resolution") in {"unresolved", "ambiguous", "self_edge"}
-    )
-    if unresolved_count:
+    ]
+    if unresolved:
+        details = _blocker_details(
+            [
+                f"{issue.get('entity_kind')}:{issue.get('entity_ref')} "
+                f"({issue.get('resolution')})"
+                for issue in unresolved
+            ]
+        )
         execute_blockers.append(
             {
                 "id": "unresolved_or_ambiguous_entity_refs",
                 "reason": (
-                    f"{unresolved_count} entity references must resolve before "
-                    "Retrograde can write canonical rows"
+                    f"{len(unresolved)} entity references must resolve before "
+                    f"Retrograde can write canonical rows: {details}"
                 ),
             }
         )
@@ -1894,12 +1913,18 @@ def _append_vocabulary_blockers(
 ) -> None:
     if not vocabulary_issues:
         return
+    details = _blocker_details(
+        [
+            f"{issue.get('kind')}:{issue.get('value')} ({issue.get('reason')})"
+            for issue in vocabulary_issues
+        ]
+    )
     execute_blockers.append(
         {
             "id": "missing_slot_vocabulary",
             "reason": (
                 f"{len(vocabulary_issues)} planned vocabulary entries are not "
-                "registered in this slot"
+                f"registered in this slot: {details}"
             ),
         }
     )
@@ -1911,12 +1936,19 @@ def _append_relationship_blockers(
 ) -> None:
     if not relationship_issues:
         return
+    details = _blocker_details(
+        [
+            f"{issue.get('subject_ref')}-[{issue.get('relationship_type')}]->"
+            f"{issue.get('object_ref')} ({issue.get('reason')})"
+            for issue in relationship_issues
+        ]
+    )
     execute_blockers.append(
         {
             "id": "unsupported_relationship_rows",
             "reason": (
                 f"{len(relationship_issues)} relationship_plan rows cannot be "
-                "written to canonical relationship tables"
+                f"written to canonical relationship tables: {details}"
             ),
         }
     )
@@ -1926,10 +1958,6 @@ def _source_event_template_id(source_event_ref: Any) -> Optional[str]:
     if not source_event_ref:
         return None
     return f"retrograde:{source_event_ref}"
-
-
-def _normalize_ref(value: str) -> str:
-    return " ".join(value.strip().casefold().split())
 
 
 def _optional_int(value: Any) -> Optional[int]:

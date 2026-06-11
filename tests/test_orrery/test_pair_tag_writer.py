@@ -90,7 +90,9 @@ def test_entities(
             )
         char_a, char_b = char_rows[0][0], char_rows[1][0]
 
-        cur.execute("SELECT id FROM entities WHERE kind = 'faction' ORDER BY id LIMIT 1")
+        cur.execute(
+            "SELECT id FROM entities WHERE kind = 'faction' ORDER BY id LIMIT 1"
+        )
         faction_row = cur.fetchone()
         faction = faction_row[0] if faction_row else None
 
@@ -417,7 +419,9 @@ def test_polymorphic_object_kind_faction_path(
     """
 
     if test_entities.faction is None:
-        pytest.skip(f"{TEST_DBNAME} has no faction entities; skipping faction polymorphism case.")
+        pytest.skip(
+            f"{TEST_DBNAME} has no faction entities; skipping faction polymorphism case."
+        )
 
     with slot_connection:
         with slot_connection.cursor() as cur:

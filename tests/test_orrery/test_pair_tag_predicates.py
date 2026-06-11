@@ -189,7 +189,12 @@ def test_exists_returns_true_after_bestowal(
 
     with slot_connection:
         with slot_connection.cursor() as cur:
-            _bestow(cur, subject=test_entities.char_a, obj=test_entities.char_b, tag="mentors")
+            _bestow(
+                cur,
+                subject=test_entities.char_a,
+                obj=test_entities.char_b,
+                tag="mentors",
+            )
             assert (
                 pair_tag_exists(
                     cur,
@@ -209,7 +214,12 @@ def test_exists_returns_false_after_clear(
 
     with slot_connection:
         with slot_connection.cursor() as cur:
-            _bestow(cur, subject=test_entities.char_a, obj=test_entities.char_b, tag="mentors")
+            _bestow(
+                cur,
+                subject=test_entities.char_a,
+                obj=test_entities.char_b,
+                tag="mentors",
+            )
             clear_pair_tag(
                 cur,
                 subject_entity_id=test_entities.char_a,
@@ -235,7 +245,12 @@ def test_exists_is_direction_sensitive(
 
     with slot_connection:
         with slot_connection.cursor() as cur:
-            _bestow(cur, subject=test_entities.char_a, obj=test_entities.char_b, tag="mentors")
+            _bestow(
+                cur,
+                subject=test_entities.char_a,
+                obj=test_entities.char_b,
+                tag="mentors",
+            )
             assert (
                 pair_tag_exists(
                     cur,
@@ -287,8 +302,18 @@ def test_lookup_subjects_returns_multiple_in_id_order(
 
     with slot_connection:
         with slot_connection.cursor() as cur:
-            _bestow(cur, subject=test_entities.char_a, obj=test_entities.char_c, tag="mentors")
-            _bestow(cur, subject=test_entities.char_b, obj=test_entities.char_c, tag="mentors")
+            _bestow(
+                cur,
+                subject=test_entities.char_a,
+                obj=test_entities.char_c,
+                tag="mentors",
+            )
+            _bestow(
+                cur,
+                subject=test_entities.char_b,
+                obj=test_entities.char_c,
+                tag="mentors",
+            )
             subjects = lookup_pair_tag_subjects(
                 cur,
                 object_entity_id=test_entities.char_c,
@@ -305,8 +330,18 @@ def test_lookup_subjects_filters_by_tag(
 
     with slot_connection:
         with slot_connection.cursor() as cur:
-            _bestow(cur, subject=test_entities.char_a, obj=test_entities.char_b, tag="mentors")
-            _bestow(cur, subject=test_entities.char_c, obj=test_entities.char_b, tag="protects")
+            _bestow(
+                cur,
+                subject=test_entities.char_a,
+                obj=test_entities.char_b,
+                tag="mentors",
+            )
+            _bestow(
+                cur,
+                subject=test_entities.char_c,
+                obj=test_entities.char_b,
+                tag="protects",
+            )
             assert lookup_pair_tag_subjects(
                 cur, object_entity_id=test_entities.char_b, tag="mentors"
             ) == [test_entities.char_a]
@@ -323,8 +358,18 @@ def test_lookup_subjects_excludes_cleared(
 
     with slot_connection:
         with slot_connection.cursor() as cur:
-            _bestow(cur, subject=test_entities.char_a, obj=test_entities.char_c, tag="mentors")
-            _bestow(cur, subject=test_entities.char_b, obj=test_entities.char_c, tag="mentors")
+            _bestow(
+                cur,
+                subject=test_entities.char_a,
+                obj=test_entities.char_c,
+                tag="mentors",
+            )
+            _bestow(
+                cur,
+                subject=test_entities.char_b,
+                obj=test_entities.char_c,
+                tag="mentors",
+            )
             clear_pair_tag(
                 cur,
                 subject_entity_id=test_entities.char_a,
@@ -370,8 +415,18 @@ def test_lookup_objects_returns_multiple_in_id_order(
 
     with slot_connection:
         with slot_connection.cursor() as cur:
-            _bestow(cur, subject=test_entities.char_a, obj=test_entities.char_b, tag="mentors")
-            _bestow(cur, subject=test_entities.char_a, obj=test_entities.char_c, tag="mentors")
+            _bestow(
+                cur,
+                subject=test_entities.char_a,
+                obj=test_entities.char_b,
+                tag="mentors",
+            )
+            _bestow(
+                cur,
+                subject=test_entities.char_a,
+                obj=test_entities.char_c,
+                tag="mentors",
+            )
             objects = lookup_pair_tag_objects(
                 cur,
                 subject_entity_id=test_entities.char_a,
@@ -388,8 +443,18 @@ def test_lookup_objects_excludes_cleared(
 
     with slot_connection:
         with slot_connection.cursor() as cur:
-            _bestow(cur, subject=test_entities.char_a, obj=test_entities.char_b, tag="mentors")
-            _bestow(cur, subject=test_entities.char_a, obj=test_entities.char_c, tag="mentors")
+            _bestow(
+                cur,
+                subject=test_entities.char_a,
+                obj=test_entities.char_b,
+                tag="mentors",
+            )
+            _bestow(
+                cur,
+                subject=test_entities.char_a,
+                obj=test_entities.char_c,
+                tag="mentors",
+            )
             clear_pair_tag(
                 cur,
                 subject_entity_id=test_entities.char_a,
@@ -412,8 +477,18 @@ def test_lookup_objects_filters_by_tag(
 
     with slot_connection:
         with slot_connection.cursor() as cur:
-            _bestow(cur, subject=test_entities.char_a, obj=test_entities.char_b, tag="mentors")
-            _bestow(cur, subject=test_entities.char_a, obj=test_entities.char_c, tag="protects")
+            _bestow(
+                cur,
+                subject=test_entities.char_a,
+                obj=test_entities.char_b,
+                tag="mentors",
+            )
+            _bestow(
+                cur,
+                subject=test_entities.char_a,
+                obj=test_entities.char_c,
+                tag="protects",
+            )
             assert lookup_pair_tag_objects(
                 cur, subject_entity_id=test_entities.char_a, tag="mentors"
             ) == [test_entities.char_b]

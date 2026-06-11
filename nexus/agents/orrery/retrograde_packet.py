@@ -15,6 +15,12 @@ from nexus.config.settings_models import Settings
 PACKET_SCHEMA_VERSION = "orrery_retrograde_dry_run_packet.v0"
 SEED_REQUEST_SCHEMA_VERSION = "orrery_retrograde_seed_request.v0"
 WEIRD_LEVELS = frozenset({"low", "medium", "high"})
+# Prompt-section headings that carry first-class entity cards. The R6 entity
+# budget check (retrograde_expansion._packet_known_entity_keys) matches these
+# strings to rebuild the known-entity set, so they must be shared constants:
+# silent heading drift would empty that set and hard-block valid expansions.
+CORE_ENTITIES_HEADING = "Core entities"
+NAMED_SEED_NPCS_HEADING = "Named seed NPCs"
 SEED_BUDGETS: Mapping[str, Mapping[str, int]] = {
     "low": {"generate_candidates": 6, "select_target": 3, "deferred_secret_cap": 1},
     "medium": {"generate_candidates": 9, "select_target": 4, "deferred_secret_cap": 2},
@@ -84,10 +90,13 @@ def build_retrograde_dry_run_packet(
         zone=zone,
         initial_location=initial_location,
     )
+    if settings.orrery is None:
+        raise ValueError("settings.orrery is required for Retrograde budgets")
     seed_generation_request = build_seed_generation_request(
         candidate_scaffolds=candidate_scaffolds,
         vocabulary=vocabulary,
         weird=weird,
+        max_new_entity_stubs=settings.orrery.retrograde.wizard.max_new_entity_stubs,
     )
 
     return {
@@ -134,6 +143,7 @@ def build_seed_generation_request(
     candidate_scaffolds: Mapping[str, Any],
     vocabulary: SeedEligibleVocabulary,
     weird: Mapping[str, Any],
+    max_new_entity_stubs: Optional[int] = None,
 ) -> dict[str, Any]:
     """Build the non-mutating R4/R5 request contract for Skald-as-weaver."""
 
@@ -145,6 +155,11 @@ def build_seed_generation_request(
         1,
         round(budget["generate_candidates"] / budget["select_target"]),
     )
+    if max_new_entity_stubs is not None:
+        # Decision 8 entity-coverage cap: how many entities beyond the
+        # first-class starting set the eventual R6 expansion may introduce
+        # as minimum-viable stubs.
+        budget["max_new_entity_stubs"] = int(max_new_entity_stubs)
 
     return {
         "schema_version": SEED_REQUEST_SCHEMA_VERSION,
@@ -333,11 +348,11 @@ def _seed_prompt_sections(
 
     return [
         {
-            "heading": "Core entities",
+            "heading": CORE_ENTITIES_HEADING,
             "items": _present_items(candidate_scaffolds.get("core_entities")),
         },
         {
-            "heading": "Named seed NPCs",
+            "heading": NAMED_SEED_NPCS_HEADING,
             "items": _present_items(candidate_scaffolds.get("named_seed_npcs")),
         },
         {

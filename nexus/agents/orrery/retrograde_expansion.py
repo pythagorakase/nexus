@@ -3,14 +3,30 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Literal, Mapping, Optional, cast
+from typing import Annotated, Any, Literal, Mapping, Optional, cast
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from nexus.agents.orrery.retrograde_packet import (
+    CORE_ENTITIES_HEADING,
+    NAMED_SEED_NPCS_HEADING,
+)
 from nexus.agents.orrery.retrograde_seed_candidates import (
     validate_seed_candidate_response,
 )
-from nexus.agents.orrery.retrograde_vocabulary import SeedEligibleVocabulary
+from nexus.agents.orrery.retrograde_vocabulary import (
+    ENTITY_REF_MAX_LENGTH,
+    SeedEligibleVocabulary,
+    normalize_entity_ref,
+)
+
+EntityRef = Annotated[str, Field(min_length=1, max_length=ENTITY_REF_MAX_LENGTH)]
+"""Prompt-local entity ref: a proper name, never a description.
+
+Bounded because refs become canonical ``name`` values when persistence
+stages minimum-viable stubs (``characters.name``/``places.name`` are
+``varchar(50)``).
+"""
 
 ExpansionSchemaVersion = Literal["orrery_retrograde_expansion_plan.v0"]
 RETROGRADE_EXPANSION_RESPONSE_SCHEMA_VERSION: ExpansionSchemaVersion = (
@@ -43,7 +59,7 @@ class RetrogradeExpansionValidationError(ValueError):
 class RetrogradeExpansionParticipant(BaseModel):
     """One entity reference participating in a planned Retrograde event."""
 
-    entity_ref: str = Field(min_length=1)
+    entity_ref: EntityRef
     entity_kind: str = Field(min_length=1)
     role: Literal["actor", "target", "observer", "beneficiary", "witness"] = Field(
         default="observer"
@@ -76,10 +92,13 @@ class RetrogradeExpansionEventPlan(BaseModel):
         description="Relative placement before the first narrative chunk."
     )
     participants: list[RetrogradeExpansionParticipant] = Field(default_factory=list)
-    location_ref: Optional[str] = Field(
+    location_ref: Optional[EntityRef] = Field(
         default=None,
-        max_length=200,
-        description="Prompt-local place ref for future location_id resolution.",
+        description=(
+            "Prompt-local place name for future location_id resolution: a "
+            f"proper name of at most {ENTITY_REF_MAX_LENGTH} characters, "
+            "never a description."
+        ),
     )
     changed_fields: list[str] = Field(
         default_factory=list,
@@ -102,7 +121,7 @@ class RetrogradeExpansionEventPlan(BaseModel):
 class RetrogradeExpansionEntityTagPlan(BaseModel):
     """One future entity_tags write implied by the woven history."""
 
-    entity_ref: str = Field(min_length=1)
+    entity_ref: EntityRef
     entity_kind: str = Field(min_length=1)
     tag: str = Field(min_length=1)
     source_event_ref: Optional[str] = Field(
@@ -119,10 +138,10 @@ class RetrogradeExpansionEntityTagPlan(BaseModel):
 class RetrogradeExpansionPairTagPlan(BaseModel):
     """One future entity_pair_tags write implied by the woven history."""
 
-    subject_ref: str = Field(min_length=1)
+    subject_ref: EntityRef
     subject_kind: str = Field(min_length=1)
     tag: str = Field(min_length=1)
-    object_ref: str = Field(min_length=1)
+    object_ref: EntityRef
     object_kind: str = Field(min_length=1)
     source_event_ref: Optional[str] = Field(default=None)
     rationale: Optional[str] = Field(default=None, max_length=500)
@@ -133,10 +152,10 @@ class RetrogradeExpansionPairTagPlan(BaseModel):
 class RetrogradeExpansionRelationshipPlan(BaseModel):
     """One future relationship-table write implied by the woven history."""
 
-    subject_ref: str = Field(min_length=1)
+    subject_ref: EntityRef
     subject_kind: str = Field(min_length=1)
     relationship_type: str = Field(min_length=1)
-    object_ref: str = Field(min_length=1)
+    object_ref: EntityRef
     object_kind: str = Field(min_length=1)
     source_event_ref: Optional[str] = Field(default=None)
     rationale: Optional[str] = Field(default=None, max_length=500)
@@ -269,6 +288,7 @@ def render_expansion_prompt(
             "reason": "R6 expansion remains dry-run until commit blockers resolve.",
         },
         "commit_blockers": list(RETROGRADE_COMMIT_BLOCKERS),
+        "budget": seed_generation_request.get("budget", {}),
         "selected_seed_ids": candidates.selected_seed_ids,
         "selected_candidates": selected_candidates,
         "core_prompt_sections": (
@@ -315,6 +335,8 @@ def validate_expansion_plan(
         response=response,
         selected_seed_ids=set(candidates.selected_seed_ids),
         vocabulary=vocabulary,
+        known_entity_keys=_packet_known_entity_keys(packet),
+        max_new_entity_stubs=_budget_entity_stub_cap(seed_generation_request),
     )
     if issues:
         formatted = "\n".join(f"- {issue}" for issue in issues)
@@ -395,8 +417,17 @@ def _expansion_contract_issues(
     response: RetrogradeExpansionPlanResponse,
     selected_seed_ids: set[str],
     vocabulary: SeedEligibleVocabulary,
+    known_entity_keys: Optional[set[tuple[str, str]]] = None,
+    max_new_entity_stubs: Optional[int] = None,
 ) -> list[str]:
     issues: list[str] = []
+    issues.extend(
+        _new_entity_budget_issues(
+            response=response,
+            known_entity_keys=known_entity_keys or set(),
+            max_new_entity_stubs=max_new_entity_stubs,
+        )
+    )
     response_seed_ids = set(response.selected_seed_ids)
     unknown_response_seeds = sorted(response_seed_ids - selected_seed_ids)
     if unknown_response_seeds:
@@ -424,6 +455,10 @@ def _expansion_contract_issues(
         policy: set(tags)
         for policy, tags in vocabulary.get("registered_tags_by_seed_policy", {}).items()
     }
+    tags_by_entity_kind = {
+        kind: set(tags)
+        for kind, tags in vocabulary.get("registered_tags_by_entity_kind", {}).items()
+    }
 
     for event in response.event_plan:
         issues.extend(
@@ -442,6 +477,7 @@ def _expansion_contract_issues(
                 entity_kinds=entity_kinds,
                 registered_tags=registered_tags,
                 tags_by_seed_policy=tags_by_seed_policy,
+                tags_by_entity_kind=tags_by_entity_kind,
                 event_refs=event_refs,
             )
         )
@@ -477,6 +513,117 @@ def _expansion_contract_issues(
     return issues
 
 
+STUB_CREATABLE_ENTITY_KINDS = frozenset({"character", "place", "faction"})
+
+
+def _new_entity_budget_issues(
+    *,
+    response: RetrogradeExpansionPlanResponse,
+    known_entity_keys: set[tuple[str, str]],
+    max_new_entity_stubs: Optional[int],
+) -> list[str]:
+    """Enforce the Decision 8 entity-coverage cap against plan entity refs."""
+
+    if max_new_entity_stubs is None:
+        return []
+    new_keys = sorted(
+        key
+        for key in _collect_plan_entity_keys(response)
+        if key[0] in STUB_CREATABLE_ENTITY_KINDS and key not in known_entity_keys
+    )
+    if len(new_keys) <= max_new_entity_stubs:
+        return []
+    listed = ", ".join(f"{kind}:{ref}" for kind, ref in new_keys)
+    return [
+        f"expansion introduces {len(new_keys)} entities beyond the first-class "
+        f"starting set, exceeding budget.max_new_entity_stubs="
+        f"{max_new_entity_stubs}: {listed}. Drop or merge minor entities, or "
+        "reattach their threads to first-class starting entities."
+    ]
+
+
+def _collect_plan_entity_keys(
+    response: RetrogradeExpansionPlanResponse,
+) -> set[tuple[str, str]]:
+    """Collect distinct (kind, normalized ref) keys across all plan sections."""
+
+    keys: set[tuple[str, str]] = set()
+    for event in response.event_plan:
+        for participant in event.participants:
+            keys.add(
+                (participant.entity_kind, normalize_entity_ref(participant.entity_ref))
+            )
+        if event.location_ref:
+            keys.add(("place", normalize_entity_ref(event.location_ref)))
+    for tag_plan in response.entity_tag_plan:
+        keys.add((tag_plan.entity_kind, normalize_entity_ref(tag_plan.entity_ref)))
+    for pair_plan in response.pair_tag_plan:
+        keys.add((pair_plan.subject_kind, normalize_entity_ref(pair_plan.subject_ref)))
+        keys.add((pair_plan.object_kind, normalize_entity_ref(pair_plan.object_ref)))
+    for relationship in response.relationship_plan:
+        keys.add(
+            (relationship.subject_kind, normalize_entity_ref(relationship.subject_ref))
+        )
+        keys.add(
+            (relationship.object_kind, normalize_entity_ref(relationship.object_ref))
+        )
+    return keys
+
+
+def _packet_known_entity_keys(packet: Mapping[str, Any]) -> set[tuple[str, str]]:
+    """First-class starting entity keys known to the Retrograde packet.
+
+    Reads both the top-level candidate scaffolds (full dry-run packets) and
+    the seed request prompt sections (always present in loadable packets), so
+    saved or compacted packets keep the same first-class entity surface.
+    """
+
+    keys: set[tuple[str, str]] = set()
+
+    def add_card(card: Any) -> None:
+        if not isinstance(card, Mapping):
+            return
+        kind = card.get("kind")
+        name = card.get("name")
+        if kind in STUB_CREATABLE_ENTITY_KINDS and name:
+            keys.add((str(kind), normalize_entity_ref(str(name))))
+
+    scaffolds = packet.get("candidate_scaffolds")
+    if isinstance(scaffolds, Mapping):
+        for card in scaffolds.get("core_entities") or ():
+            add_card(card)
+        for npc in scaffolds.get("named_seed_npcs") or ():
+            add_card(npc)
+
+    seed_generation_request = packet.get("seed_generation_request")
+    if isinstance(seed_generation_request, Mapping):
+        for section in seed_generation_request.get("prompt_sections") or ():
+            if not isinstance(section, Mapping):
+                continue
+            if section.get("heading") not in {
+                CORE_ENTITIES_HEADING,
+                NAMED_SEED_NPCS_HEADING,
+            }:
+                continue
+            for card in section.get("items") or ():
+                add_card(card)
+    return keys
+
+
+def _budget_entity_stub_cap(
+    seed_generation_request: Mapping[str, Any],
+) -> Optional[int]:
+    """Read the optional Decision 8 stub cap from the request budget."""
+
+    budget = seed_generation_request.get("budget")
+    if not isinstance(budget, Mapping):
+        return None
+    cap = budget.get("max_new_entity_stubs")
+    if cap is None:
+        return None
+    return int(cap)
+
+
 def _event_plan_issues(
     *,
     event: RetrogradeExpansionEventPlan,
@@ -506,6 +653,7 @@ def _entity_tag_plan_issues(
     entity_kinds: set[str],
     registered_tags: set[str],
     tags_by_seed_policy: Mapping[str, set[str]],
+    tags_by_entity_kind: Mapping[str, set[str]],
     event_refs: set[str],
 ) -> list[str]:
     issues: list[str] = []
@@ -514,6 +662,17 @@ def _entity_tag_plan_issues(
         issues.append(f"{prefix} uses unknown entity_kind {tag_plan.entity_kind!r}")
     if tag_plan.tag not in registered_tags:
         issues.append(f"{prefix} is not a registered single-entity tag")
+        return issues
+    # Mirror the persistence layer's tag_category_registry kind check so an
+    # incompatible plan is repaired by ModelRetry at generation time instead
+    # of blocking the wizard transition. Enforceable only when the live
+    # registry mapping rode along in the packet vocabulary.
+    if tags_by_entity_kind and tag_plan.tag not in tags_by_entity_kind.get(
+        tag_plan.entity_kind, set()
+    ):
+        issues.append(
+            f"{prefix} is not registered for entity_kind {tag_plan.entity_kind!r}"
+        )
         return issues
     policy = _tag_seed_policy(tag_plan.tag, tags_by_seed_policy)
     if policy is None:
@@ -654,8 +813,19 @@ def _hard_validation_rules() -> list[str]:
         "Prompt-visible-only tags must not appear in entity_tag_plan.",
         "Pair tags must obey registered subject/object kind constraints.",
         (
+            "Single-entity tags must be registered for the tagged entity_kind "
+            "in registered_tags_by_entity_kind; a tag listed only under another "
+            "kind is illegal."
+        ),
+        (
             "relationship_plan currently supports only character->character "
             "rows; express faction/place pressure through events or pair tags."
+        ),
+        (
+            "Entity refs (entity_ref, subject_ref, object_ref, location_ref) "
+            f"are proper names of at most {ENTITY_REF_MAX_LENGTH} characters "
+            "-- never sentences or descriptive phrases. New implied entities "
+            "get a short invented name, not a description."
         ),
         (
             "commit_readiness must keep writes='none' and include both current "
@@ -692,6 +862,11 @@ def _prompt_vocabulary(vocabulary: SeedEligibleVocabulary) -> dict[str, Any]:
         "relationship_types": vocabulary["relationship_types"],
         "registered_tags_by_seed_policy": vocabulary.get(
             "registered_tags_by_seed_policy", {}
+        ),
+        # The validator enforces per-kind tag registration, so Skald must see
+        # the same mapping up front; otherwise kind mismatches burn retries.
+        "registered_tags_by_entity_kind": vocabulary.get(
+            "registered_tags_by_entity_kind", {}
         ),
         "multi_entity_tag_definitions": vocabulary["multi_entity_tag_definitions"],
     }

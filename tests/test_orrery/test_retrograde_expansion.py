@@ -6,6 +6,7 @@ import copy
 from typing import Any
 
 import pytest
+from pydantic import ValidationError
 
 from nexus.agents.orrery.retrograde_expansion import (
     RETROGRADE_EXPANSION_RESPONSE_SCHEMA_VERSION,
@@ -18,6 +19,7 @@ from nexus.agents.orrery.retrograde_seed_candidates import (
     SEED_CANDIDATE_RESPONSE_SCHEMA_VERSION,
 )
 from nexus.agents.orrery.retrograde_vocabulary import (
+    ENTITY_REF_MAX_LENGTH,
     SeedEligibleVocabulary,
     enumerate_seed_eligible_vocabulary,
 )
@@ -54,6 +56,7 @@ def test_expansion_prompt_includes_selected_seeds_and_commit_blockers() -> None:
     assert "seed_001" in prompt
     assert "pre_game_tick_chunk_id" in prompt
     assert "relationship_plan currently supports only character->character" in prompt
+    assert "registered_tags_by_entity_kind" in prompt
     assert RETROGRADE_EXPANSION_RESPONSE_SCHEMA_VERSION in prompt
 
 
@@ -148,6 +151,145 @@ def test_expansion_plan_requires_thread_for_each_selected_seed() -> None:
             packet=_packet(vocabulary),
             seed_candidate_response=seed_response,
         )
+
+
+def test_expansion_plan_rejects_kind_incompatible_tag() -> None:
+    """Plan tags must be registered for their entity kind, as in persistence."""
+
+    vocabulary = _expansion_test_vocabulary()
+    # Seed-stage hints ('grieving' on a character) stay legal, but the
+    # expansion's 'scholar' tag on a character is no longer kind-registered.
+    vocabulary["registered_tags_by_entity_kind"] = {
+        "character": ["grieving", "untested_signal"],
+        "faction": ["scholar"],
+    }
+
+    with pytest.raises(
+        RetrogradeExpansionValidationError,
+        match="not registered for entity_kind",
+    ):
+        validate_expansion_plan(
+            payload=_valid_expansion(vocabulary),
+            packet=_packet(vocabulary),
+            seed_candidate_response=_seed_response(vocabulary),
+        )
+
+
+def test_expansion_plan_rejects_overlong_entity_ref() -> None:
+    """Refs become canonical varchar(50) stub names; descriptions must fail."""
+
+    vocabulary = _expansion_test_vocabulary()
+    payload = _valid_expansion(vocabulary)
+    payload["entity_tag_plan"][0][
+        "entity_ref"
+    ] = "the dockside chemist who first cut Mara's product behind Shutter Hall"
+
+    with pytest.raises(
+        ValidationError,
+        match=f"at most {ENTITY_REF_MAX_LENGTH} characters",
+    ):
+        validate_expansion_plan(
+            payload=payload,
+            packet=_packet(vocabulary),
+            seed_candidate_response=_seed_response(vocabulary),
+        )
+
+
+def test_expansion_plan_rejects_overlong_location_ref() -> None:
+    """location_ref obeys the same name bound as places.name varchar(50)."""
+
+    vocabulary = _expansion_test_vocabulary()
+    payload = _valid_expansion(vocabulary)
+    payload["event_plan"][0][
+        "location_ref"
+    ] = "the flooded sub-basement of the old transit authority records annex"
+
+    with pytest.raises(
+        ValidationError,
+        match=f"at most {ENTITY_REF_MAX_LENGTH} characters",
+    ):
+        validate_expansion_plan(
+            payload=payload,
+            packet=_packet(vocabulary),
+            seed_candidate_response=_seed_response(vocabulary),
+        )
+
+
+def test_expansion_plan_rejects_empty_location_ref() -> None:
+    """location_ref carries EntityRef's lower bound too: '' is not a name."""
+
+    vocabulary = _expansion_test_vocabulary()
+    payload = _valid_expansion(vocabulary)
+    payload["event_plan"][0]["location_ref"] = ""
+
+    with pytest.raises(ValidationError, match="at least 1 character"):
+        validate_expansion_plan(
+            payload=payload,
+            packet=_packet(vocabulary),
+            seed_candidate_response=_seed_response(vocabulary),
+        )
+
+
+def test_expansion_prompt_states_entity_ref_name_contract() -> None:
+    """The R6 prompt tells Skald refs are bounded proper names."""
+
+    vocabulary = _expansion_test_vocabulary()
+    prompt = render_expansion_prompt(
+        packet=_packet(vocabulary),
+        seed_candidate_response=_seed_response(vocabulary),
+    )
+
+    assert f"at most {ENTITY_REF_MAX_LENGTH} characters" in prompt
+
+
+def test_expansion_plan_enforces_new_entity_budget() -> None:
+    """Decision 8: refs beyond the first-class set respect the stub cap."""
+
+    vocabulary = _expansion_test_vocabulary()
+    packet = _packet(vocabulary)
+    # The valid expansion references Vale and Shutter Hall beyond core Mara.
+    packet["seed_generation_request"]["budget"]["max_new_entity_stubs"] = 1
+
+    with pytest.raises(
+        RetrogradeExpansionValidationError,
+        match="max_new_entity_stubs",
+    ):
+        validate_expansion_plan(
+            payload=_valid_expansion(vocabulary),
+            packet=packet,
+            seed_candidate_response=_seed_response(vocabulary),
+        )
+
+
+def test_expansion_plan_accepts_new_entities_within_budget() -> None:
+    """New refs at or under the configured stub cap stay valid."""
+
+    vocabulary = _expansion_test_vocabulary()
+    packet = _packet(vocabulary)
+    packet["seed_generation_request"]["budget"]["max_new_entity_stubs"] = 2
+
+    response = validate_expansion_plan(
+        payload=_valid_expansion(vocabulary),
+        packet=packet,
+        seed_candidate_response=_seed_response(vocabulary),
+    )
+
+    assert response.selected_seed_ids == ["seed_001"]
+
+
+def test_expansion_prompt_surfaces_budget() -> None:
+    """The R6 prompt shows the request budget, including the stub cap."""
+
+    vocabulary = _expansion_test_vocabulary()
+    packet = _packet(vocabulary)
+    packet["seed_generation_request"]["budget"]["max_new_entity_stubs"] = 3
+
+    prompt = render_expansion_prompt(
+        packet=packet,
+        seed_candidate_response=_seed_response(vocabulary),
+    )
+
+    assert '"max_new_entity_stubs": 3' in prompt
 
 
 def _expansion_test_vocabulary() -> SeedEligibleVocabulary:

@@ -245,6 +245,26 @@ summary_chunks = true
 # Retrograde summary chunks immediately after a successful apply commit.
 embed_after_apply = true
 
+[orrery.retrograde.wizard]
+# Wizard-time Retrograde cold start (spec decisions 6/8/14, M4). When enabled,
+# the wizard ready -> narrative transition runs packet -> seed candidates ->
+# expansion -> persistence -> embedding before the slot enters narrative mode.
+enabled = true
+# Allow persistence to create minimum-viable stubs for expansion refs with no
+# canonical row (the dehydrated-entity pattern; implied entities stay stubs).
+create_entity_stubs = true
+# Decision 8 entity-coverage cap: max new minimum-viable stubs one wizard-time
+# expansion may introduce beyond the first-class starting entities.
+max_new_entity_stubs = 6
+# Seed/expansion structured responses are larger than wizard chat turns, so the
+# wizard-time Skald calls get their own output-token ceiling.
+max_tokens = 16000
+# CLI/UI HTTP timeout for the transition request; frontier calls run inside it.
+transition_timeout_seconds = 900
+# NOTE: transition progress (GET /api/story/new/retrograde/status) lives in a
+# process-local registry. Run the API single-worker, or accept that status
+# polls answered by a non-writing worker report stage "idle" mid-transition.
+
 [orrery.retrograde.weird]
 # Player-facing Retrograde strangeness is low/medium/high. Each genre remaps
 # those labels onto the raw calibration float below, so "medium" means

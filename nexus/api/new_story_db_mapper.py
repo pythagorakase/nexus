@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Dict, Any, Optional, List, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 from datetime import datetime, timezone
 
 from nexus.api.new_story_schemas import (
@@ -533,7 +533,11 @@ class NewStoryDatabaseMapper:
                     )
                     raise
 
-    def perform_transition(self, transition_data: TransitionData) -> Dict[str, int]:
+    def perform_transition(
+        self,
+        transition_data: TransitionData,
+        in_transaction: Optional[Callable[[Any], None]] = None,
+    ) -> Dict[str, int]:
         """
         Perform complete transition from setup to narrative mode.
 
@@ -547,10 +551,15 @@ class NewStoryDatabaseMapper:
         5. Creates complete location hierarchy (layer -> zone -> place)
         6. Applies typed trait compilation and persists the audit result
         7. Sets base timestamp
-        8. Clears the wizard cache (mode is derived from data presence)
+        8. Runs the optional in_transaction hook on the same cursor (used by
+           Retrograde wizard-time persistence so generated history commits
+           atomically with the world; a raise rolls back everything)
+        9. Clears the wizard cache (mode is derived from data presence)
 
         Args:
             transition_data: Complete transition data package
+            in_transaction: Optional callable invoked with the open cursor
+                after all transition writes, before commit
 
         Returns:
             Dictionary with created IDs
@@ -706,20 +715,13 @@ class NewStoryDatabaseMapper:
                         (transition_data.base_timestamp,),
                     )
 
-                # Transaction commits automatically on successful context exit
+                    if in_transaction is not None:
+                        # Retrograde wizard-time persistence joins this
+                        # transaction; a raise here rolls back the whole world
+                        # so a history-less story can never silently begin.
+                        in_transaction(cur)
+
                 logger.info("Atomic transition complete")
-
-                # Clear the wizard cache - this is what transitions to narrative mode
-                # (mode is derived from data presence, not a flag)
-                clear_cache(self.dbname)
-                logger.debug("Cleared wizard cache, slot now in narrative mode")
-
-                return {
-                    "character_id": character_id,
-                    "layer_id": location_ids["layer_id"],
-                    "zone_id": location_ids["zone_id"],
-                    "place_id": location_ids["place_id"],
-                }
 
             except Exception as e:
                 # Transaction rolls back automatically on exception
@@ -728,6 +730,23 @@ class NewStoryDatabaseMapper:
                     f"All database changes rolled back (no partial data)."
                 )
                 raise
+
+        # The connection context has exited, so the transaction is committed.
+        # Clear the wizard cache - this is what transitions to narrative mode
+        # (mode is derived from data presence, not a flag). This must happen
+        # AFTER commit: clear_cache uses its own pooled connection, and the
+        # trait compiler updates assets.new_story_creator inside the
+        # transition transaction, so deleting the cache row pre-commit
+        # self-deadlocks on the uncommitted row version.
+        clear_cache(self.dbname)
+        logger.debug("Cleared wizard cache, slot now in narrative mode")
+
+        return {
+            "character_id": character_id,
+            "layer_id": location_ids["layer_id"],
+            "zone_id": location_ids["zone_id"],
+            "place_id": location_ids["place_id"],
+        }
 
     def _build_character_extra_data(self, character: CharacterSheet) -> Dict[str, Any]:
         """
