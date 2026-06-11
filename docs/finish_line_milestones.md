@@ -31,7 +31,7 @@ All six databases (NEXUS_template + save_01..05) now at migration 060; slot 1 un
 **M3 - Make Retrograde History Retrievable** - M - DONE 2026-06-10 (PR #373, 6ac8de74)
 Shipped as per-event embedded summary chunks (excluded from the warm slice, fully searchable; live top-hit 0.95 on save_05). The spec promises MEMNON retrieves generated history identically to play-generated; today it can't. Decide and build the surface: embed real prologue prose chunks, embed per-event summaries as chunks, or accept structured-only visibility for v1.0 (and say so). This is the unstated implementation half of spec decision 14.
 
-**M4 - Wire Retrograde Into the New-Story Wizard** - M
+**M4 - Wire Retrograde Into the New-Story Wizard** - M - DONE 2026-06-10 (PR #378, 27dfd911; decisions 6/8/14 settled, two green destructive e2e runs on slot 5, varchar ref-overflow fixed at the Pydantic boundary)
 The pipeline exists only as CLI verbs (zero references in `nexus/api/`). New-story flow should run R1-R6 + persistence automatically at slot creation. Requires settling decision 14's product boundary (when generated history becomes visible; behavior when expansion succeeds but persistence is blocked), decision 8's entity-coverage caps, and the seed-eligible vs prompt-visible category split.
 
 **M5 - Finish the Trait Compiler** - M - DONE 2026-06-10 (PR #372, fae2ebd5)
