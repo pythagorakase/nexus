@@ -64,7 +64,9 @@ class _RecorderGenerator:
         (False, True, ["episode-5-1-gpt-5.1"]),  # skip season summary if present
     ],
 )
-def test_schedule_summary_generation_skips_existing(existing_episode, existing_season, expected_calls):
+def test_schedule_summary_generation_skips_existing(
+    existing_episode, existing_season, expected_calls
+):
     recorder_calls: List[str] = []
 
     def db_factory() -> _FakeDB:
@@ -91,3 +93,18 @@ def test_schedule_summary_generation_skips_existing(existing_episode, existing_s
     )
 
     assert recorder_calls == expected_calls
+
+
+def test_coalesce_models_resolves_apex_default_when_constants_are_none():
+    """Empty candidates resolve to the live apex model, never an empty list.
+
+    M9 gate finding: scripts/summarize_narrative resolves its module
+    constants at argparse time (both None on import), so API-triggered
+    episode summaries ran with zero model candidates and always failed.
+    """
+
+    from nexus.api.summary_triggers import _coalesce_models
+
+    models = _coalesce_models(None)
+    assert models, "model candidate list must never be empty"
+    assert all(isinstance(model, str) and model for model in models)
