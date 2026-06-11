@@ -11,6 +11,19 @@ from nexus.agents.orrery.tag_library import read_event_types, read_tag_library
 from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
 
 
+ENTITY_REF_MAX_LENGTH = 50
+"""Hard cap for prompt-local entity refs across R4/R6 Skald responses.
+
+Entity refs double as canonical row names whenever Retrograde persistence
+stages a minimum-viable stub: ``characters.name`` and ``places.name`` are
+``varchar(50)``, and the wizard's own Pydantic name contract
+(``nexus/api/new_story_schemas.py``) caps every entity name at 50
+characters. A longer ref is a description rather than a name, so it fails
+loudly at the response validation boundary (with a ModelRetry repair shot)
+instead of mid-transaction at the database.
+"""
+
+
 class PairTagPrimitive(TypedDict):
     """One registered multi-entity tag family with kind constraints."""
 

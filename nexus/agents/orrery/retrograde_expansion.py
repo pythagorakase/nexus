@@ -3,14 +3,25 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Literal, Mapping, Optional, cast
+from typing import Annotated, Any, Literal, Mapping, Optional, cast
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from nexus.agents.orrery.retrograde_seed_candidates import (
     validate_seed_candidate_response,
 )
-from nexus.agents.orrery.retrograde_vocabulary import SeedEligibleVocabulary
+from nexus.agents.orrery.retrograde_vocabulary import (
+    ENTITY_REF_MAX_LENGTH,
+    SeedEligibleVocabulary,
+)
+
+EntityRef = Annotated[str, Field(min_length=1, max_length=ENTITY_REF_MAX_LENGTH)]
+"""Prompt-local entity ref: a proper name, never a description.
+
+Bounded because refs become canonical ``name`` values when persistence
+stages minimum-viable stubs (``characters.name``/``places.name`` are
+``varchar(50)``).
+"""
 
 ExpansionSchemaVersion = Literal["orrery_retrograde_expansion_plan.v0"]
 RETROGRADE_EXPANSION_RESPONSE_SCHEMA_VERSION: ExpansionSchemaVersion = (
@@ -43,7 +54,7 @@ class RetrogradeExpansionValidationError(ValueError):
 class RetrogradeExpansionParticipant(BaseModel):
     """One entity reference participating in a planned Retrograde event."""
 
-    entity_ref: str = Field(min_length=1)
+    entity_ref: EntityRef
     entity_kind: str = Field(min_length=1)
     role: Literal["actor", "target", "observer", "beneficiary", "witness"] = Field(
         default="observer"
@@ -78,8 +89,12 @@ class RetrogradeExpansionEventPlan(BaseModel):
     participants: list[RetrogradeExpansionParticipant] = Field(default_factory=list)
     location_ref: Optional[str] = Field(
         default=None,
-        max_length=200,
-        description="Prompt-local place ref for future location_id resolution.",
+        max_length=ENTITY_REF_MAX_LENGTH,
+        description=(
+            "Prompt-local place name for future location_id resolution: a "
+            f"proper name of at most {ENTITY_REF_MAX_LENGTH} characters, "
+            "never a description."
+        ),
     )
     changed_fields: list[str] = Field(
         default_factory=list,
@@ -102,7 +117,7 @@ class RetrogradeExpansionEventPlan(BaseModel):
 class RetrogradeExpansionEntityTagPlan(BaseModel):
     """One future entity_tags write implied by the woven history."""
 
-    entity_ref: str = Field(min_length=1)
+    entity_ref: EntityRef
     entity_kind: str = Field(min_length=1)
     tag: str = Field(min_length=1)
     source_event_ref: Optional[str] = Field(
@@ -119,10 +134,10 @@ class RetrogradeExpansionEntityTagPlan(BaseModel):
 class RetrogradeExpansionPairTagPlan(BaseModel):
     """One future entity_pair_tags write implied by the woven history."""
 
-    subject_ref: str = Field(min_length=1)
+    subject_ref: EntityRef
     subject_kind: str = Field(min_length=1)
     tag: str = Field(min_length=1)
-    object_ref: str = Field(min_length=1)
+    object_ref: EntityRef
     object_kind: str = Field(min_length=1)
     source_event_ref: Optional[str] = Field(default=None)
     rationale: Optional[str] = Field(default=None, max_length=500)
@@ -133,10 +148,10 @@ class RetrogradeExpansionPairTagPlan(BaseModel):
 class RetrogradeExpansionRelationshipPlan(BaseModel):
     """One future relationship-table write implied by the woven history."""
 
-    subject_ref: str = Field(min_length=1)
+    subject_ref: EntityRef
     subject_kind: str = Field(min_length=1)
     relationship_type: str = Field(min_length=1)
-    object_ref: str = Field(min_length=1)
+    object_ref: EntityRef
     object_kind: str = Field(min_length=1)
     source_event_ref: Optional[str] = Field(default=None)
     rationale: Optional[str] = Field(default=None, max_length=500)
@@ -799,6 +814,12 @@ def _hard_validation_rules() -> list[str]:
         (
             "relationship_plan currently supports only character->character "
             "rows; express faction/place pressure through events or pair tags."
+        ),
+        (
+            "Entity refs (entity_ref, subject_ref, object_ref, location_ref) "
+            f"are proper names of at most {ENTITY_REF_MAX_LENGTH} characters "
+            "-- never sentences or descriptive phrases. New implied entities "
+            "get a short invented name, not a description."
         ),
         (
             "commit_readiness must keep writes='none' and include both current "

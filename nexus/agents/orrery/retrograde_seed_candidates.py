@@ -3,11 +3,22 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Literal, Mapping, Optional, cast
+from typing import Annotated, Any, Literal, Mapping, Optional, cast
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from nexus.agents.orrery.retrograde_vocabulary import SeedEligibleVocabulary
+from nexus.agents.orrery.retrograde_vocabulary import (
+    ENTITY_REF_MAX_LENGTH,
+    SeedEligibleVocabulary,
+)
+
+EntityRef = Annotated[str, Field(min_length=1, max_length=ENTITY_REF_MAX_LENGTH)]
+"""Prompt-local entity ref: a proper name, never a description.
+
+Bounded because refs become canonical ``name`` values when persistence
+stages minimum-viable stubs (``characters.name``/``places.name`` are
+``varchar(50)``).
+"""
 
 SeedCandidateSchemaVersion = Literal["orrery_retrograde_seed_candidates.v0"]
 SEED_CANDIDATE_RESPONSE_SCHEMA_VERSION: SeedCandidateSchemaVersion = (
@@ -35,9 +46,13 @@ class RetrogradeSeedEventHint(BaseModel):
         max_length=600,
         description="Brief natural-language event summary.",
     )
-    participating_entities: list[str] = Field(
+    participating_entities: list[EntityRef] = Field(
         default_factory=list,
-        description="Prompt-local entity names or refs involved in the event.",
+        description=(
+            "Prompt-local entity names involved in the event. Each entry is a "
+            f"proper name of at most {ENTITY_REF_MAX_LENGTH} characters, never "
+            "a descriptive phrase."
+        ),
     )
 
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
@@ -46,9 +61,11 @@ class RetrogradeSeedEventHint(BaseModel):
 class RetrogradeSingleEntityTagHint(BaseModel):
     """One proposed single-entity tag outcome for a candidate seed."""
 
-    entity_ref: str = Field(
-        min_length=1,
-        description="Prompt-local entity name or ref receiving the tag.",
+    entity_ref: EntityRef = Field(
+        description=(
+            "Prompt-local entity name receiving the tag: a proper name of at "
+            f"most {ENTITY_REF_MAX_LENGTH} characters, never a description."
+        ),
     )
     entity_kind: str = Field(
         min_length=1,
@@ -77,10 +94,10 @@ class RetrogradeSingleEntityTagHint(BaseModel):
 class RetrogradePairTagHint(BaseModel):
     """One proposed directed multi-entity tag outcome."""
 
-    subject_ref: str = Field(min_length=1)
+    subject_ref: EntityRef
     subject_kind: str = Field(min_length=1)
     tag: str = Field(min_length=1)
-    object_ref: str = Field(min_length=1)
+    object_ref: EntityRef
     object_kind: str = Field(min_length=1)
     rationale: Optional[str] = Field(default=None, max_length=500)
 
@@ -90,10 +107,10 @@ class RetrogradePairTagHint(BaseModel):
 class RetrogradeRelationshipHint(BaseModel):
     """One proposed relationship primitive implied by a candidate seed."""
 
-    subject_ref: str = Field(min_length=1)
+    subject_ref: EntityRef
     subject_kind: str = Field(min_length=1)
     relationship_type: str = Field(min_length=1)
-    object_ref: str = Field(min_length=1)
+    object_ref: EntityRef
     object_kind: str = Field(min_length=1)
     rationale: Optional[str] = Field(default=None, max_length=500)
 
@@ -692,6 +709,13 @@ def _hard_validation_rules() -> list[str]:
             "selected_seed_ids and rejected_seed_ids must reference returned "
             "candidate seed_id values, and a seed cannot be both selected and "
             "rejected."
+        ),
+        (
+            "Entity refs (entity_ref, subject_ref, object_ref, "
+            "participating_entities) are proper names of at most "
+            f"{ENTITY_REF_MAX_LENGTH} characters -- never sentences or "
+            "descriptive phrases. Implied new entities get a short invented "
+            "name, not a description."
         ),
         "If a hint is marginal or cannot satisfy these rules, omit the hint.",
     ]

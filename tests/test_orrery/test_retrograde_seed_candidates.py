@@ -17,6 +17,7 @@ from nexus.agents.orrery.retrograde_seed_candidates import (
     validate_seed_candidate_response,
 )
 from nexus.agents.orrery.retrograde_vocabulary import (
+    ENTITY_REF_MAX_LENGTH,
     SeedEligibleVocabulary,
     enumerate_seed_eligible_vocabulary,
 )
@@ -178,6 +179,34 @@ def test_seed_candidate_response_schema_rejects_unknown_fields() -> None:
 
     with pytest.raises(ValidationError):
         RetrogradeSeedCandidateResponse.model_validate(payload)
+
+
+def test_seed_candidate_response_rejects_overlong_entity_ref() -> None:
+    """Hint refs feed R6 refs, which become varchar(50) stub names."""
+
+    payload = _valid_response_payload(_seed_test_vocabulary())
+    hints = payload["candidates"][0]["mechanical_hints"]
+    hints["single_entity_tags"][0][
+        "entity_ref"
+    ] = "the handler's estranged sister who kept the original ledger pages"
+
+    with pytest.raises(
+        ValidationError,
+        match=f"at most {ENTITY_REF_MAX_LENGTH} characters",
+    ):
+        RetrogradeSeedCandidateResponse.model_validate(payload)
+
+
+def test_seed_candidate_prompt_states_entity_ref_name_contract() -> None:
+    """The R4 prompt tells Skald refs are bounded proper names."""
+
+    vocabulary = _seed_test_vocabulary()
+    prompt = render_seed_generation_prompt(
+        seed_generation_request=_seed_request(vocabulary),
+        vocabulary=vocabulary,
+    )
+
+    assert f"at most {ENTITY_REF_MAX_LENGTH} characters" in prompt
 
 
 def _seed_test_vocabulary() -> SeedEligibleVocabulary:

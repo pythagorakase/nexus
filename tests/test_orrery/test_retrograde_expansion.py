@@ -6,6 +6,7 @@ import copy
 from typing import Any
 
 import pytest
+from pydantic import ValidationError
 
 from nexus.agents.orrery.retrograde_expansion import (
     RETROGRADE_EXPANSION_RESPONSE_SCHEMA_VERSION,
@@ -18,6 +19,7 @@ from nexus.agents.orrery.retrograde_seed_candidates import (
     SEED_CANDIDATE_RESPONSE_SCHEMA_VERSION,
 )
 from nexus.agents.orrery.retrograde_vocabulary import (
+    ENTITY_REF_MAX_LENGTH,
     SeedEligibleVocabulary,
     enumerate_seed_eligible_vocabulary,
 )
@@ -170,6 +172,58 @@ def test_expansion_plan_rejects_kind_incompatible_tag() -> None:
             packet=_packet(vocabulary),
             seed_candidate_response=_seed_response(vocabulary),
         )
+
+
+def test_expansion_plan_rejects_overlong_entity_ref() -> None:
+    """Refs become canonical varchar(50) stub names; descriptions must fail."""
+
+    vocabulary = _expansion_test_vocabulary()
+    payload = _valid_expansion(vocabulary)
+    payload["entity_tag_plan"][0][
+        "entity_ref"
+    ] = "the dockside chemist who first cut Mara's product behind Shutter Hall"
+
+    with pytest.raises(
+        ValidationError,
+        match=f"at most {ENTITY_REF_MAX_LENGTH} characters",
+    ):
+        validate_expansion_plan(
+            payload=payload,
+            packet=_packet(vocabulary),
+            seed_candidate_response=_seed_response(vocabulary),
+        )
+
+
+def test_expansion_plan_rejects_overlong_location_ref() -> None:
+    """location_ref obeys the same name bound as places.name varchar(50)."""
+
+    vocabulary = _expansion_test_vocabulary()
+    payload = _valid_expansion(vocabulary)
+    payload["event_plan"][0][
+        "location_ref"
+    ] = "the flooded sub-basement of the old transit authority records annex"
+
+    with pytest.raises(
+        ValidationError,
+        match=f"at most {ENTITY_REF_MAX_LENGTH} characters",
+    ):
+        validate_expansion_plan(
+            payload=payload,
+            packet=_packet(vocabulary),
+            seed_candidate_response=_seed_response(vocabulary),
+        )
+
+
+def test_expansion_prompt_states_entity_ref_name_contract() -> None:
+    """The R6 prompt tells Skald refs are bounded proper names."""
+
+    vocabulary = _expansion_test_vocabulary()
+    prompt = render_expansion_prompt(
+        packet=_packet(vocabulary),
+        seed_candidate_response=_seed_response(vocabulary),
+    )
+
+    assert f"at most {ENTITY_REF_MAX_LENGTH} characters" in prompt
 
 
 def test_expansion_plan_enforces_new_entity_budget() -> None:
