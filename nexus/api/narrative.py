@@ -7,6 +7,7 @@ import frontmatter
 import json
 import logging
 import os
+import threading
 import uuid
 from datetime import datetime
 from typing import Dict, Any, Optional, List, Literal
@@ -799,6 +800,32 @@ async def approve_narrative(
     )
 
 
+def _run_post_commit_orrery_work(slot: Optional[int]) -> None:
+    """Drain quick Orrery outbox work inline; detach the maturation drain.
+
+    FastAPI background tasks run sequentially in add order, and the
+    auto-approve path in ``continue_narrative`` schedules this work BEFORE
+    the next chunk's generation task. Promotions, narration, and semantic
+    clearance are quick and benefit from completing before the next turn
+    sees the world; Retrograde stub maturation makes multi-minute frontier
+    calls and must never serialize the play loop (fire-and-forget, spec
+    decision 10), so it drains on a detached thread. The durable
+    ``orrery_maturation_jobs`` queue makes a mid-drain process death safe:
+    leases expire and the next drain resumes the work.
+    """
+
+    from nexus.agents.orrery.retrograde_maturation import drain_maturation_jobs_sync
+    from nexus.agents.orrery.worker import process_orrery_outbox_sync
+
+    process_orrery_outbox_sync(slot, maturation_limit=0)
+    threading.Thread(
+        target=drain_maturation_jobs_sync,
+        args=(slot,),
+        name=f"retrograde-maturation-slot-{slot}",
+        daemon=True,
+    ).start()
+
+
 async def _approve_narrative_impl(
     session_id: str,
     commit: bool,
@@ -826,9 +853,7 @@ async def _approve_narrative_impl(
                 # Commit to database
                 chunk_id = commit_incubator_to_database_sync(conn, session_id, slot)
                 if background_tasks is not None:
-                    from nexus.agents.orrery.worker import process_orrery_outbox_sync
-
-                    background_tasks.add_task(process_orrery_outbox_sync, slot)
+                    background_tasks.add_task(_run_post_commit_orrery_work, slot)
 
                 return {
                     "status": "committed",

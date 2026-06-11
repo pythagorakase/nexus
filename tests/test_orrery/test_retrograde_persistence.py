@@ -152,9 +152,20 @@ def test_persistence_plan_counts_vocabulary_blocked_events() -> None:
 
 
 def test_persistence_plan_blocks_entity_kind_incompatible_tags() -> None:
-    """Registered tag names still have to fit the target entity kind."""
+    """Registered tag names still have to fit the target entity kind.
+
+    The packet vocabulary deliberately claims place-applicability for
+    "grieving" (simulating packet/registry drift) so the plan passes R6
+    validation and the persistence-side applicability gate stays exercised
+    as the second line of defense.
+    """
 
     vocabulary = _persistence_test_vocabulary()
+    vocabulary["registered_tags_by_entity_kind"] = {
+        "character": ["grieving", "scholar", "untested_signal"],
+        "place": ["grieving"],
+        "faction": [],
+    }
     cur = FakeRetrogradePersistenceCursor(vocabulary)
     expansion = _valid_expansion(vocabulary)
     expansion["entity_tag_plan"][0] = {
@@ -539,6 +550,11 @@ def _persistence_test_vocabulary() -> SeedEligibleVocabulary:
         "stable_seed": ["scholar"],
         "event_anchored": ["grieving"],
         "prompt_visible_only": ["untested_signal"],
+    }
+    vocabulary["registered_tags_by_entity_kind"] = {
+        "character": ["grieving", "scholar", "untested_signal"],
+        "place": [],
+        "faction": [],
     }
     return vocabulary
 

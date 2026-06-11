@@ -436,6 +436,15 @@ def test_process_orrery_outbox_includes_semantic_clearance(monkeypatch) -> None:
         fake_clear,
     )
 
+    def fake_maturation(*_args, **kwargs):
+        calls.append(("mature", kwargs["limit"]))
+        return (6, 7)
+
+    monkeypatch.setattr(
+        "nexus.agents.orrery.worker.drain_maturation_jobs_sync",
+        fake_maturation,
+    )
+
     result = process_orrery_outbox_sync(
         slot=5,
         promotion_limit=6,
@@ -444,6 +453,7 @@ def test_process_orrery_outbox_includes_semantic_clearance(monkeypatch) -> None:
         semantic_clearance_recent_chunks=9,
         semantic_clearance_evidence_chunks=10,
         semantic_clearance_evidence_events=11,
+        maturation_limit=12,
     )
 
     assert result.promoted == 1
@@ -451,7 +461,14 @@ def test_process_orrery_outbox_includes_semantic_clearance(monkeypatch) -> None:
     assert result.narrated == 3
     assert result.failed == 4
     assert result.semantically_cleared == 5
-    assert calls == [("promote", 6), ("drain", 7), ("clear", 8, 9, 10, 11)]
+    assert result.matured == 6
+    assert result.maturation_failed == 7
+    assert calls == [
+        ("promote", 6),
+        ("drain", 7),
+        ("clear", 8, 9, 10, 11),
+        ("mature", 12),
+    ]
 
 
 def test_load_orrery_status_sync_counts_background_work() -> None:

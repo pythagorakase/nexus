@@ -115,6 +115,18 @@ def extract_orrery_adjudications(response: StoryTurnResponse) -> List[Dict[str, 
     return serialized
 
 
+def extract_new_entities(response: StoryTurnResponse) -> List[Dict[str, Any]]:
+    """Extract Skald new-entity declarations for Retrograde stub maturation."""
+
+    declarations = getattr(response, "new_entities", None) or []
+    serialized = []
+    for declaration in declarations:
+        data = _model_to_json_dict(declaration)
+        if data:
+            serialized.append(data)
+    return serialized
+
+
 def response_to_incubator(
     response: StoryTurnResponse,
     parent_chunk_id: int,
@@ -162,6 +174,7 @@ def response_to_incubator(
         "authorial_directives": extract_authorial_directives(response),
         "orrery_proposal": _serialize_orrery_proposal(orrery_proposal),
         "orrery_adjudications": extract_orrery_adjudications(response),
+        "new_entities": extract_new_entities(response),
         "session_id": session_id,
         "llm_response_id": getattr(response, "response_id", None),
         "status": "provisional",

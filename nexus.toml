@@ -265,6 +265,32 @@ transition_timeout_seconds = 900
 # process-local registry. Run the API single-worker, or accept that status
 # polls answered by a non-writing worker report stage "idle" mid-transition.
 
+[orrery.retrograde.maturation]
+# Runtime stub maturation (spec decisions 9/10/12, M8). When Skald declares a
+# new entity via the new_entities structured-output field and the entity
+# appears in the committed chunk, the commit path enqueues a durable
+# maturation job; the post-commit Orrery worker drains the queue and runs the
+# scoped single-entity Retrograde pipeline (seed gen -> expansion ->
+# persistence -> summary-chunk embedding).
+enabled = true
+# Soft per-job wall-clock target in seconds (spec budget: ~5-30s). Exceeding
+# it logs a warning and is recorded in the job manifest; it never aborts.
+budget_seconds = 30.0
+max_jobs_per_drain = 2
+max_attempts = 3
+retry_delay_seconds = 300
+# Tighter over-generation than wizard-time (~2x per the spec's runtime knob
+# guidance): generate 4 candidate seeds, select 2.
+generate_candidates = 4
+select_target = 2
+deferred_secret_cap = 1
+weird_level = "medium"
+# Frontier model for the R4/R6 maturation calls.
+model_ref = "@openai.default"
+# Maturation responses are larger than ordinary wizard chat turns.
+max_tokens = 16000
+chunk_excerpt_chars = 1200
+
 [orrery.retrograde.weird]
 # Player-facing Retrograde strangeness is low/medium/high. Each genre remaps
 # those labels onto the raw calibration float below, so "medium" means
