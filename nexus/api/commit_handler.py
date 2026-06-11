@@ -290,16 +290,18 @@ async def apply_state_updates(
                     bestowal=bestowal,
                 )
 
-    # Update place states
+    # Update place states. The schema field is current_conditions
+    # (LocationStateUpdate); it persists to the places.current_status
+    # column (M9 gate finding: the old attribute read crashed commits).
     for place_update in state_updates.locations:
-        if place_update.place_id and place_update.current_status:
+        if place_update.place_id and place_update.current_conditions:
             await conn.execute(
                 """
                 UPDATE places
                 SET current_status = $1
                 WHERE id = $2
                 """,
-                place_update.current_status,
+                place_update.current_conditions,
                 place_update.place_id,
             )
             logger.info(f"Updated place {place_update.place_id}")
