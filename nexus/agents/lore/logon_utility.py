@@ -287,9 +287,14 @@ class LogonUtility:
         )
         from nexus.api.slot_utils import require_slot_dbname
 
-        output_validator = build_storyteller_tag_validator(
-            require_slot_dbname(dbname=self.dbname)
-        )
+        # Slotless LOGON usage (model_override without dbname or NEXUS_SLOT)
+        # has no registry to validate against; skip the validator rather
+        # than failing provider initialization (Codex review on PR #383).
+        try:
+            validation_dbname: Optional[str] = require_slot_dbname(dbname=self.dbname)
+        except Exception:
+            validation_dbname = None
+        output_validator = build_storyteller_tag_validator(validation_dbname)
 
         if provider_type in {"openai", "test"}:
             self.provider = OpenAIProvider(

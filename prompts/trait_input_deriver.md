@@ -8,8 +8,12 @@ mechanical state (relationship rows, pair-tags, stub entities).
 
 ## Hard Rules
 
-1. Provide an input for EVERY selected trait listed in the request, and for NO
-   other trait. Leave every non-selected trait field null.
+1. Provide an input for EVERY selected trait listed in the request, and for
+   NO other trait. Leave every non-selected trait field null. Exception:
+   allies, contacts, and enemies are OPTIONAL -- in a brand-new world their
+   targets have no database rows, so the compiler records them as prose
+   remainders either way. Provide named targets for them only when the
+   prose names concrete people (the names seed world-history coverage).
 2. Never set any database id field (`character_id`, `character_entity_id`,
    `place_id`, `place_entity_id`, `counterparty_id`, `counterparty_entity_id`,
    `scope_faction_entity_id`). This is a brand-new world: there are no existing

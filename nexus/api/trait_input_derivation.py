@@ -79,7 +79,13 @@ def derived_input_issues(
     }
     for extra in sorted(provided - selected_set):
         issues.append(f"input provided for non-selected trait '{extra}'")
-    for missing in sorted(selected_set - provided):
+    # Relationship traits (allies/contacts/enemies) are optional: the M5
+    # compiler deliberately does not stub-create their targets, so name-only
+    # inputs compile to structured remainders regardless. Derived targets
+    # still feed Retrograde core-entity coverage when provided, but their
+    # absence is not an error.
+    required = selected_set - set(_RELATIONSHIP_TRAITS)
+    for missing in sorted(required - provided):
         issues.append(f"missing input for selected trait '{missing}'")
 
     if inputs.resources is not None and inputs.resources.level not in RESOURCE_TAGS:

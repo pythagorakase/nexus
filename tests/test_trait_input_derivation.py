@@ -106,6 +106,19 @@ def test_missing_and_extra_traits_are_flagged() -> None:
     assert "missing input for selected trait 'dependents'" in issues
 
 
+def test_relationship_traits_are_optional() -> None:
+    """Allies/contacts/enemies may be omitted: the M5 compiler deliberately
+    does not stub-create their targets, so name-only inputs are prose
+    remainders regardless (Codex review on PR #383)."""
+
+    inputs = TraitCompileInputs(
+        patron=PatronTraitInput(name="Doctor Imari Voss"),
+        resources=SingleEntityTraitInput(level="comfortable"),
+    )
+    issues = derived_input_issues(inputs, selected=["patron", "resources", "enemies"])
+    assert issues == []
+
+
 def test_database_ids_are_rejected_everywhere() -> None:
     inputs = TraitCompileInputs(
         patron=PatronTraitInput(name="Voss", character_id=3),
