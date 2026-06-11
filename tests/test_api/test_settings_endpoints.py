@@ -178,3 +178,15 @@ class TestRoundTripOnCopy:
         assert "# Typewriter reveal speed" in updated
         assert "# Resolved via api_models registry" in updated
         assert original != updated
+
+    def test_anthropic_wizard_selection_round_trips(self, tmp_path: Path) -> None:
+        """Selecting an Anthropic wizard model through the API surface works."""
+        toml_copy = tmp_path / "nexus.toml"
+        shutil.copy2(REPO_ROOT / "nexus.toml", toml_copy)
+
+        patch = SettingsPatchRequest(wizard_model_ref="@anthropic.default")
+        save_settings(_updates_from_patch(patch), path=toml_copy, backup=False)
+
+        settings = load_settings(toml_copy)
+        anthropic = settings.global_.model.api_models["anthropic"]
+        assert settings.wizard.default_model == anthropic.roles["default"]
