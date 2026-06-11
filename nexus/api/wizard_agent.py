@@ -443,6 +443,29 @@ async def _submit_wildcard_impl(
         ctx, "wildcard", "submit_wildcard_trait"
     )
 
+    # Validate bestowed Orrery tags against the live registry now, while
+    # Skald can still repair them; an invalid name would otherwise explode
+    # later inside the transition transaction (M9 gate finding).
+    if wildcard.orrery_tags is not None:
+        from nexus.agents.orrery.tag_writer import validate_tag_bestowal
+        from nexus.api.db_pool import get_connection
+
+        with get_connection(slot_dbname(ctx.deps.slot)) as conn:
+            with conn.cursor() as cur:
+                tag_issues = validate_tag_bestowal(
+                    cur,
+                    entity_kind="character",
+                    bestowal=wildcard.orrery_tags,
+                )
+        if tag_issues:
+            formatted = "\n".join(f"- {issue}" for issue in tag_issues)
+            raise ModelRetry(
+                "submit_wildcard_trait rejected: orrery_tags failed registry "
+                "validation. Use bare registered tag names from the Tag "
+                "Reference (e.g. 'comfortable'), never 'category:name' "
+                f"composites. Issues:\n{formatted}"
+            )
+
     updated_state = CharacterCreationState.model_validate(
         {**creation_state.model_dump(), "wildcard": wildcard.model_dump()}
     )
