@@ -256,3 +256,85 @@ def test_retrograde_weird_raw_override_stays_in_dev_range() -> None:
             setting={"genre": "cyberpunk"},
             weird_raw=999,
         )
+
+
+def test_trait_compile_inputs_become_first_class_core_entities() -> None:
+    """Trait-declared targets join core entities so Skald reuses their names.
+
+    Without this, the trait compiler and Retrograde expansion mint separate
+    rows for the same person under different name forms (the M9 golden-path
+    duplicate-stub bug).
+    """
+
+    trait_compile_inputs = {
+        "patron": {
+            "name": "Magistra Odile Sorrenwick",
+            "functions": ["sponsors", "protects"],
+            "history": "Quiet Council sponsorship in exchange for retrievals.",
+        },
+        "dependents": {
+            "targets": [
+                {"name": "Pim Tideloft", "dynamic": "Kid brother, too clever."},
+                {"name": "Nan Cesska"},
+            ]
+        },
+        "resources": {"level": "comfortable"},
+    }
+
+    packet = build_retrograde_dry_run_packet(
+        slot=5,
+        dbname="save_05",
+        cache=FakeRetrogradeCache(),
+        vocabulary=enumerate_seed_eligible_vocabulary(),
+        settings=load_settings(),
+        trait_compile_inputs=trait_compile_inputs,
+    )
+
+    core = packet["candidate_scaffolds"]["core_entities"]
+    by_name = {card["name"]: card for card in core if card.get("name")}
+
+    patron_card = by_name["Magistra Odile Sorrenwick"]
+    assert patron_card["kind"] == "character"
+    assert patron_card["role"] == "trait_target:patron"
+    assert "exactly this name" in patron_card["details"]["ref_rule"]
+
+    assert by_name["Pim Tideloft"]["role"] == "trait_target:dependent"
+    assert by_name["Nan Cesska"]["role"] == "trait_target:dependent"
+
+    # The seed prompt section carries the same cards (expansion reads the
+    # first four prompt sections, so trait targets reach both Skald calls).
+    sections = {
+        section["heading"]: section
+        for section in packet["seed_generation_request"]["prompt_sections"]
+    }
+    core_section_names = {
+        item.get("name") for item in sections["Core entities"]["items"]
+    }
+    assert {"Magistra Odile Sorrenwick", "Pim Tideloft", "Nan Cesska"} <= (
+        core_section_names
+    )
+
+    # Resources is protagonist-level state, never a separate entity card.
+    assert all(
+        not str(card.get("role", "")).startswith("trait_target:resources")
+        for card in core
+    )
+
+
+def test_packet_without_trait_inputs_keeps_legacy_core_entities() -> None:
+    """No trait inputs -> exactly the four legacy core entity cards."""
+
+    packet = build_retrograde_dry_run_packet(
+        slot=5,
+        dbname="save_05",
+        cache=FakeRetrogradeCache(),
+        vocabulary=enumerate_seed_eligible_vocabulary(),
+        settings=load_settings(),
+    )
+    roles = [card["role"] for card in packet["candidate_scaffolds"]["core_entities"]]
+    assert roles == [
+        "protagonist",
+        "starting_location",
+        "starting_zone",
+        "starting_layer",
+    ]

@@ -67,8 +67,16 @@ def build_retrograde_dry_run_packet(
     settings: Settings,
     weird_level: Optional[str] = None,
     weird_raw: Optional[float] = None,
+    trait_compile_inputs: Optional[Mapping[str, Any]] = None,
 ) -> dict[str, Any]:
-    """Build a non-mutating Retrograde packet from wizard cache and vocabulary."""
+    """Build a non-mutating Retrograde packet from wizard cache and vocabulary.
+
+    ``trait_compile_inputs`` carries the typed trait-compiler inputs (derived
+    or wizard-collected) so trait-declared people, places, and factions become
+    first-class core entities: Skald must reuse their exact names, keeping
+    Retrograde refs aligned with the canonical rows the trait compiler creates
+    in the same transition transaction.
+    """
 
     setting = _require_cache_section(cache, "get_setting_dict", "setting")
     character = _require_cache_section(cache, "get_character_dict", "character")
@@ -89,6 +97,7 @@ def build_retrograde_dry_run_packet(
         layer=layer,
         zone=zone,
         initial_location=initial_location,
+        trait_compile_inputs=trait_compile_inputs,
     )
     if settings.orrery is None:
         raise ValueError("settings.orrery is required for Retrograde budgets")
@@ -366,6 +375,76 @@ def _seed_prompt_sections(
     ]
 
 
+def _trait_target_cards(
+    trait_compile_inputs: Optional[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """Return core-entity cards for trait-declared people, places, factions.
+
+    The trait compiler creates canonical rows for these names inside the same
+    transition transaction, before Retrograde persistence resolves expansion
+    refs. Exposing them as core entities makes Skald reuse the exact names,
+    so refs resolve as already_present instead of minting duplicate stubs.
+    """
+
+    if not trait_compile_inputs:
+        return []
+
+    cards: list[dict[str, Any]] = []
+    ref_rule = "Canonical name: refer to this entity with exactly this name."
+
+    def add(kind: str, role: str, target: Mapping[str, Any]) -> None:
+        name = target.get("name")
+        if not name:
+            return
+        summary = (
+            target.get("history")
+            or target.get("dynamic")
+            or f"Trait-declared {role} of the protagonist."
+        )
+        cards.append(
+            _compact_card(
+                kind=kind,
+                role=f"trait_target:{role}",
+                name=name,
+                summary=summary,
+                details={"ref_rule": ref_rule},
+            )
+        )
+
+    patron = _mapping(trait_compile_inputs.get("patron"))
+    if patron:
+        add("character", "patron", patron)
+    for target in _mapping(trait_compile_inputs.get("dependents")).get("targets") or []:
+        add("character", "dependent", _mapping(target))
+    for target in (
+        _mapping(trait_compile_inputs.get("obligations")).get("targets") or []
+    ):
+        target_map = _mapping(target)
+        kind = (
+            "faction"
+            if target_map.get("counterparty_kind") == "faction"
+            else "character"
+        )
+        add(kind, "obligation_counterparty", target_map)
+    relationship_roles = {"allies": "ally", "contacts": "contact", "enemies": "enemy"}
+    for trait_name, role in relationship_roles.items():
+        for target in (
+            _mapping(trait_compile_inputs.get(trait_name)).get("targets") or []
+        ):
+            add("character", role, _mapping(target))
+    domain = _mapping(trait_compile_inputs.get("domain"))
+    if domain:
+        add("place", "domain", domain)
+    status = _mapping(trait_compile_inputs.get("status"))
+    if status and status.get("scope_faction_name"):
+        add(
+            "faction",
+            "status_scope",
+            {"name": status.get("scope_faction_name")},
+        )
+    return cards
+
+
 def _candidate_scaffolds(
     *,
     character: Mapping[str, Any],
@@ -373,6 +452,7 @@ def _candidate_scaffolds(
     layer: Optional[Mapping[str, Any]],
     zone: Optional[Mapping[str, Any]],
     initial_location: Optional[Mapping[str, Any]],
+    trait_compile_inputs: Optional[Mapping[str, Any]] = None,
 ) -> dict[str, Any]:
     """Return deterministic R2/R3 scaffold cards for later seed generation."""
 
@@ -415,6 +495,7 @@ def _candidate_scaffolds(
                 summary=_mapping(layer).get("description"),
                 details=_mapping(layer),
             ),
+            *_trait_target_cards(trait_compile_inputs),
         ],
         "named_seed_npcs": [
             {"kind": "character", "role": "seed_npc", "name": name}

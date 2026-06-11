@@ -144,6 +144,50 @@ def apply_tag_bestowal(
     return counters
 
 
+def validate_tag_bestowal(
+    cur: Any,
+    *,
+    entity_kind: str,
+    bestowal: Optional[OrreryTagBestowal],
+) -> list[str]:
+    """Validate a bestowal against the live registry without writing.
+
+    Returns issue strings for unknown, deprecated, or entity-kind-incompatible
+    tag names. Used by wizard tools to reject bad bestowals at submission time
+    (via ModelRetry) instead of exploding later inside the transition
+    transaction.
+    """
+
+    if bestowal is None:
+        return []
+    if entity_kind not in VALID_ENTITY_KINDS:
+        raise ValueError(
+            f"Unknown entity_kind={entity_kind!r}; expected one of "
+            f"{sorted(VALID_ENTITY_KINDS)}"
+        )
+
+    allowed = _lookup_allowed_categories(cur, entity_kind)
+    if not allowed:
+        raise ValueError(
+            f"No Orrery tag categories registered for entity_kind={entity_kind!r}"
+        )
+
+    issues: list[str] = []
+    for field_name in ("applied_tags", "tags_to_clear"):
+        for tag_name in getattr(bestowal, field_name):
+            try:
+                canonical_name, tag_row = _lookup_canonical_tag(cur, tag_name)
+                _validate_allowed_category(
+                    category=_row_value(tag_row, "category", 1),
+                    allowed=allowed,
+                    tag_name=canonical_name,
+                    entity_kind=entity_kind,
+                )
+            except ValueError as exc:
+                issues.append(f"{field_name}: {exc}")
+    return issues
+
+
 async def apply_tag_bestowal_async(
     conn: Any,
     *,

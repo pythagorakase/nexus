@@ -1,0 +1,181 @@
+{
+ "thread_id": "thread_kXPR4jDfqfHXpGP1x40347ze",
+ "setting_draft": {
+  "genre": "fantasy",
+  "secondary_genres": [
+   "noir",
+   "mystery"
+  ],
+  "world_name": "Veyport",
+  "time_period": "Late medieval maritime city-state era",
+  "tech_level": "medieval",
+  "magic_exists": true,
+  "magic_description": "Magic is old, scarce, distrusted, and mostly maritime or warding in nature. It survives in lighthouse rites, salt-oaths, charms against drowning, guild-kept alchemical tricks, and half-forgotten signals used to keep an ancient presence asleep beyond the breakwater. Open sorcery is rare enough to be scandalous and dangerous enough to draw knives, contracts, or bells.",
+  "political_structure": "Independent harbor city ruled by a Merchant-Guild Compact, with competing guild councils, dock syndicates, ward bosses, old noble remnants, smuggler fraternities, and the semi-sacred Lighthouse Order all claiming pieces of authority.",
+  "major_conflict": "Veyport\u2019s prosperity depends on sea trade, smuggling, and fragile civic bargains, but the ancient Lighthouse Order\u2019s weakening vigil keeps something vast asleep beyond the breakwater. Guild ambition, criminal profit, political sabotage, and maritime superstition all threaten to disturb it.",
+  "tone": "dark",
+  "themes": [
+   "The city as a living organism",
+   "Commerce versus sacred duty",
+   "Corruption and survival",
+   "Old promises coming due",
+   "Class tension and civic rot",
+   "Secrets buried under routine"
+  ],
+  "cultural_notes": "Veyport is a city of tides, ledgers, bells, and knives. Reputation is currency; oaths sworn over saltwater are feared; guild colors mark status and danger; funeral coins are nailed beneath doorframes for those lost at sea. Common folk navigate neighborhood loyalties, protection rents, market feasts, fog curfews, and the constant rumor-mill of taverns, countinghouses, shrines, and dock cranes. The Lighthouse Order is treated with a blend of reverence, resentment, and unease.",
+  "language_notes": "Names favor hard consonants, brine-worn syllables, and occupational bynames: Mara Kest, Orven Tallow, Sella Grig, Dock-Saint Harl, Bellwarden Voss. Veyport slang is nautical and transactional: debts are 'anchors,' secrets are 'sealed cargo,' betrayal is 'cutting the moorline,' and death at sea is 'going under the gray.'",
+  "geographic_scope": "local",
+  "diegetic_artifact": "EXTRACT FROM THE BELLWARDEN\u2019S REGISTER, KEPT IN THE THIRD LANTERN ROOM OF SAINT ORVEN\u2019S LIGHT\nCopied under fog-seal for the instruction of junior keepers, harbor magistrates, and such guild factors as have paid the old fee and sworn not to laugh.\n\nKnow first that Veyport is not built beside the sea. Veyport is built in argument with it.\n\nThe city lies curled around the black-water harbor like a fist around a coin. Its outer arms are stone moles, chain piers, tide-gates, wrecking cranes, and the long teeth of the breakwater where the gulls go silent at dusk. Inland it rises in crowded tiers: tarred dock roofs and sail-lofts below; chandlers, fishwives, coopers, ropewalks, debt-houses, and cheap shrines above; then the counting stairs, guild halls, charter courts, and rain-polished mansions of those who own ships they never board. Every street remembers water. Every cellar has tasted brine. Every family keeps at least one story of a door opened during a storm and someone beloved never standing there again.\n\nThe city\u2019s heart is the harbor, though the guilds will tell you it is the Ledger House, the smugglers will tell you it is the Moon Quay, and the priests will tell you a city has no heart until it is dying. All are wrong. Veyport\u2019s heart is the tide-bell. It hangs green with age in the low tower over Chainmarket, and it is rung for fog, fire, riot, plague-ship, royal envoy, guild judgment, drowned children, and once\u2014only once in living memory\u2014for the thing beyond the breakwater turning in its sleep.\n\nDo not write its name. Do not ask the old keepers for its shape. The sea is full of things that were never meant to be believed in by daylight.\n\nThe Merchant-Guild Compact governs Veyport in the way a net governs fish: by catching some, missing many, and tearing under strain. The Compact\u2019s public face is respectable. The Salt Factors regulate cargo rights. The Red Ropemakers hold half the labor contracts below Hook Street. The Lampwrights maintain whale-oil quotas and public lanterns. The Chandlers\u2019 Confraternity owns more debt than any noble house ever owned land. The Shipwrights speak softly because every wall in the city depends on their hands. Lesser guilds swarm beneath them\u2014guttersmiths, eelmongers, bellfounders, sail-inkers, corpse washers, lime burners, oyster-lawyers, ratcatchers with hereditary badges and excellent memories.\n\nNo guild acts alone if it can act through a cousin, a bonded apprentice, a drinking club, a charity kitchen, a dockside preacher, or a knife hired under another man\u2019s seal. Veyport\u2019s politics are conducted in votes, bribes, marriages, warehouse fires, tariff amendments, missing cargo, and rumors placed carefully enough to ruin a family by breakfast.\n\nBeneath the Compact swim the unlicensed powers. The Marsh Eels run night cargo through the reed channels west of the city. The Grayhook Brotherhood owns three fish markets, two orphanages, and more honest magistrates than is considered decent. The Lanternless are not a gang, whatever the watch claims, but a habit of the city: men and women who know which postern is unwatched in rain, which customs clerk fears debt, which widow will hide a fugitive for coin, pity, or revenge. Smuggling in Veyport is less a crime than a second weather. Everyone condemns it. Everyone budgets for it.\n\nAbove all this stands Saint Orven\u2019s Light on the outer rock, older than the Compact, older than the south wall, older than the language in which its first vows were carved. The Lighthouse Order keeps the lamps, charts the fog banks, blesses departures, records wrecks, and performs the night rites no guild auditor is permitted to witness. Its members are called bellwardens, wick-sisters, lens-brothers, storm-novices, and, by those who have lost cargo to their interdictions, salt-mad frauds. They own little land and command no army. Yet when the Light\u2019s black bell sounds across the harbor, even guildmasters stop speaking.\n\nThe Order\u2019s doctrine is simple in public: the Light guides ships home and warns ships away. Its private doctrine is older and less comforting: the Light is not for ships.\n\nPast the breakwater the seabed drops sheer into a trench the charts mark only as Saint\u2019s Mercy. Nets lowered there come up cut, frozen, or full of pale weed that bleeds blue when burned. On windless nights, fishermen report a pressure in the bones, as if the world is holding its breath. The oldest account says something was lured there before Veyport had walls, bound beneath stone, song, lamp-glass, and tide. The Order does not keep it dead. It keeps it asleep.\n\nMagic, if that word must be used, is not a scholar\u2019s toy in Veyport. It is not fire from fingers or gold from mud. It is the inherited fear of doing a precise thing at the precise hour because your grandmother did it and her grandmother survived. It is salt thrown over a ledger before a dangerous contract. It is a bell struck underwater to call back the nearly drowned. It is blue flame in the lighthouse lens when no oil has been poured. It is a smuggler\u2019s charm that fails if bought with clean money. It is the way certain debts seem to find heirs.\n\nThe city tolerates such practices so long as they remain useful, private, and deniable. Public sorcery brings crowds. Crowds bring panic. Panic brings the watch, the guild courts, the Order, or worse, ambitious men who believe the old rites are merely technology without patents.\n\nFor Veyport is changing. The western warehouses are sinking by inches though no engineer will admit it. The Fishgut Steps flood now under a moon that once left them dry. Three guilds have petitioned to audit the Lighthouse Order\u2019s sealed accounts. Two bellwardens have vanished. The tide-bell has developed a hairline crack shaped, if viewed by candlelight, like an open eye. Ships from the south bring spices, plague rumors, and coin clipped so thin it sings wrong when dropped. Apprentices whisper that the old guildmasters are selling harbor rights to foreign crowns. Smugglers whisper that the Order has been dumping chained coffins beyond the breakwater. The Order whispers nothing.\n\nTo live in Veyport is to understand that the city is alive, and like all living things it hungers. It eats timber, coin, fish, secrets, labor, names, sons, daughters, and ships painted bright with hope. It rewards those who learn its pulses: fog hour, watch change, market surge, bell silence, funeral tide, riot weather. It punishes those who mistake its corruption for weakness. Every alley belongs to someone. Every roof hears something. Every lantern casts both guidance and shadow.\n\nIf you are new to the city, learn the first laws:\n\nNever mock a salt-oath.\nNever count another crew\u2019s dead aloud.\nNever bring an unhooded flame onto Moon Quay after midnight.\nNever ask what the Light is watching.\nNever stand on the seaward breakwater when the tide is going out and the gulls have stopped crying.\n\nAnd if the tide-bell rings three times with no hand on the rope, find stone beneath your feet, close your eyes, and pray the old bargains still remember your blood."
+ },
+ "character_draft": {
+  "concept": {
+   "name": "Brena Tideloft",
+   "archetype": "fever-marked salvage diver and tide-canal fixer",
+   "background": "Brena Tideloft survived Veyport's fever year and came out of it with a life built from salvage, favors, and grudges. She works the tide canals from her patched dory, the Gullwise, retrieving drowned cargo, inconvenient evidence, and things the Harbor Council would rather forget. Magistra Odile Sorrenwick, an aging Council archivist, quietly sponsors and shields her in exchange for discreet recoveries. At home, Brena supports her too-clever twelve-year-old brother Pim and half-blind Nan Cesska, the woman who raised them after the fever year. Practical, dry-humored, and careful with her hidden savings, Brena knows Veyport from the waterline down.",
+   "appearance": "Brena is in her mid-thirties, weather-browned and wiry from years of hauling rope, diving cold channels, and sleeping poorly when the foghorns call. She dresses in patched oilcloth, canal boots, and layered wool that always smells faintly of brine, lamp-smoke, and old copper. Her hands are scarred from barnacles and salvage hooks; her eyes have the narrowed patience of someone who has learned to listen before speaking. She carries herself plainly, with a fixer\u2019s economy\u2014nothing ornamental unless it hides a use.",
+   "suggested_traits": [
+    "patron",
+    "dependents",
+    "resources"
+   ],
+   "trait_rationales": {
+    "patron": "Magistra Odile Sorrenwick sponsors and protects Brena, but that protection comes tied to Council secrets and dangerous retrievals.",
+    "dependents": "Pim Tideloft and Nan Cesska give Brena a household to protect, making her choices personal whenever Veyport applies pressure.",
+    "resources": "Brena\u2019s modest hidden savings and working dory matter in a city where a little money, gear, and mobility can decide whether someone survives the tide."
+   }
+  },
+  "trait_selection": {
+   "selected_traits": [
+    "patron",
+    "dependents",
+    "resources"
+   ],
+   "trait_rationales": {
+    "patron": "Magistra Odile Sorrenwick sponsors and protects Brena, but that protection comes tied to Council secrets and dangerous retrievals.",
+    "dependents": "Pim Tideloft and Nan Cesska give Brena a household to protect, making her choices personal whenever Veyport applies pressure.",
+    "resources": "Brena\u2019s modest hidden savings and working dory matter in a city where a little money, gear, and mobility can decide whether someone survives the tide."
+   }
+  },
+  "wildcard": {
+   "wildcard_name": "Fever-Born Tide-Sense",
+   "wildcard_description": "Since surviving the fever year, Brena can read Veyport\u2019s tides, canals, submerged rooms, and hidden currents as if they were alleys under a dim moon. In the water she senses disturbances, drowned passages, and things moving before they surface\u2014but deep harbor pressure can stir memories that are not hers, and the sleeper beyond the breakwater may sometimes sense her in return.",
+   "orrery_tags": {
+    "applied_tags": [
+     "human",
+     "perceptive",
+     "resourceful",
+     "survivalist",
+     "urban",
+     "cautious",
+     "cynical",
+     "dutiful",
+     "kin_protector",
+     "reserved",
+     "fixer",
+     "salvager",
+     "broker",
+     "trauma_survivor",
+     "route_familiar",
+     "travel_ready",
+     "work_obligation",
+     "field_worker"
+    ],
+    "tags_to_clear": []
+   }
+  }
+ },
+ "selected_seed": {
+  "seed_type": "meeting",
+  "title": "Odile\u2019s Last Favor",
+  "situation": "Brena Tideloft arrives before dawn at the Lanternward Annex, a half-flooded Harbor Council archive built into Veyport\u2019s old seawall, where Magistra Odile Sorrenwick has summoned her for one last retrieval: a sealed bell-casket taken from beneath the outer breakwater and misfiled under plague-dead property. Odile insists it must be moved quietly to the Gullwise before the morning guild clerks arrive, but the archive doors have already been opened from the inside and someone has left wet footprints leading down into the forbidden lower stacks.",
+  "hook": "The job begins as a discreet favor between patron and fixer, but immediately turns into a tense search through drowned records, guild secrets, and old lighthouse taboos. Brena\u2019s fever-born tide-sense reacts to the bell-casket as if the harbor itself is breathing around it, and Odile\u2019s apology-laden urgency suggests this favor is less an errand than a farewell.",
+  "immediate_goal": "Get inside the Lanternward Annex, find Odile, secure the sealed bell-casket, and decide whether to carry out the retrieval before guild agents, Council rivals, or the old lighthouse order intervene.",
+  "stakes": "If Brena refuses or fails, Odile\u2019s protection may collapse, exposing Brena, Pim, and Nan to guild debt collectors and Council inquiry. If she succeeds blindly, she may help bury\u2014or awaken\u2014something tied to the old order\u2019s watch beyond the breakwater.",
+  "tension_source": "Brena owes Odile trust but has every reason to suspect she is being used. The archive is physically unsafe at the predawn flood, politically dangerous because rival Council hands are already moving, and supernaturally wrong because Brena\u2019s tide-sense recognizes a current where no water should be flowing.",
+  "base_timestamp": {
+   "year": 2026,
+   "month": 6,
+   "day": 11,
+   "hour": 3,
+   "minute": 21
+  },
+  "weather": "Cold predawn fog, steady harbor drizzle, and a rising tide pressing black water up through the archive drains.",
+  "key_npcs": [
+   "Magistra Odile Sorrenwick, aging Harbor Council archivist and Brena\u2019s patron, frightened but composed and hiding how little time she has left",
+   "Pim Tideloft, Brena\u2019s twelve-year-old brother, not present at the opening but vulnerable if Brena\u2019s protection network fails",
+   "Nan Cesska, half-blind household elder, asleep at home near the tide canals and dependent on Brena\u2019s income",
+   "Brother Edran Vell, a severe emissary of the old lighthouse order who believes the bell-casket must never leave consecrated watch",
+   "Marra Kest, a guild clerk-thief selling access to Council records to whoever pays fastest"
+  ],
+  "secrets": "Odile is dying from a slow poison administered through Council supper wine after she discovered that several Harbor Council families secretly profit from smuggling offerings past the breakwater to keep the sleeper quiescent. The bell-casket does not contain treasure or documents but a cracked tongue from one of the original lighthouse bells; when near Brena, it resonates with her fever-born tide-sense because the same fever that killed her parents was caused by a diluted outbreak of the sleeper\u2019s dream leaking into the canals. Odile intends Brena to take the casket not to the Council vault, as she will claim, but to a hidden channel only Brena can find. Brother Edran is not an enemy at first: he has orders to recover the casket, but he also knows Odile\u2019s poisoner sits on the Council. Marra Kest opened the Annex for a rival guild, then panicked after seeing a dead clerk walking and whispering below the waterline. The immediate corpse in the lower stacks is animated only by echo and current, not true life, and it may speak with the voice of someone Brena lost in the fever year."
+ },
+ "layer_draft": {
+  "name": "Veyport",
+  "type": "planet",
+  "description": "A dark late-medieval maritime world centered on a rain-lashed city-state of canals, guild law, sea walls, relics, and old harbor magic."
+ },
+ "zone_draft": {
+  "name": "Lanternward Quays",
+  "summary": "The old lighthouse quarter of Veyport, where seawalls, rope bridges, fish markets, signal towers, council offices, and flooded prison-stores crowd the fogbound harbor edge."
+ },
+ "initial_location": {
+  "name": "Lanternward Annex",
+  "history": "The Annex began as a tide-prison and signal storehouse for the old lighthouse order, later seized by the Harbor Council and converted into a restricted archive for salvage liens, plague-year inventories, guild charters, harbor claims, and misfiled property of the dead.",
+  "secrets": "The sealed bell-casket was not merely recovered from beneath the outer breakwater; it was deliberately placed there as a warding weight tied to the sleeper below the harbor. Odile knows the Council\u2019s official catalog has been altered by someone with access to plague-dead property records. The wet footprints may belong to a drowned agent using the culverts, a living clerk possessed by bell-metal resonance, or an old lighthouse-order remnant seeking to return the casket before the tide turns. Odile\u2019s private catalog room behind false tax rolls contains evidence that several Harbor Council archives were built over sealed channels leading to the same submerged thing.",
+  "summary": "A narrow, leaning Harbor Council archive built into Veyport\u2019s old seawall near the lighthouse quay. Its upper rooms hold warped oak shelves, brass catalog rails, locked map cages, clerk desks, and mildew-stained civic seals, while lower levels descend below the tide mark into flooded stacks, barred culverts, forgotten cells, and bricked-up lighthouse passages.",
+  "latitude": 60.392,
+  "longitude": 5.322,
+  "extra_data": {
+   "ruler": "Veyport Harbor Council",
+   "rumors": [
+    "Some records in the lower stacks whisper different names after they swell with seawater.",
+    "A smugglers\u2019 grate beneath the Annex opens only when the tide is nearly high.",
+    "Odile keeps a second index that contradicts the Council\u2019s official ledgers."
+   ],
+   "culture": "Austere civic secrecy governs the Annex: ledgers are treated like legal weapons, access is controlled by stamps and favors, and everyone understands that some drowned records are safer left misfiled.",
+   "dangers": [
+    "rising tide flooding the lower stacks",
+    "rotten stairs and collapsing shelves",
+    "barred culverts that trap the unwary",
+    "watchmen open to bribes or panic",
+    "bell-metal relics that stir old things under the breakwater"
+   ],
+   "economy": "The Annex underpins Veyport\u2019s harbor economy by recording salvage rights, shipping disputes, guild charters, plague inheritances, and claims on goods pulled from wrecks or tidewater graves.",
+   "factions": [
+    "Harbor Council clerks",
+    "Lanternward watchmen",
+    "dockside smugglers",
+    "old lighthouse-order remnants",
+    "guild salvage interests"
+   ],
+   "resources": [
+    "harbor claims and salvage records",
+    "locked map cages",
+    "Odile\u2019s private catalog room",
+    "culvert routes",
+    "Council seals and filing warrants"
+   ],
+   "atmosphere": "Bureaucratic, haunted, damp, and claustrophobic, with salt fog muffling bells and the smell of lamp oil, wet paper, rusted chain, mildew, and cold ashes.",
+   "nearby_landmarks": [
+    "the lighthouse quay",
+    "the outer breakwater",
+    "the old seawall",
+    "pre-dawn fish market",
+    "Gullwise mooring"
+   ]
+  },
+  "place_type": "fixed_location",
+  "inhabitants": [
+   "Magistra Odile Sorrenwick",
+   "exhausted junior clerks",
+   "bribed harbor watchmen",
+   "night smugglers",
+   "council record-keepers",
+   "rats and tide-crabs"
+  ],
+  "orrery_tags": null,
+  "current_status": "Before dawn, cold fog and harbor drizzle press against the building as the rising tide forces black water up through floor drains. Magistra Odile Sorrenwick has summoned Brena Tideloft to retrieve a sealed bell-casket, but the archive doors stand opened from within and wet footprints lead toward the forbidden lower stacks."
+ },
+ "base_timestamp": null,
+ "target_slot": 5
+}

@@ -110,6 +110,16 @@ max_retries = 2
 max_tokens = 4096
 enable_streaming = true
 
+[wizard.trait_inputs]
+# Transition-time derivation of typed trait-compiler inputs (M9). The wizard
+# chat records trait selections and prose rationales only; when the character
+# sheet reaches the wizard -> narrative transition without TraitCompileInputs,
+# one structured Skald call derives them so the M5 compilers can write
+# mechanical state (relationship rows, pair-tags, stub entities) instead of
+# leaving every trait a prose-only remainder. Skipped for the mock TEST model.
+derive_at_transition = true
+max_tokens = 4096
+
 # =============================================================================
 # API Settings
 # =============================================================================
@@ -697,6 +707,7 @@ provider = "openai"           # API provider: "openai" or "anthropic"
 model = "@openai.default"     # Resolved via api_models registry; edit roles to migrate
 reasoning_effort = "medium"   # Reasoning effort level (low/medium/high)
 max_output_tokens = 25000     # Maximum tokens for generated narrative
+structured_output_retries = 3 # Validation retry budget for structured story turns
 
 # =============================================================================
 # IR Evaluation V2 Settings

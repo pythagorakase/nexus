@@ -140,3 +140,31 @@ def test_sync_faction_state_updates_do_not_write_legacy_activity():
     )
 
     assert all("UPDATE factions" not in sql for sql in conn.cursor_instance.statements)
+
+
+def test_sync_location_state_updates_map_conditions_to_status_column():
+    """LocationStateUpdate.current_conditions persists to places.current_status.
+
+    M9 gate finding: the handler previously read a nonexistent
+    ``current_status`` attribute and crashed every commit that carried a
+    location state update.
+    """
+
+    from nexus.agents.logon.apex_schema import LocationStateUpdate
+
+    conn = RecordingStateUpdateConnection()
+
+    apply_state_updates_sync(
+        conn,
+        StateUpdates(
+            locations=[
+                LocationStateUpdate(
+                    place_id=4,
+                    current_conditions="Flooded to the second stair",
+                )
+            ]
+        ),
+    )
+
+    statements = conn.cursor_instance.statements
+    assert any("UPDATE places SET current_status" in sql for sql in statements)

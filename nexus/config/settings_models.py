@@ -1003,11 +1003,39 @@ class APEXSettings(BaseModel):
     model: str
     reasoning_effort: str = Field(..., pattern="^(low|medium|high)$")
     max_output_tokens: int = Field(..., ge=1)
+    structured_output_retries: int = Field(
+        default=3,
+        ge=0,
+        description=(
+            "Validation retry budget for apex structured-output calls. Each "
+            "retry feeds the validation error back to the model."
+        ),
+    )
 
 
 # =============================================================================
 # Wizard Settings Models
 # =============================================================================
+
+
+class WizardTraitInputsSettings(BaseModel):
+    """Transition-time derivation of typed trait-compiler inputs."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    derive_at_transition: bool = Field(
+        default=True,
+        description=(
+            "Derive TraitCompileInputs via one structured Skald call at the "
+            "wizard -> narrative transition when the wizard did not collect "
+            "them conversationally"
+        ),
+    )
+    max_tokens: int = Field(
+        default=4096,
+        ge=1,
+        description="Max output tokens for the trait input derivation call",
+    )
 
 
 class WizardSettings(BaseModel):
@@ -1031,6 +1059,10 @@ class WizardSettings(BaseModel):
     )
     enable_streaming: bool = Field(
         default=True, description="Enable wizard streaming endpoint"
+    )
+    trait_inputs: WizardTraitInputsSettings = Field(
+        default_factory=WizardTraitInputsSettings,
+        description="Transition-time trait input derivation settings",
     )
 
 

@@ -262,9 +262,11 @@ class NewCharacter(BaseModel):
         default=None,
         description=(
             "Semantic Orrery tags for this character (bodyform, capacity, "
-            "disposition, role, state, etc.). Apply registered tags by name; "
-            "omit tags when the closed registry has no exact fit. See the "
-            "Orrery Awareness section of your system prompt for category guidance."
+            "disposition, role, state, etc.). This is an OBJECT whose "
+            '"applied_tags" key holds the list of registered tag names — '
+            "never a bare list of strings. Omit tags when the closed "
+            "registry has no exact fit. See the Orrery Awareness section of "
+            "your system prompt for category guidance."
         ),
     )
 
@@ -312,9 +314,10 @@ class NewPlace(BaseModel):
         default=None,
         description=(
             "Semantic place tags for this location (e.g., commerce, dwelling, "
-            "haven, transit, place_hidden, place_open, wilderness). Apply "
-            "registered tags by name; omit tags when the closed registry has "
-            "no exact fit."
+            "haven, transit, place_hidden, place_open, wilderness). This is "
+            'an OBJECT whose "applied_tags" key holds the list of registered '
+            "tag names — never a bare list of strings. Omit tags when the "
+            "closed registry has no exact fit."
         ),
     )
 
@@ -386,8 +389,10 @@ class NewFaction(BaseModel):
     orrery_tags: Optional[OrreryTagBestowal] = Field(
         default=None,
         description=(
-            "Closed-vocabulary Orrery tags for this faction. Use registered "
-            "tags from ideology, resource_base, legitimacy, operational_mode, "
+            "Closed-vocabulary Orrery tags for this faction. This is an "
+            'OBJECT whose "applied_tags" key holds the list of registered '
+            "tag names — never a bare list of strings. Use registered tags "
+            "from ideology, resource_base, legitimacy, operational_mode, "
             "power_status, and agenda; omit tags when prose is more accurate."
         ),
     )

@@ -958,6 +958,7 @@ async def transition_to_narrative_endpoint(request: TransitionRequest):
             zone_id=result["zone_id"],
             message=f"Welcome to {transition_data.setting.world_name}. Your story begins.",
             retrograde=result.get("retrograde"),
+            trait_inputs=result.get("trait_inputs"),
         )
     except ValueError as e:
         # Includes RetrogradePersistenceBlockedError: the transaction rolled

@@ -258,7 +258,9 @@ class OpenAIProvider(LLMProvider):
                 max_output_tokens: Optional[int] = None,
                 system_prompt: Optional[str] = None,
                 reasoning_effort: Optional[str] = None,
-                base_url: Optional[str] = None):
+                base_url: Optional[str] = None,
+                structured_output_retries: Optional[int] = None,
+                output_validator: Optional[Any] = None):
         """
         Initialize OpenAI provider with additional reasoning parameter.
 
@@ -273,10 +275,20 @@ class OpenAIProvider(LLMProvider):
                 - GPT-5: 'minimal', 'medium', 'high'
                 - o3: 'low', 'medium', 'high'
             base_url: Optional base URL for API (e.g., for mock servers)
+            structured_output_retries: Validation retry budget for structured
+                output agents (apex.structured_output_retries in nexus.toml)
+            output_validator: Optional async pydantic_ai output validator
+                registered on structured agents (may raise ModelRetry)
         """
         self.reasoning_effort = reasoning_effort
         self.max_output_tokens = max_output_tokens or max_tokens
         self.base_url = base_url
+        self.structured_output_retries = (
+            structured_output_retries
+            if structured_output_retries is not None
+            else self.STRUCTURED_OUTPUT_RETRIES
+        )
+        self.output_validator = output_validator
 
         # Validate reasoning effort if provided
         if reasoning_effort is not None and reasoning_effort not in self.VALID_REASONING_EFFORTS:
@@ -432,8 +444,10 @@ class OpenAIProvider(LLMProvider):
             output_type=schema_model,
             system_prompt=self.system_prompt,
             model_settings=model_settings,
-            retries=self.STRUCTURED_OUTPUT_RETRIES,
+            retries=self.structured_output_retries,
         )
+        if self.output_validator is not None:
+            agent.output_validator(self.output_validator)
 
         return agent
 

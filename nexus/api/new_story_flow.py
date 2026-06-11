@@ -195,6 +195,34 @@ def perform_transition_with_retrograde(
     orrery_settings = settings.orrery
 
     effective_model = model or get_slot_model(slot_number, dbname=dbname)
+
+    # Derive typed trait-compiler inputs before any world writes so the
+    # compiler can create stub entities and relationship rows (M9). Runs for
+    # real models only; the mock TEST wizard stays hermetic.
+    trait_inputs_outcome: Optional[Dict[str, Any]] = None
+    trait_inputs_settings = settings.wizard.trait_inputs
+    if (
+        effective_model != MOCK_WIZARD_MODEL
+        and trait_inputs_settings.derive_at_transition
+    ):
+        from nexus.api.trait_input_derivation import ensure_trait_compile_inputs
+
+        if effective_model is None:
+            raise ValueError(
+                f"Slot {slot_number} has no configured model; cannot derive "
+                "trait compile inputs at the transition"
+            )
+        # Sync context only: the transition endpoint runs this whole
+        # function via asyncio.to_thread, and the deriver uses
+        # agent.run_sync, which would deadlock inside a running event loop.
+        trait_inputs_outcome = ensure_trait_compile_inputs(
+            transition_data,
+            slot=slot_number,
+            model_name=effective_model,
+            max_tokens=trait_inputs_settings.max_tokens,
+            retries=settings.wizard.max_retries,
+        )
+
     if orrery_settings is None or not orrery_settings.enabled:
         skip_reason = "orrery_disabled"
     elif not orrery_settings.retrograde.wizard.enabled:
@@ -212,6 +240,7 @@ def perform_transition_with_retrograde(
         )
         result: Dict[str, Any] = dict(mapper.perform_transition(transition_data))
         result["retrograde"] = {"enabled": False, "skip_reason": skip_reason}
+        result["trait_inputs"] = trait_inputs_outcome or {"derived": False}
         return result
 
     # Narrowing only: orrery_settings None always sets skip_reason above.
@@ -229,6 +258,7 @@ def perform_transition_with_retrograde(
     def _progress(stage: str, detail: Dict[str, Any]) -> None:
         record_retrograde_progress(slot_number, stage, detail)
 
+    derived_inputs = transition_data.character.trait_compile_inputs
     bundle = generate_retrograde_history(
         slot=slot_number,
         dbname=dbname,
@@ -237,6 +267,11 @@ def perform_transition_with_retrograde(
         model_name=effective_model,
         max_tokens=orrery_settings.retrograde.wizard.max_tokens,
         progress=_progress,
+        trait_compile_inputs=(
+            derived_inputs.model_dump(mode="json", exclude_none=True)
+            if derived_inputs is not None
+            else None
+        ),
     )
 
     manifest_holder: Dict[str, Any] = {}
@@ -287,6 +322,7 @@ def perform_transition_with_retrograde(
         "embedded_chunk_ids": [entry["chunk_id"] for entry in embedding_results],
         "timings": [timing.model_dump() for timing in bundle.timings],
     }
+    result["trait_inputs"] = trait_inputs_outcome or {"derived": False}
     return result
 
 

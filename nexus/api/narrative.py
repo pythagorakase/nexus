@@ -377,72 +377,83 @@ def _trigger_locked_chunk_embedding(
     *, slot: Optional[int], parent_chunk_id: int
 ) -> None:
     """
-    Embed the chunk that becomes locked when starting from parent_chunk_id.
+    Embed every locked chunk older than parent_chunk_id.
 
-    Continuing from chunk n-1 creates provisional chunk n. That leaves chunk
-    n-1 undoable, while chunk n-2 is now locked and eligible for embeddings.
+    Continuing from chunk N creates a provisional successor, leaving chunk N
+    undoable while every committed chunk before it is locked and must be
+    embedded ("embedded == ironman"). Chunk ids are NOT contiguous: regens
+    burn ids and Retrograde/maturation summary chunks interleave with played
+    chunks, so the old single-id ``parent - 1`` arithmetic silently skipped
+    played chunks whenever a summary chunk sat in between (M9 gate finding).
+    This catch-up form embeds every unembedded locked chunk except the
+    intentionally unembedded Retrograde prologue anchor, healing any
+    previously skipped chunk on the next turn.
     """
-    locked_chunk_id = parent_chunk_id - 1
-    if locked_chunk_id < 1:
+    if parent_chunk_id <= 1:
         return
 
     try:
         dbname = require_slot_dbname(slot=slot)
     except Exception as exc:
         logger.warning(
-            "Skipping locked chunk embedding for chunk %s: %s",
-            locked_chunk_id,
+            "Skipping locked chunk embedding before chunk %s: %s",
+            parent_chunk_id,
             exc,
         )
         return
 
     try:
+        from nexus.agents.orrery.retrograde_markers import (
+            RETROGRADE_PROLOGUE_MARKER,
+        )
+
         with get_connection(dbname, dict_cursor=True) as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    SELECT embedding_generated_at
+                    SELECT id
                     FROM narrative_chunks
-                    WHERE id = %s
+                    WHERE id < %s
+                      AND embedding_generated_at IS NULL
+                      AND NOT (
+                          COALESCE(authorial_directives, '[]'::jsonb)
+                          @> %s::jsonb
+                      )
+                    ORDER BY id
                     """,
-                    (locked_chunk_id,),
+                    (parent_chunk_id, json.dumps([RETROGRADE_PROLOGUE_MARKER])),
                 )
-                row = cur.fetchone()
+                locked_chunk_ids = [row["id"] for row in cur.fetchall()]
 
-        if not row:
-            logger.warning(
-                "Skipping locked chunk embedding: chunk %s not found in %s",
-                locked_chunk_id,
-                dbname,
-            )
-            return
-
-        if row.get("embedding_generated_at"):
+        if not locked_chunk_ids:
             logger.info(
-                "Skipping locked chunk embedding: chunk %s already embedded",
-                locked_chunk_id,
+                "No locked chunks pending embedding before chunk %s in %s",
+                parent_chunk_id,
+                dbname,
             )
             return
 
         workflow = ChunkWorkflow(dbname)
-        job_id = workflow.trigger_embedding_generation(locked_chunk_id)
-        if job_id:
-            logger.info(
-                "Generated embeddings for locked chunk %s in %s (%s)",
-                locked_chunk_id,
-                dbname,
-                job_id,
-            )
-        else:
-            logger.warning(
-                "Embedding generation did not complete for locked chunk %s in %s",
-                locked_chunk_id,
-                dbname,
-            )
+        for locked_chunk_id in locked_chunk_ids:
+            job_id = workflow.trigger_embedding_generation(locked_chunk_id)
+            if job_id:
+                logger.info(
+                    "Generated embeddings for locked chunk %s in %s (%s)",
+                    locked_chunk_id,
+                    dbname,
+                    job_id,
+                )
+            else:
+                logger.warning(
+                    "Embedding generation did not complete for locked chunk %s "
+                    "in %s",
+                    locked_chunk_id,
+                    dbname,
+                )
     except Exception as exc:
         logger.error(
-            "Error embedding locked chunk %s for slot %s: %s",
-            locked_chunk_id,
+            "Error embedding locked chunks before %s for slot %s: %s",
+            parent_chunk_id,
             slot,
             exc,
         )

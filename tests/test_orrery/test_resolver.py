@@ -8,6 +8,7 @@ from nexus.agents.lore.utils.turn_context import TurnContext
 from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
 from nexus.agents.orrery.resolver import (
     LOCATION_CLASS_TAG_CATEGORIES,
+    OrreryResolutionDraft,
     _need_pressure_stub,
     compose_actor_target_bindings,
     hydrate_world_state,
@@ -2118,3 +2119,43 @@ def test_resolve_dry_run_produces_multi_slot_resolution() -> None:
     )
     assert protect_kin_drafts[0].bindings == {"actor": 1, "target": 2}
     assert proposal.pressure_count == 0
+
+
+def test_resolution_drafts_carry_binding_names_for_skald() -> None:
+    """Imminent-activity drafts name their actors and render their stubs.
+
+    M9 gate finding: Skald received bare entity ids and misattributed an
+    off-screen sleep resolution to the on-screen protagonist.
+    """
+
+    proposal = resolve_dry_run(
+        FakeSession(
+            world_time=datetime(2073, 10, 31, 23, tzinfo=timezone.utc),
+            entity_name_rows=[{"id": 1, "name": "Brother Edran Vell"}],
+            need_debt_rows=[
+                {
+                    "character_entity_id": 1,
+                    "need_type": "sleep",
+                    "debt_score": 10,
+                    "last_evaluated_at": datetime(
+                        2073, 10, 31, 23, tzinfo=timezone.utc
+                    ),
+                }
+            ],
+        ),
+        BUILTIN_TEMPLATES,
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert proposal.resolution_count == 1
+    draft = proposal.resolutions[0]
+    assert draft.binding_names == {"actor": "Brother Edran Vell"}
+    assert "{actor}" not in draft.narrative_stub
+    assert "Brother Edran Vell" in draft.narrative_stub
+
+    # The Skald-facing dict and the incubator round-trip both keep names.
+    data = draft.to_dict()
+    assert data["binding_names"] == {"actor": "Brother Edran Vell"}
+    rehydrated = OrreryResolutionDraft.from_dict(data)
+    assert rehydrated.binding_names == {"actor": "Brother Edran Vell"}

@@ -130,20 +130,24 @@ def _run_summary_generation(
                 password = os.environ.get("DB_PASSWORD", "")
                 host = os.environ.get("DB_HOST", "localhost")
                 port = os.environ.get("DB_PORT", "5432")
-                
+
                 if password:
                     db_url = f"postgresql://{user}:{password}@{host}:{port}/{dbname}"
                 else:
                     db_url = f"postgresql://{user}@{host}:{port}/{dbname}"
-            
+
             db_manager = DatabaseManager(db_url=db_url)
     except Exception as exc:  # pragma: no cover - defensive logging
-        logger.error("Unable to start summary generation; database init failed: %s", exc)
+        logger.error(
+            "Unable to start summary generation; database init failed: %s", exc
+        )
         return
 
     for task in tasks:
         try:
-            _run_single_task(task, db_manager, model_candidates, overwrite, generator_cls)
+            _run_single_task(
+                task, db_manager, model_candidates, overwrite, generator_cls
+            )
         except Exception as exc:  # pragma: no cover - defensive logging
             logger.error("Summary generation failed for %s: %s", task, exc)
 
@@ -159,9 +163,21 @@ def _run_single_task(
         if task.episode is None:
             logger.warning("Episode summary task missing episode value: %s", task)
             return
-        if not overwrite and db_manager.episode_summary_exists(task.season, task.episode):
+        if not overwrite and db_manager.episode_summary_exists(
+            task.season, task.episode
+        ):
             logger.info(
                 "Skipping summary for S%02dE%02d because one already exists",
+                task.season,
+                task.episode,
+            )
+            return
+        # The Storyteller may open play mid-numbering (e.g., the first played
+        # chunk lands in S01E02 while S01E01 holds no chunks); an episode
+        # with nothing in it has nothing to summarize (M9 gate finding).
+        if db_manager.get_episode_chunk_span(task.season, task.episode) is None:
+            logger.info(
+                "Skipping summary for S%02dE%02d because the episode has no " "chunks",
                 task.season,
                 task.episode,
             )
@@ -193,10 +209,14 @@ def _run_single_task(
         if summary:
             if index > 0:
                 logger.info(
-                    "Generated %s summary using fallback model %s", target_label, model_name
+                    "Generated %s summary using fallback model %s",
+                    target_label,
+                    model_name,
                 )
             else:
-                logger.info("Generated %s summary using model %s", target_label, model_name)
+                logger.info(
+                    "Generated %s summary using model %s", target_label, model_name
+                )
             return
 
         if index < len(model_candidates) - 1:
@@ -213,6 +233,12 @@ def _run_single_task(
 
 
 def _coalesce_models(model_candidates: Optional[Sequence[str]]) -> List[str]:
+    # scripts/summarize_narrative resolves its module-level DEFAULT_MODEL /
+    # FALLBACK_MODEL constants at argparse time, so they are None when
+    # imported here (M9 gate finding: every API-triggered episode summary
+    # failed with zero model candidates). Resolve the default from the live
+    # apex config instead, keeping the legacy constants as extra candidates
+    # for older callers that still set them.
     models = (
         list(model_candidates) if model_candidates else [DEFAULT_MODEL, FALLBACK_MODEL]
     )
@@ -221,5 +247,10 @@ def _coalesce_models(model_candidates: Optional[Sequence[str]]) -> List[str]:
     for candidate in models:
         if candidate and candidate not in deduped:
             deduped.append(candidate)
+
+    if not deduped:
+        from nexus.config import load_settings
+
+        deduped.append(load_settings().apex.model)
 
     return deduped

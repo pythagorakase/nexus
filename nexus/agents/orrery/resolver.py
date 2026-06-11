@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable as IterableABC
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from typing import Any, Iterable, Mapping, Optional, Tuple
 
@@ -65,6 +65,10 @@ class OrreryResolutionDraft:
     event_type: Optional[str] = None
     changed_fields: Tuple[str, ...] = ()
     magnitude: float = 0.0
+    # Slot name -> entity display name. Skald adjudicates these proposals;
+    # without names it cannot tell WHO an off-screen resolution is about and
+    # may misattribute it to an on-screen character (M9 gate finding).
+    binding_names: Mapping[str, str] = field(default_factory=dict)
 
     @property
     def proposal_id(self) -> str:
@@ -81,6 +85,7 @@ class OrreryResolutionDraft:
             "priority": self.priority,
             "binding_hash": self.binding_hash,
             "bindings": dict(self.bindings),
+            "binding_names": dict(self.binding_names),
             "branch_label": self.branch_label,
             "narrative_stub": self.narrative_stub,
             "state_delta": dict(self.state_delta),
@@ -117,6 +122,7 @@ class OrreryResolutionDraft:
             event_type=data.get("event_type"),
             changed_fields=tuple(data.get("changed_fields") or ()),
             magnitude=float(data.get("magnitude") or 0.0),
+            binding_names=dict(data.get("binding_names") or {}),
         )
 
 
@@ -869,6 +875,32 @@ def resolve_dry_run(
                 resolution = evaluate_stack(pressure_templates, state, bindings)
                 if resolution is not None and resolution.passes:
                     scene_pressure_results.append(resolution)
+
+    # Resolve binding entity names so Skald's adjudication payload says WHO
+    # each off-screen proposal is about; bare entity ids invite misattribution
+    # to on-screen characters (M9 gate finding).
+    draft_entity_ids: set[int] = set()
+    for draft in drafts:
+        for value in draft.bindings.values():
+            if isinstance(value, int):
+                draft_entity_ids.add(value)
+    draft_entity_names = _load_entity_names(session, draft_entity_ids)
+    drafts = [
+        replace(
+            draft,
+            binding_names={
+                slot: _entity_label(value, draft_entity_names)
+                for slot, value in draft.bindings.items()
+            },
+            narrative_stub=_render_bound_text(
+                draft.narrative_stub,
+                draft.bindings,
+                draft_entity_names,
+                template_id=draft.template_id,
+            ),
+        )
+        for draft in drafts
+    ]
 
     present_need_pressure_specs = _present_need_pressure_specs(
         state,
