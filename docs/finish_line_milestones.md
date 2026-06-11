@@ -49,10 +49,14 @@ When Skald declares `new_entities` mid-narrative, mature them. MVP cut: the stru
 **M8.5 - Wizard Multi-Model Support** - M (added 2026-06-10 per user) - DONE 2026-06-10 (PR #382, e77980be; gpt-5.5 default kept via @openai.default, Anthropic proven live end-to-end both ways on slot 5)
 The wizard and its Retrograde calls should route through the same pluggable provider layer as the main narrative engine: gpt-5.5 stays the default testing workhorse, Anthropic models become selectable (config + settings UI dropdown), structured-output paths provider-agnostic. No literal model IDs in runtime code.
 
-**M9 - Golden-Path Release Gate** - M
+**M9 - Golden-Path Release Gate** - M - DONE 2026-06-11 (PR #383, 03d05a7b; 8/8 live stages green in 14m30s, nine gate-found bugs fixed, gate codified as tests/test_golden_path_live.py)
 One scripted end-to-end run, real API calls, fresh slot: wizard -> Retrograde cold start -> ~10 live turns with Orrery on -> assert chunk persistence, embedding lifecycle, retrieval of retrograde-sourced history (per M3's chosen surface), and at least one off-screen event bleeding into prose. Codified as a repeatable `NEXUS_RUN_LIVE_LLM=1` test. Passing this run *is* the MVP.
 
-**M10 - Release Hygiene** - M - DONE except the tag, 2026-06-10 (PR #380, ac3734e6; #369 closed, settings.json retired, fresh-slot migration stamping fixed, README rewritten; v1.0.0 tag fires after M9 passes)
+**M10 - Release Hygiene** - M - DONE 2026-06-11 (PRs #380+#381; #369 closed, settings.json retired, fresh-slot migration stamping fixed, README rewritten; v1.0.0 tagged at 03d05a7b)
+
+## Campaign Complete
+
+All fifteen milestones (M1-M10 incl. M8.5, U1-U5) landed 2026-06-10/11. v1.0.0 tagged after the golden-path gate passed 8/8 live stages.
 Close #369 (side-effect-free API imports). Reconcile nexus.toml/settings.json drift. Document intentional flag states (`structured_data_enabled = false` stays off). Rewrite README to match reality. Update stale issue/spec checklists (#300 prerequisites). Tag v1.0.0.
 
 ## UI Track (Parallel Lane)
