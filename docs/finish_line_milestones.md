@@ -46,7 +46,7 @@ Branch selection reads the acting entity's own properties (fame, resources, disp
 **M8 - Retrograde Phase B-Lite: Runtime Stub Maturation** - L - DONE 2026-06-10 (PR #379; live-proven on slot 2: Skald-declared entity matured with 4 events in 171s, retrievable via MEMNON; maturation drain detached from the play loop, +3.2min -> +106ms)
 When Skald declares `new_entities` mid-narrative, mature them. MVP cut: the structured-output declaration schema (decision 9), a conservative engagement-signal set (decision 12), and the fire-and-forget job contract with persistence-on-completion (the core of decision 10) - running only on the *committed* branch. Deferred past 1.0: A/B/C speculative branch maturation (decision 10's tail) and the rule-based prose-audit pass (decision 11).
 
-**M8.5 - Wizard Multi-Model Support** - M (added 2026-06-10 per user)
+**M8.5 - Wizard Multi-Model Support** - M (added 2026-06-10 per user) - DONE 2026-06-10 (PR #382, e77980be; gpt-5.5 default kept via @openai.default, Anthropic proven live end-to-end both ways on slot 5)
 The wizard and its Retrograde calls should route through the same pluggable provider layer as the main narrative engine: gpt-5.5 stays the default testing workhorse, Anthropic models become selectable (config + settings UI dropdown), structured-output paths provider-agnostic. No literal model IDs in runtime code.
 
 **M9 - Golden-Path Release Gate** - M
