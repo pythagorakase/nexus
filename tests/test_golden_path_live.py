@@ -199,11 +199,19 @@ def _stage_run_transition(run: GoldenPathRun) -> None:
 def _poll_generation(session_id: str) -> None:
     deadline = time.monotonic() + GENERATION_POLL_SECONDS
     while time.monotonic() < deadline:
-        status = requests.get(
-            f"{API}/api/narrative/status/{session_id}",
-            params={"slot": SLOT},
-            timeout=30,
-        )
+        try:
+            status = requests.get(
+                f"{API}/api/narrative/status/{session_id}",
+                params={"slot": SLOT},
+                timeout=60,
+            )
+        except requests.RequestException:
+            # The single-worker server shares its host with in-process
+            # embedding inference; a slow status read is expected under
+            # load. The status GET is idempotent -- keep polling until the
+            # overall deadline.
+            time.sleep(2)
+            continue
         if status.ok:
             state = status.json().get("status")
             if state in {
