@@ -1010,6 +1010,26 @@ class APEXSettings(BaseModel):
 # =============================================================================
 
 
+class WizardTraitInputsSettings(BaseModel):
+    """Transition-time derivation of typed trait-compiler inputs."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    derive_at_transition: bool = Field(
+        default=True,
+        description=(
+            "Derive TraitCompileInputs via one structured Skald call at the "
+            "wizard -> narrative transition when the wizard did not collect "
+            "them conversationally"
+        ),
+    )
+    max_tokens: int = Field(
+        default=4096,
+        ge=1,
+        description="Max output tokens for the trait input derivation call",
+    )
+
+
 class WizardSettings(BaseModel):
     """Wizard configuration for new story setup and structured responses."""
 
@@ -1031,6 +1051,10 @@ class WizardSettings(BaseModel):
     )
     enable_streaming: bool = Field(
         default=True, description="Enable wizard streaming endpoint"
+    )
+    trait_inputs: WizardTraitInputsSettings = Field(
+        default_factory=WizardTraitInputsSettings,
+        description="Transition-time trait input derivation settings",
     )
 
 

@@ -195,6 +195,26 @@ def perform_transition_with_retrograde(
     orrery_settings = settings.orrery
 
     effective_model = model or get_slot_model(slot_number, dbname=dbname)
+
+    # Derive typed trait-compiler inputs before any world writes so the
+    # compiler can create stub entities and relationship rows (M9). Runs for
+    # real models only; the mock TEST wizard stays hermetic.
+    trait_inputs_outcome: Optional[Dict[str, Any]] = None
+    trait_inputs_settings = settings.wizard.trait_inputs
+    if (
+        effective_model != MOCK_WIZARD_MODEL
+        and trait_inputs_settings.derive_at_transition
+    ):
+        from nexus.api.trait_input_derivation import ensure_trait_compile_inputs
+
+        trait_inputs_outcome = ensure_trait_compile_inputs(
+            transition_data,
+            slot=slot_number,
+            model_name=effective_model or get_new_story_model(),
+            max_tokens=trait_inputs_settings.max_tokens,
+            retries=settings.wizard.max_retries,
+        )
+
     if orrery_settings is None or not orrery_settings.enabled:
         skip_reason = "orrery_disabled"
     elif not orrery_settings.retrograde.wizard.enabled:
@@ -212,6 +232,7 @@ def perform_transition_with_retrograde(
         )
         result: Dict[str, Any] = dict(mapper.perform_transition(transition_data))
         result["retrograde"] = {"enabled": False, "skip_reason": skip_reason}
+        result["trait_inputs"] = trait_inputs_outcome or {"derived": False}
         return result
 
     # Narrowing only: orrery_settings None always sets skip_reason above.
@@ -287,6 +308,7 @@ def perform_transition_with_retrograde(
         "embedded_chunk_ids": [entry["chunk_id"] for entry in embedding_results],
         "timings": [timing.model_dump() for timing in bundle.timings],
     }
+    result["trait_inputs"] = trait_inputs_outcome or {"derived": False}
     return result
 
 
