@@ -261,6 +261,9 @@ max_new_entity_stubs = 6
 max_tokens = 16000
 # CLI/UI HTTP timeout for the transition request; frontier calls run inside it.
 transition_timeout_seconds = 900
+# NOTE: transition progress (GET /api/story/new/retrograde/status) lives in a
+# process-local registry. Run the API single-worker, or accept that status
+# polls answered by a non-writing worker report stage "idle" mid-transition.
 
 [orrery.retrograde.weird]
 # Player-facing Retrograde strangeness is low/medium/high. Each genre remaps

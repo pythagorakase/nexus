@@ -7,12 +7,17 @@ from typing import Annotated, Any, Literal, Mapping, Optional, cast
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from nexus.agents.orrery.retrograde_packet import (
+    CORE_ENTITIES_HEADING,
+    NAMED_SEED_NPCS_HEADING,
+)
 from nexus.agents.orrery.retrograde_seed_candidates import (
     validate_seed_candidate_response,
 )
 from nexus.agents.orrery.retrograde_vocabulary import (
     ENTITY_REF_MAX_LENGTH,
     SeedEligibleVocabulary,
+    normalize_entity_ref,
 )
 
 EntityRef = Annotated[str, Field(min_length=1, max_length=ENTITY_REF_MAX_LENGTH)]
@@ -87,9 +92,8 @@ class RetrogradeExpansionEventPlan(BaseModel):
         description="Relative placement before the first narrative chunk."
     )
     participants: list[RetrogradeExpansionParticipant] = Field(default_factory=list)
-    location_ref: Optional[str] = Field(
+    location_ref: Optional[EntityRef] = Field(
         default=None,
-        max_length=ENTITY_REF_MAX_LENGTH,
         description=(
             "Prompt-local place name for future location_id resolution: a "
             f"proper name of at most {ENTITY_REF_MAX_LENGTH} characters, "
@@ -547,21 +551,21 @@ def _collect_plan_entity_keys(
     for event in response.event_plan:
         for participant in event.participants:
             keys.add(
-                (participant.entity_kind, _normalize_entity_ref(participant.entity_ref))
+                (participant.entity_kind, normalize_entity_ref(participant.entity_ref))
             )
         if event.location_ref:
-            keys.add(("place", _normalize_entity_ref(event.location_ref)))
+            keys.add(("place", normalize_entity_ref(event.location_ref)))
     for tag_plan in response.entity_tag_plan:
-        keys.add((tag_plan.entity_kind, _normalize_entity_ref(tag_plan.entity_ref)))
+        keys.add((tag_plan.entity_kind, normalize_entity_ref(tag_plan.entity_ref)))
     for pair_plan in response.pair_tag_plan:
-        keys.add((pair_plan.subject_kind, _normalize_entity_ref(pair_plan.subject_ref)))
-        keys.add((pair_plan.object_kind, _normalize_entity_ref(pair_plan.object_ref)))
+        keys.add((pair_plan.subject_kind, normalize_entity_ref(pair_plan.subject_ref)))
+        keys.add((pair_plan.object_kind, normalize_entity_ref(pair_plan.object_ref)))
     for relationship in response.relationship_plan:
         keys.add(
-            (relationship.subject_kind, _normalize_entity_ref(relationship.subject_ref))
+            (relationship.subject_kind, normalize_entity_ref(relationship.subject_ref))
         )
         keys.add(
-            (relationship.object_kind, _normalize_entity_ref(relationship.object_ref))
+            (relationship.object_kind, normalize_entity_ref(relationship.object_ref))
         )
     return keys
 
@@ -582,7 +586,7 @@ def _packet_known_entity_keys(packet: Mapping[str, Any]) -> set[tuple[str, str]]
         kind = card.get("kind")
         name = card.get("name")
         if kind in STUB_CREATABLE_ENTITY_KINDS and name:
-            keys.add((str(kind), _normalize_entity_ref(str(name))))
+            keys.add((str(kind), normalize_entity_ref(str(name))))
 
     scaffolds = packet.get("candidate_scaffolds")
     if isinstance(scaffolds, Mapping):
@@ -596,7 +600,10 @@ def _packet_known_entity_keys(packet: Mapping[str, Any]) -> set[tuple[str, str]]
         for section in seed_generation_request.get("prompt_sections") or ():
             if not isinstance(section, Mapping):
                 continue
-            if section.get("heading") not in {"Core entities", "Named seed NPCs"}:
+            if section.get("heading") not in {
+                CORE_ENTITIES_HEADING,
+                NAMED_SEED_NPCS_HEADING,
+            }:
                 continue
             for card in section.get("items") or ():
                 add_card(card)
@@ -615,12 +622,6 @@ def _budget_entity_stub_cap(
     if cap is None:
         return None
     return int(cap)
-
-
-def _normalize_entity_ref(value: str) -> str:
-    """Match the persistence layer's prompt-local ref normalization."""
-
-    return " ".join(value.split()).casefold()
 
 
 def _event_plan_issues(

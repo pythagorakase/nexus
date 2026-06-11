@@ -24,6 +24,18 @@ instead of mid-transaction at the database.
 """
 
 
+def normalize_entity_ref(value: str) -> str:
+    """Collapse whitespace and casefold a prompt-local entity ref.
+
+    The single normalization shared by the R6 expansion validator (entity
+    budget check) and the persistence layer (canonical row resolution), so
+    the two layers can never drift apart: a ref that passes the budget
+    check resolves identically at persistence time.
+    """
+
+    return " ".join(value.split()).casefold()
+
+
 class PairTagPrimitive(TypedDict):
     """One registered multi-entity tag family with kind constraints."""
 

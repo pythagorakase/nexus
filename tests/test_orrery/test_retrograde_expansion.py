@@ -215,6 +215,21 @@ def test_expansion_plan_rejects_overlong_location_ref() -> None:
         )
 
 
+def test_expansion_plan_rejects_empty_location_ref() -> None:
+    """location_ref carries EntityRef's lower bound too: '' is not a name."""
+
+    vocabulary = _expansion_test_vocabulary()
+    payload = _valid_expansion(vocabulary)
+    payload["event_plan"][0]["location_ref"] = ""
+
+    with pytest.raises(ValidationError, match="at least 1 character"):
+        validate_expansion_plan(
+            payload=payload,
+            packet=_packet(vocabulary),
+            seed_candidate_response=_seed_response(vocabulary),
+        )
+
+
 def test_expansion_prompt_states_entity_ref_name_contract() -> None:
     """The R6 prompt tells Skald refs are bounded proper names."""
 

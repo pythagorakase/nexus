@@ -26,6 +26,10 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
+from nexus.agents.orrery.retrograde_markers import (
+    RETROGRADE_PROLOGUE_MARKER,
+    RETROGRADE_SUMMARY_MARKER,
+)
 from nexus.api.choice_handling import extract_presented_choices, resolve_input_text
 from nexus.api.db_pool import get_connection
 from nexus.api.slot_utils import slot_dbname
@@ -271,11 +275,6 @@ def _get_narrative_state(cur) -> NarrativeState:
     # boundary: generated history is memory, not recent narration. Without
     # this filter a freshly transitioned slot would resolve a Retrograde
     # summary chunk as the continuation parent and skip bootstrap.
-    from nexus.agents.orrery.retrograde_markers import (
-        RETROGRADE_PROLOGUE_MARKER,
-        RETROGRADE_SUMMARY_MARKER,
-    )
-
     cur.execute(
         """
         SELECT nc.id, nc.raw_text, nc.choice_object

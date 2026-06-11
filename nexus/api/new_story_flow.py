@@ -204,7 +204,7 @@ def perform_transition_with_retrograde(
     else:
         skip_reason = None
 
-    if skip_reason is not None or orrery_settings is None:
+    if skip_reason is not None:
         logger.info(
             "Skipping Retrograde cold start for slot %s (%s)",
             slot_number,
@@ -213,6 +213,9 @@ def perform_transition_with_retrograde(
         result: Dict[str, Any] = dict(mapper.perform_transition(transition_data))
         result["retrograde"] = {"enabled": False, "skip_reason": skip_reason}
         return result
+
+    # Narrowing only: orrery_settings None always sets skip_reason above.
+    assert orrery_settings is not None
 
     cache = read_cache(dbname)
     if cache is None:
