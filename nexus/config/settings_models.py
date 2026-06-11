@@ -107,7 +107,12 @@ class ModelConfig(BaseModel):
 
     @model_validator(mode="after")
     def _validate_defaults_reference_known_models(self) -> "ModelConfig":
-        """Legacy/default UI fields must stay anchored to registered model IDs."""
+        """Legacy/default UI fields must stay anchored to registered model IDs.
+
+        "@provider.role" references are skipped here: they are resolved (and
+        validated) by ``Settings._resolve_model_references`` once the full
+        registry is available on the root model.
+        """
         known_ids = {
             entry.id
             for provider in self.api_models.values()
@@ -115,6 +120,8 @@ class ModelConfig(BaseModel):
         }
         for field_name in ("default_model", "default_slot_model"):
             model_id = getattr(self, field_name)
+            if model_id.startswith(MODEL_ROLE_PREFIX):
+                continue
             if model_id not in known_ids:
                 raise ValueError(
                     f"{field_name} references unknown model id '{model_id}'. "
@@ -1267,6 +1274,8 @@ class Settings(BaseModel):
         # Each tuple is (container, attribute_name, optional_flag). When the
         # value is None on an optional field, skip resolution silently.
         targets: List[Tuple[Any, str, bool]] = [
+            (self.global_.model, "default_model", False),
+            (self.global_.model, "default_slot_model", False),
             (self.apex, "model", False),
             (self.wizard, "default_model", False),
             (self.wizard, "fallback_model", True),
@@ -1303,6 +1312,19 @@ class Settings(BaseModel):
             object.__setattr__(container, attr, resolved)
 
         return self
+
+    def resolve_model_ref(self, ref: str) -> str:
+        """Resolve an "@provider.role" reference against the api_models registry.
+
+        Literal model IDs are validated against the registry and returned
+        unchanged. Intended for callers outside the load-time resolution pass
+        (live tests, env overrides) that accept role references at runtime.
+        """
+        return _resolve_model_reference(
+            ref,
+            registry=self._build_model_registry(),
+            source="Settings.resolve_model_ref",
+        )
 
     def _build_model_registry(self) -> _ModelRegistry:
         """Index [global.model.api_models] for fast role / literal-ID lookup.

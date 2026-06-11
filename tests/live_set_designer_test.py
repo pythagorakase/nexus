@@ -76,7 +76,10 @@ TEST_SEED = StorySeed(
     tension_source="Corporate drones tracking from above, unknown allies signaling from below.",
     base_timestamp=StoryTimestamp(year=2087, month=11, day=3, hour=0, minute=15),
     weather="Hard sideways rain, visibility near zero",
-    key_npcs=["Pursuing corporate security team", "Mysterious figure signaling from below"],
+    key_npcs=[
+        "Pursuing corporate security team",
+        "Mysterious figure signaling from below",
+    ],
     secrets="The data core is bait planted by a Ghost faction testing if Kade can be reactivated as an asset.",
 )
 
@@ -114,8 +117,9 @@ The air tastes of rust, recycled coolant, and the ozone snap of failing electron
     },
 ]
 
-# Models to test (testing defaults per CLAUDE.md)
-TEST_MODELS = ["gpt-5.1", "claude-sonnet-4-5"]
+# Model role references to test, resolved against the nexus.toml registry at
+# run time (testing defaults per CLAUDE.md).
+TEST_MODEL_REFS = ["@openai.default", "@anthropic.default"]
 
 
 async def test_set_designer(model: str, sketch_info: Dict[str, str]) -> Dict[str, Any]:
@@ -145,7 +149,11 @@ async def test_set_designer(model: str, sketch_info: Dict[str, str]) -> Dict[str
         )
 
         result["success"] = True
-        result["layer"] = {"name": layer.name, "type": layer.type.value, "description": layer.description[:100]}
+        result["layer"] = {
+            "name": layer.name,
+            "type": layer.type.value,
+            "description": layer.description[:100],
+        }
         result["zone"] = {"name": zone.name, "summary": zone.summary[:100]}
         result["place"] = {
             "name": place.name,
@@ -165,7 +173,9 @@ async def test_set_designer(model: str, sketch_info: Dict[str, str]) -> Dict[str
         if "Hong Kong" in sketch or "Yokohama" in sketch:
             # Should be East Asia region (lat 20-40, lon 100-145)
             if not (15 < place.latitude < 45 and 100 < place.longitude < 150):
-                logger.warning(f"  ⚠ Coordinates don't match Hong Kong/Yokohama region!")
+                logger.warning(
+                    f"  ⚠ Coordinates don't match Hong Kong/Yokohama region!"
+                )
         elif "Kowloon" in sketch or "Manchester" in sketch:
             # Could be either HK or UK depending on interpretation
             pass
@@ -189,9 +199,12 @@ async def main():
     logger.info("Testing location_sketch → structured location data translation")
     logger.info("=" * 70)
 
-    results = []
+    from nexus.config import resolve_model_ref
 
-    for model in TEST_MODELS:
+    results = []
+    models = [resolve_model_ref(ref) for ref in TEST_MODEL_REFS]
+
+    for model in models:
         logger.info(f"\n{'='*70}")
         logger.info(f"MODEL: {model}")
         logger.info(f"{'='*70}")
@@ -206,7 +219,7 @@ async def main():
     logger.info("=" * 70)
 
     # Group by model
-    for model in TEST_MODELS:
+    for model in models:
         model_results = [r for r in results if r["model"] == model]
         passed = sum(1 for r in model_results if r["success"])
         logger.info(f"\n{model}: {passed}/{len(model_results)} passed")
@@ -215,7 +228,9 @@ async def main():
             status = "✓" if r["success"] else "✗"
             if r["success"]:
                 coords = r["coordinates"]
-                logger.info(f"  {status} {r['sketch']}: {r['place']['name']} @ ({coords['lat']:.2f}, {coords['lon']:.2f})")
+                logger.info(
+                    f"  {status} {r['sketch']}: {r['place']['name']} @ ({coords['lat']:.2f}, {coords['lon']:.2f})"
+                )
             else:
                 logger.info(f"  {status} {r['sketch']}: {r['error'][:50]}...")
 

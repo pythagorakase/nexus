@@ -92,11 +92,19 @@ PHASE_CONFIGS: Dict[str, Dict[str, Any]] = {
     },
 }
 
-# Models to test
-TEST_MODELS = [
-    "gpt-5.1",
-    "claude-sonnet-4-5",
+# Model role references to test (resolved against the nexus.toml registry at
+# run time so this file never drifts from the live model lineup).
+TEST_MODEL_REFS = [
+    "@openai.default",
+    "@anthropic.default",
 ]
+
+
+def _build_model_for_ref(model_ref: str):
+    """Resolve a role reference and build the Pydantic AI model for it."""
+    from nexus.config import resolve_model_ref
+
+    return build_pydantic_ai_model(resolve_model_ref(model_ref))
 
 
 def make_test_context(
@@ -134,8 +142,12 @@ def mock_db_functions(monkeypatch):
     monkeypatch.setattr(wizard_module, "record_drafts", lambda *args, **kwargs: None)
 
     # Mock suggested traits functions (called by concept tool)
-    monkeypatch.setattr(wizard_module, "write_suggested_traits", lambda *args, **kwargs: None)
-    monkeypatch.setattr(wizard_module, "clear_suggested_traits", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        wizard_module, "write_suggested_traits", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(
+        wizard_module, "clear_suggested_traits", lambda *args, **kwargs: None
+    )
 
     # Mock trait menu functions (called by concept tool)
     class DummyTrait:
@@ -159,8 +171,10 @@ def mock_db_functions(monkeypatch):
 @pytest.mark.live
 @pytest.mark.asyncio
 @pytest.mark.parametrize("phase_name", ["setting", "concept", "wildcard", "seed"])
-@pytest.mark.parametrize("model_name", TEST_MODELS)
-async def test_accept_fate_forces_tool_call(phase_name: str, model_name: str, mock_db_functions):
+@pytest.mark.parametrize("model_name", TEST_MODEL_REFS)
+async def test_accept_fate_forces_tool_call(
+    phase_name: str, model_name: str, mock_db_functions
+):
     """
     Live test: accept_fate=True should result in a tool call, not WizardResponse.
 
@@ -175,7 +189,7 @@ async def test_accept_fate_forces_tool_call(phase_name: str, model_name: str, mo
     )
 
     agent = get_wizard_agent(context)
-    model = build_pydantic_ai_model(model_name)
+    model = _build_model_for_ref(model_name)
 
     logger.info(f"Testing {phase_name} phase with {model_name}, accept_fate=True")
 
@@ -193,9 +207,9 @@ async def test_accept_fate_forces_tool_call(phase_name: str, model_name: str, mo
     )
 
     # Verify the correct tool was called
-    assert context.last_tool_name == config["expected_tool"], (
-        f"Expected tool {config['expected_tool']}, got {context.last_tool_name}"
-    )
+    assert (
+        context.last_tool_name == config["expected_tool"]
+    ), f"Expected tool {config['expected_tool']}, got {context.last_tool_name}"
 
     logger.info(
         f"✓ {phase_name}/{model_name}: Tool '{context.last_tool_name}' called successfully"
@@ -209,7 +223,7 @@ async def test_normal_flow_allows_wizard_response(phase_name: str, mock_db_funct
     """
     Sanity check: accept_fate=False should allow WizardResponse.
 
-    Uses gpt-5.1 only to minimize API calls for sanity check.
+    Uses the OpenAI default role only to minimize API calls for sanity check.
     """
     config = PHASE_CONFIGS[phase_name]
     context = make_test_context(
@@ -219,7 +233,7 @@ async def test_normal_flow_allows_wizard_response(phase_name: str, mock_db_funct
     )
 
     agent = get_wizard_agent(context)
-    model = build_pydantic_ai_model("gpt-5.1")
+    model = _build_model_for_ref("@openai.default")
 
     logger.info(f"Testing {phase_name} phase with accept_fate=False")
 
@@ -262,7 +276,11 @@ def setup_db_mocks():
             self.is_selected = False
             self.rationale = ""
 
-    dummy_traits = [DummyTrait(1, "allies"), DummyTrait(2, "contacts"), DummyTrait(3, "patron")]
+    dummy_traits = [
+        DummyTrait(1, "allies"),
+        DummyTrait(2, "contacts"),
+        DummyTrait(3, "patron"),
+    ]
     wizard_module.get_trait_menu = lambda _: dummy_traits
     wizard_module.get_selected_trait_count = lambda _: 0
     wizard_module.slot_dbname = lambda slot: f"save_0{slot}"
@@ -283,7 +301,7 @@ async def quick_test():
 
     results = []
 
-    for model_name in TEST_MODELS:
+    for model_name in TEST_MODEL_REFS:
         print(f"\n--- Testing with {model_name} ---")
 
         for phase_name, config in PHASE_CONFIGS.items():
@@ -294,7 +312,7 @@ async def quick_test():
             )
 
             agent = get_wizard_agent(context)
-            model = build_pydantic_ai_model(model_name)
+            model = _build_model_for_ref(model_name)
 
             try:
                 result = await agent.run(
@@ -311,26 +329,34 @@ async def quick_test():
                         print(f"  {phase_name}: {status} - Called {tool_name}")
                     else:
                         status = "✗ WRONG TOOL"
-                        print(f"  {phase_name}: {status} - Expected {expected}, got {tool_name}")
+                        print(
+                            f"  {phase_name}: {status} - Expected {expected}, got {tool_name}"
+                        )
                 else:
                     status = "✗ FAIL"
                     output_type = type(result.output).__name__
-                    print(f"  {phase_name}: {status} - Got {output_type} instead of tool call")
+                    print(
+                        f"  {phase_name}: {status} - Got {output_type} instead of tool call"
+                    )
 
-                results.append({
-                    "model": model_name,
-                    "phase": phase_name,
-                    "status": status,
-                })
+                results.append(
+                    {
+                        "model": model_name,
+                        "phase": phase_name,
+                        "status": status,
+                    }
+                )
 
             except Exception as e:
                 status = "✗ ERROR"
                 print(f"  {phase_name}: {status} - {e}")
-                results.append({
-                    "model": model_name,
-                    "phase": phase_name,
-                    "status": f"ERROR: {e}",
-                })
+                results.append(
+                    {
+                        "model": model_name,
+                        "phase": phase_name,
+                        "status": f"ERROR: {e}",
+                    }
+                )
 
     # Summary
     print("\n" + "=" * 60)

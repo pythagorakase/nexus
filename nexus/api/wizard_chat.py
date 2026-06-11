@@ -497,11 +497,15 @@ async def new_story_chat_endpoint(request: ChatRequest):
                         # Production: Call set designer to generate location data
                         logger.info("Running set designer for slot %s", request.slot)
                         try:
+                            # selected_model, not request.model: the request
+                            # may omit the model (it is persisted on the slot),
+                            # and the effective model is locked after the first
+                            # user message regardless of provider.
                             layer, zone, place = await generate_set_design(
                                 location_sketch=location_sketch,
                                 setting=setting,
                                 seed=seed,
-                                model=request.model,
+                                model=selected_model,
                             )
 
                             # Record the generated location data
@@ -799,11 +803,13 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
                                 request.slot,
                             )
                             try:
+                                # selected_model, not request.model (see the
+                                # non-streaming endpoint for rationale).
                                 layer, zone, place = await generate_set_design(
                                     location_sketch=location_sketch,
                                     setting=setting,
                                     seed=seed,
-                                    model=request.model,
+                                    model=selected_model,
                                 )
 
                                 record_drafts(

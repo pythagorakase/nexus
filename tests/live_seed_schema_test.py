@@ -69,7 +69,8 @@ TEST_CONTEXT = {
     },
 }
 
-TEST_MODELS = ["gpt-5.1", "claude-sonnet-4-5"]
+# Model role references, resolved against the nexus.toml registry at run time.
+TEST_MODEL_REFS = ["@openai.default", "@anthropic.default"]
 
 SEED_PROMPT = """Create a compelling story opening for this cyberpunk setting and character.
 
@@ -163,14 +164,22 @@ async def test_model(model_name: str) -> Dict[str, Any]:
                 logger.info(f"{sketch[:500]}...")
 
                 logger.info(f"\n--- VALIDATION ---")
-                logger.info(f"requires_set_design: {context.last_tool_result.get('requires_set_design')}")
-                logger.info(f"phase_complete: {context.last_tool_result.get('phase_complete')}")
+                logger.info(
+                    f"requires_set_design: {context.last_tool_result.get('requires_set_design')}"
+                )
+                logger.info(
+                    f"phase_complete: {context.last_tool_result.get('phase_complete')}"
+                )
             else:
                 result["error"] = f"Wrong tool called: {context.last_tool_name}"
-                logger.error(f"Wrong tool: expected submit_starting_scenario, got {context.last_tool_name}")
+                logger.error(
+                    f"Wrong tool: expected submit_starting_scenario, got {context.last_tool_name}"
+                )
 
         elif isinstance(output, WizardResponse):
-            result["error"] = "Got WizardResponse instead of tool call (accept_fate should force tool)"
+            result["error"] = (
+                "Got WizardResponse instead of tool call (accept_fate should force tool)"
+            )
             logger.error(f"WizardResponse returned instead of tool call:")
             logger.error(f"Message: {output.message[:200]}...")
             logger.error(f"Choices: {output.choices}")
@@ -194,8 +203,10 @@ async def main():
     logger.info("Testing StorySeedSubmission against real LLMs")
     logger.info("=" * 60)
 
+    from nexus.config import resolve_model_ref
+
     results = []
-    for model_name in TEST_MODELS:
+    for model_name in [resolve_model_ref(ref) for ref in TEST_MODEL_REFS]:
         result = await test_model(model_name)
         results.append(result)
         logger.info(f"\n{model_name}: {'PASS' if result['success'] else 'FAIL'}")
