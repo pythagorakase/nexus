@@ -24,6 +24,7 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 # Try to use connection pool if available (when running within NEXUS)
 try:
     from nexus.api.db_pool import get_connection
+
     USE_POOL = True
 except ImportError:
     USE_POOL = False
@@ -31,6 +32,7 @@ except ImportError:
 # Import migration runner for post-creation migration
 try:
     from scripts.migrate import migrate_database
+
     HAS_MIGRATE = True
 except ImportError:
     HAS_MIGRATE = False
@@ -81,13 +83,17 @@ def create_assets_tables(dbname: Optional[str] = None) -> None:
     """
     with _connect(dbname) as conn, conn.cursor() as cur:
         cur.execute(ddl_creator)
-    LOG.info("Ensured assets tables exist in %s", dbname or os.environ.get("PGDATABASE", "(unspecified)"))
+    LOG.info(
+        "Ensured assets tables exist in %s",
+        dbname or os.environ.get("PGDATABASE", "(unspecified)"),
+    )
 
 
 def _get_default_slot_model() -> str:
     """Get default model for new slots from config."""
     try:
         from nexus.config.loader import load_settings
+
         settings = load_settings()
         return settings.global_.model.default_slot_model
     except Exception:
@@ -104,29 +110,49 @@ def ensure_global_variables(dbname: str) -> None:
         if not exists:
             cur.execute(
                 "INSERT INTO public.global_variables (id, new_story, model) VALUES (TRUE, TRUE, %s)",
-                (default_model,)
+                (default_model,),
             )
-            LOG.info("Inserted default global_variables row in %s (model=%s)", dbname, default_model)
+            LOG.info(
+                "Inserted default global_variables row in %s (model=%s)",
+                dbname,
+                default_model,
+            )
 
 
-def create_slot_schema_only(slot: int, source_db: Optional[str] = None, force: bool = False) -> None:
+def create_slot_schema_only(
+    slot: int, source_db: Optional[str] = None, force: bool = False
+) -> None:
     """
-    Create a per-slot database with schema only (no data).
+    Create a per-slot database from the template (no narrative data).
 
     Args:
         slot: Slot number (1-5)
-        source_db: Source database to clone schema from.
-                   Defaults to "NEXUS_template" which contains empty tables
-                   with the latest schema. Refresh it with:
-                   dropdb NEXUS_template && createdb NEXUS_template &&
-                   pg_dump -s -d save_01 | psql -d NEXUS_template
+        source_db: Source database to clone from. Defaults to "NEXUS_template",
+                   which carries the latest schema plus seed/vocab rows and a
+                   fully stamped schema_migrations table.
         force: If True, drop and recreate the target database.
     """
     if slot < 1 or slot > 5:
         raise ValueError("Slot must be between 1 and 5 (inclusive)")
-    # NEXUS_template is the canonical schema template (empty tables, latest schema)
-    source_db = source_db or "NEXUS_template"
     target_db = f"save_{slot:02d}"
+    initialize_slot_database(target_db, source_db=source_db, force=force)
+
+
+def initialize_slot_database(
+    target_db: str, source_db: Optional[str] = None, force: bool = False
+) -> None:
+    """
+    Create ``target_db`` as a fresh story database cloned from the template.
+
+    Copies the template schema, then the template's data (seed/vocab tables
+    such as tags and event_types, plus the schema_migrations stamps). The
+    stamps baseline the new database so the migration runner only applies
+    migrations the template has not seen — without them, migrate.py replays
+    already-applied migrations against the post-migration schema and fails
+    (e.g. 053 alters factions.power_level, which 058 already dropped).
+    """
+    # NEXUS_template is the canonical fresh-slot image (schema + seed data)
+    source_db = source_db or "NEXUS_template"
 
     if force:
         # Terminate active connections before dropping
@@ -142,7 +168,7 @@ def create_slot_schema_only(slot: int, source_db: Optional[str] = None, force: b
             with admin_conn.cursor() as cur:
                 cur.execute(
                     "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = %s",
-                    (target_db,)
+                    (target_db,),
                 )
         finally:
             admin_conn.close()
@@ -162,10 +188,12 @@ def create_slot_schema_only(slot: int, source_db: Optional[str] = None, force: b
     try:
         # Ensure required extensions exist in the new DB
         subprocess.run(
-            ["psql", target_db, "-c", "CREATE EXTENSION IF NOT EXISTS vector;"], check=True
+            ["psql", target_db, "-c", "CREATE EXTENSION IF NOT EXISTS vector;"],
+            check=True,
         )
         subprocess.run(
-            ["psql", target_db, "-c", "CREATE EXTENSION IF NOT EXISTS postgis;"], check=True
+            ["psql", target_db, "-c", "CREATE EXTENSION IF NOT EXISTS postgis;"],
+            check=True,
         )
 
         # Strip CREATE/ALTER SCHEMA lines to avoid noisy errors
@@ -191,10 +219,14 @@ def create_slot_schema_only(slot: int, source_db: Optional[str] = None, force: b
         except OSError:
             pass
 
+    # Copy template data: seed/vocab rows plus schema_migrations stamps.
+    _copy_template_data(source_db, target_db)
+    _require_migration_stamps(source_db, target_db)
+
     # Ensure global_variables row exists
     ensure_global_variables(target_db)
 
-    # Run migrations to populate seed data (e.g., assets.traits)
+    # Apply only migrations newer than the template's stamped baseline
     if HAS_MIGRATE:
         LOG.info("Running migrations on %s...", target_db)
         applied, failed = migrate_database(target_db, skip_locked=False)
@@ -203,9 +235,75 @@ def create_slot_schema_only(slot: int, source_db: Optional[str] = None, force: b
         else:
             LOG.info("Applied %d migrations to %s", applied, target_db)
     else:
-        LOG.warning("Migration runner not available - run 'python scripts/migrate.py --slot %d' manually", slot)
+        LOG.warning(
+            "Migration runner not available - run 'python scripts/migrate.py' manually"
+        )
 
-    LOG.info("Slot %s ready", target_db)
+    LOG.info("Database %s ready", target_db)
+
+
+# The template's canonical seed image: the only tables whose ROWS are copied
+# into a fresh story database. Keep in sync with the "Refreshing the Template"
+# section of CLAUDE.md. Everything else arrives schema-only, so pointing
+# --mode schema at a populated source can never leak narrative or cache rows
+# into a fresh slot.
+TEMPLATE_SEED_TABLES = (
+    "public.schema_migrations",
+    "public.tags",
+    "public.event_types",
+    "public.pair_tags",
+    "public.tag_category_registry",
+    "assets.traits",
+)
+
+
+def _copy_template_data(source_db: str, target_db: str) -> None:
+    """Copy the seed image from the template into the freshly restored schema.
+
+    Transfers exactly the seed/vocab tables and the schema_migrations
+    baseline (TEMPLATE_SEED_TABLES) — never narrative or cache rows, even if
+    the source database carries them. ON_ERROR_STOP keeps failures loud.
+    """
+    LOG.info("Copying template data (seed rows + migration stamps) from %s", source_db)
+    dump_cmd = ["pg_dump", "--data-only", source_db]
+    for table in TEMPLATE_SEED_TABLES:
+        dump_cmd.extend(["-t", table])
+    with tempfile.NamedTemporaryFile("w+", delete=False, suffix=".sql") as tmp:
+        subprocess.run(
+            dump_cmd,
+            check=True,
+            stdout=tmp,
+        )
+        tmp_path = tmp.name
+    try:
+        subprocess.run(
+            ["psql", "-v", "ON_ERROR_STOP=1", target_db, "-f", tmp_path],
+            check=True,
+        )
+    finally:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+
+
+def _require_migration_stamps(source_db: str, target_db: str) -> None:
+    """Fail loudly if the new database has no schema_migrations baseline.
+
+    Without stamps, the next migrate.py run would replay every migration
+    against a schema that already contains their effects. That means the
+    template itself lacks stamps - refresh it so schema_migrations rows and
+    seed data survive (see CLAUDE.md, Refreshing the Template).
+    """
+    with _connect(target_db) as conn, conn.cursor() as cur:
+        cur.execute("SELECT COUNT(*) FROM public.schema_migrations")
+        count = cur.fetchone()[0]
+    if count == 0:
+        raise RuntimeError(
+            f"{target_db} has an empty schema_migrations table after cloning "
+            f"{source_db}. The template must carry migration stamps (and seed "
+            "data); refresh it per CLAUDE.md before creating slots."
+        )
 
 
 def clone_slot_with_data(slot: int, source_db: str, force: bool = False) -> None:
@@ -227,17 +325,30 @@ def clone_slot_with_data(slot: int, source_db: str, force: bool = False) -> None
     try:
         # Plain text dump for easy filtering
         subprocess.run(
-            ["pg_dump", "-Fp", "-d", source_db, "-f", dump_path, "-n", "public", "-n", "assets"],
+            [
+                "pg_dump",
+                "-Fp",
+                "-d",
+                source_db,
+                "-f",
+                dump_path,
+                "-n",
+                "public",
+                "-n",
+                "assets",
+            ],
             check=True,
         )
         subprocess.run(["createdb", target_db], check=True)
 
         # Ensure extensions before replaying functions/tables
         subprocess.run(
-            ["psql", target_db, "-c", "CREATE EXTENSION IF NOT EXISTS vector;"], check=True
+            ["psql", target_db, "-c", "CREATE EXTENSION IF NOT EXISTS vector;"],
+            check=True,
         )
         subprocess.run(
-            ["psql", target_db, "-c", "CREATE EXTENSION IF NOT EXISTS postgis;"], check=True
+            ["psql", target_db, "-c", "CREATE EXTENSION IF NOT EXISTS postgis;"],
+            check=True,
         )
 
         # Strip CREATE/ALTER SCHEMA public lines to avoid conflicts
@@ -264,14 +375,20 @@ def clone_slot_with_data(slot: int, source_db: str, force: bool = False) -> None
 def _post_clone_cleanup(target_db: str) -> None:
     """Normalize cloned DB: ensure new_story is true."""
     with _connect(target_db) as conn, conn.cursor() as cur:
-        cur.execute("UPDATE public.global_variables SET new_story = TRUE WHERE id = TRUE;")
+        cur.execute(
+            "UPDATE public.global_variables SET new_story = TRUE WHERE id = TRUE;"
+        )
     ensure_global_variables(target_db)
     LOG.info("Post-clone cleanup completed for %s", target_db)
 
 
 def main():
     parser = argparse.ArgumentParser(description="Set up new-story infrastructure")
-    parser.add_argument("--create-assets", action="store_true", help="Create assets tables in the primary DB")
+    parser.add_argument(
+        "--create-assets",
+        action="store_true",
+        help="Create assets tables in the primary DB",
+    )
     parser.add_argument("--slot", type=int, help="Target slot number (2-5)")
     parser.add_argument(
         "--mode",
@@ -283,7 +400,11 @@ def main():
         "--source",
         help="Source database for cloning (required when --mode=clone). Defaults to PGDATABASE when --mode=schema.",
     )
-    parser.add_argument("--force", action="store_true", help="Drop and recreate the target slot database if it exists")
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Drop and recreate the target slot database if it exists",
+    )
     args = parser.parse_args()
 
     if not args.create_assets and not args.slot:

@@ -1042,6 +1042,21 @@ class APIConstraintsConfig(BaseModel):
     )
 
 
+class APIDatabaseSettings(BaseModel):
+    """Connection behavior for slot database access."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    connect_timeout_seconds: int = Field(
+        ...,
+        ge=1,
+        description=(
+            "Postgres connect_timeout (seconds) for API pools and worker "
+            "connections, bounding outage pain when the server is unreachable"
+        ),
+    )
+
+
 class APISettings(BaseModel):
     """Top-level API settings."""
 
@@ -1049,6 +1064,9 @@ class APISettings(BaseModel):
 
     constraints: Optional[APIConstraintsConfig] = Field(
         default=None, description="API constraints configuration"
+    )
+    database: APIDatabaseSettings = Field(
+        ..., description="Slot database connection behavior"
     )
 
 

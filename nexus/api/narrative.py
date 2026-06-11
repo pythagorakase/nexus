@@ -43,7 +43,7 @@ from nexus.api.chunk_workflow import (
     ChunkRejectRequest,
     EditPreviousRequest,
     build_embedding_scheduler,
-    default_workflow,
+    get_default_workflow,
 )
 from nexus.api.conversations import ConversationsClient
 from nexus.api.new_story_flow import (
@@ -1063,11 +1063,12 @@ async def accept_chunk_endpoint(
 ):
     """Accept a chunk and trigger embedding generation"""
     try:
-        return default_workflow.accept_chunk(
+        workflow = get_default_workflow()
+        return workflow.accept_chunk(
             request.chunk_id,
             request.session_id,
             embedding_scheduler=build_embedding_scheduler(
-                default_workflow, background_tasks.add_task
+                workflow, background_tasks.add_task
             ),
         )
     except ValueError as e:
@@ -1081,7 +1082,7 @@ async def accept_chunk_endpoint(
 async def reject_chunk_endpoint(request: ChunkRejectRequest):
     """Reject a chunk and either regenerate or edit previous"""
     try:
-        return default_workflow.reject_chunk(
+        return get_default_workflow().reject_chunk(
             request.chunk_id, request.session_id, request.action
         )
     except ValueError as e:
@@ -1097,7 +1098,7 @@ async def edit_chunk_input_endpoint(chunk_id: int, request: EditPreviousRequest)
     if chunk_id != request.chunk_id:
         raise HTTPException(status_code=400, detail="Chunk ID mismatch")
     try:
-        return default_workflow.edit_previous_input(
+        return get_default_workflow().edit_previous_input(
             request.chunk_id, request.new_user_input, request.session_id
         )
     except ValueError as e:
@@ -1111,7 +1112,7 @@ async def edit_chunk_input_endpoint(chunk_id: int, request: EditPreviousRequest)
 async def get_chunk_states_endpoint(start: int, end: int, slot: Optional[int] = None):
     """Get states for a range of chunks"""
     try:
-        return default_workflow.get_chunk_states(start, end, slot)
+        return get_default_workflow().get_chunk_states(start, end, slot)
     except Exception as e:
         logger.error(f"Error fetching chunk states: {e}")
         raise HTTPException(status_code=500, detail=str(e))

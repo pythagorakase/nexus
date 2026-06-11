@@ -11,6 +11,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Typecheck: `poetry run mypy .`
 - Lint: `poetry run flake8`
 
+## Configuration
+
+`nexus.toml` is the sole runtime configuration file, validated by the Pydantic models in `nexus/config/settings_models.py`. The legacy top-level `settings.json` was retired in June 2026 after every runtime reader (loader fallback chain, LORE, MEMNON, memory manager) had migrated to nexus.toml; its overlapping keys (embedding model registry with `is_active` flags, `memory.divergence_threshold`, retired GAIA/NEMESIS/PSYCHE agent settings) were already dead copies. Explicitly passed `.json` paths to `load_settings()` remain supported only for legacy ir_eval V1 tooling.
+
 ## Pre-commit hooks
 
 Config in `.pre-commit-config.yaml`. Hooks fire on `git commit`. Currently:
@@ -94,9 +98,18 @@ The setup script uses `pg_dump -s` to extract schema from `NEXUS_template`.
 
 #### Refreshing the Template
 
+The template is the canonical fresh-slot image: latest schema **plus**
+seed/vocab rows (`tags`, `event_types`, `pair_tags`, `tag_category_registry`,
+`assets.traits`) **plus** a fully stamped `schema_migrations` table. Slot
+initialization copies all three; a template without migration stamps is
+rejected loudly (the runner would otherwise replay already-applied
+migrations against the post-migration schema and fail).
+
 To update `NEXUS_template` from a known-good slot:
 ```bash
 dropdb NEXUS_template && createdb NEXUS_template && pg_dump -s -d save_01 | psql -d NEXUS_template
+pg_dump --data-only -d save_01 -t schema_migrations -t tags -t event_types \
+  -t pair_tags -t tag_category_registry -t assets.traits | psql -d NEXUS_template
 ```
 
 ### Active Slot Configuration
@@ -168,7 +181,7 @@ For CLI command reference, see the `nexus-cli` skill in `.claude/skills/`.
 For detailed, task-specific workflows and guides, see the Claude Code skills in `.claude/skills/`. These skills are automatically invoked when relevant:
 
 - **git-feature-workflow**: Complete feature development workflow including branch creation, PR submission, GPT-5-Codex review handling, merging, and cleanup
-- **audit-settings**: Validate `settings.json` for configuration errors, constraint violations, and cross-agent consistency
+- **audit-settings**: Validate agent configuration (`nexus.toml`) for errors, constraint violations, and cross-agent consistency
 - **inspect-chunk-context**: Query NEXUS database for chunk details, metadata, entity references, and temporal relationships
 - **manage-api-keys**: Manage NEXUS API keys via macOS Keychain (runtime) and 1Password (canonical source), bootstrap fresh checkouts, rotate keys, and troubleshoot silent retrieval
 - **openai-structured-output**: Implement OpenAI structured outputs with Pydantic models or JSON schemas
@@ -177,7 +190,7 @@ These skills contain detailed commands, workflows, troubleshooting guides, and b
 
 ## Entity-Based Divergence Detection
 
-The LORE turn loop (`nexus/memory/manager.py`) runs deterministic entity-based divergence detection (`nexus/memory/divergence.py`, `nexus/memory/entity_detector.py`) to identify when user input references known entities absent from the warm slice. Configuration: `memory.divergence_threshold` in `settings.json` (default `0.7`). Tests at `tests/test_lore/test_memory_manager.py` and `tests/test_lore/test_pass2_chunk1369.py`.
+The LORE turn loop (`nexus/memory/manager.py`) runs deterministic entity-based divergence detection (`nexus/memory/divergence.py`, `nexus/memory/entity_detector.py`) to identify when user input references known entities absent from the warm slice. Configuration: `divergence_threshold` in nexus.toml's `[memory]` section (default `0.7`). Tests at `tests/test_lore/test_memory_manager.py` and `tests/test_lore/test_pass2_chunk1369.py`.
 
 This is the **deterministic** entity-based variant. An earlier *LLM-based* divergence detection path was retired per the bake-off in `docs/retrieval_query_bakeoff_2026_05_18.md`; the `analyze-divergence` skill that documented the LLM-based path was removed alongside.
 

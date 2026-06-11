@@ -32,6 +32,23 @@ MIN_CONNECTIONS = 1
 MAX_CONNECTIONS = 10
 
 
+def get_connect_timeout_seconds() -> int:
+    """Read the configured Postgres connect timeout from nexus.toml.
+
+    Loaded lazily at connection time (never at import) so that importing
+    this module stays free of configuration and database side effects.
+    """
+    from nexus.config import load_settings
+
+    settings = load_settings()
+    if settings.api is None:
+        raise RuntimeError(
+            "nexus.toml is missing the [api.database] section; "
+            "connect_timeout_seconds is required"
+        )
+    return settings.api.database.connect_timeout_seconds
+
+
 def _get_connection_params(dbname: Optional[str] = None) -> Dict[str, Any]:
     """
     Get database connection parameters.
@@ -56,6 +73,11 @@ def _get_connection_params(dbname: Optional[str] = None) -> Dict[str, Any]:
         "user": os.environ.get("PGUSER", "pythagor"),
         "host": os.environ.get("PGHOST", "localhost"),
         "port": os.environ.get("PGPORT", "5432"),
+        # PGCONNECT_TIMEOUT keeps env precedence like the PG* params above;
+        # otherwise the nexus.toml [api.database] value applies.
+        "connect_timeout": int(
+            os.environ.get("PGCONNECT_TIMEOUT") or get_connect_timeout_seconds()
+        ),
     }
 
 
@@ -81,9 +103,7 @@ def _get_pool(dbname: Optional[str] = None) -> pool.ThreadedConnectionPool:
         params = _get_connection_params(dbname)
         try:
             _pools[db_key] = pool.ThreadedConnectionPool(
-                MIN_CONNECTIONS,
-                MAX_CONNECTIONS,
-                **params
+                MIN_CONNECTIONS, MAX_CONNECTIONS, **params
             )
             logger.info("Created connection pool for database: %s", db_key)
         except psycopg2.Error as e:
@@ -147,7 +167,7 @@ def get_connection(dbname: Optional[str] = None, dict_cursor: bool = False):
     finally:
         # Return connection to pool
         if conn:
-            if dict_cursor and 'orig_cursor_factory' in locals():
+            if dict_cursor and "orig_cursor_factory" in locals():
                 conn.cursor_factory = orig_cursor_factory
             conn_pool.putconn(conn)
 
@@ -201,6 +221,8 @@ def _connect(dbname: Optional[str] = None):
         ValueError: If dbname is not a valid slot database
         RuntimeError: If no slot can be determined
     """
-    logger.warning("Using deprecated _connect() function. Please migrate to get_connection()")
+    logger.warning(
+        "Using deprecated _connect() function. Please migrate to get_connection()"
+    )
     params = _get_connection_params(dbname)
     return psycopg2.connect(**params)

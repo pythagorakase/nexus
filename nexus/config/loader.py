@@ -2,7 +2,11 @@
 Configuration loader for NEXUS.
 
 Loads and validates settings from nexus.toml using Pydantic models.
-Falls back to settings.json for backward compatibility during migration.
+
+nexus.toml is the sole runtime configuration file. The legacy top-level
+settings.json was retired in June 2026 once every runtime reader had moved
+to nexus.toml; explicitly passed .json paths remain supported only for
+legacy ir_eval V1 tooling that synthesizes temporary settings files.
 """
 
 import shutil
@@ -188,7 +192,8 @@ def load_settings(path: Union[str, Path] = "nexus.toml") -> Settings:
     Load and validate NEXUS configuration.
 
     Args:
-        path: Path to configuration file (nexus.toml or settings.json)
+        path: Path to configuration file (nexus.toml; explicit .json paths
+              are accepted only for legacy ir_eval V1 tooling)
 
     Returns:
         Validated Settings object with type-safe access to configuration
@@ -207,28 +212,16 @@ def load_settings(path: Union[str, Path] = "nexus.toml") -> Settings:
     """
     path = Path(path)
 
-    # Try nexus.toml first
     if not path.exists():
-        # Fall back to settings.json for backward compatibility
-        legacy_path = Path("settings.json")
-        if legacy_path.exists():
-            print(
-                "⚠️  WARNING: Using legacy settings.json. "
-                "Please migrate to nexus.toml for better validation and comments."
-            )
-            return _load_from_json(legacy_path)
-        else:
-            raise FileNotFoundError(
-                f"Configuration file not found: {path}\n" f"Also checked: {legacy_path}"
-            )
+        raise FileNotFoundError(f"Configuration file not found: {path}")
 
     # Load based on file extension
     if path.suffix == ".toml":
         return _load_from_toml(path)
     elif path.suffix == ".json":
         print(
-            "⚠️  WARNING: Using legacy settings.json. "
-            "Please migrate to nexus.toml for better validation and comments."
+            "⚠️  WARNING: Loading settings from a legacy JSON file. "
+            "nexus.toml is the canonical configuration format."
         )
         return _load_from_json(path)
     else:
