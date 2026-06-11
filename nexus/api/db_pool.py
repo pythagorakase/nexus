@@ -11,6 +11,7 @@ or can be explicitly passed to connection functions.
 
 from __future__ import annotations
 
+import functools
 import logging
 import os
 from contextlib import contextmanager
@@ -32,19 +33,22 @@ MIN_CONNECTIONS = 1
 MAX_CONNECTIONS = 10
 
 
+@functools.lru_cache(maxsize=None)
 def get_connect_timeout_seconds() -> int:
     """Read the configured Postgres connect timeout from nexus.toml.
 
-    Loaded lazily at connection time (never at import) so that importing
-    this module stays free of configuration and database side effects.
+    Loaded lazily on first connection (never at import) so that importing
+    this module stays free of configuration and database side effects. The
+    value is static config, so it is cached after the first read; call
+    ``get_connect_timeout_seconds.cache_clear()`` to force a re-read.
     """
     from nexus.config import load_settings
 
     settings = load_settings()
     if settings.api is None:
         raise RuntimeError(
-            "nexus.toml is missing the [api.database] section; "
-            "connect_timeout_seconds is required"
+            "nexus.toml is missing the [api] section; "
+            "[api.database] connect_timeout_seconds is required"
         )
     return settings.api.database.connect_timeout_seconds
 

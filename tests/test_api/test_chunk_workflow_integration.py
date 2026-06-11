@@ -113,3 +113,28 @@ def test_accept_chunk_queues_background_embedding_with_real_slot_db(
     assert rows[1][0] == current_id
     assert rows[1][1] == ChunkState.FINALIZED.value
     assert rows[1][2] is not None
+
+
+def test_default_workflow_singleton_reuses_one_pool() -> None:
+    """get_default_workflow() must hand every caller one workflow and one pool.
+
+    Guards the lazy-singleton invariant from issue #369: endpoint handlers
+    (accept/reject/edit/states) all route through get_default_workflow(), so
+    repeated access must never construct a fresh ChunkWorkflow or open an
+    additional connection pool per request.
+    """
+    from nexus.api import db_pool
+
+    chunk_workflow._default_workflow = None
+    db_pool.close_all_pools()
+    try:
+        first = chunk_workflow.get_default_workflow()
+        second = chunk_workflow.get_default_workflow()
+        assert first is second
+
+        # A real read through the workflow must reuse the existing pool.
+        first.get_chunk_states(1, 1)
+        assert list(db_pool._pools) == [first.dbname]
+    finally:
+        chunk_workflow._default_workflow = None
+        db_pool.close_all_pools()
