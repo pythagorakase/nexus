@@ -1,322 +1,144 @@
-# *NEXUS: Narrative Intelligence System*
+# NEXUS: Narrative Intelligence System
 
-# 1. Introduction
+NEXUS is a turn-based interactive storytelling system that pairs a frontier
+LLM storyteller with a deterministic memory and world-state engine. Apex-tier
+models write excellent prose but cannot hold a long narrative in context or
+attend to what happens off screen. NEXUS compensates on both fronts: a
+PostgreSQL-backed retrieval stack reassembles the relevant past for every
+turn, and an off-screen world engine keeps characters, factions, and places
+evolving while the player is elsewhere.
 
-## 1.1 Purpose & Vision
-We are building an intelligent, dynamic memory storage and retrieval system to augment AI-driven interactive/emergent storytelling. Apex-tier LLMs are capable of nuanced, elevated prose, but are limited by two critical weaknesses.
-1. Inability to maintain continuity when length of narrative exceeds context window
-2. Poor ability to plan for, or attend to, elements of the story that are not explicitly on screen:
-	- activities of off-screen characters
-	- changing states of other locations
-	- internal states of characters (secrets, hidden agendas, etc.)
+The project is intentionally turn-based and quality-first. There are no skill
+checks, no combat system, and no real-time constraints — latency is accepted
+in exchange for richness of plot, depth of character, and high-quality prose.
 
-Our project aims to compensate for these weaknesses with a deterministic orchestration system that coordinates specialized utilities and frontier-model narrative generation to:
-1. Critically analyze new input from user & storyteller AI.
-2. Dynamically and intelligently build an API payload to the apex-LLM that combines recent raw narrative, structured summaries of relevant character history and events, and excerpts from the historical narrative corpus curated for maximum relevance.
-3. Incorporate the apex-LLMs response (newly-generated narrative + updates to hidden variables).
+## Architecture
 
-## 1.2 Scope & Limitations
+Everything below exists and runs today; blueprints for unbuilt modules live
+in `docs/blueprint_*.md`.
 
-### Limited Design "Team"
-This is currently a passion project, driven by the user's desire to enjoy roleplaying and interactive storytelling with an AI beyond the constraints noted above. The development team is the user; you, the AI; and as many other AI instances as need be mustered by the user to see this project through, in whatever role is required: coding AI, project manager AI, debugging AI, etc. 
+### Turn-Cycle Orchestration
 
-The user has limited somewhat technical knowledge, but is learning Python and SQL in order to better understand and guide the project.
+Each turn is orchestrated deterministically (`nexus/agents/lore`,
+`nexus/memory`): budget the context window, assemble the warm slice (recent
+chunks plus user input), run retrieval, build the payload, integrate the
+response. A two-pass memory system provides the baseline context for
+generation (Pass 1) and then catches novel entity references in user input
+via deterministic entity-based divergence detection (Pass 2,
+`nexus/memory/divergence.py`).
 
-### Vibe over Mechanics
-The interactive, user-choice-driven flow has much in common with the kind of collaborative storytelling that can be found in tabletop RPG sessions with creative-minded people. However, incorporating similar rules systems is not currently a goal. When the user decides their character will attempt a difficult action, the result will be determined not by a "skill check" but rather by whatever the Apex AI determines is the best fit for the narrative. Similarly, there is no plan to design a "combat system".
+There is no local-LLM intelligence in the loop. That layer was retired after
+the May 2026 retrieval bake-off
+(`docs/retrieval_query_bakeoff_2026_05_18.md`) showed that feeding raw chunk
+text to the IR engine outperforms LLM-rewritten queries.
 
-There are already numerous rogue-like dungeon-crawlers with satisfyingly deep rules systems and tactics; instead of spending time and tokens trying to emulate them, our prime objective is to achieve unparalleled excellence in the roleplaying experience: richness of plot, depth of characters, a world that feels alive and engaging, and high-quality prose.
+### MEMNON Retrieval
 
-### Slow by Design
-Real-time functionality is neither needed nor desired. The system is intentionally and strictly turn-based. In accordance with the overriding emphasis on quality latency is not just acceptable—it is expected.
+`nexus/agents/memnon` is the headless information-retrieval engine over the
+narrative corpus. Production embeddings use Octen-Embedding-4B (2560d, the
+issue #175 bake-off winner) stored in pgvector tables, combined with
+IDF-weighted full-text search through configurable hybrid scoring, then
+refined by cross-encoder reranking. See `docs/hybrid_search.md` and
+`docs/vector_embeddings.md`.
 
-## 1.3 Key Concepts
-- **Skald (Apex AI)**: Frontier LLM (Claude/GPT/Grok) that generates narrative content
-- **Memory Tiers**: The three-part memory architecture (Strategic, Entity, Narrative)
-- **Warm Slice**: Most recent narrative chunks plus new user input
-- **Cold Distillation**: The process of retrieving and filtering narrative memory
-- **Context Payload**: The assembled package of information sent to Skald
-- **Turn Cycle**: The step-by-step sequence from user input to new narrative
-- **Entity State**: Character emotions, location conditions, faction status, etc.
-- **Chunk**: A discrete piece of narrative text, typically a single scene or interaction
+### Skald via LOGON
 
-## 1.4 Local Development Servers
+Skald is the frontier storyteller (Claude or GPT family, configured in
+`nexus.toml`). `nexus/agents/logon` owns the API traffic: structured-output
+schemas (`nexus/agents/logon/apex_schema.py`), retry handling, and response
+validation. Skald receives the assembled context payload and returns new
+narrative plus authorial retrieval directives.
 
-The `./iris` helper script now orchestrates every service required for UI work:
+### Orrery World Engine
 
-1. `cd /Users/pythagor/nexus && poetry install` (first run only).
-2. `./iris`
-   - Boots the Vite/Express dev server (default port 5001, respecting `PORT`).
-   - Starts the Narrative FastAPI app on `NARRATIVE_API_PORT` (default `8002`) and proxies story, config, chunk, and wizard routes through the UI server.
+`nexus/agents/orrery` resolves off-screen behavior and is on by default
+(`[orrery]` in `nexus.toml`). A deterministic package substrate ticks
+characters, factions, and places through condition-gated templates; salient
+resolutions are promoted by a post-commit worker
+(`python -m nexus.agents.orrery.worker`) and narrated asynchronously into
+`offscreen_narrations` — canonical prose the player never sees directly but
+future scenes can draw on. Packages are self-aware in three stages
+(entry-gating, branch-selection, outcome), so what an actor notices and
+pursues depends on its tags and the target's fame. See
+`docs/orrery_design_plan.md` and the generated catalog
+`docs/orrery_packages.md`.
 
-If you need to run components manually, start the Narrative API with `poetry run uvicorn nexus.api.narrative:app --reload --port 8002`, then run `npm run dev` inside `ui/` with a matching `NARRATIVE_API_PORT` environment variable so the proxies target the correct port.
+### Retrograde Deep History
 
-For longer debugging sessions you can now supervise every service with the included `Procfile.dev`. Install either [Honcho](https://honcho.readthedocs.io/en/latest/) (`pip install honcho`) or Foreman (`brew install foreman`), then run:
+Retrograde cures the cold-start problem by running Orrery backward: at
+new-story setup it generates shallow-but-connected backstory as
+pre-game-stamped `world_events`, retrievable by MEMNON exactly like
+play-generated history. It fires automatically inside the new-story wizard
+and continues at runtime by maturing entity stubs as they surface. See
+`docs/orrery_retrograde_spec.md`.
 
-```
-honcho start -f Procfile.dev
-```
+### Save-Slot Fleet
 
-The Procfile respects the same `PORT` and `NARRATIVE_API_PORT` variables as `./iris`, so you can override either before launching if a port is already in use.
-If `DATABASE_URL` is unset, it automatically falls back to the local `postgresql://pythagor@localhost:5432/NEXUS`, mirroring the `iris` defaults.
+Each save slot is its own PostgreSQL database (`save_01` through `save_05`),
+selected via the `NEXUS_SLOT` environment variable. `NEXUS_template` is the
+canonical fresh-slot image (schema, seed vocabulary, migration stamps).
+Incremental schema changes go through `scripts/migrate.py`; fresh slots are
+created with `scripts/new_story_setup.py`. Chunks become immutable once
+accepted: accepting chunk N finalizes it and triggers embedding of N-1, so
+embedded history is ironman.
 
-# 2. System Architecture
+### IRIS UI
 
-## 2.1 Architectural Overview
-NEXUS is built on a single-agent orchestration architecture implemented entirely within this repository. At its core, the system uses LORE as the primary intelligent agent that coordinates specialized utility modules in a turn-based cycle.
+`ui/` holds the React/TypeScript client (Vite, shadcn/ui) with Narrative,
+Map, Characters, and Settings panes, a status bar, theming, and the
+conversational new-story wizard (setting, character traits, story seed). The
+`./iris` script supervises the full development stack.
 
-```
-┌─────────┐                                   ┌─────────┐
-│  User   ├───────────────────────────────────┤  Skald  │
-└─────────┘                                   └─────────┘
-                          │
-                     ┌────┴────┐
-                     │  LORE   │
-                     │ (Agent) │
-                     └────┬────┘
-                          │
-            ┌─────────────┴─────────────┐
-            │      Utility Modules      │
-            ├───────────────────────────┤
-            │    MEMNON  │  LOGON       │
-            └─────────────┬─────────────┘
-                          │
-       ┌──────────────────┴───────────────────┐
-       │ vector     ¦    PSQL    ¦      chunk │
-       │ embeddings ¦  database  ¦   metadata │
-       └──────────────────────────────────────┘
-```
+## Quickstart
 
-### Agent & Utility Modules
-- **LORE (Agent)**: Primary orchestration agent that coordinates utilities and manages the turn cycle
-- **MEMNON (Utility)**: Headless information retrieval system with multi-strategy search and cross-encoder reranking
-- **LOGON (Utility)**: Handles API traffic with Skald, delivers new narrative
+Requirements: Python 3.11, Poetry, PostgreSQL with pgvector and PostGIS,
+Node.js for the UI, and local model weights for the embedder and reranker
+(paths in `nexus.toml`). API keys live in the macOS Keychain; see
+`CLAUDE.md` for key management.
 
-### AI Role Summary
-The system employs two tiers of AI:
-**Skald** (Frontier LLM: Claude/GPT/Grok)
-- Generates new narrative to continue from last user input
-- Updates world state variables
-- Updates hidden information
-**LORE** (deterministic orchestration)
-- Turn-cycle coordination and context budgeting
-- Retrieval planning from raw narrative text and Skald directives
-- Post-generation processing and integration
+```bash
+poetry install
+poetry run pre-commit install
 
-### PostgreSQL
-Data flows through a unified PostgreSQL database with vector extensions that stores:
-- Complete narrative history with vector embeddings
-- Structured character and world state information
-- Cross-referenced connections between entities and narrative moments
-- Rich metadata for context-aware retrieval 
+# Database status and migrations
+python scripts/migrate.py --status
+python scripts/migrate.py --all
 
-## 2.2 System Components
-### LORE (Primary Agent)
-`Orchestration & Context Management`
-- Deep Context Analysis: Analyzes retrieved narrative chunks to understand their significance to the current story moment.
-- Thematic Connection: Identifies recurring themes, motifs, and narrative patterns.
-- Plot Structure Awareness: Recognizes story beat progression, tension arcs, and narrative pacing.
-- Causal Tracking: Understands how past events connect to present situations.
+# Full development stack: UI dev server (port 5001) + narrative API (8002)
+./iris
 
-### MEMNON (IR System)
-`Memory Access & Retrieval System`
-
-MEMNON is a headless information retrieval system that serves as LORE's primary interface to the narrative database. It implements advanced IR techniques specifically optimized for narrative intelligence.
-
-**Multi-Model Embedding Architecture**:
-- Manages 3 active embedding models with weighted fusion:
-  - inf-retriever-v1-1.5b (1536d, weight 0.5)
-  - E5-Large-V2 (1024d, weight 0.3)
-  - BGE-Large-EN (1024d, weight 0.2)
-- Dimension-specific PostgreSQL tables with pgvector
-- Automatic model routing and result fusion
-
-**Advanced Search Capabilities**:
-- **Hybrid Search**: Configurable vector + text search with query-type-specific weights ([detailed documentation](docs/hybrid_search.md))
-- **Temporal Search**: Continuous temporal intent analysis with narrative-aware boosting
-- **Cross-Encoder Reranking**: Sliding window approach for semantic similarity refinement
-- **Query Classification**: Automatic categorization (character, event, location, theme, etc.)
-- **IDF-Weighted Text Search**: PostgreSQL full-text search with term relevance weighting
-- **Character Alias Resolution**: Handles perspective shifts and character references
-
-**Performance Features**:
-- Batch processing for embeddings and reranking
-- Model caching and session management
-- 8-bit quantization support for memory efficiency
-- Comprehensive logging and error handling
-
-Implementation: `nexus/agents/memnon/`
-
-### LOGON (Utility Module)
-`API Communication Handler`
-- Handles API calls to Claude / GPT models
-- Takes the assembled context from LORE
-- Makes the API call to generate narrative text
-- Handles API response parsing and error recovery
-
-## 2.3 Technical Dependencies
-
-### Software
-- **PostgreSQL with pgvector**: Powers the vectorized database for semantic search and embedding storage
-- **SQLAlchemy + Alembic**: ORM for database interaction and migration management
-- **Pydantic**: Data validation and settings management
-- **Sentence-Transformers + Transformers**: Powers the triple-embedding strategy using models like BGE and E5
-- **OpenAI / Anthropic APIs**: Interfaces for narrative generation with frontier LLMs
-- **FastAPI + Uvicorn**: Web framework and ASGI server for API endpoints
-- **PyTorch + Accelerate**: ML framework for embedding models and cross-encoder reranking
-- **Tiktoken**: Token counting for managing context window constraints
-- **React + TypeScript**: Modern frontend UI framework
-
-### Hardware
-Performance quality and latency will depend on the configured frontier models, PostgreSQL, embeddings, and reranking stack.
-
-Development Hardware:
-	- **Model**: MacBook Pro M4 Max
-	- **CPU**: 16-core
-		- 12 performance cores
-		- 4 efficiency cores
-	- **GPU**: 40-core
-	- **Neural Engine**: 16-core
-	- **Unified Memory**: 128GB
-	- **Memory Bandwidth**: 546GB/s
-	- **Storage**: 2TB SSD
-
-# 3. Data Design
-
-## 3.1 Memory Architecture
-1. **Strategic Memory** (high-level narrative understanding):
-    - Implemented as structured tables with explicit schemas
-    - Accessed through direct SQL queries
-    - Contains synthesized information about plot, themes, character arcs
-2. **Entity Memory** (character/location tracking):
-    - Implemented as structured tables with relationships
-    - Accessed through entity-specific queries
-    - Contains detailed state information for characters, locations, etc.
-3. **Narrative Memory** (detailed text chunks):
-    - Implemented as vector-enabled tables
-    - Accessed through similarity search
-    - Contains the actual narrative text with rich metadata
-
-## 3.2 Embedding Strategy
-
-### Semantic Embedding
-Models:
-	- inf-retriever-v1-1.5b (1536 dimensions, weight 0.5)
-	- E5-Large-V2 (1024 dimensions, weight 0.3)
-	- BGE-Large-EN (1024 dimensions, weight 0.2)
-
-#### Database Storage Strategy
-The system uses separate tables for different vector dimensions:
-- **chunk_embeddings_1536d**: Table for 1536-dimensional vectors (inf-retriever-v1-1.5b)
-- **chunk_embeddings_1024d**: Table for 1024-dimensional vectors (E5-Large-V2, BGE-Large-EN)
-
-This separation maintains efficient storage and query performance in PostgreSQL with pgvector, which requires fixed dimensions at table creation time.
-
-#### Automatic Table Selection
-The system includes utilities that automatically route queries to the correct table based on the model name, allowing for transparent usage of multiple vector dimensions in the same codebase.
-
-#### Search Capabilities
-1. **Semantic Understanding**: Converting narrative text into high-dimensional vector representations that capture meaning
-2. **Similarity Calculation**: Determining semantic relatedness between queries and stored narrative chunks
-3. **Multi-faceted Retrieval**: Supporting different types of information needs (factual, thematic, character-focused)
-4. **Triple-Embedding Strategy**: Using multiple models to capture different semantic aspects
-5. **Domain Adaptation**: Understanding narrative-specific terminology and concepts
-6. **Hybrid Search Support**: Integrating with keyword and metadata-based search for comprehensive retrieval
-7. **Cross-Encoder Reranking**: Using Naver TREC-DL22 model for final result refinement
-
-See the detailed documentation in [docs/vector_embeddings.md](docs/vector_embeddings.md) for more information.
-
-# 4. Core Workflows
-## 4.1 Turn Cycle Sequence
-
-```
-   ┌─────────────────┐   ┌─────────────────┐   ┌─────────────────┐
-   │     User        │   │      Warm       │   │      World      │
-┌─►│     Input       │──►│    Analysis     │──►│      State      │
-│  │                 │   │                 │   │     Report      │
-│  └─────────────────┘   └─────────────────┘   └────────┬────────┘
-│                                                       │
-│                                                       ▼
-│  ┌─────────────────┐   ┌─────────────────┐   ┌─────────────────┐
-│  │    Payload      │   │      Cold       │   │        Deep     │
-│  │   Assembly      │◄──│  Distillation   │◄──│     Queries     │
-│  │                 │   │                 │   │                 │
-│  └───────┬─────────┘   └─────────────────┘   └─────────────────┘
-│          │
-│          ▼                  
-│  ┌─────────────────┐   ┌─────────────────┐   ┌─────────────────┐
-│  │     Apex        │   │   [Potential]   │   │        Apex     │
-│  │      API        │──►│     Offline     │──►│         API     │
-│  │     Call        │   │      Mode       │   │    Response     │
-│  └─────────────────┘   └─────────────────┘   └────────┬────────┘
-│                                                       │
-│                                                       ▼ 
-│  ┌─────────────────┐   ┌─────────────────┐   ┌─────────────────┐
-│  │                 │   │                 │   │      World      │
-└──│      Idle       │◄──│    Narrative    │◄──│      State      │
-   │     State       │   │   Integration   │   │     Update      │
-   └─────────────────┘   └─────────────────┘   └─────────────────┘
+# Or drive a story from the command line
+nexus load --slot 5
+nexus continue --slot 5 --choice 1
 ```
 
-Details: [Turn Flow Sequence](docs/turn_flow_sequence.md)
+CLI reference: `docs/cli.md`.
 
-## 4.2 Context Assembly Process
+## Configuration
 
-LORE orchestrates context assembly through a two-pass memory system:
+`nexus.toml` is the sole runtime configuration file, validated by Pydantic
+models in `nexus/config/settings_models.py`. Model choices use
+`@provider.role` references resolved against the `[global.model.api_models]`
+registry at load time. The legacy `settings.json` is retired.
 
-**Pass 1: Baseline Assembly** (triggered by Skald's narrative generation)
-1. LORE calculates a context budget based on Skald token limits
-2. LORE seeds retrieval from raw narrative text and Skald-supplied authorial directives
-3. MEMNON executes multi-strategy search (vector + text + hybrid scoring)
-4. Cross-encoder reranking refines results for semantic relevance
-5. LORE assembles the baseline context package: warm slice, historical excerpts, entity state
+## Testing
 
-**Pass 2: Divergence Detection** (triggered by user input)
-1. When user completes a chunk with their input, LORE analyzes for divergence
-2. Entity matching checks if user input references known entities outside the baseline
-3. Raw user-input retrieval fills the remaining Phase 2 budget when appropriate
-4. Updated context improves Skald's awareness of user-referenced elements
+```bash
+poetry run pytest                          # offline tier (default)
+NEXUS_RUN_POSTGRES=1 poetry run pytest     # + PostgreSQL integration tests
+NEXUS_RUN_LIVE_LLM=1 poetry run pytest     # + live model endpoints
+```
 
-This two-pass approach ensures continuity: Pass 1 provides context for generation, Pass 2 catches novel user references that need historical grounding.
+Tests marked `requires_postgres`, `live`, and `live_llm` skip unless their
+flag is set, so the default sweep runs fast with no services required.
+Formatting and linting: `poetry run black .`, `poetry run flake8`,
+`poetry run mypy .`.
 
-## 4.3 Error Recovery
+## Documentation
 
-### API Failures
-- **Temporary Outage**: Retry strategy with exponential backoff (3 attempts)
-- **Content Moderation Rejection**: Alternative prompt formulation
-- **Rate Limiting**: Queue system with delayed retry
-
-### User Interaction
-- **Narrative Rejection**: User can request regeneration with modifications
-- **Rollback**: System can revert to previous stable state
-
-# 5. Interface Design
-
-## 5.1 User Interface
-
-NEXUS features a modern React/TypeScript web interface built with Vite and shadcn/ui components.
-
-**Main Navigation Tabs**:
-- **Narrative**: Primary story view with markdown rendering, accept/reject controls for new generations, and command input
-- **Map**: Geographic visualization of story locations
-- **Characters**: Character profiles and relationship tracking
-- **Audition**: Model comparison tool for evaluating different LLM outputs
-- **Settings**: Configuration for models, themes, and system behavior
-
-**Key Features**:
-- **Theme System**: Multiple visual themes (Vector, Veil, Gilded) with consistent styling
-- **New Story Wizard**: Conversational LLM-guided flow for creating new stories:
-  - **Slot Selection**: Choose from save slots 2-5 (slot 1 protected)
-  - **Setting Phase**: Genre, tech level, magic system, themes, diegetic artifact
-  - **Character Phase**: Three sub-phases—concept definition, trait selection (3 of 10 options), wildcard trait
-  - **Seed Phase**: Story opening type, location hierarchy, timestamp, secrets channel
-- **Wizard Features**: "Accept Fate" button for autonomous Skald progression, structured choice system (2-4 options per response), interactive trait selector
-- **Save Slot System**: 5-slot save system for managing multiple narrative sessions (slot 1 protected)
-- **Status Bar**: Real-time display of configured model, APEX connectivity, and generation state
-- **Responsive Layout**: Adapts to different screen sizes with collapsible panels
-
-## 5.2 Development Server
-
-The `./iris` script orchestrates all services:
-- Vite/Express dev server (default port 5001)
-- Narrative FastAPI app (port 8002, proxied for story, config, chunk, and wizard routes)
+- `docs/turn_flow_sequence.md` — the turn cycle end to end
+- `docs/orrery_design_plan.md` — world engine stages, schema, and workers
+- `docs/orrery_retrograde_spec.md` — deep-history generation
+- `docs/hybrid_search.md`, `docs/vector_embeddings.md` — retrieval stack
+- `docs/agent_workflow.md` — branch, PR, and review workflow for agents
+- `CLAUDE.md`, `AGENTS.md` — repository conventions for coding agents
