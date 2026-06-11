@@ -704,6 +704,23 @@ class OrreryRetrogradeMaturationSettings(BaseModel):
         ),
     )
 
+    @model_validator(mode="after")
+    def _validate_seed_budget(self) -> "OrreryRetrogradeMaturationSettings":
+        """Over-generation must cover the selection target.
+
+        Asking R5 to select more seeds than R4 generated is silent semantic
+        corruption (the multiplier clamps to 1 and selection starves), so a
+        misconfigured budget fails at config load instead.
+        """
+
+        if self.generate_candidates < self.select_target:
+            raise ValueError(
+                "orrery.retrograde.maturation.generate_candidates must be >= "
+                f"select_target (got {self.generate_candidates} < "
+                f"{self.select_target})"
+            )
+        return self
+
 
 class OrreryRetrogradeSettings(BaseModel):
     """Retrograde deep-history generation settings."""

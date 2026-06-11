@@ -865,9 +865,7 @@ def _prompt_vocabulary(vocabulary: SeedEligibleVocabulary) -> dict[str, Any]:
         ),
         # The validator enforces per-kind tag registration, so Skald must see
         # the same mapping up front; otherwise kind mismatches burn retries.
-        "registered_tags_by_entity_kind": vocabulary.get(
-            "registered_tags_by_entity_kind", {}
-        ),
+        "registered_tags_by_entity_kind": vocabulary["registered_tags_by_entity_kind"],
         "multi_entity_tag_definitions": vocabulary["multi_entity_tag_definitions"],
     }
 

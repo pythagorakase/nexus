@@ -1164,12 +1164,20 @@ def _connect_for_slot(slot: Optional[int]) -> Any:
 
 
 def _slot_label(slot: Optional[int]) -> str:
+    """Resolve the slot label stored on a maturation job row.
+
+    Unlike the narration outbox's bookkeeping label, this value routes the
+    drain worker's database connection, so an unresolvable slot must fail
+    loudly at enqueue time instead of producing a permanently
+    unprocessable job. ``get_active_slot`` raises when ``NEXUS_SLOT`` is
+    unset or invalid.
+    """
+
     if slot is not None:
         return str(slot)
-    value = os.environ.get("NEXUS_SLOT")
-    if value:
-        return value
-    return "default"
+    from nexus.api.slot_utils import get_active_slot
+
+    return str(get_active_slot())
 
 
 def _row_value(row: Any, key: str, index: int) -> Any:

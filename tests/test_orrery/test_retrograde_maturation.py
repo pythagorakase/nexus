@@ -23,6 +23,7 @@ from nexus.agents.logon.apex_schema import (
 from nexus.agents.orrery.retrograde_maturation import (
     MaturationEnqueueResult,
     RetrogradeMaturationVocabularyError,
+    _slot_label,
     enqueue_declared_entity_maturations,
     namespace_expansion_event_refs,
 )
@@ -500,3 +501,29 @@ def _latest_chunk_id(conn: Any) -> int:
     with conn.cursor() as cur:
         cur.execute("SELECT max(id) FROM narrative_chunks")
         return int(cur.fetchone()[0])
+
+
+# ============================================================================
+# Slot Routing — Enqueue Must Fail Loudly When the Slot Is Unresolvable
+# ============================================================================
+
+
+def test_slot_label_resolves_explicit_slot() -> None:
+    assert _slot_label(2) == "2"
+
+
+def test_slot_label_resolves_env_slot(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("NEXUS_SLOT", "3")
+    assert _slot_label(None) == "3"
+
+
+def test_slot_label_raises_when_unresolvable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A job's slot routes the drain worker's DB connection; an
+    unresolvable slot must fail at enqueue time, not produce a job no
+    drain can ever process."""
+
+    monkeypatch.delenv("NEXUS_SLOT", raising=False)
+    with pytest.raises(RuntimeError, match="NEXUS_SLOT"):
+        _slot_label(None)

@@ -10,6 +10,7 @@ from nexus.api.new_story_schemas import Genre
 from nexus.config.settings_models import (
     OrreryBleedSettings,
     OrreryPromoteSettings,
+    OrreryRetrogradeMaturationSettings,
     OrreryRetrogradeWeirdGenreBands,
     OrreryRetrogradeWeirdSettings,
 )
@@ -124,3 +125,19 @@ def test_orrery_retrograde_weird_rejects_bands_outside_dev_range() -> None:
 
     with pytest.raises(ValidationError, match="within the dev raw range"):
         OrreryRetrogradeWeirdSettings(**payload)
+
+
+def test_orrery_maturation_rejects_selection_exceeding_generation() -> None:
+    """R5 cannot be asked to select more seeds than R4 generates."""
+
+    with pytest.raises(ValidationError, match="generate_candidates must be >="):
+        OrreryRetrogradeMaturationSettings(generate_candidates=1, select_target=4)
+
+
+def test_orrery_maturation_accepts_equal_generation_and_selection() -> None:
+    """generate_candidates == select_target is a legal (1x) budget."""
+
+    settings = OrreryRetrogradeMaturationSettings(
+        generate_candidates=2, select_target=2
+    )
+    assert settings.generate_candidates == 2
