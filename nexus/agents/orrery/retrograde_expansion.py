@@ -457,7 +457,7 @@ def _expansion_contract_issues(
     }
     tags_by_entity_kind = {
         kind: set(tags)
-        for kind, tags in vocabulary.get("registered_tags_by_entity_kind", {}).items()
+        for kind, tags in vocabulary["registered_tags_by_entity_kind"].items()
     }
 
     for event in response.event_plan:
@@ -665,13 +665,13 @@ def _entity_tag_plan_issues(
         return issues
     # Mirror the persistence layer's tag_category_registry kind check so an
     # incompatible plan is repaired by ModelRetry at generation time instead
-    # of blocking the wizard transition. Enforceable only when the live
-    # registry mapping rode along in the packet vocabulary.
-    if tags_by_entity_kind and tag_plan.tag not in tags_by_entity_kind.get(
-        tag_plan.entity_kind, set()
-    ):
+    # of failing later at persistence time. The mapping is a required packet
+    # vocabulary key, so the check is unconditional.
+    if tag_plan.tag not in tags_by_entity_kind.get(tag_plan.entity_kind, set()):
         issues.append(
-            f"{prefix} is not registered for entity_kind {tag_plan.entity_kind!r}"
+            f"{prefix} is not registered for entity_kind "
+            f"{tag_plan.entity_kind!r}; use a tag from "
+            "registered_tags_by_entity_kind for that kind"
         )
         return issues
     policy = _tag_seed_policy(tag_plan.tag, tags_by_seed_policy)
@@ -888,6 +888,7 @@ def _seed_vocabulary(value: Any) -> SeedEligibleVocabulary:
         "entity_kinds",
         "registered_single_entity_tags",
         "registered_tags_by_seed_policy",
+        "registered_tags_by_entity_kind",
         "multi_entity_tag_definitions",
         "event_types",
         "relationship_types",

@@ -96,6 +96,35 @@ def test_expansion_plan_requires_event_for_event_anchored_tag() -> None:
         )
 
 
+def test_expansion_plan_rejects_kind_inapplicable_tag() -> None:
+    """Registered tags must also be applicable to the planned entity kind.
+
+    Regression for the runtime maturation live failure: the frontier planned a
+    registry-valid tag on an entity kind its category does not allow, which
+    the persistence gate blocks ("tag category is not registered for this
+    entity kind"). The R6 validator must catch it first so the re-ask loop can
+    repair the plan instead of failing at persistence time.
+    """
+
+    vocabulary = _expansion_test_vocabulary()
+    vocabulary["registered_tags_by_entity_kind"] = {
+        "character": ["scholar", "untested_signal"],
+        "place": ["grieving"],
+        "faction": [],
+    }
+    payload = _valid_expansion(vocabulary)
+
+    with pytest.raises(
+        RetrogradeExpansionValidationError,
+        match="is not registered for entity_kind 'character'",
+    ):
+        validate_expansion_plan(
+            payload=payload,
+            packet=_packet(vocabulary),
+            seed_candidate_response=_seed_response(vocabulary),
+        )
+
+
 def test_expansion_plan_validates_pair_tag_kinds() -> None:
     """R6 pair tags use the shared pair-tag registry constraints."""
 
@@ -303,6 +332,11 @@ def _expansion_test_vocabulary() -> SeedEligibleVocabulary:
         "stable_seed": ["scholar"],
         "event_anchored": ["grieving"],
         "prompt_visible_only": ["untested_signal"],
+    }
+    vocabulary["registered_tags_by_entity_kind"] = {
+        "character": ["grieving", "scholar", "untested_signal"],
+        "place": [],
+        "faction": [],
     }
     return vocabulary
 
