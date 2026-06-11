@@ -26,6 +26,7 @@ from nexus.api.wizard_agent import (
 )
 from nexus.api.new_story_schemas import WizardResponse
 from nexus.api.pydantic_ai_utils import build_pydantic_ai_model
+from nexus.config import resolve_model_ref
 
 logger = logging.getLogger(__name__)
 
@@ -102,8 +103,6 @@ TEST_MODEL_REFS = [
 
 def _build_model_for_ref(model_ref: str):
     """Resolve a role reference and build the Pydantic AI model for it."""
-    from nexus.config import resolve_model_ref
-
     return build_pydantic_ai_model(resolve_model_ref(model_ref))
 
 

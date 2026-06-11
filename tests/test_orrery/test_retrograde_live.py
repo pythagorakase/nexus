@@ -19,14 +19,13 @@ from nexus.agents.orrery.retrograde_vocabulary import (
     SeedEligibleVocabulary,
     enumerate_seed_eligible_vocabulary,
 )
+from nexus.config import resolve_model_ref
 
 
 @pytest.mark.live
 @pytest.mark.live_llm
 def test_live_retrograde_seed_and_expansion_round_trip() -> None:
     """Real Skald calls can generate seeds and weave a dry-run R6 plan."""
-
-    from nexus.config import resolve_model_ref
 
     packet = _compact_live_packet()
     model_name = resolve_model_ref(

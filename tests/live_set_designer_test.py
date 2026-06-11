@@ -46,6 +46,7 @@ from nexus.api.new_story_schemas import (
     Genre,
     TechLevel,
 )
+from nexus.config import resolve_model_ref
 
 
 # Test setting (cyberpunk Neon Palimpsest)
@@ -198,8 +199,6 @@ async def main():
     logger.info("LIVE SET DESIGNER TEST")
     logger.info("Testing location_sketch → structured location data translation")
     logger.info("=" * 70)
-
-    from nexus.config import resolve_model_ref
 
     results = []
     models = [resolve_model_ref(ref) for ref in TEST_MODEL_REFS]

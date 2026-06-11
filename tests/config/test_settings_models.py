@@ -71,6 +71,23 @@ def test_global_default_model_unknown_role_rejected():
         Settings(**raw)
 
 
+def test_global_default_slot_model_unknown_role_rejected():
+    """An unknown role in the slot default fails Settings validation too."""
+    raw = _nexus_toml_dict()
+    raw["global"]["model"]["default_slot_model"] = "@test.nonexistent_role"
+    with pytest.raises(ValidationError, match="no role 'nonexistent_role'"):
+        Settings(**raw)
+
+
+def test_global_default_slot_model_role_ref_resolves_at_load():
+    """A valid role ref in default_slot_model resolves to the concrete ID."""
+    raw = _nexus_toml_dict()
+    raw["global"]["model"]["default_slot_model"] = "@test.default"
+    settings = Settings(**raw)
+    test_default = settings.global_.model.api_models["test"].roles["default"]
+    assert settings.global_.model.default_slot_model == test_default
+
+
 def test_resolve_model_ref_resolves_roles_and_validates_literals():
     """The public resolver maps roles to concrete IDs and validates literals."""
     settings = load_settings("nexus.toml")

@@ -43,6 +43,7 @@ logging.getLogger("openai").setLevel(logging.WARNING)
 from nexus.api.wizard_agent import WizardContext, get_wizard_agent
 from nexus.api.pydantic_ai_utils import build_pydantic_ai_model
 from nexus.api.new_story_schemas import StorySeedSubmission, WizardResponse
+from nexus.config import resolve_model_ref
 
 
 # Test context data - minimal setting and character to enable seed phase
@@ -202,8 +203,6 @@ async def main():
     logger.info("LIVE SEED SCHEMA TEST")
     logger.info("Testing StorySeedSubmission against real LLMs")
     logger.info("=" * 60)
-
-    from nexus.config import resolve_model_ref
 
     results = []
     for model_name in [resolve_model_ref(ref) for ref in TEST_MODEL_REFS]:

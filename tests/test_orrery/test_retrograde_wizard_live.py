@@ -73,9 +73,10 @@ def test_wizard_transition_cold_starts_retrograde_history() -> None:
 
     retrograde = result["retrograde"]
     assert retrograde["enabled"] is True, retrograde
-    assert retrograde["model"] == _live_run_model(), (
+    expected_model = _live_run_model()
+    assert retrograde["model"] == expected_model, (
         "Retrograde ran with an unexpected model: "
-        f"got {retrograde['model']!r}, expected {_live_run_model()!r}"
+        f"got {retrograde['model']!r}, expected {expected_model!r}"
     )
 
     # Canonical history landed with source='retrograde'.
