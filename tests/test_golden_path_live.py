@@ -373,23 +373,17 @@ def test_stage1_retrograde_cold_start(golden_path: GoldenPathRun) -> None:
     )
     assert len(trait_stubs) >= 3, trait_stubs
 
-    # Decision-8 cap: retrograde expansion stubs stay within configuration.
+    # Decision-8 cap: the wizard-time expansion stayed within its stub
+    # budget. Assert the transition's own counter -- runtime maturations
+    # later in the run legitimately add their own expansion stubs, so an
+    # end-of-run table count would conflate the two.
     from nexus.config import load_settings
 
     settings = load_settings()
     assert settings.orrery is not None
     cap = settings.orrery.retrograde.wizard.max_new_entity_stubs
-    expansion_stubs = _scalar(
-        "SELECT count(*) FROM ("
-        "  SELECT name FROM characters "
-        "  WHERE extra_data ->> 'stub_kind' = 'retrograde_expansion_ref'"
-        "  UNION ALL SELECT name FROM places "
-        "  WHERE extra_data ->> 'stub_kind' = 'retrograde_expansion_ref'"
-        "  UNION ALL SELECT name FROM factions "
-        "  WHERE extra_data ->> 'stub_kind' = 'retrograde_expansion_ref'"
-        ") stubs"
-    )
-    assert int(expansion_stubs) <= cap
+    counters = retro.get("counters") or {}
+    assert int(counters.get("entity_stubs_inserted", 0)) <= cap, counters
 
     # The duplicate-stub regression: one canonical row per character name.
     duplicates = _query(

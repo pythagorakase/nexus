@@ -328,3 +328,11 @@ class TransitionResponse(BaseModel):
             "withheld from this response."
         ),
     )
+    trait_inputs: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description=(
+            "Transition-time trait input derivation outcome: whether typed "
+            "TraitCompileInputs were derived, with which model, and for "
+            "which canonical traits."
+        ),
+    )
