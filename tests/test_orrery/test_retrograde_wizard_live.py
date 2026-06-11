@@ -7,6 +7,10 @@ and expansion calls, real persistence, real embedding, real MEMNON retrieval.
 
 Gating: requires ``NEXUS_RUN_LIVE_LLM=1``, ``NEXUS_RUN_POSTGRES=1``, and the
 explicit destructive opt-in ``NEXUS_RETROGRADE_WIZARD_E2E=1``.
+
+Model selection: defaults to the wizard default model (wizard.default_model in
+nexus.toml). Set ``NEXUS_RETROGRADE_WIZARD_MODEL`` to an ``@provider.role``
+reference (e.g. ``@anthropic.default``) to prove the run on another provider.
 """
 
 from __future__ import annotations
@@ -21,6 +25,19 @@ from psycopg2.extras import RealDictCursor  # type: ignore[import-untyped]
 SAVE_05_DSN = "postgresql://pythagor@localhost:5432/save_05"
 SAVE_05_DBNAME = "save_05"
 SLOT = 5
+MODEL_OVERRIDE_ENV = "NEXUS_RETROGRADE_WIZARD_MODEL"
+
+
+def _live_run_model() -> str:
+    """Wizard default model, or the @provider.role env override if set."""
+    from nexus.api.config_utils import get_new_story_model
+    from nexus.config import resolve_model_ref
+
+    override = os.environ.get(MODEL_OVERRIDE_ENV)
+    if override:
+        return resolve_model_ref(override)
+    return get_new_story_model()
+
 
 pytestmark = [
     pytest.mark.live,
@@ -56,6 +73,11 @@ def test_wizard_transition_cold_starts_retrograde_history() -> None:
 
     retrograde = result["retrograde"]
     assert retrograde["enabled"] is True, retrograde
+    expected_model = _live_run_model()
+    assert retrograde["model"] == expected_model, (
+        "Retrograde ran with an unexpected model: "
+        f"got {retrograde['model']!r}, expected {expected_model!r}"
+    )
 
     # Canonical history landed with source='retrograde'.
     rows = _query(
@@ -135,7 +157,6 @@ def _install_fixture_world() -> Any:
 
     from datetime import datetime, timezone
 
-    from nexus.api.config_utils import get_new_story_model
     from nexus.api.db_pool import close_pool
     from nexus.api.new_story_cache import write_cache
     from nexus.api.new_story_schemas import (
@@ -158,7 +179,7 @@ def _install_fixture_world() -> Any:
     # Fresh slots default to the mock TEST model (global.model.
     # default_slot_model); a real wizard run overrides it in start_setup.
     # Mirror that here so the transition engages real Retrograde generation.
-    upsert_slot(SLOT, model=get_new_story_model(), dbname=SAVE_05_DBNAME)
+    upsert_slot(SLOT, model=_live_run_model(), dbname=SAVE_05_DBNAME)
 
     cache = load_cache()
     write_cache(

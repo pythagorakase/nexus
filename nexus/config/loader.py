@@ -187,6 +187,28 @@ def get_provider_for_model(model_id: str) -> Optional[str]:
     return None
 
 
+def resolve_model_ref(ref: str, path: Union[str, Path] = "nexus.toml") -> str:
+    """
+    Resolve an "@provider.role" reference to a concrete model ID.
+
+    Literal model IDs are validated against the registry and returned
+    unchanged. Convenience wrapper for callers that take role references at
+    runtime (live tests, env overrides) rather than at config-load time.
+
+    Args:
+        ref: "@provider.role" reference or literal registry model ID
+        path: Path to configuration file (default: nexus.toml)
+
+    Returns:
+        Concrete model ID from the api_models registry
+
+    Raises:
+        ValueError: If the reference is malformed, names an unknown
+            provider/role, or a literal ID is not in the registry
+    """
+    return load_settings(path).resolve_model_ref(ref)
+
+
 def load_settings(path: Union[str, Path] = "nexus.toml") -> Settings:
     """
     Load and validate NEXUS configuration.

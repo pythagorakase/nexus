@@ -19,6 +19,7 @@ from nexus.agents.orrery.retrograde_vocabulary import (
     SeedEligibleVocabulary,
     enumerate_seed_eligible_vocabulary,
 )
+from nexus.config import resolve_model_ref
 
 
 @pytest.mark.live
@@ -27,7 +28,9 @@ def test_live_retrograde_seed_and_expansion_round_trip() -> None:
     """Real Skald calls can generate seeds and weave a dry-run R6 plan."""
 
     packet = _compact_live_packet()
-    model_name = os.environ.get("NEXUS_RETROGRADE_LIVE_MODEL", "gpt-5.1")
+    model_name = resolve_model_ref(
+        os.environ.get("NEXUS_RETROGRADE_LIVE_MODEL", "@openai.default")
+    )
     max_tokens = int(os.environ.get("NEXUS_RETROGRADE_LIVE_MAX_TOKENS", "8000"))
 
     seed_generation = generate_seed_candidates_with_skald(
