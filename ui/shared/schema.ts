@@ -200,6 +200,14 @@ export interface CurrentPlace {
 }
 
 export type Character = typeof characters.$inferSelect;
+
+// Character row plus presentation context for the cast pane: the resolved
+// current-location place name and the main portrait path (both null when
+// unknown). Served by GET /api/characters.
+export type CharacterListEntry = Character & {
+  currentLocationName: string | null;
+  portraitPath: string | null;
+};
 export type CharacterRelationship = typeof characterRelationships.$inferSelect;
 export type CharacterPsychology = typeof characterPsychology.$inferSelect;
 export type CharacterImage = typeof characterImages.$inferSelect;
