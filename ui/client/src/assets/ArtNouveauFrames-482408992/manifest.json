@@ -19,7 +19,12 @@
     {
       "file": "r1c5-inner.ts",
       "from": "r1c5.svg",
-      "description": "Landscape-rotated (-90deg) inner SVG payload with per-path fills stripped, from the NEXUS IRIS design handoff. Consumed by components/veil/NouveauFrame.tsx (the Veil splash border)."
+      "description": "Landscape-rotated (-90deg) inner SVG payload with per-path fills stripped, from the NEXUS IRIS design handoff. Consumed by components/veil/NouveauFrame.tsx (the retired Veil Hero Frame border)."
+    },
+    {
+      "file": "r1c1-inner.ts",
+      "from": "r1c1.svg",
+      "description": "Landscape-rotated (-90deg) inner SVG payload with the group fill stripped, from the NEXUS IRIS design handoff (hero/crescent_frame_inner.js). Consumed by components/veil/CrescentFrame.tsx (the Veil Hero Spiral v3 splash border)."
     }
   ],
   "grid": {"rows": 2, "cols": 5},

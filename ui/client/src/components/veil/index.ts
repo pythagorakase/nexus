@@ -4,5 +4,7 @@
  */
 export { VeilSpiral } from './VeilSpiral';
 export type { VeilSpiralProps, VeilSpiralMaskMode } from './VeilSpiral';
+export { CrescentFrame, computeCrescentSlices } from './CrescentFrame';
+export type { CrescentFrameProps, CrescentSlice } from './CrescentFrame';
 export { NouveauFrame } from './NouveauFrame';
 export type { NouveauFrameProps } from './NouveauFrame';
