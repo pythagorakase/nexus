@@ -86,6 +86,13 @@ describe("getSlotVisuals card classes", () => {
         expect(content).toBe("");
     });
 
+    it("keeps a keyboard focus ring on every card", () => {
+        for (const slot of [emptySlot, occupiedSlot, wizardSlot, lockedSlot]) {
+            const { card } = getSlotVisuals(slot, noSelection);
+            expect(card).toContain("focus-visible:ring-primary");
+        }
+    });
+
     it("applies the destructive locked treatment over occupancy", () => {
         const { card, tile } = getSlotVisuals(lockedSlot, noSelection);
         expect(card).toContain("cursor-not-allowed");
@@ -114,6 +121,15 @@ describe("bound-slot beacon", () => {
     it("marks nothing when no slot is bound", () => {
         const visuals = getSlotVisuals(occupiedSlot, noSelection);
         expect(visuals.bound).toBe(false);
+    });
+
+    it("never marks an empty slot, even with a stale activeSlot match", () => {
+        const visuals = getSlotVisuals(emptySlot, {
+            selected: false,
+            boundSlot: emptySlot.slot,
+        });
+        expect(visuals.bound).toBe(false);
+        expect(visuals.ariaLabel).not.toContain("current story");
     });
 });
 

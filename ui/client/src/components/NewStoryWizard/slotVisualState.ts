@@ -39,7 +39,15 @@ export interface SlotVisualSpec {
     ariaLabel: string;
 }
 
-/** Classify occupancy. Wizard-in-progress outranks plain occupancy. */
+/**
+ * Classify occupancy. Wizard-in-progress outranks plain occupancy.
+ *
+ * The API guarantees wizard_in_progress implies is_active: slot_state.py
+ * derives both from data presence and only reports wizard mode when a
+ * wizard cache row exists (is_empty=False, hence is_active=True). The
+ * precedence here is also correct defensively: a slot with resumable
+ * wizard data is not hollow, whatever is_active claims.
+ */
 export function classifySlot(slot: SlotVisualInput): SlotOccupancy {
     if (slot.wizard_in_progress) return "wizard";
     return slot.is_active ? "occupied" : "empty";
@@ -61,12 +69,18 @@ export function readBoundSlot(): number | null {
 }
 
 const CARD_BASE =
-    "p-4 cursor-pointer transition-all duration-300 group relative overflow-hidden";
+    "p-4 cursor-pointer transition-all duration-300 group relative overflow-hidden focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary";
+
+/* Shared "lit" treatment. Wizard slots are lit plus the pulsing mote
+   (rendered by the component), so both occupancies share these classes. */
+const CARD_LIT =
+    "border-solid border-primary/30 bg-card hover:border-primary/60";
+const TILE_LIT = "border-primary text-primary bg-primary/10 terminal-glow";
 
 const CARD_BY_OCCUPANCY: Record<SlotOccupancy, string> = {
     empty: "border-dashed border-muted-foreground/30 bg-card/20 hover:bg-card/40 hover:border-primary/40",
-    occupied: "border-solid border-primary/30 bg-card hover:border-primary/60",
-    wizard: "border-solid border-primary/30 bg-card hover:border-primary/60",
+    occupied: CARD_LIT,
+    wizard: CARD_LIT,
 };
 
 const TILE_BASE =
@@ -74,8 +88,8 @@ const TILE_BASE =
 
 const TILE_BY_OCCUPANCY: Record<SlotOccupancy, string> = {
     empty: "border-dashed border-muted-foreground/40 text-muted-foreground/60 bg-transparent",
-    occupied: "border-primary text-primary bg-primary/10 terminal-glow",
-    wizard: "border-primary text-primary bg-primary/10 terminal-glow",
+    occupied: TILE_LIT,
+    wizard: TILE_LIT,
 };
 
 const TILE_LOCKED = "border-destructive/50 text-destructive bg-destructive/10";
@@ -110,7 +124,13 @@ export function getSlotVisuals(
     opts: { selected: boolean; boundSlot: number | null },
 ): SlotVisualSpec {
     const occupancy = classifySlot(slot);
-    const bound = opts.boundSlot !== null && opts.boundSlot === slot.slot;
+    // An empty slot can never be the current story, even if a stale
+    // localStorage activeSlot still points at it (e.g. the bound slot
+    // was just cleared and the list refetched).
+    const bound =
+        occupancy !== "empty" &&
+        opts.boundSlot !== null &&
+        opts.boundSlot === slot.slot;
 
     const card = cn(
         CARD_BASE,

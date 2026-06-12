@@ -164,6 +164,13 @@ export function SlotSelector({ onSlotSelected, onSlotResumed }: SlotSelectorProp
                         <Card
                             key={slotData.slot}
                             onClick={() => handleSelect(slotData.slot, slotData)}
+                            onKeyDown={(e) => {
+                                if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) {
+                                    e.preventDefault();
+                                    handleSelect(slotData.slot, slotData);
+                                }
+                            }}
+                            tabIndex={0}
                             role="group"
                             aria-label={visuals.ariaLabel}
                             title={visuals.ariaLabel}
@@ -240,6 +247,10 @@ export function SlotSelector({ onSlotSelected, onSlotResumed }: SlotSelectorProp
                                         <Button
                                             variant="ghost"
                                             aria-label={`Initialize empty Memory Slot ${slotData.slot}`}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleSelect(slotData.slot, slotData);
+                                            }}
                                             className={cn(
                                                 "font-mono text-xs border border-transparent group-hover:border-primary/30",
                                                 selectedSlot === slotData.slot && "bg-primary text-primary-foreground hover:bg-primary/90"
