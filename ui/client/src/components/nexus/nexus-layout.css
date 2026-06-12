@@ -1059,8 +1059,6 @@
   --map-sea: var(--bg-elev-1);
   --map-land: color-mix(in srgb, var(--brass) 16%, var(--bg-elev-1));
   --map-coast: color-mix(in srgb, var(--brass) 50%, transparent);
-  --map-survey: color-mix(in srgb, var(--brass) 7%, transparent);
-  --map-survey-line: color-mix(in srgb, var(--brass) 45%, transparent);
 }
 .mappane-svg {
   position: absolute;

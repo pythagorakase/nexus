@@ -16,7 +16,6 @@ import {
   type Place,
   type CurrentPlace,
   type Zone,
-  type WorldLayer,
   type Faction,
   seasons,
   episodes,
@@ -91,9 +90,6 @@ export interface IStorage {
 
   // Zone methods
   getAllZones(slot?: number | null): Promise<Zone[]>;
-
-  // World layer methods
-  getAllLayers(slot?: number | null): Promise<WorldLayer[]>;
 
   // Faction methods
   getAllFactions(slot?: number | null): Promise<Faction[]>;
@@ -584,23 +580,6 @@ export class PostgresStorage implements IStorage {
     })) as Zone[];
   }
 
-  // World layer methods
-  async getAllLayers(slot?: number | null): Promise<WorldLayer[]> {
-    const db = getDb(slot) || this.db;
-    const result = await db.execute(sql`
-      SELECT id, name, type::text, description
-      FROM layers
-      ORDER BY id
-    `);
-
-    return (result.rows as any[]).map(row => ({
-      id: Number(row.id),
-      name: row.name as string,
-      type: row.type ?? null,
-      description: row.description ?? null,
-    }));
-  }
-
   // Faction methods
   async getAllFactions(slot?: number | null): Promise<Faction[]> {
     const db = getDb(slot) || this.db;
@@ -971,11 +950,6 @@ class MemStorage implements IStorage {
 
   async getAllZones(): Promise<Zone[]> {
     return this.zones;
-  }
-
-  async getAllLayers(): Promise<WorldLayer[]> {
-    // MemStorage carries no world layer data.
-    return [];
   }
 
   async getAllFactions(): Promise<Faction[]> {

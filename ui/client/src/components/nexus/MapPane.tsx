@@ -25,10 +25,11 @@
  *                       d3 fit the sphere-complement (i.e. the whole
  *                       globe), which shipped in the original rebuild
  *
- * Worlds: the bundled Natural Earth outline renders only when the slot's
- * world layer (GET /api/layers) is Earth. Generated worlds have no
- * coastline data, so they get a deliberate abstract survey chart instead:
- * open sea, grid, dashed zone survey boundaries, place beacons.
+ * Geography: ALL NEXUS worlds are Earth-shaped by design — GIS
+ * coordinates are real-Earth positions regardless of genre (deliberate
+ * cognitive offloading for LLM spatial reasoning: latitude implies
+ * climate, terrain implies travel modes). The bundled Natural Earth
+ * outline therefore renders for every slot.
  *
  * Design: theme-token colors only (--brass / --bronze / --bg-elev-* plus
  * the --map-* mixes on .mappane-canvas), menu-font labels — theme-aware
@@ -43,7 +44,6 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type { GeoPermissibleObjects } from "d3-geo";
 import { ChevronDown, ChevronRight, MapPin } from "lucide-react";
 import { useGeoProjection } from "@/hooks/useGeoProjection";
 import {
@@ -53,21 +53,13 @@ import {
   computeLabelVisibility,
   computeMapBounds,
   extractCoordinates,
-  extractZoneBoundary,
-  worldIsEarth,
   zoomViewBoxAtCursor,
-  type BoundaryGeometry,
   type LabelCandidate,
   type ViewBox,
 } from "@/lib/map-geometry";
-import {
-  getCurrentPlace,
-  getLayers,
-  getPlaces,
-  getZones,
-} from "@/lib/narrative-api";
+import { getCurrentPlace, getPlaces, getZones } from "@/lib/narrative-api";
 import { worldOutline } from "@/lib/world-outline";
-import type { CurrentPlace, Place, WorldLayer, Zone } from "@shared/schema";
+import type { CurrentPlace, Place, Zone } from "@shared/schema";
 import { MapPlaceDialog } from "./MapPlaceDialog";
 
 interface MapPaneProps {
@@ -95,21 +87,10 @@ export function MapPane({ slot }: MapPaneProps) {
     queryFn: () => getZones(slot),
   });
 
-  const { data: layers = [], error: layersError } = useQuery<WorldLayer[]>({
-    queryKey: ["/api/layers", slot],
-    queryFn: () => getLayers(slot),
-  });
-
   const { data: currentPlace = null } = useQuery<CurrentPlace | null>({
     queryKey: ["/api/current-place", slot],
     queryFn: () => getCurrentPlace(slot),
   });
-
-  // The bundled Natural Earth outline is Earth's geography; it renders
-  // only when the slot's world layer is literally Earth. Generated worlds
-  // (no coastline data exists for them) get the abstract survey chart:
-  // open sea, grid, zone survey boundaries, place beacons.
-  const earthWorld = worldIsEarth(layers);
 
   // ── Local state ─────────────────────────────────────────────────────
   const [hoveredId, setHoveredId] = useState<number | null>(null);
@@ -159,25 +140,10 @@ export function MapPane({ slot }: MapPaneProps) {
   }, []);
 
   // ── Projection ──────────────────────────────────────────────────────
-  // Survey boundaries (zones.boundary polygons) are real per-world data;
-  // they are drawn — and counted toward the projection fit — only on
-  // non-Earth worlds, where they are the chart's primary shapes.
-  const surveyGeometries = useMemo<Array<{ id: number; geometry: BoundaryGeometry }>>(() => {
-    if (earthWorld) return [];
-    return zones.flatMap((zone) => {
-      const geometry = extractZoneBoundary(zone);
-      return geometry ? [{ id: zone.id, geometry }] : [];
-    });
-  }, [zones, earthWorld]);
-
-  const mapBounds = useMemo(
-    () =>
-      computeMapBounds(
-        places,
-        surveyGeometries.map((entry) => entry.geometry),
-      ),
-    [places, surveyGeometries],
-  );
+  // Fit to the charted places only. Zone boundaries are deliberately NOT
+  // part of the fit: legacy slots carry near-global zones (Pacific Ocean,
+  // Antarctic) that would blow the frame back out to world scale.
+  const mapBounds = useMemo(() => computeMapBounds(places), [places]);
 
   const { transformCoordinates, geoJsonToSvgPath } = useGeoProjection({
     mapDimensions,
@@ -185,7 +151,6 @@ export function MapPane({ slot }: MapPaneProps) {
   });
 
   const worldCountries = useMemo(() => {
-    if (!earthWorld) return [];
     return worldOutline.features
       .map((feature, index) => ({
         id: index,
@@ -195,19 +160,7 @@ export function MapPane({ slot }: MapPaneProps) {
         (country): country is { id: number; pathData: string } =>
           country.pathData !== null,
       );
-  }, [earthWorld, geoJsonToSvgPath]);
-
-  const surveyBoundaries = useMemo(() => {
-    return surveyGeometries
-      .map((entry) => ({
-        id: entry.id,
-        pathData: geoJsonToSvgPath(entry.geometry as GeoPermissibleObjects),
-      }))
-      .filter(
-        (boundary): boundary is { id: number; pathData: string } =>
-          boundary.pathData !== null,
-      );
-  }, [surveyGeometries, geoJsonToSvgPath]);
+  }, [geoJsonToSvgPath]);
 
   const placeCoordinates = useMemo(() => {
     const cache = new Map<number, { x: number; y: number }>();
@@ -393,7 +346,7 @@ export function MapPane({ slot }: MapPaneProps) {
     rest: "var(--bronze)",
   };
 
-  const dataError = (placesError ?? zonesError ?? layersError) as Error | null;
+  const dataError = (placesError ?? zonesError) as Error | null;
 
   return (
     <div className="mappane" data-testid="map-pane">
@@ -502,8 +455,9 @@ export function MapPane({ slot }: MapPaneProps) {
             fill="url(#nexus-map-grid)"
           />
 
-          {/* World outline (Natural Earth 110m, bundled) — Earth worlds
-              only. Land/coast colors are theme-token mixes defined on
+          {/* World outline (Natural Earth 110m, bundled). Every NEXUS
+              world uses real-Earth geography, so this renders for all
+              slots. Land/coast colors are theme-token mixes defined on
               .mappane-canvas so all three themes keep land/sea contrast. */}
           {worldCountries.map((country) => (
             <path
@@ -512,21 +466,6 @@ export function MapPane({ slot }: MapPaneProps) {
               fill="var(--map-land)"
               stroke="var(--map-coast)"
               strokeWidth={1 / zoom}
-            />
-          ))}
-
-          {/* Zone survey boundaries (zones.boundary) — non-Earth worlds.
-              Dashed survey lines, not coastlines: deliberate "charted
-              extent" cartography for worlds without landmass data. */}
-          {surveyBoundaries.map((boundary) => (
-            <path
-              key={boundary.id}
-              d={boundary.pathData}
-              fill="var(--map-survey)"
-              stroke="var(--map-survey-line)"
-              strokeWidth={1 / zoom}
-              strokeDasharray={`${6 / zoom} ${4 / zoom}`}
-              strokeLinejoin="round"
             />
           ))}
 
@@ -613,19 +552,17 @@ export function MapPane({ slot }: MapPaneProps) {
             );
           })}
 
-          {/* Empty state: grid stays visible (spec §3.4) */}
-          {!placesLoading &&
-            placeCoordinates.size === 0 &&
-            surveyBoundaries.length === 0 && (
-              <text
-                x="50%"
-                y="50%"
-                textAnchor="middle"
-                className="map-empty-text"
-              >
-                [ UNCHARTED ]
-              </text>
-            )}
+          {/* Empty state: grid + world outline stay visible (spec §3.4) */}
+          {!placesLoading && placeCoordinates.size === 0 && (
+            <text
+              x="50%"
+              y="50%"
+              textAnchor="middle"
+              className="map-empty-text"
+            >
+              [ UNCHARTED ]
+            </text>
+          )}
         </svg>
 
         {/* Chrome: zoom readout */}

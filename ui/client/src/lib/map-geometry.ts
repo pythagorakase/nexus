@@ -1,7 +1,7 @@
 /**
  * Pure geometry logic for the MapPane (no React, no DOM).
  *
- * This module concentrates the four historical failure modes documented in
+ * This module concentrates the historical failure modes documented in
  * docs/maptab_rebuild_spec.md §6 into testable pure functions:
  *
  *  1. Label culling        → computeLabelVisibility (priority + AABB overlap)
@@ -10,6 +10,9 @@
  *  3. Pointer capture       → DOM-coupled; lives in MapPane.tsx (see the
  *                             pointer handlers there), not here
  *  4. lng/lat ordering      → extractCoordinates (GeoJSON is [lng, lat])
+ *  5. Spherical fit winding → boundsToFitObject (winding-free corner points
+ *                             for fitSize; a bounding polygon ring wound
+ *                             the wrong way fits the whole globe)
  *
  * Unit tests: map-geometry.test.ts.
  */
@@ -41,76 +44,10 @@ export const MAX_ZOOM = 100;
  * Minimum geographic span (degrees) for the projection fit. Without a
  * floor, a world with a single charted place collapses the bounding box
  * to ~0.0001° — fitSize then zooms the projection to a viewport a couple
- * of meters across, and nothing (grid, coastline, zone boundary) can
- * possibly be in frame. This was the slot-5 "blank void" bug.
+ * of meters across, and no coastline can possibly be in frame. Part of
+ * the slot-5 "blank void" bug (with failure mode 5).
  */
 export const MIN_BOUNDS_SPAN_DEG = 1;
-
-/** Polygonal GeoJSON accepted for zone survey boundaries. */
-export interface BoundaryGeometry {
-  type: "Polygon" | "MultiPolygon";
-  coordinates: unknown[];
-}
-
-/**
- * The bundled Natural Earth outline is Earth's geography. Drawing it under
- * a generated world (e.g. the fictional planet "Veyport") would be fake
- * cartography, so the continents render only when the slot's world layer
- * is literally Earth.
- */
-export function worldIsEarth(layers: Array<{ name: string }>): boolean {
-  return layers.some((layer) => layer.name === "Earth");
-}
-
-/**
- * Parse a zone's boundary into validated polygonal GeoJSON.
- *
- * The API serves `ST_AsGeoJSON(boundary)::json`; depending on the driver
- * path the client may still receive it as a JSON string. Anything that is
- * not a Polygon/MultiPolygon with coordinates is dropped with a
- * console.warn — bad data must never take down the map.
- */
-export function extractZoneBoundary(zone: {
-  id: number;
-  boundary?: unknown;
-}): BoundaryGeometry | null {
-  const raw = zone.boundary;
-  if (raw === null || raw === undefined) return null;
-
-  let geometry: unknown = raw;
-  if (typeof raw === "string") {
-    try {
-      geometry = JSON.parse(raw);
-    } catch {
-      console.warn(`Zone ${zone.id} has unparseable boundary geometry`);
-      return null;
-    }
-  }
-
-  if (
-    typeof geometry !== "object" ||
-    geometry === null ||
-    !("type" in geometry) ||
-    !("coordinates" in geometry)
-  ) {
-    console.warn(`Zone ${zone.id} has invalid boundary structure`);
-    return null;
-  }
-
-  const candidate = geometry as { type: unknown; coordinates: unknown };
-  if (candidate.type !== "Polygon" && candidate.type !== "MultiPolygon") {
-    console.warn(
-      `Zone ${zone.id} has unsupported boundary type: ${String(candidate.type)}`,
-    );
-    return null;
-  }
-  if (!Array.isArray(candidate.coordinates) || candidate.coordinates.length === 0) {
-    console.warn(`Zone ${zone.id} has empty boundary coordinates`);
-    return null;
-  }
-
-  return candidate as BoundaryGeometry;
-}
 
 /**
  * Build the GeoJSON object that useGeoProjection feeds to fitSize.
@@ -133,23 +70,6 @@ export function boundsToFitObject(bounds: MapBounds): {
       [bounds.maxLng, bounds.maxLat],
     ],
   };
-}
-
-/** Walk every [lng, lat] position in nested GeoJSON coordinate arrays. */
-function forEachPosition(
-  coords: unknown,
-  visit: (lng: number, lat: number) => void,
-): void {
-  if (!Array.isArray(coords)) return;
-  if (
-    coords.length >= 2 &&
-    typeof coords[0] === "number" &&
-    typeof coords[1] === "number"
-  ) {
-    visit(coords[0], coords[1]);
-    return;
-  }
-  for (const child of coords) forEachPosition(child, visit);
 }
 
 /**
@@ -206,38 +126,27 @@ export function extractCoordinates(place: Place): LatLng | null {
 }
 
 /**
- * Geographic bounding box across every place with valid coordinates plus
- * every rendered survey boundary, padded by 10% so border features don't
- * hug the canvas edge. Spans below MIN_BOUNDS_SPAN_DEG are widened around
- * their center (see the constant's doc). Returns null when nothing has
- * usable geometry (the projection then falls back to the whole world).
+ * Geographic bounding box across every place with valid coordinates,
+ * padded by 10% so border pins don't hug the canvas edge. Spans below
+ * MIN_BOUNDS_SPAN_DEG are widened around their center (see the
+ * constant's doc). Returns null when no place has usable geometry (the
+ * projection then falls back to the whole world).
  */
-export function computeMapBounds(
-  places: Place[],
-  boundaries: BoundaryGeometry[] = [],
-): MapBounds | null {
+export function computeMapBounds(places: Place[]): MapBounds | null {
   let minLng = Infinity;
   let maxLng = -Infinity;
   let minLat = Infinity;
   let maxLat = -Infinity;
   let found = false;
 
-  const accumulate = (lng: number, lat: number) => {
-    if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
-    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return;
-    found = true;
-    minLng = Math.min(minLng, lng);
-    maxLng = Math.max(maxLng, lng);
-    minLat = Math.min(minLat, lat);
-    maxLat = Math.max(maxLat, lat);
-  };
-
   for (const place of places) {
     const coords = extractCoordinates(place);
-    if (coords) accumulate(coords.longitude, coords.latitude);
-  }
-  for (const boundary of boundaries) {
-    forEachPosition(boundary.coordinates, accumulate);
+    if (!coords) continue;
+    found = true;
+    minLng = Math.min(minLng, coords.longitude);
+    maxLng = Math.max(maxLng, coords.longitude);
+    minLat = Math.min(minLat, coords.latitude);
+    maxLat = Math.max(maxLat, coords.latitude);
   }
 
   if (!found) return null;

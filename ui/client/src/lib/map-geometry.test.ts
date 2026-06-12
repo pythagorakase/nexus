@@ -20,12 +20,9 @@ import {
   computeLabelVisibility,
   computeMapBounds,
   extractCoordinates,
-  extractZoneBoundary,
   MIN_BOUNDS_SPAN_DEG,
   shouldDisplayLabelByZoom,
-  worldIsEarth,
   zoomViewBoxAtCursor,
-  type BoundaryGeometry,
   type LabelCandidate,
   type ViewBox,
 } from "./map-geometry";
@@ -297,106 +294,6 @@ describe("computeMapBounds", () => {
     // Still centered on the place:
     expect((bounds!.minLng + bounds!.maxLng) / 2).toBeCloseTo(5.322, 6);
     expect((bounds!.minLat + bounds!.maxLat) / 2).toBeCloseTo(60.392, 6);
-  });
-
-  it("includes survey boundary extents in the fit", () => {
-    const boundary: BoundaryGeometry = {
-      type: "MultiPolygon",
-      coordinates: [
-        [
-          [
-            [3.86, 59.67],
-            [6.78, 59.67],
-            [6.78, 61.11],
-            [3.86, 61.11],
-            [3.86, 59.67],
-          ],
-        ],
-      ],
-    };
-    const bounds = computeMapBounds(
-      [makePlace(1, { type: "Point", coordinates: [5.322, 60.392, 0] })],
-      [boundary],
-    );
-
-    expect(bounds).not.toBeNull();
-    // Boundary bbox (2.92 x 1.44 deg) + 10% padding, clamped to the globe.
-    expect(bounds!.minLng).toBeCloseTo(3.86 - 2.92 * 0.1, 6);
-    expect(bounds!.maxLng).toBeCloseTo(6.78 + 2.92 * 0.1, 6);
-    expect(bounds!.minLat).toBeCloseTo(59.67 - 1.44 * 0.1, 6);
-    expect(bounds!.maxLat).toBeCloseTo(61.11 + 1.44 * 0.1, 6);
-  });
-
-  it("computes bounds from boundaries alone when no place is charted", () => {
-    const boundary: BoundaryGeometry = {
-      type: "Polygon",
-      coordinates: [
-        [
-          [-2, -2],
-          [2, -2],
-          [2, 2],
-          [-2, 2],
-          [-2, -2],
-        ],
-      ],
-    };
-    const bounds = computeMapBounds([], [boundary]);
-    expect(bounds).not.toBeNull();
-    expect(bounds!.minLng).toBeCloseTo(-2.4, 6);
-    expect(bounds!.maxLng).toBeCloseTo(2.4, 6);
-  });
-});
-
-describe("extractZoneBoundary", () => {
-  const ring = [
-    [0, 0],
-    [1, 0],
-    [1, 1],
-    [0, 0],
-  ];
-
-  it("accepts Polygon and MultiPolygon objects", () => {
-    expect(
-      extractZoneBoundary({ id: 1, boundary: { type: "Polygon", coordinates: [ring] } }),
-    ).not.toBeNull();
-    expect(
-      extractZoneBoundary({
-        id: 1,
-        boundary: { type: "MultiPolygon", coordinates: [[ring]] },
-      }),
-    ).not.toBeNull();
-  });
-
-  it("accepts a JSON string (driver-dependent serialization)", () => {
-    const parsed = extractZoneBoundary({
-      id: 1,
-      boundary: JSON.stringify({ type: "Polygon", coordinates: [ring] }),
-    });
-    expect(parsed).not.toBeNull();
-    expect(parsed!.type).toBe("Polygon");
-  });
-
-  it("drops null, EWKB hex, wrong types, and empty coordinates without throwing", () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    expect(extractZoneBoundary({ id: 1, boundary: null })).toBeNull();
-    expect(extractZoneBoundary({ id: 1 })).toBeNull();
-    // The pre-fix API served boundary as EWKB hex text:
-    expect(extractZoneBoundary({ id: 1, boundary: "0106000020E61000..." })).toBeNull();
-    expect(
-      extractZoneBoundary({ id: 1, boundary: { type: "Point", coordinates: [1, 2] } }),
-    ).toBeNull();
-    expect(
-      extractZoneBoundary({ id: 1, boundary: { type: "Polygon", coordinates: [] } }),
-    ).toBeNull();
-    warn.mockRestore();
-  });
-});
-
-describe("worldIsEarth", () => {
-  it("is true only when a layer is literally named Earth", () => {
-    expect(worldIsEarth([{ name: "Earth" }])).toBe(true);
-    expect(worldIsEarth([{ name: "Veyport" }])).toBe(false);
-    expect(worldIsEarth([])).toBe(false);
   });
 });
 

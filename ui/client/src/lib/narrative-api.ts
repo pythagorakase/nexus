@@ -13,7 +13,6 @@ import type {
   CurrentPlace,
   Place,
   PlaceImage,
-  WorldLayer,
   Zone,
 } from "@shared/schema";
 import type {
@@ -97,10 +96,6 @@ export function getPlaces(slot: number | null): Promise<Place[]> {
 
 export function getZones(slot: number | null): Promise<Zone[]> {
   return getJson(`/api/zones${slotQuery(slot)}`);
-}
-
-export function getLayers(slot: number | null): Promise<WorldLayer[]> {
-  return getJson(`/api/layers${slotQuery(slot)}`);
 }
 
 export function getPlaceImages(
