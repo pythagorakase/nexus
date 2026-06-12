@@ -787,10 +787,6 @@
   min-height: 0;
 }
 .charspane-list { padding: 8px 0; overflow-y: auto; }
-.charspane-list > .eyebrow {
-  display: block;
-  margin-bottom: 12px;
-}
 .charspane-list ul {
   list-style: none;
   padding: 0;
@@ -831,22 +827,25 @@
   text-shadow: var(--glow-soft);
   flex-shrink: 0;
 }
+/* Uploaded-portrait thumbnail; same footprint as the letter glyph. */
+.char-glyph-img {
+  width: 30px;
+  height: 30px;
+  object-fit: cover;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+/* Names are content — natural case in the body face (the menu face has no
+   true lowercase in every theme). */
 .char-name {
-  font-family: var(--font-menu);
-  font-size: 12px;
-  letter-spacing: 0.18em;
+  font-family: var(--font-body);
+  font-size: 15px;
+  letter-spacing: 0.02em;
   color: var(--fg);
-  text-transform: uppercase;
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.char-role {
-  font-family: var(--font-body);
-  font-style: italic;
-  font-size: 14px;
-  color: var(--fg-muted);
   white-space: nowrap;
 }
 .charspane-detail {
@@ -870,6 +869,7 @@
 }
 /* Portraits: dark surface, thin violet border, light sepia + cool rotate. */
 .char-portrait {
+  position: relative;
   width: 104px;
   height: 136px;
   border: 1px solid var(--border-strong);
@@ -889,17 +889,59 @@
 .char-portrait .char-portrait-empty {
   color: var(--fg-dim);
 }
-/* The character's NAME is a heading — menu font, not the marquee. */
+/* Icon-only upload affordance: hidden until the portrait is hovered or the
+   control is focused; stays visible while an upload is in flight. */
+.char-portrait-upload {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border: 0;
+  padding: 0;
+  background: hsl(270 30% 8% / .65);
+  color: var(--brass);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.char-portrait:hover .char-portrait-upload,
+.char-portrait-upload:focus-visible,
+.char-portrait-upload:disabled {
+  opacity: 1;
+}
+.char-upload-spin {
+  animation: char-upload-rotate 0.9s linear infinite;
+}
+@keyframes char-upload-rotate {
+  to { transform: rotate(360deg); }
+}
+/* The character's NAME is a heading, but it is content — body face so it
+   renders in natural case in every theme. */
 .char-title {
-  font-family: var(--font-menu);
+  font-family: var(--font-body);
   font-size: 30px;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.02em;
   font-weight: 600;
-  text-transform: uppercase;
   color: var(--brass-bright);
   text-shadow: var(--glow-soft);
   margin: 0 0 4px;
   line-height: 1.1;
+}
+/* Location line: place names are content, not chrome — no uppercasing. */
+.char-where {
+  display: block;
+  font-family: var(--font-body);
+  font-style: italic;
+  font-size: 15px;
+  color: var(--fg-muted);
+}
+.char-upload-error {
+  display: block;
+  margin-top: 6px;
+  font-family: var(--font-menu);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: hsl(var(--destructive));
 }
 .char-sections {
   display: flex;
