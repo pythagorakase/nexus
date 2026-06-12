@@ -2,7 +2,10 @@
  * NarrativePane - the typeset book-chapter reading surface.
  *
  * Renders the current episode's committed chunks plus the pending
- * (incubator) chunk from slot state. Voice is differentiated by color only:
+ * (incubator) chunk from slot state. Prose renders as real markdown via
+ * ProseMarkdown (committed path and typewriter reveal path alike), with the
+ * voice color carried by the .md-part wrapper.
+ * Voice is differentiated by color only:
  * storyteller prose in warm cream (--fg), player responses in muted cream
  * (--fg-muted), with a thin centered rule between speaker changes. The
  * current chunk carries a 3px magenta edge marker; earlier chunks read at
@@ -17,11 +20,11 @@ import {
   useRef,
   useState,
   type KeyboardEvent,
-  type ReactNode,
 } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { DecoDivider } from "@/components/deco";
 import { Textarea } from "@/components/ui/textarea";
+import { ProseMarkdown } from "./ProseMarkdown";
 import { TypewriterText } from "./TypewriterText";
 import {
   getChunkContext,
@@ -30,13 +33,6 @@ import {
 } from "@/lib/narrative-api";
 import type { NarrativeEngine } from "@/hooks/useNarrativeEngine";
 import type { ChunkContext, ChunkWithMetadata } from "@/types/narrative";
-
-/** Render *emphasis* spans without dangerouslySetInnerHTML. */
-function renderProse(text: string): ReactNode[] {
-  return text.split(/\*([^*]+)\*/g).map((segment, i) =>
-    i % 2 === 1 ? <em key={i}>{segment}</em> : <Fragment key={i}>{segment}</Fragment>,
-  );
-}
 
 interface NarrativePaneProps {
   slot: number;
@@ -251,9 +247,9 @@ export function NarrativePane({
                   {chunk.parts.map((part) => (
                     <Fragment key={part.voice}>
                       {part.divider && <hr className="voice-divider" />}
-                      <p className={`line ${part.voice}`}>
-                        {renderProse(part.text)}
-                      </p>
+                      <div className={`md-part ${part.voice}`}>
+                        <ProseMarkdown text={part.text} />
+                      </div>
                     </Fragment>
                   ))}
                 </div>
@@ -264,14 +260,15 @@ export function NarrativePane({
               <div className="chunk-block current" data-testid="chunk-pending">
                 <div className="prose-block">
                   {pendingDivider && <hr className="voice-divider" />}
-                  <p className="line st">
+                  <div className="md-part st">
                     <TypewriterText
                       key={completedGenerations}
                       text={pendingText}
                       msPerChar={typewriterMsPerChar}
                       animate={completedGenerations > 0}
+                      markdown
                     />
-                  </p>
+                  </div>
                 </div>
               </div>
             )}

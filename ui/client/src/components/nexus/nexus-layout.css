@@ -348,9 +348,71 @@
   font-style: normal;
   white-space: pre-wrap;
 }
-/* Voice colors — uniform per speaker; no italics, no prefix glyphs. */
-.prose-block .line.st { color: var(--fg); }
-.prose-block .line.you { color: var(--fg-muted); }
+/* Voice colors — uniform per speaker; no italics, no prefix glyphs.
+   Color sits on the markdown part wrapper so every block element
+   (paragraphs, headings, lists, quotes) inherits its voice. */
+.prose-block .md-part.st { color: var(--fg); }
+.prose-block .md-part.you { color: var(--fg-muted); }
+.prose-block .md-part > :first-child { margin-top: 0; }
+
+/* ─── In-chunk markdown ───
+   Headings stay in the body serif and defer to the surrounding UI chrome:
+   h2 is the largest in-chunk heading (h1 in content clamps to it), h3 steps
+   down, and h4-h6 floor at body size — distinguished by size first, with
+   weight and a touch of tracking within the existing design language. */
+.prose-block .md-heading {
+  font-family: var(--font-body);
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: 0.02em;
+  color: inherit;
+  margin: 30px 0 14px;
+  text-wrap: pretty;
+}
+.prose-block .md-h2 { font-size: 24px; }
+.prose-block .md-h3 { font-size: 20px; }
+.prose-block .md-h4 { font-size: 18px; }
+
+/* Markdown scene rule (`---`) — kin to the voice divider, slightly wider. */
+.prose-block .md-hr {
+  border: none;
+  height: 1px;
+  margin: 26px auto;
+  width: 55%;
+  background: linear-gradient(to right, transparent, var(--border-strong), transparent);
+}
+
+/* list-style is explicit because the Tailwind preflight resets it. */
+.prose-block .md-part ul,
+.prose-block .md-part ol {
+  font-family: var(--font-body);
+  font-size: 18px;
+  line-height: 1.6;
+  margin: 0 0 20px;
+  padding-left: 1.6em;
+}
+.prose-block .md-part ul { list-style: disc outside; }
+.prose-block .md-part ol { list-style: decimal outside; }
+.prose-block .md-part li { margin: 0 0 10px; }
+.prose-block .md-part li:last-child { margin-bottom: 0; }
+.prose-block .md-part li::marker { color: var(--bronze); }
+.prose-block .md-part li > .line { margin: 0; }
+
+.prose-block .md-part blockquote {
+  margin: 0 0 20px;
+  padding: 2px 0 2px 18px;
+  border-left: 2px solid var(--border-strong);
+}
+.prose-block .md-part blockquote > .line:last-child { margin-bottom: 0; }
+
+.prose-block .md-part code {
+  font-family: var(--font-mono);
+  font-size: 15px;
+}
+.prose-block .md-part pre {
+  margin: 0 0 20px;
+  white-space: pre-wrap;
+}
 
 /* Voice divider: thin centered rule on speaker change. */
 .voice-divider {
