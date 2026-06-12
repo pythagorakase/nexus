@@ -35,9 +35,9 @@ export function applyThemeIcons(theme: ThemeId): void {
       link = document.createElement("link");
       link.rel = rel;
       if (sizes) link.setAttribute("sizes", sizes);
-      link.type = "image/png";
       document.head.appendChild(link);
     }
+    link.type = "image/png";
     link.href = themeIconPath(theme, size);
   }
 }

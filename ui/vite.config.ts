@@ -25,19 +25,19 @@ export default defineConfig({
             src: '/icons/veil/icon-192.png',
             sizes: '192x192',
             type: 'image/png',
-            purpose: 'any'
+            purpose: 'any maskable'
           },
           {
             src: '/icons/veil/icon-512.png',
             sizes: '512x512',
             type: 'image/png',
-            purpose: 'any'
+            purpose: 'any maskable'
           },
           {
             src: '/icons/veil/icon-180.png',
             sizes: '180x180',
             type: 'image/png',
-            purpose: 'any'
+            purpose: 'any maskable'
           }
         ]
       },
@@ -45,6 +45,11 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
         globIgnores: [
           '**/character_portraits/**',
+          // Non-default theme icons are fetched on demand at theme switch and
+          // cached by the NetworkFirst runtimeCaching rule below — keep them
+          // out of the install-time precache.
+          '**/icons/gilded/**',
+          '**/icons/vector/**',
         ],
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
         runtimeCaching: [
