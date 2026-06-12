@@ -15,7 +15,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, Circle, CircleDot, RefreshCw, Save } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
-import { useFonts } from "@/contexts/FontContext";
+import { KEEPERS, useFonts } from "@/contexts/FontContext";
 import { useSettingsMutation, useSettingsQuery } from "@/hooks/useSettings";
 import { themeIconPath } from "@/lib/themeIcons";
 import { FONT_CATALOG } from "./fontCatalog";
@@ -94,7 +94,10 @@ function ThemeSection({ active, onPick }: { active: ThemeId; onPick: (t: ThemeId
     <SettingsCard id="theme" label="THEME">
       <div className="theme-grid">
         {THEME_IDS.map((id) => {
-          const slots: FontSlots = fonts[id];
+          // GET /api/settings serves raw nexus.toml, so a hand-edited
+          // [ui.fonts] could arrive partial; guard with the keeper matrix
+          // exactly as FontContext does for the active theme.
+          const slots: FontSlots = fonts[id] ?? KEEPERS[id];
           const on = active === id;
           return (
             <button
