@@ -163,16 +163,19 @@ For detailed key management workflows including rotation, see the `manage-api-ke
 
 ## UI Design: Visual Minimalism
 
-The standing antipattern to avoid is **visual verbosity**: cluttering the UI with excessive or redundant textual labels. The reference example is the light/dark toggle on darioamodei.com — an unlabeled control whose function is ~90% guessable on sight and 100% confirmed by one click. NEXUS UI should strive for that kind of clean minimalism.
+Scope: all visual UI surfaces (the IRIS web client under `ui/`). CLI output follows its own conventions.
+
+The standing antipattern to avoid is **visual verbosity**: cluttering the UI with excessive or redundant textual labels. The reference example is the light/dark toggle on darioamodei.com — a small unlabeled icon button that swaps theme on a single click; its function is ~90% guessable on sight and 100% confirmed by one click. NEXUS UI should strive for that kind of clean minimalism.
 
 - Every verbal label must earn its place, and the threshold is high. UI elements should be visually self-evident or easily discoverable through interaction.
-- Err on the side of too little labeling. When confusion seems possible, first redesign the element to communicate intent visually; add text only as a last resort.
+- Err on the side of too little labeling. When confusion seems possible, first redesign the element to communicate intent visually — an icon, placement, theme-token color or weight, state styling (dimmed, glowing, dashed), or a hover-revealed affordance — and add text only as a last resort.
 - Never restate information already visible elsewhere on screen (duplicate slugs, repeated cast lists, a wordmark re-spelled in a footer bar).
-- No explanatory paragraphs in persistent chrome. Rationale and "how this works" prose belong in release communications or docs — never in settings panes or sidebars.
+- No explanatory paragraphs in persistent chrome (the recurring shell: nav rails, headers, sidebars, settings panes). Rationale and "how this works" prose belong in release communications or docs — never in the UI.
 - One label per section, maximum, matching its navigation name. No eyebrow-plus-title-plus-subtitle stacks.
 - Internal module names (LORE, LOGON, MEMNON, and the like) never appear in UI copy. Users see plain functional names: "MODEL", "CONTEXT LENGTH".
-- Don't uppercase content. Character names and prose render in natural case; reserve case styling for chrome where the design system specifies it.
+- Don't uppercase content. Character names and prose render in natural case; uppercase belongs only to chrome element labels where the vendored theme CSS (`ui/client/src/`) styles them that way.
 - Transient status (telemetry, progress) is visible only while the underlying activity is live, and vanishes when idle.
+- Friction is earned the same way labels are: destructive actions (wiping an occupied save slot) warrant explicit confirmation; everything else should act on a single interaction.
 
 ## Testing with NEXUS CLI
 
