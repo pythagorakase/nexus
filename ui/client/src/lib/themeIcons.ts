@@ -12,7 +12,7 @@ import type { ThemeId } from "@/types/settings";
 export type ThemeIconSize = 16 | 32 | 180 | 192 | 512;
 
 /** Cache-bust token for the icon set; bump when the PNGs change. */
-export const ICON_VERSION = "20260612";
+export const ICON_VERSION = "20260612b";
 
 export function themeIconPath(theme: ThemeId, size: ThemeIconSize): string {
   return `/icons/${theme}/icon-${size}.png?v=${ICON_VERSION}`;
