@@ -84,7 +84,8 @@ def compose_padded(master: Image.Image, safe_frac: float) -> Image.Image:
     Returns a canvas the same size as the master, filled with the sampled
     background color, with the scaled artwork bbox centered on it.
     """
-    rgb = np.asarray(master.convert("RGB"))
+    master_rgb = master.convert("RGB")
+    rgb = np.asarray(master_rgb)
     side = master.width
     if master.height != side:
         raise ValueError(f"Master is not square: {master.size}")
@@ -94,7 +95,7 @@ def compose_padded(master: Image.Image, safe_frac: float) -> Image.Image:
     bbox_w, bbox_h = x1 - x0 + 1, y1 - y0 + 1
 
     scale = safe_frac * side / max(bbox_w, bbox_h)
-    scaled = master.convert("RGB").resize(
+    scaled = master_rgb.resize(
         (round(side * scale), round(side * scale)), Image.LANCZOS
     )
 
@@ -140,6 +141,39 @@ def write_masked_preview(icon: Image.Image, dest: Path) -> None:
     preview.save(dest)
 
 
+def write_favicon(frames: dict[int, Image.Image]) -> None:
+    """Write favicon.ico from the dedicated 32 + 16 frames and verify it.
+
+    Pillow (>= 9.1) fills each entry in ``sizes`` with an exact-size match
+    from ``[base] + append_images`` before falling back to downsampling the
+    base, so both directory entries below come from the dedicated padded
+    frames. The post-write check fails loudly if a Pillow behavior change
+    ever substitutes a downsampled frame or alters the frame count.
+    """
+    frames[32].save(
+        FAVICON_OUT,
+        format="ICO",
+        sizes=[(32, 32), (16, 16)],
+        append_images=[frames[16]],
+    )
+
+    data = FAVICON_OUT.read_bytes()
+    count = int.from_bytes(data[4:6], "little")
+    if count != 2:
+        raise SystemExit(f"favicon.ico has {count} frames, expected exactly 2")
+    for size in (32, 16):
+        ico = Image.open(FAVICON_OUT)
+        ico.size = (size, size)
+        if np.asarray(ico.convert("RGB")).tobytes() != (
+            np.asarray(frames[size].convert("RGB")).tobytes()
+        ):
+            raise SystemExit(
+                f"favicon.ico {size}px frame differs from the dedicated "
+                f"padded frame — check Pillow ICO size-matching behavior"
+            )
+    print(f"favicon.ico written from Veil 32+16 (verified) -> {FAVICON_OUT}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -161,6 +195,14 @@ def main() -> None:
         help="If set, write masked 512px previews here for eyeballing",
     )
     args = parser.parse_args()
+
+    if not args.masters.is_dir():
+        raise SystemExit(
+            f"Masters directory not found: {args.masters}\n"
+            "The icon masters live in the untracked design handoff "
+            "(design_handoff/project/assets/ in the main checkout). "
+            "Pass --masters to point at your copy."
+        )
 
     favicon_frames: dict[int, Image.Image] = {}
 
@@ -185,13 +227,7 @@ def main() -> None:
             if theme == "veil" and size in (32, 16):
                 favicon_frames[size] = resized
 
-    favicon_frames[32].save(
-        FAVICON_OUT,
-        format="ICO",
-        sizes=[(32, 32), (16, 16)],
-        append_images=[favicon_frames[16]],
-    )
-    print(f"favicon.ico written from Veil 32+16 -> {FAVICON_OUT}")
+    write_favicon(favicon_frames)
 
 
 if __name__ == "__main__":
