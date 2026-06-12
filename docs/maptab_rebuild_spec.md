@@ -71,7 +71,7 @@ divide by `zoom` to stay visually constant.
 import { geoEquirectangular, geoPath } from "d3-geo";
 
 const proj = geoEquirectangular();
-proj.fitSize([mapDimensions.width, mapDimensions.height], boundingFeature);
+proj.fitSize([mapDimensions.width, mapDimensions.height], fitObject);
 const transformCoordinates = (lng: number, lat: number) => proj([lng, lat]);
 const pathGenerator = geoPath().projection(proj);
 ```
@@ -79,9 +79,11 @@ const pathGenerator = geoPath().projection(proj);
 - `geoEquirectangular` is the right choice for a fictional-world map —
   it's a simple linear mapping of lat/lng to pixels, no distortion to
   reason about, no globe wrap-around concerns.
-- `fitSize` accepts a "bounding feature" (a GeoJSON polygon describing
-  the area to include) and computes scale/translate so that polygon fills
-  the canvas.
+- `fitSize` accepts a GeoJSON object describing the area to include and
+  computes scale/translate so that area fills the canvas. **Do not pass a
+  bounding polygon** — see §6.5 (spherical fit winding). Pass winding-free
+  corner points instead (`boundsToFitObject` in `lib/map-geometry.ts`):
+  `{ type: "MultiPoint", coordinates: [[minLng, minLat], [maxLng, maxLat]] }`.
 - `geoPath()` returns a path generator that converts arbitrary GeoJSON
   geometry → SVG path strings, used for the continent outlines.
 
@@ -296,7 +298,7 @@ to feel like a live window, not a navigable document.
 
 ## 6. Known Subtleties (The Historical Failure Modes)
 
-These are the four areas where past rebuilds went wrong:
+These are the five areas where past rebuilds went wrong:
 
 ### 6.1 Label collision detection
 
@@ -366,6 +368,28 @@ lng ∈ [-180,180]. Out-of-range coords are silently dropped with
 Currently only `Point` is rendered. `Polygon` / `LineString` geometries
 are returned by the API as-is but are dropped at the renderer; future
 work would compute centroids for Polygon and midpoints for LineString.
+
+### 6.5 Spherical Fit Winding
+
+d3-geo polygons are **spherical**: a ring's winding order decides which
+side is the inside. A bounding-box ring wound the wrong way denotes the
+*complement* of the box (the entire globe minus it), so `fitSize` quietly
+fits the whole world and every regional map renders as a world-scale
+speck. The U4 rebuild shipped with exactly this bug — on an Earth slot it
+masqueraded as a plausible whole-world view; on a generated world (one
+zone, one place) it produced a blank void.
+
+**The fix**: never feed `fitSize` a bounding polygon. Use winding-free
+corner points (`boundsToFitObject` in `lib/map-geometry.ts`):
+
+```ts
+proj.fitSize([width, height], {
+  type: "MultiPoint",
+  coordinates: [[minLng, minLat], [maxLng, maxLat]],
+});
+```
+
+Regression-tested in `map-geometry.test.ts` ("failure mode 5").
 
 ---
 

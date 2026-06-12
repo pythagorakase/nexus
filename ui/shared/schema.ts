@@ -182,7 +182,10 @@ export const chunkMetadata = pgTable("chunk_metadata", {
 });
 
 // Type exports
-export type Zone = typeof zones.$inferSelect;
+export type Zone = Omit<typeof zones.$inferSelect, "boundary"> & {
+  // GET /api/zones serves ST_AsGeoJSON(boundary)::json, not raw geometry
+  boundary: object | null;
+};
 export type Faction = typeof factions.$inferSelect;
 
 // Place type with GeoJSON geometry from PostGIS

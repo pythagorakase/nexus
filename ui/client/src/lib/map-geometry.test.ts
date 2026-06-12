@@ -9,15 +9,18 @@
  *   - clampViewBox / computeMapBounds → §4.3 pan clamping
  * (§6.3 pointer capture is DOM behavior — verified manually, see PR.)
  */
+import { geoEquirectangular } from "d3-geo";
 import { describe, expect, it, vi } from "vitest";
 import type { Place } from "@shared/schema";
 import {
+  boundsToFitObject,
   centerViewBoxOn,
   clampViewBox,
   clampZoom,
   computeLabelVisibility,
   computeMapBounds,
   extractCoordinates,
+  MIN_BOUNDS_SPAN_DEG,
   shouldDisplayLabelByZoom,
   zoomViewBoxAtCursor,
   type LabelCandidate,
@@ -274,6 +277,75 @@ describe("computeMapBounds", () => {
   it("returns null when no place has usable geometry", () => {
     expect(computeMapBounds([makePlace(1, null)])).toBeNull();
     expect(computeMapBounds([])).toBeNull();
+  });
+
+  it("widens a single-place box to the minimum span (slot-5 blank-void bug)", () => {
+    // One charted place used to collapse the fit to a ~0.0001-degree box,
+    // zooming the projection to a viewport a couple of meters across.
+    const bounds = computeMapBounds([
+      makePlace(1, { type: "Point", coordinates: [5.322, 60.392, 0] }),
+    ]);
+
+    expect(bounds).not.toBeNull();
+    const lngSpan = bounds!.maxLng - bounds!.minLng;
+    const latSpan = bounds!.maxLat - bounds!.minLat;
+    expect(lngSpan).toBeGreaterThanOrEqual(MIN_BOUNDS_SPAN_DEG);
+    expect(latSpan).toBeGreaterThanOrEqual(MIN_BOUNDS_SPAN_DEG);
+    // Still centered on the place:
+    expect((bounds!.minLng + bounds!.maxLng) / 2).toBeCloseTo(5.322, 6);
+    expect((bounds!.minLat + bounds!.maxLat) / 2).toBeCloseTo(60.392, 6);
+  });
+});
+
+describe("boundsToFitObject (failure mode 5: spherical fit winding)", () => {
+  // The original rebuild fed fitSize a bounding POLYGON whose ring was
+  // wound so that d3-geo (spherical winding semantics) read it as the
+  // box's sphere-complement: fitSize quietly fit the whole globe, and
+  // every regional map rendered as a world-scale speck. Corner points
+  // carry no winding, so this cannot regress silently again.
+  const region = {
+    minLng: 17.34,
+    maxLng: 19.67,
+    minLat: 41.13,
+    maxLat: 42.87,
+  };
+
+  it("fits the projection to the region, not the sphere-complement", () => {
+    const proj = geoEquirectangular();
+    proj.fitSize([1026, 792], boundsToFitObject(region));
+
+    const world = geoEquirectangular();
+    world.fitSize(
+      [1026, 792],
+      boundsToFitObject({ minLng: -180, maxLng: 180, minLat: -90, maxLat: 90 }),
+    );
+
+    // A ~2-degree region must be fit at a far larger scale than the globe.
+    expect(proj.scale()).toBeGreaterThan(world.scale() * 50);
+  });
+
+  it("centers the region in the canvas", () => {
+    const proj = geoEquirectangular();
+    proj.fitSize([1026, 792], boundsToFitObject(region));
+    const center = proj([
+      (region.minLng + region.maxLng) / 2,
+      (region.minLat + region.maxLat) / 2,
+    ]);
+    expect(center).not.toBeNull();
+    expect(center![0]).toBeCloseTo(1026 / 2, 0);
+    expect(center![1]).toBeCloseTo(792 / 2, 0);
+  });
+
+  it("still fits the whole world for the null-bounds fallback box", () => {
+    const world = geoEquirectangular();
+    world.fitSize(
+      [1026, 792],
+      boundsToFitObject({ minLng: -180, maxLng: 180, minLat: -90, maxLat: 90 }),
+    );
+    // Full longitudinal span maps to the full canvas width.
+    const west = world([-180, 0])!;
+    const east = world([180, 0])!;
+    expect(east[0] - west[0]).toBeCloseTo(1026, 0);
   });
 });
 

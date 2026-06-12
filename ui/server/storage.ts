@@ -671,13 +671,14 @@ export class PostgresStorage implements IStorage {
   // Zone methods
   async getAllZones(slot?: number | null): Promise<Zone[]> {
     const db = getDb(slot) || this.db;
-    // Use raw SQL to extract boundary as text from PostGIS geometry
+    // Serve boundary as GeoJSON: the raw geometry's ::text form is EWKB
+    // hex, which no client renderer can consume.
     const result = await db.execute(sql`
       SELECT
         id,
         name,
         summary,
-        boundary::text
+        ST_AsGeoJSON(boundary)::json AS boundary
       FROM zones
       ORDER BY id
     `);

@@ -1,7 +1,7 @@
 /**
  * Pure geometry logic for the MapPane (no React, no DOM).
  *
- * This module concentrates the four historical failure modes documented in
+ * This module concentrates the historical failure modes documented in
  * docs/maptab_rebuild_spec.md §6 into testable pure functions:
  *
  *  1. Label culling        → computeLabelVisibility (priority + AABB overlap)
@@ -10,6 +10,9 @@
  *  3. Pointer capture       → DOM-coupled; lives in MapPane.tsx (see the
  *                             pointer handlers there), not here
  *  4. lng/lat ordering      → extractCoordinates (GeoJSON is [lng, lat])
+ *  5. Spherical fit winding → boundsToFitObject (winding-free corner points
+ *                             for fitSize; a bounding polygon ring wound
+ *                             the wrong way fits the whole globe)
  *
  * Unit tests: map-geometry.test.ts.
  */
@@ -36,6 +39,38 @@ export interface MapBounds {
 
 export const MIN_ZOOM = 0.2;
 export const MAX_ZOOM = 100;
+
+/**
+ * Minimum geographic span (degrees) for the projection fit. Without a
+ * floor, a world with a single charted place collapses the bounding box
+ * to ~0.0001° — fitSize then zooms the projection to a viewport a couple
+ * of meters across, and no coastline can possibly be in frame. Part of
+ * the slot-5 "blank void" bug (with failure mode 5).
+ */
+export const MIN_BOUNDS_SPAN_DEG = 1;
+
+/**
+ * Build the GeoJSON object that useGeoProjection feeds to fitSize.
+ *
+ * A bounding polygon ring is the natural choice but is a winding trap:
+ * d3-geo polygons are SPHERICAL, so a ring wound the wrong way denotes
+ * the complement of the box — fitSize then quietly fits the whole globe
+ * and every regional map renders as a world-scale speck (the original
+ * MapPane rebuild shipped with exactly that bug). Corner points carry no
+ * winding, so the fit is unambiguous.
+ */
+export function boundsToFitObject(bounds: MapBounds): {
+  type: "MultiPoint";
+  coordinates: Array<[number, number]>;
+} {
+  return {
+    type: "MultiPoint",
+    coordinates: [
+      [bounds.minLng, bounds.minLat],
+      [bounds.maxLng, bounds.maxLat],
+    ],
+  };
+}
 
 /**
  * Parse a place's GeoJSON geometry into validated lat/lng.
@@ -92,9 +127,10 @@ export function extractCoordinates(place: Place): LatLng | null {
 
 /**
  * Geographic bounding box across every place with valid coordinates,
- * padded by 10% so border pins don't hug the canvas edge. Returns null
- * when no place has usable geometry (the projection then falls back to
- * the whole world).
+ * padded by 10% so border pins don't hug the canvas edge. Spans below
+ * MIN_BOUNDS_SPAN_DEG are widened around their center (see the
+ * constant's doc). Returns null when no place has usable geometry (the
+ * projection then falls back to the whole world).
  */
 export function computeMapBounds(places: Place[]): MapBounds | null {
   let minLng = Infinity;
@@ -115,8 +151,21 @@ export function computeMapBounds(places: Place[]): MapBounds | null {
 
   if (!found) return null;
 
-  const lngRange = Math.max(maxLng - minLng, 0.0001);
-  const latRange = Math.max(maxLat - minLat, 0.0001);
+  // Widen degenerate spans before padding: a lone beacon should sit in a
+  // regional frame, not a meters-wide one.
+  if (maxLng - minLng < MIN_BOUNDS_SPAN_DEG) {
+    const center = (minLng + maxLng) / 2;
+    minLng = center - MIN_BOUNDS_SPAN_DEG / 2;
+    maxLng = center + MIN_BOUNDS_SPAN_DEG / 2;
+  }
+  if (maxLat - minLat < MIN_BOUNDS_SPAN_DEG) {
+    const center = (minLat + maxLat) / 2;
+    minLat = center - MIN_BOUNDS_SPAN_DEG / 2;
+    maxLat = center + MIN_BOUNDS_SPAN_DEG / 2;
+  }
+
+  const lngRange = maxLng - minLng;
+  const latRange = maxLat - minLat;
   const padding = 0.1;
 
   return {

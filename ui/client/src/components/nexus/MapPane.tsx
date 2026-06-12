@@ -19,10 +19,21 @@
  *                       other pointer (multi-touch / trackpad safety)
  *  4. lng/lat order   → extractCoordinates is the only place the GeoJSON
  *                       [longitude, latitude] array is destructured
+ *  5. Spherical fit winding → boundsToFitObject in lib/map-geometry.ts
+ *                       feeds fitSize winding-free corner points; a
+ *                       bounding polygon ring wound the wrong way makes
+ *                       d3 fit the sphere-complement (i.e. the whole
+ *                       globe), which shipped in the original rebuild
  *
- * Design: IRIS tokens only (--brass / --bronze / --bg-elev-* / --border),
- * menu-font labels — theme-aware across Veil / Gilded / Vector with zero
- * map-specific colors.
+ * Geography: ALL NEXUS worlds are Earth-shaped by design — GIS
+ * coordinates are real-Earth positions regardless of genre (deliberate
+ * cognitive offloading for LLM spatial reasoning: latitude implies
+ * climate, terrain implies travel modes). The bundled Natural Earth
+ * outline therefore renders for every slot.
+ *
+ * Design: theme-token colors only (--brass / --bronze / --bg-elev-* plus
+ * the --map-* mixes on .mappane-canvas), menu-font labels — theme-aware
+ * across Veil / Gilded / Vector with zero map-specific colors.
  */
 import {
   useCallback,
@@ -129,6 +140,9 @@ export function MapPane({ slot }: MapPaneProps) {
   }, []);
 
   // ── Projection ──────────────────────────────────────────────────────
+  // Fit to the charted places only. Zone boundaries are deliberately NOT
+  // part of the fit: legacy slots carry near-global zones (Pacific Ocean,
+  // Antarctic) that would blow the frame back out to world scale.
   const mapBounds = useMemo(() => computeMapBounds(places), [places]);
 
   const { transformCoordinates, geoJsonToSvgPath } = useGeoProjection({
@@ -417,7 +431,7 @@ export function MapPane({ slot }: MapPaneProps) {
           <rect
             width={mapDimensions.width}
             height={mapDimensions.height}
-            fill="var(--bg-elev-1)"
+            fill="var(--map-sea)"
           />
           <defs>
             <pattern
@@ -441,20 +455,19 @@ export function MapPane({ slot }: MapPaneProps) {
             fill="url(#nexus-map-grid)"
           />
 
-          {/* World outline (Natural Earth 110m, bundled) */}
-          <g opacity="0.45">
-            {worldCountries.map((country) => (
-              <path
-                key={country.id}
-                d={country.pathData}
-                fill="var(--brass)"
-                fillOpacity={0.07}
-                stroke="var(--brass)"
-                strokeOpacity={0.35}
-                strokeWidth={1 / zoom}
-              />
-            ))}
-          </g>
+          {/* World outline (Natural Earth 110m, bundled). Every NEXUS
+              world uses real-Earth geography, so this renders for all
+              slots. Land/coast colors are theme-token mixes defined on
+              .mappane-canvas so all three themes keep land/sea contrast. */}
+          {worldCountries.map((country) => (
+            <path
+              key={country.id}
+              d={country.pathData}
+              fill="var(--map-land)"
+              stroke="var(--map-coast)"
+              strokeWidth={1 / zoom}
+            />
+          ))}
 
           {/* Place pins */}
           {places.map((place) => {
@@ -532,14 +545,14 @@ export function MapPane({ slot }: MapPaneProps) {
                       userSelect: "none",
                     }}
                   >
-                    {place.name.toUpperCase()}
+                    {place.name}
                   </text>
                 </g>
               </g>
             );
           })}
 
-          {/* Empty state: grid + outline stay visible (spec §3.4) */}
+          {/* Empty state: grid + world outline stay visible (spec §3.4) */}
           {!placesLoading && placeCoordinates.size === 0 && (
             <text
               x="50%"
@@ -547,7 +560,7 @@ export function MapPane({ slot }: MapPaneProps) {
               textAnchor="middle"
               className="map-empty-text"
             >
-              [ NO LOCATION DATA AVAILABLE ]
+              [ UNCHARTED ]
             </text>
           )}
         </svg>
@@ -555,34 +568,17 @@ export function MapPane({ slot }: MapPaneProps) {
         {/* Chrome: zoom readout */}
         <div className="map-chrome map-zoom-readout">
           <span className="eyebrow">
-            ZOOM {zoom >= 10 ? zoom.toFixed(1) : zoom.toFixed(2)}×
+            {zoom >= 10 ? zoom.toFixed(1) : zoom.toFixed(2)}×
           </span>
         </div>
 
-        {/* Chrome: controls + legend */}
-        <div className="map-chrome map-controls">
-          <span className="eyebrow brass-glow">[ SURVEY ]</span>
-          <span className="map-controls-line">Drag to pan · scroll to zoom</span>
-          <div className="map-legend">
-            <span>
-              <i style={{ background: "var(--brass-bright)" }} /> Current
-            </span>
-            <span>
-              <i style={{ background: "var(--brass)" }} /> Selected
-            </span>
-            <span>
-              <i style={{ background: "var(--bronze)" }} /> Charted
-            </span>
-          </div>
-        </div>
-
-        {/* Chrome: current-location readout */}
+        {/* Chrome: current-location readout (pin glyph carries the
+            meaning — no caption) */}
         {currentPlace && (
           <div className="map-chrome map-readout">
-            <span className="eyebrow">
-              <MapPin size={11} aria-hidden="true" /> THE STORY IS HERE
+            <span className="map-readout-name">
+              <MapPin size={12} aria-hidden="true" /> {currentPlace.name}
             </span>
-            <span className="map-readout-name">{currentPlace.name}</span>
           </div>
         )}
 
