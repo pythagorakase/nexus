@@ -55,3 +55,5 @@ pytest-asyncio = "^1.2.0"
 asyncpg = "^0.30.0"
 pre-commit = "^3.5"
 flake8 = "^7.3.0"
+# Asset tooling: scripts/generate_app_icons.py (per-theme PWA icon regeneration)
+pillow = "^11.0"
