@@ -7,8 +7,12 @@
  *  1. Label culling        → computeLabelVisibility (priority + AABB overlap)
  *  2. Zoom-cursor anchoring → zoomViewBoxAtCursor (solve for the new origin
  *                             so the SVG point under the cursor stays put)
- *  3. Pointer capture       → DOM-coupled; lives in MapPane.tsx (see the
- *                             pointer handlers there), not here
+ *  3. Pointer capture       → the capture calls are DOM-coupled and live in
+ *                             MapPane.tsx, but the drag lifecycle itself
+ *                             (active-pointer guard, click-vs-drag movement
+ *                             threshold, incremental deltas) is the pure
+ *                             drag-session machine here: beginDragSession /
+ *                             applyDragMove / endDragSession
  *  4. lng/lat ordering      → extractCoordinates (GeoJSON is [lng, lat])
  *  5. Spherical fit winding → boundsToFitObject (winding-free corner points
  *                             for fitSize; a bounding polygon ring wound
@@ -37,8 +41,35 @@ export interface MapBounds {
   maxLat: number;
 }
 
+/**
+ * The projected extent the pan/zoom window is allowed to roam, in SVG
+ * units (for MapPane this is the whole projected world, i.e. the Natural
+ * Earth box [-180..180, -90..90] pushed through the current projection).
+ */
+export interface PanBounds {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
+
 export const MIN_ZOOM = 0.2;
 export const MAX_ZOOM = 100;
+
+/**
+ * Pointer movement (client px, straight-line from pointerdown) below which
+ * a press-release is a click, at or above which it is a pan. Keeps
+ * click-to-select working: a click with a couple px of jitter still
+ * selects, while any real drag suppresses selection.
+ */
+export const DRAG_THRESHOLD_PX = 4;
+
+/**
+ * Fraction of the viewport (per axis) that must still overlap the world
+ * after clamping — the user can pan anywhere on the globe, but can never
+ * drag the world fully off-screen and get lost in the void.
+ */
+export const MIN_WORLD_VISIBLE_FRACTION = 0.2;
 
 /**
  * Minimum geographic span (degrees) for the projection fit. Without a
@@ -177,25 +208,62 @@ export function computeMapBounds(places: Place[]): MapBounds | null {
 }
 
 /**
- * Keep the viewBox inside the projected map area so the user can never
- * pan the world fully out of frame (spec §4.3).
+ * Pan-bounds clamp (spec §4.3, reworked).
+ *
+ * The original clamp confined the window to the initially fitted region
+ * ([0..mapWidth] × [0..mapHeight]) — at 1.00× zoom that range has zero
+ * slack, so dragging was a silent no-op and the map "had no panning".
+ *
+ * The window may now roam the entire projected world; the only rule is
+ * that at least MIN_WORLD_VISIBLE_FRACTION of the viewport (per axis)
+ * must still overlap the world box, so the map can never be dragged
+ * fully off-screen. When the window is larger than the world (deep
+ * zoom-out), the same arithmetic keeps the world inside the window.
  */
-export function clampViewBox(
-  box: ViewBox,
-  mapWidth: number,
-  mapHeight: number,
-): ViewBox {
-  const safeWidth = Math.max(mapWidth, 1);
-  const safeHeight = Math.max(mapHeight, 1);
-  const maxX = Math.max(0, safeWidth - box.width);
-  const maxY = Math.max(0, safeHeight - box.height);
+export function clampViewBox(box: ViewBox, world: PanBounds): ViewBox {
+  const keepX = box.width * MIN_WORLD_VISIBLE_FRACTION;
+  const keepY = box.height * MIN_WORLD_VISIBLE_FRACTION;
+
+  // Range is never inverted: maxX ≥ minX ⇔ worldWidth ≥ -(1 - 2f)·boxWidth,
+  // which holds for any fraction f ≤ 0.5.
+  const minX = world.minX - box.width + keepX;
+  const maxX = world.maxX - keepX;
+  const minY = world.minY - box.height + keepY;
+  const maxY = world.maxY - keepY;
 
   return {
-    x: Math.min(Math.max(box.x, 0), maxX),
-    y: Math.min(Math.max(box.y, 0), maxY),
+    x: Math.min(Math.max(box.x, minX), maxX),
+    y: Math.min(Math.max(box.y, minY), maxY),
     width: box.width,
     height: box.height,
   };
+}
+
+/**
+ * Drag-to-pan (spec §4.1): convert a pointer delta in client px into a
+ * viewBox translation in SVG units. The delta divides by the current
+ * zoom (prev.width / rectW), so a given mouse movement always moves the
+ * map the same distance ON SCREEN regardless of zoom level.
+ */
+export function panViewBox(
+  prev: ViewBox,
+  deltaXPx: number,
+  deltaYPx: number,
+  rectW: number,
+  rectH: number,
+  world: PanBounds,
+): ViewBox {
+  const scaleX = prev.width / Math.max(rectW, 1);
+  const scaleY = prev.height / Math.max(rectH, 1);
+
+  return clampViewBox(
+    {
+      ...prev,
+      x: prev.x - deltaXPx * scaleX,
+      y: prev.y - deltaYPx * scaleY,
+    },
+    world,
+  );
 }
 
 /**
@@ -211,6 +279,7 @@ export function clampViewBox(
  * @param cursorX/Y cursor position in client px, relative to the SVG rect
  * @param rectW/H   the SVG element's client size in px
  * @param newZoom   the already-clamped target zoom factor
+ * @param world     projected world extent for the pan-bounds clamp
  */
 export function zoomViewBoxAtCursor(
   prev: ViewBox,
@@ -221,6 +290,7 @@ export function zoomViewBoxAtCursor(
   newZoom: number,
   mapWidth: number,
   mapHeight: number,
+  world: PanBounds,
 ): ViewBox {
   // The SVG-space point currently under the cursor:
   const svgX = prev.x + cursorX * (prev.width / rectW);
@@ -238,8 +308,7 @@ export function zoomViewBoxAtCursor(
       width: newWidth,
       height: newHeight,
     },
-    mapWidth,
-    mapHeight,
+    world,
   );
 }
 
@@ -255,8 +324,7 @@ export function clampZoom(zoom: number): number {
 export function centerViewBoxOn(
   point: { x: number; y: number },
   prev: ViewBox,
-  mapWidth: number,
-  mapHeight: number,
+  world: PanBounds,
 ): ViewBox {
   return clampViewBox(
     {
@@ -265,9 +333,103 @@ export function centerViewBoxOn(
       width: prev.width,
       height: prev.height,
     },
-    mapWidth,
-    mapHeight,
+    world,
   );
+}
+
+// ─── Drag session (failure mode 3: pointer lifecycle + click-vs-drag) ──────
+//
+// The DOM half of failure mode 3 (setPointerCapture / releasePointerCapture)
+// lives in MapPane.tsx; everything decidable without a DOM lives here so it
+// can be unit-tested: which pointer owns the drag, when a press stops being
+// a click and becomes a pan, and what delta each move contributes.
+
+export interface DragSession {
+  /** The pointer that owns this drag — all others are ignored (§6.3). */
+  pointerId: number;
+  /** pointerdown position (client px) — anchor for the click-vs-drag test. */
+  originX: number;
+  originY: number;
+  /** Last applied position (client px) — anchor for incremental deltas. */
+  lastX: number;
+  lastY: number;
+  /** True once movement exceeded the threshold: this press is a pan, and
+   *  the release must not fire a click. Never resets within a session. */
+  panned: boolean;
+}
+
+export interface DragMoveResult {
+  session: DragSession;
+  /** Pan delta to apply, in client px. Zero until the threshold trips. */
+  deltaX: number;
+  deltaY: number;
+}
+
+export function beginDragSession(
+  pointerId: number,
+  clientX: number,
+  clientY: number,
+): DragSession {
+  return {
+    pointerId,
+    originX: clientX,
+    originY: clientY,
+    lastX: clientX,
+    lastY: clientY,
+    panned: false,
+  };
+}
+
+/**
+ * Advance the drag session for a pointermove.
+ *
+ * Returns null for a foreign pointer (multi-touch / stray trackpad
+ * contact — spec §6.3: ignore every pointer but the dragger). Below the
+ * movement threshold the press is still a potential click and the map
+ * must not move. The move that crosses the threshold applies the full
+ * displacement accumulated since pointerdown, so no pixels are swallowed.
+ */
+export function applyDragMove(
+  session: DragSession,
+  pointerId: number,
+  clientX: number,
+  clientY: number,
+  thresholdPx: number = DRAG_THRESHOLD_PX,
+): DragMoveResult | null {
+  if (pointerId !== session.pointerId) return null;
+
+  if (!session.panned) {
+    const dx = clientX - session.originX;
+    const dy = clientY - session.originY;
+    if (Math.hypot(dx, dy) < thresholdPx) {
+      return { session, deltaX: 0, deltaY: 0 };
+    }
+    return {
+      session: { ...session, lastX: clientX, lastY: clientY, panned: true },
+      deltaX: dx,
+      deltaY: dy,
+    };
+  }
+
+  return {
+    session: { ...session, lastX: clientX, lastY: clientY },
+    deltaX: clientX - session.lastX,
+    deltaY: clientY - session.lastY,
+  };
+}
+
+/**
+ * Close the drag session for a pointerup. Returns null for a foreign
+ * pointer (the drag survives another pointer's release); otherwise
+ * reports whether the session panned — a panned release must NOT count
+ * as a click on whatever the press started on.
+ */
+export function endDragSession(
+  session: DragSession,
+  pointerId: number,
+): { panned: boolean } | null {
+  if (pointerId !== session.pointerId) return null;
+  return { panned: session.panned };
 }
 
 export interface LabelCandidate {

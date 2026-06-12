@@ -14,9 +14,14 @@
  *                       by a NATIVE non-passive wheel listener (React 17+
  *                       root wheel listeners are passive: preventDefault
  *                       would silently fail and scroll the page)
- *  3. Pointer capture → setPointerCapture on pointerdown + an
- *                       activePointerId ref that rejects events from any
- *                       other pointer (multi-touch / trackpad safety)
+ *  3. Pointer capture → setPointerCapture on pointerdown (drag keeps
+ *                       working across the pane edge, releases cleanly)
+ *                       + the pure drag-session machine in
+ *                       lib/map-geometry.ts: an owning-pointer guard that
+ *                       rejects events from any other pointer
+ *                       (multi-touch / trackpad safety) and a small
+ *                       movement threshold separating click from drag —
+ *                       pin selection fires only below it
  *  4. lng/lat order   → extractCoordinates is the only place the GeoJSON
  *                       [longitude, latitude] array is destructured
  *  5. Spherical fit winding → boundsToFitObject in lib/map-geometry.ts
@@ -36,7 +41,6 @@
  * across Veil / Gilded / Vector with zero map-specific colors.
  */
 import {
-  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -47,14 +51,18 @@ import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight, MapPin } from "lucide-react";
 import { useGeoProjection } from "@/hooks/useGeoProjection";
 import {
+  applyDragMove,
+  beginDragSession,
   centerViewBoxOn,
-  clampViewBox,
   clampZoom,
   computeLabelVisibility,
   computeMapBounds,
   extractCoordinates,
+  panViewBox,
   zoomViewBoxAtCursor,
+  type DragSession,
   type LabelCandidate,
+  type PanBounds,
   type ViewBox,
 } from "@/lib/map-geometry";
 import { getCurrentPlace, getPlaces, getZones } from "@/lib/narrative-api";
@@ -111,8 +119,8 @@ export function MapPane({ slot }: MapPaneProps) {
 
   const svgRef = useRef<SVGSVGElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
-  const activePointerId = useRef<number | null>(null);
-  const dragStartRef = useRef({ x: 0, y: 0 });
+  const dragSessionRef = useRef<DragSession | null>(null);
+  const downTargetRef = useRef<EventTarget | null>(null);
   const dimensionsRef = useRef(mapDimensions);
   dimensionsRef.current = mapDimensions;
 
@@ -149,6 +157,26 @@ export function MapPane({ slot }: MapPaneProps) {
     mapDimensions,
     mapBounds,
   });
+
+  // Pan bounds: the whole projected world, not the initially fitted
+  // region. The old clamp confined the window to the fit box, which at
+  // 1.00× zoom had zero slack — dragging was a silent no-op. Equirect
+  // projection is linear, so the two corners bound the projected globe.
+  const panBounds = useMemo<PanBounds>(() => {
+    const a = transformCoordinates(-180, 90);
+    const b = transformCoordinates(180, -90);
+    if (!a || !b) {
+      throw new Error("Map projection failed to project the world corners");
+    }
+    return {
+      minX: Math.min(a.x, b.x),
+      minY: Math.min(a.y, b.y),
+      maxX: Math.max(a.x, b.x),
+      maxY: Math.max(a.y, b.y),
+    };
+  }, [transformCoordinates]);
+  const panBoundsRef = useRef(panBounds);
+  panBoundsRef.current = panBounds;
 
   const worldCountries = useMemo(() => {
     return worldOutline.features
@@ -222,6 +250,7 @@ export function MapPane({ slot }: MapPaneProps) {
           newZoom,
           dims.width,
           dims.height,
+          panBoundsRef.current,
         );
       });
     };
@@ -230,57 +259,74 @@ export function MapPane({ slot }: MapPaneProps) {
     return () => svg.removeEventListener("wheel", onWheel);
   }, []);
 
-  // ── Pan (failure mode 3: pointer capture + active-pointer guard) ────
-  const isInteractiveTarget = (target: EventTarget | null) => {
-    if (!(target instanceof Element)) return false;
-    return Boolean(target.closest("[data-interactive='true']"));
-  };
-
-  const endDrag = useCallback(() => {
-    setIsDragging(false);
-    activePointerId.current = null;
-  }, []);
-
+  // ── Pan (failure mode 3: pointer capture + drag-session machine) ────
+  // Every press starts a session — including presses on pins, so a drag
+  // that begins on a pin pans the map. Selection happens on release,
+  // only when the session never crossed the drag threshold.
   const handlePointerDown = (e: ReactPointerEvent<SVGSVGElement>) => {
     if (e.button !== 0) return;
-    if (isInteractiveTarget(e.target)) return;
 
-    activePointerId.current = e.pointerId;
-    setIsDragging(true);
-    dragStartRef.current = { x: e.clientX, y: e.clientY };
-    // Mandatory: keeps pointermove firing when the cursor leaves the SVG
-    // mid-drag. Without capture, drag breaks on fast cursor movement.
+    dragSessionRef.current = beginDragSession(e.pointerId, e.clientX, e.clientY);
+    downTargetRef.current = e.target;
+    // Mandatory (spec §6.3): capture keeps pointermove firing when the
+    // cursor leaves the SVG mid-drag and guarantees a clean release.
     svgRef.current?.setPointerCapture?.(e.pointerId);
   };
 
   const handlePointerMove = (e: ReactPointerEvent<SVGSVGElement>) => {
-    // Reject any pointer that isn't the dragger (multi-touch safety).
-    if (!isDragging || activePointerId.current !== e.pointerId) return;
+    const session = dragSessionRef.current;
+    if (!session) return;
 
-    const deltaX = e.clientX - dragStartRef.current.x;
-    const deltaY = e.clientY - dragStartRef.current.y;
-    dragStartRef.current = { x: e.clientX, y: e.clientY };
+    const move = applyDragMove(session, e.pointerId, e.clientX, e.clientY);
+    if (!move) return; // foreign pointer (multi-touch safety)
+    dragSessionRef.current = move.session;
+
+    if (move.session.panned && !isDragging) setIsDragging(true);
+    if (move.deltaX === 0 && move.deltaY === 0) return;
 
     const dims = dimensionsRef.current;
-    setViewBox((prev) => {
-      const scaleX = prev.width / Math.max(dims.width, 1);
-      const scaleY = prev.height / Math.max(dims.height, 1);
-      return clampViewBox(
-        {
-          ...prev,
-          x: prev.x - deltaX * scaleX,
-          y: prev.y - deltaY * scaleY,
-        },
+    setViewBox((prev) =>
+      panViewBox(
+        prev,
+        move.deltaX,
+        move.deltaY,
         dims.width,
         dims.height,
-      );
-    });
+        panBounds,
+      ),
+    );
   };
 
-  const handlePointerEnd = (e: ReactPointerEvent<SVGSVGElement>) => {
-    if (activePointerId.current !== e.pointerId) return;
+  const handlePointerUp = (e: ReactPointerEvent<SVGSVGElement>) => {
+    const session = dragSessionRef.current;
+    if (!session || session.pointerId !== e.pointerId) return;
+
+    dragSessionRef.current = null;
+    setIsDragging(false);
     svgRef.current?.releasePointerCapture?.(e.pointerId);
-    endDrag();
+
+    // Below the drag threshold this press was a click. Pointer capture
+    // retargets the click event to the SVG itself, so pin selection lives
+    // here — keyed off the original pointerdown target, never the (re-
+    // targeted) release target.
+    if (!session.panned && downTargetRef.current instanceof Element) {
+      const pin = downTargetRef.current.closest("[data-place-id]");
+      if (pin) {
+        const placeId = Number(pin.getAttribute("data-place-id"));
+        if (Number.isFinite(placeId)) selectPlace(placeId, false);
+      }
+    }
+    downTargetRef.current = null;
+  };
+
+  // Aborted gestures (pointercancel, capture stolen/lost without a
+  // pointerup): reset drag state, never fire a selection.
+  const handlePointerAbort = (e: ReactPointerEvent<SVGSVGElement>) => {
+    const session = dragSessionRef.current;
+    if (!session || session.pointerId !== e.pointerId) return;
+    dragSessionRef.current = null;
+    downTargetRef.current = null;
+    setIsDragging(false);
   };
 
   // ── Selection ───────────────────────────────────────────────────────
@@ -290,10 +336,7 @@ export function MapPane({ slot }: MapPaneProps) {
     if (center) {
       const coords = placeCoordinates.get(placeId);
       if (coords) {
-        const dims = dimensionsRef.current;
-        setViewBox((prev) =>
-          centerViewBoxOn(coords, prev, dims.width, dims.height),
-        );
+        setViewBox((prev) => centerViewBoxOn(coords, prev, panBounds));
       }
     }
   };
@@ -422,15 +465,19 @@ export function MapPane({ slot }: MapPaneProps) {
           preserveAspectRatio="xMidYMid slice"
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerEnd}
-          onPointerLeave={handlePointerEnd}
-          onPointerCancel={handlePointerEnd}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerAbort}
+          onLostPointerCapture={handlePointerAbort}
           data-testid="map-svg"
         >
-          {/* Background + survey grid */}
+          {/* Background + survey grid track the window: the viewBox can
+              now roam beyond the initially fitted region, so a fixed
+              canvas-sized rect would run out from under the sea. */}
           <rect
-            width={mapDimensions.width}
-            height={mapDimensions.height}
+            x={viewBox.x}
+            y={viewBox.y}
+            width={viewBox.width}
+            height={viewBox.height}
             fill="var(--map-sea)"
           />
           <defs>
@@ -450,8 +497,10 @@ export function MapPane({ slot }: MapPaneProps) {
             </pattern>
           </defs>
           <rect
-            width={mapDimensions.width}
-            height={mapDimensions.height}
+            x={viewBox.x}
+            y={viewBox.y}
+            width={viewBox.width}
+            height={viewBox.height}
             fill="url(#nexus-map-grid)"
           />
 
@@ -485,18 +534,12 @@ export function MapPane({ slot }: MapPaneProps) {
               <g
                 key={place.id}
                 className="map-pin"
-                data-interactive="true"
+                data-place-id={place.id}
                 onPointerEnter={() => {
                   if (!isDragging) setHoveredId(place.id);
                 }}
                 onPointerLeave={() => {
                   if (!isDragging) setHoveredId(null);
-                }}
-                onPointerDown={(e) => e.stopPropagation()}
-                onClick={(e) => {
-                  if (isDragging) return;
-                  e.stopPropagation();
-                  selectPlace(place.id, false);
                 }}
                 data-testid={`map-pin-${place.id}`}
               >
@@ -555,8 +598,8 @@ export function MapPane({ slot }: MapPaneProps) {
           {/* Empty state: grid + world outline stay visible (spec §3.4) */}
           {!placesLoading && placeCoordinates.size === 0 && (
             <text
-              x="50%"
-              y="50%"
+              x={viewBox.x + viewBox.width / 2}
+              y={viewBox.y + viewBox.height / 2}
               textAnchor="middle"
               className="map-empty-text"
             >

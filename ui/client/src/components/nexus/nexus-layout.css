@@ -253,17 +253,6 @@
   background: var(--border);
   margin: 6px 0;
 }
-.rail-spacer { flex: 1; }
-/* Rail monogram — menu font, not the marquee. */
-.rail-monogram {
-  font-family: var(--font-menu);
-  font-size: 11px;
-  color: var(--fg-dim);
-  letter-spacing: 0.3em;
-  opacity: .55;
-  margin-bottom: 8px;
-  font-weight: 600;
-}
 
 /* ─── Main content ─── */
 .nexus-content {
