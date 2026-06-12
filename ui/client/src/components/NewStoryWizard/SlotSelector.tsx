@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
-import { Save, AlertTriangle, Loader2, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { AlertTriangle, Loader2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { getSlotVisuals, readBoundSlot } from "./slotVisualState";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
 import {
@@ -58,6 +59,8 @@ interface SlotSelectorProps {
 
 export function SlotSelector({ onSlotSelected, onSlotResumed }: SlotSelectorProps) {
     const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
+    // Currently-bound story slot (localStorage 'activeSlot') — gets the beacon.
+    const [boundSlot] = useState<number | null>(readBoundSlot);
     const queryClient = useQueryClient();
 
     // Fetch status of all 5 slots
@@ -72,8 +75,7 @@ export function SlotSelector({ onSlotSelected, onSlotResumed }: SlotSelectorProp
             return data.map((slot: any) => ({
                 slot: slot.slot_number,
                 is_active: slot.is_active,
-                character_name: slot.character_name,
-                last_played: slot.last_played,
+                is_locked: slot.is_locked,
                 // Wizard resume state
                 wizard_in_progress: slot.wizard_in_progress,
                 wizard_thread_id: slot.wizard_thread_id,
@@ -153,44 +155,64 @@ export function SlotSelector({ onSlotSelected, onSlotResumed }: SlotSelectorProp
                 <SlotFrameCorner position="br" />
 
                 <div className="grid gap-4 md:grid-cols-1">
-                    {slots.map((slotData) => (
+                    {slots.map((slotData) => {
+                        const visuals = getSlotVisuals(slotData, {
+                            selected: selectedSlot === slotData.slot,
+                            boundSlot,
+                        });
+                        return (
                         <Card
                             key={slotData.slot}
                             onClick={() => handleSelect(slotData.slot, slotData)}
-                            className={cn(
-                                "p-4 cursor-pointer transition-all duration-300 border-border bg-card/50 hover:bg-card hover:border-primary/50 group relative overflow-hidden",
-                                selectedSlot === slotData.slot && "border-primary bg-primary/5 ring-1 ring-primary",
-                                slotData.is_locked && "opacity-80 cursor-not-allowed hover:border-destructive/50 hover:bg-destructive/5"
-                            )}
+                            onKeyDown={(e) => {
+                                if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) {
+                                    e.preventDefault();
+                                    handleSelect(slotData.slot, slotData);
+                                }
+                            }}
+                            tabIndex={0}
+                            role="group"
+                            aria-label={visuals.ariaLabel}
+                            title={visuals.ariaLabel}
+                            data-occupancy={visuals.occupancy}
+                            className={visuals.card}
                         >
                             {/* Scanline effect */}
                             <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] z-0 bg-[length:100%_2px,3px_100%] opacity-20" />
 
-                            <div className="relative z-10 flex items-center justify-between">
+                            {/* Currently-bound story: glowing left edge-marker (same
+                                vocabulary as the nexus current-chunk marker) */}
+                            {visuals.bound && (
+                                <div
+                                    aria-hidden="true"
+                                    className="absolute left-0 top-0 bottom-0 w-[3px] bg-primary shadow-[0_0_10px_2px_hsl(var(--primary)/0.6)]"
+                                />
+                            )}
+
+                            <div className={cn("relative z-10 flex items-center justify-between", visuals.content)}>
                                 <div className="flex items-center gap-4">
-                                    <div className={cn(
-                                        "h-12 w-12 rounded-sm flex items-center justify-center font-mono text-lg font-bold border",
-                                        slotData.is_locked
-                                            ? "border-destructive/50 text-destructive bg-destructive/10"
-                                            : slotData.is_active
-                                                ? "border-primary text-primary bg-primary/10 terminal-glow"
-                                                : "border-muted text-muted-foreground bg-muted/10"
-                                    )}>
+                                    <div className={visuals.tile}>
                                         {slotData.slot}
+                                        {/* Wizard-in-progress: pulsing corner mote */}
+                                        {visuals.occupancy === "wizard" && (
+                                            <span
+                                                aria-hidden="true"
+                                                className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-primary animate-pulse motion-reduce:animate-none shadow-[0_0_6px_1px_hsl(var(--primary)/0.8)]"
+                                            />
+                                        )}
                                     </div>
 
                                     <div className="flex items-center gap-2">
                                         <span className={cn(
                                             "font-mono text-sm font-bold",
-                                            slotData.is_locked ? "text-destructive" : "text-foreground"
+                                            slotData.is_locked
+                                                ? "text-destructive"
+                                                : visuals.occupancy === "empty"
+                                                    ? "text-muted-foreground"
+                                                    : "text-foreground"
                                         )}>
                                             {slotData.is_locked ? "PROTECTED ARCHIVE" : `MEMORY SLOT ${slotData.slot}`}
                                         </span>
-                                        {slotData.is_active && (
-                                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/20 text-primary font-mono">
-                                                ACTIVE
-                                            </span>
-                                        )}
                                     </div>
                                 </div>
 
@@ -205,6 +227,7 @@ export function SlotSelector({ onSlotSelected, onSlotResumed }: SlotSelectorProp
                                             <Button
                                                 variant="ghost"
                                                 size="sm"
+                                                aria-label={`Clear Memory Slot ${slotData.slot}`}
                                                 onClick={(e) => handleReset(e, slotData)}
                                                 className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 font-mono text-xs"
                                             >
@@ -213,6 +236,7 @@ export function SlotSelector({ onSlotSelected, onSlotResumed }: SlotSelectorProp
                                             </Button>
                                             <Button
                                                 variant="default"
+                                                aria-label={`Resume story in Memory Slot ${slotData.slot}`}
                                                 className="font-mono text-xs bg-primary text-primary-foreground hover:bg-primary/90 terminal-glow"
                                                 onClick={(e) => handleResume(e, slotData)}
                                             >
@@ -222,6 +246,11 @@ export function SlotSelector({ onSlotSelected, onSlotResumed }: SlotSelectorProp
                                     ) : (
                                         <Button
                                             variant="ghost"
+                                            aria-label={`Initialize empty Memory Slot ${slotData.slot}`}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleSelect(slotData.slot, slotData);
+                                            }}
                                             className={cn(
                                                 "font-mono text-xs border border-transparent group-hover:border-primary/30",
                                                 selectedSlot === slotData.slot && "bg-primary text-primary-foreground hover:bg-primary/90"
@@ -233,7 +262,8 @@ export function SlotSelector({ onSlotSelected, onSlotResumed }: SlotSelectorProp
                                 </div>
                             </div>
                         </Card>
-                    ))}
+                        );
+                    })}
                 </div>
             </div>
 
