@@ -186,6 +186,75 @@ html {
   background-color: #09101c;
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   FADING SCROLLBARS
+   Global overlay-style scrollbars: invisible at rest, fading in while
+   scrolling (lib/fading-scrollbars.ts toggles .scrollbar-active) and when
+   the pointer rests on the gutter. Styling ::-webkit-scrollbar reserves a
+   constant gutter, so the fade never shifts layout. The thumb color rides
+   each theme's --primary token, so Veil/Gilded/Vector inherit their own
+   palette. The fade itself animates the registered custom property
+   --scrollbar-alpha on the scrolling element; the scrollbar pseudo-elements
+   (which cannot transition) re-resolve the inherited var() every frame.
+   ═══════════════════════════════════════════════════════════════════════════ */
+@property --scrollbar-alpha {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
+
+:root {
+  /* Tunables (consumed below and by lib/fading-scrollbars.ts). */
+  --scrollbar-size: 10px;
+  --scrollbar-fade-ms: 450ms;
+  --scrollbar-idle-ms: 1000;
+}
+
+/* Zero-specificity transition: fills in only where nothing else declares
+   one, so element/utility transitions are never disturbed. Interactions to
+   know about when adding transitions elsewhere:
+   - A higher-specificity `transition: none` (or any explicit transition
+     list) on a scroll container drops the fade there - the alpha still
+     switches, just instantly.
+   - A higher-specificity `transition: all` covers --scrollbar-alpha too,
+     so the fade runs at THAT rule's duration, not --scrollbar-fade-ms.
+     Prefer explicit property lists over `all` on scroll containers.
+   - On engines without ::-webkit-scrollbar (Firefox) this whole block is
+     visually inert; the property still animates but paints nothing. */
+* {
+  transition: --scrollbar-alpha var(--scrollbar-fade-ms) ease;
+}
+
+*::-webkit-scrollbar {
+  width: var(--scrollbar-size);
+  height: var(--scrollbar-size);
+  background: transparent;
+}
+
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--primary) / calc(var(--scrollbar-alpha) * 0.45));
+  border-radius: calc(var(--scrollbar-size) / 2);
+  /* Transparent border + padding-box clip = a slim inset thumb. */
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+/* Hovering the gutter reveals the thumb regardless of scroll state (the
+   hit area exists even while the paint is transparent). */
+*::-webkit-scrollbar-thumb:hover,
+*::-webkit-scrollbar-thumb:active {
+  background-color: hsl(var(--primary) / 0.6);
+}
+
+.scrollbar-active {
+  --scrollbar-alpha: 1;
+}
+
 /* LIGHT MODE */
 :root {
   --button-outline: rgba(0, 0, 0, .10);

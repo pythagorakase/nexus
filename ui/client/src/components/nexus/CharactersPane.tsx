@@ -110,9 +110,6 @@ export function CharactersPane({ slot }: CharactersPaneProps) {
     return (
       <div className="pane-notice">
         <span className="notice-text">[ NO CAST RECORDED ]</span>
-        <span className="notice-detail">
-          Characters appear here as the story introduces them.
-        </span>
       </div>
     );
   }

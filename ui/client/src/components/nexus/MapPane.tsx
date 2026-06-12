@@ -350,11 +350,11 @@ export function MapPane({ slot }: MapPaneProps) {
 
   return (
     <div className="mappane" data-testid="map-pane">
-      {/* ── Location index ─────────────────────────────────────────── */}
+      {/* ── Location index ─────────────────────────────────────────────
+          No header: the rail's Map tab already names this surface, and a
+          place count would restate the visible list (tenets 3/5; same
+          rationale as the cast roster's removed "CAST · N" header). */}
       <div className="mappane-list">
-        <span className="eyebrow brass-glow">
-          ATLAS · {places.length} {places.length === 1 ? "PLACE" : "PLACES"}
-        </span>
         <ul>
           {placesByZone.map(([zoneId, zonePlaces]) => {
             const zone = zoneById.get(zoneId);

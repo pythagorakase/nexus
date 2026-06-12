@@ -337,11 +337,9 @@ export function InteractiveWizard({
             // - Connect to WebSocket for real-time updates
             // - Detect incubator data when generation completes
             // - Show approval modal automatically
+            // No "generation started" toast: the reader the user lands on
+            // shows the live generation telemetry already (tenet 3).
             setWaitScreenActive(false);
-            toast({
-                title: "Generation Started",
-                description: "Your story is being created...",
-            });
             localStorage.setItem("activeSlot", slot.toString());
             onComplete();
 
@@ -353,10 +351,7 @@ export function InteractiveWizard({
                 processingRef.current = false;
                 setWaitScreenActive(false);
                 setIsLoading(false);
-                toast({
-                    title: "Operation cancelled",
-                    description: "You can restart when ready.",
-                });
+                toast({ title: "Cancelled" });
                 return;
             }
             console.error("Transition/bootstrap error:", e);

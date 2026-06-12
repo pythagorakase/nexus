@@ -12,6 +12,7 @@ import {
     type KeyboardEvent,
 } from "react";
 import { cn } from "@/lib/utils";
+import { InlineMarkdown } from "@/components/nexus/ProseMarkdown";
 import { Textarea } from "@/components/ui/textarea";
 
 /**
@@ -133,7 +134,7 @@ export function WizardChoices({
                         {i + 1}.
                     </span>
                     <span className="flex-1 font-serif text-sm leading-relaxed text-muted-foreground">
-                        {text}
+                        <InlineMarkdown text={text} />
                     </span>
                 </button>
             ))}

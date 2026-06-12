@@ -131,4 +131,29 @@ describe("WizardChoices", () => {
         expect(screen.getByTestId("wizard-choice-1")).toBeDisabled();
         expect(screen.getByTestId("wizard-freeform")).toBeDisabled();
     });
+
+    it("renders inline markdown in choice labels instead of literal markers", () => {
+        render(
+            <WizardChoices
+                choices={["A *quiet* start in the **lower stacks**"]}
+                onSubmit={() => {}}
+            />,
+        );
+        const button = screen.getByTestId("wizard-choice-1");
+        const em = button.querySelector("em");
+        const strong = button.querySelector("strong");
+        expect(em).not.toBeNull();
+        expect(em!.textContent).toBe("quiet");
+        expect(strong).not.toBeNull();
+        expect(strong!.textContent).toBe("lower stacks");
+        expect(button.textContent).not.toContain("*");
+    });
+
+    it("submits the raw choice string even when the label is marked up", () => {
+        const onSubmit = vi.fn();
+        const marked = "A *quiet* start";
+        render(<WizardChoices choices={[marked]} onSubmit={onSubmit} />);
+        fireEvent.click(screen.getByTestId("wizard-choice-1"));
+        expect(onSubmit).toHaveBeenCalledWith(marked);
+    });
 });
