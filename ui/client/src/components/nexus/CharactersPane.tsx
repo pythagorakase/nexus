@@ -73,15 +73,15 @@ export function CharactersPane({ slot }: CharactersPaneProps) {
       characterId: number;
       file: File;
     }) => {
-      const hadImages = (images?.length ?? 0) > 0;
       const image = await uploadCharacterPortrait(characterId, slot, file);
-      // The POST only marks the very first image as main; promoting each new
-      // upload keeps the visible portrait in sync with what was just chosen.
-      if (hadImages) {
-        await setMainCharacterImage(characterId, image.id, slot);
-      }
+      // Promote unconditionally: the POST only marks a slot's very first
+      // image as main, and gating the promote on the client's images query
+      // would race its async settle. Promoting every upload is idempotent.
+      await setMainCharacterImage(characterId, image.id, slot);
     },
-    onSuccess: (_data, { characterId }) => {
+    onSettled: (_data, _error, { characterId }) => {
+      // Invalidate even on failure so a partially completed upload (image
+      // row created, promote rejected) still surfaces without a reload.
       queryClient.invalidateQueries({
         queryKey: ["/api/characters/images", characterId, slot],
       });
