@@ -102,3 +102,29 @@ def test_resolve_model_ref_resolves_roles_and_validates_literals():
         resolve_model_ref("@anthropic.bogus")
     with pytest.raises(ValueError, match="not declared"):
         resolve_model_ref("model-that-does-not-exist")
+
+
+def test_ui_visible_filters_ui_model_lists_but_not_registry():
+    """ui_visible = false hides a provider from UI lists, not the registry.
+
+    The TEST mock server stays fully functional for backend/CLI callers
+    (unfiltered loader calls, role resolution) while every UI-facing model
+    list - /api/config/models and the settings pane metadata - omits it.
+    """
+    from nexus.config.loader import get_all_api_models, get_api_models_by_provider
+
+    settings = load_settings("nexus.toml")
+    assert settings.global_.model.api_models["test"].ui_visible is False
+    assert settings.global_.model.api_models["anthropic"].ui_visible is True
+
+    all_ids = {m["id"] for m in get_all_api_models()}
+    ui_ids = {m["id"] for m in get_all_api_models(ui_only=True)}
+    assert "TEST" in all_ids
+    assert "TEST" not in ui_ids
+    assert ui_ids == all_ids - {"TEST"}
+
+    assert "test" not in get_api_models_by_provider(ui_only=True)
+    assert "test" in get_api_models_by_provider()
+
+    # Backend role resolution is untouched by UI visibility.
+    assert resolve_model_ref("@test.default") == "TEST"

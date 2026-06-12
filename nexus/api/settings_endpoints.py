@@ -126,15 +126,28 @@ _TYPEWRITER_BOUNDS: Dict[str, int] = {
 
 
 def _build_settings_meta(raw: Dict[str, Any]) -> Dict[str, Any]:
-    """Derive the client-facing metadata block from config + Pydantic models."""
+    """Derive the client-facing metadata block from config + Pydantic models.
+
+    Providers flagged ``ui_visible = false`` in the api_models registry (the
+    TEST mock server) are excluded from every list served here - the settings
+    pane is a UI-facing model surface. The ``True`` default mirrors
+    ``ProviderModels.ui_visible``; backend/CLI callers read the registry
+    through the loader and are unaffected.
+    """
     api_models = raw.get("global", {}).get("model", {}).get("api_models", {})
+    visible = {
+        provider: cfg
+        for provider, cfg in api_models.items()
+        if cfg.get("ui_visible", True)
+    }
+
     labels_by_id: Dict[str, str] = {}
-    for provider_cfg in api_models.values():
+    for provider_cfg in visible.values():
         for entry in provider_cfg.get("models", []):
             labels_by_id[entry["id"]] = entry.get("label", entry["id"])
 
     model_roles: List[Dict[str, str]] = []
-    for provider, provider_cfg in api_models.items():
+    for provider, provider_cfg in visible.items():
         for role, model_id in provider_cfg.get("roles", {}).items():
             model_roles.append(
                 {
@@ -148,7 +161,7 @@ def _build_settings_meta(raw: Dict[str, Any]) -> Dict[str, Any]:
 
     apex_allowed_providers = [
         provider
-        for provider in api_models
+        for provider in visible
         if re.fullmatch(_APEX_PROVIDER_PATTERN, provider)
     ]
 

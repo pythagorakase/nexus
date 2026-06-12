@@ -12,8 +12,10 @@ import type { FontMatrix, FontSlotId, ThemeId } from '@/types/settings';
 /**
  * The NEXUS IRIS keeper matrix - first-paint seed only. The persisted
  * defaults live in UISettings (settings_models.py) and nexus.toml [ui.fonts].
+ * Exported so theme-card specimens can apply the same partial-matrix guard
+ * this provider uses for the active theme.
  */
-const KEEPERS: FontMatrix = {
+export const KEEPERS: FontMatrix = {
   veil: { body: 'Spectral', menu: 'Cinzel', display: 'Megrim' },
   gilded: { body: 'Cormorant Garamond', menu: 'Space Mono', display: 'Monoton' },
   vector: { body: 'Rajdhani', menu: 'Source Code Pro', display: 'Sixtyfour' },
