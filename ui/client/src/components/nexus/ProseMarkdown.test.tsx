@@ -347,7 +347,7 @@ describe("typewriter reveal", () => {
     // Frame ends exactly on the opening `*` of mid-line `*urgent*`: closing
     // it would yield the empty-emphasis literal `Not **`. The trailing run
     // is stripped instead; the opener reappears with its first content char.
-    const opener = render(<ProseMarkdown text="Not *" revealing />, {});
+    const opener = render(<ProseMarkdown text="Not *" revealing />);
     expect(opener.container.textContent).not.toContain("*");
     expect(opener.container.querySelector(".type-caret")).not.toBeNull();
     const boldOpener = render(<ProseMarkdown text="the **" revealing />);
