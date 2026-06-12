@@ -63,6 +63,17 @@ export function WizardChoices({
     const [freeform, setFreeform] = useState("");
     const freeformRef = useRef<HTMLTextAreaElement>(null);
 
+    // Choice selection clears any freeform draft so it cannot leak into the
+    // next turn's input.
+    const submitChoice = useCallback(
+        (text: string) => {
+            if (disabled) return;
+            setFreeform("");
+            onSubmit(text);
+        },
+        [disabled, onSubmit],
+    );
+
     const submitFreeform = useCallback(() => {
         const text = freeform.trim();
         if (!text || disabled) return;
@@ -95,12 +106,12 @@ export function WizardChoices({
             }
             const n = parseInt(e.key, 10);
             if (!isNaN(n) && n >= 1 && n <= choices.length) {
-                onSubmit(choices[n - 1]);
+                submitChoice(choices[n - 1]);
             }
         };
         window.addEventListener("keydown", onKey);
         return () => window.removeEventListener("keydown", onKey);
-    }, [choices, disabled, onSubmit]);
+    }, [choices, disabled, submitChoice]);
 
     return (
         <div className="space-y-1.5" data-testid="wizard-choices">
@@ -108,7 +119,7 @@ export function WizardChoices({
                 <button
                     key={`${i}-${text}`}
                     type="button"
-                    onClick={() => onSubmit(text)}
+                    onClick={() => submitChoice(text)}
                     disabled={disabled}
                     data-testid={`wizard-choice-${i + 1}`}
                     className={cn(

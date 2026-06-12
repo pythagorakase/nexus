@@ -69,6 +69,33 @@ logger = logging.getLogger("nexus.api.wizard_chat")
 router = APIRouter(prefix="/api/story/new", tags=["wizard"])
 
 
+def resolve_wizard_model(
+    request_model: Optional[str], slot_model: Optional[str]
+) -> str:
+    """Resolve the effective wizard model for a turn.
+
+    Precedence: explicit request override -> the slot's stamped model
+    (locked at setup start) -> the configured wizard default from
+    nexus.toml. The mock TEST model is never introduced here; it can only
+    arrive as an explicit request override or a deliberate slot stamp.
+    """
+    return request_model or slot_model or get_new_story_model()
+
+
+def wizard_model_lock_candidate(
+    request_model: Optional[str], slot_model: Optional[str]
+) -> bool:
+    """Whether a request may violate the wizard model lock.
+
+    Only an explicit request override that differs from the slot's stamped
+    model can conflict; an omitted model always resolves to the stamped
+    model and is therefore never a lock violation. The caller still checks
+    message history before raising 409 (the lock engages after the first
+    user message).
+    """
+    return bool(request_model and slot_model and request_model != slot_model)
+
+
 def _hydrate_character_context(request: ChatRequest) -> Optional[Dict[str, Any]]:
     """Load character_state from cache if in character phase and no context provided."""
     if request.current_phase != "character" or request.context_data is not None:
@@ -310,9 +337,9 @@ async def new_story_chat_endpoint(request: ChatRequest):
         history_limit = get_wizard_history_limit()
 
         slot_model = state.model
-        selected_model = request.model or slot_model or get_new_story_model()
+        selected_model = resolve_wizard_model(request.model, slot_model)
 
-        if request.model and slot_model and request.model != slot_model:
+        if wizard_model_lock_candidate(request.model, slot_model):
             history_client = ConversationsClient(model=slot_model)
             history = history_client.list_messages(
                 request.thread_id, limit=history_limit
@@ -625,9 +652,9 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
 
     history_limit = get_wizard_history_limit()
     slot_model = state.model
-    selected_model = request.model or slot_model or get_new_story_model()
+    selected_model = resolve_wizard_model(request.model, slot_model)
 
-    if request.model and slot_model and request.model != slot_model:
+    if wizard_model_lock_candidate(request.model, slot_model):
         history_client = ConversationsClient(model=slot_model)
         history = history_client.list_messages(request.thread_id, limit=history_limit)
         if any(msg["role"] == "user" for msg in history):

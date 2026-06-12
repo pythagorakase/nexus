@@ -52,6 +52,27 @@ describe("WizardChoices", () => {
         expect(onSubmit).toHaveBeenCalledWith("Start in the underdark");
     });
 
+    it("clears a freeform draft when a choice is clicked", () => {
+        const onSubmit = vi.fn();
+        render(<WizardChoices choices={choices} onSubmit={onSubmit} />);
+        const freeform = screen.getByTestId("wizard-freeform");
+        fireEvent.change(freeform, { target: { value: "abandoned draft" } });
+        fireEvent.click(screen.getByTestId("wizard-choice-1"));
+        expect(onSubmit).toHaveBeenCalledWith("Build a floating city");
+        expect(freeform).toHaveValue("");
+    });
+
+    it("clears a freeform draft when a choice is selected by number key", () => {
+        const onSubmit = vi.fn();
+        render(<WizardChoices choices={choices} onSubmit={onSubmit} />);
+        const freeform = screen.getByTestId("wizard-freeform");
+        fireEvent.change(freeform, { target: { value: "abandoned draft" } });
+        (document.activeElement as HTMLElement | null)?.blur?.();
+        fireEvent.keyDown(window, { key: "2" });
+        expect(onSubmit).toHaveBeenCalledWith("Start in the underdark");
+        expect(freeform).toHaveValue("");
+    });
+
     it("always renders the freeform slot, even with no choices", () => {
         render(<WizardChoices choices={[]} onSubmit={() => {}} />);
         expect(screen.queryByRole("button")).toBeNull();

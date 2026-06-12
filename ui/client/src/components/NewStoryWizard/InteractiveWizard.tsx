@@ -44,6 +44,8 @@ interface InteractiveWizardProps {
 
 type Phase = "setting" | "character" | "seed";
 
+// User-facing phase titles; the seed phase is presented as "Introduction"
+// throughout the wizard (see WizardShell's PHASES and the artifact modal).
 const PHASE_TITLES: Record<Phase, string> = {
     setting: "Setting",
     character: "Character",
