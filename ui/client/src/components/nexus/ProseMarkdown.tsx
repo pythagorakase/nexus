@@ -31,7 +31,7 @@
  */
 import ReactMarkdown, { type Options } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import type { Element, Root } from "hast";
+import type { Element, ElementContent, Root, Text } from "hast";
 
 const components: Options["components"] = {
   // Clamp: an in-chunk h1 gets the h2 treatment.
@@ -64,6 +64,13 @@ function emphasisClosers(partial: string): string {
   // closed - so they must not count toward delimiter parity. Before this
   // exclusion, the `_` in a scene-break id flipped the underscore count odd
   // and a literal `_` rode the caret for the rest of the reveal.
+  //
+  // The `$` alternative makes an unclosed `<!--` swallow everything to the
+  // end of the partial. That mirrors the renderer: micromark treats an
+  // unterminated `<!--` HTML block as running to end of input, and skipHtml
+  // drops it wholesale - so nothing after it is visible and nothing after it
+  // should count. (Corpus comments are block-level scene breaks; inline
+  // comments mid-paragraph do not occur.)
   const counted = partial.replace(/<!--[\s\S]*?(-->|$)/g, "");
   let closers = "";
   const boldTokens = (counted.match(/\*\*/g) ?? []).length;
@@ -140,13 +147,41 @@ function lastTextPosition(
 /** Append the inline caret element at the reveal frontier. */
 function rehypeCaret() {
   return (tree: Root) => {
-    const position = lastTextPosition(tree);
-    if (position) {
-      position.parent.children.splice(position.index + 1, 0, makeCaret());
-    } else {
-      // Nothing revealed yet (or only structure): caret stands alone.
-      tree.children.push(makeCaret());
+    // The frontier lives in the last rendered block, so the caret search is
+    // scoped to it: a block with no text node (a just-completed `---` rule)
+    // takes the caret after itself rather than pulling it backward into an
+    // earlier block's text.
+    let lastBlock: Element | null = null;
+    for (let i = tree.children.length - 1; i >= 0; i -= 1) {
+      const child = tree.children[i];
+      if (child.type === "element") {
+        lastBlock = child;
+        break;
+      }
     }
+    const position = lastBlock ? lastTextPosition(lastBlock) : null;
+    if (!position) {
+      // No text at the frontier yet (empty frame, or a textless last block
+      // such as a just-revealed rule): the caret stands on its own line, in
+      // a paragraph so the root keeps block-level children only.
+      tree.children.push({
+        type: "element",
+        tagName: "p",
+        properties: { className: ["line"] },
+        children: [makeCaret()],
+      });
+      return;
+    }
+    // Character-precise placement: the frontier is the last non-whitespace
+    // character, so trailing whitespace in the text node stays after the
+    // caret rather than pushing it forward.
+    const node = position.parent.children[position.index] as Text;
+    const kept = node.value.replace(/\s+$/, "");
+    const trailing = node.value.slice(kept.length);
+    node.value = kept;
+    const inserted: ElementContent[] = [makeCaret()];
+    if (trailing) inserted.push({ type: "text", value: trailing });
+    position.parent.children.splice(position.index + 1, 0, ...inserted);
   };
 }
 

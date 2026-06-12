@@ -290,6 +290,33 @@ describe("typewriter reveal", () => {
     expect(prepareRevealSource("Before.\n\n------")).not.toContain("-");
   });
 
+  it("keeps the caret at the frontier after a just-completed rule", () => {
+    // A textless last block (the freshly revealed <hr>) must take the caret
+    // after itself; pulling it back into the previous paragraph's text made
+    // the typewriter position jump backward mid-chunk. The caret stands in
+    // its own paragraph so the markdown root keeps block-level children.
+    const { container } = render(
+      <ProseMarkdown text={"Before.\n\n---\n\n"} revealing />,
+    );
+    const caret = container.querySelector(".type-caret");
+    expect(caret).not.toBeNull();
+    const caretLine = caret!.closest("p");
+    expect(caretLine).not.toBeNull();
+    expect(caretLine!.previousElementSibling?.tagName).toBe("HR");
+    expect(caretLine!.textContent).toBe("");
+  });
+
+  it("attaches auto-closers to the last non-whitespace character", () => {
+    // A whitespace-preceded closer is not right-flanking and cannot close.
+    expect(prepareRevealSource("*Before ")).toBe("*Before*");
+    expect(prepareRevealSource("*Before first bell. ")).toBe(
+      "*Before first bell.*",
+    );
+    expect(prepareRevealSource("The crew **moves ")).toBe(
+      "The crew **moves**",
+    );
+  });
+
   it("trims bare heading hashes until their text arrives", () => {
     const { container } = render(
       <ProseMarkdown text={"Seen.\n\n##"} revealing />,
