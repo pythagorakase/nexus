@@ -30,10 +30,11 @@ const ModelContext = createContext<ModelContextType | undefined>(undefined);
 const STORAGE_KEY = 'nexus-model';
 const DEFAULT_MODEL = 'gpt-5.2';
 
-// Fallback models if API fails (matches nexus.toml defaults)
+// Fallback models if API fails (matches nexus.toml defaults). UI-visible
+// providers only - the TEST mock server is backend/CLI-only (ui_visible =
+// false in the api_models registry) and never appears in UI model lists.
 const FALLBACK_MODELS: ModelInfo[] = [
   { id: 'gpt-5.2', label: 'GPT-5.2', provider: 'openai' },
-  { id: 'TEST', label: 'TEST', provider: 'test' },
   { id: 'claude', label: 'Claude', provider: 'anthropic' },
 ];
 

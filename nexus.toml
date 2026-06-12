@@ -34,6 +34,7 @@ models = [
 ]
 
 [global.model.api_models.test]
+ui_visible = false  # Backend/CLI-only mock server; hidden from UI model pickers
 roles = { default = "TEST" }
 models = [
     { id = "TEST", label = "TEST", description = "Mock server with cached data (dev)" },

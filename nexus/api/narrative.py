@@ -468,12 +468,17 @@ async def health_check():
 
 @app.get("/api/config/models")
 async def get_config_models():
-    """Get available API models with provider info from nexus.toml."""
+    """Get UI-visible API models with provider info from nexus.toml.
+
+    Providers flagged ``ui_visible = false`` in the api_models registry
+    (the TEST mock server) are omitted here; backend and CLI callers use
+    the unfiltered loader functions directly.
+    """
     from nexus.config.loader import get_all_api_models, get_api_models_by_provider
 
     return {
-        "models": get_all_api_models(),
-        "by_provider": get_api_models_by_provider(),
+        "models": get_all_api_models(ui_only=True),
+        "by_provider": get_api_models_by_provider(ui_only=True),
     }
 
 

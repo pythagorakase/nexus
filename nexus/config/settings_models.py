@@ -69,6 +69,14 @@ class ProviderModels(BaseModel):
     models: List[APIModelEntry] = Field(
         default_factory=list, description="List of models available from this provider"
     )
+    ui_visible: bool = Field(
+        default=True,
+        description=(
+            "Expose this provider's models in UI-facing pickers "
+            "(/api/config/models, /api/settings settings_meta). Backend and "
+            "CLI callers always see the full registry regardless of this flag."
+        ),
+    )
 
     @model_validator(mode="after")
     def _validate_roles_reference_known_models(self) -> "ProviderModels":

@@ -141,9 +141,15 @@ def get_available_api_models() -> List[str]:
     return [m["id"] for m in get_all_api_models()]
 
 
-def get_api_models_by_provider() -> Dict[str, List[dict]]:
+def get_api_models_by_provider(ui_only: bool = False) -> Dict[str, List[dict]]:
     """
     Get API models grouped by provider, sourced from nexus.toml.
+
+    Args:
+        ui_only: When True, drop providers whose registry entry sets
+            ``ui_visible = false`` (e.g., the TEST mock server). UI-facing
+            endpoints pass True; backend/CLI validation paths keep the
+            default and always see the full registry.
 
     Returns:
         Dictionary mapping provider name to list of model dicts.
@@ -153,19 +159,23 @@ def get_api_models_by_provider() -> Dict[str, List[dict]]:
     return {
         provider: [m.model_dump() for m in config.models]
         for provider, config in settings.global_.model.api_models.items()
-        if config.models
+        if config.models and (config.ui_visible or not ui_only)
     }
 
 
-def get_all_api_models() -> List[dict]:
+def get_all_api_models(ui_only: bool = False) -> List[dict]:
     """
     Get flat list of all API models with provider info.
+
+    Args:
+        ui_only: When True, drop providers whose registry entry sets
+            ``ui_visible = false`` (see ``get_api_models_by_provider``).
 
     Returns:
         List of model dicts, each containing: id, label, description, provider
     """
     result = []
-    for provider, models in get_api_models_by_provider().items():
+    for provider, models in get_api_models_by_provider(ui_only=ui_only).items():
         for model in models:
             result.append({**model, "provider": provider})
     return result

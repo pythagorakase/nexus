@@ -89,13 +89,30 @@ class TestBuildPayload:
         payload = _build_payload(raw_settings)
         assert payload["apex"]["model"].startswith("@")
 
-    def test_meta_roles_cover_registry(self, raw_settings: dict) -> None:
+    def test_meta_roles_cover_ui_visible_registry(self, raw_settings: dict) -> None:
         payload = _build_payload(raw_settings)
         meta = payload["settings_meta"]
         refs = {r["ref"] for r in meta["model_roles"]}
         for provider, cfg in raw_settings["global"]["model"]["api_models"].items():
             for role in cfg.get("roles", {}):
-                assert f"@{provider}.{role}" in refs
+                if cfg.get("ui_visible", True):
+                    assert f"@{provider}.{role}" in refs
+                else:
+                    assert f"@{provider}.{role}" not in refs
+
+    def test_meta_roles_exclude_ui_hidden_test_provider(
+        self, raw_settings: dict
+    ) -> None:
+        # The TEST mock server is flagged ui_visible = false in nexus.toml:
+        # it must stay in the backend registry but never reach UI model lists.
+        api_models = raw_settings["global"]["model"]["api_models"]
+        assert "test" in api_models, "TEST provider must remain in the registry"
+        assert api_models["test"]["ui_visible"] is False
+
+        meta = _build_payload(raw_settings)["settings_meta"]
+        providers = {r["provider"] for r in meta["model_roles"]}
+        assert "test" not in providers
+        assert {"openai", "anthropic"} <= providers
 
     def test_apex_allowlist_excludes_test_provider(self, raw_settings: dict) -> None:
         meta = _build_payload(raw_settings)["settings_meta"]
