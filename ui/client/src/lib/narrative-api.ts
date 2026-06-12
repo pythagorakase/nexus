@@ -1,8 +1,9 @@
 /**
  * Typed fetchers for the narrative reading surface.
  *
- * Read routes are served by the Express layer (direct Postgres);
- * generation/slot routes are proxied through Express to FastAPI :8002.
+ * All routes are served by the FastAPI gateway — the single origin for
+ * reads, generation, slots, and websockets (issue #396). In dev, the Vite
+ * server proxies these paths to the gateway.
  * Errors surface as thrown exceptions — no silent fallbacks.
  */
 import type {

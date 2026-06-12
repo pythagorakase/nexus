@@ -1104,6 +1104,23 @@ class APIDatabaseSettings(BaseModel):
     )
 
 
+class APIUploadsSettings(BaseModel):
+    """Limits for image upload endpoints (character portraits, place images)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    max_file_size_mb: int = Field(
+        ...,
+        ge=1,
+        description="Per-file size cap (MB) for image uploads",
+    )
+    max_files_per_request: int = Field(
+        ...,
+        ge=1,
+        description="Maximum number of files accepted in one upload request",
+    )
+
+
 class APISettings(BaseModel):
     """Top-level API settings."""
 
@@ -1114,6 +1131,9 @@ class APISettings(BaseModel):
     )
     database: APIDatabaseSettings = Field(
         ..., description="Slot database connection behavior"
+    )
+    uploads: Optional[APIUploadsSettings] = Field(
+        default=None, description="Image upload limits"
     )
 
 

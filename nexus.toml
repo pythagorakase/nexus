@@ -131,6 +131,12 @@ max_tokens = 4096
 # import-time code must never connect at all (issue #369).
 connect_timeout_seconds = 5
 
+[api.uploads]
+# Per-file size cap (MB) for character portrait / place image uploads and
+# the maximum number of files accepted in a single upload request.
+max_file_size_mb = 15
+max_files_per_request = 10
+
 # =============================================================================
 # LORE Agent Settings
 # =============================================================================
