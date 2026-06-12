@@ -33,7 +33,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { DecoDivider } from "@/components/deco";
 import { Textarea } from "@/components/ui/textarea";
-import { ProseMarkdown } from "./ProseMarkdown";
+import { InlineMarkdown, ProseMarkdown } from "./ProseMarkdown";
 import { TypewriterText } from "./TypewriterText";
 import {
   getChunk,
@@ -334,7 +334,7 @@ export function NarrativePane({
   if (!slotState) {
     return (
       <div className="pane-notice">
-        <span className="notice-text">LOADING SLOT STATE…</span>
+        <span className="notice-text">LOADING…</span>
       </div>
     );
   }
@@ -343,10 +343,6 @@ export function NarrativePane({
     return (
       <div className="pane-notice">
         <span className="notice-text">[ SETUP INCOMPLETE ]</span>
-        <span className="notice-detail">
-          This slot is still in the New Story wizard. Finish setup to begin
-          reading.
-        </span>
       </div>
     );
   }
@@ -355,9 +351,6 @@ export function NarrativePane({
     return (
       <div className="pane-notice">
         <span className="notice-text">[ EMPTY SLOT ]</span>
-        <span className="notice-detail">
-          No story lives here yet. Start a new story from the splash menu.
-        </span>
       </div>
     );
   }
@@ -527,7 +520,9 @@ export function NarrativePane({
                 >
                   <span className="choice-key">{i + 1}</span>
                   <span className="choice-glyph">◆</span>
-                  <span className="choice-text">{text}</span>
+                  <span className="choice-text">
+                    <InlineMarkdown text={text} />
+                  </span>
                 </button>
               ))}
               <label className="choice freeform">

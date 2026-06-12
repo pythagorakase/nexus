@@ -25,12 +25,9 @@ interface LeftRailProps {
 export function LeftRail({ tab, onTabChange, onHome }: LeftRailProps) {
   return (
     <nav className="rail-left" aria-label="Primary navigation">
-      <button
-        className="rail-btn"
-        onClick={onHome}
-        title="Home"
-        data-testid="rail-home"
-      >
+      {/* No title attributes: the styled .rail-tip is the hover label, and
+          a native tooltip on top of it would restate it (tenet 3). */}
+      <button className="rail-btn" onClick={onHome} data-testid="rail-home">
         <Home size={18} />
         <span className="rail-tip">HOME</span>
       </button>
@@ -40,7 +37,6 @@ export function LeftRail({ tab, onTabChange, onHome }: LeftRailProps) {
           key={id}
           className={`rail-btn ${tab === id ? "on" : ""}`}
           onClick={() => onTabChange(id)}
-          title={label}
           aria-pressed={tab === id}
           data-testid={`rail-${id}`}
         >

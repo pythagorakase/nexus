@@ -299,14 +299,9 @@ function AccordionSection({
           </button>
         </CollapsibleTrigger>
         <CollapsibleContent>
+          {/* An empty open section stays quiet - no placeholder copy. */}
           <div className="p-4 border-t border-primary/20 space-y-4">
-            {hasContent ? (
-              children
-            ) : (
-              <p className="text-muted-foreground text-sm italic">
-                Waiting for data...
-              </p>
-            )}
+            {hasContent ? children : null}
           </div>
         </CollapsibleContent>
       </div>
@@ -455,16 +450,7 @@ function CharacterContent({
   const { concept, traitSelection, wildcard, isComplete, completeSheet } =
     charView;
 
-  if (!data && !showTraitSelector) return null;
-
-  // M3: Fallback when trait selector is shown but no character concept exists yet
-  if (!data && showTraitSelector) {
-    return (
-      <div className="text-muted-foreground text-sm italic">
-        Waiting for character concept...
-      </div>
-    );
-  }
+  if (!data) return null;
 
   if (isComplete && completeSheet) {
     return (

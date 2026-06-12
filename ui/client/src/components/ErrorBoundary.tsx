@@ -60,13 +60,8 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
               <AlertCircle className="h-5 w-5" />
               <AlertTitle className="text-lg font-semibold">Application Error</AlertTitle>
               <AlertDescription className="mt-2">
-                <p className="mb-4">
-                  The NEXUS interface encountered an unexpected error. This has been logged and can be
-                  reported to the development team.
-                </p>
                 {this.state.error && (
                   <div className="mt-4 p-4 bg-background/50 rounded border border-destructive/20 font-mono text-xs overflow-auto max-h-48">
-                    <div className="font-semibold mb-2 text-destructive">Error Details:</div>
                     <div className="text-muted-foreground">{this.state.error.toString()}</div>
                     {this.state.errorInfo && (
                       <details className="mt-2">
@@ -82,10 +77,10 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
                 )}
                 <div className="mt-6 flex gap-3">
                   <Button onClick={this.handleReload} variant="default">
-                    Reload Application
+                    Reload
                   </Button>
                   <Button onClick={this.handleReset} variant="outline">
-                    Try to Recover
+                    Recover
                   </Button>
                 </div>
               </AlertDescription>

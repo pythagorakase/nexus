@@ -98,10 +98,6 @@ export function NexusLayout() {
             (slot === null ? (
               <div className="pane-notice">
                 <span className="notice-text">[ NO ACTIVE SLOT ]</span>
-                <span className="notice-detail">
-                  Choose Continue or start a New Story from the splash menu to
-                  bind a save slot.
-                </span>
               </div>
             ) : engine.slotStateError ? (
               <div className="pane-notice">

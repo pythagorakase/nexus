@@ -13,7 +13,11 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { ProseMarkdown, prepareRevealSource } from "./ProseMarkdown";
+import {
+  InlineMarkdown,
+  ProseMarkdown,
+  prepareRevealSource,
+} from "./ProseMarkdown";
 import { TypewriterText } from "./TypewriterText";
 
 const LEGACY_CHUNK_1425_EXCERPT = `<!-- SCENE BREAK: S05E06_001 (episode heading) -->
@@ -427,5 +431,68 @@ describe("typewriter reveal", () => {
     expect(ems[0].textContent).toContain("Brena.");
     expect(container.textContent).not.toContain("*");
     expect(container.querySelector(".type-caret")).not.toBeNull();
+  });
+});
+
+describe("InlineMarkdown (choice labels)", () => {
+  // No live chunk carries marked-up choices as of 2026-06-12 (verified
+  // across save_01..save_05 choice_object->'presented'), so these fixtures
+  // are pinned in the dialect the PR #386 survey documented for fresh Skald
+  // output: sentence emphasis via single asterisks (the real chunk strings
+  // `*Brena.*` / `*Before first bell. Come alone. Last favor.*`) and
+  // `**bold**`.
+  it("renders *emphasis* as <em> with no literal asterisks", () => {
+    const { container } = render(
+      <InlineMarkdown text="Answer her: *Before first bell. Come alone. Last favor.*" />,
+    );
+    const em = container.querySelector("em");
+    expect(em).not.toBeNull();
+    expect(em!.textContent).toBe("Before first bell. Come alone. Last favor.");
+    expect(container.textContent).not.toContain("*");
+  });
+
+  it("renders **bold** as <strong> with no literal asterisks", () => {
+    const { container } = render(
+      <InlineMarkdown text="Refuse. **Walk away** before first bell." />,
+    );
+    const strong = container.querySelector("strong");
+    expect(strong).not.toBeNull();
+    expect(strong!.textContent).toBe("Walk away");
+    expect(container.textContent).not.toContain("*");
+  });
+
+  it("handles mixed emphasis exactly like prose rendering", () => {
+    const { container } = render(
+      <InlineMarkdown text="Hold the line while *Brena.* watches — **do not blink**." />,
+    );
+    expect(container.querySelector("em")!.textContent).toBe("Brena.");
+    expect(container.querySelector("strong")!.textContent).toBe(
+      "do not blink",
+    );
+    expect(container.textContent).not.toMatch(/[*_]/);
+  });
+
+  it("emits no block elements - paragraphs unwrap, headings flatten to text", () => {
+    const { container } = render(<InlineMarkdown text="## Storm the gate" />);
+    expect(
+      container.querySelector("p, h1, h2, h3, ul, ol, blockquote, hr"),
+    ).toBeNull();
+    expect(container.textContent).toBe("Storm the gate");
+  });
+
+  it("unwraps links to their text - no navigation surface inside a choice", () => {
+    const { container } = render(
+      <InlineMarkdown text="Ask [Pete](https://example.com) to run the decoy." />,
+    );
+    expect(container.querySelector("a")).toBeNull();
+    expect(container.textContent).toBe("Ask Pete to run the decoy.");
+  });
+
+  it("passes plain choices through untouched", () => {
+    // Real choice string from save_02 (latest committed choice set).
+    const real =
+      "Disconnect the hard-line cleanly now and withdraw through the crawlspace before the technician reaches the annex door.";
+    const { container } = render(<InlineMarkdown text={real} />);
+    expect(container.textContent).toBe(real);
   });
 });

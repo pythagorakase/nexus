@@ -188,6 +188,37 @@ function rehypeCaret() {
 const REMARK_PLUGINS = [remarkGfm];
 const REVEAL_REHYPE_PLUGINS = [rehypeCaret];
 
+/* Inline-only rendering for single-line labels (choice buttons). Emphasis
+   and strong render as real <em>/<strong>; every other construct is
+   unwrapped to its text (unwrapDisallowed), so a stray heading marker or
+   link in a choice can never produce block layout inside a button. */
+const INLINE_ALLOWED_ELEMENTS = ["p", "em", "strong"];
+const INLINE_COMPONENTS: Options["components"] = {
+  // The paragraph wrapper would be block-level inside the button; choices
+  // are single-line labels, so unwrap it.
+  p: ({ children }) => <>{children}</>,
+};
+
+/**
+ * InlineMarkdown - emphasis/strong only, no block elements. For choice
+ * button labels, which the storyteller marks up with the same `*italic*` /
+ * `**bold**` dialect as prose (PR #386 dialect survey) but which previously
+ * rendered the markers as literal asterisks.
+ */
+export function InlineMarkdown({ text }: { text: string }) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={REMARK_PLUGINS}
+      components={INLINE_COMPONENTS}
+      allowedElements={INLINE_ALLOWED_ELEMENTS}
+      unwrapDisallowed
+      skipHtml
+    >
+      {text}
+    </ReactMarkdown>
+  );
+}
+
 interface ProseMarkdownProps {
   text: string;
   /**

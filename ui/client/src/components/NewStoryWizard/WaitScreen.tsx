@@ -64,11 +64,6 @@ export function WaitScreen({
           <h2 className="text-2xl font-medium tracking-wide text-foreground mb-2">
             {hasError ? 'Generation Failed' : statusText}
           </h2>
-          {!hasError && (
-            <p className="text-muted-foreground text-sm">
-              This may take several minutes for complex scenarios
-            </p>
-          )}
         </div>
 
         {/* Error message if present */}
@@ -83,15 +78,12 @@ export function WaitScreen({
           {formatTime(elapsedSeconds)}
         </div>
 
-        {/* Progress bar */}
+        {/* Progress bar (the strip carries the proportion; no caption) */}
         <div className="w-full max-w-xs">
           <Progress
             value={progressPercent}
             className="h-2 bg-muted"
           />
-          <p className="text-center text-muted-foreground text-xs mt-2">
-            {hasError ? 'Ready to retry' : `${Math.round(progressPercent)}% of expected time`}
-          </p>
         </div>
 
         {/* Action buttons */}
@@ -110,17 +102,9 @@ export function WaitScreen({
             variant={hasError ? 'default' : 'outline'}
           >
             <RotateCcw className="h-4 w-4" />
-            {hasError ? 'Retry' : 'Retry Now'}
+            Retry
           </Button>
         </div>
-
-        {/* Hint text */}
-        {!hasError && (
-          <p className="text-muted-foreground/60 text-xs text-center max-w-xs">
-            Reasoning models like GPT-5.1 may need extra time for complex world-building.
-            You can retry if the request seems stuck.
-          </p>
-        )}
       </div>
     </div>
   );

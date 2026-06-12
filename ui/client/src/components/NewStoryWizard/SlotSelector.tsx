@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AlertTriangle, Loader2, Trash2 } from "lucide-react";
+import { AlertTriangle, Loader2, Lock, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -96,24 +96,40 @@ export function SlotSelector({ onSlotSelected, onSlotResumed }: SlotSelectorProp
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["/api/story/new/slots"] });
-            toast({
-                title: "Slot Reset",
-                description: "Save slot has been cleared.",
-            });
+            toast({ title: "Slot cleared" });
         },
     });
 
-    const handleSelect = (slot: number, slotData: SlotData) => {
-        if (slotData.is_locked) {
-            toast({
-                title: "Slot Locked",
-                description: `Save Slot ${slot} is protected and cannot be overwritten.`,
-                variant: "destructive",
-            });
-            return;
-        }
+    // Occupied slot awaiting overwrite confirmation (tenet 9: wiping an
+    // occupied slot earns explicit friction; empty slots stay single-click).
+    const [slotToOverwrite, setSlotToOverwrite] = useState<number | null>(null);
+
+    const proceedToWizard = (slot: number) => {
         setSelectedSlot(slot);
         onSlotSelected(slot);
+    };
+
+    const handleSelect = (slot: number, slotData: SlotData) => {
+        if (slotData.is_locked) {
+            toast({ title: "Slot locked", variant: "destructive" });
+            return;
+        }
+        if (slotData.is_active) {
+            // Initializing an occupied slot destroys its story; gate it
+            // behind an explicit confirmation. Mouse and keyboard activation
+            // both route through here, so both paths are gated.
+            setSlotToOverwrite(slot);
+            return;
+        }
+        proceedToWizard(slot);
+    };
+
+    const confirmOverwrite = () => {
+        if (slotToOverwrite !== null) {
+            const slot = slotToOverwrite;
+            setSlotToOverwrite(null);
+            proceedToWizard(slot);
+        }
     };
 
     const handleResume = (e: React.MouseEvent, slotData: SlotData) => {
@@ -138,9 +154,8 @@ export function SlotSelector({ onSlotSelected, onSlotResumed }: SlotSelectorProp
 
     if (isLoading) {
         return (
-            <div className="flex flex-col items-center justify-center h-64 space-y-4">
+            <div className="flex flex-col items-center justify-center h-64">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                <p className="font-mono text-sm text-muted-foreground">Scanning memory banks...</p>
             </div>
         );
     }
@@ -211,16 +226,19 @@ export function SlotSelector({ onSlotSelected, onSlotResumed }: SlotSelectorProp
                                                     ? "text-muted-foreground"
                                                     : "text-foreground"
                                         )}>
-                                            {slotData.is_locked ? "PROTECTED ARCHIVE" : `MEMORY SLOT ${slotData.slot}`}
+                                            MEMORY SLOT {slotData.slot}
                                         </span>
                                     </div>
                                 </div>
 
                                 <div className="flex items-center gap-2 ml-auto">
                                     {slotData.is_locked ? (
-                                        <div className="flex items-center gap-2 text-destructive text-xs font-mono px-3 py-1.5 border border-destructive/30 bg-destructive/5 rounded">
-                                            <AlertTriangle className="h-3 w-3" />
-                                            LOCKED
+                                        <div
+                                            className="flex items-center text-destructive px-3 py-1.5 border border-destructive/30 bg-destructive/5 rounded"
+                                            role="img"
+                                            aria-label="Locked"
+                                        >
+                                            <Lock className="h-3 w-3" />
                                         </div>
                                     ) : slotData.is_active ? (
                                         <>
@@ -272,10 +290,10 @@ export function SlotSelector({ onSlotSelected, onSlotResumed }: SlotSelectorProp
                     <AlertDialogHeader>
                         <AlertDialogTitle className="text-destructive font-mono uppercase tracking-wider flex items-center gap-2">
                             <AlertTriangle className="h-5 w-5" />
-                            Confirm Deletion
+                            Clear Slot {slotToDelete}
                         </AlertDialogTitle>
                         <AlertDialogDescription className="text-muted-foreground font-mono">
-                            Are you sure you want to clear Memory Slot {slotToDelete}? This action cannot be undone and all progress will be lost.
+                            The story in this slot will be erased.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
@@ -284,7 +302,41 @@ export function SlotSelector({ onSlotSelected, onSlotResumed }: SlotSelectorProp
                             onClick={confirmReset}
                             className="bg-destructive text-destructive-foreground hover:bg-destructive/90 font-mono"
                         >
-                            DELETE DATA
+                            ERASE
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            {/* Overwrite confirmation: shown only when initialization targets
+                an occupied slot (the destructive path). */}
+            <AlertDialog
+                open={slotToOverwrite !== null}
+                onOpenChange={(open) => !open && setSlotToOverwrite(null)}
+            >
+                <AlertDialogContent
+                    className="border-destructive/50 bg-background/95 backdrop-blur-xl"
+                    data-testid="overwrite-confirm"
+                >
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="text-destructive font-mono uppercase tracking-wider flex items-center gap-2">
+                            <AlertTriangle className="h-5 w-5" />
+                            Overwrite Slot {slotToOverwrite}
+                        </AlertDialogTitle>
+                        <AlertDialogDescription className="text-muted-foreground font-mono">
+                            Starting a new story here erases the existing one.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel className="font-mono" data-testid="overwrite-cancel">
+                            CANCEL
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={confirmOverwrite}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90 font-mono"
+                            data-testid="overwrite-confirm-action"
+                        >
+                            OVERWRITE
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

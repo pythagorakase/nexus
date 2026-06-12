@@ -2,8 +2,13 @@
  * TopBar - the 52px operator strip across the top of the NexusLayout.
  *
  * Left: NEXUS wordmark (the single marquee-font element on this surface)
- * plus the slot label. Right: SKALD status field. Per the locked design
- * decisions there is no scene cartouche and no MODEL field.
+ * plus the slot label. Right: nothing at rest. Per the visual minimalism
+ * doctrine the old persistent `SKALD <status>` field is gone - it carried
+ * an internal module name, sat on screen while idle, and during generation
+ * restated the in-reader status line and the ledger telemetry. The one
+ * state with no other surface is backend unreachability, which renders as
+ * a plain OFFLINE flag only while true. Per the locked design decisions
+ * there is no scene cartouche and no MODEL field.
  */
 import type { SkaldStatus } from "@/types/narrative";
 
@@ -31,15 +36,13 @@ export function TopBar({ slot, characterName, skaldStatus }: TopBarProps) {
       </div>
 
       <div className="topbar-right">
-        <span className="field">
-          <span className="k">SKALD</span>
-          <span
-            className={`v ${skaldStatus.toLowerCase()}`}
-            data-testid="text-skald-status"
-          >
-            {skaldStatus}
+        {skaldStatus === "OFFLINE" && (
+          <span className="field">
+            <span className="v offline" data-testid="text-skald-status">
+              OFFLINE
+            </span>
           </span>
-        </span>
+        )}
       </div>
     </header>
   );
