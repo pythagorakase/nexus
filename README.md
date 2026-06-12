@@ -82,12 +82,19 @@ created with `scripts/new_story_setup.py`. Chunks become immutable once
 accepted: accepting chunk N finalizes it and triggers embedding of N-1, so
 embedded history is ironman.
 
-### IRIS UI
+### IRIS UI and the Gateway
 
 `ui/` holds the React/TypeScript client (Vite, shadcn/ui) with Narrative,
 Map, Characters, and Settings panes, a status bar, theming, and the
-conversational new-story wizard (setting, character traits, story seed). The
-`./iris` script supervises the full development stack.
+conversational new-story wizard (setting, character traits, story seed).
+
+One origin serves everything: the FastAPI gateway
+(`nexus.api.narrative:app`, port 8002) owns every API route, the
+`/ws/narrative` websocket, and static serving of the built PWA
+(`ui/dist/public`) plus runtime image uploads. Node is build-time only —
+there is no Express layer. For development with HMR, the Vite dev server
+(`npm --prefix ui run dev`, port 5001) serves the client and proxies
+`/api`, `/ws`, and upload routes to the gateway.
 
 ## Quickstart
 
@@ -104,8 +111,11 @@ poetry run pre-commit install
 python scripts/migrate.py --status
 python scripts/migrate.py --all
 
-# Full development stack: UI dev server (port 5001) + narrative API (8002)
+# Single-origin gateway (port 8002): APIs, websocket, and the built PWA
 ./iris
+
+# UI development with HMR: Vite dev server (port 5001) proxying to the gateway
+npm --prefix ui run dev
 
 # Or drive a story from the command line
 nexus load --slot 5

@@ -14,7 +14,7 @@ For the database / API / GeoJSON layer, see
 
 ## 1. Data Layer (Summary)
 
-The map consumes three Express endpoints (full shapes in
+The map consumes three gateway endpoints (FastAPI; full shapes in
 `geojson-integration.md`):
 
 - `GET /api/places?slot={slot}` — all places with `geometry` populated from
