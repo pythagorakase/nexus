@@ -40,6 +40,9 @@ describe('SPIRAL_V3 locked values', () => {
       wordmarkY: 380,
       // Deliberate deviation from the prototype: product wordmark is gold.
       wordmarkColor: '#e1cd97',
+      // Pinned at the shared component/prototype default so a default change
+      // cannot silently alter the shipped splash.
+      wordmarkStroke: 1.4,
     });
   });
 });

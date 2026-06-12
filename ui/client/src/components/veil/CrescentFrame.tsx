@@ -120,12 +120,13 @@ export function CrescentFrame({
       setBox({ w: r.width, h: r.height });
     };
     measure();
+    // ResizeObserver covers every resize origin (including viewport resizes),
+    // so no window resize listener is needed — the prototype's extra listener
+    // double-measured.
     const ro = new ResizeObserver(measure);
     ro.observe(el);
-    window.addEventListener('resize', measure);
     return () => {
       ro.disconnect();
-      window.removeEventListener('resize', measure);
     };
   }, []);
 

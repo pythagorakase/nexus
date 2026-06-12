@@ -64,6 +64,7 @@ export const SPIRAL_V3 = {
   anchorY: 380,
   wordmarkY: 380,
   wordmarkColor: veil.gold,
+  wordmarkStroke: 1.4,
 } as const;
 
 interface VeilButtonProps {
@@ -189,6 +190,7 @@ export function VeilSplash() {
           primaryColor={SPIRAL_V3.primaryColor}
           secondaryColor={SPIRAL_V3.secondaryColor}
           wordmarkColor={SPIRAL_V3.wordmarkColor}
+          wordmarkStroke={SPIRAL_V3.wordmarkStroke}
           fontSize={SPIRAL_V3.fontSize}
         />
         <CrescentFrame

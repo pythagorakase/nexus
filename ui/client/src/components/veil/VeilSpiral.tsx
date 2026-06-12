@@ -273,31 +273,39 @@ function buildTextMaskSprite(
   // Approximates the prototype's feMorphology dilate + blur by stroking the
   // glyphs with a round-joined outline of the dilation diameter, then
   // blurring. Same halo footprint; the dilation corners are rounder.
+  //
+  // The dilated shape (stroke + fill) is composed unfiltered on a scratch
+  // canvas first, then blurred in a single pass onto the sprite — canvas
+  // `filter` applies per draw call, so blurring stroke and fill separately
+  // would over-accumulate alpha where the two blurred shapes overlap
+  // (the prototype blurs the composed shape once).
   const dilate = Math.max(0.5, maskHaloPx * 0.4) * view.scale;
   const blur = maskHaloPx * 0.6 * view.scale;
   const fs = fontSize * view.scale;
   const padX = fs * 6;
   const padY = fs;
-  const ctx = makeSpriteCanvas(padX * 2, padY * 2 + fs);
-  ctx.filter = `blur(${blur}px)`;
-  ctx.globalAlpha = maskStrength;
-  ctx.font = `400 ${fs}px ${WORDMARK_FONT}`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
+  const shape = makeSpriteCanvas(padX * 2, padY * 2 + fs);
+  shape.font = `400 ${fs}px ${WORDMARK_FONT}`;
+  shape.textAlign = 'center';
+  shape.textBaseline = 'middle';
   try {
-    (ctx as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing =
+    (shape as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing =
       `${fs * 0.16}px`;
   } catch {
     // letterSpacing is a recent canvas addition; the halo merely widens less.
   }
-  ctx.fillStyle = '#000';
-  ctx.strokeStyle = '#000';
-  ctx.lineWidth = dilate * 2;
-  ctx.lineJoin = 'round';
+  shape.fillStyle = '#000';
+  shape.strokeStyle = '#000';
+  shape.lineWidth = dilate * 2;
+  shape.lineJoin = 'round';
   const cx = padX + fs * 0.0595;
   const cy = padY + fs / 2;
-  ctx.strokeText(WORDMARK_TEXT, cx, cy);
-  ctx.fillText(WORDMARK_TEXT, cx, cy);
+  shape.strokeText(WORDMARK_TEXT, cx, cy);
+  shape.fillText(WORDMARK_TEXT, cx, cy);
+  const ctx = makeSpriteCanvas(shape.canvas.width, shape.canvas.height);
+  ctx.filter = `blur(${blur}px)`;
+  ctx.globalAlpha = maskStrength;
+  ctx.drawImage(shape.canvas, 0, 0);
   const cxDev = view.tx + 600 * view.scale;
   const cyDev = view.ty + wordmarkY * view.scale;
   return { canvas: ctx.canvas, dx: cxDev - padX, dy: cyDev - (padY + fs / 2) };
