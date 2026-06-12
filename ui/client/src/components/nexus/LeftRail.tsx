@@ -57,10 +57,6 @@ export function LeftRail({ tab, onTabChange, onHome }: LeftRailProps) {
           </span>
         </button>
       ))}
-      <div className="rail-spacer" />
-      <div className="rail-monogram" aria-hidden="true">
-        N·I
-      </div>
     </nav>
   );
 }

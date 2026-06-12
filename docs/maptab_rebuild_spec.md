@@ -161,10 +161,19 @@ visible.
 ### 4.1 Pan (pointer drag)
 
 - `onPointerDown` on the `<svg>`: capture pointer ID, store start point,
-  set `isDragging = true`.
+  begin a drag session.
 - `onPointerMove`: compute delta from start, scale by current `viewBox.width
   / svgClientWidth`, subtract from `viewBox.x/y`. Call `clampViewBox`.
 - `onPointerUp`: release pointer capture, clear drag state.
+
+**Click-vs-drag threshold** (June 2026 rework): a press is not a drag
+until the pointer moves a few px (`DRAG_THRESHOLD_PX`, straight-line
+from pointerdown). Below the threshold the map must not move and the
+release counts as a click (pin selection); at or above it the press is
+a pan and the release must never fire a selection — even if the pointer
+returns to its origin before release. The session logic is pure and
+unit-tested (`beginDragSession` / `applyDragMove` / `endDragSession` in
+`lib/map-geometry.ts`).
 
 **Pointer capture is mandatory**, not optional:
 `svgRef.current.setPointerCapture(e.pointerId)` ensures `pointermove`
@@ -212,16 +221,27 @@ Zoom range: 0.2× to 100×. Don't allow negative or zero.
 ### 4.3 ViewBox clamping
 
 After every pan or zoom, run `clampViewBox(viewBox)` to ensure the world
-outline stays at least partially visible. The exact bounds depend on the
-projected world bounds — the current implementation uses the result of
-`fitSize` to define a "fully zoomed out" viewBox and never lets the user
-pan beyond it.
+outline stays at least partially visible.
+
+**The mistake to avoid** (shipped in the U4 rebuild): clamping the
+window to the initially *fitted* region. At 1.00× zoom the window
+exactly equals the fit box, the clamp range collapses to zero on both
+axes, and every drag is silently clamped back — pan handlers that look
+correct but do nothing. Clamp against the **whole projected world**
+instead (for equirectangular, the two projected corners of
+[-180..180, -90..90]), requiring some minimum fraction of the viewport
+(`MIN_WORLD_VISIBLE_FRACTION`) to still overlap the world box, so the
+map can roam anywhere but never be dragged fully off-screen.
 
 ### 4.4 Place selection / details modal
 
 - Click a pin → set `selectedLocation = place.id`, open details dialog.
-  Use `e.stopPropagation()` and an `isDragging` check to prevent the
-  click from firing at the end of a drag.
+  NOTE: with pointer capture on the `<svg>`, the browser retargets the
+  derived `click` event to the capture element, so a pin `onClick` never
+  fires once the svg captures on pointerdown. Select on the svg's
+  `pointerup` instead, keyed off the original pointerdown target (the
+  release target is retargeted too), and only when the drag session
+  stayed below the click-vs-drag threshold (§4.1).
 - Click a place in the sidebar → set `selectedLocation` AND programmatically
   reposition the viewBox so the place sits at the canvas center
   (manually compute new viewBox.x/y from `placeCoordinates.get(id)`).

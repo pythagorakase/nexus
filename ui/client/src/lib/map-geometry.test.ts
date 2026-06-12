@@ -6,30 +6,62 @@
  *   - extractCoordinates  → §6.4 GeoJSON [lng, lat] ordering + validation
  *   - zoomViewBoxAtCursor → §6.2 cursor-anchored zoom
  *   - computeLabelVisibility → §6.1 priority + AABB label culling
- *   - clampViewBox / computeMapBounds → §4.3 pan clamping
- * (§6.3 pointer capture is DOM behavior — verified manually, see PR.)
+ *   - clampViewBox / panViewBox / computeMapBounds → §4.1/§4.3 pan + bounds
+ *   - beginDragSession / applyDragMove / endDragSession → §6.3 pointer
+ *     lifecycle (owning-pointer guard) + click-vs-drag threshold
+ * (The setPointerCapture / releasePointerCapture DOM calls themselves are
+ * verified in a real browser — see PR evidence.)
  */
 import { geoEquirectangular } from "d3-geo";
 import { describe, expect, it, vi } from "vitest";
 import type { Place } from "@shared/schema";
 import {
+  applyDragMove,
+  beginDragSession,
   boundsToFitObject,
   centerViewBoxOn,
   clampViewBox,
   clampZoom,
   computeLabelVisibility,
   computeMapBounds,
+  DRAG_THRESHOLD_PX,
+  endDragSession,
   extractCoordinates,
   MIN_BOUNDS_SPAN_DEG,
+  MIN_WORLD_VISIBLE_FRACTION,
+  panViewBox,
   shouldDisplayLabelByZoom,
   zoomViewBoxAtCursor,
   type LabelCandidate,
+  type PanBounds,
   type ViewBox,
 } from "./map-geometry";
 
 function makePlace(id: number, geometry: unknown): Place {
   return { id, name: `Place ${id}`, geometry } as unknown as Place;
 }
+
+/** SVG-space point under a client cursor position for a given viewBox. */
+function svgPointUnderCursor(
+  box: ViewBox,
+  cursorX: number,
+  cursorY: number,
+  rectW: number,
+  rectH: number,
+) {
+  return {
+    x: box.x + cursorX * (box.width / rectW),
+    y: box.y + cursorY * (box.height / rectH),
+  };
+}
+
+/** A projected world so large no clamp engages (regional-fit geometry). */
+const OPEN_WORLD: PanBounds = {
+  minX: -100000,
+  minY: -100000,
+  maxX: 100000,
+  maxY: 100000,
+};
 
 describe("extractCoordinates (failure mode 4: lng/lat ordering)", () => {
   it("reads GeoJSON Point as [longitude, latitude]", () => {
@@ -118,20 +150,6 @@ describe("zoomViewBoxAtCursor (failure mode 2: zoom anchoring)", () => {
   const MAP_W = 800;
   const MAP_H = 600;
 
-  /** SVG-space point under a client cursor position for a given viewBox. */
-  function svgPointUnderCursor(
-    box: ViewBox,
-    cursorX: number,
-    cursorY: number,
-    rectW: number,
-    rectH: number,
-  ) {
-    return {
-      x: box.x + cursorX * (box.width / rectW),
-      y: box.y + cursorY * (box.height / rectH),
-    };
-  }
-
   it("keeps the SVG point under the cursor invariant across a zoom-in", () => {
     const prev: ViewBox = { x: 100, y: 80, width: 400, height: 300 };
     const cursor = { x: 530, y: 190 };
@@ -154,6 +172,7 @@ describe("zoomViewBoxAtCursor (failure mode 2: zoom anchoring)", () => {
       2.2,
       MAP_W,
       MAP_H,
+      OPEN_WORLD,
     );
     const after = svgPointUnderCursor(next, cursor.x, cursor.y, rect.w, rect.h);
 
@@ -185,6 +204,7 @@ describe("zoomViewBoxAtCursor (failure mode 2: zoom anchoring)", () => {
       3.6,
       MAP_W,
       MAP_H,
+      OPEN_WORLD,
     );
     const after = svgPointUnderCursor(next, cursor.x, cursor.y, rect.w, rect.h);
 
@@ -197,7 +217,17 @@ describe("zoomViewBoxAtCursor (failure mode 2: zoom anchoring)", () => {
     // x/y zooms toward the top-left corner. With the cursor at the canvas
     // center, a correct zoom-in must move the origin down-right.
     const prev: ViewBox = { x: 0, y: 0, width: 800, height: 600 };
-    const next = zoomViewBoxAtCursor(prev, 400, 300, 800, 600, 2, MAP_W, MAP_H);
+    const next = zoomViewBoxAtCursor(
+      prev,
+      400,
+      300,
+      800,
+      600,
+      2,
+      MAP_W,
+      MAP_H,
+      OPEN_WORLD,
+    );
     expect(next.x).toBeGreaterThan(0);
     expect(next.y).toBeGreaterThan(0);
     expect(next.x).toBeCloseTo(200, 6);
@@ -211,46 +241,212 @@ describe("zoomViewBoxAtCursor (failure mode 2: zoom anchoring)", () => {
   });
 });
 
-describe("clampViewBox (§4.3 pan clamping)", () => {
-  it("clamps negative origins to zero", () => {
-    const box = clampViewBox(
-      { x: -50, y: -20, width: 400, height: 300 },
-      800,
-      600,
-    );
-    expect(box.x).toBe(0);
-    expect(box.y).toBe(0);
+describe("clampViewBox (§4.3 pan bounds: world never fully off-screen)", () => {
+  // A projected world that extends beyond the 800×600 canvas, as it does
+  // for any regional fit (the fitted region maps to the canvas, the rest
+  // of the globe projects outside it).
+  const world: PanBounds = { minX: -1000, minY: -800, maxX: 1800, maxY: 1400 };
+
+  it("leaves an interior window untouched", () => {
+    const box = clampViewBox({ x: 250, y: 130, width: 400, height: 300 }, world);
+    expect(box).toEqual({ x: 250, y: 130, width: 400, height: 300 });
   });
 
-  it("clamps the origin so the window stays inside the map", () => {
-    const box = clampViewBox(
-      { x: 700, y: 500, width: 400, height: 300 },
-      800,
-      600,
+  it("allows panning beyond the fitted region (the 1.00x pan-lock bug)", () => {
+    // REGRESSION: the old clamp confined the window to the fitted region
+    // [0, 0, mapW, mapH]; at zoom 1 the slack was zero on both axes and
+    // every drag was silently clamped back — "the map has no panning".
+    const box = clampViewBox({ x: 300, y: 200, width: 800, height: 600 }, world);
+    expect(box.x).toBe(300);
+    expect(box.y).toBe(200);
+
+    const negative = clampViewBox(
+      { x: -350, y: -250, width: 800, height: 600 },
+      world,
     );
-    expect(box.x).toBe(400); // 800 - 400
-    expect(box.y).toBe(300); // 600 - 300
+    expect(negative.x).toBe(-350);
+    expect(negative.y).toBe(-250);
   });
 
-  it("pins to origin when the window is larger than the map (zoom < 1)", () => {
+  it("keeps the minimum world fraction visible at the right/bottom edge", () => {
     const box = clampViewBox(
-      { x: 120, y: 90, width: 1600, height: 1200 },
-      800,
-      600,
+      { x: 99999, y: 99999, width: 800, height: 600 },
+      world,
     );
-    expect(box.x).toBe(0);
-    expect(box.y).toBe(0);
+    expect(box.x).toBe(world.maxX - 800 * MIN_WORLD_VISIBLE_FRACTION);
+    expect(box.y).toBe(world.maxY - 600 * MIN_WORLD_VISIBLE_FRACTION);
   });
 
-  it("centerViewBoxOn centers a point and respects clamping", () => {
+  it("keeps the minimum world fraction visible at the left/top edge", () => {
+    const box = clampViewBox(
+      { x: -99999, y: -99999, width: 800, height: 600 },
+      world,
+    );
+    expect(box.x).toBe(world.minX - 800 + 800 * MIN_WORLD_VISIBLE_FRACTION);
+    expect(box.y).toBe(world.minY - 600 + 600 * MIN_WORLD_VISIBLE_FRACTION);
+  });
+
+  it("keeps a small world inside a large window (deep zoom-out)", () => {
+    const tiny: PanBounds = { minX: 0, minY: 0, maxX: 100, maxY: 80 };
+    const big = { width: 4000, height: 3000 };
+
+    const right = clampViewBox({ x: 5000, y: 5000, ...big }, tiny);
+    expect(right.x).toBeLessThanOrEqual(tiny.minX);
+    expect(right.x + big.width).toBeGreaterThanOrEqual(tiny.maxX);
+    expect(right.y).toBeLessThanOrEqual(tiny.minY);
+    expect(right.y + big.height).toBeGreaterThanOrEqual(tiny.maxY);
+
+    const left = clampViewBox({ x: -5000, y: -5000, ...big }, tiny);
+    expect(left.x).toBeLessThanOrEqual(tiny.minX);
+    expect(left.x + big.width).toBeGreaterThanOrEqual(tiny.maxX);
+  });
+
+  it("centerViewBoxOn centers a point and respects the pan bounds", () => {
     const prev: ViewBox = { x: 0, y: 0, width: 400, height: 300 };
-    const centered = centerViewBoxOn({ x: 400, y: 300 }, prev, 800, 600);
+    const centered = centerViewBoxOn({ x: 400, y: 300 }, prev, world);
     expect(centered.x).toBe(200);
     expect(centered.y).toBe(150);
 
-    const nearEdge = centerViewBoxOn({ x: 790, y: 590 }, prev, 800, 600);
-    expect(nearEdge.x).toBe(400); // clamped to map edge
-    expect(nearEdge.y).toBe(300);
+    const farOut = centerViewBoxOn({ x: 99999, y: 99999 }, prev, world);
+    expect(farOut.x).toBe(world.maxX - 400 * MIN_WORLD_VISIBLE_FRACTION);
+    expect(farOut.y).toBe(world.maxY - 300 * MIN_WORLD_VISIBLE_FRACTION);
+  });
+});
+
+describe("panViewBox (§4.1 drag-to-pan + pan/zoom composition)", () => {
+  it("moves the window opposite the drag (content follows the cursor)", () => {
+    // Dragging right/down pulls the world right/down → window moves left/up.
+    const next = panViewBox(
+      { x: 0, y: 0, width: 800, height: 600 },
+      50,
+      30,
+      800,
+      600,
+      OPEN_WORLD,
+    );
+    expect(next.x).toBe(-50);
+    expect(next.y).toBe(-30);
+  });
+
+  it("maps the same px drag through the projection scale at every zoom", () => {
+    // zoom 1: viewBox width == rect width → 50 px ⇒ 50 SVG units.
+    const z1 = panViewBox(
+      { x: 0, y: 0, width: 800, height: 600 },
+      50,
+      -30,
+      800,
+      600,
+      OPEN_WORLD,
+    );
+    expect(z1.x).toBeCloseTo(-50, 6);
+    expect(z1.y).toBeCloseTo(30, 6);
+
+    // zoom 4: same 50 px covers a quarter of the SVG distance, which is
+    // the SAME distance on screen — pan feel is zoom-invariant.
+    const z4 = panViewBox(
+      { x: 100, y: 80, width: 200, height: 150 },
+      50,
+      -30,
+      800,
+      600,
+      OPEN_WORLD,
+    );
+    expect(z4.x).toBeCloseTo(100 - 12.5, 6);
+    expect(z4.y).toBeCloseTo(80 + 7.5, 6);
+  });
+
+  it("clamps a drag at the world edge", () => {
+    const world: PanBounds = { minX: 0, minY: 0, maxX: 1600, maxY: 1200 };
+    const next = panViewBox(
+      { x: 0, y: 0, width: 800, height: 600 },
+      99999, // hard fling right → window pushed far left of the world
+      0,
+      800,
+      600,
+      world,
+    );
+    expect(next.x).toBe(world.minX - 800 + 800 * MIN_WORLD_VISIBLE_FRACTION);
+  });
+
+  it("zoom anchoring still holds on a panned window (composition)", () => {
+    // Pan first…
+    const panned = panViewBox(
+      { x: 0, y: 0, width: 400, height: 300 },
+      -120,
+      90,
+      800,
+      600,
+      OPEN_WORLD,
+    );
+    expect(panned.x).toBeCloseTo(60, 6); // 120 px × (400/800)
+    expect(panned.y).toBeCloseTo(-45, 6);
+
+    // …then zoom at an off-center cursor: the SVG point under the cursor
+    // must survive the zoom exactly as it does on an unpanned window.
+    const cursor = { x: 250, y: 410 };
+    const before = svgPointUnderCursor(panned, cursor.x, cursor.y, 800, 600);
+    const next = zoomViewBoxAtCursor(
+      panned,
+      cursor.x,
+      cursor.y,
+      800,
+      600,
+      3,
+      800,
+      600,
+      OPEN_WORLD,
+    );
+    const after = svgPointUnderCursor(next, cursor.x, cursor.y, 800, 600);
+    expect(after.x).toBeCloseTo(before.x, 6);
+    expect(after.y).toBeCloseTo(before.y, 6);
+  });
+});
+
+describe("drag session (failure mode 3: pointer lifecycle + click-vs-drag)", () => {
+  it("ignores moves from a foreign pointer (multi-touch safety)", () => {
+    const session = beginDragSession(7, 100, 100);
+    expect(applyDragMove(session, 9, 300, 300)).toBeNull();
+  });
+
+  it("survives a foreign pointer's release", () => {
+    const session = beginDragSession(7, 100, 100);
+    expect(endDragSession(session, 9)).toBeNull();
+    expect(endDragSession(session, 7)).toEqual({ panned: false });
+  });
+
+  it("stays a click below the movement threshold (map must not move)", () => {
+    const session = beginDragSession(1, 100, 100);
+    const move = applyDragMove(session, 1, 102, 101); // ~2.2 px of jitter
+    expect(move).not.toBeNull();
+    expect(move!.deltaX).toBe(0);
+    expect(move!.deltaY).toBe(0);
+    expect(move!.session.panned).toBe(false);
+    expect(endDragSession(move!.session, 1)).toEqual({ panned: false });
+  });
+
+  it("becomes a pan at the threshold, applying the full accumulated delta", () => {
+    const session = beginDragSession(1, 100, 100);
+    const move = applyDragMove(session, 1, 100 + DRAG_THRESHOLD_PX + 2, 100);
+    expect(move!.session.panned).toBe(true);
+    expect(move!.deltaX).toBe(DRAG_THRESHOLD_PX + 2); // nothing swallowed
+    expect(move!.deltaY).toBe(0);
+  });
+
+  it("applies incremental deltas after the threshold", () => {
+    let session = beginDragSession(1, 100, 100);
+    session = applyDragMove(session, 1, 110, 100)!.session;
+    const move = applyDragMove(session, 1, 115, 103);
+    expect(move!.deltaX).toBe(5);
+    expect(move!.deltaY).toBe(3);
+  });
+
+  it("a pan stays a pan even when released back at the origin", () => {
+    // Drag out and back: total displacement is zero, but the session
+    // panned — the release must still be click-suppressed.
+    let session = beginDragSession(1, 100, 100);
+    session = applyDragMove(session, 1, 130, 100)!.session;
+    session = applyDragMove(session, 1, 100, 100)!.session;
+    expect(endDragSession(session, 1)).toEqual({ panned: true });
   });
 });
 
