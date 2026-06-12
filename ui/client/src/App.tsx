@@ -10,6 +10,7 @@ import { ModelProvider } from "@/contexts/ModelContext";
 import NotFound from "@/pages/not-found";
 import SplashPage from "@/pages/SplashPage";
 import NewStoryPage from "@/pages/NewStoryPage";
+import DevMarkdownPreview from "@/pages/DevMarkdownPreview";
 import { NexusLayout } from "@/components/nexus";
 
 function Router() {
@@ -18,6 +19,10 @@ function Router() {
       <Route path="/" component={SplashPage} />
       <Route path="/new-story" component={NewStoryPage} />
       <Route path="/nexus" component={NexusLayout} />
+      {/* Dev-only harness for narrative markdown rendering. */}
+      {import.meta.env.DEV && (
+        <Route path="/dev/markdown" component={DevMarkdownPreview} />
+      )}
       <Route component={NotFound} />
     </Switch>
   );

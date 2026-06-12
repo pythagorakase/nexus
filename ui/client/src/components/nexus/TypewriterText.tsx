@@ -5,8 +5,17 @@
  * (configurable via `[ui] typewriter_ms_per_char` in nexus.toml, surfaced
  * through GET /api/settings). Chunks loaded from history render instantly;
  * only freshly generated text animates (the parent decides via `animate`).
+ *
+ * Markdown mode (`markdown`) renders each frame's visible slice through
+ * ProseMarkdown instead of as plain text, so emphasis and headings appear
+ * correctly formatted mid-reveal and the finished frame is identical to the
+ * committed-chunk rendering - no end-of-reveal swap, no layout jump. The
+ * caret rides the reveal frontier inside the rendered markdown. Block
+ * content cannot live inside a span, so markdown mode ignores `className`
+ * and returns the bare block stream (wrap it in a styled container).
  */
 import { useEffect, useRef, useState } from "react";
+import { ProseMarkdown } from "./ProseMarkdown";
 
 interface TypewriterTextProps {
   text: string;
@@ -14,6 +23,8 @@ interface TypewriterTextProps {
   msPerChar: number;
   /** When false, render the full text immediately. */
   animate: boolean;
+  /** Render the visible slice as narrative markdown (block content). */
+  markdown?: boolean;
   className?: string;
   onDone?: () => void;
 }
@@ -22,6 +33,7 @@ export function TypewriterText({
   text,
   msPerChar,
   animate,
+  markdown = false,
   className,
   onDone,
 }: TypewriterTextProps) {
@@ -50,6 +62,12 @@ export function TypewriterText({
   }, [text, animate, msPerChar]);
 
   const revealing = animate && visibleChars < text.length;
+
+  if (markdown) {
+    return (
+      <ProseMarkdown text={text.slice(0, visibleChars)} revealing={revealing} />
+    );
+  }
 
   return (
     <span className={className}>
