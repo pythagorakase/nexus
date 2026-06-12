@@ -1,14 +1,12 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { Sparkles, ChevronDown, Check } from "lucide-react";
-import { getProviderIcon, getProviderWordmark, getModelIcon } from "@/lib/model-icons";
+import { Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
-import { StoryChoices, ChoiceSelection } from "@/components/StoryChoices";
+import { WizardChoices, normalizeChoices } from "./WizardChoices";
 import { WaitScreen } from "./WaitScreen";
 import { ArtifactSidePanel } from "./ArtifactSidePanel";
-import { useModel } from "@/contexts/ModelContext";
 import {
     ResizablePanelGroup,
     ResizablePanel,
@@ -16,24 +14,9 @@ import {
 } from "@/components/ui/resizable";
 import type { ImperativePanelGroupHandle } from "react-resizable-panels";
 import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuPortal,
-    DropdownMenuSub,
-    DropdownMenuSubContent,
-    DropdownMenuSubTrigger,
-    DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
     Conversation,
     ConversationContent,
     ConversationScrollButton,
-    PromptInput,
-    PromptInputTextarea,
-    PromptInputToolbar,
-    PromptInputTools,
-    PromptInputSubmit,
     Loader,
     Response,
 } from "@/components/ai";
@@ -60,6 +43,12 @@ interface InteractiveWizardProps {
 }
 
 type Phase = "setting" | "character" | "seed";
+
+const PHASE_TITLES: Record<Phase, string> = {
+    setting: "Setting",
+    character: "Character",
+    seed: "Introduction",
+};
 
 // Panel size constants (percentages of container width)
 const PANEL_SIZE_COLLAPSED = 5;
@@ -117,18 +106,15 @@ export function InteractiveWizard({
     initialPhase,
 }: InteractiveWizardProps) {
     const [messages, setMessages] = useState<Message[]>([]);
-    const [input, setInput] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const [threadId, setThreadId] = useState<string | null>(null);
     const [currentPhase, setCurrentPhase] = useState<Phase>(initialPhase || "setting");
     const [pendingArtifact, setPendingArtifact] = useState<any>(null);
-    const [displayChoices, setDisplayChoices] = useState<string[] | null>(null);
+    const [displayChoices, setDisplayChoices] = useState<string[]>([]);
     const [showTraitSelector, setShowTraitSelector] = useState(false);
     const [suggestedTraits, setSuggestedTraits] = useState<string[]>([]);
     const [selectedTraits, setSelectedTraits] = useState<string[]>([]);
-    const [modelLocked, setModelLocked] = useState(false);
     const { toast } = useToast();
-    const { model, setModel, availableModels, modelsByProvider, isTestMode } = useModel();
 
     // Side panel state
     const [panelExpanded, setPanelExpanded] = useState(false);
@@ -167,20 +153,21 @@ export function InteractiveWizard({
 
                 // Reset local UI state when starting/resuming a session
                 setMessages([]);
-                setDisplayChoices(null);
+                setDisplayChoices([]);
                 setPendingArtifact(null);
                 setShowTraitSelector(false);
-                setModelLocked(false);
 
                 if (resumeThreadId) {
                     setThreadId(resumeThreadId);
                     return;
                 }
 
+                // No model in the payload: the backend resolves the
+                // configured wizard default and stamps it on the slot.
                 const startRes = await fetch("/api/story/new/setup/start", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ slot, model }),  // Include model for TEST mode support
+                    body: JSON.stringify({ slot }),
                 });
 
                 if (!startRes.ok) throw new Error("Failed to start setup");
@@ -190,9 +177,7 @@ export function InteractiveWizard({
                 if (welcome_message) {
                     addMessage("assistant", welcome_message);
                 }
-                if (welcome_choices && welcome_choices.length > 0) {
-                    setDisplayChoices(welcome_choices);
-                }
+                setDisplayChoices(normalizeChoices(welcome_choices));
             } catch (error) {
                 console.error("Failed to init chat:", error);
                 toast({
@@ -319,6 +304,8 @@ export function InteractiveWizard({
             // Step 2: Trigger bootstrap (generate first narrative chunk)
             setWaitScreenStatusText("Starting narrative generation...");
 
+            // No model override: bootstrap uses the model stamped on the
+            // slot when the wizard session started.
             const bootstrapRes = await fetch("/api/narrative/continue", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -326,8 +313,6 @@ export function InteractiveWizard({
                     chunk_id: 0,  // Bootstrap signal
                     slot,
                     user_text: "Begin the story.",
-                    test_mode: isTestMode,  // Pass TEST mode for mock bootstrap
-                    model,
                 }),
                 signal: abortController.signal,
             });
@@ -407,9 +392,6 @@ export function InteractiveWizard({
         content: string,
         artifact?: { type: string; data: any }
     ) => {
-        if (role === "user") {
-            setModelLocked(true);
-        }
         setMessages((prev) => [
             ...prev,
             {
@@ -434,7 +416,7 @@ export function InteractiveWizard({
     const triggerSubphaseContinuation = async (artifactType: string, contextData: any) => {
         if (isLoading) return;
         setIsLoading(true);
-        setDisplayChoices(null);  // Clear stale choices immediately to prevent flash
+        setDisplayChoices([]);  // Clear stale choices immediately to prevent flash
         try {
             const res = await fetch("/api/story/new/chat", {
                 method: "POST",
@@ -443,7 +425,6 @@ export function InteractiveWizard({
                     slot,
                     thread_id: threadId,
                     message: `[SYSTEM] Artifact ${artifactType} confirmed. Proceed to next step.`,
-                    model,
                     current_phase: currentPhase,
                     context_data: contextData
                 }),
@@ -454,12 +435,12 @@ export function InteractiveWizard({
 
             if (data.phase_complete) {
                 setPendingArtifact(normalizePendingArtifact(data.phase, data.artifact_type, data.data));
-                setDisplayChoices(null);
+                setDisplayChoices([]);
             } else if (data.subphase_complete) {
                 handleSubphaseCompletion(data.artifact_type, data.data);
             } else {
                 addMessage("assistant", data.message);
-                setDisplayChoices(data.choices ? normalizeChoices(data.choices) : null);
+                setDisplayChoices(normalizeChoices(data.choices));
                 if (currentPhase === "character" && shouldShowTraitSelector(data.message)) {
                     setShowTraitSelector(true);
                     extractSuggestedTraits(data.message);
@@ -521,7 +502,7 @@ export function InteractiveWizard({
                 console.error("Failed to build trait intro message:", error);
                 addMessage("assistant", TRAIT_INTRODUCTION + "\n\nPlease select your traits from the menu.");
             }
-            setDisplayChoices(null);  // No structured choices - TraitSelector handles it
+            setDisplayChoices([]);  // No structured choices - TraitSelector handles it
             return;  // Early return - no API call needed
         }
 
@@ -536,33 +517,15 @@ export function InteractiveWizard({
         triggerSubphaseContinuation(artifactType, updatedWizardData);
     };
 
-    const normalizeChoices = (choices: any): string[] | null => {
-        if (!choices || !Array.isArray(choices) || choices.length === 0) {
-            return null;
-        }
-        // Already string array
-        if (typeof choices[0] === "string") {
-            return (choices as string[]).map((c) => c.trim()).filter(Boolean);
-        }
-        // Handle structured {label, description}
-        if (choices[0]?.label && choices[0]?.description) {
-            return (choices as Array<{ label: string; description: string }>).map(
-                (c) => `${c.label}: ${c.description}`
-            );
-        }
-        // Fallback: coerce to strings
-        return (choices as Array<any>).map((c) => String(c).trim()).filter(Boolean);
-    };
-
-    const handleSend = async () => {
+    // Unified turn submission for structured choices and freeform input.
+    const sendMessage = async (text: string) => {
         // Synchronous ref-based guard for double-click prevention
-        if (processingRef.current || !input.trim() || isLoading || !threadId) return;
+        if (processingRef.current || !text.trim() || isLoading || !threadId) return;
         processingRef.current = true;
 
-        const userMsg = input.trim();
-        setInput("");
+        const userMsg = text.trim();
         addMessage("user", userMsg);
-        setDisplayChoices(null);  // Clear choices while loading
+        setDisplayChoices([]);  // Clear choices while loading
         setIsLoading(true);
 
         try {
@@ -573,7 +536,6 @@ export function InteractiveWizard({
                     slot,
                     thread_id: threadId,
                     message: userMsg,
-                    model,
                     current_phase: currentPhase,
                     context_data: wizardData
                 }),
@@ -585,13 +547,13 @@ export function InteractiveWizard({
 
             if (data.phase_complete) {
                 setPendingArtifact(normalizePendingArtifact(data.phase, data.artifact_type, data.data));
-                setDisplayChoices(null);
+                setDisplayChoices([]);
             } else if (data.subphase_complete) {
                 handleSubphaseCompletion(data.artifact_type, data.data);
             } else {
                 addMessage("assistant", data.message);
                 // Set choices if returned by backend
-                setDisplayChoices(data.choices ? normalizeChoices(data.choices) : null);
+                setDisplayChoices(normalizeChoices(data.choices));
                 // Check if LLM is prompting for trait selection
                 if (currentPhase === "character" && shouldShowTraitSelector(data.message)) {
                     setShowTraitSelector(true);
@@ -611,61 +573,6 @@ export function InteractiveWizard({
             processingRef.current = false;
             setIsLoading(false);
         }
-    };
-
-    const handleChoiceSelect = (selection: ChoiceSelection) => {
-        // Synchronous ref-based guard for double-click prevention
-        if (processingRef.current || isLoading) return;
-        processingRef.current = true;
-
-        // Clear choices while loading
-        setDisplayChoices(null);
-        const inputToSend = selection.text;
-        addMessage("user", inputToSend);
-        setIsLoading(true);
-
-        fetch("/api/story/new/chat", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                slot,
-                thread_id: threadId,
-                message: inputToSend,
-                model,
-                current_phase: currentPhase,
-                context_data: wizardData
-            }),
-        })
-            .then(async (res) => {
-                if (!res.ok) throw new Error("Failed to send message");
-                const data = await res.json();
-                if (data.phase_complete) {
-                    setPendingArtifact(normalizePendingArtifact(data.phase, data.artifact_type, data.data));
-                    setDisplayChoices(null);
-                } else if (data.subphase_complete) {
-                    handleSubphaseCompletion(data.artifact_type, data.data);
-                } else {
-                    addMessage("assistant", data.message);
-                    // Set choices if returned by backend
-                    setDisplayChoices(data.choices ? normalizeChoices(data.choices) : null);
-                    // Check if LLM is prompting for trait selection
-                    if (currentPhase === "character" && shouldShowTraitSelector(data.message)) {
-                        setShowTraitSelector(true);
-                    }
-                }
-            })
-            .catch((error) => {
-                console.error("Chat error:", error);
-                toast({
-                    title: "Transmission Error",
-                    description: "Failed to send message. Please try again.",
-                    variant: "destructive",
-                });
-            })
-            .finally(() => {
-                processingRef.current = false;
-                setIsLoading(false);
-            });
     };
 
     // Detect if LLM message is prompting for trait selection
@@ -713,9 +620,8 @@ export function InteractiveWizard({
 
         // Don't close selector yet - keep it open with spinner while processing
         const traitMessage = `I'll take: ${traits.join(", ")}`;
-        setInput("");
         addMessage("user", traitMessage);
-        setDisplayChoices(null);  // Clear choices while loading
+        setDisplayChoices([]);  // Clear choices while loading
         setIsLoading(true);
 
         fetch("/api/story/new/chat", {
@@ -725,7 +631,6 @@ export function InteractiveWizard({
                 slot,
                 thread_id: threadId,
                 message: traitMessage,
-                model,
                 current_phase: currentPhase,
                 context_data: wizardData
             }),
@@ -737,12 +642,12 @@ export function InteractiveWizard({
                 setShowTraitSelector(false);
                 if (data.phase_complete) {
                     setPendingArtifact(normalizePendingArtifact(data.phase, data.artifact_type, data.data));
-                    setDisplayChoices(null);
+                    setDisplayChoices([]);
                 } else if (data.subphase_complete) {
                     handleSubphaseCompletion(data.artifact_type, data.data);
                 } else {
                     addMessage("assistant", data.message);
-                    setDisplayChoices(data.choices ? normalizeChoices(data.choices) : null);
+                    setDisplayChoices(normalizeChoices(data.choices));
                 }
             })
             .catch((error) => {
@@ -780,7 +685,6 @@ export function InteractiveWizard({
                 slot,
                 thread_id: threadId,
                 message: traitMessage,
-                model,
                 current_phase: currentPhase,
                 context_data: wizardData
             }),
@@ -890,7 +794,6 @@ export function InteractiveWizard({
                     slot,
                     thread_id: threadId,
                     message: `[SYSTEM] Phase ${currentPhase} complete. Proceeding to ${nextPhase}. Please introduce the next phase.`,
-                    model,
                     current_phase: nextPhase,
                     context_data: wizardData
                 }),
@@ -901,7 +804,7 @@ export function InteractiveWizard({
             addMessage("assistant", data.message);
 
             // Set new choices (or clear if none)
-            setDisplayChoices(data.choices ? normalizeChoices(data.choices) : null);
+            setDisplayChoices(normalizeChoices(data.choices));
         } catch (error) {
             console.error("Next phase trigger error:", error);
         } finally {
@@ -967,7 +870,7 @@ export function InteractiveWizard({
                 <div className="flex items-center gap-2">
                     <Sparkles className="w-5 h-5 text-primary" />
                     <h3 className="font-mono text-foreground">
-                        SKALD // {currentPhase.toUpperCase()} PROTOCOL
+                        {PHASE_TITLES[currentPhase]}
                     </h3>
                 </div>
                 <Button
@@ -988,7 +891,6 @@ export function InteractiveWizard({
                                     slot,
                                     thread_id: threadId,
                                     message: "",  // No message needed
-                                    model,
                                     current_phase: currentPhase,
                                     context_data: wizardData,
                                     accept_fate: true,  // Backend forces tool call
@@ -1004,7 +906,7 @@ export function InteractiveWizard({
                                 handleSubphaseCompletion(data.artifact_type, data.data);
                             } else {
                                 addMessage("assistant", data.message);
-                                setDisplayChoices(data.choices?.length > 0 ? normalizeChoices(data.choices) : null);
+                                setDisplayChoices(normalizeChoices(data.choices));
                             }
                         } catch (e) {
                             console.error(e);
@@ -1046,14 +948,8 @@ export function InteractiveWizard({
                                         )}
                                     >
                                         {msg.role === "assistant" ? (
-                                            <div>
-                                                <div className="flex items-center gap-1.5 mb-2 pb-1 border-b border-primary/20">
-                                                    <Sparkles className="w-3 h-3 text-primary" />
-                                                    <span className="text-[10px] font-mono text-primary uppercase tracking-widest">Skald</span>
-                                                </div>
-                                                <div className="prose prose-invert max-w-none prose-p:leading-relaxed">
-                                                    <Response>{msg.content}</Response>
-                                                </div>
+                                            <div className="prose prose-invert max-w-none prose-p:leading-relaxed">
+                                                <Response>{msg.content}</Response>
                                             </div>
                                         ) : msg.role === "system" && msg.artifactData ? (
                                             <button
@@ -1074,17 +970,17 @@ export function InteractiveWizard({
                                 </motion.div>
                             ))}
                         </AnimatePresence>
-                        {/* Structured choices */}
-                        {displayChoices && displayChoices.length > 0 && !isLoading && (
+                        {/* Structured choices + freeform slot */}
+                        {!isLoading && (
                             <motion.div
                                 initial={{ opacity: 0, y: 10 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 className="mt-4"
                             >
-                                <StoryChoices
+                                <WizardChoices
                                     choices={displayChoices}
-                                    onSelect={handleChoiceSelect}
-                                    disabled={isLoading}
+                                    onSubmit={sendMessage}
+                                    disabled={isLoading || !!pendingArtifact || !threadId}
                                 />
                             </motion.div>
                         )}
@@ -1096,100 +992,12 @@ export function InteractiveWizard({
                             >
                                 <div className="bg-muted/60 border border-accent/30 p-3 rounded-lg flex items-center gap-2">
                                     <Loader size={16} className="text-accent" />
-                                    <span className="text-xs text-muted-foreground font-mono">PROCESSING...</span>
                                 </div>
                             </motion.div>
                         )}
                     </ConversationContent>
                     <ConversationScrollButton />
                 </Conversation>
-
-                {/* Input Area - shadcn AI PromptInput */}
-                <div className="p-4 border-t border-primary/30 bg-background/60">
-                    <PromptInput
-                        onSubmit={(e) => {
-                            e.preventDefault();
-                            handleSend();
-                        }}
-                        className="border-primary/30 bg-background/40"
-                    >
-                        <PromptInputTextarea
-                            value={input}
-                            onChange={(e) => setInput(e.target.value)}
-                            placeholder={displayChoices && displayChoices.length > 0 ? "or something else?" : `Input for ${currentPhase} phase...`}
-                            disabled={isLoading || !!pendingArtifact}
-                            className="font-mono bg-transparent"
-                        />
-                        <PromptInputToolbar>
-                            <PromptInputTools>
-                                {/* Model Picker - Nested Dropdown */}
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            disabled={modelLocked}
-                                            className="h-7 px-2 font-mono text-xs text-muted-foreground hover:text-foreground"
-                                        >
-                                            <div className="flex items-center gap-1.5">
-                                                {getModelIcon(model, modelsByProvider, 'w-3.5 h-3.5')}
-                                                <span>{availableModels.find(m => m.id === model)?.label || model}</span>
-                                            </div>
-                                            <ChevronDown className="h-3 w-3 ml-1 opacity-50" />
-                                        </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent className="font-mono text-xs" align="start">
-                                        {Object.entries(modelsByProvider).map(([provider, models]) => (
-                                            models.length === 1 ? (
-                                                <DropdownMenuItem
-                                                    key={models[0].id}
-                                                    onClick={() => setModel(models[0].id)}
-                                                    className="flex items-center justify-between gap-2 text-xs"
-                                                >
-                                                    <div className="flex items-center gap-1.5">
-                                                        {getProviderIcon(provider, 'w-3.5 h-3.5')}
-                                                        <span>{models[0].label}</span>
-                                                    </div>
-                                                    {model === models[0].id && <Check className="h-3 w-3 shrink-0" />}
-                                                </DropdownMenuItem>
-                                            ) : (
-                                                <DropdownMenuSub key={provider}>
-                                                    <DropdownMenuSubTrigger className="gap-1.5 text-xs">
-                                                        {getProviderWordmark(provider, true) || (
-                                                            <span>{provider.charAt(0).toUpperCase() + provider.slice(1)}</span>
-                                                        )}
-                                                    </DropdownMenuSubTrigger>
-                                                    <DropdownMenuPortal>
-                                                        <DropdownMenuSubContent className="font-mono text-xs">
-                                                            {models.map(m => (
-                                                                <DropdownMenuItem
-                                                                    key={m.id}
-                                                                    onClick={() => setModel(m.id)}
-                                                                    className="flex items-center justify-between gap-2 text-xs"
-                                                                >
-                                                                    <div className="flex items-center gap-1.5">
-                                                                        {getProviderIcon(provider, 'w-3.5 h-3.5')}
-                                                                        <span>{m.label}</span>
-                                                                    </div>
-                                                                    {model === m.id && <Check className="h-3 w-3 shrink-0" />}
-                                                                </DropdownMenuItem>
-                                                            ))}
-                                                        </DropdownMenuSubContent>
-                                                    </DropdownMenuPortal>
-                                                </DropdownMenuSub>
-                                            )
-                                        ))}
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
-                            </PromptInputTools>
-                            <PromptInputSubmit
-                                disabled={isLoading || !input.trim() || !!pendingArtifact}
-                                status={isLoading ? "submitted" : "ready"}
-                                className="bg-primary/20 border border-primary/50 text-primary hover:bg-primary/30"
-                            />
-                        </PromptInputToolbar>
-                    </PromptInput>
-                </div>
             </div>
         </div>
             </ResizablePanel>

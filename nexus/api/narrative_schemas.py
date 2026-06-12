@@ -257,25 +257,16 @@ class SlotLockResponse(BaseModel):
 # =============================================================================
 
 
-def _wizard_default_model_factory() -> str:
-    """Return the resolved wizard default model from nexus.toml.
-
-    Used as the field default when an HTTP client doesn't specify a model.
-    Reading at request time keeps the value in sync with config edits.
-    """
-    from nexus.config import load_settings
-
-    return load_settings().wizard.default_model
-
-
 class ChatRequest(BaseModel):
     slot: int
     message: str
     # thread_id and current_phase are optional - resolved from slot state if not provided
     thread_id: Optional[str] = None
     current_phase: Optional[Literal["setting", "character", "seed"]] = None
-    # Defaults to the resolved wizard.default_model from nexus.toml
-    model: str = Field(default_factory=_wizard_default_model_factory)
+    # Optional explicit override. When omitted, the endpoint resolves the
+    # slot's stamped model (locked at setup start), then the configured
+    # wizard default from nexus.toml.
+    model: Optional[str] = None
     context_data: Optional[Dict[str, Any]] = None  # Accumulated wizard state
     accept_fate: bool = False  # Force tool call without adding user message
     dev: bool = Field(
@@ -288,8 +279,10 @@ class ChatRequest(BaseModel):
 
     @field_validator("model")
     @classmethod
-    def validate_model(cls, v: str) -> str:
+    def validate_model(cls, v: Optional[str]) -> Optional[str]:
         """Validate model against available models from nexus.toml."""
+        if v is None:
+            return v
         from nexus.config import get_available_api_models
 
         available = get_available_api_models()

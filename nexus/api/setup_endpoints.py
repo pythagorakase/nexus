@@ -42,7 +42,14 @@ router = APIRouter(prefix="/api/story/new", tags=["setup"])
 async def start_setup_endpoint(request: StartSetupRequest) -> Dict[str, Any]:
     """Start a new setup conversation"""
     try:
-        thread_id = start_setup(request.slot, request.model)
+        # Resolve the effective model once: an explicit request override
+        # (backend/CLI test flows may pass TEST here) or the configured
+        # wizard default from nexus.toml. The resolved model is stamped on
+        # the slot by start_setup, overriding any pre-wizard slot stamp such
+        # as the dev reset default; the mock TEST server is never selected
+        # implicitly.
+        model_to_use = request.model or get_new_story_model()
+        thread_id = start_setup(request.slot, model_to_use)
 
         # Load welcome message and choices from frontmatter
         prompt_path = (
@@ -58,8 +65,6 @@ async def start_setup_endpoint(request: StartSetupRequest) -> Dict[str, Any]:
 
         # Seed welcome message if exists (without choices - UI renders those)
         if welcome_message:
-            # Use request model (enables TEST mode) or fall back to settings
-            model_to_use = request.model or get_new_story_model()
             client = ConversationsClient(model=model_to_use)
             client.add_message(thread_id, "assistant", welcome_message)
 
@@ -71,6 +76,7 @@ async def start_setup_endpoint(request: StartSetupRequest) -> Dict[str, Any]:
             "status": "started",
             "thread_id": thread_id,
             "slot": request.slot,
+            "model": model_to_use,
             "welcome_message": welcome_message,
             "welcome_choices": welcome_choices,
         }
@@ -174,7 +180,9 @@ async def get_slots_status_endpoint():
         except (psycopg2.OperationalError, psycopg2.DatabaseError) as e:
             # Expected: DB doesn't exist or connection failed
             logger.warning(f"Could not connect to slot {slot} database: {e}")
-            results.append({"slot_number": slot, "is_active": False, "wizard_in_progress": False})
+            results.append(
+                {"slot_number": slot, "is_active": False, "wizard_in_progress": False}
+            )
         except Exception as e:
             # Unexpected errors should surface during development
             logger.error(f"Unexpected error fetching slot {slot}: {e}")
