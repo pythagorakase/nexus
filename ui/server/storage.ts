@@ -269,6 +269,8 @@ export class PostgresStorage implements IStorage {
 
   async getChunkById(chunkId: number, slot?: number | null): Promise<(NarrativeChunk & { metadata?: ChunkMetadata }) | null> {
     const db = getDb(slot) || this.db;
+    // Inner join: only committed chunks with metadata are addressable for
+    // historical reading, so the metadata mapping below is unconditional.
     const result = await db.execute(sql`
       SELECT
         nc.id,
@@ -278,16 +280,16 @@ export class PostgresStorage implements IStorage {
         nc.choice_text,
         nc.created_at,
         cm.chunk_id,
-      cm.season,
-      cm.episode,
-      cm.scene,
-      cm.world_layer,
-      cm.time_delta,
-      cm.generation_date,
-      cm.slug
-    FROM narrative_chunks nc
-    LEFT JOIN chunk_metadata cm ON cm.chunk_id = nc.id
-    WHERE nc.id = ${chunkId} AND cm.id IS NOT NULL
+        cm.season,
+        cm.episode,
+        cm.scene,
+        cm.world_layer,
+        cm.time_delta,
+        cm.generation_date,
+        cm.slug
+      FROM narrative_chunks nc
+      JOIN chunk_metadata cm ON cm.chunk_id = nc.id
+      WHERE nc.id = ${chunkId}
     `);
 
     if (!result.rows || result.rows.length === 0) {
@@ -302,19 +304,17 @@ export class PostgresStorage implements IStorage {
       choiceObject: row.choice_object ?? null,
       choiceText: row.choice_text ?? null,
       createdAt: row.created_at ?? null,
-      metadata: row.chunk_id
-        ? {
-          id: Number(row.chunk_id),
-          chunkId: Number(row.chunk_id),
-          season: toNumber(row.season),
-          episode: toNumber(row.episode),
-          scene: toNumber(row.scene),
-          worldLayer: row.world_layer ?? null,
-          timeDelta: row.time_delta ?? null,
-          generationDate: row.generation_date ?? null,
-          slug: row.slug ?? null,
-        }
-        : undefined,
+      metadata: {
+        id: Number(row.chunk_id),
+        chunkId: Number(row.chunk_id),
+        season: toNumber(row.season),
+        episode: toNumber(row.episode),
+        scene: toNumber(row.scene),
+        worldLayer: row.world_layer ?? null,
+        timeDelta: row.time_delta ?? null,
+        generationDate: row.generation_date ?? null,
+        slug: row.slug ?? null,
+      },
     };
   }
 

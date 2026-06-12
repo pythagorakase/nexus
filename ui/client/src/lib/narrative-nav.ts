@@ -23,7 +23,11 @@
  * provides direct jumps.
  */
 
-/** One committed chunk's coordinates, in story order (mirrors GET /api/narrative/outline). */
+/**
+ * One committed chunk's coordinates, in story order. Client-side mirror of
+ * `OutlineRow` in `ui/server/storage.ts` (the GET /api/narrative/outline
+ * payload); keep the two in lockstep if the outline ever gains a column.
+ */
 export interface OutlineRow {
   id: number;
   season: number | null;

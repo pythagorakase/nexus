@@ -314,7 +314,9 @@ export function NarrativePane({
   }, [isHistorical, readingChunkId]);
 
   // Without structured choices the freeform input is the turn affordance:
-  // focus it so the blinking caret invites input.
+  // focus it so the blinking caret invites input. The autoFocus attribute on
+  // the Textarea covers the initial mount only; this effect re-focuses after
+  // each completed turn.
   const freeformPresent = freeformPresentation(choices.length);
   useEffect(() => {
     if (isHistorical || isGenerating || isBootstrapNeeded || !canSubmit) return;
@@ -371,6 +373,14 @@ export function NarrativePane({
     );
   }
 
+  if (isHistorical && !historicalChunk) {
+    return (
+      <div className="pane-notice">
+        <span className="notice-text">LOADING…</span>
+      </div>
+    );
+  }
+
   if (isHistorical) {
     return (
       <article className="reader" data-testid="narrative-reader" ref={headRef}>
@@ -396,8 +406,8 @@ export function NarrativePane({
                   data-testid={`chunk-${historicalChunk.id}`}
                 >
                   <div className="prose-block">
-                    {historicalParts.map((part) => (
-                      <Fragment key={part.voice}>
+                    {historicalParts.map((part, i) => (
+                      <Fragment key={i}>
                         {part.divider && <hr className="voice-divider" />}
                         <div className={`md-part ${part.voice}`}>
                           <ProseMarkdown text={part.text} />
