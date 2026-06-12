@@ -42,12 +42,17 @@ const components: Options["components"] = {
   hr: () => <hr className="md-hr" />,
   // Narrative carries no navigation: render link text, drop the href.
   a: ({ children }) => <span className="md-link">{children}</span>,
+  // Never emit a real <img> (no outbound requests from narrative or
+  // freeform player text); render the alt text inert, like links.
+  img: ({ alt }) => (alt ? <span className="md-link">{alt}</span> : null),
 };
 
 /**
  * Close dangling emphasis markers in a partially revealed markdown string so
  * the typewriter shows `**bo` as bold-in-progress rather than literal stars.
- * Returns the suffix of closing markers to append (after the caret).
+ * Handles both the asterisk and underscore forms found in the corpus
+ * (`**`/`*` from Skald, `__`/`_` in the legacy import). Returns the suffix
+ * of closing markers to append (after the caret).
  */
 function emphasisClosers(partial: string): string {
   let closers = "";
@@ -55,17 +60,22 @@ function emphasisClosers(partial: string): string {
   if (boldTokens % 2 === 1) closers += "**";
   const singleStars = (partial.replace(/\*\*/g, "").match(/\*/g) ?? []).length;
   if (singleStars % 2 === 1) closers += "*";
+  const doubleUnderscores = (partial.match(/__/g) ?? []).length;
+  if (doubleUnderscores % 2 === 1) closers += "__";
+  const singleUnderscores = (partial.replace(/__/g, "").match(/_/g) ?? [])
+    .length;
+  if (singleUnderscores % 2 === 1) closers += "_";
   return closers;
 }
 
 /**
  * Build the markdown source for a mid-reveal frame: trim a trailing line
- * that is still just structural markers (`--` typing toward `---`, bare
- * `##`, `>`), insert the caret sentinel at the frontier, and close any
- * dangling emphasis after it.
+ * that is still just structural markers (`--` typing toward `---` and its
+ * longer CommonMark variants, bare `##`, `>`), insert the caret sentinel at
+ * the frontier, and close any dangling emphasis after it.
  */
 export function prepareRevealSource(partial: string): string {
-  const trimmed = partial.replace(/(^|\n)[-*_#>]{1,4}[ \t]*$/, "$1");
+  const trimmed = partial.replace(/(^|\n)[-*_#>]{1,6}[ \t]*$/, "$1");
   return trimmed + CARET_SENTINEL + emphasisClosers(trimmed);
 }
 

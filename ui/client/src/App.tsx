@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -10,8 +11,13 @@ import { ModelProvider } from "@/contexts/ModelContext";
 import NotFound from "@/pages/not-found";
 import SplashPage from "@/pages/SplashPage";
 import NewStoryPage from "@/pages/NewStoryPage";
-import DevMarkdownPreview from "@/pages/DevMarkdownPreview";
 import { NexusLayout } from "@/components/nexus";
+
+// Dev-only markdown harness: lazy + DEV-guarded so the module (and its
+// embedded fixture text) never reaches the production bundle.
+const DevMarkdownPreview = import.meta.env.DEV
+  ? lazy(() => import("@/pages/DevMarkdownPreview"))
+  : null;
 
 function Router() {
   return (
@@ -19,9 +25,12 @@ function Router() {
       <Route path="/" component={SplashPage} />
       <Route path="/new-story" component={NewStoryPage} />
       <Route path="/nexus" component={NexusLayout} />
-      {/* Dev-only harness for narrative markdown rendering. */}
-      {import.meta.env.DEV && (
-        <Route path="/dev/markdown" component={DevMarkdownPreview} />
+      {DevMarkdownPreview && (
+        <Route path="/dev/markdown">
+          <Suspense fallback={null}>
+            <DevMarkdownPreview />
+          </Suspense>
+        </Route>
       )}
       <Route component={NotFound} />
     </Switch>

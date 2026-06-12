@@ -123,6 +123,19 @@ describe("ProseMarkdown", () => {
     expect(container.textContent).toContain("the ledger");
   });
 
+  it("never emits an <img>; image markdown renders alt text only", () => {
+    const { container } = render(
+      <ProseMarkdown text="Before ![a tracking pixel](https://example.com/p.png) after." />,
+    );
+    expect(container.querySelector("img")).toBeNull();
+    expect(container.textContent).toContain("a tracking pixel");
+    const { container: noAlt } = render(
+      <ProseMarkdown text="Bare ![](https://example.com/p.png) image." />,
+    );
+    expect(noAlt.querySelector("img")).toBeNull();
+    expect(noAlt.textContent).toContain("Bare");
+  });
+
   it("renders the real save_02 legacy excerpt cleanly", () => {
     const { container } = render(
       <ProseMarkdown text={LEGACY_CHUNK_1425_EXCERPT} />,
@@ -220,6 +233,16 @@ describe("typewriter reveal", () => {
     expect(strong!.querySelector(".type-caret")).not.toBeNull();
   });
 
+  it("closes dangling _italic_ mid-reveal (legacy underscore emphasis)", () => {
+    const { container } = render(
+      <ProseMarkdown text="Alex is _well-rest" revealing />,
+    );
+    const em = container.querySelector("em");
+    expect(em).not.toBeNull();
+    expect(em!.textContent).toContain("well-rest");
+    expect(container.textContent).not.toContain("_");
+  });
+
   it("trims a half-typed rule so `--` never flashes as text", () => {
     expect(prepareRevealSource("Before.\n\n--")).not.toContain("-");
     const { container } = render(
@@ -227,6 +250,11 @@ describe("typewriter reveal", () => {
     );
     expect(container.textContent).not.toContain("-");
     expect(container.querySelector(".type-caret")).not.toBeNull();
+  });
+
+  it("trims longer CommonMark rule variants up to six markers", () => {
+    expect(prepareRevealSource("Before.\n\n-----")).not.toContain("-");
+    expect(prepareRevealSource("Before.\n\n------")).not.toContain("-");
   });
 
   it("trims bare heading hashes until their text arrives", () => {
