@@ -82,6 +82,18 @@ export const ACTIVE_GENERATION_PHASES: NarrativePhase[] = [
   "processing_response",
 ];
 
+/**
+ * Reader-facing labels for the active generation phases (telemetry rail and
+ * in-reader status line). Plain language only - no internal module names.
+ */
+export const PHASE_LABELS: Partial<Record<NarrativePhase, string>> = {
+  initiated: "Request received…",
+  loading_chunk: "Loading scene…",
+  building_context: "Assembling context…",
+  calling_llm: "Writing…",
+  processing_response: "Processing response…",
+};
+
 /** Operator-strip status derived from the generation phase. */
 export type SkaldStatus =
   | "OFFLINE"
