@@ -211,7 +211,16 @@ html {
 }
 
 /* Zero-specificity transition: fills in only where nothing else declares
-   one, so element/utility transitions are never disturbed. */
+   one, so element/utility transitions are never disturbed. Interactions to
+   know about when adding transitions elsewhere:
+   - A higher-specificity `transition: none` (or any explicit transition
+     list) on a scroll container drops the fade there - the alpha still
+     switches, just instantly.
+   - A higher-specificity `transition: all` covers --scrollbar-alpha too,
+     so the fade runs at THAT rule's duration, not --scrollbar-fade-ms.
+     Prefer explicit property lists over `all` on scroll containers.
+   - On engines without ::-webkit-scrollbar (Firefox) this whole block is
+     visually inert; the property still animates but paints nothing. */
 * {
   transition: --scrollbar-alpha var(--scrollbar-fade-ms) ease;
 }

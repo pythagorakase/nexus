@@ -450,6 +450,12 @@ function CharacterContent({
   const { concept, traitSelection, wildcard, isComplete, completeSheet } =
     charView;
 
+  // showTraitSelector can flip true before any concept data exists (the
+  // keyword heuristic in InteractiveWizard.sendMessage fires on message
+  // text alone). The old "Waiting for character concept..." placeholder
+  // returned early in that window too - the trait chips have never
+  // rendered without data. The deliberate treatment now is a quiet empty
+  // section; the conversation itself carries the trait discussion.
   if (!data) return null;
 
   if (isComplete && completeSheet) {

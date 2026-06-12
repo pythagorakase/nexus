@@ -140,8 +140,12 @@ describe("WizardChoices", () => {
             />,
         );
         const button = screen.getByTestId("wizard-choice-1");
-        expect(button.querySelector("em")!.textContent).toBe("quiet");
-        expect(button.querySelector("strong")!.textContent).toBe("lower stacks");
+        const em = button.querySelector("em");
+        const strong = button.querySelector("strong");
+        expect(em).not.toBeNull();
+        expect(em!.textContent).toBe("quiet");
+        expect(strong).not.toBeNull();
+        expect(strong!.textContent).toBe("lower stacks");
         expect(button.textContent).not.toContain("*");
     });
 
