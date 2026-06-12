@@ -68,8 +68,19 @@ export const DRAG_THRESHOLD_PX = 4;
  * Fraction of the viewport (per axis) that must still overlap the world
  * after clamping — the user can pan anywhere on the globe, but can never
  * drag the world fully off-screen and get lost in the void.
+ *
+ * Must stay ≤ 0.5: above that, the clamp range in clampViewBox inverts
+ * whenever the world box is smaller than the window (deep zoom-out), and
+ * min/max clamping silently pins the view to one bound. Guarded below.
  */
 export const MIN_WORLD_VISIBLE_FRACTION = 0.2;
+
+if (MIN_WORLD_VISIBLE_FRACTION > 0.5) {
+  throw new Error(
+    "MIN_WORLD_VISIBLE_FRACTION must be <= 0.5: larger fractions invert " +
+      "the clampViewBox range when the world is smaller than the window",
+  );
+}
 
 /**
  * Minimum geographic span (degrees) for the projection fit. Without a

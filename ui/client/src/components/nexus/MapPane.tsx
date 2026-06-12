@@ -57,6 +57,7 @@ import {
   clampZoom,
   computeLabelVisibility,
   computeMapBounds,
+  endDragSession,
   extractCoordinates,
   panViewBox,
   zoomViewBoxAtCursor,
@@ -273,6 +274,11 @@ export function MapPane({ slot }: MapPaneProps) {
     svgRef.current?.setPointerCapture?.(e.pointerId);
   };
 
+  // NOTE: these React handlers read `panBounds` from the render closure,
+  // which is safe — JSX-bound handlers are recreated every render, so the
+  // closure is never stale. Only the NATIVE wheel listener above (mounted
+  // once, empty deps) must go through panBoundsRef. Do not wrap these in
+  // useCallback without moving them onto the ref.
   const handlePointerMove = (e: ReactPointerEvent<SVGSVGElement>) => {
     const session = dragSessionRef.current;
     if (!session) return;
@@ -299,17 +305,20 @@ export function MapPane({ slot }: MapPaneProps) {
 
   const handlePointerUp = (e: ReactPointerEvent<SVGSVGElement>) => {
     const session = dragSessionRef.current;
-    if (!session || session.pointerId !== e.pointerId) return;
+    if (!session) return;
+
+    const end = endDragSession(session, e.pointerId);
+    if (!end) return; // foreign pointer's release: the drag survives
 
     dragSessionRef.current = null;
-    setIsDragging(false);
+    if (end.panned) setIsDragging(false);
     svgRef.current?.releasePointerCapture?.(e.pointerId);
 
     // Below the drag threshold this press was a click. Pointer capture
     // retargets the click event to the SVG itself, so pin selection lives
     // here — keyed off the original pointerdown target, never the (re-
     // targeted) release target.
-    if (!session.panned && downTargetRef.current instanceof Element) {
+    if (!end.panned && downTargetRef.current instanceof Element) {
       const pin = downTargetRef.current.closest("[data-place-id]");
       if (pin) {
         const placeId = Number(pin.getAttribute("data-place-id"));
@@ -326,7 +335,7 @@ export function MapPane({ slot }: MapPaneProps) {
     if (!session || session.pointerId !== e.pointerId) return;
     dragSessionRef.current = null;
     downTargetRef.current = null;
-    setIsDragging(false);
+    if (session.panned) setIsDragging(false);
   };
 
   // ── Selection ───────────────────────────────────────────────────────
