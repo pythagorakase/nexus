@@ -21,19 +21,23 @@
     <title>NEXUS IRIS - Narrative Intelligence System</title>
     <meta name="description" content="AI-driven interactive storytelling interface with advanced memory architecture and immersive cyberpunk terminal aesthetic" />
 
-    <!-- PWA Icons and Manifest -->
+    <!-- PWA Icons and Manifest. The static hrefs are the Veil (default
+         theme) set; ThemeContext retargets them per theme at runtime via
+         applyThemeIcons (src/lib/themeIcons.ts). Keep ?v= in sync with
+         ICON_VERSION there. -->
     <link rel="manifest" href="/manifest.json" />
-    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
-    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/veil/icon-32.png?v=20260612" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/icons/veil/icon-16.png?v=20260612" />
+    <link rel="apple-touch-icon" type="image/png" href="/icons/veil/icon-180.png?v=20260612" />
 
     <!-- Apple PWA Meta Tags -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="NEXUS" />
 
-    <!-- Theme Colors -->
-    <meta name="theme-color" content="#0d9488" />
-    <meta name="msapplication-TileColor" content="#0d9488" />
+    <!-- Theme Colors (Veil blue-black, the default theme) -->
+    <meta name="theme-color" content="#09101c" />
+    <meta name="msapplication-TileColor" content="#09101c" />
 
     <!-- All brand fonts are self-hosted keepers served from /fonts/ via
          @font-face in src/index.css — no CDN dependency. -->

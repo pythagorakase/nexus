@@ -2,7 +2,7 @@
  * SettingsPane - the operator's calibration console (NEXUS IRIS, U5).
  *
  * Seven sections: Theme, Typography, Narrative Mode, Model, LORE Budget,
- * Typewriter, PWA Icon. Every dial writes back to PATCH /api/settings
+ * Typewriter, App Icon. Every dial writes back to PATCH /api/settings
  * (FastAPI -> nexus.config.loader.save_settings -> nexus.toml) with
  * optimistic cache updates and server confirmation - no local draft state.
  * Theme and font writes flow through ThemeContext/FontContext, which share
@@ -22,12 +22,11 @@ import {
   CircleDot,
   RefreshCw,
   Save,
-  Upload,
-  X,
 } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useFonts } from "@/contexts/FontContext";
 import { useSettingsMutation, useSettingsQuery } from "@/hooks/useSettings";
+import { themeIconPath } from "@/lib/themeIcons";
 import { FONT_CATALOG } from "./fontCatalog";
 import type {
   FontSlotId,
@@ -47,7 +46,7 @@ const SECTION_INDEX = [
   { id: "model", label: "Model" },
   { id: "lore", label: "LORE Budget" },
   { id: "reveal", label: "Typewriter" },
-  { id: "pwa", label: "PWA Icon" },
+  { id: "pwa", label: "App Icon" },
 ] as const;
 
 type SectionId = (typeof SECTION_INDEX)[number]["id"];
@@ -722,133 +721,30 @@ function TypewriterSection({
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// 7. PWA Icon
+// 7. App Icon (Per-Theme, Locked)
 // ──────────────────────────────────────────────────────────────────────────
 
 function PwaSection() {
-  const [drag, setDrag] = useState(false);
-  const [preview, setPreview] = useState<string | null>(null);
-  const [file, setFile] = useState<File | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [cacheBust, setCacheBust] = useState(0);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const onFile = (candidate: File | null | undefined) => {
-    if (!candidate || !candidate.type.startsWith("image/")) return;
-    setFile(candidate);
-    setError(null);
-    const reader = new FileReader();
-    reader.onload = (e) => setPreview(e.target?.result as string);
-    reader.readAsDataURL(candidate);
-  };
-
-  const discard = () => {
-    setPreview(null);
-    setFile(null);
-    setError(null);
-    if (inputRef.current) inputRef.current.value = "";
-  };
-
-  const commit = async () => {
-    if (!file) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const form = new FormData();
-      form.append("icon", file);
-      const res = await fetch("/api/settings/pwa-icon", {
-        method: "POST",
-        body: form,
-        credentials: "include",
-      });
-      if (!res.ok) {
-        const text = (await res.text()) || res.statusText;
-        throw new Error(`${res.status}: ${text}`);
-      }
-      discard();
-      setCacheBust(Date.now());
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const currentSrc = `/icons/icon-192.png${cacheBust ? `?v=${cacheBust}` : ""}`;
+  const { theme } = useTheme();
 
   return (
     <SettingsCard
       id="pwa"
       eyebrow="PWA · HOME-SCREEN GLYPH"
-      title="Installable Icon"
-      sub="The icon stamped onto the home screen, dock, or splash when NEXUS is installed as a PWA. PNG or JPEG, at least 512 px — all sizes and the manifest are regenerated server-side."
+      title="App Icon"
+      sub="One mark, three liveries. The favicon and home-screen glyph follow the active theme; the PWA install icon is baked at build time on the default theme (Veil)."
     >
-      <div className="pwa-row">
-        <div className="pwa-current">
-          <div className="caption dim">CURRENT · 192PX</div>
-          <div className="pwa-icon-box">
-            <img src={currentSrc} alt="Current PWA icon" />
+      <div className="pwa-icon-row">
+        {THEME_IDS.map((id) => (
+          <div
+            key={id}
+            className={`pwa-icon-tile ${theme === id ? "on" : ""}`}
+            data-testid={`pwa-icon-${id}`}
+          >
+            <img src={themeIconPath(id, 192)} alt={`${id} app icon`} />
           </div>
-          <div className="pwa-icon-coord">/icons/icon-192.png</div>
-        </div>
-
-        <div
-          className={`pwa-drop ${drag ? "drag" : ""} ${preview ? "has-preview" : ""}`}
-          onDragOver={(e) => {
-            e.preventDefault();
-            setDrag(true);
-          }}
-          onDragLeave={() => setDrag(false)}
-          onDrop={(e) => {
-            e.preventDefault();
-            setDrag(false);
-            onFile(e.dataTransfer.files?.[0]);
-          }}
-          onClick={() => inputRef.current?.click()}
-          data-testid="pwa-drop"
-        >
-          {preview ? (
-            <img src={preview} alt="Staged icon preview" className="pwa-drop-img" />
-          ) : (
-            <>
-              <Upload size={22} />
-              <div className="pwa-drop-title">DROP NEW GLYPH</div>
-              <div className="caption dim">
-                or click to choose · PNG / JPEG · 512px or larger
-              </div>
-            </>
-          )}
-          <input
-            ref={inputRef}
-            type="file"
-            accept="image/png,image/jpeg,image/jpg"
-            style={{ display: "none" }}
-            onChange={(e) => onFile(e.target.files?.[0])}
-          />
-        </div>
+        ))}
       </div>
-
-      {error && (
-        <div className="alert danger">
-          <AlertTriangle size={14} />
-          <div>
-            <div className="alert-title">UPLOAD FAILED</div>
-            <div className="alert-body">{error}</div>
-          </div>
-        </div>
-      )}
-
-      {preview && (
-        <div className="pwa-actions">
-          <button className="btn-soft" onClick={discard} disabled={busy}>
-            <X size={11} /> DISCARD
-          </button>
-          <button className="btn-primary" onClick={commit} disabled={busy}>
-            <Upload size={12} /> {busy ? "TRANSMITTING" : "COMMIT GLYPH"}
-          </button>
-        </div>
-      )}
     </SettingsCard>
   );
 }

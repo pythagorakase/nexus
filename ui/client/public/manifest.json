@@ -4,23 +4,27 @@
   "description": "AI-driven interactive storytelling interface with advanced memory architecture",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0a0a0a",
-  "theme_color": "#0d9488",
+  "background_color": "#09101c",
+  "theme_color": "#09101c",
   "orientation": "any",
   "icons": [
     {
-      "src": "/icons/icon-192.png?v=1729645200000",
+      "src": "/icons/veil/icon-192.png?v=20260612",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/icons/icon-512.png?v=1729645200000",
+      "src": "/icons/veil/icon-512.png?v=20260612",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
     }
   ],
-  "categories": ["entertainment", "productivity", "utilities"],
+  "categories": [
+    "entertainment",
+    "productivity",
+    "utilities"
+  ],
   "screenshots": []
 }
