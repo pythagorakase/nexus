@@ -90,8 +90,10 @@ export function MapPlaceDialog({
       >
         <DialogHeader>
           <span className="eyebrow brass-glow">
-            <MapPin size={12} aria-hidden="true" /> PLACE
-            {place.type ? ` · ${String(place.type).toUpperCase()}` : ""}
+            <MapPin size={12} aria-hidden="true" />{" "}
+            {place.type
+              ? String(place.type).replace(/_/g, " ").toUpperCase()
+              : "PLACE"}
           </span>
           <DialogTitle className="map-dialog-title">{place.name}</DialogTitle>
           <DialogDescription asChild>

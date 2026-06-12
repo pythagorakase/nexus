@@ -182,8 +182,22 @@ export const chunkMetadata = pgTable("chunk_metadata", {
 });
 
 // Type exports
-export type Zone = typeof zones.$inferSelect;
+export type Zone = Omit<typeof zones.$inferSelect, "boundary"> & {
+  // GET /api/zones serves ST_AsGeoJSON(boundary)::json, not raw geometry
+  boundary: any | null;
+};
 export type Faction = typeof factions.$inferSelect;
+
+// World layer rows (planet/realm metadata) served by GET /api/layers.
+// The map uses these to decide whether the bundled Natural Earth outline
+// is honest to draw: only a layer literally named "Earth" gets Earth's
+// coastlines; generated worlds get the abstract survey presentation.
+export interface WorldLayer {
+  id: number;
+  name: string;
+  type: string | null;
+  description: string | null;
+}
 
 // Place type with GeoJSON geometry from PostGIS
 export type Place = typeof places.$inferSelect & {

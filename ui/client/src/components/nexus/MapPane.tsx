@@ -19,10 +19,20 @@
  *                       other pointer (multi-touch / trackpad safety)
  *  4. lng/lat order   → extractCoordinates is the only place the GeoJSON
  *                       [longitude, latitude] array is destructured
+ *  5. Spherical fit winding → boundsToFitObject in lib/map-geometry.ts
+ *                       feeds fitSize winding-free corner points; a
+ *                       bounding polygon ring wound the wrong way makes
+ *                       d3 fit the sphere-complement (i.e. the whole
+ *                       globe), which shipped in the original rebuild
  *
- * Design: IRIS tokens only (--brass / --bronze / --bg-elev-* / --border),
- * menu-font labels — theme-aware across Veil / Gilded / Vector with zero
- * map-specific colors.
+ * Worlds: the bundled Natural Earth outline renders only when the slot's
+ * world layer (GET /api/layers) is Earth. Generated worlds have no
+ * coastline data, so they get a deliberate abstract survey chart instead:
+ * open sea, grid, dashed zone survey boundaries, place beacons.
+ *
+ * Design: theme-token colors only (--brass / --bronze / --bg-elev-* plus
+ * the --map-* mixes on .mappane-canvas), menu-font labels — theme-aware
+ * across Veil / Gilded / Vector with zero map-specific colors.
  */
 import {
   useCallback,
@@ -33,6 +43,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { useQuery } from "@tanstack/react-query";
+import type { GeoPermissibleObjects } from "d3-geo";
 import { ChevronDown, ChevronRight, MapPin } from "lucide-react";
 import { useGeoProjection } from "@/hooks/useGeoProjection";
 import {
@@ -42,13 +53,21 @@ import {
   computeLabelVisibility,
   computeMapBounds,
   extractCoordinates,
+  extractZoneBoundary,
+  worldIsEarth,
   zoomViewBoxAtCursor,
+  type BoundaryGeometry,
   type LabelCandidate,
   type ViewBox,
 } from "@/lib/map-geometry";
-import { getCurrentPlace, getPlaces, getZones } from "@/lib/narrative-api";
+import {
+  getCurrentPlace,
+  getLayers,
+  getPlaces,
+  getZones,
+} from "@/lib/narrative-api";
 import { worldOutline } from "@/lib/world-outline";
-import type { CurrentPlace, Place, Zone } from "@shared/schema";
+import type { CurrentPlace, Place, WorldLayer, Zone } from "@shared/schema";
 import { MapPlaceDialog } from "./MapPlaceDialog";
 
 interface MapPaneProps {
@@ -76,10 +95,21 @@ export function MapPane({ slot }: MapPaneProps) {
     queryFn: () => getZones(slot),
   });
 
+  const { data: layers = [], error: layersError } = useQuery<WorldLayer[]>({
+    queryKey: ["/api/layers", slot],
+    queryFn: () => getLayers(slot),
+  });
+
   const { data: currentPlace = null } = useQuery<CurrentPlace | null>({
     queryKey: ["/api/current-place", slot],
     queryFn: () => getCurrentPlace(slot),
   });
+
+  // The bundled Natural Earth outline is Earth's geography; it renders
+  // only when the slot's world layer is literally Earth. Generated worlds
+  // (no coastline data exists for them) get the abstract survey chart:
+  // open sea, grid, zone survey boundaries, place beacons.
+  const earthWorld = worldIsEarth(layers);
 
   // ── Local state ─────────────────────────────────────────────────────
   const [hoveredId, setHoveredId] = useState<number | null>(null);
@@ -129,7 +159,25 @@ export function MapPane({ slot }: MapPaneProps) {
   }, []);
 
   // ── Projection ──────────────────────────────────────────────────────
-  const mapBounds = useMemo(() => computeMapBounds(places), [places]);
+  // Survey boundaries (zones.boundary polygons) are real per-world data;
+  // they are drawn — and counted toward the projection fit — only on
+  // non-Earth worlds, where they are the chart's primary shapes.
+  const surveyGeometries = useMemo<Array<{ id: number; geometry: BoundaryGeometry }>>(() => {
+    if (earthWorld) return [];
+    return zones.flatMap((zone) => {
+      const geometry = extractZoneBoundary(zone);
+      return geometry ? [{ id: zone.id, geometry }] : [];
+    });
+  }, [zones, earthWorld]);
+
+  const mapBounds = useMemo(
+    () =>
+      computeMapBounds(
+        places,
+        surveyGeometries.map((entry) => entry.geometry),
+      ),
+    [places, surveyGeometries],
+  );
 
   const { transformCoordinates, geoJsonToSvgPath } = useGeoProjection({
     mapDimensions,
@@ -137,6 +185,7 @@ export function MapPane({ slot }: MapPaneProps) {
   });
 
   const worldCountries = useMemo(() => {
+    if (!earthWorld) return [];
     return worldOutline.features
       .map((feature, index) => ({
         id: index,
@@ -146,7 +195,19 @@ export function MapPane({ slot }: MapPaneProps) {
         (country): country is { id: number; pathData: string } =>
           country.pathData !== null,
       );
-  }, [geoJsonToSvgPath]);
+  }, [earthWorld, geoJsonToSvgPath]);
+
+  const surveyBoundaries = useMemo(() => {
+    return surveyGeometries
+      .map((entry) => ({
+        id: entry.id,
+        pathData: geoJsonToSvgPath(entry.geometry as GeoPermissibleObjects),
+      }))
+      .filter(
+        (boundary): boundary is { id: number; pathData: string } =>
+          boundary.pathData !== null,
+      );
+  }, [surveyGeometries, geoJsonToSvgPath]);
 
   const placeCoordinates = useMemo(() => {
     const cache = new Map<number, { x: number; y: number }>();
@@ -332,7 +393,7 @@ export function MapPane({ slot }: MapPaneProps) {
     rest: "var(--bronze)",
   };
 
-  const dataError = (placesError ?? zonesError) as Error | null;
+  const dataError = (placesError ?? zonesError ?? layersError) as Error | null;
 
   return (
     <div className="mappane" data-testid="map-pane">
@@ -417,7 +478,7 @@ export function MapPane({ slot }: MapPaneProps) {
           <rect
             width={mapDimensions.width}
             height={mapDimensions.height}
-            fill="var(--bg-elev-1)"
+            fill="var(--map-sea)"
           />
           <defs>
             <pattern
@@ -441,20 +502,33 @@ export function MapPane({ slot }: MapPaneProps) {
             fill="url(#nexus-map-grid)"
           />
 
-          {/* World outline (Natural Earth 110m, bundled) */}
-          <g opacity="0.45">
-            {worldCountries.map((country) => (
-              <path
-                key={country.id}
-                d={country.pathData}
-                fill="var(--brass)"
-                fillOpacity={0.07}
-                stroke="var(--brass)"
-                strokeOpacity={0.35}
-                strokeWidth={1 / zoom}
-              />
-            ))}
-          </g>
+          {/* World outline (Natural Earth 110m, bundled) — Earth worlds
+              only. Land/coast colors are theme-token mixes defined on
+              .mappane-canvas so all three themes keep land/sea contrast. */}
+          {worldCountries.map((country) => (
+            <path
+              key={country.id}
+              d={country.pathData}
+              fill="var(--map-land)"
+              stroke="var(--map-coast)"
+              strokeWidth={1 / zoom}
+            />
+          ))}
+
+          {/* Zone survey boundaries (zones.boundary) — non-Earth worlds.
+              Dashed survey lines, not coastlines: deliberate "charted
+              extent" cartography for worlds without landmass data. */}
+          {surveyBoundaries.map((boundary) => (
+            <path
+              key={boundary.id}
+              d={boundary.pathData}
+              fill="var(--map-survey)"
+              stroke="var(--map-survey-line)"
+              strokeWidth={1 / zoom}
+              strokeDasharray={`${6 / zoom} ${4 / zoom}`}
+              strokeLinejoin="round"
+            />
+          ))}
 
           {/* Place pins */}
           {places.map((place) => {
@@ -532,57 +606,42 @@ export function MapPane({ slot }: MapPaneProps) {
                       userSelect: "none",
                     }}
                   >
-                    {place.name.toUpperCase()}
+                    {place.name}
                   </text>
                 </g>
               </g>
             );
           })}
 
-          {/* Empty state: grid + outline stay visible (spec §3.4) */}
-          {!placesLoading && placeCoordinates.size === 0 && (
-            <text
-              x="50%"
-              y="50%"
-              textAnchor="middle"
-              className="map-empty-text"
-            >
-              [ NO LOCATION DATA AVAILABLE ]
-            </text>
-          )}
+          {/* Empty state: grid stays visible (spec §3.4) */}
+          {!placesLoading &&
+            placeCoordinates.size === 0 &&
+            surveyBoundaries.length === 0 && (
+              <text
+                x="50%"
+                y="50%"
+                textAnchor="middle"
+                className="map-empty-text"
+              >
+                [ UNCHARTED ]
+              </text>
+            )}
         </svg>
 
         {/* Chrome: zoom readout */}
         <div className="map-chrome map-zoom-readout">
           <span className="eyebrow">
-            ZOOM {zoom >= 10 ? zoom.toFixed(1) : zoom.toFixed(2)}×
+            {zoom >= 10 ? zoom.toFixed(1) : zoom.toFixed(2)}×
           </span>
         </div>
 
-        {/* Chrome: controls + legend */}
-        <div className="map-chrome map-controls">
-          <span className="eyebrow brass-glow">[ SURVEY ]</span>
-          <span className="map-controls-line">Drag to pan · scroll to zoom</span>
-          <div className="map-legend">
-            <span>
-              <i style={{ background: "var(--brass-bright)" }} /> Current
-            </span>
-            <span>
-              <i style={{ background: "var(--brass)" }} /> Selected
-            </span>
-            <span>
-              <i style={{ background: "var(--bronze)" }} /> Charted
-            </span>
-          </div>
-        </div>
-
-        {/* Chrome: current-location readout */}
+        {/* Chrome: current-location readout (pin glyph carries the
+            meaning — no caption) */}
         {currentPlace && (
           <div className="map-chrome map-readout">
-            <span className="eyebrow">
-              <MapPin size={11} aria-hidden="true" /> THE STORY IS HERE
+            <span className="map-readout-name">
+              <MapPin size={12} aria-hidden="true" /> {currentPlace.name}
             </span>
-            <span className="map-readout-name">{currentPlace.name}</span>
           </div>
         )}
 

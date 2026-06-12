@@ -9,17 +9,23 @@
  *   - clampViewBox / computeMapBounds → §4.3 pan clamping
  * (§6.3 pointer capture is DOM behavior — verified manually, see PR.)
  */
+import { geoEquirectangular } from "d3-geo";
 import { describe, expect, it, vi } from "vitest";
 import type { Place } from "@shared/schema";
 import {
+  boundsToFitObject,
   centerViewBoxOn,
   clampViewBox,
   clampZoom,
   computeLabelVisibility,
   computeMapBounds,
   extractCoordinates,
+  extractZoneBoundary,
+  MIN_BOUNDS_SPAN_DEG,
   shouldDisplayLabelByZoom,
+  worldIsEarth,
   zoomViewBoxAtCursor,
+  type BoundaryGeometry,
   type LabelCandidate,
   type ViewBox,
 } from "./map-geometry";
@@ -274,6 +280,175 @@ describe("computeMapBounds", () => {
   it("returns null when no place has usable geometry", () => {
     expect(computeMapBounds([makePlace(1, null)])).toBeNull();
     expect(computeMapBounds([])).toBeNull();
+  });
+
+  it("widens a single-place box to the minimum span (slot-5 blank-void bug)", () => {
+    // One charted place used to collapse the fit to a ~0.0001-degree box,
+    // zooming the projection to a viewport a couple of meters across.
+    const bounds = computeMapBounds([
+      makePlace(1, { type: "Point", coordinates: [5.322, 60.392, 0] }),
+    ]);
+
+    expect(bounds).not.toBeNull();
+    const lngSpan = bounds!.maxLng - bounds!.minLng;
+    const latSpan = bounds!.maxLat - bounds!.minLat;
+    expect(lngSpan).toBeGreaterThanOrEqual(MIN_BOUNDS_SPAN_DEG);
+    expect(latSpan).toBeGreaterThanOrEqual(MIN_BOUNDS_SPAN_DEG);
+    // Still centered on the place:
+    expect((bounds!.minLng + bounds!.maxLng) / 2).toBeCloseTo(5.322, 6);
+    expect((bounds!.minLat + bounds!.maxLat) / 2).toBeCloseTo(60.392, 6);
+  });
+
+  it("includes survey boundary extents in the fit", () => {
+    const boundary: BoundaryGeometry = {
+      type: "MultiPolygon",
+      coordinates: [
+        [
+          [
+            [3.86, 59.67],
+            [6.78, 59.67],
+            [6.78, 61.11],
+            [3.86, 61.11],
+            [3.86, 59.67],
+          ],
+        ],
+      ],
+    };
+    const bounds = computeMapBounds(
+      [makePlace(1, { type: "Point", coordinates: [5.322, 60.392, 0] })],
+      [boundary],
+    );
+
+    expect(bounds).not.toBeNull();
+    // Boundary bbox (2.92 x 1.44 deg) + 10% padding, clamped to the globe.
+    expect(bounds!.minLng).toBeCloseTo(3.86 - 2.92 * 0.1, 6);
+    expect(bounds!.maxLng).toBeCloseTo(6.78 + 2.92 * 0.1, 6);
+    expect(bounds!.minLat).toBeCloseTo(59.67 - 1.44 * 0.1, 6);
+    expect(bounds!.maxLat).toBeCloseTo(61.11 + 1.44 * 0.1, 6);
+  });
+
+  it("computes bounds from boundaries alone when no place is charted", () => {
+    const boundary: BoundaryGeometry = {
+      type: "Polygon",
+      coordinates: [
+        [
+          [-2, -2],
+          [2, -2],
+          [2, 2],
+          [-2, 2],
+          [-2, -2],
+        ],
+      ],
+    };
+    const bounds = computeMapBounds([], [boundary]);
+    expect(bounds).not.toBeNull();
+    expect(bounds!.minLng).toBeCloseTo(-2.4, 6);
+    expect(bounds!.maxLng).toBeCloseTo(2.4, 6);
+  });
+});
+
+describe("extractZoneBoundary", () => {
+  const ring = [
+    [0, 0],
+    [1, 0],
+    [1, 1],
+    [0, 0],
+  ];
+
+  it("accepts Polygon and MultiPolygon objects", () => {
+    expect(
+      extractZoneBoundary({ id: 1, boundary: { type: "Polygon", coordinates: [ring] } }),
+    ).not.toBeNull();
+    expect(
+      extractZoneBoundary({
+        id: 1,
+        boundary: { type: "MultiPolygon", coordinates: [[ring]] },
+      }),
+    ).not.toBeNull();
+  });
+
+  it("accepts a JSON string (driver-dependent serialization)", () => {
+    const parsed = extractZoneBoundary({
+      id: 1,
+      boundary: JSON.stringify({ type: "Polygon", coordinates: [ring] }),
+    });
+    expect(parsed).not.toBeNull();
+    expect(parsed!.type).toBe("Polygon");
+  });
+
+  it("drops null, EWKB hex, wrong types, and empty coordinates without throwing", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(extractZoneBoundary({ id: 1, boundary: null })).toBeNull();
+    expect(extractZoneBoundary({ id: 1 })).toBeNull();
+    // The pre-fix API served boundary as EWKB hex text:
+    expect(extractZoneBoundary({ id: 1, boundary: "0106000020E61000..." })).toBeNull();
+    expect(
+      extractZoneBoundary({ id: 1, boundary: { type: "Point", coordinates: [1, 2] } }),
+    ).toBeNull();
+    expect(
+      extractZoneBoundary({ id: 1, boundary: { type: "Polygon", coordinates: [] } }),
+    ).toBeNull();
+    warn.mockRestore();
+  });
+});
+
+describe("worldIsEarth", () => {
+  it("is true only when a layer is literally named Earth", () => {
+    expect(worldIsEarth([{ name: "Earth" }])).toBe(true);
+    expect(worldIsEarth([{ name: "Veyport" }])).toBe(false);
+    expect(worldIsEarth([])).toBe(false);
+  });
+});
+
+describe("boundsToFitObject (failure mode 5: spherical fit winding)", () => {
+  // The original rebuild fed fitSize a bounding POLYGON whose ring was
+  // wound so that d3-geo (spherical winding semantics) read it as the
+  // box's sphere-complement: fitSize quietly fit the whole globe, and
+  // every regional map rendered as a world-scale speck. Corner points
+  // carry no winding, so this cannot regress silently again.
+  const region = {
+    minLng: 17.34,
+    maxLng: 19.67,
+    minLat: 41.13,
+    maxLat: 42.87,
+  };
+
+  it("fits the projection to the region, not the sphere-complement", () => {
+    const proj = geoEquirectangular();
+    proj.fitSize([1026, 792], boundsToFitObject(region));
+
+    const world = geoEquirectangular();
+    world.fitSize(
+      [1026, 792],
+      boundsToFitObject({ minLng: -180, maxLng: 180, minLat: -90, maxLat: 90 }),
+    );
+
+    // A ~2-degree region must be fit at a far larger scale than the globe.
+    expect(proj.scale()).toBeGreaterThan(world.scale() * 50);
+  });
+
+  it("centers the region in the canvas", () => {
+    const proj = geoEquirectangular();
+    proj.fitSize([1026, 792], boundsToFitObject(region));
+    const center = proj([
+      (region.minLng + region.maxLng) / 2,
+      (region.minLat + region.maxLat) / 2,
+    ]);
+    expect(center).not.toBeNull();
+    expect(center![0]).toBeCloseTo(1026 / 2, 0);
+    expect(center![1]).toBeCloseTo(792 / 2, 0);
+  });
+
+  it("still fits the whole world for the null-bounds fallback box", () => {
+    const world = geoEquirectangular();
+    world.fitSize(
+      [1026, 792],
+      boundsToFitObject({ minLng: -180, maxLng: 180, minLat: -90, maxLat: 90 }),
+    );
+    // Full longitudinal span maps to the full canvas width.
+    const west = world([-180, 0])!;
+    const east = world([180, 0])!;
+    expect(east[0] - west[0]).toBeCloseTo(1026, 0);
   });
 });
 

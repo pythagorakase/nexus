@@ -305,6 +305,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // GET /api/layers - World layer metadata (planet/realm rows). The map
+  // uses this to decide whether the bundled Earth outline is honest to
+  // draw for the active slot's world.
+  app.get("/api/layers", async (req, res) => {
+    try {
+      const slot = req.query.slot ? parseInt(req.query.slot as string) : undefined;
+      const layers = await storage.getAllLayers(slot);
+      res.json(layers);
+    } catch (error) {
+      console.error("Error fetching layers:", error);
+      res.status(500).json({ error: "Failed to fetch layers" });
+    }
+  });
+
   // Additional faction route (for completeness)
   app.get("/api/factions", async (req, res) => {
     try {

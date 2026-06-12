@@ -38,6 +38,121 @@ export const MIN_ZOOM = 0.2;
 export const MAX_ZOOM = 100;
 
 /**
+ * Minimum geographic span (degrees) for the projection fit. Without a
+ * floor, a world with a single charted place collapses the bounding box
+ * to ~0.0001° — fitSize then zooms the projection to a viewport a couple
+ * of meters across, and nothing (grid, coastline, zone boundary) can
+ * possibly be in frame. This was the slot-5 "blank void" bug.
+ */
+export const MIN_BOUNDS_SPAN_DEG = 1;
+
+/** Polygonal GeoJSON accepted for zone survey boundaries. */
+export interface BoundaryGeometry {
+  type: "Polygon" | "MultiPolygon";
+  coordinates: unknown[];
+}
+
+/**
+ * The bundled Natural Earth outline is Earth's geography. Drawing it under
+ * a generated world (e.g. the fictional planet "Veyport") would be fake
+ * cartography, so the continents render only when the slot's world layer
+ * is literally Earth.
+ */
+export function worldIsEarth(layers: Array<{ name: string }>): boolean {
+  return layers.some((layer) => layer.name === "Earth");
+}
+
+/**
+ * Parse a zone's boundary into validated polygonal GeoJSON.
+ *
+ * The API serves `ST_AsGeoJSON(boundary)::json`; depending on the driver
+ * path the client may still receive it as a JSON string. Anything that is
+ * not a Polygon/MultiPolygon with coordinates is dropped with a
+ * console.warn — bad data must never take down the map.
+ */
+export function extractZoneBoundary(zone: {
+  id: number;
+  boundary?: unknown;
+}): BoundaryGeometry | null {
+  const raw = zone.boundary;
+  if (raw === null || raw === undefined) return null;
+
+  let geometry: unknown = raw;
+  if (typeof raw === "string") {
+    try {
+      geometry = JSON.parse(raw);
+    } catch {
+      console.warn(`Zone ${zone.id} has unparseable boundary geometry`);
+      return null;
+    }
+  }
+
+  if (
+    typeof geometry !== "object" ||
+    geometry === null ||
+    !("type" in geometry) ||
+    !("coordinates" in geometry)
+  ) {
+    console.warn(`Zone ${zone.id} has invalid boundary structure`);
+    return null;
+  }
+
+  const candidate = geometry as { type: unknown; coordinates: unknown };
+  if (candidate.type !== "Polygon" && candidate.type !== "MultiPolygon") {
+    console.warn(
+      `Zone ${zone.id} has unsupported boundary type: ${String(candidate.type)}`,
+    );
+    return null;
+  }
+  if (!Array.isArray(candidate.coordinates) || candidate.coordinates.length === 0) {
+    console.warn(`Zone ${zone.id} has empty boundary coordinates`);
+    return null;
+  }
+
+  return candidate as BoundaryGeometry;
+}
+
+/**
+ * Build the GeoJSON object that useGeoProjection feeds to fitSize.
+ *
+ * A bounding polygon ring is the natural choice but is a winding trap:
+ * d3-geo polygons are SPHERICAL, so a ring wound the wrong way denotes
+ * the complement of the box — fitSize then quietly fits the whole globe
+ * and every regional map renders as a world-scale speck (the original
+ * MapPane rebuild shipped with exactly that bug). Corner points carry no
+ * winding, so the fit is unambiguous.
+ */
+export function boundsToFitObject(bounds: MapBounds): {
+  type: "MultiPoint";
+  coordinates: Array<[number, number]>;
+} {
+  return {
+    type: "MultiPoint",
+    coordinates: [
+      [bounds.minLng, bounds.minLat],
+      [bounds.maxLng, bounds.maxLat],
+    ],
+  };
+}
+
+/** Walk every [lng, lat] position in nested GeoJSON coordinate arrays. */
+function forEachPosition(
+  coords: unknown,
+  visit: (lng: number, lat: number) => void,
+): void {
+  if (!Array.isArray(coords)) return;
+  if (
+    coords.length >= 2 &&
+    typeof coords[0] === "number" &&
+    typeof coords[1] === "number"
+  ) {
+    visit(coords[0], coords[1]);
+    return;
+  }
+  for (const child of coords) forEachPosition(child, visit);
+}
+
+/**
  * Parse a place's GeoJSON geometry into validated lat/lng.
  *
  * GeoJSON Point coordinates are ordered [longitude, latitude] — the
@@ -91,32 +206,57 @@ export function extractCoordinates(place: Place): LatLng | null {
 }
 
 /**
- * Geographic bounding box across every place with valid coordinates,
- * padded by 10% so border pins don't hug the canvas edge. Returns null
- * when no place has usable geometry (the projection then falls back to
- * the whole world).
+ * Geographic bounding box across every place with valid coordinates plus
+ * every rendered survey boundary, padded by 10% so border features don't
+ * hug the canvas edge. Spans below MIN_BOUNDS_SPAN_DEG are widened around
+ * their center (see the constant's doc). Returns null when nothing has
+ * usable geometry (the projection then falls back to the whole world).
  */
-export function computeMapBounds(places: Place[]): MapBounds | null {
+export function computeMapBounds(
+  places: Place[],
+  boundaries: BoundaryGeometry[] = [],
+): MapBounds | null {
   let minLng = Infinity;
   let maxLng = -Infinity;
   let minLat = Infinity;
   let maxLat = -Infinity;
   let found = false;
 
+  const accumulate = (lng: number, lat: number) => {
+    if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
+    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return;
+    found = true;
+    minLng = Math.min(minLng, lng);
+    maxLng = Math.max(maxLng, lng);
+    minLat = Math.min(minLat, lat);
+    maxLat = Math.max(maxLat, lat);
+  };
+
   for (const place of places) {
     const coords = extractCoordinates(place);
-    if (!coords) continue;
-    found = true;
-    minLng = Math.min(minLng, coords.longitude);
-    maxLng = Math.max(maxLng, coords.longitude);
-    minLat = Math.min(minLat, coords.latitude);
-    maxLat = Math.max(maxLat, coords.latitude);
+    if (coords) accumulate(coords.longitude, coords.latitude);
+  }
+  for (const boundary of boundaries) {
+    forEachPosition(boundary.coordinates, accumulate);
   }
 
   if (!found) return null;
 
-  const lngRange = Math.max(maxLng - minLng, 0.0001);
-  const latRange = Math.max(maxLat - minLat, 0.0001);
+  // Widen degenerate spans before padding: a lone beacon should sit in a
+  // regional frame, not a meters-wide one.
+  if (maxLng - minLng < MIN_BOUNDS_SPAN_DEG) {
+    const center = (minLng + maxLng) / 2;
+    minLng = center - MIN_BOUNDS_SPAN_DEG / 2;
+    maxLng = center + MIN_BOUNDS_SPAN_DEG / 2;
+  }
+  if (maxLat - minLat < MIN_BOUNDS_SPAN_DEG) {
+    const center = (minLat + maxLat) / 2;
+    minLat = center - MIN_BOUNDS_SPAN_DEG / 2;
+    maxLat = center + MIN_BOUNDS_SPAN_DEG / 2;
+  }
+
+  const lngRange = maxLng - minLng;
+  const latRange = maxLat - minLat;
   const padding = 0.1;
 
   return {

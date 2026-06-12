@@ -12,6 +12,8 @@ import { useMemo, useCallback } from "react";
 import { geoEquirectangular, geoPath } from "d3-geo";
 import type { GeoProjection, GeoPath, GeoPermissibleObjects } from "d3-geo";
 
+import { boundsToFitObject } from "@/lib/map-geometry";
+
 interface MapBounds {
   minLng: number;
   maxLng: number;
@@ -71,25 +73,16 @@ export function useGeoProjection({ mapDimensions, mapBounds }: ProjectionConfig)
 
     const proj = geoEquirectangular();
 
-    // Create bounding box as GeoJSON Feature for fitSize
-    // This tells D3 what geographic area we want to display
-    const boundingFeature = {
-      type: "Feature" as const,
-      properties: {},
-      geometry: {
-        type: "Polygon" as const,
-        coordinates: [[
-          [bounds.minLng, bounds.minLat],
-          [bounds.maxLng, bounds.minLat],
-          [bounds.maxLng, bounds.maxLat],
-          [bounds.minLng, bounds.maxLat],
-          [bounds.minLng, bounds.minLat]
-        ]]
-      }
-    };
-
-    // Scale and translate the projection to fit our SVG dimensions
-    proj.fitSize([mapDimensions.width, mapDimensions.height], boundingFeature);
+    // Fit the projection to the requested geographic area. NOTE: this must
+    // NOT be a polygon ring — d3-geo polygons are spherical, and a ring
+    // wound the wrong way means "everything but this box", which makes
+    // fitSize quietly fit the entire globe (regional maps then render as
+    // world-scale specks). boundsToFitObject uses winding-free corner
+    // points instead; see its doc comment in lib/map-geometry.ts.
+    proj.fitSize(
+      [mapDimensions.width, mapDimensions.height],
+      boundsToFitObject(bounds)
+    );
 
     return proj;
   }, [mapDimensions.width, mapDimensions.height, mapBounds]);
