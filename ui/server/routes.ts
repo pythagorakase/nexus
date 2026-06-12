@@ -5,7 +5,6 @@ import { createProxyMiddleware } from "http-proxy-middleware";
 import multer from "multer";
 import fs from "fs/promises";
 import path from "path";
-import sharp from "sharp";
 
 // WebSocket proxy instance for /ws/narrative. http-proxy-middleware only
 // attaches its upgrade listener lazily (after the first plain HTTP request
@@ -83,18 +82,12 @@ export function registerProxyRoutes(app: Express): void {
 
   // Settings GET/PATCH live on the FastAPI service (typed, Pydantic-validated,
   // formatting-preserving writes through nexus.config.loader.save_settings).
-  // Only the exact /api/settings path proxies — /api/settings/pwa-icon stays a
-  // local Express route (multer + sharp asset pipeline in registerRoutes).
-  const settingsProxy = createProxyMiddleware({
+  // All /api/settings paths proxy through; there are no Express-local settings
+  // routes (the PWA icon upload was retired — icons are per-theme and locked).
+  app.use("/api/settings", createProxyMiddleware({
     ...narrativeProxyOptions,
     pathRewrite: (path) => (path === "/" ? "/api/settings" : `/api/settings${path}`),
-  });
-  app.use("/api/settings", (req, res, next) => {
-    if (req.path === "/" || req.path === "") {
-      return settingsProxy(req, res, next);
-    }
-    next();
-  });
+  }));
 
   narrativeWsProxy = createProxyMiddleware({ ...narrativeProxyOptions, ws: true });
   app.use("/ws/narrative", narrativeWsProxy);
@@ -325,7 +318,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Settings GET/PATCH are proxied to the FastAPI service (registerProxyRoutes).
-  // Only the PWA icon upload below remains an Express-local settings route.
 
   // Multer configuration for file uploads
   const upload = multer({
@@ -584,70 +576,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error deleting place image:", error);
       res.status(500).json({ error: "Failed to delete image" });
-    }
-  });
-
-  // PWA Icon upload route
-  app.post("/api/settings/pwa-icon", upload.single("icon"), async (req, res) => {
-    try {
-      if (!req.file) {
-        return res.status(400).json({ error: "No file uploaded" });
-      }
-
-      const tempPath = req.file.path;
-      const iconsDir = path.join(import.meta.dirname, "..", "client", "public", "icons");
-
-      // Generate all required icon sizes using sharp (safe, no shell execution)
-      const sizes = [
-        { size: 512, name: "icon-512.png" },
-        { size: 192, name: "icon-192.png" },
-        { size: 180, name: "apple-touch-icon.png" },
-        { size: 32, name: "favicon-32.png" },
-      ];
-
-      for (const { size, name } of sizes) {
-        const outputPath = path.join(iconsDir, name);
-        await sharp(tempPath)
-          .resize(size, size, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
-          .png()
-          .toFile(outputPath);
-      }
-
-      // Generate favicon.ico using sharp
-      const faviconPath = path.join(import.meta.dirname, "..", "client", "public", "favicon.ico");
-
-      // Sharp doesn't natively support ICO, so create a 32x32 PNG as favicon
-      // Modern browsers support PNG favicons via <link rel="icon">
-      await sharp(tempPath)
-        .resize(32, 32, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
-        .png()
-        .toFile(faviconPath.replace('.ico', '.png'));
-
-      // Copy source file for future reference
-      const sourcePath = path.join(iconsDir, "icon-source.png");
-      await fs.copyFile(tempPath, sourcePath);
-
-      // Clean up temp file
-      await fs.unlink(tempPath);
-
-      // Update manifest.json with cache-busting timestamp
-      const manifestPath = path.join(import.meta.dirname, "..", "client", "public", "manifest.json");
-      const manifestData = await fs.readFile(manifestPath, "utf-8");
-      const manifest = JSON.parse(manifestData);
-      const timestamp = Date.now();
-
-      // Add timestamp query parameter to all icon URLs
-      manifest.icons = manifest.icons.map((icon: any) => ({
-        ...icon,
-        src: icon.src.split('?')[0] + `?v=${timestamp}` // Remove old timestamp if exists, add new one
-      }));
-
-      await fs.writeFile(manifestPath, JSON.stringify(manifest, null, 2), "utf-8");
-
-      res.json({ success: true, message: "PWA icon updated successfully" });
-    } catch (error) {
-      console.error("Error uploading PWA icon:", error);
-      res.status(500).json({ error: "Failed to upload icon" });
     }
   });
 

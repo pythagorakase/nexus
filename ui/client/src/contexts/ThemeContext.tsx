@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useSettingsMutation, useSettingsQuery } from '@/hooks/useSettings';
+import { applyThemeIcons } from '@/lib/themeIcons';
 
 export type Theme = 'gilded' | 'vector' | 'veil';
 
@@ -58,6 +59,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       root.classList.add('theme-vector');
     }
     localStorage.setItem(STORAGE_KEY, theme);
+    // Favicon + apple-touch icons follow the active theme (one mark, three
+    // liveries). PWA manifest icons are bake-time and stay on Veil.
+    applyThemeIcons(theme);
   }, [theme]);
 
   const setTheme = (newTheme: Theme) => {

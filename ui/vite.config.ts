@@ -8,30 +8,33 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'icons/apple-touch-icon.png'],
+      // PWA install icons are bake-time and follow the default theme (Veil).
+      // Runtime favicon/apple-touch swapping per theme happens in
+      // client/src/lib/themeIcons.ts.
+      includeAssets: ['favicon.ico', 'icons/veil/icon-180.png'],
       manifest: {
         name: 'NEXUS',
         short_name: 'NEXUS',
         description: 'NEXUS - Narrative exploration and analysis',
-        theme_color: '#0d9488',
-        background_color: '#09090b',
+        theme_color: '#09101c',
+        background_color: '#09101c',
         display: 'standalone',
         orientation: 'any',
         icons: [
           {
-            src: '/icons/icon-192.png',
+            src: '/icons/veil/icon-192.png',
             sizes: '192x192',
             type: 'image/png',
             purpose: 'any'
           },
           {
-            src: '/icons/icon-512.png',
+            src: '/icons/veil/icon-512.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'any'
           },
           {
-            src: '/icons/apple-touch-icon.png',
+            src: '/icons/veil/icon-180.png',
             sizes: '180x180',
             type: 'image/png',
             purpose: 'any'
@@ -42,7 +45,6 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
         globIgnores: [
           '**/character_portraits/**',
-          '**/icons/icon-source.png',
         ],
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
         runtimeCaching: [
