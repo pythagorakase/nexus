@@ -9,6 +9,7 @@ import {
   type NarrativeChunk,
   type ChunkMetadata,
   type Character,
+  type CharacterListEntry,
   type CharacterRelationship,
   type CharacterPsychology,
   type CharacterImage,
@@ -31,7 +32,7 @@ import {
   factions
 } from "@shared/schema";
 import { db, getDb } from "./db";
-import { eq, and, gte, lte, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 /**
  * Entity references for a single narrative chunk: the characters in (or
@@ -78,7 +79,7 @@ export interface IStorage {
   getChunkContext(chunkId: number, slot?: number | null): Promise<ChunkContext>;
 
   // Character methods
-  getCharacters(startId?: number, endId?: number, slot?: number | null): Promise<Character[]>;
+  getCharacters(startId?: number, endId?: number, slot?: number | null): Promise<CharacterListEntry[]>;
   getCharacterById(id: number, slot?: number | null): Promise<Character | undefined>;
 
   // Character relationship methods
@@ -451,31 +452,57 @@ export class PostgresStorage implements IStorage {
   }
 
   // Character methods
-  async getCharacters(startId?: number, endId?: number, slot?: number | null): Promise<Character[]> {
+  async getCharacters(startId?: number, endId?: number, slot?: number | null): Promise<CharacterListEntry[]> {
     const db = getDb(slot) || this.db;
-    if (startId !== undefined && endId !== undefined) {
-      return await db.select()
-        .from(characters)
-        .where(and(
-          gte(characters.id, startId),
-          lte(characters.id, endId)
-        ))
-        .orderBy(characters.id);
-    } else if (startId !== undefined) {
-      return await db.select()
-        .from(characters)
-        .where(gte(characters.id, startId))
-        .orderBy(characters.id);
-    } else if (endId !== undefined) {
-      return await db.select()
-        .from(characters)
-        .where(lte(characters.id, endId))
-        .orderBy(characters.id);
-    }
+    // Raw SQL (getAllPlaces precedent): resolve current_location to the place
+    // name server-side and pick each character's display portrait (main first,
+    // then display order) so the cast pane needs no second fetch per row.
+    const startCond = startId !== undefined ? sql` AND c.id >= ${startId}` : sql``;
+    const endCond = endId !== undefined ? sql` AND c.id <= ${endId}` : sql``;
+    const result = await db.execute(sql`
+      SELECT
+        c.id,
+        c.name,
+        c.summary,
+        c.appearance,
+        c.background,
+        c.personality,
+        c.emotional_state,
+        c.current_activity,
+        c.current_location,
+        c.extra_data,
+        c.created_at,
+        c.updated_at,
+        p.name AS current_location_name,
+        (
+          SELECT ci.file_path
+          FROM assets.character_images ci
+          WHERE ci.character_id = c.id
+          ORDER BY ci.is_main DESC, ci.display_order ASC
+          LIMIT 1
+        ) AS portrait_path
+      FROM characters c
+      LEFT JOIN places p ON p.id = c.current_location
+      WHERE TRUE${startCond}${endCond}
+      ORDER BY c.id
+    `);
 
-    return await db.select()
-      .from(characters)
-      .orderBy(characters.id);
+    return (result.rows as any[]).map((row) => ({
+      id: Number(row.id),
+      name: row.name as string,
+      summary: row.summary ?? null,
+      appearance: row.appearance ?? null,
+      background: row.background ?? null,
+      personality: row.personality ?? null,
+      emotionalState: row.emotional_state ?? null,
+      currentActivity: row.current_activity ?? null,
+      currentLocation: row.current_location != null ? String(row.current_location) : null,
+      extraData: row.extra_data ?? null,
+      createdAt: new Date(row.created_at),
+      updatedAt: new Date(row.updated_at),
+      currentLocationName: row.current_location_name ?? null,
+      portraitPath: row.portrait_path ?? null,
+    })) as CharacterListEntry[];
   }
 
   async getCharacterById(id: number, slot?: number | null): Promise<Character | undefined> {
@@ -955,16 +982,32 @@ class MemStorage implements IStorage {
     return { characters: [], places: [] };
   }
 
-  async getCharacters(startId?: number, endId?: number): Promise<Character[]> {
-    return this.characters.filter((character) => {
-      if (startId !== undefined && character.id < startId) {
-        return false;
-      }
-      if (endId !== undefined && character.id > endId) {
-        return false;
-      }
-      return true;
-    });
+  async getCharacters(startId?: number, endId?: number): Promise<CharacterListEntry[]> {
+    return this.characters
+      .filter((character) => {
+        if (startId !== undefined && character.id < startId) {
+          return false;
+        }
+        if (endId !== undefined && character.id > endId) {
+          return false;
+        }
+        return true;
+      })
+      .map((character) => {
+        // Mirror the Postgres join: resolve the place name and pick the
+        // display portrait (main first, then display order).
+        const portrait = this.characterImages
+          .filter((img) => img.characterId === character.id)
+          .sort((a, b) => b.isMain - a.isMain || a.displayOrder - b.displayOrder)[0];
+        const place = this.places.find(
+          (p) => String(p.id) === character.currentLocation,
+        );
+        return {
+          ...character,
+          currentLocationName: place?.name ?? null,
+          portraitPath: portrait?.filePath ?? null,
+        };
+      });
   }
 
   async getCharacterById(id: number): Promise<Character | undefined> {

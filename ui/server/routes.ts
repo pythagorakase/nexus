@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import express, { type Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { createProxyMiddleware } from "http-proxy-middleware";
@@ -380,6 +380,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     },
   });
 
+  // Serve uploaded portraits straight from the runtime upload directory.
+  // Vite only mirrors client/public in dev; a production bundle serves the
+  // frozen dist copy, which predates any runtime upload. This route makes
+  // portrait files resolvable in both modes.
+  app.use(
+    "/character_portraits",
+    express.static(path.join(import.meta.dirname, "..", "client", "public", "character_portraits")),
+  );
+
   // Character image routes
   app.get("/api/characters/:id/images", async (req, res) => {
     try {
@@ -408,11 +417,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "No files uploaded" });
       }
 
+      const slot = req.query.slot ? parseInt(req.query.slot as string) : undefined;
+
       const characterDir = path.join(import.meta.dirname, "..", "client", "public", "character_portraits", String(characterId));
       await fs.mkdir(characterDir, { recursive: true });
 
-      // Get current max display order
-      const existingImages = await storage.getCharacterImages(characterId);
+      // Get current max display order (in the same slot the rows are written
+      // to — omitting the slot here used to consult the default database and
+      // mis-flag a slot's first portrait as non-main).
+      const existingImages = await storage.getCharacterImages(characterId, slot);
       let maxOrder = existingImages.reduce((max, img) => Math.max(max, img.displayOrder), -1);
 
       const uploadedImages = [];
@@ -433,8 +446,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const isMain = existingImages.length === 0 && uploadedImages.length === 0 ? 1 : 0;
         maxOrder++;
 
-        const slot = req.query.slot ? parseInt(req.query.slot as string) : undefined;
-        const image = await storage.addCharacterImage(characterId, relativePath, isMain, maxOrder, slot);
+        let image;
+        try {
+          image = await storage.addCharacterImage(characterId, relativePath, isMain, maxOrder, slot);
+        } catch (insertError) {
+          // Don't leave an orphaned file behind when the row insert fails;
+          // the error still propagates to the client.
+          await fs.unlink(destPath).catch(() => {});
+          throw insertError;
+        }
         uploadedImages.push(image);
       }
 
@@ -477,8 +497,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Invalid IDs" });
       }
 
-      // Get image info to delete file
-      const images = await storage.getCharacterImages(characterId);
+      const slot = req.query.slot ? parseInt(req.query.slot as string) : undefined;
+
+      // Get image info to delete file (from the same slot the row lives in)
+      const images = await storage.getCharacterImages(characterId, slot);
       const image = images.find(img => img.id === imageId);
 
       if (image) {
@@ -490,7 +512,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      const slot = req.query.slot ? parseInt(req.query.slot as string) : undefined;
       await storage.deleteCharacterImage(imageId, slot);
       res.json({ success: true });
     } catch (error) {

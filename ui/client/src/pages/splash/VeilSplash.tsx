@@ -223,29 +223,6 @@ export function VeilSplash() {
           Settings
         </VeilButton>
       </div>
-
-      {/* Footnote */}
-      <div
-        className={isExiting ? 'animate-fade-out-fast' : ''}
-        style={{
-          position: 'absolute',
-          bottom: 28,
-          display: 'flex',
-          gap: 14,
-          alignItems: 'center',
-          fontFamily: 'var(--font-menu)',
-          fontSize: 10,
-          letterSpacing: '0.25em',
-          textTransform: 'uppercase',
-          color: 'var(--fg-muted)',
-          opacity: 0.7,
-          zIndex: 5,
-        }}
-      >
-        <span>NEXUS IRIS</span>
-        <span style={{ color: 'var(--brass)' }}>◆</span>
-        <span>narrative intelligence system</span>
-      </div>
     </div>
   );
 }

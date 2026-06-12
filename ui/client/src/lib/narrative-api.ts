@@ -8,8 +8,8 @@
 import type {
   Season,
   Episode,
-  Character,
   CharacterImage,
+  CharacterListEntry,
   CurrentPlace,
   Place,
   PlaceImage,
@@ -81,7 +81,7 @@ export function getChunk(chunkId: number, slot: number): Promise<ChunkWithMetada
   return getJson(`/api/narrative/chunks/${chunkId}?slot=${slot}`);
 }
 
-export function getCharacters(slot: number): Promise<Character[]> {
+export function getCharacters(slot: number): Promise<CharacterListEntry[]> {
   return getJson(`/api/characters?slot=${slot}`);
 }
 
@@ -90,6 +90,43 @@ export function getCharacterImages(
   slot: number,
 ): Promise<CharacterImage[]> {
   return getJson(`/api/characters/${characterId}/images?slot=${slot}`);
+}
+
+export async function uploadCharacterPortrait(
+  characterId: number,
+  slot: number,
+  file: File,
+): Promise<CharacterImage> {
+  const form = new FormData();
+  form.append("images", file);
+  const res = await fetch(`/api/characters/${characterId}/images?slot=${slot}`, {
+    method: "POST",
+    body: form,
+  });
+  if (!res.ok) {
+    const text = (await res.text()) || res.statusText;
+    throw new Error(`${res.status}: ${text}`);
+  }
+  const data: { images: CharacterImage[] } = await res.json();
+  if (!data.images?.length) {
+    throw new Error("Upload returned no image record");
+  }
+  return data.images[0];
+}
+
+export async function setMainCharacterImage(
+  characterId: number,
+  imageId: number,
+  slot: number,
+): Promise<void> {
+  const res = await fetch(
+    `/api/characters/${characterId}/images/${imageId}/main?slot=${slot}`,
+    { method: "PUT" },
+  );
+  if (!res.ok) {
+    const text = (await res.text()) || res.statusText;
+    throw new Error(`${res.status}: ${text}`);
+  }
 }
 
 export function getUserCharacter(slot: number): Promise<{ name: string } | null> {

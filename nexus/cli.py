@@ -1047,11 +1047,14 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
         state = state_response.json()
 
         if state.get("is_empty"):
-            # Initialize via setup/start endpoint
-            # Use CLI-provided model, slot's configured model, or backend default.
+            # Initialize via setup/start endpoint. Forward only an explicit
+            # --model override; otherwise the backend resolves the configured
+            # wizard default. The empty slot's pre-wizard model stamp (the
+            # dev reset default) is deliberately NOT forwarded so the mock
+            # TEST server is never selected implicitly.
             setup_url = f"{get_api_url()}/api/story/new/setup/start"
             setup_payload = {"slot": args.slot}
-            model_to_use = getattr(args, "model", None) or state.get("model")
+            model_to_use = getattr(args, "model", None)
             if model_to_use:
                 setup_payload["model"] = model_to_use
             setup_response = requests.post(setup_url, json=setup_payload, timeout=30)
@@ -1069,6 +1072,7 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                 or f"Wizard initialized for slot {args.slot}.",
                 "choices": setup_data.get("welcome_choices", []),
                 "phase": "setting",
+                "model": setup_data.get("model"),
             }
 
         if state.get("is_wizard_mode"):
