@@ -1,23 +1,25 @@
 /**
  * Veil theme splash page — the canonical NEXUS IRIS hero.
  *
- * A living logarithmic-spiral field (VeilSpiral) draws the Megrim NEXUS
- * wordmark and knocks the field out behind it with a feathered rect mask;
- * the licensed Art Nouveau border (NouveauFrame) frames the wordmark. The
- * three-button menu drops to the lower third of the screen.
+ * The "Veil Hero Spiral v3" composition: a living logarithmic-spiral field
+ * (VeilSpiral) draws the Megrim NEXUS wordmark and knocks the field out
+ * behind it with a feathered rect mask; the licensed crescent ornament
+ * (CrescentFrame) runs full-bleed around the whole composition as an
+ * edge-stretched 9-slice. The three-button menu drops to the lower third of
+ * the screen, inside the frame.
  *
- * The hero prop values below are the approved exploration values, locked in
- * the design handoff (design_handoff/project/ui_kits/nexus_iris/splash.jsx)
- * — treat them as canon: gold wordmark #e1cd97 at 120px, magenta frame
- * #b83d7a at 0.82 opacity, 2.25x width, frame size 400u, composition
- * anchored at y=312 so the frame clears the menu.
+ * The hero prop values below are the locked TWEAK_DEFAULTS of the design
+ * handoff (design_handoff/project/hero/app-v3.jsx) — treat them as canon —
+ * exported as SPIRAL_V3 so tests can pin them. One deliberate deviation from
+ * the prototype: the wordmark strokes gold #e1cd97 (product canon since the
+ * first shipped splash) where the prototype leaves it at the default magenta.
  *
  * The marquee font (Megrim) appears EXACTLY ONCE: the big NEXUS, drawn
  * inside VeilSpiral. Everything else uses the menu font.
  */
 import { CSSProperties, ReactNode, useState } from 'react';
 
-import { NouveauFrame, VeilSpiral } from '@/components/veil';
+import { CrescentFrame, VeilSpiral } from '@/components/veil';
 import { useSplashNavigation, SplashThemeMenu } from './shared';
 
 // Veil brand values (lifted from the .dark theme tokens; hard-coded here so
@@ -27,6 +29,42 @@ const veil = {
   magenta: '#b83d7a',
   copper: '#b87333',
   gold: '#e1cd97',
+} as const;
+
+/**
+ * Locked Veil Hero Spiral v3 values, mirrored from the design handoff's
+ * TWEAK_DEFAULTS (design_handoff/project/hero/app-v3.jsx). Field anchor and
+ * wordmark sit at the VeilSpiral defaults (600, 380), which app-v3 leaves
+ * untouched.
+ */
+export const SPIRAL_V3 = {
+  arms: 18,
+  growth: 0.62,
+  rotation: 70,
+  reverse: true,
+  pulseRate: 1.6,
+  pulseColor: veil.gold,
+  emberRate: 2.5,
+  emberColor: veil.gold,
+  emberSize: 1.8,
+  maskMode: 'rect',
+  maskHaloPx: 28,
+  maskStrength: 0.95,
+  rectPaddingX: 42,
+  rectPaddingY: 22,
+  rectFeather: 24,
+  primaryColor: veil.magenta,
+  secondaryColor: veil.copper,
+  fontSize: 124,
+  frameColor: veil.magenta,
+  frameOpacity: 0.85,
+  frameInset: 28,
+  frameCornerFrac: 0.3,
+  anchorX: 600,
+  anchorY: 380,
+  wordmarkY: 380,
+  wordmarkColor: veil.gold,
+  wordmarkStroke: 1.4,
 } as const;
 
 interface VeilButtonProps {
@@ -122,44 +160,44 @@ export function VeilSplash() {
       {/* Theme switcher menu */}
       <SplashThemeMenu />
 
-      {/* Hero layer: living spiral field + licensed Art Nouveau border.
-          Both render the same 1200x700 viewBox with xMidYMid slice so the
-          frame tracks the wordmark across viewport sizes. */}
+      {/* Hero layer: living spiral field (canvas) + licensed crescent border
+          (full-bleed 9-slice). The spiral renders the 1200x700 viewBox with
+          xMidYMid slice; the frame stretches edge-to-edge at a fixed pixel
+          inset. */}
       <div
         className={isExiting ? 'animate-fade-out-fast' : ''}
         style={{ position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'none' }}
       >
         <VeilSpiral
-          arms={18}
-          growth={0.62}
-          rotation={70}
-          reverse
-          anchorY={312}
-          wordmarkY={312}
-          pulseRate={1.6}
-          pulseColor={veil.gold}
-          emberRate={2.5}
-          emberColor={veil.gold}
-          emberSize={1.8}
-          maskMode="rect"
-          rectPaddingX={42}
-          rectPaddingY={22}
-          rectFeather={24}
-          maskHaloPx={28}
-          maskStrength={0.95}
-          primaryColor={veil.magenta}
-          secondaryColor={veil.copper}
-          wordmarkColor={veil.gold}
-          fontSize={120}
+          arms={SPIRAL_V3.arms}
+          growth={SPIRAL_V3.growth}
+          rotation={SPIRAL_V3.rotation}
+          reverse={SPIRAL_V3.reverse}
+          anchorX={SPIRAL_V3.anchorX}
+          anchorY={SPIRAL_V3.anchorY}
+          wordmarkY={SPIRAL_V3.wordmarkY}
+          pulseRate={SPIRAL_V3.pulseRate}
+          pulseColor={SPIRAL_V3.pulseColor}
+          emberRate={SPIRAL_V3.emberRate}
+          emberColor={SPIRAL_V3.emberColor}
+          emberSize={SPIRAL_V3.emberSize}
+          maskMode={SPIRAL_V3.maskMode}
+          rectPaddingX={SPIRAL_V3.rectPaddingX}
+          rectPaddingY={SPIRAL_V3.rectPaddingY}
+          rectFeather={SPIRAL_V3.rectFeather}
+          maskHaloPx={SPIRAL_V3.maskHaloPx}
+          maskStrength={SPIRAL_V3.maskStrength}
+          primaryColor={SPIRAL_V3.primaryColor}
+          secondaryColor={SPIRAL_V3.secondaryColor}
+          wordmarkColor={SPIRAL_V3.wordmarkColor}
+          wordmarkStroke={SPIRAL_V3.wordmarkStroke}
+          fontSize={SPIRAL_V3.fontSize}
         />
-        <NouveauFrame
-          color={veil.magenta}
-          opacity={0.82}
-          sizeU={400}
-          widthFactor={2.25}
-          heightFactor={1}
-          anchorY={312}
-          glow
+        <CrescentFrame
+          color={SPIRAL_V3.frameColor}
+          opacity={SPIRAL_V3.frameOpacity}
+          inset={SPIRAL_V3.frameInset}
+          cornerFrac={SPIRAL_V3.frameCornerFrac}
         />
       </div>
 

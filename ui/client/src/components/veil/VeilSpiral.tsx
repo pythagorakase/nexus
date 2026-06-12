@@ -8,23 +8,37 @@
  * pulses appear to emerge from behind the wordmark.
  *
  * Typed port of the NEXUS IRIS design handoff prototype
- * (design_handoff/project/ui_kits/nexus_iris/spiral-v2.jsx). The approved
- * splash values are hard-coded where this component is instantiated
- * (pages/splash/VeilSplash.tsx) — treat them as canon.
+ * (design_handoff/project/hero/spiral-v2.jsx, the Veil Hero Spiral v3
+ * composition). The approved splash values are hard-coded where this
+ * component is instantiated (pages/splash/VeilSplash.tsx) — treat them as
+ * canon.
+ *
+ * ── Rendering architecture (performance) ──────────────────────────────────
+ * The prototype rendered the field as SVG and animated it with CSS keyframes
+ * (rotate on a masked <g>, stroke-dashoffset per pulse, per-ember React
+ * state). None of those animations are compositor-promotable for SVG
+ * content, so every displayed frame forced the full main-thread pipeline —
+ * style/layout/paint/layerize/commit — plus a fresh raster of the whole
+ * field and three feGaussianBlur passes (profiled at ~2400 Paint events,
+ * ~40k raster tasks, and ~1.9 s of GPU-process work per 10 s).
+ *
+ * This port instead draws the field into a single <canvas> from one rAF
+ * loop, with zero per-frame React/DOM work:
+ *   - filament geometry is precomputed into two Path2D batches (primary /
+ *     secondary), stroked once each per frame;
+ *   - pulses and embers live in plain arrays owned by the loop (no state,
+ *     no DOM churn) and are drawn as arc-length slices / dots;
+ *   - the feathered wordmark mask is rasterized ONCE per resize into an
+ *     offscreen sprite and applied per frame with destination-out;
+ *   - the wordmark itself (Megrim + glow filter) stays a static SVG overlay,
+ *     painted once and cached by the compositor.
+ * A prefers-reduced-motion query renders a single static composition (no
+ * rotation, no pulses, no embers) and skips the loop entirely.
  *
  * One <VeilSpiral /> per artboard: each instance owns its own pulses,
  * embers, and animation loop.
  */
-import {
-  CSSProperties,
-  Fragment,
-  ReactNode,
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import { CSSProperties, useEffect, useId, useRef } from 'react';
 
 // Veil brand palette (locked splash values; mirrors the .dark theme tokens)
 const VEIL = {
@@ -34,14 +48,32 @@ const VEIL = {
   fg: '#e1cd97',
 } as const;
 
-// Fixed design viewBox shared with NouveauFrame so the frame tracks the
-// wordmark across viewport sizes.
+// Fixed design viewBox shared with the wordmark overlay; the canvas
+// replicates preserveAspectRatio="xMidYMid slice" over the same coordinates.
 const W = 1200;
 const H = 700;
 const MAX_R = Math.hypot(W, H) * 0.6;
 
 const WORDMARK_TEXT = 'NEXUS';
 const WORDMARK_FONT = "'Megrim', 'Cormorant Garamond', 'Didot', serif";
+
+// Filament stroke styling (prototype constants).
+const FILAMENT_WIDTH = 0.55;
+const PRIMARY_OPACITY = 0.42;
+const SECONDARY_OPACITY = 0.3;
+const PULSE_WIDTH = 1.7;
+/** Fraction of the filament length lit by a traveling pulse. */
+const PULSE_SEGMENT_FRAC = 0.12;
+/** Pulse opacity ramps over the first/last 8% of its travel. */
+const PULSE_RAMP = 0.08;
+
+// Safety caps on concurrent dynamics (steady state at the locked splash
+// rates is ~9 pulses / ~7 embers; the caps only bite under pathological
+// prop values).
+const MAX_PULSES = 32;
+const MAX_EMBERS = 48;
+/** Clamp spawn-accumulator steps so background-tab pauses cannot burst. */
+const MAX_SPAWN_STEP_MS = 250;
 
 // ─── Geometry ────────────────────────────────────────────────────────────
 
@@ -58,7 +90,7 @@ interface SpiralFilament {
   points: SpiralPoint[];
 }
 
-function buildSpiral(
+export function buildSpiral(
   turns: number,
   growth: number,
   startAngle: number,
@@ -83,7 +115,7 @@ function buildSpiral(
   return { d, points };
 }
 
-function buildField(
+export function buildField(
   arms: number,
   growth: number,
   anchorX: number,
@@ -106,135 +138,211 @@ function buildField(
   return filaments;
 }
 
-// ─── Filaments + Pulses ──────────────────────────────────────────────────
-
-interface FilamentProps {
-  filament: SpiralFilament;
-  primaryColor: string;
-  secondaryColor: string;
+/** Cumulative arc length at every polyline vertex. */
+function cumulativeLengths(points: SpiralPoint[]): Float64Array {
+  const cum = new Float64Array(points.length);
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1];
+    const b = points[i];
+    cum[i] = cum[i - 1] + Math.hypot(b.x - a.x, b.y - a.y);
+  }
+  return cum;
 }
 
-function Filament({ filament, primaryColor, secondaryColor }: FilamentProps) {
-  const isPrimary = filament.layer === 'primary';
-  return (
-    <path
-      d={filament.d}
-      fill="none"
-      stroke={isPrimary ? primaryColor : secondaryColor}
-      strokeWidth="0.55"
-      strokeOpacity={isPrimary ? 0.42 : 0.3}
-    />
-  );
+// ─── Animation math (exported for tests) ─────────────────────────────────
+
+export interface PulseWindow {
+  /** Visible arc-length range along the filament. */
+  a: number;
+  b: number;
+  /** Opacity envelope. */
+  alpha: number;
 }
 
-interface PulseProps {
-  filament: SpiralFilament;
-  duration: number;
-  color: string;
-  /** Globally unique CSS <custom-ident> suffix for this pulse's keyframes. */
-  animKey: string;
+/**
+ * Visible arc window of a traveling pulse, replicating the prototype's
+ * stroke-dash animation: dasharray [seg, total + 2*seg], dashoffset running
+ * linearly from +seg to -(total + seg), stroke-opacity ramping over the
+ * first and last 8%.
+ */
+export function pulseWindow(progress: number, totalLen: number): PulseWindow {
+  const seg = totalLen * PULSE_SEGMENT_FRAC;
+  const offset = seg - progress * (totalLen + 2 * seg);
+  const head = -offset; // dash segment covers [-offset, -offset + seg]
+  const a = Math.max(0, head);
+  const b = Math.min(totalLen, head + seg);
+  let alpha = 1;
+  if (progress < PULSE_RAMP) alpha = progress / PULSE_RAMP;
+  else if (progress > 1 - PULSE_RAMP) alpha = (1 - progress) / PULSE_RAMP;
+  return { a, b, alpha: Math.max(0, Math.min(1, alpha)) };
 }
 
-function Pulse({ filament, duration, color, animKey }: PulseProps) {
-  const ref = useRef<SVGPathElement>(null);
-  const [pathLen, setPathLen] = useState<number | null>(null);
-
-  useEffect(() => {
-    if (ref.current) {
-      try {
-        setPathLen(ref.current.getTotalLength());
-      } catch {
-        let len = 0;
-        for (let i = 1; i < filament.points.length; i++) {
-          const a = filament.points[i - 1];
-          const b = filament.points[i];
-          len += Math.hypot(b.x - a.x, b.y - a.y);
-        }
-        setPathLen(len);
-      }
-    }
-  }, [filament]);
-
-  const segment = pathLen ? pathLen * 0.12 : 0;
-  const total = pathLen ?? 0;
-  const startOffset = segment;
-  const endOffset = -(total + segment);
-  const animName = pathLen ? `pulseTravel_${animKey}` : null;
-
-  return (
-    <Fragment>
-      {animName && (
-        <style>{`
-          @keyframes ${animName} {
-            0%   { stroke-dashoffset: ${startOffset}; stroke-opacity: 0; }
-            8%   { stroke-dashoffset: ${startOffset + (endOffset - startOffset) * 0.08}; stroke-opacity: 1; }
-            92%  { stroke-dashoffset: ${startOffset + (endOffset - startOffset) * 0.92}; stroke-opacity: 1; }
-            100% { stroke-dashoffset: ${endOffset}; stroke-opacity: 0; }
-          }
-        `}</style>
-      )}
-      <path
-        ref={ref}
-        d={filament.d}
-        fill="none"
-        stroke={color}
-        strokeWidth="1.7"
-        strokeLinecap="round"
-        strokeOpacity={pathLen ? 1 : 0}
-        style={{
-          strokeDasharray: pathLen ? `${segment} ${total + segment * 2}` : 'none',
-          animation: animName ? `${animName} ${duration}ms linear forwards` : 'none',
-        }}
-      />
-    </Fragment>
-  );
+export interface EmberEnvelope {
+  alpha: number;
+  scale: number;
 }
 
-// ─── Ember motes (ambient texture) ───────────────────────────────────────
-// Small bright dots that fade in and out at random points along random
-// filaments. They do not move — they twinkle. Cheaper than a full particle
-// system; reads as starfield/dust on the spiral arms.
-
-interface EmberProps {
-  filament: SpiralFilament;
-  pointIdx: number;
-  duration: number;
-  color: string;
-  size: number;
-  /** Globally unique CSS <custom-ident> suffix for this ember's keyframes. */
-  animKey: string;
+/** CSS ease-out per keyframe segment, approximated quadratically. */
+function easeOut(u: number): number {
+  return 1 - (1 - u) * (1 - u);
 }
 
-function Ember({ filament, pointIdx, duration, color, size, animKey }: EmberProps) {
-  const p = filament.points[pointIdx];
-  if (!p) return null;
-  const animName = `emberLife_${animKey}`;
-  return (
-    <Fragment>
-      <style>{`
-        @keyframes ${animName} {
-          0%   { opacity: 0; transform: scale(0.4); }
-          18%  { opacity: 1; transform: scale(1); }
-          70%  { opacity: 1; transform: scale(1); }
-          100% { opacity: 0; transform: scale(0.4); }
-        }
-      `}</style>
-      <circle
-        cx={p.x}
-        cy={p.y}
-        r={size}
-        fill={color}
-        style={{
-          transformOrigin: `${p.x}px ${p.y}px`,
-          animation: `${animName} ${duration}ms ease-out forwards`,
-          mixBlendMode: 'screen',
-        }}
-      />
-    </Fragment>
-  );
+/**
+ * Ember twinkle envelope, replicating the prototype's keyframes:
+ * opacity 0 -> 1 over 0-18%, hold to 70%, fade to 0 at 100%; scale
+ * 0.4 -> 1 -> 0.4 on the same stops. The prototype used CSS `ease-out`
+ * per segment; we approximate it quadratically (visually identical for a
+ * 1.8-3.6 s twinkle).
+ */
+export function emberEnvelope(progress: number): EmberEnvelope {
+  const p = Math.max(0, Math.min(1, progress));
+  if (p < 0.18) {
+    const u = easeOut(p / 0.18);
+    return { alpha: u, scale: 0.4 + 0.6 * u };
+  }
+  if (p < 0.7) return { alpha: 1, scale: 1 };
+  const u = easeOut((p - 0.7) / 0.3);
+  return { alpha: 1 - u, scale: 1 - 0.6 * u };
 }
 
-// ─── Wordmark ────────────────────────────────────────────────────────────
+// ─── Mask sprites ────────────────────────────────────────────────────────
+// The prototype knocked the field out with an SVG luminance mask (white
+// ground, black feathered shape at `maskStrength`). The canvas equivalent is
+// destination-out with a sprite whose alpha equals (1 - mask luminance);
+// for a black shape at alpha `s` blurred over white ground that is exactly
+// the blurred shape coverage times `s`.
+
+interface MaskSprite {
+  canvas: HTMLCanvasElement;
+  /** Device-pixel position of the sprite's top-left corner. */
+  dx: number;
+  dy: number;
+}
+
+interface ViewTransform {
+  /** viewBox -> device-pixel scale (includes devicePixelRatio). */
+  scale: number;
+  tx: number;
+  ty: number;
+  deviceW: number;
+  deviceH: number;
+}
+
+function makeSpriteCanvas(w: number, h: number): CanvasRenderingContext2D {
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.ceil(w));
+  c.height = Math.max(1, Math.ceil(h));
+  const ctx = c.getContext('2d');
+  if (!ctx) throw new Error('VeilSpiral: 2D canvas context unavailable for mask sprite');
+  return ctx;
+}
+
+function buildRectMaskSprite(
+  view: ViewTransform,
+  fontSize: number,
+  wordmarkY: number,
+  rectPaddingX: number,
+  rectPaddingY: number,
+  rectFeather: number,
+  maskStrength: number,
+): MaskSprite {
+  // Estimate the wordmark box exactly as the prototype does.
+  const estW = fontSize * (5 * 0.62 + 4 * 0.16);
+  const estH = fontSize * 0.92;
+  const rectW = (estW + rectPaddingX * 2) * view.scale;
+  const rectH = (estH + rectPaddingY * 2) * view.scale;
+  const feather = rectFeather * view.scale;
+  const margin = Math.ceil(feather * 3);
+  const ctx = makeSpriteCanvas(rectW + margin * 2, rectH + margin * 2);
+  ctx.filter = `blur(${feather}px)`;
+  ctx.globalAlpha = maskStrength;
+  ctx.fillStyle = '#000';
+  ctx.fillRect(margin, margin, rectW, rectH);
+  const cxDev = view.tx + 600 * view.scale;
+  const cyDev = view.ty + wordmarkY * view.scale;
+  return { canvas: ctx.canvas, dx: cxDev - rectW / 2 - margin, dy: cyDev - rectH / 2 - margin };
+}
+
+function buildTextMaskSprite(
+  view: ViewTransform,
+  fontSize: number,
+  wordmarkY: number,
+  maskHaloPx: number,
+  maskStrength: number,
+): MaskSprite {
+  // Approximates the prototype's feMorphology dilate + blur by stroking the
+  // glyphs with a round-joined outline of the dilation diameter, then
+  // blurring. Same halo footprint; the dilation corners are rounder.
+  //
+  // The dilated shape (stroke + fill) is composed unfiltered on a scratch
+  // canvas first, then blurred in a single pass onto the sprite — canvas
+  // `filter` applies per draw call, so blurring stroke and fill separately
+  // would over-accumulate alpha where the two blurred shapes overlap
+  // (the prototype blurs the composed shape once).
+  const dilate = Math.max(0.5, maskHaloPx * 0.4) * view.scale;
+  const blur = maskHaloPx * 0.6 * view.scale;
+  const fs = fontSize * view.scale;
+  const padX = fs * 6;
+  const padY = fs;
+  const shape = makeSpriteCanvas(padX * 2, padY * 2 + fs);
+  shape.font = `400 ${fs}px ${WORDMARK_FONT}`;
+  shape.textAlign = 'center';
+  shape.textBaseline = 'middle';
+  try {
+    (shape as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing =
+      `${fs * 0.16}px`;
+  } catch {
+    // letterSpacing is a recent canvas addition; the halo merely widens less.
+  }
+  shape.fillStyle = '#000';
+  shape.strokeStyle = '#000';
+  shape.lineWidth = dilate * 2;
+  shape.lineJoin = 'round';
+  const cx = padX + fs * 0.0595;
+  const cy = padY + fs / 2;
+  shape.strokeText(WORDMARK_TEXT, cx, cy);
+  shape.fillText(WORDMARK_TEXT, cx, cy);
+  const ctx = makeSpriteCanvas(shape.canvas.width, shape.canvas.height);
+  ctx.filter = `blur(${blur}px)`;
+  ctx.globalAlpha = maskStrength;
+  ctx.drawImage(shape.canvas, 0, 0);
+  const cxDev = view.tx + 600 * view.scale;
+  const cyDev = view.ty + wordmarkY * view.scale;
+  return { canvas: ctx.canvas, dx: cxDev - padX, dy: cyDev - (padY + fs / 2) };
+}
+
+function buildRadialMaskSprite(
+  view: ViewTransform,
+  wordmarkY: number,
+  fadeRadius: number,
+  fadeStrength: number,
+): MaskSprite {
+  // SVG mask value = luminance * alpha. The prototype's gradient: black at
+  // `fadeStrength` alpha (0%), black at half alpha (55%), white opaque
+  // (100%). Erase alpha = 1 - value; sample the 55-100% color+alpha ramp at
+  // an intermediate stop so the canvas gradient's linear-rgba interpolation
+  // tracks the luminance product.
+  const r = fadeRadius * view.scale;
+  const ctx = makeSpriteCanvas(r * 2, r * 2);
+  const g = ctx.createRadialGradient(r, r, 0, r, r, r);
+  const value = (f: number): number => {
+    if (f <= 0.55) return 0; // black -> luminance 0 regardless of alpha
+    const u = (f - 0.55) / 0.45;
+    const lum = u;
+    const alpha = fadeStrength * 0.5 + (1 - fadeStrength * 0.5) * u;
+    return lum * alpha;
+  };
+  for (const stop of [0, 0.55, 0.775, 1]) {
+    g.addColorStop(stop, `rgba(0,0,0,${(1 - value(stop)).toFixed(4)})`);
+  }
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+  const cxDev = view.tx + 600 * view.scale;
+  const cyDev = view.ty + wordmarkY * view.scale;
+  return { canvas: ctx.canvas, dx: cxDev - r, dy: cyDev - r };
+}
+
+// ─── Wordmark overlay ────────────────────────────────────────────────────
 
 interface NexusWordmarkProps {
   glowId: string;
@@ -273,19 +381,14 @@ function NexusWordmark({ glowId, fontSize, anchorY, color, strokeWidth }: NexusW
 
 // ─── Main component ──────────────────────────────────────────────────────
 
-let pulseSeq = 0;
-let emberSeq = 0;
-
 interface ActivePulse {
-  id: number;
-  filamentId: string;
+  filamentIdx: number;
   duration: number;
   startedAt: number;
 }
 
 interface ActiveEmber {
-  id: number;
-  filamentId: string;
+  filamentIdx: number;
   pointIdx: number;
   duration: number;
   startedAt: number;
@@ -386,235 +489,279 @@ export function VeilSpiral({
   className,
   style,
 }: VeilSpiralProps) {
-  // Unique key for keyframes/ids per instance so multiple instances don't
-  // collide. CSS animation-name is a <custom-ident> — strip the colons React
-  // puts in useId.
   const inst = useId().replace(/[:]/g, '');
-
-  const filaments = useMemo(
-    () => buildField(arms, growth, anchorX, anchorY),
-    [arms, growth, anchorX, anchorY],
-  );
-  const filamentsById = useMemo(() => {
-    const m: Record<string, SpiralFilament> = {};
-    filaments.forEach((f) => {
-      m[f.id] = f;
-    });
-    return m;
-  }, [filaments]);
-
-  // ── pulses
-  const [pulses, setPulses] = useState<ActivePulse[]>([]);
-  useEffect(() => {
-    if (pulseRate <= 0) {
-      setPulses([]);
-      return;
-    }
-    const intervalMs = 1000 / pulseRate;
-    const tick = setInterval(() => {
-      const f = filaments[Math.floor(Math.random() * filaments.length)];
-      pulseSeq += 1;
-      setPulses((prev) => [
-        ...prev,
-        {
-          id: pulseSeq,
-          filamentId: f.id,
-          duration: pulseMinDuration + Math.random() * (pulseMaxDuration - pulseMinDuration),
-          startedAt: performance.now(),
-        },
-      ]);
-    }, intervalMs);
-    return () => clearInterval(tick);
-  }, [pulseRate, filaments, pulseMinDuration, pulseMaxDuration]);
-
-  useEffect(() => {
-    const gc = setInterval(() => {
-      const now = performance.now();
-      setPulses((prev) => prev.filter((p) => now - p.startedAt < p.duration + 200));
-    }, 1500);
-    return () => clearInterval(gc);
-  }, []);
-
-  // ── embers
-  const [embers, setEmbers] = useState<ActiveEmber[]>([]);
-  useEffect(() => {
-    if (emberRate <= 0) {
-      setEmbers([]);
-      return;
-    }
-    const intervalMs = 1000 / emberRate;
-    const tick = setInterval(() => {
-      const f = filaments[Math.floor(Math.random() * filaments.length)];
-      // Avoid the wordmark region — bias point index toward the outer 60% of
-      // the arm.
-      const tBias = 0.25 + Math.random() * 0.75;
-      const pointIdx = Math.floor(tBias * (f.points.length - 1));
-      emberSeq += 1;
-      setEmbers((prev) => [
-        ...prev,
-        {
-          id: emberSeq,
-          filamentId: f.id,
-          pointIdx,
-          duration: emberMinDuration + Math.random() * (emberMaxDuration - emberMinDuration),
-          startedAt: performance.now(),
-          size: emberSize * (0.6 + Math.random() * 0.8),
-        },
-      ]);
-    }, intervalMs);
-    return () => clearInterval(tick);
-  }, [emberRate, filaments, emberMinDuration, emberMaxDuration, emberSize]);
-
-  useEffect(() => {
-    const gc = setInterval(() => {
-      const now = performance.now();
-      setEmbers((prev) => prev.filter((e) => now - e.startedAt < e.duration + 200));
-    }, 1500);
-    return () => clearInterval(gc);
-  }, []);
-
-  // ── ids
   const glowId = `glow_${inst}`;
-  const fadeId = `fade_${inst}`;
-  const maskId = `mask_${inst}`;
-  const textMaskFilterId = `tmf_${inst}`;
-  const spinAnim = `spin_${inst}`;
-  const rotateOrigin = `${anchorX}px ${anchorY}px`;
+  const containerRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  // ── mask render
-  const renderMask = (): ReactNode => {
-    if (maskMode === 'none') return null;
-    if (maskMode === 'radial') {
-      return (
-        <Fragment>
-          <radialGradient
-            id={fadeId}
-            cx={600}
-            cy={wordmarkY}
-            r={fadeRadius}
-            gradientUnits="userSpaceOnUse"
-          >
-            <stop offset="0%" stopColor="#000" stopOpacity={fadeStrength} />
-            <stop offset="55%" stopColor="#000" stopOpacity={fadeStrength * 0.5} />
-            <stop offset="100%" stopColor="#fff" stopOpacity="1" />
-          </radialGradient>
-          <mask id={maskId} maskUnits="userSpaceOnUse" x="0" y="0" width={W} height={H}>
-            <rect x="0" y="0" width={W} height={H} fill={`url(#${fadeId})`} />
-          </mask>
-        </Fragment>
-      );
-    }
-    if (maskMode === 'text') {
-      // Per-letter halo: render the text itself, dilated + blurred.
-      return (
-        <Fragment>
-          <filter id={textMaskFilterId} x="-50%" y="-50%" width="200%" height="200%">
-            <feMorphology operator="dilate" radius={Math.max(0.5, maskHaloPx * 0.4)} />
-            <feGaussianBlur stdDeviation={maskHaloPx * 0.6} />
-          </filter>
-          <mask id={maskId} maskUnits="userSpaceOnUse" x="0" y="0" width={W} height={H}>
-            <rect x="0" y="0" width={W} height={H} fill="white" />
-            <text
-              x={600 + fontSize * 0.0595}
-              y={wordmarkY}
-              textAnchor="middle"
-              dominantBaseline="middle"
-              fontFamily={WORDMARK_FONT}
-              fontSize={fontSize}
-              fontWeight="400"
-              letterSpacing={fontSize * 0.16}
-              fill="black"
-              fillOpacity={maskStrength}
-              filter={`url(#${textMaskFilterId})`}
-            >
-              {WORDMARK_TEXT}
-            </text>
-          </mask>
-        </Fragment>
-      );
-    }
-    // 'rect' — rectangle around the wordmark with soft feathered edges.
-    // Estimate text width from font metrics: NEXUS at fontSize with
-    // letter-spacing 0.16em ≈ 5 chars × ~0.62em advance + 4 × 0.16em spacing.
-    // We over-estimate slightly and let feather smooth the edges.
-    const estW = fontSize * (5 * 0.62 + 4 * 0.16);
-    const estH = fontSize * 0.92;
-    const rectW = estW + rectPaddingX * 2;
-    const rectH = estH + rectPaddingY * 2;
-    const rectX = 600 - rectW / 2;
-    const rectY = wordmarkY - rectH / 2;
-    return (
-      <Fragment>
-        <filter id={textMaskFilterId} x="-50%" y="-50%" width="200%" height="200%">
-          <feGaussianBlur stdDeviation={rectFeather} />
-        </filter>
-        <mask id={maskId} maskUnits="userSpaceOnUse" x="0" y="0" width={W} height={H}>
-          <rect x="0" y="0" width={W} height={H} fill="white" />
-          <rect
-            x={rectX}
-            y={rectY}
-            width={rectW}
-            height={rectH}
-            fill="black"
-            fillOpacity={maskStrength}
-            filter={`url(#${textMaskFilterId})`}
-          />
-        </mask>
-      </Fragment>
-    );
-  };
+  useEffect(() => {
+    const container = containerRef.current;
+    const canvas = canvasRef.current;
+    if (!container || !canvas) return undefined;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('VeilSpiral: 2D canvas context unavailable');
 
-  const fieldGroup = (
-    <g
-      style={{
-        transformOrigin: rotateOrigin,
-        animation:
-          rotation > 0
-            ? `${spinAnim} ${rotation}s linear infinite ${reverse ? 'reverse' : 'normal'}`
-            : 'none',
-      }}
-    >
-      {filaments.map((f) => (
-        <Filament
-          key={f.id}
-          filament={f}
-          primaryColor={primaryColor}
-          secondaryColor={secondaryColor}
-        />
-      ))}
-      {embers.map((e) => {
-        const f = filamentsById[e.filamentId];
-        if (!f) return null;
-        return (
-          <Ember
-            key={e.id}
-            filament={f}
-            pointIdx={e.pointIdx}
-            duration={e.duration}
-            color={emberColor}
-            size={e.size}
-            animKey={`${inst}_${e.id}`}
-          />
+    // ── precomputed geometry
+    const filaments = buildField(arms, growth, anchorX, anchorY);
+    const cums = filaments.map((f) => cumulativeLengths(f.points));
+    const primaryBatch = new Path2D();
+    const secondaryBatch = new Path2D();
+    filaments.forEach((f) => {
+      (f.layer === 'primary' ? primaryBatch : secondaryBatch).addPath(new Path2D(f.d));
+    });
+
+    // ── view + mask sprite (rebuilt on resize)
+    let view: ViewTransform | null = null;
+    let mask: MaskSprite | null = null;
+
+    const rebuildMask = () => {
+      if (!view) return;
+      if (maskMode === 'rect') {
+        mask = buildRectMaskSprite(
+          view, fontSize, wordmarkY, rectPaddingX, rectPaddingY, rectFeather, maskStrength,
         );
-      })}
-      {pulses.map((p) => {
-        const f = filamentsById[p.filamentId];
-        if (!f) return null;
-        return (
-          <Pulse
-            key={p.id}
-            filament={f}
-            duration={p.duration}
-            color={pulseColor}
-            animKey={`${inst}_${p.id}`}
-          />
-        );
-      })}
-    </g>
-  );
+      } else if (maskMode === 'text') {
+        mask = buildTextMaskSprite(view, fontSize, wordmarkY, maskHaloPx, maskStrength);
+      } else if (maskMode === 'radial') {
+        mask = buildRadialMaskSprite(view, wordmarkY, fadeRadius, fadeStrength);
+      } else {
+        mask = null;
+      }
+    };
+
+    const resize = () => {
+      const rect = container.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const deviceW = Math.max(1, Math.round(rect.width * dpr));
+      const deviceH = Math.max(1, Math.round(rect.height * dpr));
+      if (canvas.width !== deviceW) canvas.width = deviceW;
+      if (canvas.height !== deviceH) canvas.height = deviceH;
+      // preserveAspectRatio="xMidYMid slice" over the 1200x700 viewBox.
+      const scale = Math.max(deviceW / W, deviceH / H);
+      view = {
+        scale,
+        tx: (deviceW - W * scale) / 2,
+        ty: (deviceH - H * scale) / 2,
+        deviceW,
+        deviceH,
+      };
+      rebuildMask();
+    };
+
+    // ── dynamics owned by the loop — never touches React state
+    const pulses: ActivePulse[] = [];
+    const embers: ActiveEmber[] = [];
+    let pulseAccMs = 0;
+    let emberAccMs = 0;
+
+    const spawn = (now: number, dtMs: number) => {
+      const step = Math.min(dtMs, MAX_SPAWN_STEP_MS);
+      if (pulseRate > 0) {
+        const interval = 1000 / pulseRate;
+        pulseAccMs += step;
+        while (pulseAccMs >= interval) {
+          pulseAccMs -= interval;
+          if (pulses.length >= MAX_PULSES) continue;
+          pulses.push({
+            filamentIdx: Math.floor(Math.random() * filaments.length),
+            duration:
+              pulseMinDuration + Math.random() * (pulseMaxDuration - pulseMinDuration),
+            startedAt: now,
+          });
+        }
+      }
+      if (emberRate > 0) {
+        const interval = 1000 / emberRate;
+        emberAccMs += step;
+        while (emberAccMs >= interval) {
+          emberAccMs -= interval;
+          if (embers.length >= MAX_EMBERS) continue;
+          const filamentIdx = Math.floor(Math.random() * filaments.length);
+          // Avoid the wordmark region — bias toward the outer span of the arm.
+          const tBias = 0.25 + Math.random() * 0.75;
+          embers.push({
+            filamentIdx,
+            pointIdx: Math.floor(tBias * (filaments[filamentIdx].points.length - 1)),
+            duration:
+              emberMinDuration + Math.random() * (emberMaxDuration - emberMinDuration),
+            startedAt: now,
+            size: emberSize * (0.6 + Math.random() * 0.8),
+          });
+        }
+      }
+    };
+
+    const expire = (now: number) => {
+      for (let i = pulses.length - 1; i >= 0; i--) {
+        if (now - pulses[i].startedAt >= pulses[i].duration) pulses.splice(i, 1);
+      }
+      for (let i = embers.length - 1; i >= 0; i--) {
+        if (now - embers[i].startedAt >= embers[i].duration) embers.splice(i, 1);
+      }
+    };
+
+    /** Stroke the polyline slice of filament `fi` between arc lengths a..b. */
+    const strokeArcSlice = (fi: number, a: number, b: number) => {
+      if (b <= a) return;
+      const pts = filaments[fi].points;
+      const cum = cums[fi];
+      // Binary search for the first vertex past `a`.
+      let lo = 0;
+      let hi = cum.length - 1;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (cum[mid] < a) lo = mid + 1;
+        else hi = mid;
+      }
+      const lerpAt = (target: number, idx: number) => {
+        // Interpolate between vertices idx-1 and idx.
+        const l0 = cum[idx - 1];
+        const l1 = cum[idx];
+        const u = l1 > l0 ? (target - l0) / (l1 - l0) : 0;
+        const p0 = pts[idx - 1];
+        const p1 = pts[idx];
+        return { x: p0.x + (p1.x - p0.x) * u, y: p0.y + (p1.y - p0.y) * u };
+      };
+      ctx.beginPath();
+      const start = lo > 0 ? lerpAt(a, lo) : pts[0];
+      ctx.moveTo(start.x, start.y);
+      let i = lo;
+      while (i < cum.length && cum[i] < b) {
+        ctx.lineTo(pts[i].x, pts[i].y);
+        i++;
+      }
+      if (i > 0 && i < cum.length) {
+        const end = lerpAt(b, i);
+        ctx.lineTo(end.x, end.y);
+      }
+      ctx.stroke();
+    };
+
+    const t0 = performance.now();
+
+    const draw = (now: number, animate: boolean) => {
+      if (!view) return;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, view.deviceW, view.deviceH);
+      ctx.setTransform(view.scale, 0, 0, view.scale, view.tx, view.ty);
+
+      // Field rotation (time-based; one full turn per `rotation` seconds).
+      if (animate && rotation > 0) {
+        const turns = ((now - t0) / 1000 / rotation) % 1;
+        const angle = (reverse ? -1 : 1) * turns * Math.PI * 2;
+        ctx.translate(anchorX, anchorY);
+        ctx.rotate(angle);
+        ctx.translate(-anchorX, -anchorY);
+      }
+
+      // Filaments — two batched strokes.
+      ctx.lineWidth = FILAMENT_WIDTH;
+      ctx.lineCap = 'butt';
+      ctx.globalAlpha = PRIMARY_OPACITY;
+      ctx.strokeStyle = primaryColor;
+      ctx.stroke(primaryBatch);
+      ctx.globalAlpha = SECONDARY_OPACITY;
+      ctx.strokeStyle = secondaryColor;
+      ctx.stroke(secondaryBatch);
+
+      // Pulses — arc-length slices with round caps.
+      ctx.lineWidth = PULSE_WIDTH;
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = pulseColor;
+      for (const p of pulses) {
+        const progress = (now - p.startedAt) / p.duration;
+        const total = cums[p.filamentIdx][cums[p.filamentIdx].length - 1];
+        const win = pulseWindow(progress, total);
+        if (win.alpha <= 0) continue;
+        ctx.globalAlpha = win.alpha;
+        strokeArcSlice(p.filamentIdx, win.a, win.b);
+      }
+
+      // Embers — screen-blended twinkle dots.
+      ctx.globalCompositeOperation = 'screen';
+      ctx.fillStyle = emberColor;
+      for (const e of embers) {
+        const env = emberEnvelope((now - e.startedAt) / e.duration);
+        if (env.alpha <= 0) continue;
+        const pt = filaments[e.filamentIdx].points[e.pointIdx];
+        ctx.globalAlpha = env.alpha;
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, e.size * env.scale, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = 1;
+
+      // Wordmark knockout — static sprite, device space.
+      if (mask) {
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.drawImage(mask.canvas, mask.dx, mask.dy);
+        ctx.globalCompositeOperation = 'source-over';
+      }
+    };
+
+    // ── loop / reduced-motion wiring
+    let raf = 0;
+    let last = performance.now();
+    const frame = (now: number) => {
+      spawn(now, now - last);
+      expire(now);
+      last = now;
+      draw(now, true);
+      raf = requestAnimationFrame(frame);
+    };
+
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+    let reducedMode = reduced.matches;
+
+    const start = () => {
+      if (reducedMode) {
+        // Static composition: no rotation, no pulses, no embers.
+        pulses.length = 0;
+        embers.length = 0;
+        draw(performance.now(), false);
+      } else {
+        last = performance.now();
+        raf = requestAnimationFrame(frame);
+      }
+    };
+    const stop = () => {
+      if (raf) cancelAnimationFrame(raf);
+      raf = 0;
+    };
+    const onMotionChange = () => {
+      stop();
+      reducedMode = reduced.matches;
+      start();
+    };
+    reduced.addEventListener('change', onMotionChange);
+
+    const ro = new ResizeObserver(() => {
+      resize();
+      if (reducedMode) draw(performance.now(), false);
+    });
+    ro.observe(container);
+    resize();
+    start();
+
+    return () => {
+      stop();
+      reduced.removeEventListener('change', onMotionChange);
+      ro.disconnect();
+    };
+  }, [
+    arms, growth, rotation, reverse, anchorX, anchorY, wordmarkY, fontSize,
+    maskMode, fadeRadius, fadeStrength, maskHaloPx, maskStrength,
+    rectPaddingX, rectPaddingY, rectFeather,
+    pulseRate, pulseColor, pulseMinDuration, pulseMaxDuration,
+    emberRate, emberColor, emberSize, emberMinDuration, emberMaxDuration,
+    primaryColor, secondaryColor,
+  ]);
 
   return (
     <div
+      ref={containerRef}
       className={className}
       style={{
         position: 'relative',
@@ -625,34 +772,38 @@ export function VeilSpiral({
         ...style,
       }}
     >
-      <svg
-        viewBox={`0 0 ${W} ${H}`}
-        width="100%"
-        height="100%"
-        preserveAspectRatio="xMidYMid slice"
-        style={{ display: 'block' }}
-      >
-        <defs>
-          <filter id={glowId} x="-50%" y="-50%" width="200%" height="200%">
-            <feGaussianBlur stdDeviation="3" result="b" />
-            <feMerge>
-              <feMergeNode in="b" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-          {renderMask()}
-        </defs>
-
-        <style>{`
-          @keyframes ${spinAnim} {
-            from { transform: rotate(0deg); }
-            to   { transform: rotate(360deg); }
-          }
-        `}</style>
-
-        {maskMode === 'none' ? fieldGroup : <g mask={`url(#${maskId})`}>{fieldGroup}</g>}
-
-        {showWordmark && (
+      <canvas
+        ref={canvasRef}
+        style={{
+          position: 'absolute',
+          inset: 0,
+          width: '100%',
+          height: '100%',
+          display: 'block',
+        }}
+      />
+      {showWordmark && (
+        <svg
+          viewBox={`0 0 ${W} ${H}`}
+          preserveAspectRatio="xMidYMid slice"
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            display: 'block',
+            pointerEvents: 'none',
+          }}
+        >
+          <defs>
+            <filter id={glowId} x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="3" result="b" />
+              <feMerge>
+                <feMergeNode in="b" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+          </defs>
           <NexusWordmark
             glowId={glowId}
             fontSize={fontSize}
@@ -660,8 +811,8 @@ export function VeilSpiral({
             color={wordmarkColor}
             strokeWidth={wordmarkStroke}
           />
-        )}
-      </svg>
+        </svg>
+      )}
     </div>
   );
 }
