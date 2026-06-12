@@ -37,7 +37,11 @@ def start_setup(slot_number: int, model: Optional[str] = None) -> str:
 
     Args:
         slot_number: Target save slot (1-5)
-        model: Optional model name (defaults to settings.json new_story.model)
+        model: Optional model name. The HTTP setup endpoint resolves the
+            model before calling (explicit override or the configured
+            wizard default), so it always passes a concrete ID; direct
+            callers (e.g., scripts/new_story_cli.py) may pass None to get
+            the nexus.toml wizard.default_model fallback here.
 
     Returns:
         Thread ID for the new conversation
