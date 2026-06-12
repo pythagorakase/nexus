@@ -161,6 +161,19 @@ For detailed key management workflows including rotation, see the `manage-api-ke
 - **Testing Defaults**: When writing live tests or setting model defaults in *runtime* code, do not hardcode model IDs. Reference the `[global.model.api_models]` registry in `nexus.toml` via `@<provider>.<role>` syntax (e.g., `@openai.default`, `@anthropic.fast`); the Pydantic loader resolves these to concrete IDs at config load. Tests that intentionally pin a specific model for behavioral regression coverage may keep literal IDs and should add a `# pin: <reason>` comment so the drift checker (`scripts/check_model_drift.py`) ignores them.
 - **Testing Philosophy**: The user **HATES** mock tests. If the current feature involves remote inference, for example, that means testing will be meaningless to the user unless it makes real API calls.
 
+## UI Design: Visual Minimalism
+
+The standing antipattern to avoid is **visual verbosity**: cluttering the UI with excessive or redundant textual labels. The reference example is the light/dark toggle on darioamodei.com — an unlabeled control whose function is ~90% guessable on sight and 100% confirmed by one click. NEXUS UI should strive for that kind of clean minimalism.
+
+- Every verbal label must earn its place, and the threshold is high. UI elements should be visually self-evident or easily discoverable through interaction.
+- Err on the side of too little labeling. When confusion seems possible, first redesign the element to communicate intent visually; add text only as a last resort.
+- Never restate information already visible elsewhere on screen (duplicate slugs, repeated cast lists, a wordmark re-spelled in a footer bar).
+- No explanatory paragraphs in persistent chrome. Rationale and "how this works" prose belong in release communications or docs — never in settings panes or sidebars.
+- One label per section, maximum, matching its navigation name. No eyebrow-plus-title-plus-subtitle stacks.
+- Internal module names (LORE, LOGON, MEMNON, and the like) never appear in UI copy. Users see plain functional names: "MODEL", "CONTEXT LENGTH".
+- Don't uppercase content. Character names and prose render in natural case; reserve case styling for chrome where the design system specifies it.
+- Transient status (telemetry, progress) is visible only while the underlying activity is live, and vanishes when idle.
+
 ## Testing with NEXUS CLI
 
 When developing features that affect the narrative/wizard flow:
