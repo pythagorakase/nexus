@@ -35,6 +35,24 @@ The crew **moves through the quiet streets, recovering from the night before—s
 - **Pete** → _Surprisingly un-hungover, but moving with the energy of a man whose worldview permanently shifted overnight._
 `;
 
+/**
+ * Real Skald output captured from save_05 narrative_chunks id 6 on
+ * 2026-06-12. Fresh chunks italicize whole sentences with single asterisks,
+ * so the spans end in punctuation (`favor.*`) - the form that regressed
+ * during typewriter reveal when a sentinel character followed the closing
+ * delimiter and broke CommonMark's right-flanking rule.
+ */
+const SKALD_CHUNK_6_EXCERPT = `Odile’s summons is folded inside your coat, already soft from damp. Seven words in her cramped archive hand:
+
+*Before first bell. Come alone. Last favor.*
+
+Not *urgent*. Not *danger*. Odile Sorrenwick was born into a city where panic is taxed if spoken aloud.`;
+
+/** Real Skald output from save_05 narrative_chunks id 7 (same capture). */
+const SKALD_CHUNK_7_EXCERPT = `Somewhere below the Annex, below the seawall, below any lawful map of Veyport, a voice like water remembered under a door shapes your name with patient intimacy.
+
+*Brena.*`;
+
 describe("ProseMarkdown", () => {
   it("renders **bold** as <strong> with no literal asterisks", () => {
     const { container } = render(<ProseMarkdown text="A **bold** claim." />);
@@ -157,6 +175,21 @@ describe("ProseMarkdown", () => {
     expect(container.querySelector("hr.md-hr")).not.toBeNull();
     expect(container.querySelectorAll("ul li").length).toBe(2);
   });
+
+  it("renders real Skald sentence-italics (save_05 chunk 6) as <em>", () => {
+    const { container } = render(
+      <ProseMarkdown text={SKALD_CHUNK_6_EXCERPT} />,
+    );
+    const ems = Array.from(container.querySelectorAll("em")).map(
+      (em) => em.textContent,
+    );
+    expect(ems).toEqual([
+      "Before first bell. Come alone. Last favor.",
+      "urgent",
+      "danger",
+    ]);
+    expect(container.textContent).not.toContain("*");
+  });
 });
 
 describe("heading scale (nexus-layout.css)", () => {
@@ -257,6 +290,33 @@ describe("typewriter reveal", () => {
     expect(prepareRevealSource("Before.\n\n------")).not.toContain("-");
   });
 
+  it("keeps the caret at the frontier after a just-completed rule", () => {
+    // A textless last block (the freshly revealed <hr>) must take the caret
+    // after itself; pulling it back into the previous paragraph's text made
+    // the typewriter position jump backward mid-chunk. The caret stands in
+    // its own paragraph so the markdown root keeps block-level children.
+    const { container } = render(
+      <ProseMarkdown text={"Before.\n\n---\n\n"} revealing />,
+    );
+    const caret = container.querySelector(".type-caret");
+    expect(caret).not.toBeNull();
+    const caretLine = caret!.closest("p");
+    expect(caretLine).not.toBeNull();
+    expect(caretLine!.previousElementSibling?.tagName).toBe("HR");
+    expect(caretLine!.textContent).toBe("");
+  });
+
+  it("attaches auto-closers to the last non-whitespace character", () => {
+    // A whitespace-preceded closer is not right-flanking and cannot close.
+    expect(prepareRevealSource("*Before ")).toBe("*Before*");
+    expect(prepareRevealSource("*Before first bell. ")).toBe(
+      "*Before first bell.*",
+    );
+    expect(prepareRevealSource("The crew **moves ")).toBe(
+      "The crew **moves**",
+    );
+  });
+
   it("trims bare heading hashes until their text arrives", () => {
     const { container } = render(
       <ProseMarkdown text={"Seen.\n\n##"} revealing />,
@@ -269,6 +329,103 @@ describe("typewriter reveal", () => {
       <ProseMarkdown text="Mid-sentence revea" revealing />,
     );
     expect(container.textContent).not.toContain("\uE000");
+    expect(container.querySelector(".type-caret")).not.toBeNull();
+  });
+
+  // Regression (user report: "*italic* not rendering"): the frame whose
+  // last typed character is the closing `*` of a punctuation-final span.
+  // The old in-source caret sentinel (a word character to micromark) made
+  // that closing delimiter non-right-flanking, so the whole span flashed
+  // as literal asterisks at the exact moment it completed.
+  it("keeps a just-completed punctuation-final *italic* span italic mid-reveal", () => {
+    const end =
+      SKALD_CHUNK_6_EXCERPT.indexOf("Last favor.*") + "Last favor.*".length;
+    const { container } = render(
+      <ProseMarkdown text={SKALD_CHUNK_6_EXCERPT.slice(0, end)} revealing />,
+    );
+    const em = container.querySelector("em");
+    expect(em).not.toBeNull();
+    expect(em!.textContent).toContain("Before first bell. Come alone.");
+    expect(container.textContent).not.toContain("*");
+    expect(container.querySelector(".type-caret")).not.toBeNull();
+  });
+
+  it("keeps just-completed **bold.** and _italic._ spans styled mid-reveal", () => {
+    const bold = render(
+      <ProseMarkdown text={'He says **"Stop."**'} revealing />,
+    );
+    expect(bold.container.querySelector("strong")!.textContent).toBe(
+      '"Stop."',
+    );
+    expect(bold.container.textContent).not.toContain("*");
+    const under = render(
+      <ProseMarkdown
+        text="- **Pete** \u2192 _Surprisingly un-hungover, but moving with the energy of a man whose worldview permanently shifted overnight._"
+        revealing
+      />,
+    );
+    expect(under.container.querySelector("em")!.textContent).toContain(
+      "Surprisingly un-hungover",
+    );
+    expect(under.container.textContent).not.toContain("_");
+  });
+
+  it("renders a just-typed opener as plain text, not an empty emphasis", () => {
+    // Frame ends exactly on the opening `*` of mid-line `*urgent*`: closing
+    // it would yield the empty-emphasis literal `Not **`. The trailing run
+    // is stripped instead; the opener reappears with its first content char.
+    const opener = render(<ProseMarkdown text="Not *" revealing />);
+    expect(opener.container.textContent).not.toContain("*");
+    expect(opener.container.querySelector(".type-caret")).not.toBeNull();
+    const boldOpener = render(<ProseMarkdown text="the **" revealing />);
+    expect(boldOpener.container.textContent).not.toContain("*");
+  });
+
+  it("rebuilds a half-typed closing run instead of leaking stars", () => {
+    // One of the two closing stars typed: `**moves through...*`.
+    const { container } = render(
+      <ProseMarkdown text="The crew **moves through the quiet streets*" revealing />,
+    );
+    const strong = container.querySelector("strong");
+    expect(strong).not.toBeNull();
+    expect(strong!.textContent).toContain("moves through the quiet streets");
+    expect(container.textContent).not.toContain("*");
+  });
+
+  it("never flashes literal markers on any frame of a real reveal", () => {
+    // Sweeps every typewriter frame of real corpus text: fresh Skald
+    // sentence-italics (save_05), a bold legacy line, and the full legacy
+    // excerpt whose scene-break comment contains `_` (which must not count
+    // toward delimiter parity - skipHtml drops the comment, so a parity
+    // closer would ride the caret as a literal underscore forever).
+    const texts = [
+      `${SKALD_CHUNK_7_EXCERPT}\n\nThe lower stacks answer.`,
+      SKALD_CHUNK_6_EXCERPT,
+      "The crew **moves through the quiet streets, recovering from the night before—some more gracefully than others.**\n\nDone.",
+      LEGACY_CHUNK_1425_EXCERPT,
+    ];
+    for (const text of texts) {
+      for (let frontier = 1; frontier <= text.length; frontier += 1) {
+        const { container, unmount } = render(
+          <ProseMarkdown text={text.slice(0, frontier)} revealing />,
+        );
+        expect(
+          container.textContent,
+          `literal marker leaked at frame ${frontier} of ${JSON.stringify(text.slice(0, 30))}`,
+        ).not.toMatch(/[*_]/);
+        unmount();
+      }
+    }
+  });
+
+  it("renders the live *Brena.* paragraph italic with the caret inside", () => {
+    const { container } = render(
+      <ProseMarkdown text={SKALD_CHUNK_7_EXCERPT} revealing />,
+    );
+    const ems = container.querySelectorAll("em");
+    expect(ems).toHaveLength(1);
+    expect(ems[0].textContent).toContain("Brena.");
+    expect(container.textContent).not.toContain("*");
     expect(container.querySelector(".type-caret")).not.toBeNull();
   });
 });
