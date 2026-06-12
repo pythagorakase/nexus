@@ -22,6 +22,7 @@ import type {
   IncubatorPayload,
   SlotState,
 } from "@/types/narrative";
+import type { OutlineRow } from "@/lib/narrative-nav";
 
 async function getJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
@@ -68,6 +69,16 @@ export function getEpisodeChunks(
 
 export function getChunkContext(chunkId: number, slot: number): Promise<ChunkContext> {
   return getJson(`/api/narrative/chunks/${chunkId}/context?slot=${slot}`);
+}
+
+/** Story outline: one row per committed chunk, story order. */
+export function getOutline(slot: number): Promise<OutlineRow[]> {
+  return getJson(`/api/narrative/outline?slot=${slot}`);
+}
+
+/** A single committed chunk (with metadata) for historical reading. */
+export function getChunk(chunkId: number, slot: number): Promise<ChunkWithMetadata> {
+  return getJson(`/api/narrative/chunks/${chunkId}?slot=${slot}`);
 }
 
 export function getCharacters(slot: number): Promise<Character[]> {

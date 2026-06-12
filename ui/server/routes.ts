@@ -145,6 +145,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // GET /api/narrative/outline - Story outline (season/episode/scene/slug per
+  // committed chunk, story order). Read-only; powers the right-rail story tree.
+  app.get("/api/narrative/outline", async (req, res) => {
+    try {
+      const slot = req.query.slot
+        ? parseInt(req.query.slot as string, 10)
+        : undefined;
+      if (slot !== undefined && Number.isNaN(slot)) {
+        return res.status(400).json({ error: "slot must be an integer" });
+      }
+      const outline = await storage.getChunkOutline(slot);
+      res.json(outline);
+    } catch (error) {
+      console.error("Error fetching outline:", error);
+      res.status(500).json({ error: "Failed to fetch outline" });
+    }
+  });
+
+  // GET /api/narrative/chunks/:chunkId - Get a single committed chunk by id.
+  // Read-only; powers historical (non-frontier) reading in the reader.
+  app.get("/api/narrative/chunks/:chunkId", async (req, res) => {
+    try {
+      const chunkId = parseInt(req.params.chunkId);
+      if (isNaN(chunkId)) {
+        return res.status(400).json({ error: "Invalid chunk ID" });
+      }
+
+      const slot = req.query.slot ? parseInt(req.query.slot as string) : undefined;
+      const chunk = await storage.getChunkById(chunkId, slot);
+      if (!chunk) {
+        return res.status(404).json({ error: `Chunk ${chunkId} not found` });
+      }
+      res.json(chunk);
+    } catch (error) {
+      console.error("Error fetching chunk:", error);
+      res.status(500).json({ error: "Failed to fetch chunk" });
+    }
+  });
+
   // GET /api/narrative/chunks/:chunkId/adjacent - Get previous and next chunks
   app.get("/api/narrative/chunks/:chunkId/adjacent", async (req, res) => {
     try {

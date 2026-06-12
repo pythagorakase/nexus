@@ -305,15 +305,37 @@
   margin: 0 0 12px;
   line-height: 1.05;
 }
-.scene-meta {
-  display: inline-flex;
+/* ─── Reader navigation — "<" / ">" pagination glyphs in the menu font.
+   One pair at the top and one at the bottom of the displayed chunk; "»"
+   (return to the frontier) appears between them while reading history.
+   Disabled = grayed: the rail stays in place, the step doesn't exist. */
+.reader-nav {
+  display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 14px;
-  flex-wrap: wrap;
-  justify-content: center;
+  max-width: 65ch;
+  margin: 0 auto;
 }
-.scene-meta .dot { color: var(--bronze); opacity: .6; }
+.reader-nav-btn {
+  background: transparent;
+  border: none;
+  padding: 2px 14px;
+  font-family: var(--font-menu);
+  font-size: 22px;
+  line-height: 1;
+  font-weight: 600;
+  color: var(--brass);
+  cursor: pointer;
+  transition: color .15s, text-shadow .15s;
+}
+.reader-nav-btn:hover:not(:disabled) {
+  color: var(--brass-bright);
+  text-shadow: var(--glow-soft);
+}
+.reader-nav-btn:disabled {
+  opacity: .2;
+  cursor: default;
+}
 
 /* ─── Chunk blocks ─── */
 .chunk-stream {
@@ -334,6 +356,12 @@
   border-left-color: var(--brass);
   background: hsl(320 55% 50% / .04);
   box-shadow: -6px 0 18px -8px hsl(320 55% 50% / .35);
+}
+/* Historical reading: full presence, bronze edge - the archive, not the
+   live frontier. */
+.chunk-block.archival {
+  opacity: 1;
+  border-left-color: var(--bronze);
 }
 .prose-block {
   max-width: 65ch;
@@ -437,17 +465,6 @@
   margin: 36px auto 0;
   max-width: 65ch;
 }
-.choices-eyebrow {
-  display: block;
-  margin-bottom: 14px;
-  font-family: var(--font-menu);
-  font-size: 10px;
-  letter-spacing: 0.3em;
-  text-transform: uppercase;
-  color: var(--brass);
-  text-align: center;
-  font-weight: 600;
-}
 .choice {
   display: flex;
   align-items: center;
@@ -523,8 +540,12 @@
   border-radius: 0;
   caret-color: var(--brass);
 }
-.choice-input:focus,
-.choice-input:focus-visible {
+/* Suppress the shadcn focus ring at higher specificity than the Tailwind
+   utilities: programmatic focus (the no-choices autofocus) matches
+   :focus-visible, which pointer focus never did - the caret alone is the
+   focus indicator here, with the glow on the enclosing pill. */
+.choice.freeform .choice-input:focus,
+.choice.freeform .choice-input:focus-visible {
   outline: none;
   box-shadow: none;
   border: none;
@@ -575,11 +596,6 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-}
-.ledger-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
 }
 
 /* Phase stream */
@@ -634,7 +650,7 @@
 }
 .phase-stat {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: baseline;
 }
 .phase-clock {
@@ -646,64 +662,7 @@
   font-weight: 600;
 }
 
-/* Scene cast */
-.cast-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.cast-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 7px 8px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  white-space: nowrap;
-  overflow: hidden;
-}
-.cast-row:hover {
-  border-color: var(--border);
-  background: hsl(270 30% 14% / .5);
-}
-.cast-row.off { opacity: .65; }
-/* Single-letter avatar — menu font, not the marquee. */
-.cast-glyph {
-  width: 30px;
-  height: 30px;
-  display: grid;
-  place-items: center;
-  font-family: var(--font-menu);
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--brass);
-  background: var(--bg-elev-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  flex-shrink: 0;
-}
-.cast-glyph.dim { color: var(--fg-dim); }
-.cast-name {
-  font-family: var(--font-menu);
-  font-size: 12px;
-  letter-spacing: 0.16em;
-  color: var(--fg);
-  text-transform: uppercase;
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.cast-role {
-  font-family: var(--font-body);
-  font-size: 14px;
-  color: var(--fg-muted);
-  font-style: italic;
-}
-
-/* Hierarchy */
+/* Story tree */
 .hier-list {
   list-style: none;
   padding: 0;
@@ -717,17 +676,25 @@
   padding: 0;
   margin: 0;
 }
+/* Season / episode nodes are expand-collapse buttons; chunk rows are jump
+   buttons. All inherit the menu font; button chrome is stripped. */
 .hier-row {
   display: flex;
   align-items: center;
   gap: 6px;
+  width: 100%;
   padding: 4px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
   font-family: var(--font-menu);
   font-size: 10px;
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--fg-muted);
 }
+.hier-row:hover { color: var(--brass-bright); }
 .hier-season > .hier-row {
   color: var(--brass);
   font-weight: 600;
@@ -745,20 +712,25 @@
   display: flex;
   gap: 8px;
   align-items: baseline;
+  width: 100%;
   padding: 4px 4px 4px 10px;
+  background: none;
+  border: none;
+  border-left: 2px solid transparent;
+  cursor: pointer;
+  text-align: left;
   font-family: var(--font-menu);
   font-size: 10px;
   letter-spacing: 0.08em;
   color: var(--fg-muted);
-  border-left: 2px solid transparent;
   white-space: nowrap;
   overflow: hidden;
 }
-.hier-chunk .hier-coord {
-  color: var(--bronze);
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  flex-shrink: 0;
+.hier-chunk:hover { background: hsl(270 30% 14% / .5); }
+.hier-chunk:hover .hier-slug { color: var(--brass-bright); }
+/* The live frontier row stays findable even while reading history. */
+.hier-chunk.live {
+  border-left-color: color-mix(in srgb, var(--brass) 45%, transparent);
 }
 .hier-chunk .hier-slug {
   color: var(--fg);
@@ -768,13 +740,16 @@
   text-overflow: ellipsis;
   overflow: hidden;
 }
+.hier-chunk .hier-slug.pending {
+  font-family: var(--font-menu);
+  font-style: normal;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  color: var(--bronze);
+}
 .hier-chunk.current {
   border-left-color: var(--brass);
   background: hsl(320 55% 50% / .1);
-}
-.hier-chunk.current .hier-coord {
-  color: var(--brass-bright);
-  text-shadow: var(--glow-soft);
 }
 .hier-chunk.current .hier-slug { color: var(--brass-bright); }
 

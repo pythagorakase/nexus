@@ -55,6 +55,9 @@ export function NexusLayout() {
   const { isVector } = useTheme();
   const [tab, setTab] = useState<NexusTab>(initialTab);
   const [slot] = useState<number | null>(activeSlot);
+  // Reading position: null = live frontier; a chunk id = historical
+  // reading (read-only). Shared by the reader and the right-rail tree.
+  const [readingChunkId, setReadingChunkId] = useState<number | null>(null);
 
   const engine = useNarrativeEngine(slot);
 
@@ -112,6 +115,8 @@ export function NexusLayout() {
                 slot={slot}
                 engine={engine}
                 typewriterMsPerChar={typewriterMsPerChar}
+                readingChunkId={readingChunkId}
+                onNavigate={setReadingChunkId}
               />
             ))}
           {tab === "map" && <MapPane slot={slot} />}
@@ -125,7 +130,14 @@ export function NexusLayout() {
             ))}
           {tab === "settings" && <SettingsPane />}
         </main>
-        {showLedger && <RightLedger slot={slot as number} engine={engine} />}
+        {showLedger && (
+          <RightLedger
+            slot={slot as number}
+            engine={engine}
+            readingChunkId={readingChunkId}
+            onNavigate={setReadingChunkId}
+          />
+        )}
       </div>
     </div>
   );

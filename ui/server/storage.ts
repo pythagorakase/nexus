@@ -43,6 +43,19 @@ export interface ChunkContext {
   places: Array<{ id: number; name: string; referenceType: "setting" | "mentioned" | "transit" }>;
 }
 
+/**
+ * One row of the story outline: the metadata coordinates of a committed
+ * chunk, in story order. Powers the right-rail story tree without shipping
+ * chunk prose.
+ */
+export interface OutlineRow {
+  id: number;
+  season: number | null;
+  episode: number | null;
+  scene: number | null;
+  slug: string | null;
+}
+
 export interface IStorage {
   // Season methods
   getAllSeasons(slot?: number | null): Promise<Season[]>;
@@ -56,6 +69,8 @@ export interface IStorage {
     total: number;
   }>;
   getLatestChunk(slot?: number | null): Promise<(NarrativeChunk & { metadata?: ChunkMetadata }) | null>;
+  getChunkById(chunkId: number, slot?: number | null): Promise<(NarrativeChunk & { metadata?: ChunkMetadata }) | null>;
+  getChunkOutline(slot?: number | null): Promise<OutlineRow[]>;
   getAdjacentChunks(chunkId: number, slot?: number | null): Promise<{
     previous: (NarrativeChunk & { metadata?: ChunkMetadata }) | null;
     next: (NarrativeChunk & { metadata?: ChunkMetadata }) | null;
@@ -250,6 +265,75 @@ export class PostgresStorage implements IStorage {
         }
         : undefined,
     };
+  }
+
+  async getChunkById(chunkId: number, slot?: number | null): Promise<(NarrativeChunk & { metadata?: ChunkMetadata }) | null> {
+    const db = getDb(slot) || this.db;
+    const result = await db.execute(sql`
+      SELECT
+        nc.id,
+        nc.raw_text,
+        nc.storyteller_text,
+        nc.choice_object,
+        nc.choice_text,
+        nc.created_at,
+        cm.chunk_id,
+      cm.season,
+      cm.episode,
+      cm.scene,
+      cm.world_layer,
+      cm.time_delta,
+      cm.generation_date,
+      cm.slug
+    FROM narrative_chunks nc
+    LEFT JOIN chunk_metadata cm ON cm.chunk_id = nc.id
+    WHERE nc.id = ${chunkId} AND cm.id IS NOT NULL
+    `);
+
+    if (!result.rows || result.rows.length === 0) {
+      return null;
+    }
+
+    const row = result.rows[0] as any;
+    return {
+      id: Number(row.id),
+      rawText: row.raw_text,
+      storytellerText: row.storyteller_text ?? null,
+      choiceObject: row.choice_object ?? null,
+      choiceText: row.choice_text ?? null,
+      createdAt: row.created_at ?? null,
+      metadata: row.chunk_id
+        ? {
+          id: Number(row.chunk_id),
+          chunkId: Number(row.chunk_id),
+          season: toNumber(row.season),
+          episode: toNumber(row.episode),
+          scene: toNumber(row.scene),
+          worldLayer: row.world_layer ?? null,
+          timeDelta: row.time_delta ?? null,
+          generationDate: row.generation_date ?? null,
+          slug: row.slug ?? null,
+        }
+        : undefined,
+    };
+  }
+
+  async getChunkOutline(slot?: number | null): Promise<OutlineRow[]> {
+    const db = getDb(slot) || this.db;
+    const result = await db.execute(sql`
+      SELECT cm.chunk_id, cm.season, cm.episode, cm.scene, cm.slug
+      FROM chunk_metadata cm
+      JOIN narrative_chunks nc ON nc.id = cm.chunk_id
+      ORDER BY cm.chunk_id
+    `);
+
+    return (result.rows as any[]).map((row) => ({
+      id: Number(row.chunk_id),
+      season: toNumber(row.season),
+      episode: toNumber(row.episode),
+      scene: toNumber(row.scene),
+      slug: row.slug ?? null,
+    }));
   }
 
   async getAdjacentChunks(chunkId: number, slot?: number | null): Promise<{
@@ -818,6 +902,27 @@ class MemStorage implements IStorage {
       .sort((a, b) => b.id - a.id);
 
     return chunksWithMetadata[0] || null;
+  }
+
+  async getChunkById(chunkId: number): Promise<(NarrativeChunk & { metadata?: ChunkMetadata }) | null> {
+    const chunk = this.chunks.find((c) => c.id === chunkId);
+    if (!chunk) return null;
+    const metadata = this.metadata.find((meta) => meta.chunkId === chunkId);
+    if (!metadata) return null;
+    return { ...chunk, metadata };
+  }
+
+  async getChunkOutline(): Promise<OutlineRow[]> {
+    return this.metadata
+      .slice()
+      .sort((a, b) => a.chunkId - b.chunkId)
+      .map((meta) => ({
+        id: meta.chunkId,
+        season: meta.season ?? null,
+        episode: meta.episode ?? null,
+        scene: meta.scene ?? null,
+        slug: meta.slug ?? null,
+      }));
   }
 
   async getAdjacentChunks(chunkId: number): Promise<{
