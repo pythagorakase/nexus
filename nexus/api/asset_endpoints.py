@@ -227,7 +227,10 @@ def _delete_image(
     images = _fetch_images(dbname, table, owner_column, owner_id)
     image = next((row for row in images if row["id"] == image_id), None)
     if image:
-        file_path = UPLOAD_ROOT / image["file_path"]
+        # Legacy rows store file_path with a leading slash
+        # ("/character_portraits/..."); pathlib would treat that as absolute
+        # and discard UPLOAD_ROOT (Node's path.join did not). Strip it.
+        file_path = UPLOAD_ROOT / image["file_path"].lstrip("/")
         try:
             file_path.unlink()
         except OSError as exc:

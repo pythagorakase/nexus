@@ -91,9 +91,7 @@ class TestNarrativeReads:
         assert outline
         assert set(outline[0].keys()) == {"id", "season", "episode", "scene", "slug"}
         chunk_id = outline[0]["id"]
-        chunk = client.get(
-            f"/api/narrative/chunks/{chunk_id}?slot={READ_SLOT}"
-        ).json()
+        chunk = client.get(f"/api/narrative/chunks/{chunk_id}?slot={READ_SLOT}").json()
         assert chunk["id"] == chunk_id
         assert chunk["metadata"]["chunkId"] == chunk_id
 
@@ -234,9 +232,7 @@ def temp_character() -> Iterator[Tuple[int, str]]:
     dbname = f"save_{WRITE_SLOT:02d}"
     with get_connection(dbname) as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                "INSERT INTO entities (kind) VALUES ('character') RETURNING id"
-            )
+            cur.execute("INSERT INTO entities (kind) VALUES ('character') RETURNING id")
             entity_id = cur.fetchone()[0]
             cur.execute(
                 """
@@ -333,3 +329,40 @@ class TestAssetRoundTrip:
         )
         assert response.status_code == 400
         assert "Invalid file type" in response.text
+
+    def test_delete_handles_legacy_leading_slash_paths(
+        self, client: TestClient, temp_character: Tuple[int, str]
+    ) -> None:
+        """Legacy rows store file_path as "/character_portraits/...".
+
+        pathlib treats a leading-slash right operand as absolute (Node's
+        path.join did not), so delete must strip it or the public file is
+        orphaned (Codex P2 on PR #400).
+        """
+        character_id, dbname = temp_character
+        rel_dir = UPLOAD_ROOT / "character_portraits" / str(character_id)
+        rel_dir.mkdir(parents=True, exist_ok=True)
+        stored = rel_dir / "legacy.png"
+        stored.write_bytes(PNG_BYTES)
+
+        with get_connection(dbname, dict_cursor=True) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO assets.character_images
+                        (character_id, file_path, is_main, display_order)
+                    VALUES (%s, %s, 0, 0)
+                    RETURNING id
+                    """,
+                    (
+                        character_id,
+                        f"/character_portraits/{character_id}/legacy.png",
+                    ),
+                )
+                image_id = cur.fetchone()["id"]
+
+        response = client.delete(
+            f"/api/characters/{character_id}/images/{image_id}?slot={WRITE_SLOT}"
+        )
+        assert response.json() == {"success": True}
+        assert not stored.exists(), "legacy-path file must be unlinked"
