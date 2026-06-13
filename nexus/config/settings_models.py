@@ -218,6 +218,171 @@ class GlobalSettings(BaseModel):
 
 
 # =============================================================================
+# Managed Runtime Settings Models (issue #396)
+# =============================================================================
+
+
+class RuntimeServiceSettings(BaseModel):
+    """One supervised service in the local runtime profile."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    command: List[str] = Field(
+        ...,
+        min_length=1,
+        description=(
+            "argv template for spawning the service. Placeholders: {python} "
+            "(current interpreter), {host}, {port}. No shell is involved."
+        ),
+    )
+    host: str = Field(default="127.0.0.1", description="Bind host (loopback TCP)")
+    port: int = Field(..., ge=1, le=65535, description="Service port")
+    health_path: str = Field(
+        default="/health", description="HTTP path probed for liveness"
+    )
+    env: Dict[str, str] = Field(
+        default_factory=dict,
+        description="Extra environment variables set on the spawned process",
+    )
+    enabled: Literal["always", "never", "auto"] = Field(
+        default="always",
+        description=(
+            "'always' spawns the service in the local profile; 'never' skips "
+            "it; 'auto' spawns only when the TEST provider is registered in "
+            "[global.model.api_models] (the mock server's condition)."
+        ),
+    )
+    autorestart: Literal["never", "on-failure"] = Field(
+        default="never",
+        description=(
+            "'on-failure' respawns the service when it exits nonzero while a "
+            "foreground supervisor (nexus up --foreground) is attached. "
+            "Detached mode has no supervising process, so it is effectively "
+            "'never' there."
+        ),
+    )
+    autorestart_max_retries: int = Field(
+        default=3,
+        ge=0,
+        description="Foreground autorestart attempts before giving up",
+    )
+
+
+class RuntimeHealthSettings(BaseModel):
+    """HTTP health-probe and process lifecycle timing."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    timeout_seconds: float = Field(
+        default=2.0, gt=0, description="Per-probe HTTP timeout"
+    )
+    startup_deadline_seconds: float = Field(
+        default=30.0, gt=0, description="How long nexus up waits per service"
+    )
+    poll_interval_seconds: float = Field(
+        default=0.25, gt=0, description="Delay between startup health probes"
+    )
+    stop_grace_seconds: float = Field(
+        default=10.0,
+        gt=0,
+        description="SIGTERM-to-SIGKILL escalation window on nexus down",
+    )
+
+
+class RuntimeLogsSettings(BaseModel):
+    """Captured-log presentation settings for nexus logs."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    tail_lines: int = Field(
+        default=100, ge=1, description="Default line count for nexus logs"
+    )
+    follow_poll_seconds: float = Field(
+        default=0.5, gt=0, description="Poll interval for nexus logs -f"
+    )
+
+
+class RuntimeExternalSettings(BaseModel):
+    """Attach targets for the external profile (spawn nothing)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    gateway_url: str = Field(..., description="Base URL of the already-running gateway")
+    mock_openai_url: Optional[str] = Field(
+        default=None,
+        description="Base URL of an already-running mock server (optional)",
+    )
+
+
+class RuntimeRemoteSettings(BaseModel):
+    """A hosted NEXUS runtime reached purely over HTTP."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    base_url: str = Field(
+        ..., min_length=1, description="Base URL of the remote runtime origin"
+    )
+
+
+class RuntimeSettings(BaseModel):
+    """Managed runtime configuration (nexus up / down / status / logs)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    profile: Literal["local", "external", "remote"] = Field(
+        default="local",
+        description=(
+            "'local' spawns and manages services; 'external' attaches to "
+            "already-running services (health/status only); 'remote' targets "
+            "a hosted runtime via remote.base_url."
+        ),
+    )
+    state_dir: str = Field(
+        default=".nexus/runtime",
+        description=(
+            "Directory for pidfiles and captured service logs. Relative paths "
+            "resolve against the repository root."
+        ),
+    )
+    default_slot: int = Field(
+        default=1,
+        ge=1,
+        le=5,
+        description=(
+            "Slot exported as NEXUS_SLOT to spawned services when neither "
+            "--slot nor the NEXUS_SLOT environment variable is set."
+        ),
+    )
+    services: Dict[str, RuntimeServiceSettings] = Field(
+        default_factory=dict,
+        description="Supervised services for the local profile, by name",
+    )
+    health: RuntimeHealthSettings = Field(default_factory=RuntimeHealthSettings)
+    logs: RuntimeLogsSettings = Field(default_factory=RuntimeLogsSettings)
+    external: Optional[RuntimeExternalSettings] = None
+    remote: Optional[RuntimeRemoteSettings] = None
+
+    @model_validator(mode="after")
+    def _validate_profile_requirements(self) -> "RuntimeSettings":
+        if self.profile == "local" and "gateway" not in self.services:
+            raise ValueError(
+                "[runtime] profile 'local' requires a [runtime.services.gateway] "
+                "section"
+            )
+        if self.profile == "external" and self.external is None:
+            raise ValueError(
+                "[runtime] profile 'external' requires a [runtime.external] "
+                "section with gateway_url"
+            )
+        if self.profile == "remote" and self.remote is None:
+            raise ValueError(
+                "[runtime] profile 'remote' requires a [runtime.remote] section "
+                "with base_url"
+            )
+        return self
+
+
+# =============================================================================
 # LORE Agent Settings Models
 # =============================================================================
 
@@ -1389,6 +1554,10 @@ class Settings(BaseModel):
         default=None,
         description="IR evaluation subsystem settings",
     )
+    runtime: Optional[RuntimeSettings] = Field(
+        default=None,
+        description="Managed runtime settings (nexus up/down/status/logs)",
+    )
 
     @model_validator(mode="after")
     def _resolve_model_references(self) -> "Settings":
@@ -1479,6 +1648,34 @@ class Settings(BaseModel):
                         f"(unsupported_params in [global.model.api_models]). "
                         f"Remove the setting or choose a model that accepts it."
                     )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_runtime_mock_port_consistency(self) -> "Settings":
+        """The mock service port and the test provider base_url must agree.
+
+        The TEST registry entry's base_url is where clients send requests; the
+        [runtime.services.mock_openai] port is where the supervisor binds the
+        server. Drift between the two produces a runtime that "works" while
+        every TEST call connection-refuses, so it is rejected at load.
+        """
+        if self.runtime is None:
+            return self
+        mock = self.runtime.services.get("mock_openai")
+        test_provider = self.global_.model.api_models.get("test")
+        if mock is None or mock.enabled == "never":
+            return self
+        if test_provider is None or not test_provider.base_url:
+            return self
+        from urllib.parse import urlparse
+
+        base_port = urlparse(test_provider.base_url).port
+        if base_port != mock.port:
+            raise ValueError(
+                f"[runtime.services.mock_openai] port {mock.port} does not match "
+                f"the test provider base_url port {base_port} "
+                f"({test_provider.base_url}). Keep them in sync."
+            )
         return self
 
     def model_entry(self, model_id: str) -> APIModelEntry:
