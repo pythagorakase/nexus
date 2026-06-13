@@ -14,6 +14,11 @@ from pydantic import BaseModel, Field, ConfigDict, model_validator
 # Example: "@openai.default" resolves via api_models.openai.roles.default
 MODEL_ROLE_PREFIX = "@"
 
+# Providers with native SDK request paths. Every other provider in
+# [global.model.api_models] is an OpenAI-compatible server and must declare a
+# `base_url` (enforced by ``ModelConfig._validate_non_native_providers``).
+NATIVE_API_PROVIDERS = frozenset({"openai", "anthropic"})
+
 
 @dataclass
 class _ModelRegistry:
@@ -46,6 +51,17 @@ class APIModelEntry(BaseModel):
     description: Optional[str] = Field(
         default=None, description="Human-readable description (optional)"
     )
+    unsupported_params: List[str] = Field(
+        default_factory=list,
+        description=(
+            "Request parameters this model's API rejects outright (e.g. "
+            "'temperature' on reasoning-class models). Config load refuses any "
+            "consumer field that configures one of these params for this model "
+            "(see Settings._validate_param_capabilities); request builders only "
+            "send explicitly configured params, so a rejected parameter can "
+            "never reach the provider."
+        ),
+    )
 
 
 class ProviderModels(BaseModel):
@@ -75,6 +91,25 @@ class ProviderModels(BaseModel):
             "Expose this provider's models in UI-facing pickers "
             "(/api/config/models, /api/settings settings_meta). Backend and "
             "CLI callers always see the full registry regardless of this flag."
+        ),
+    )
+    base_url: Optional[str] = Field(
+        default=None,
+        description=(
+            "OpenAI-compatible server base URL (e.g. 'http://127.0.0.1:5102/v1' "
+            "for the mock server, or an Ollama/vLLM endpoint). Required for "
+            "every provider outside NATIVE_API_PROVIDERS; requests for this "
+            "provider's models are sent to this URL with the OpenAI client."
+        ),
+    )
+    api_key_secret: Optional[str] = Field(
+        default=None,
+        description=(
+            "Keychain account name (service 'nexus-api') holding the API key "
+            "for a base_url provider, resolved via "
+            "nexus.util.secret_manager.get_secret. Leave unset for servers "
+            "that need no key (mock server, local Ollama/vLLM); a placeholder "
+            "key is sent because OpenAI clients require a non-empty key."
         ),
     )
 
@@ -137,6 +172,32 @@ class ModelConfig(BaseModel):
                 )
         return self
 
+    @model_validator(mode="after")
+    def _validate_non_native_providers(self) -> "ModelConfig":
+        """Every provider without a native SDK path must declare a base_url.
+
+        OpenAI and Anthropic requests go through their own SDK clients; any
+        other provider section (test mock server, Ollama, vLLM, ...) is an
+        OpenAI-compatible server whose endpoint lives in the registry, not in
+        code.
+        """
+        for provider, config in self.api_models.items():
+            if provider in NATIVE_API_PROVIDERS:
+                if config.base_url is not None:
+                    raise ValueError(
+                        f"Provider '{provider}' uses its native SDK endpoint; "
+                        f"base_url is not allowed here. Register a proxy or "
+                        f"local server as its own provider section instead."
+                    )
+                continue
+            if config.models and not config.base_url:
+                raise ValueError(
+                    f"Provider '{provider}' in [global.model.api_models] is not "
+                    f"a native SDK provider ({sorted(NATIVE_API_PROVIDERS)}) and "
+                    f"must declare a base_url for its OpenAI-compatible server."
+                )
+        return self
+
 
 class NarrativeConfig(BaseModel):
     """Narrative test mode settings."""
@@ -147,16 +208,6 @@ class NarrativeConfig(BaseModel):
     test_database_suffix: str = Field(..., description="Database suffix for testing")
 
 
-class GlobalAPIConfig(BaseModel):
-    """Global API configuration."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    test_mock_server_url: str = Field(
-        default="http://localhost:5102/v1", description="Mock server URL for TEST model"
-    )
-
-
 class GlobalSettings(BaseModel):
     """Global configuration settings."""
 
@@ -164,9 +215,6 @@ class GlobalSettings(BaseModel):
 
     model: ModelConfig
     narrative: NarrativeConfig
-    api: Optional[GlobalAPIConfig] = Field(
-        default=None, description="API configuration"
-    )
 
 
 # =============================================================================
@@ -277,6 +325,26 @@ class OrreryNarrationSettings(BaseModel):
     mode: Literal["async", "sync"] = "async"
     provider: str = "anthropic"
     model_ref: str = Field(..., description="Model ID or @provider.role reference")
+    temperature: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+        le=2.0,
+        description=(
+            "Sampling temperature for narration calls. Unset means the "
+            "parameter is omitted entirely (API default). Configuring it for "
+            "a model that lists 'temperature' in unsupported_params is a "
+            "config-load error."
+        ),
+    )
+    max_output_tokens: int = Field(
+        default=1200, ge=1, description="Output-token ceiling for narration calls"
+    )
+    max_attempts: int = Field(
+        default=3, ge=1, description="Narration job attempts before marked failed"
+    )
+    retry_delay_seconds: int = Field(
+        default=300, ge=0, description="Delay before a failed narration job retries"
+    )
 
 
 class OrreryBleedSettings(BaseModel):
@@ -1372,6 +1440,68 @@ class Settings(BaseModel):
             object.__setattr__(container, attr, resolved)
 
         return self
+
+    @model_validator(mode="after")
+    def _validate_param_capabilities(self) -> "Settings":
+        """Refuse configured request params that the resolved model rejects.
+
+        This is the single enforcement boundary for per-model parameter
+        capability (issue #401): consumer sections in nexus.toml may only
+        configure a sampling parameter when the model they resolve to does not
+        list it in `unsupported_params`. Request builders send only explicitly
+        configured params, so passing this validator guarantees no provider
+        ever receives a parameter it rejects.
+
+        Runs after ``_resolve_model_references`` (Pydantic executes model
+        validators in definition order), so every model field holds a concrete
+        registry ID by the time this checks it.
+        """
+        # Each tuple: (concrete model id, {param name: configured value}, source)
+        checks: List[Tuple[str, Dict[str, Any], str]] = []
+        if self.orrery is not None:
+            checks.append(
+                (
+                    self.orrery.narration.model_ref,
+                    {"temperature": self.orrery.narration.temperature},
+                    "[orrery.narration]",
+                )
+            )
+
+        for model_id, params, source in checks:
+            entry = self.model_entry(model_id)
+            for param, value in params.items():
+                if value is None:
+                    continue
+                if param in entry.unsupported_params:
+                    raise ValueError(
+                        f"{source} configures {param}={value!r}, but model "
+                        f"'{model_id}' declares '{param}' unsupported "
+                        f"(unsupported_params in [global.model.api_models]). "
+                        f"Remove the setting or choose a model that accepts it."
+                    )
+        return self
+
+    def model_entry(self, model_id: str) -> APIModelEntry:
+        """Return the registry entry for a concrete model ID (raises if absent)."""
+        for provider_models in self.global_.model.api_models.values():
+            for entry in provider_models.models:
+                if entry.id == model_id:
+                    return entry
+        raise ValueError(
+            f"Model ID '{model_id}' is not declared in "
+            f"[global.model.api_models.*].models"
+        )
+
+    def provider_for_model(self, model_id: str) -> str:
+        """Return the provider name owning a concrete model ID (raises if absent)."""
+        for provider, provider_models in self.global_.model.api_models.items():
+            for entry in provider_models.models:
+                if entry.id == model_id:
+                    return provider
+        raise ValueError(
+            f"Model ID '{model_id}' is not declared in "
+            f"[global.model.api_models.*].models"
+        )
 
     def resolve_model_ref(self, ref: str) -> str:
         """Resolve an "@provider.role" reference against the api_models registry.

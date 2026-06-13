@@ -19,22 +19,31 @@ default_slot_model = "TEST"
 # Each provider section lists models available for that API backend AND named
 # roles that downstream consumers reference via "@provider.role" syntax.
 # Editing a role here (e.g., openai.default) propagates everywhere automatically.
+# Per-model `unsupported_params` lists request parameters the provider rejects
+# outright for that model (e.g. temperature on reasoning-class models).
+# Config load refuses any consumer section that configures one of them.
 [global.model.api_models.openai]
 roles = { default = "gpt-5.5" }
 models = [
-    { id = "gpt-5.5", label = "GPT-5.5" },
+    { id = "gpt-5.5", label = "GPT-5.5", unsupported_params = ["temperature", "top_p"] },
 ]
 
 [global.model.api_models.anthropic]
 roles = { default = "claude-opus-4-8", deep = "claude-fable-5", fast = "claude-sonnet-4-6" }
 models = [
     { id = "claude-sonnet-4-6", label = "Sonnet 4.6" },
-    { id = "claude-opus-4-8", label = "Opus 4.8" },
-    { id = "claude-fable-5", label = "Fable 5" },
+    { id = "claude-opus-4-8", label = "Opus 4.8", unsupported_params = ["temperature", "top_p", "top_k"] },
+    { id = "claude-fable-5", label = "Fable 5", unsupported_params = ["temperature", "top_p", "top_k"] },
 ]
 
+# Non-native providers are OpenAI-compatible servers: `base_url` is where the
+# OpenAI client points. Any local server (Ollama, vLLM, ...) is registered the
+# same way — a new provider section with its own base_url and model list.
+# `api_key_secret` names a Keychain account (service "nexus-api") when the
+# server needs a key; leave unset for keyless servers like this mock.
 [global.model.api_models.test]
 ui_visible = false  # Backend/CLI-only mock server; hidden from UI model pickers
+base_url = "http://127.0.0.1:5102/v1"
 roles = { default = "TEST" }
 models = [
     { id = "TEST", label = "TEST", description = "Mock server with cached data (dev)" },
@@ -204,6 +213,13 @@ max_edges_per_query = 5000
 mode = "async"
 provider = "anthropic"
 model_ref = "@anthropic.default"
+# Optional sampling/queue knobs (defaults in OrreryNarrationSettings):
+#   temperature        — omitted from the request entirely when unset; setting
+#                        it for a model whose registry entry lists it in
+#                        unsupported_params is a config-load error (#401)
+#   max_output_tokens  — narration output ceiling (default 1200)
+#   max_attempts       — narration job attempts before failure (default 3)
+#   retry_delay_seconds — backoff between attempts (default 300)
 
 [orrery.bleed]
 max_candidates = 3
@@ -727,9 +743,6 @@ reasoning_effort = "high"     # Reasoning effort level (low/medium/high)
 # =============================================================================
 # API Settings
 # =============================================================================
-
-[global.api]
-test_mock_server_url = "http://localhost:5102/v1"  # Mock server for TEST model
 
 [api.constraints]
 max_choice_text_length = 1000  # Maximum length of choice text

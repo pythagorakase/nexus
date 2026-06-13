@@ -197,6 +197,44 @@ def get_provider_for_model(model_id: str) -> Optional[str]:
     return None
 
 
+def get_openai_compatible_endpoint(model_id: str) -> Optional[Dict[str, str]]:
+    """
+    Resolve the OpenAI-compatible endpoint for a registry model, if any.
+
+    Native SDK providers (openai, anthropic) return None — their requests use
+    the provider SDK's own endpoint and Keychain credentials. Every other
+    provider in [global.model.api_models] is an OpenAI-compatible server whose
+    `base_url` lives in the registry (issue #401); the mock TEST server and any
+    future local server (Ollama, vLLM, ...) route through here.
+
+    Args:
+        model_id: Concrete model ID from the api_models registry
+
+    Returns:
+        ``{"base_url": ..., "api_key": ...}`` for base_url providers, or None
+        for native providers and for models absent from the registry (callers
+        that accept ad-hoc model overrides treat those as native-SDK models).
+        ``api_key`` is read from Keychain when the provider declares
+        ``api_key_secret``; otherwise a placeholder is returned because OpenAI
+        clients require a non-empty key.
+    """
+    from nexus.config.settings_models import NATIVE_API_PROVIDERS
+
+    settings = load_settings()
+    provider = get_provider_for_model(model_id)
+    if provider is None or provider in NATIVE_API_PROVIDERS:
+        return None
+    entry = settings.global_.model.api_models[provider]
+    # base_url presence is enforced at config load for non-native providers.
+    if entry.api_key_secret:
+        from nexus.util.secret_manager import get_secret
+
+        api_key = get_secret(entry.api_key_secret)
+    else:
+        api_key = "nexus-local-no-key"
+    return {"base_url": entry.base_url, "api_key": api_key}
+
+
 def resolve_model_ref(ref: str, path: Union[str, Path] = "nexus.toml") -> str:
     """
     Resolve an "@provider.role" reference to a concrete model ID.
