@@ -67,7 +67,9 @@ from psycopg2.extras import RealDictCursor  # type: ignore[import-untyped]
 SLOT = 5
 DBNAME = "save_05"
 DSN = f"postgresql://pythagor@localhost:5432/{DBNAME}"
-API = "http://localhost:8002"
+# NARRATIVE_API_PORT lets the gate run beside a live dev stack on 8002
+# (agent worktrees); the spawned server subprocess inherits it via env.
+API = f"http://localhost:{os.environ.get('NARRATIVE_API_PORT', '8002')}"
 FIXTURE = Path(__file__).parent / "fixtures" / "golden_path_wizard_cache.json"
 
 # Hard ceiling on play turns; the run goes adaptive after the scripted

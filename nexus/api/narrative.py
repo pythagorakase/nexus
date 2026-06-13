@@ -1194,4 +1194,8 @@ mount_ui(app)
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8002)
+    # NARRATIVE_API_PORT lets parallel checkouts (agent worktrees, the
+    # golden-path gate) boot the gateway without contending for 8002.
+    uvicorn.run(
+        app, host="0.0.0.0", port=int(os.environ.get("NARRATIVE_API_PORT", "8002"))
+    )
