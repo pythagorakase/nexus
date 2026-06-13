@@ -164,45 +164,54 @@ async def generate_narrative_async(
             # Initialize LORE with LOGON enabled for API calls
             lore = LORE(enable_logon=True, debug=True, slot=slot)
 
-            # Send progress: calling LLM
-            await manager.send_progress(session_id, "calling_llm")
-
-            # Process the turn with LORE (builds context and generates narrative)
+            # The per-turn LORE stack MUST be closed when the turn finishes:
+            # it is a reference-cycle island holding an engine pool, and
+            # without deterministic teardown those islands accumulate across
+            # turns (issue #401). The shared embedding model survives close()
+            # in the process-level cache.
             try:
-                response = await lore.process_turn(
-                    user_text, parent_chunk_id=parent_chunk_id, note=note
-                )
-                logger.info(f"LORE response received for session {session_id}")
-            except Exception as e:
-                error_detail = _exception_detail(e)
-                logger.error(f"LORE process_turn failed: {error_detail}")
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Failed to generate narrative: {error_detail}",
-                )
+                # Send progress: calling LLM
+                await manager.send_progress(session_id, "calling_llm")
 
-            # Send progress: processing response
-            await manager.send_progress(session_id, "processing_response")
+                # Process the turn with LORE (builds context and generates
+                # narrative)
+                try:
+                    response = await lore.process_turn(
+                        user_text, parent_chunk_id=parent_chunk_id, note=note
+                    )
+                    logger.info(f"LORE response received for session {session_id}")
+                except Exception as e:
+                    error_detail = _exception_detail(e)
+                    logger.error(f"LORE process_turn failed: {error_detail}")
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"Failed to generate narrative: {error_detail}",
+                    )
 
-            failure_detail = _describe_lore_failure(lore, response)
-            if failure_detail:
-                logger.error(
-                    "Narrative turn failed for session %s: %s",
-                    session_id,
-                    failure_detail,
+                # Send progress: processing response
+                await manager.send_progress(session_id, "processing_response")
+
+                failure_detail = _describe_lore_failure(lore, response)
+                if failure_detail:
+                    logger.error(
+                        "Narrative turn failed for session %s: %s",
+                        session_id,
+                        failure_detail,
+                    )
+                    raise HTTPException(status_code=500, detail=failure_detail)
+
+                # Transform LORE response to incubator format
+                incubator_data = response_to_incubator(
+                    response=response,
+                    parent_chunk_id=parent_chunk_id,
+                    user_text=user_text,
+                    session_id=session_id,
+                    orrery_proposal=(
+                        lore.turn_context.orrery_proposal if lore.turn_context else None
+                    ),
                 )
-                raise HTTPException(status_code=500, detail=failure_detail)
-
-            # Transform LORE response to incubator format
-            incubator_data = response_to_incubator(
-                response=response,
-                parent_chunk_id=parent_chunk_id,
-                user_text=user_text,
-                session_id=session_id,
-                orrery_proposal=(
-                    lore.turn_context.orrery_proposal if lore.turn_context else None
-                ),
-            )
+            finally:
+                lore.close()
 
             # Validate the data before writing
             validate_incubator_data(incubator_data)

@@ -613,6 +613,24 @@ class ResponsesRequest(BaseModel):
     temperature: Optional[float] = None
     reasoning: Optional[Dict[str, Any]] = None
     text_format: Optional[Any] = None  # Pydantic schema for structured output
+    tools: Optional[Any] = None  # pydantic_ai output tool ("final_result")
+
+
+def _requested_output_properties(request: "ResponsesRequest") -> set:
+    """Return the property names of the structured-output tool, if present.
+
+    pydantic_ai delivers the caller's output schema as a ``final_result``
+    function tool with ``tool_choice: required``; the schema's top-level
+    properties identify WHICH Storyteller schema the caller will validate
+    against. Routing on this is exact, where the legacy keyword sniffing of
+    the prompt text was not (a turn request without Orrery proposals used to
+    fall through to the bootstrap-shaped payload and fail validation).
+    """
+    for tool in request.tools or []:
+        if isinstance(tool, dict) and tool.get("name") == "final_result":
+            params = tool.get("parameters") or {}
+            return set((params.get("properties") or {}).keys())
+    return set()
 
 
 def _collect_text(value: Any) -> str:
@@ -786,8 +804,11 @@ def get_cached_bootstrap_narrative() -> Dict[str, Any]:
     """
     Get bootstrap narrative from mock database.
 
-    Queries incubator and transforms to StorytellerResponseExtended format.
-    Must match the exact schema in nexus/agents/logon/apex_schema.py.
+    Queries incubator and transforms to StorytellerResponseBootstrap format
+    (narrative + choices + authorial_directives, extra fields forbidden).
+    Must match the exact schema in nexus/agents/logon/apex_schema.py: the
+    bootstrap path validates StorytellerResponseBootstrap, which rejects the
+    Extended-shaped payload this function used to emit.
     """
     row = query_bootstrap_narrative()
 
@@ -803,57 +824,11 @@ def get_cached_bootstrap_narrative() -> Dict[str, Any]:
     choice_obj = row.get("choice_object") or {}
     choices = choice_obj.get("presented", [])
 
-    # Extract metadata
-    metadata = row.get("metadata_updates") or {}
-    chronology = metadata.get("chronology", {})
-
-    # Extract references
-    refs = row.get("reference_updates") or {}
-
-    # Build response matching StorytellerResponseExtended schema exactly
     return {
         "narrative": row.get("storyteller_text", ""),
         "choices": choices,
         "authorial_directives": row.get("authorial_directives")
         or ["Retrieve the immediate prior scene."],
-        # ChunkMetadataUpdate: has chronology (nested) and world_layer
-        "chunk_metadata": {
-            "chronology": {
-                "episode_transition": chronology.get("episode_transition", "continue"),
-                "time_delta_minutes": chronology.get("time_delta_minutes"),
-                "time_delta_hours": chronology.get("time_delta_hours"),
-                "time_delta_days": chronology.get("time_delta_days"),
-                "time_delta_description": chronology.get("time_delta_description"),
-            },
-            "world_layer": metadata.get("world_layer", "primary"),
-        },
-        # ReferencedEntities: characters, places, factions (no items field!)
-        "referenced_entities": {
-            "characters": [
-                {
-                    "character_id": c.get("character_id"),
-                    "reference_type": "present",  # Valid: present, mentioned, protagonist, antagonist
-                }
-                for c in refs.get("characters", [])
-            ],
-            "places": [
-                {
-                    "place_id": p.get("place_id"),
-                    "reference_type": "setting",  # Valid: setting, mentioned, transit
-                }
-                for p in refs.get("places", [])
-            ],
-            "factions": [],
-        },
-        # StateUpdates: characters, relationships, locations, factions
-        "state_updates": {
-            "characters": [],
-            "relationships": [],
-            "locations": [],
-            "factions": [],
-        },
-        "operations": None,
-        "reasoning": "[TEST MODE] Returning cached bootstrap narrative",
     }
 
 
@@ -867,11 +842,25 @@ async def responses_create(request: ResponsesRequest):
     """
     logger.info(f"[MOCK] Responses request for model: {request.model}")
 
-    # Check if this is a bootstrap/narrative request (vs wizard)
-    # by looking for storyteller-related content in the messages
     input_text = _collect_text(request.input)
     proposal_ids = _extract_orrery_proposal_ids(input_text)
 
+    # Exact routing: the structured-output tool's schema says which
+    # Storyteller response the caller validates against. Turn requests
+    # (StorytellerResponseExtended) carry state_updates; bootstrap requests
+    # (StorytellerResponseBootstrap) do not.
+    output_fields = _requested_output_properties(request)
+    if output_fields:
+        if "state_updates" in output_fields:
+            logger.info(
+                "[MOCK] Extended turn schema requested (%d Orrery proposals)",
+                len(proposal_ids),
+            )
+            return _responses_payload(_mock_storyteller_response(input_text))
+        logger.info("[MOCK] Bootstrap schema requested, returning cached bootstrap")
+        return _responses_payload(get_cached_bootstrap_narrative())
+
+    # Legacy keyword routing for callers without a structured-output tool.
     is_narrative = any(
         kw in input_text.lower()
         for kw in ["narrative", "story", "protagonist", "bootstrap", "user input"]

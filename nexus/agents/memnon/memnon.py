@@ -414,6 +414,16 @@ class MEMNON:
 
         logger.info("MEMNON agent initialized (Headless Mode - No LLM)")
 
+    def close(self) -> None:
+        """Release per-instance resources deterministically.
+
+        Disposes this instance's SQLAlchemy engine (returning pooled Postgres
+        connections). Embedding models are deliberately NOT released: they
+        live in the process-level cache in embedding_manager and are shared
+        by every MEMNON in this process (issue #401).
+        """
+        self.db_manager.close()
+
     def get_schema_summary(self, tables: Optional[List[str]] = None) -> str:
         """
         Return a concise schema summary for non-empty, relevant tables.

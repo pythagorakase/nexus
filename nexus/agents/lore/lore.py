@@ -304,6 +304,30 @@ class LORE:
         if self.logon is None:
             self._initialize_logon()
 
+    def close(self) -> None:
+        """Deterministically release this turn-stack's per-instance resources.
+
+        The narrative API constructs a fresh LORE per turn; the resulting
+        object graph is a reference-cycle island (LORE <-> TurnCycleManager,
+        MEMNON <-> ContentProcessor bound method) that plain refcounting
+        cannot reclaim, and CPython's throttled full GC effectively never
+        runs mid-session (issue #401's turn-8 hang). Callers that build a
+        LORE per request MUST close it when the turn finishes.
+
+        Closes MEMNON (disposing its engine/pool) and drops the component
+        back-references so the island collapses under refcounting alone.
+        The shared embedding-model cache is untouched by design.
+        """
+        if self.memnon is not None:
+            self.memnon.close()
+        # Break the cycles: these components hold back-references to self
+        # (directly or via bound methods). After close() the LORE instance
+        # is dead; any late access should fail loudly with AttributeError.
+        self.turn_manager = None
+        self.memory_manager = None
+        self.memnon = None
+        logger.info("LORE turn stack closed")
+
     async def process_turn(
         self,
         user_input: str,

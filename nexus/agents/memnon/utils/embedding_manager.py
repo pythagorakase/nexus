@@ -4,6 +4,7 @@ Embedding Manager Utility for MEMNON Agent
 Handles initialization and usage of sentence transformer embedding models.
 """
 import logging
+import threading
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 from sentence_transformers import SentenceTransformer
@@ -20,6 +21,40 @@ from sentence_transformers import SentenceTransformer
 #     print("Warning: Could not import MEMNON_SETTINGS. Using empty defaults.")
 
 logger = logging.getLogger("nexus.memnon.embedding_manager")
+
+# Process-level cache of loaded SentenceTransformer models, keyed by the
+# path string actually passed to the constructor. Mirrors _RERANKER_CACHE in
+# cross_encoder.py.
+#
+# This cache is load-bearing, not an optimization: the production embedder
+# (Octen-Embedding-4B) materializes ~15.5 GB of unified (MPS) memory per
+# instance, and the narrative API constructs a fresh LORE -> MEMNON ->
+# EmbeddingManager stack for every turn. Those per-turn stacks are reference
+# -cycle islands that CPython's throttled full GC does not reclaim mid-run,
+# so without sharing, each turn permanently ratchets the server's Metal
+# footprint by one full model copy -- exhausting a 128 GB machine at ~8
+# turns and hanging the event loop inside Metal allocation (issue #401).
+_MODEL_CACHE: Dict[str, SentenceTransformer] = {}
+_MODEL_CACHE_LOCK = threading.Lock()
+
+
+def _get_or_load_sentence_transformer(path: str) -> SentenceTransformer:
+    """Return the process-wide SentenceTransformer for ``path``.
+
+    Loads on first request and reuses the same instance for every subsequent
+    EmbeddingManager in this process. The lock is held across the load so
+    concurrent first requests cannot race two copies of a multi-gigabyte
+    model into memory.
+    """
+    with _MODEL_CACHE_LOCK:
+        model = _MODEL_CACHE.get(path)
+        if model is None:
+            model = SentenceTransformer(path)
+            _MODEL_CACHE[path] = model
+        else:
+            logger.info(f"Reusing process-cached SentenceTransformer: {path}")
+        return model
+
 
 class EmbeddingManager:
     """Manages embedding models for MEMNON."""
@@ -73,7 +108,7 @@ class EmbeddingManager:
                 local_path_obj = Path(local_path)
                 if local_path_obj.exists() and local_path_obj.is_dir():
                     try:
-                        model = SentenceTransformer(str(local_path_obj))
+                        model = _get_or_load_sentence_transformer(str(local_path_obj))
                         self.models[model_name] = model
                         logger.info(f"Loaded {model_name} from local path: {local_path}")
                         loaded = True
@@ -86,7 +121,7 @@ class EmbeddingManager:
             if not loaded and remote_path:
                 try:
                     logger.info(f"Attempting to load {model_name} from remote path: {remote_path}")
-                    model = SentenceTransformer(remote_path)
+                    model = _get_or_load_sentence_transformer(remote_path)
                     self.models[model_name] = model
                     logger.info(f"Loaded {model_name} from remote path: {remote_path}")
                     loaded = True
@@ -123,7 +158,7 @@ class EmbeddingManager:
             if name not in self.models and self.model_active_status.get(name, True): # Check active status
                 try:
                     logger.info(f"Loading default model {name} from {path}")
-                    self.models[name] = SentenceTransformer(path)
+                    self.models[name] = _get_or_load_sentence_transformer(path)
                     logger.info(f"Successfully loaded default {name}")
                 except Exception as e:
                     logger.warning(f"Failed to load default model {name}: {e}")
