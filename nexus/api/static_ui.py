@@ -99,6 +99,10 @@ def mount_ui(app: FastAPI) -> None:
             UI_DIST_DIR,
         )
 
+        # Registration-order dependency: this catch-all GET is added after
+        # every API route (mount_ui runs last in narrative.py), so it only
+        # answers paths nothing else claimed - the same position the dist
+        # mount occupies when the build exists.
         @app.get("/{full_path:path}", include_in_schema=False)
         async def ui_build_missing(full_path: str) -> PlainTextResponse:
             return PlainTextResponse(

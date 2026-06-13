@@ -95,6 +95,22 @@ def _validate_upload(upload: UploadFile, max_bytes: int) -> None:
         )
 
 
+async def _read_bounded(upload: UploadFile, max_bytes: int) -> bytes:
+    """Read an upload, rejecting at the cap without buffering past it.
+
+    upload.size is None for chunked multipart parts, so the declared-size
+    check in _validate_upload cannot be relied on alone; reading max+1
+    bytes detects overflow while bounding memory.
+    """
+    contents = await upload.read(max_bytes + 1)
+    if len(contents) > max_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large. Maximum size is {max_bytes // (1024 * 1024)}MB.",
+        )
+    return contents
+
+
 def _fetch_images(
     dbname: str, table: str, owner_column: str, owner_id: int
 ) -> List[Dict[str, Any]]:
@@ -140,6 +156,12 @@ def _insert_image(
 def _set_main_image(
     dbname: str, table: str, owner_column: str, owner_id: int, image_id: int
 ) -> None:
+    """Promote one of the owner's images to main, atomically.
+
+    The owner guard on the promotion prevents cross-owner mutation via an
+    arbitrary image_id; when it matches nothing the whole transaction
+    (including the clear) rolls back via get_connection's error handling.
+    """
     with get_connection(dbname) as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -147,15 +169,26 @@ def _set_main_image(
                 (owner_id,),
             )
             cur.execute(
-                f"UPDATE {table} SET is_main = 1 WHERE id = %s",
-                (image_id,),
+                f"UPDATE {table} SET is_main = 1 "
+                f"WHERE id = %s AND {owner_column} = %s",
+                (image_id, owner_id),
             )
+            if cur.rowcount == 0:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Image {image_id} not found for this owner",
+                )
 
 
-def _delete_image_row(dbname: str, table: str, image_id: int) -> None:
+def _delete_image_row(
+    dbname: str, table: str, owner_column: str, owner_id: int, image_id: int
+) -> None:
     with get_connection(dbname) as conn:
         with conn.cursor() as cur:
-            cur.execute(f"DELETE FROM {table} WHERE id = %s", (image_id,))
+            cur.execute(
+                f"DELETE FROM {table} WHERE id = %s AND {owner_column} = %s",
+                (image_id, owner_id),
+            )
 
 
 async def _handle_upload(
@@ -176,8 +209,14 @@ async def _handle_upload(
             status_code=400,
             detail=f"Too many files. Maximum is {max_files} per upload.",
         )
+    # Validate and read every file (bounded) before touching the
+    # filesystem, so a rejected batch leaves no side effects behind.
+    payloads: List[Tuple[str, bytes]] = []
     for upload in images:
         _validate_upload(upload, max_bytes)
+        payloads.append(
+            (upload.filename or "upload.png", await _read_bounded(upload, max_bytes))
+        )
 
     owner_dir = UPLOAD_ROOT / upload_subdir / str(owner_id)
     owner_dir.mkdir(parents=True, exist_ok=True)
@@ -189,18 +228,9 @@ async def _handle_upload(
     max_order = max((row["display_order"] for row in existing), default=-1)
 
     uploaded: List[Dict[str, Any]] = []
-    for upload in images:
-        filename = _sanitize_filename(upload.filename or "upload.png")
+    for original_name, contents in payloads:
+        filename = _sanitize_filename(original_name)
         dest_path = owner_dir / filename
-        contents = await upload.read()
-        if len(contents) > max_bytes:
-            raise HTTPException(
-                status_code=413,
-                detail=(
-                    "File too large. Maximum size is "
-                    f"{max_bytes // (1024 * 1024)}MB."
-                ),
-            )
         dest_path.write_bytes(contents)
 
         relative_path = f"{upload_subdir}/{owner_id}/{filename}"
@@ -223,19 +253,27 @@ async def _handle_upload(
 def _delete_image(
     dbname: str, table: str, owner_column: str, owner_id: int, image_id: int
 ) -> Dict[str, Any]:
-    """Shared delete flow: remove the file (best effort), then the row."""
+    """Shared delete flow: remove the file (best effort), then the row.
+
+    Both the file lookup and the row deletion are owner-scoped, so an
+    image_id belonging to a different owner is a 404, not a cross-owner
+    mutation.
+    """
     images = _fetch_images(dbname, table, owner_column, owner_id)
     image = next((row for row in images if row["id"] == image_id), None)
-    if image:
-        # Legacy rows store file_path with a leading slash
-        # ("/character_portraits/..."); pathlib would treat that as absolute
-        # and discard UPLOAD_ROOT (Node's path.join did not). Strip it.
-        file_path = UPLOAD_ROOT / image["file_path"].lstrip("/")
-        try:
-            file_path.unlink()
-        except OSError as exc:
-            logger.warning("Could not delete image file %s: %s", file_path, exc)
-    _delete_image_row(dbname, table, image_id)
+    if image is None:
+        raise HTTPException(
+            status_code=404, detail=f"Image {image_id} not found for this owner"
+        )
+    # Legacy rows store file_path with a leading slash
+    # ("/character_portraits/..."); pathlib would treat that as absolute
+    # and discard UPLOAD_ROOT (Node's path.join did not). Strip it.
+    file_path = UPLOAD_ROOT / image["file_path"].lstrip("/")
+    try:
+        file_path.unlink()
+    except OSError as exc:
+        logger.warning("Could not delete image file %s: %s", file_path, exc)
+    _delete_image_row(dbname, table, owner_column, owner_id, image_id)
     return {"success": True}
 
 

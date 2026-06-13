@@ -366,3 +366,40 @@ class TestAssetRoundTrip:
         )
         assert response.json() == {"success": True}
         assert not stored.exists(), "legacy-path file must be unlinked"
+
+    def test_cross_owner_image_ids_are_404(
+        self, client: TestClient, temp_character: Tuple[int, str]
+    ) -> None:
+        """set-main and delete must not mutate another owner's image rows.
+
+        A foreign image_id is a 404 and the owner's own main flag is left
+        untouched (Claude review on PR #400: cross-owner IDOR).
+        """
+        character_id, _ = temp_character
+        own = client.post(
+            f"/api/characters/{character_id}/images?slot={WRITE_SLOT}",
+            files={"images": ("mine.png", io.BytesIO(PNG_BYTES), "image/png")},
+        ).json()["images"][0]
+        assert own["isMain"] == 1
+
+        foreign_id = own["id"] + 999_999  # guaranteed not this character's
+        response = client.put(
+            f"/api/characters/{character_id}/images/{foreign_id}/main"
+            f"?slot={WRITE_SLOT}"
+        )
+        assert response.status_code == 404
+        response = client.delete(
+            f"/api/characters/{character_id}/images/{foreign_id}?slot={WRITE_SLOT}"
+        )
+        assert response.status_code == 404
+
+        listed = client.get(
+            f"/api/characters/{character_id}/images?slot={WRITE_SLOT}"
+        ).json()
+        assert [row["id"] for row in listed] == [own["id"]]
+        assert listed[0]["isMain"] == 1, "failed set-main must not clear the flag"
+
+        # Cleanup through the API (also exercises the happy delete path).
+        assert client.delete(
+            f"/api/characters/{character_id}/images/{own['id']}?slot={WRITE_SLOT}"
+        ).json() == {"success": True}
