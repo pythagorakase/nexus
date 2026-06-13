@@ -1,6 +1,6 @@
 # NEXUS IRIS - Narrative Intelligence System
 
-A cyberpunk terminal-style interface for exploring complex narrative datasets. Built with React, TypeScript, Express, and PostgreSQL.
+A cyberpunk terminal-style interface for exploring complex narrative datasets. Built with React and TypeScript, served by the NEXUS FastAPI gateway.
 
 ## Features
 
@@ -24,9 +24,9 @@ A cyberpunk terminal-style interface for exploring complex narrative datasets. B
 ## Tech Stack
 
 - **Frontend**: React 18, TypeScript, Tailwind CSS, Radix UI
-- **Backend**: Express.js, Node.js
-- **Database**: PostgreSQL with PostGIS extensions
-- **ORM**: Drizzle ORM
+- **Backend**: NEXUS FastAPI gateway (`nexus.api.narrative:app`, one origin
+  for APIs, websocket, and static PWA serving; see `../README.md`)
+- **Database**: PostgreSQL with PostGIS extensions (per-slot databases)
 - **State Management**: TanStack Query
 - **Routing**: Wouter
 
@@ -37,22 +37,21 @@ A cyberpunk terminal-style interface for exploring complex narrative datasets. B
    npm install
    ```
 
-2. **Set up PostgreSQL database**:
-   - Create a Neon or local PostgreSQL database
-   - Set `DATABASE_URL` environment variable
-   
-3. **Import narrative data** (if not already present):
+2. **Start the gateway** (from the repo root):
    ```bash
-   psql $DATABASE_URL < attached_assets/massiveDUMP_1759202904039.sql
+   ./iris
    ```
 
-4. **Run development server**:
+3. **Run the dev server with HMR** (proxies `/api`, `/ws`, and uploads to
+   the gateway):
    ```bash
    npm run dev
    ```
 
-5. **Access the application**:
-   - Open http://localhost:5000
+4. **Access the application**:
+   - Dev (HMR): http://localhost:5001
+   - Production build via the gateway: http://localhost:8002
+     (after `npm run build`)
 
 ## Database Schema
 
@@ -72,14 +71,14 @@ The application uses a comprehensive PostgreSQL schema with:
 │   ├── components/      # UI components (NarrativeTab, MapTab, CharactersTab)
 │   ├── pages/          # Page components
 │   └── lib/            # Utilities and query client
-├── server/             # Express backend
-│   ├── routes.ts       # API endpoints
-│   ├── storage.ts      # Data access layer
-│   └── index.ts        # Server entry point
-├── shared/             # Shared types and schemas
-│   └── schema.ts       # Drizzle ORM schemas
-└── attached_assets/    # SQL dump and reference data
+└── shared/             # Shared types (wire-format declarations only)
+    └── schema.ts       # Type declarations for gateway responses
 ```
+
+API endpoints are implemented in the FastAPI gateway
+(`nexus/api/reader_endpoints.py`, `nexus/api/asset_endpoints.py`, and
+peers); the built PWA is served from `dist/public` by
+`nexus/api/static_ui.py`.
 
 ## API Endpoints
 
@@ -105,14 +104,11 @@ NEXUS IRIS uses a cyberpunk terminal aesthetic with:
 ## Development
 
 The project uses Vite for fast development with HMR:
-- Frontend: React + TypeScript
-- Backend: Express with `tsx` for TypeScript execution
-- Database: Drizzle ORM with type-safe queries
+- Frontend: React + TypeScript (Vite dev server on port 5001)
+- Backend: NEXUS FastAPI gateway (port 8002)
 
-For database schema changes, use:
-```bash
-npm run db:push
-```
+Database schema changes go through the repo-root migration workflow
+(`scripts/migrate.py`); see the root `CLAUDE.md`.
 
 ## License
 

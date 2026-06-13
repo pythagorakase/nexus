@@ -2423,6 +2423,18 @@ docs = ["sphinx"]
 test = ["mypy", "pyaml", "pytest", "toml", "types-PyYAML", "types-toml"]
 
 [[package]]
+name = "python-multipart"
+version = "0.0.32"
+description = "A streaming multipart parser for Python"
+optional = false
+python-versions = ">=3.10"
+groups = ["main"]
+files = [
+    {file = "python_multipart-0.0.32-py3-none-any.whl", hash = "sha256:ff6d3f776f16878c894e52e107296ffc890e913c611b1a4ec6c44e2821fe2e23"},
+    {file = "python_multipart-0.0.32.tar.gz", hash = "sha256:be54b7f3fa167bb83e4fcd936b887b708f4e57fe75911c02aebf53efaf8d938e"},
+]
+
+[[package]]
 name = "pywin32-ctypes"
 version = "0.2.3"
 description = "A (partial) reimplementation of pywin32 using ctypes/cffi"
@@ -3482,4 +3494,4 @@ dev = ["black", "flake8", "mypy", "pytest"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<3.14"
-content-hash = "cf0e225011c45bb6f0abe359c4034227bf61117a06f74b3ebe6a8b29969c78d1"
+content-hash = "c5a2f100ae5dd16c3a31bd36eecc8dfd727face79ca325bc31565468086fd012"

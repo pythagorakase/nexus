@@ -2,11 +2,11 @@
  * TypeScript types for the narrative reading surface.
  *
  * Mirrors the FastAPI Pydantic schemas in `nexus/api/narrative_schemas.py`
- * and the Express read routes in `ui/server/routes.ts`.
+ * and the gateway read routes in `nexus/api/reader_endpoints.py`.
  */
 import type { NarrativeChunk, ChunkMetadata } from "@shared/schema";
 
-/** A committed chunk joined with its metadata row (Express read routes). */
+/** A committed chunk joined with its metadata row (gateway read routes). */
 export type ChunkWithMetadata = Omit<NarrativeChunk, "choiceObject"> & {
   choiceObject?: ChoiceObject | null;
   metadata?: ChunkMetadata;

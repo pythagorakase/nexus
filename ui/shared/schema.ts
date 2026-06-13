@@ -7,14 +7,18 @@ import {
   bigint,
   integer,
   jsonb,
-  numeric,
   timestamp,
   interval,
   primaryKey,
   customType
 } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
-import { z } from "zod";
+
+// NOTE: These table definitions are TYPE DECLARATIONS ONLY. The runtime
+// data layer is the FastAPI gateway (nexus/api/reader_endpoints.py et al.,
+// issue #396); no Drizzle queries execute anywhere. The types describe the
+// gateway's wire format - which is why characters.currentLocation stays
+// declared as text: the live column is bigint but the wire contract
+// coerces it to a string.
 
 // Custom PostGIS types for Drizzle
 const geometry = customType<{ data: string }>({
@@ -40,19 +44,13 @@ export const zones = pgTable("zones", {
   boundary: geometry("boundary"),
 });
 
-// Factions table
+// Factions table (live schema: the ideology/history/territory-era columns
+// were dropped server-side; GET /api/factions serves these fields only)
 export const factions = pgTable("factions", {
   id: bigint("id", { mode: "number" }).primaryKey(),
   name: varchar("name", { length: 255 }).notNull(),
   summary: text("summary"),
-  ideology: text("ideology"),
-  history: text("history"),
-  currentActivity: text("current_activity"),
-  hiddenAgenda: text("hidden_agenda"),
-  territory: text("territory"),
   primaryLocation: bigint("primary_location", { mode: "number" }),
-  powerLevel: numeric("power_level").default('0.5'),
-  resources: text("resources"),
   extraData: jsonb("extra_data"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`now()`),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().default(sql`now()`),

@@ -62,9 +62,12 @@ from nexus.api.narrative_generation import (
     generate_bootstrap_narrative,
 )
 from nexus.api.config_utils import get_max_choice_text_length
+from nexus.api.asset_endpoints import router as asset_router
+from nexus.api.reader_endpoints import router as reader_router
 from nexus.api.settings_endpoints import router as settings_router
 from nexus.api.slot_endpoints import router as slot_router
 from nexus.api.setup_endpoints import router as setup_router
+from nexus.api.static_ui import mount_ui
 from nexus.api.wizard_chat import router as wizard_chat_router
 
 logger = logging.getLogger("nexus.api.narrative")
@@ -86,6 +89,8 @@ app.include_router(settings_router)
 app.include_router(slot_router)
 app.include_router(setup_router)
 app.include_router(wizard_chat_router)
+app.include_router(reader_router)
+app.include_router(asset_router)
 
 
 # WebSocket connection manager
@@ -1181,7 +1186,16 @@ async def get_user_character(slot: Optional[int] = None):
             conn.close()
 
 
+# Static serving for the built PWA and runtime uploads. Registered last:
+# the dist mount at "/" is a catch-all and Starlette matches in order.
+mount_ui(app)
+
+
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8002)
+    # NARRATIVE_API_PORT lets parallel checkouts (agent worktrees, the
+    # golden-path gate) boot the gateway without contending for 8002.
+    uvicorn.run(
+        app, host="0.0.0.0", port=int(os.environ.get("NARRATIVE_API_PORT", "8002"))
+    )

@@ -67,7 +67,9 @@ from psycopg2.extras import RealDictCursor  # type: ignore[import-untyped]
 SLOT = 5
 DBNAME = "save_05"
 DSN = f"postgresql://pythagor@localhost:5432/{DBNAME}"
-API = "http://localhost:8002"
+# NARRATIVE_API_PORT lets the gate run beside a live dev stack on 8002
+# (agent worktrees); the spawned server subprocess inherits it via env.
+API = f"http://localhost:{os.environ.get('NARRATIVE_API_PORT', '8002')}"
 FIXTURE = Path(__file__).parent / "fixtures" / "golden_path_wizard_cache.json"
 
 # Hard ceiling on play turns; the run goes adaptive after the scripted
@@ -313,10 +315,12 @@ def _stage_play_turns(run: GoldenPathRun) -> None:
 def golden_path(tmp_path_factory: pytest.TempPathFactory) -> Any:
     """Execute the staged golden-path run once; yield shared evidence."""
 
-    if not _port_free(8002):
+    api_port = int(os.environ.get("NARRATIVE_API_PORT", "8002"))
+    if not _port_free(api_port):
         raise RuntimeError(
-            "Port 8002 is occupied; stop the running NEXUS API server before "
-            "the golden-path gate (it boots its own instance)."
+            f"Port {api_port} is occupied; stop the running NEXUS API server "
+            "before the golden-path gate (it boots its own instance), or set "
+            "NARRATIVE_API_PORT to a free port."
         )
 
     from nexus.config import load_settings

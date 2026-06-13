@@ -3,7 +3,9 @@ import json
 import sys
 import time
 
-BASE_URL = "http://localhost:5001"
+import os
+
+BASE_URL = os.environ.get("NEXUS_API_URL", "http://localhost:8002")
 
 def test_setup_flow(slot_number):
     print(f"Testing setup flow for slot {slot_number}...")

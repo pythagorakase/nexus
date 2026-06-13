@@ -2,36 +2,39 @@
 #
 # IRIS - Integrated Runtime for Interactive Stories
 #
-# Clears occupied ports, then runs honcho for proper process management
-# with color-coded output and better lifecycle handling.
+# Interim single-origin launcher (issue #396, part 1): the FastAPI gateway
+# serves the built PWA, every API route, and the narrative websocket from
+# one origin. Node/Express is retired; the UI is built once and served
+# statically. Lane C2 replaces this script with `nexus up`.
+#
+# For HMR development, run the Vite dev server alongside the gateway:
+#   npm --prefix ui run dev    # serves the client on $APP_PORT (5001),
+#                              # proxying /api, /ws, and uploads here
 #
 
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-UI_DIR="$ROOT_DIR/ui"
-
-if [ ! -d "$UI_DIR" ]; then
-  echo "iris: expected directory '$UI_DIR' but it does not exist" >&2
-  exit 1
-fi
-
 cd "$ROOT_DIR"
 
-# Install UI dependencies if needed (first run)
-if [ ! -d "$UI_DIR/node_modules" ]; then
-  echo "Installing UI dependencies (first run)..."
-  npm --prefix "$UI_DIR" install
+NEXUS_SLOT="${NEXUS_SLOT:-1}"
+GATEWAY_PORT="${NARRATIVE_API_PORT:-8002}"
+MOCK_OPENAI_PORT="${MOCK_OPENAI_PORT:-5102}"
+
+# Build the PWA if missing (first run). Rebuild manually after UI changes:
+#   npm --prefix ui run build
+if [ ! -f ui/dist/public/index.html ]; then
+  echo "Building UI (first run)..."
+  [ -d ui/node_modules ] || npm --prefix ui install
+  npm --prefix ui run build
 fi
 
-# Kill any existing processes on our ports to prevent EADDRINUSE errors
-PORTS=(5001 8002 5102)
-echo "Clearing ports: ${PORTS[*]}..." >&2
-for port in "${PORTS[@]}"; do
-  lsof -ti:"$port" | xargs kill -9 2>/dev/null || true
-done
-sleep 0.5  # Brief pause to ensure ports are fully released
+# Mock OpenAI server for the TEST model (cached responses).
+poetry run uvicorn nexus.api.mock_openai:app --host 127.0.0.1 \
+  --port "$MOCK_OPENAI_PORT" &
+MOCK_PID=$!
+trap 'kill "$MOCK_PID" 2>/dev/null || true' EXIT
 
-# Run honcho for proper process management (color-coded output, better signals)
-echo "Starting NEXUS services..."
-exec poetry run honcho start -f Procfile.dev
+echo "Starting NEXUS gateway on port ${GATEWAY_PORT} (slot ${NEXUS_SLOT})..."
+NEXUS_SLOT="$NEXUS_SLOT" poetry run uvicorn nexus.api.narrative:app \
+  --host 127.0.0.1 --port "$GATEWAY_PORT"

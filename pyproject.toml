@@ -29,7 +29,8 @@ dependencies = [
     "tomlkit>=0.13.2,<1.0.0",
     "keyring (>=25.7.0,<26.0.0)",
     "protobuf (>=6.0.0,<7.0.0)",
-    "sentencepiece (>=0.2.0,<0.3.0)"
+    "sentencepiece (>=0.2.0,<0.3.0)",
+    "python-multipart (>=0.0.32,<0.0.33)"
 ]
 
 [project.optional-dependencies]

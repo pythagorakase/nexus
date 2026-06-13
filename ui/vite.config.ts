@@ -104,16 +104,28 @@ export default defineConfig({
   },
   server: {
     host: '0.0.0.0',
+    // Dev-only server: HMR client served by Vite, everything else proxied
+    // to the FastAPI gateway (the single origin in production). APP_PORT
+    // and NARRATIVE_API_PORT/NARRATIVE_API_URL match the gateway launcher.
+    port: parseInt(process.env.APP_PORT ?? "5001", 10),
+    strictPort: true,
     fs: {
       strict: true,
       deny: ["**/.*"],
     },
-    proxy: {
-      '/api': {
-        target: 'http://localhost:8002',
-        changeOrigin: true,
-      },
-    },
+    proxy: (() => {
+      const gateway =
+        process.env.NARRATIVE_API_URL ??
+        `http://localhost:${process.env.NARRATIVE_API_PORT ?? "8002"}`;
+      return {
+        '/api': { target: gateway, changeOrigin: true },
+        '/ws': { target: gateway, ws: true, changeOrigin: true },
+        // Runtime upload dirs: the gateway serves the same files Vite
+        // mirrors from client/public; proxying keeps one source of truth.
+        '/character_portraits': { target: gateway, changeOrigin: true },
+        '/place_images': { target: gateway, changeOrigin: true },
+      };
+    })(),
   },
   test: {
     environment: "jsdom",

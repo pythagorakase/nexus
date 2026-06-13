@@ -14,7 +14,7 @@ For the database / API / GeoJSON layer, see
 
 ## 1. Data Layer (Summary)
 
-The map consumes three Express endpoints (full shapes in
+The map consumes three gateway endpoints (FastAPI; full shapes in
 `geojson-integration.md`):
 
 - `GET /api/places?slot={slot}` — all places with `geometry` populated from
@@ -462,5 +462,7 @@ implementation (now deleted on the `ui-rebuild` branch):
 - `ui/server/storage.ts` — `getAllPlaces`, `getAllZones`, place_images
 - `ui/shared/schema.ts` — Drizzle table definitions
 
-The backend (`server/`, `shared/`) is **not** part of the demolition and
-remains intact.
+The Express backend (`ui/server/`) was later retired wholesale by the
+gateway consolidation (issue #396): the map endpoints now live in
+`nexus/api/reader_endpoints.py` / `nexus/api/asset_endpoints.py`, and
+`ui/shared/schema.ts` survives as type declarations only.

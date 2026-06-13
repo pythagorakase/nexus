@@ -143,7 +143,7 @@ def main():
         if args.health or args.full:
             if not test_health():
                 print("\n❌ Health check failed. Is the server running?")
-                print("Start it with: poetry run honcho start -f Procfile.dev")
+                print("Start it with: ./iris")
                 return
 
         if args.clear:
@@ -163,7 +163,7 @@ def main():
 
     except requests.exceptions.ConnectionError:
         print("\n❌ Cannot connect to API server.")
-        print("Start the server with: poetry run honcho start -f Procfile.dev")
+        print("Start the server with: ./iris")
     except Exception as e:
         print(f"\n❌ Test failed: {e}")
 
