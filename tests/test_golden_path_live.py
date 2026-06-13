@@ -315,10 +315,12 @@ def _stage_play_turns(run: GoldenPathRun) -> None:
 def golden_path(tmp_path_factory: pytest.TempPathFactory) -> Any:
     """Execute the staged golden-path run once; yield shared evidence."""
 
-    if not _port_free(8002):
+    api_port = int(os.environ.get("NARRATIVE_API_PORT", "8002"))
+    if not _port_free(api_port):
         raise RuntimeError(
-            "Port 8002 is occupied; stop the running NEXUS API server before "
-            "the golden-path gate (it boots its own instance)."
+            f"Port {api_port} is occupied; stop the running NEXUS API server "
+            "before the golden-path gate (it boots its own instance), or set "
+            "NARRATIVE_API_PORT to a free port."
         )
 
     from nexus.config import load_settings
