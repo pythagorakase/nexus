@@ -9,6 +9,7 @@ from nexus.agents.logon.apex_schema import (
     StorytellerResponseExtended,
 )
 from nexus.api.native_structured_output import (
+    anthropic_output_config,
     anthropic_output_format,
     anthropic_strict_tool,
     openai_response_text_format,
@@ -48,7 +49,7 @@ def test_openai_response_text_format_is_native_strict_json_schema() -> None:
 
 
 def test_anthropic_output_format_uses_native_json_schema_shape() -> None:
-    """Anthropic receives schema output_format and leaves validation to Pydantic."""
+    """Anthropic receives a schema format and leaves validation to Pydantic."""
 
     output_format = anthropic_output_format(StorytellerResponseExtended)
 
@@ -58,6 +59,15 @@ def test_anthropic_output_format_uses_native_json_schema_shape() -> None:
     assert "state_updates" in schema["required"]
     assert not _contains_key(schema, "minLength")
     assert not _contains_key(schema, "maximum")
+
+
+def test_anthropic_output_config_wraps_native_schema_format() -> None:
+    """Anthropic Messages receives structured output through output_config.format."""
+
+    output_config = anthropic_output_config(StorytellerResponseBootstrap)
+
+    assert output_config["format"]["type"] == "json_schema"
+    assert output_config["format"]["schema"]["additionalProperties"] is False
 
 
 def test_anthropic_strict_tool_helper_sets_strict_true() -> None:
@@ -145,7 +155,7 @@ def test_openai_provider_accepts_native_text_format_override() -> None:
 
 
 def test_anthropic_provider_uses_native_output_format() -> None:
-    """Anthropic provider should call beta Messages with JSON schema output."""
+    """Anthropic provider should call beta Messages with output_config.format."""
 
     expected = _bootstrap_response()
     captured = {}
@@ -173,14 +183,52 @@ def test_anthropic_provider_uses_native_output_format() -> None:
     assert parsed == expected
     assert llm_response.input_tokens == 33
     assert llm_response.output_tokens == 44
-    assert captured["output_format"]["type"] == "json_schema"
-    assert captured["output_format"]["schema"]["additionalProperties"] is False
+    assert captured["output_config"]["format"]["type"] == "json_schema"
+    assert (
+        captured["output_config"]["format"]["schema"]["additionalProperties"] is False
+    )
+    assert "output_format" not in captured
     assert "tools" not in captured
     assert captured["system"] == "System prompt"
     assert captured["max_tokens"] == 5678
 
 
-def test_anthropic_provider_accepts_native_output_format_override() -> None:
+def test_anthropic_provider_accepts_native_output_config_override() -> None:
+    expected = _bootstrap_response()
+    captured = {}
+    output_config = {
+        "format": {
+            "type": "json_schema",
+            "schema": StorytellerResponseBootstrap.model_json_schema(),
+        }
+    }
+
+    class FakeMessages:
+        def create(self, **kwargs):
+            captured.update(kwargs)
+            return SimpleNamespace(
+                content=[SimpleNamespace(type="text", text=expected.model_dump_json())],
+                usage=SimpleNamespace(input_tokens=33, output_tokens=44),
+            )
+
+    provider = AnthropicProvider(
+        model="claude-sonnet-4-5",
+        api_key="test-key",
+        system_prompt="System prompt",
+        max_tokens=5678,
+    )
+    provider.client = SimpleNamespace(beta=SimpleNamespace(messages=FakeMessages()))
+
+    parsed, _llm_response = provider.get_structured_completion(
+        "Prompt", StorytellerResponseBootstrap, output_config=output_config
+    )
+
+    assert parsed == expected
+    assert captured["output_config"] is output_config
+    assert "output_format" not in captured
+
+
+def test_anthropic_provider_wraps_legacy_output_format_override() -> None:
     expected = _bootstrap_response()
     captured = {}
     output_format = {
@@ -209,4 +257,5 @@ def test_anthropic_provider_accepts_native_output_format_override() -> None:
     )
 
     assert parsed == expected
-    assert captured["output_format"] is output_format
+    assert captured["output_config"] == {"format": output_format}
+    assert "output_format" not in captured

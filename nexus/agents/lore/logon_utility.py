@@ -437,16 +437,16 @@ class LogonUtility:
         kwargs: Dict[str, Any] = {}
         try:
             from nexus.agents.logon.orrery_tag_schema import (
-                storyteller_anthropic_output_format,
+                storyteller_anthropic_output_config,
                 storyteller_openai_text_format,
             )
 
             if self._provider_wire_type == "anthropic":
-                output_format = storyteller_anthropic_output_format(
+                output_config = storyteller_anthropic_output_config(
                     schema_model, self._validation_dbname
                 )
-                if output_format is not None:
-                    kwargs = {"output_format": output_format}
+                if output_config is not None:
+                    kwargs = {"output_config": output_config}
             else:
                 text_format = storyteller_openai_text_format(
                     schema_model, self._validation_dbname

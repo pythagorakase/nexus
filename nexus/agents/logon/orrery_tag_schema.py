@@ -10,7 +10,7 @@ from pydantic import BaseModel
 
 from nexus.agents.orrery.tag_library import read_tag_library
 from nexus.api.native_structured_output import (
-    anthropic_output_format,
+    anthropic_output_config,
     openai_response_text_format,
     strict_json_schema,
 )
@@ -44,15 +44,15 @@ def storyteller_openai_text_format(
     return openai_response_text_format(schema_model, schema=schema)
 
 
-def storyteller_anthropic_output_format(
+def storyteller_anthropic_output_config(
     schema_model: Type[BaseModel], dbname: Optional[str]
 ) -> Optional[Dict[str, Any]]:
-    """Build an Anthropic output_format with live tag enums for LOGON responses."""
+    """Build an Anthropic output_config with live tag enums for LOGON responses."""
 
     schema = storyteller_schema_with_runtime_tag_enums(schema_model, dbname)
     if schema is None:
         return None
-    return anthropic_output_format(schema_model, schema=schema)
+    return anthropic_output_config(schema_model, schema=schema)
 
 
 def storyteller_schema_with_runtime_tag_enums(

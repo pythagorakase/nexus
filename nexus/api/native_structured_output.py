@@ -98,7 +98,7 @@ def anthropic_json_schema(schema_model: Type[BaseModel]) -> Dict[str, Any]:
 def anthropic_output_format(
     schema_model: Type[BaseModel], *, schema: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
-    """Build the Anthropic beta Messages native JSON schema output format."""
+    """Build the Anthropic native JSON schema format payload."""
 
     schema_payload = (
         _strip_anthropic_unsupported_schema_keys(schema)
@@ -106,6 +106,14 @@ def anthropic_output_format(
         else anthropic_json_schema(schema_model)
     )
     return {"type": "json_schema", "schema": schema_payload}
+
+
+def anthropic_output_config(
+    schema_model: Type[BaseModel], *, schema: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    """Build the Anthropic Messages output_config wrapper for native JSON output."""
+
+    return {"format": anthropic_output_format(schema_model, schema=schema)}
 
 
 def anthropic_strict_tool(
