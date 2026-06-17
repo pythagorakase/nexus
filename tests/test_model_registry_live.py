@@ -103,6 +103,7 @@ def test_test_model_via_registry_base_url_against_real_mock_server():
     raw["global"]["model"]["api_models"]["test"][
         "base_url"
     ] = f"http://127.0.0.1:{MOCK_PORT}/v1"
+    raw["runtime"]["services"]["mock_openai"]["port"] = MOCK_PORT
     settings = Settings(**raw)
     entry = settings.global_.model.api_models["test"]
 
