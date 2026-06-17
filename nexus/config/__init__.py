@@ -5,6 +5,7 @@ from .loader import (
     load_settings,
     load_settings_as_dict,
     get_available_api_models,
+    get_openai_compatible_endpoint,
     resolve_model_ref,
     save_settings,
 )
@@ -14,6 +15,7 @@ __all__ = [
     "load_settings",
     "load_settings_as_dict",
     "get_available_api_models",
+    "get_openai_compatible_endpoint",
     "resolve_model_ref",
     "save_settings",
 ]

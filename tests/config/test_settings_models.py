@@ -3,6 +3,7 @@
 import tomllib
 
 import pytest
+import tomlkit
 from pydantic import ValidationError
 
 from nexus.config import load_settings, resolve_model_ref
@@ -29,6 +30,7 @@ def test_model_config_rejects_unknown_default_model():
                 "test": ProviderModels(
                     roles={"default": "TEST"},
                     models=[APIModelEntry(id="TEST", label="TEST")],
+                    base_url="http://127.0.0.1:5102/v1",
                 )
             },
         )
@@ -43,6 +45,7 @@ def test_model_config_defers_role_references_to_settings_resolution():
             "test": ProviderModels(
                 roles={"default": "TEST"},
                 models=[APIModelEntry(id="TEST", label="TEST")],
+                base_url="http://127.0.0.1:5102/v1",
             )
         },
     )
@@ -128,3 +131,111 @@ def test_ui_visible_filters_ui_model_lists_but_not_registry():
 
     # Backend role resolution is untouched by UI visibility.
     assert resolve_model_ref("@test.default") == "TEST"
+
+
+# =============================================================================
+# Registry base_url + per-model parameter capability (#401)
+# =============================================================================
+
+
+def test_non_native_provider_requires_base_url():
+    """Providers outside the native SDK set must declare an endpoint."""
+    raw = _nexus_toml_dict()
+    del raw["global"]["model"]["api_models"]["test"]["base_url"]
+    with pytest.raises(ValidationError, match="must declare a base_url"):
+        Settings(**raw)
+
+
+def test_native_provider_rejects_base_url():
+    """Native SDK providers use their own endpoints; base_url is a config error."""
+    raw = _nexus_toml_dict()
+    raw["global"]["model"]["api_models"]["openai"]["base_url"] = "http://x/v1"
+    with pytest.raises(ValidationError, match="base_url is not allowed"):
+        Settings(**raw)
+
+
+def test_configured_param_rejected_when_model_declares_it_unsupported():
+    """[orrery.narration] temperature on a temperature-rejecting model fails load.
+
+    This is the #401 proving instance: the narration model resolves to a model
+    whose registry entry lists 'temperature' in unsupported_params, so setting
+    temperature in nexus.toml must be refused at config load, not at request
+    time.
+    """
+    raw = _nexus_toml_dict()
+    narration_model = Settings(**raw).orrery.narration.model_ref
+    assert "temperature" in {
+        p
+        for provider in Settings(**raw).global_.model.api_models.values()
+        for entry in provider.models
+        if entry.id == narration_model
+        for p in entry.unsupported_params
+    }, f"expected nexus.toml to declare temperature unsupported for {narration_model}"
+
+    raw["orrery"]["narration"]["temperature"] = 0.4
+    with pytest.raises(ValidationError, match="declares 'temperature' unsupported"):
+        Settings(**raw)
+
+
+def test_configured_param_allowed_when_model_supports_it():
+    """A supporting model (Sonnet 4.6) accepts a configured temperature."""
+    raw = _nexus_toml_dict()
+    raw["orrery"]["narration"]["model_ref"] = "claude-sonnet-4-6"
+    raw["orrery"]["narration"]["temperature"] = 0.4
+    settings = Settings(**raw)
+    assert settings.orrery.narration.temperature == 0.4
+
+
+def test_narration_temperature_unset_by_default():
+    """Shipped config omits narration temperature so the param is never sent."""
+    settings = load_settings("nexus.toml")
+    assert settings.orrery.narration.temperature is None
+
+
+def test_get_openai_compatible_endpoint_routing():
+    """Registry base_url providers resolve to an endpoint; native ones do not."""
+    from nexus.config import get_openai_compatible_endpoint
+
+    settings = load_settings("nexus.toml")
+    endpoint = get_openai_compatible_endpoint("TEST")
+    assert endpoint == {
+        "base_url": settings.global_.model.api_models["test"].base_url,
+        "api_key": "nexus-local-no-key",
+    }
+    assert get_openai_compatible_endpoint("gpt-5.5") is None
+    assert get_openai_compatible_endpoint("claude-opus-4-8") is None
+    # Models absent from the registry are treated as native/legacy overrides.
+    assert get_openai_compatible_endpoint("unregistered-model") is None
+
+
+def test_default_load_honors_runtime_config_env(tmp_path, monkeypatch):
+    """Managed services use the config path exported by the supervisor."""
+    from nexus.config import get_openai_compatible_endpoint
+    from nexus.config.loader import get_provider_for_model
+
+    raw = _nexus_toml_dict()
+    raw["global"]["model"]["default_slot_model"] = "TEMPTEST"
+    raw["global"]["model"]["api_models"]["test"]["roles"]["default"] = "TEMPTEST"
+    raw["global"]["model"]["api_models"]["test"]["models"][0]["id"] = "TEMPTEST"
+    raw["global"]["model"]["api_models"]["test"][
+        "base_url"
+    ] = "http://127.0.0.1:5999/v1"
+    raw["runtime"]["services"]["mock_openai"]["port"] = 5999
+    config = tmp_path / "runtime.toml"
+    config.write_text(tomlkit.dumps(raw))
+
+    monkeypatch.setenv("NEXUS_RUNTIME_CONFIG", str(config))
+
+    assert (
+        load_settings().global_.model.api_models["test"].models[0].id == "TEMPTEST"
+    )
+    assert get_provider_for_model("TEMPTEST") == "test"
+    assert get_openai_compatible_endpoint("TEMPTEST") == {
+        "base_url": "http://127.0.0.1:5999/v1",
+        "api_key": "nexus-local-no-key",
+    }
+    assert (
+        load_settings("nexus.toml")
+        .global_.model.api_models["test"]
+        .base_url.endswith(":5102/v1")
+    )

@@ -78,9 +78,6 @@ def _labeled_lines(rows: list[tuple[str, Any]]) -> list[str]:
 class LogonUtility:
     """Wrapper for Apex AI API calls using existing providers"""
 
-    # Mock server URL for TEST model
-    TEST_MODEL_BASE_URL = "http://localhost:5102/v1"
-
     def __init__(
         self,
         settings: Dict[str, Any],
@@ -264,13 +261,15 @@ class LogonUtility:
             "provider", "openai"
         )
 
-        # Determine base_url for TEST model routing
-        base_url = None
-        api_key = None
-        if model == "TEST":
-            base_url = self.TEST_MODEL_BASE_URL
-            api_key = "test-dummy-key"  # Avoid 1Password lookup for TEST
-            logger.info(f"TEST model: routing to mock server at {base_url}")
+        # OpenAI-compatible base_url routing (mock TEST server, local servers):
+        # the endpoint lives in the [global.model.api_models] registry (#401).
+        from nexus.config import get_openai_compatible_endpoint
+
+        endpoint = get_openai_compatible_endpoint(model)
+        base_url = endpoint["base_url"] if endpoint else None
+        api_key = endpoint["api_key"] if endpoint else None
+        if base_url:
+            logger.info(f"Model {model}: routing to base_url {base_url}")
 
         # Load system prompt
         system_prompt = self._load_system_prompt(provider_bootstrap_mode)
@@ -296,7 +295,19 @@ class LogonUtility:
             validation_dbname = None
         output_validator = build_storyteller_tag_validator(validation_dbname)
 
-        if provider_type in {"openai", "test"}:
+        if provider_type == "anthropic":
+            self.provider = AnthropicProvider(
+                model=model,
+                max_tokens=apex_settings.get(
+                    "max_output_tokens", apex_settings.get("max_tokens", 4000)
+                ),
+                system_prompt=system_prompt,
+                structured_output_retries=structured_output_retries,
+                output_validator=output_validator,
+            )
+        elif provider_type == "openai" or base_url:
+            # Native OpenAI, or any OpenAI-compatible server registered with a
+            # base_url in [global.model.api_models] (mock TEST, Ollama, vLLM).
             self.provider = OpenAIProvider(
                 model=model,
                 temperature=apex_settings.get("temperature", 0.7),
@@ -305,16 +316,6 @@ class LogonUtility:
                 system_prompt=system_prompt,
                 base_url=base_url,
                 api_key=api_key,
-                structured_output_retries=structured_output_retries,
-                output_validator=output_validator,
-            )
-        elif provider_type == "anthropic":
-            self.provider = AnthropicProvider(
-                model=model,
-                max_tokens=apex_settings.get(
-                    "max_output_tokens", apex_settings.get("max_tokens", 4000)
-                ),
-                system_prompt=system_prompt,
                 structured_output_retries=structured_output_retries,
                 output_validator=output_validator,
             )

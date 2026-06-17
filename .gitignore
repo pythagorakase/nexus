@@ -73,3 +73,6 @@ nexus-tui-temp/
 /archive/
 prompt.md
 format_strip.md
+
+# Managed runtime state (pidfiles, captured logs)
+.nexus/

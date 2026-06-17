@@ -17,13 +17,11 @@ from nexus.agents.orrery.retrograde_maturation import (
     load_maturation_status_sync,
 )
 from nexus.config import load_settings_as_dict
-from nexus.config.settings_models import OrreryPromoteSettings
+from nexus.config.settings_models import OrreryNarrationSettings, OrreryPromoteSettings
 
 logger = logging.getLogger("nexus.orrery.worker")
 
 
-DEFAULT_NARRATION_MAX_ATTEMPTS = 3
-DEFAULT_NARRATION_RETRY_DELAY_SECONDS = 300
 DEFAULT_SEMANTIC_CLEARANCE_LIMIT = 20
 DEFAULT_SEMANTIC_CLEARANCE_RECENT_CHUNKS = 10
 DEFAULT_SEMANTIC_CLEARANCE_EVIDENCE_CHUNKS = 5
@@ -632,44 +630,59 @@ def _perceptual_descriptor(row: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _narration_settings(settings: Mapping[str, Any]) -> OrreryNarrationSettings:
+    raw_settings = (settings.get("orrery") or {}).get("narration") or {}
+    if isinstance(raw_settings, OrreryNarrationSettings):
+        return raw_settings
+    return OrreryNarrationSettings.model_validate(raw_settings)
+
+
 def _narration_provider(settings: Mapping[str, Any]) -> Any:
+    from nexus.config import get_openai_compatible_endpoint
     from nexus.config.loader import get_provider_for_model
     from scripts.api_anthropic import AnthropicProvider
     from scripts.api_openai import OpenAIProvider
 
-    narration_settings = (settings.get("orrery") or {}).get("narration") or {}
-    provider_name = narration_settings.get("provider")
-    model = narration_settings.get("model_ref")
-    provider_name = provider_name or get_provider_for_model(model)
+    narration = _narration_settings(settings)
+    model = narration.model_ref
+    provider_name = narration.provider or get_provider_for_model(model)
 
-    if provider_name in {"openai", "test"}:
-        return OpenAIProvider(
-            model=model,
-            temperature=0.4,
-            max_output_tokens=1200,
-            system_prompt=NARRATION_SYSTEM_PROMPT,
-        )
+    # Sampling params come from [orrery.narration]; anything left unset is
+    # omitted from the request entirely. Config load already rejected any
+    # configured param the model declares unsupported (#401), so nothing sent
+    # here can be refused by the provider.
     if provider_name == "anthropic":
         return AnthropicProvider(
             model=model,
-            temperature=0.4,
-            max_tokens=1200,
+            temperature=narration.temperature,
+            max_tokens=narration.max_output_tokens,
             system_prompt=NARRATION_SYSTEM_PROMPT,
+        )
+    if provider_name == "openai":
+        return OpenAIProvider(
+            model=model,
+            temperature=narration.temperature,
+            max_output_tokens=narration.max_output_tokens,
+            system_prompt=NARRATION_SYSTEM_PROMPT,
+        )
+    # Any other provider must be the model's own registry provider with an
+    # OpenAI-compatible base_url (mock TEST server, Ollama, vLLM, ...).
+    endpoint = get_openai_compatible_endpoint(model)
+    if endpoint and get_provider_for_model(model) == provider_name:
+        return OpenAIProvider(
+            model=model,
+            temperature=narration.temperature,
+            max_output_tokens=narration.max_output_tokens,
+            system_prompt=NARRATION_SYSTEM_PROMPT,
+            base_url=endpoint["base_url"],
+            api_key=endpoint["api_key"],
         )
     raise ValueError(f"Unsupported Orrery narration provider: {provider_name}")
 
 
 def _narration_retry_settings(settings: Mapping[str, Any]) -> tuple[int, int]:
-    narration_settings = (settings.get("orrery") or {}).get("narration") or {}
-    max_attempts = int(
-        narration_settings.get("max_attempts", DEFAULT_NARRATION_MAX_ATTEMPTS)
-    )
-    retry_delay_seconds = int(
-        narration_settings.get(
-            "retry_delay_seconds", DEFAULT_NARRATION_RETRY_DELAY_SECONDS
-        )
-    )
-    return max(1, max_attempts), max(0, retry_delay_seconds)
+    narration = _narration_settings(settings)
+    return max(1, narration.max_attempts), max(0, narration.retry_delay_seconds)
 
 
 def _connect_for_slot(slot: Optional[int]) -> Any:

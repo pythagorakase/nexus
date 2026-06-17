@@ -67,6 +67,7 @@ from nexus.api.reader_endpoints import router as reader_router
 from nexus.api.settings_endpoints import router as settings_router
 from nexus.api.slot_endpoints import router as slot_router
 from nexus.api.setup_endpoints import router as setup_router
+from nexus.api.runtime_status import register_runtime_status
 from nexus.api.static_ui import mount_ui
 from nexus.api.wizard_chat import router as wizard_chat_router
 
@@ -1185,6 +1186,10 @@ async def get_user_character(slot: Optional[int] = None):
         if "conn" in locals():
             conn.close()
 
+
+# Runtime status endpoint (issue #396): aggregate health beside /health.
+# Must register BEFORE mount_ui below - the SPA mount is a catch-all.
+register_runtime_status(app)
 
 # Static serving for the built PWA and runtime uploads. Registered last:
 # the dist mount at "/" is a catch-all and Starlette matches in order.
