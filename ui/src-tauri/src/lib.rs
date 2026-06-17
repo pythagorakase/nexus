@@ -3,8 +3,11 @@ use serde_json::Value;
 use std::{
     env, fs,
     path::{Path, PathBuf},
-    process::Command,
-    sync::{Arc, Mutex},
+    process::{Command, Stdio},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
     thread,
     time::{Duration, Instant},
 };
@@ -15,6 +18,9 @@ const DEFAULT_RUNTIME_ORIGIN: &str = "http://127.0.0.1:8002";
 const DEFAULT_STATUS_PATH: &str = "/runtime/status";
 const DEFAULT_AUTH_HEADER: &str = "X-Nexus-Auth";
 const DEFAULT_AUTH_TOKEN_ENV: &str = "NEXUS_AUTH";
+const DEFAULT_COMMAND_TIMEOUT_SECONDS: u64 = 120;
+const MIN_STARTUP_TIMEOUT_SECONDS: u64 = 5;
+const MIN_COMMAND_TIMEOUT_SECONDS: u64 = 5;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 #[serde(default, rename_all = "camelCase")]
@@ -29,6 +35,7 @@ pub struct DesktopConfig {
     pub working_directory: Option<PathBuf>,
     pub startup_timeout_seconds: u64,
     pub poll_interval_milliseconds: u64,
+    pub command_timeout_seconds: u64,
 }
 
 impl Default for DesktopConfig {
@@ -44,6 +51,7 @@ impl Default for DesktopConfig {
             working_directory: None,
             startup_timeout_seconds: 90,
             poll_interval_milliseconds: 500,
+            command_timeout_seconds: DEFAULT_COMMAND_TIMEOUT_SECONDS,
         }
     }
 }
@@ -55,22 +63,17 @@ pub struct ResolvedDesktopConfig {
     pub working_directory: PathBuf,
 }
 
-#[derive(Default)]
-struct RuntimeSession {
-    started_by_shell: bool,
-}
-
 pub fn run() {
     let loaded = match load_desktop_config() {
         Ok(config) => config,
         Err(error) => {
-            eprintln!("failed to load NEXUS desktop config: {error}");
+            report_startup_error(&format!("failed to load NEXUS desktop config: {error}"));
             return;
         }
     };
-    let session = Arc::new(Mutex::new(RuntimeSession::default()));
+    let runtime_owned_by_shell = Arc::new(AtomicBool::new(false));
     let startup_config = loaded.clone();
-    let startup_session = session.clone();
+    let startup_ownership = runtime_owned_by_shell.clone();
 
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
@@ -83,7 +86,7 @@ pub fn run() {
             let window = app
                 .get_webview_window("main")
                 .expect("main window is declared in tauri.conf.json");
-            spawn_runtime_startup(window, startup_config.clone(), startup_session.clone());
+            spawn_runtime_startup(window, startup_config.clone(), startup_ownership.clone());
             Ok(())
         })
         .build(tauri::generate_context!())
@@ -91,7 +94,7 @@ pub fn run() {
 
     app.run(move |_app_handle, event| {
         if let tauri::RunEvent::ExitRequested { .. } = event {
-            stop_owned_runtime(&loaded, &session);
+            stop_owned_runtime(&loaded, &runtime_owned_by_shell);
         }
     });
 }
@@ -99,11 +102,12 @@ pub fn run() {
 fn spawn_runtime_startup(
     window: WebviewWindow,
     config: ResolvedDesktopConfig,
-    session: Arc<Mutex<RuntimeSession>>,
+    runtime_owned_by_shell: Arc<AtomicBool>,
 ) {
     thread::spawn(move || {
         set_loading_status(&window, "Checking runtime", &config.config.runtime_origin);
-        match ensure_runtime_ready(&config, &session, &window) {
+        warn_if_auth_token_missing(&config.config);
+        match ensure_runtime_ready(&config, &runtime_owned_by_shell, &window) {
             Ok(status) => navigate_to_runtime(&window, &config.config.runtime_origin, &status),
             Err(error) => set_loading_status(&window, "Runtime unavailable", &error),
         }
@@ -112,7 +116,7 @@ fn spawn_runtime_startup(
 
 fn ensure_runtime_ready(
     config: &ResolvedDesktopConfig,
-    session: &Arc<Mutex<RuntimeSession>>,
+    runtime_owned_by_shell: &Arc<AtomicBool>,
     window: &WebviewWindow,
 ) -> Result<Value, String> {
     if let Ok(status) = fetch_runtime_status(config) {
@@ -129,10 +133,7 @@ fn ensure_runtime_ready(
     set_loading_status(window, "Starting managed runtime", "Running nexus up");
     match run_runtime_command(config, &config.config.start_args) {
         Ok(output) => {
-            session
-                .lock()
-                .expect("runtime session lock")
-                .started_by_shell = true;
+            runtime_owned_by_shell.store(true, Ordering::SeqCst);
             if !output.trim().is_empty() {
                 set_loading_status(window, "Runtime command returned", output.trim());
             }
@@ -185,14 +186,8 @@ fn wait_for_runtime_ready(
     ))
 }
 
-fn stop_owned_runtime(config: &ResolvedDesktopConfig, session: &Arc<Mutex<RuntimeSession>>) {
-    let should_stop = {
-        let mut guard = session.lock().expect("runtime session lock");
-        let started = guard.started_by_shell;
-        guard.started_by_shell = false;
-        started
-    };
-    if should_stop {
+fn stop_owned_runtime(config: &ResolvedDesktopConfig, runtime_owned_by_shell: &Arc<AtomicBool>) {
+    if runtime_owned_by_shell.swap(false, Ordering::SeqCst) {
         let _ = run_runtime_command(config, &config.config.stop_args);
     }
 }
@@ -200,15 +195,13 @@ fn stop_owned_runtime(config: &ResolvedDesktopConfig, session: &Arc<Mutex<Runtim
 fn fetch_runtime_status(config: &ResolvedDesktopConfig) -> Result<Value, String> {
     let url = runtime_status_url(&config.config)?;
     let auth_value = env::var(&config.config.auth_token_env).unwrap_or_default();
-    let response = reqwest::blocking::Client::new()
-        .get(url.clone())
-        .header(&config.config.auth_header, auth_value)
-        .timeout(Duration::from_secs(3))
+    let response = minreq::get(url.as_str())
+        .with_header(&config.config.auth_header, auth_value)
+        .with_timeout(3)
         .send()
         .map_err(|error| format!("{url}: {error}"))?;
-    let status = response.status();
-    if !status.is_success() {
-        return Err(format!("{url}: HTTP {status}"));
+    if !(200..300).contains(&response.status_code) {
+        return Err(format!("{url}: HTTP {}", response.status_code));
     }
     response
         .json::<Value>()
@@ -222,20 +215,55 @@ fn run_runtime_command(config: &ResolvedDesktopConfig, args: &[String]) -> Resul
         .split_first()
         .ok_or_else(|| "runtimeCommand must contain at least the CLI program".to_string())?;
     let program_path = resolve_program(program);
-    let output = Command::new(&program_path)
+    let mut child = Command::new(&program_path)
         .args(prefix_args)
         .args(args)
         .current_dir(&config.working_directory)
         .env("NEXUS_DESKTOP", "1")
-        .output()
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
         .map_err(|error| {
             format!(
-                "failed to run {} {}: {}",
+                "failed to start {} in {}: {}",
                 display_command(&program_path, prefix_args, args),
                 config.working_directory.display(),
                 error
             )
         })?;
+    let timeout = Duration::from_secs(config.config.command_timeout_seconds);
+    let deadline = Instant::now() + timeout;
+    loop {
+        match child.try_wait() {
+            Ok(Some(_status)) => break,
+            Ok(None) if Instant::now() < deadline => thread::sleep(Duration::from_millis(100)),
+            Ok(None) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(format!(
+                    "{} timed out after {}s",
+                    display_command(&program_path, prefix_args, args),
+                    timeout.as_secs()
+                ));
+            }
+            Err(error) => {
+                let _ = child.kill();
+                return Err(format!(
+                    "failed while waiting for {}: {}",
+                    display_command(&program_path, prefix_args, args),
+                    error
+                ));
+            }
+        }
+    }
+    let output = child.wait_with_output().map_err(|error| {
+        format!(
+            "failed to collect output from {}: {}",
+            display_command(&program_path, prefix_args, args),
+            error
+        )
+    })?;
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
     let combined = [stdout.trim(), stderr.trim()]
@@ -265,7 +293,7 @@ fn display_command(program: &Path, prefix_args: &[String], args: &[String]) -> S
 }
 
 fn runtime_status_url(config: &DesktopConfig) -> Result<String, String> {
-    let origin = config.runtime_origin.trim_end_matches('/');
+    let origin = normalize_runtime_origin(&config.runtime_origin)?;
     let path = if config.status_path.starts_with('/') {
         config.status_path.clone()
     } else {
@@ -274,6 +302,26 @@ fn runtime_status_url(config: &DesktopConfig) -> Result<String, String> {
     let url = format!("{origin}{path}");
     url::Url::parse(&url).map_err(|error| format!("invalid runtime status URL {url}: {error}"))?;
     Ok(url)
+}
+
+fn normalize_runtime_origin(origin: &str) -> Result<String, String> {
+    let mut url = url::Url::parse(origin)
+        .map_err(|error| format!("invalid runtime origin {origin}: {error}"))?;
+    match url.scheme() {
+        "http" | "https" => {}
+        scheme => {
+            return Err(format!(
+                "runtimeOrigin must use http or https, got {scheme:?}"
+            ))
+        }
+    }
+    if url.host_str().is_none() {
+        return Err(format!("runtimeOrigin must include a host: {origin}"));
+    }
+    url.set_path("");
+    url.set_query(None);
+    url.set_fragment(None);
+    Ok(url.as_str().trim_end_matches('/').to_string())
 }
 
 fn navigate_to_runtime(window: &WebviewWindow, runtime_origin: &str, status: &Value) {
@@ -296,9 +344,17 @@ fn set_loading_status(window: &WebviewWindow, label: &str, detail: &str) {
 
 fn eval_on_main_thread(window: &WebviewWindow, script: String) {
     let target = window.clone();
-    let _ = window.run_on_main_thread(move || {
-        let _ = target.eval(script);
-    });
+    if let Err(error) = window.run_on_main_thread(move || {
+        if let Err(error) = target.eval(script) {
+            append_desktop_log(&format!(
+                "failed to evaluate desktop webview script: {error}"
+            ));
+        }
+    }) {
+        append_desktop_log(&format!(
+            "failed to schedule desktop webview script: {error}"
+        ));
+    }
 }
 
 fn runtime_summary(status: &Value) -> String {
@@ -342,6 +398,13 @@ pub fn load_desktop_config() -> Result<ResolvedDesktopConfig, String> {
             config.runtime_origin = origin;
         }
     }
+    config.runtime_origin = normalize_runtime_origin(&config.runtime_origin)?;
+    config.startup_timeout_seconds = config
+        .startup_timeout_seconds
+        .max(MIN_STARTUP_TIMEOUT_SECONDS);
+    config.command_timeout_seconds = config
+        .command_timeout_seconds
+        .max(MIN_COMMAND_TIMEOUT_SECONDS);
     let working_directory = resolve_working_directory(&config, source_path.as_deref())?;
     Ok(ResolvedDesktopConfig {
         config,
@@ -460,7 +523,85 @@ fn common_bin_dirs() -> Vec<PathBuf> {
         dirs.push(home.join(".local/bin"));
         dirs.push(home.join(".cargo/bin"));
     }
+    if cfg!(target_os = "windows") {
+        if let Some(appdata) = env::var_os("APPDATA") {
+            dirs.push(PathBuf::from(appdata).join("Python/Scripts"));
+        }
+        if let Some(local_appdata) = env::var_os("LOCALAPPDATA") {
+            let local = PathBuf::from(local_appdata);
+            dirs.push(local.join("Programs/Python/Python311/Scripts"));
+            dirs.push(local.join("Programs/Python/Python312/Scripts"));
+            dirs.push(local.join("Programs/Python/Python313/Scripts"));
+            dirs.push(local.join("pypoetry/Cache/virtualenvs"));
+        }
+        if let Some(program_files) = env::var_os("ProgramFiles") {
+            dirs.push(PathBuf::from(program_files).join("NEXUS/bin"));
+        }
+    }
     dirs
+}
+
+fn warn_if_auth_token_missing(config: &DesktopConfig) {
+    if !config.auth_header.trim().is_empty()
+        && !config.auth_token_env.trim().is_empty()
+        && env::var_os(&config.auth_token_env).is_none()
+    {
+        append_desktop_log(&format!(
+            "{} is not set; sending an empty {} header. Local runtimes ignore this today.",
+            config.auth_token_env, config.auth_header
+        ));
+    }
+}
+
+fn report_startup_error(message: &str) {
+    append_desktop_log(message);
+    eprintln!("{message}");
+    #[cfg(target_os = "macos")]
+    {
+        let script = format!(
+            "display alert \"NEXUS could not start\" message {} as critical",
+            applescript_string(message)
+        );
+        let _ = Command::new("osascript")
+            .arg("-e")
+            .arg(script)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn();
+    }
+}
+
+fn append_desktop_log(message: &str) {
+    let log_path = desktop_log_path();
+    if let Some(parent) = log_path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    let line = format!("{message}\n");
+    let _ = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(log_path)
+        .and_then(|mut file| {
+            use std::io::Write;
+            file.write_all(line.as_bytes())
+        });
+}
+
+fn desktop_log_path() -> PathBuf {
+    if cfg!(target_os = "macos") {
+        if let Some(home) = dirs::home_dir() {
+            return home.join("Library/Logs/NEXUS/desktop.log");
+        }
+    }
+    dirs::data_local_dir()
+        .unwrap_or_else(env::temp_dir)
+        .join("NEXUS/desktop.log")
+}
+
+#[cfg(target_os = "macos")]
+fn applescript_string(value: &str) -> String {
+    format!("\"{}\"", value.replace('\\', "\\\\").replace('"', "\\\""))
 }
 
 #[cfg(test)]
@@ -487,6 +628,20 @@ mod tests {
         assert_eq!(
             runtime_status_url(&config).unwrap(),
             "http://127.0.0.1:8002/runtime/status"
+        );
+    }
+
+    #[test]
+    fn runtime_origin_rejects_non_http_schemes() {
+        let error = normalize_runtime_origin("javascript:alert(1)").unwrap_err();
+        assert!(error.contains("http or https"));
+    }
+
+    #[test]
+    fn runtime_origin_strips_path_query_and_fragment() {
+        assert_eq!(
+            normalize_runtime_origin("https://nexus.example.com/path?x=1#frag").unwrap(),
+            "https://nexus.example.com"
         );
     }
 

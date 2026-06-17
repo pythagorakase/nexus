@@ -15,6 +15,9 @@ The dev command builds the PWA first because the desktop shell points at the
 gateway origin, not at Vite. Once the runtime is ready, the Tauri loading page
 replaces itself with `http://127.0.0.1:8002` by default.
 
+This is intentionally not a hot-reload path. Use the browser workflow below for
+Vite HMR, Playwright, Safari/Chrome comparison, and agent-driven UI debugging.
+
 Build a local macOS app bundle with:
 
 ```bash
@@ -40,7 +43,8 @@ It defines the runtime origin, status path, auth header, and CLI command:
   "runtimeCommand": ["poetry", "run", "nexus"],
   "startArgs": ["--json", "up"],
   "stopArgs": ["--json", "down"],
-  "workingDirectory": "../.."
+  "workingDirectory": "../..",
+  "commandTimeoutSeconds": 120
 }
 ```
 
@@ -59,6 +63,10 @@ Poetry from the repo root. Packaged or globally installed environments can set
   command on quit.
 - The shell talks only to the runtime contract: origin, status surface, auth
   header, and CLI entrypoint.
+- If startup fails before a window can be shown, the shell writes
+  `~/Library/Logs/NEXUS/desktop.log` on macOS and shows a native alert.
+- The bundled loading page has a restrictive local CSP. After navigation, the
+  runtime origin controls its own HTTP response headers.
 
 ## Browser Workflow
 

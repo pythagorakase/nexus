@@ -8,5 +8,6 @@
   "stopArgs": ["--json", "down"],
   "workingDirectory": "../..",
   "startupTimeoutSeconds": 90,
-  "pollIntervalMilliseconds": 500
+  "pollIntervalMilliseconds": 500,
+  "commandTimeoutSeconds": 120
 }
