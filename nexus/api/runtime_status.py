@@ -12,6 +12,7 @@ SPA mount registers a catch-all route and must come last.
 
 from __future__ import annotations
 
+import asyncio
 import os
 from importlib.metadata import PackageNotFoundError, version
 from typing import Any, Dict
@@ -108,4 +109,4 @@ def register_runtime_status(app: FastAPI) -> None:
 
     @app.get(RUNTIME_STATUS_PATH)
     async def runtime_status() -> Dict[str, Any]:
-        return build_runtime_status()
+        return await asyncio.to_thread(build_runtime_status)

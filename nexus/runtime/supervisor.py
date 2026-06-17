@@ -435,6 +435,15 @@ class Supervisor:
             _signal_pid(pid, kill_sig)
             time.sleep(0.2)
 
+    def _wait_port_closed(self, host: str, port: int) -> bool:
+        """Return true once a stopped service's TCP port is closed."""
+        deadline = time.monotonic() + self.runtime.health.stop_grace_seconds
+        while time.monotonic() < deadline:
+            if not _port_open(host, port):
+                return True
+            time.sleep(0.1)
+        return not _port_open(host, port)
+
     def _stop_service(self, name: str) -> Optional[int]:
         record = self._read_pidfile(name)
         if record is None:
@@ -465,7 +474,9 @@ class Supervisor:
             if pid is None:
                 continue
             stopped[name] = {"pid": pid}
-            if record and _port_open(record.get("host", "127.0.0.1"), record["port"]):
+            if record and not self._wait_port_closed(
+                record.get("host", "127.0.0.1"), record["port"]
+            ):
                 raise RuntimeError_(
                     f"Service '{name}' was signaled but port {record['port']} is "
                     f"still open - a process outlived shutdown."
@@ -624,7 +635,7 @@ class Supervisor:
                         with open(path, "rb") as handle:
                             handle.seek(offsets[name])
                             data = handle.read()
-                        offsets[name] = size
+                            offsets[name] = handle.tell()
                         if echo:
                             text = data.decode("utf-8", errors="replace")
                             for line in text.splitlines():
@@ -645,22 +656,29 @@ class Supervisor:
         restarts: Dict[str, int],
         echo: bool,
     ) -> None:
+        exited: list[tuple[str, RuntimeServiceSettings, Dict[str, Any]]] = []
         for name, service in services.items():
             record = self._read_pidfile(name)
             if record is None or _pid_alive(int(record["pid"])):
                 continue
             self._pidfile(name).unlink(missing_ok=True)
+            exited.append((name, service, record))
+
+        failures: list[str] = []
+        for name, service, record in exited:
             if service.autorestart != "on-failure":
-                raise RuntimeError_(
+                failures.append(
                     f"Service '{name}' (pid {record['pid']}) exited and "
                     f"autorestart is 'never'."
                 )
+                continue
             attempts = restarts.get(name, 0)
             if attempts >= service.autorestart_max_retries:
-                raise RuntimeError_(
+                failures.append(
                     f"Service '{name}' exceeded autorestart_max_retries "
                     f"({service.autorestart_max_retries})."
                 )
+                continue
             restarts[name] = attempts + 1
             if echo:
                 print(
@@ -668,3 +686,5 @@ class Supervisor:
                     f"({restarts[name]}/{service.autorestart_max_retries})"
                 )
             self._start_service(name, service, slot, detached=False)
+        if failures:
+            raise RuntimeError_(" ".join(failures))

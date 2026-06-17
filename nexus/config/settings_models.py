@@ -1614,12 +1614,12 @@ class Settings(BaseModel):
     def _validate_param_capabilities(self) -> "Settings":
         """Refuse configured request params that the resolved model rejects.
 
-        This is the single enforcement boundary for per-model parameter
-        capability (issue #401): consumer sections in nexus.toml may only
-        configure a sampling parameter when the model they resolve to does not
-        list it in `unsupported_params`. Request builders send only explicitly
-        configured params, so passing this validator guarantees no provider
-        ever receives a parameter it rejects.
+        This is the enforcement boundary for Orrery narration sampling
+        capability (issue #401): [orrery.narration] may only configure a
+        sampling parameter when its resolved model does not list it in
+        `unsupported_params`. Request builders send only explicitly configured
+        params, so passing this validator guarantees Orrery never sends a
+        narration parameter its provider rejects.
 
         Runs after ``_resolve_model_references`` (Pydantic executes model
         validators in definition order), so every model field holds a concrete

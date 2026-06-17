@@ -48,6 +48,8 @@ def build_pydantic_ai_model(model: str) -> Model:
     # Any other provider is an OpenAI-compatible server registered via
     # base_url in [global.model.api_models] (mock TEST server, Ollama, vLLM).
     endpoint = get_openai_compatible_endpoint(model)
+    if endpoint is None:
+        raise ValueError(f"No base_url registry entry for model {model!r}")
     pyd_provider = PydanticOpenAIProvider(
         api_key=endpoint["api_key"], base_url=endpoint["base_url"]
     )
