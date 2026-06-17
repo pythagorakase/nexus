@@ -141,6 +141,20 @@ def test_local_profile_full_lifecycle(tmp_path):
         assert _pid_alive(mock_pid)
         assert requests.get(f"{base}/health", timeout=5).status_code == 200
 
+        # A full restart without --slot preserves the running slot instead of
+        # falling back to runtime.default_slot.
+        full_restart = _cli("restart", config=config)
+        assert full_restart["slot"] == TEST_SLOT
+        full_gateway_pid = full_restart["services"]["gateway"]["pid"]
+        full_mock_pid = full_restart["services"]["mock_openai"]["pid"]
+        assert full_gateway_pid != new_pid
+        assert full_mock_pid != mock_pid
+        runtime_status = requests.get(f"{base}/runtime/status", timeout=5).json()
+        assert runtime_status["slot"] == TEST_SLOT
+        assert runtime_status["database"]["dbname"] == f"save_0{TEST_SLOT}"
+        new_pid = full_gateway_pid
+        mock_pid = full_mock_pid
+
         # down leaves no orphans: pids dead, ports closed, pidfiles gone.
         down = _cli("down", config=config)
         assert set(down["stopped"]) == {"gateway", "mock_openai"}

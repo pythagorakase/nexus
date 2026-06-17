@@ -165,6 +165,26 @@ class Supervisor:
             return None
         return json.loads(path.read_text())
 
+    def _running_slot(self) -> Optional[int]:
+        """Return the slot recorded by running services, if any.
+
+        A full restart should preserve the slot chosen by ``nexus up --slot N``;
+        once ``down()`` removes pidfiles that information is gone.
+        """
+        slots = {
+            int(record["slot"])
+            for path in self.state_dir.glob("*.pid.json")
+            if (record := json.loads(path.read_text()))
+            and _pid_alive(int(record["pid"]))
+            and record.get("slot") is not None
+        }
+        if len(slots) > 1:
+            raise RuntimeError_(
+                f"Running services disagree about active slot: {sorted(slots)}. "
+                "Pass --slot explicitly."
+            )
+        return next(iter(slots), None)
+
     def _write_pidfile(self, name: str, record: Dict[str, Any]) -> None:
         self._pidfile(name).write_text(json.dumps(record, indent=2))
 
@@ -476,8 +496,11 @@ class Supervisor:
                 service, services[service], resolved_slot, detached=True
             )
             return {"success": True, "services": {service: record}}
+        resolved_slot = self._resolve_slot(
+            slot if slot is not None else self._running_slot()
+        )
         self.down()
-        return self.up(slot=slot, echo=False)
+        return self.up(slot=resolved_slot, echo=False)
 
     # ------------------------------------------------------------------
     # Status

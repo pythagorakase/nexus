@@ -3,6 +3,7 @@
 import tomllib
 
 import pytest
+import tomlkit
 from pydantic import ValidationError
 
 from nexus.config import load_settings, resolve_model_ref
@@ -205,3 +206,36 @@ def test_get_openai_compatible_endpoint_routing():
     assert get_openai_compatible_endpoint("claude-opus-4-8") is None
     # Models absent from the registry are treated as native/legacy overrides.
     assert get_openai_compatible_endpoint("unregistered-model") is None
+
+
+def test_default_load_honors_runtime_config_env(tmp_path, monkeypatch):
+    """Managed services use the config path exported by the supervisor."""
+    from nexus.config import get_openai_compatible_endpoint
+    from nexus.config.loader import get_provider_for_model
+
+    raw = _nexus_toml_dict()
+    raw["global"]["model"]["default_slot_model"] = "TEMPTEST"
+    raw["global"]["model"]["api_models"]["test"]["roles"]["default"] = "TEMPTEST"
+    raw["global"]["model"]["api_models"]["test"]["models"][0]["id"] = "TEMPTEST"
+    raw["global"]["model"]["api_models"]["test"][
+        "base_url"
+    ] = "http://127.0.0.1:5999/v1"
+    raw["runtime"]["services"]["mock_openai"]["port"] = 5999
+    config = tmp_path / "runtime.toml"
+    config.write_text(tomlkit.dumps(raw))
+
+    monkeypatch.setenv("NEXUS_RUNTIME_CONFIG", str(config))
+
+    assert (
+        load_settings().global_.model.api_models["test"].models[0].id == "TEMPTEST"
+    )
+    assert get_provider_for_model("TEMPTEST") == "test"
+    assert get_openai_compatible_endpoint("TEMPTEST") == {
+        "base_url": "http://127.0.0.1:5999/v1",
+        "api_key": "nexus-local-no-key",
+    }
+    assert (
+        load_settings("nexus.toml")
+        .global_.model.api_models["test"]
+        .base_url.endswith(":5102/v1")
+    )

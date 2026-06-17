@@ -31,7 +31,7 @@ def _database_status() -> Dict[str, Any]:
     """SELECT 1 against the active slot's database."""
     import psycopg2
 
-    from nexus.api.db_pool import get_connect_timeout_seconds
+    from nexus.api.db_pool import get_connection
     from nexus.api.slot_utils import get_active_slot, require_slot_dbname
 
     try:
@@ -40,18 +40,10 @@ def _database_status() -> Dict[str, Any]:
     except (RuntimeError, ValueError) as exc:
         return {"ok": False, "error": str(exc)}
     try:
-        conn = psycopg2.connect(
-            host="localhost",
-            dbname=dbname,
-            user="pythagor",
-            connect_timeout=get_connect_timeout_seconds(),
-        )
-        try:
+        with get_connection(dbname=dbname) as conn:
             with conn.cursor() as cur:
                 cur.execute("SELECT 1")
                 cur.fetchone()
-        finally:
-            conn.close()
         return {"ok": True, "slot": slot, "dbname": dbname}
     except psycopg2.Error as exc:
         return {"ok": False, "slot": slot, "dbname": dbname, "error": str(exc)}

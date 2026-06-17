@@ -9,6 +9,7 @@ to nexus.toml; explicitly passed .json paths remain supported only for
 legacy ir_eval V1 tooling that synthesizes temporary settings files.
 """
 
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -33,6 +34,8 @@ except ModuleNotFoundError:
 from .settings_models import Settings
 
 logger = logging.getLogger("nexus.config.loader")
+
+RUNTIME_CONFIG_ENV = "NEXUS_RUNTIME_CONFIG"
 
 
 def save_settings(
@@ -235,7 +238,7 @@ def get_openai_compatible_endpoint(model_id: str) -> Optional[Dict[str, str]]:
     return {"base_url": entry.base_url, "api_key": api_key}
 
 
-def resolve_model_ref(ref: str, path: Union[str, Path] = "nexus.toml") -> str:
+def resolve_model_ref(ref: str, path: Union[str, Path, None] = None) -> str:
     """
     Resolve an "@provider.role" reference to a concrete model ID.
 
@@ -245,7 +248,8 @@ def resolve_model_ref(ref: str, path: Union[str, Path] = "nexus.toml") -> str:
 
     Args:
         ref: "@provider.role" reference or literal registry model ID
-        path: Path to configuration file (default: nexus.toml)
+        path: Path to configuration file (default: active runtime config, then
+            nexus.toml)
 
     Returns:
         Concrete model ID from the api_models registry
@@ -257,13 +261,15 @@ def resolve_model_ref(ref: str, path: Union[str, Path] = "nexus.toml") -> str:
     return load_settings(path).resolve_model_ref(ref)
 
 
-def load_settings(path: Union[str, Path] = "nexus.toml") -> Settings:
+def load_settings(path: Union[str, Path, None] = None) -> Settings:
     """
     Load and validate NEXUS configuration.
 
     Args:
-        path: Path to configuration file (nexus.toml; explicit .json paths
-              are accepted only for legacy ir_eval V1 tooling)
+        path: Path to configuration file. When omitted, services spawned by
+              the managed runtime honor NEXUS_RUNTIME_CONFIG; otherwise
+              nexus.toml is used. Explicit .json paths are accepted only for
+              legacy ir_eval V1 tooling.
 
     Returns:
         Validated Settings object with type-safe access to configuration
@@ -280,6 +286,8 @@ def load_settings(path: Union[str, Path] = "nexus.toml") -> Settings:
         >>> # settings.apex.model resolves to a concrete ID from the api_models
         >>> # registry (e.g. whatever openai.default points at).
     """
+    if path is None:
+        path = os.environ.get(RUNTIME_CONFIG_ENV, "nexus.toml")
     path = Path(path)
 
     if not path.exists():
@@ -369,7 +377,7 @@ def _load_from_json(path: Path) -> Settings:
         raise
 
 
-def load_settings_as_dict(path: Union[str, Path] = "nexus.toml") -> Dict[str, Any]:
+def load_settings_as_dict(path: Union[str, Path, None] = None) -> Dict[str, Any]:
     """
     Load settings and return as dict for backward compatibility.
 
