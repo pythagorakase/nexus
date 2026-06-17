@@ -25,6 +25,13 @@ _UNREACHABLE_DB_ENV = {
     "NEXUS_SLOT": "1",
 }
 
+_FORBIDDEN_APP_IMPORT_MODULES = {
+    "nexus.agents.memnon.memnon",
+    "sentence_transformers",
+    "torch",
+    "transformers",
+}
+
 
 def _run_fresh_import(code: str) -> "subprocess.CompletedProcess[str]":
     env = {**os.environ, **_UNREACHABLE_DB_ENV}
@@ -68,6 +75,21 @@ def test_storyteller_app_export_does_not_touch_postgres() -> None:
         "from nexus.api import db_pool\n"
         "assert app.title is not None\n"
         "assert db_pool._pools == {}, db_pool._pools\n"
+        "print('OK')\n"
+    )
+    _assert_clean(_run_fresh_import(code))
+
+
+def test_storyteller_app_export_does_not_import_ml_stack() -> None:
+    """Resolving nexus.api.app must not import LORE's MEMNON/ML dependencies."""
+    module_list = repr(sorted(_FORBIDDEN_APP_IMPORT_MODULES))
+    code = (
+        "import sys\n"
+        "from nexus.api import app\n"
+        f"forbidden = {module_list}\n"
+        "loaded = [module for module in forbidden if module in sys.modules]\n"
+        "assert app.title is not None\n"
+        "assert loaded == [], loaded\n"
         "print('OK')\n"
     )
     _assert_clean(_run_fresh_import(code))
