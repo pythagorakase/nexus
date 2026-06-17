@@ -58,6 +58,8 @@ from nexus.api.config_utils import get_new_story_model
 
 if TYPE_CHECKING:
     from nexus.agents.lore.lore import LORE
+else:
+    LORE = Any
 
 logger = logging.getLogger("nexus.api.storyteller")
 
@@ -343,7 +345,7 @@ def get_session_manager() -> SessionManager:
     return session_manager
 
 
-async def get_lore() -> Any:
+async def get_lore() -> "LORE":
     """FastAPI dependency returning the LORE agent."""
 
     return await lore_provider.get()
@@ -482,7 +484,7 @@ async def story_turn(
     request: StoryTurnRequest,
     background_tasks: BackgroundTasks,
     manager: SessionManager = Depends(get_session_manager),
-    lore: Any = Depends(get_lore),
+    lore: "LORE" = Depends(get_lore),
 ) -> StoryTurnResponse:
     """Execute a full story turn and persist the results."""
 
@@ -605,7 +607,7 @@ async def regenerate_turn(
     request: RegenerateRequest,
     background_tasks: BackgroundTasks,
     manager: SessionManager = Depends(get_session_manager),
-    lore: Any = Depends(get_lore),
+    lore: "LORE" = Depends(get_lore),
 ) -> StoryTurnResponse:
     """Regenerate the last turn with updated options."""
 

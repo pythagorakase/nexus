@@ -233,7 +233,6 @@ class LORE:
         try:
             from nexus.agents.memnon.memnon import MEMNON
         except ImportError as e:
-            logger.error("MEMNON module not available: %s", e)
             raise RuntimeError(
                 "FATAL: MEMNON module not available! Cannot proceed without memory retrieval."
             ) from e

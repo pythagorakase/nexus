@@ -174,7 +174,7 @@ export function GildedSplash() {
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        background: gilded.bg,
+        background: 'hsl(var(--background))',
         overflow: 'hidden',
       }}
     >

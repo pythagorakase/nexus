@@ -179,6 +179,12 @@ const getRequiredNumber = (value: number | null | undefined): number => {
   return value;
 };
 
+const assertFixedTerminator = (stretchFlags: boolean[], nextIndex: number): void => {
+  if (nextIndex >= stretchFlags.length || stretchFlags[nextIndex]) {
+    throw new Error('Deco frame metadata must terminate each stretch band with a fixed ink band.');
+  }
+};
+
 function layoutAxis(
   bounds: number[],
   stretchFlags: boolean[],
@@ -225,6 +231,7 @@ function layoutAxis(
       }
 
       const nextIndex = index + 1;
+      assertFixedTerminator(stretchFlags, nextIndex);
       const nextInkCenter = getRequiredNumber(inkCenters[nextIndex]);
       const nextFraction = getRequiredNumber(fractions[nextIndex]);
       const inkOffset = (nextInkCenter - bounds[nextIndex]) * scale;
@@ -256,6 +263,7 @@ function layoutAxis(
       }
 
       const nextIndex = index + 1;
+      assertFixedTerminator(stretchFlags, nextIndex);
       const nextInkCenter = getRequiredNumber(inkCenters[nextIndex]);
       const nextFraction = getRequiredNumber(fractions[nextIndex]);
       const inkOffset = (nextInkCenter - bounds[nextIndex]) * scale;
@@ -302,8 +310,9 @@ export function DecoFrameSliced({
 
     let animationFrame = 0;
     let tries = 0;
+    let cancelled = false;
     const pollUntilSized = () => {
-      if (!ref.current) return;
+      if (cancelled || !ref.current) return;
       if (ref.current.clientWidth > 0 && ref.current.clientHeight > 0) {
         measure();
         return;
@@ -325,6 +334,7 @@ export function DecoFrameSliced({
     }
 
     return () => {
+      cancelled = true;
       window.removeEventListener('resize', measure);
       resizeObserver?.disconnect();
       if (animationFrame) cancelAnimationFrame(animationFrame);
