@@ -766,17 +766,25 @@ def _mock_storyteller_response(prompt: str) -> Dict[str, Any]:
     }
 
 
-def _responses_payload(output_data: Dict[str, Any]) -> Dict[str, Any]:
+def _responses_payload(
+    output_data: Dict[str, Any], *, final_result_tool: bool = False
+) -> Dict[str, Any]:
     """Format structured JSON as an OpenAI Responses-compatible payload."""
 
     output_json = json.dumps(output_data)
-    return {
-        "id": f"resp-mock-{uuid.uuid4().hex[:8]}",
-        "object": "response",
-        "created_at": int(datetime.now().timestamp()),
-        "model": "TEST",
-        "status": "completed",
-        "output": [
+    if final_result_tool:
+        output = [
+            {
+                "type": "function_call",
+                "id": f"fc-mock-{uuid.uuid4().hex[:8]}",
+                "call_id": f"call-mock-{uuid.uuid4().hex[:8]}",
+                "name": "final_result",
+                "arguments": output_json,
+                "status": "completed",
+            }
+        ]
+    else:
+        output = [
             {
                 "type": "message",
                 "id": f"msg-mock-{uuid.uuid4().hex[:8]}",
@@ -790,7 +798,14 @@ def _responses_payload(output_data: Dict[str, Any]) -> Dict[str, Any]:
                     }
                 ],
             }
-        ],
+        ]
+    return {
+        "id": f"resp-mock-{uuid.uuid4().hex[:8]}",
+        "object": "response",
+        "created_at": int(datetime.now().timestamp()),
+        "model": "TEST",
+        "status": "completed",
+        "output": output,
         "output_text": output_json,
         "usage": {
             "input_tokens": 1000,
@@ -856,9 +871,13 @@ async def responses_create(request: ResponsesRequest):
                 "[MOCK] Extended turn schema requested (%d Orrery proposals)",
                 len(proposal_ids),
             )
-            return _responses_payload(_mock_storyteller_response(input_text))
+            return _responses_payload(
+                _mock_storyteller_response(input_text), final_result_tool=True
+            )
         logger.info("[MOCK] Bootstrap schema requested, returning cached bootstrap")
-        return _responses_payload(get_cached_bootstrap_narrative())
+        return _responses_payload(
+            get_cached_bootstrap_narrative(), final_result_tool=True
+        )
 
     # Legacy keyword routing for callers without a structured-output tool.
     is_narrative = any(

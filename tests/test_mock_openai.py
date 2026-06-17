@@ -157,10 +157,34 @@ async def test_mock_responses_routes_turn_schema_without_orrery_proposals() -> N
         )
     )
 
+    tool_call = response["output"][0]
+    assert tool_call["type"] == "function_call"
+    assert tool_call["name"] == "final_result"
+
     payload = json.loads(response["output_text"])
+    assert json.loads(tool_call["arguments"]) == payload
     parsed = StorytellerResponseExtended.model_validate(payload)
     assert parsed.narrative.startswith("[TEST MODE]")
     assert parsed.orrery_adjudications == []
+
+
+@pytest.mark.asyncio
+async def test_mock_responses_routes_bootstrap_schema_as_final_result_tool() -> None:
+    """Bootstrap structured output must also call the required output tool."""
+
+    response = await responses_create(
+        ResponsesRequest(
+            model="TEST",
+            input=[{"role": "user", "content": "Bootstrap the protagonist story."}],
+            tools=[_final_result_tool(StorytellerResponseBootstrap)],
+        )
+    )
+
+    tool_call = response["output"][0]
+    assert tool_call["type"] == "function_call"
+    assert tool_call["name"] == "final_result"
+    payload = json.loads(tool_call["arguments"])
+    StorytellerResponseBootstrap.model_validate(payload)
 
 
 def test_requested_output_properties_extracts_schema_fields() -> None:
