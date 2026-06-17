@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from fastapi import (
     BackgroundTasks,
@@ -20,7 +20,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from nexus.api.session_manager import SessionManager, SessionNotFoundError, SessionTurn
-from nexus.agents.lore.lore import LORE
 from nexus.agents.logon.apex_schema import (
     StoryTurnResponse,
     StorytellerResponseBootstrap,
@@ -56,6 +55,11 @@ from nexus.api.retry_handler import (
     FallbackChain,
 )
 from nexus.api.config_utils import get_new_story_model
+
+if TYPE_CHECKING:
+    from nexus.agents.lore.lore import LORE
+else:
+    LORE = Any
 
 logger = logging.getLogger("nexus.api.storyteller")
 
@@ -263,10 +267,10 @@ class LoreProvider:
     """Lazily instantiate the LORE agent for request handling."""
 
     def __init__(self) -> None:
-        self._instance: Optional[LORE] = None
+        self._instance: Optional["LORE"] = None
         self._lock = asyncio.Lock()
 
-    async def get(self) -> LORE:
+    async def get(self) -> "LORE":
         """Return a cached LORE instance, creating it if necessary."""
 
         if self._instance is not None:
@@ -275,6 +279,8 @@ class LoreProvider:
         async with self._lock:
             if self._instance is None:
                 loop = asyncio.get_running_loop()
+                from nexus.agents.lore.lore import LORE
+
                 self._instance = await loop.run_in_executor(None, LORE)
         return self._instance
 
@@ -339,7 +345,7 @@ def get_session_manager() -> SessionManager:
     return session_manager
 
 
-async def get_lore() -> LORE:
+async def get_lore() -> "LORE":
     """FastAPI dependency returning the LORE agent."""
 
     return await lore_provider.get()
@@ -478,7 +484,7 @@ async def story_turn(
     request: StoryTurnRequest,
     background_tasks: BackgroundTasks,
     manager: SessionManager = Depends(get_session_manager),
-    lore: LORE = Depends(get_lore),
+    lore: "LORE" = Depends(get_lore),
 ) -> StoryTurnResponse:
     """Execute a full story turn and persist the results."""
 
@@ -601,7 +607,7 @@ async def regenerate_turn(
     request: RegenerateRequest,
     background_tasks: BackgroundTasks,
     manager: SessionManager = Depends(get_session_manager),
-    lore: LORE = Depends(get_lore),
+    lore: "LORE" = Depends(get_lore),
 ) -> StoryTurnResponse:
     """Regenerate the last turn with updated options."""
 

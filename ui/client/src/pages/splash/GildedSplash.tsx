@@ -1,231 +1,156 @@
 /**
- * Gilded theme splash page - Art Deco home screen with animated sunburst.
- * Showcases the Monoton display font and brass/gold color palette.
+ * Gilded theme splash page - the approved Art Deco home screen.
+ *
+ * The composition comes from the NEXUS IRIS design handoff: an off-screen brass
+ * ray field behind the marquee and the licensed r1c1 Deco frame dynamically
+ * sliced around the whole viewport. The marquee font appears exactly once.
  */
-import { useState } from 'react';
+import { CSSProperties, ReactNode, useState } from 'react';
+
+import decoFrameR1C1 from '@/assets/ArtDecoFrames-549888080/r1c1.png';
+import { DECO_FRAME_META } from '@/assets/ArtDecoFrames-549888080/frames-meta';
+import { DecoFrameSliced, DecoRays } from './GildedDeco';
 import { useSplashNavigation, SplashThemeMenu } from './shared';
 
-// CSS variable references for theme-aware colors
-const themeColors = {
-  bg: 'hsl(var(--background))',
-  primary: 'hsl(var(--primary))',
-  accent: 'hsl(var(--accent))',
-  foreground: 'hsl(var(--foreground))',
-  mutedForeground: 'hsl(var(--muted-foreground))',
-  bronze: 'hsl(var(--chart-2))',
-  darkBronze: 'hsl(var(--chart-4))',
-};
+const gilded = {
+  bg: 'hsl(0 0% 4%)',
+  brass: '#c9a227',
+  brassBright: '#e8c766',
+  bronze: 'hsl(30 50% 45%)',
+  cream: 'hsl(45 20% 93%)',
+  panelHover: 'hsl(43 45% 12%)',
+} as const;
 
-const HeroSunburst = () => {
-  const rays = 72;
-  const size = 1600;
-  const pulseGroups = 6;
+const GILDED_SPLASH_FRAME = {
+  scale: 0.75,
+  margin: 16,
+  tint: 2,
+} as const;
 
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox={`0 0 ${size} ${size}`}
-      className="absolute overflow-visible"
-      style={{
-        top: -size/2,
-        left: '50%',
-        transform: 'translateX(-50%)',
-      }}
-    >
-      <style>{`
-        @keyframes rotateSunburst {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(-360deg); }
-        }
-        @keyframes rayPulse {
-          0%, 100% { opacity: 0.15; }
-          50% { opacity: 0.5; }
-        }
-        @keyframes rayPulseAccent {
-          0%, 100% { opacity: 0.25; }
-          50% { opacity: 0.7; }
-        }
-        @keyframes rayPulseBronze {
-          0%, 100% { opacity: 0.2; }
-          50% { opacity: 0.6; }
-        }
-      `}</style>
+const GILDED_SPLASH_RAYS = {
+  sourceXvw: 50,
+  sourceYvh: -34,
+  rayCount: 50,
+  spinSeconds: 160,
+  reachVmax: 1.15,
+  spreadDeg: 360,
+  color: '#c9a227',
+  accentColor: '#e8c766',
+  thickness: 1,
+  intensity: 0.5,
+  falloff: 0.65,
+  pulse: 1.5,
+  rings: false,
+} as const;
 
-      <g style={{
-        transformOrigin: `${size/2}px ${size/2}px`,
-        animation: 'rotateSunburst 120s linear infinite',
-      }}>
-        {[...Array(rays)].map((_, i) => {
-          const angle = (i * (360 / rays)) * Math.PI / 180;
-          const isAccent = i % 4 === 0;
-          const isBronze = i % 6 === 2;
-          const isMajor = i % 2 === 0;
-          const groupIndex = Math.floor(i / (rays / pulseGroups));
-          const pulseDelay = (groupIndex / pulseGroups) * 8;
-
-          let rayColor, rayWidth, animName;
-          if (isAccent) {
-            rayColor = themeColors.primary;
-            rayWidth = 2.5;
-            animName = 'rayPulseAccent';
-          } else if (isBronze) {
-            rayColor = themeColors.bronze;
-            rayWidth = 2;
-            animName = 'rayPulseBronze';
-          } else {
-            rayColor = isMajor ? themeColors.darkBronze : themeColors.mutedForeground;
-            rayWidth = isMajor ? 1.5 : 0.75;
-            animName = 'rayPulse';
-          }
-
-          return (
-            <line
-              key={i}
-              x1={size / 2}
-              y1={size / 2}
-              x2={size / 2 + Math.cos(angle) * size}
-              y2={size / 2 + Math.sin(angle) * size}
-              stroke={rayColor}
-              strokeWidth={rayWidth}
-              style={{
-                animation: `${animName} 8s ease-in-out infinite`,
-                animationDelay: `${pulseDelay}s`,
-              }}
-            />
-          );
-        })}
-      </g>
-
-      {/* Concentric circles */}
-      {[150, 250, 380].map((r, i) => (
-        <circle
-          key={r}
-          cx={size / 2}
-          cy={size / 2}
-          r={r}
-          fill="none"
-          stroke={i === 1 ? themeColors.bronze : themeColors.primary}
-          strokeWidth={i === 1 ? 2 : 1}
-          opacity={0.12 + i * 0.04}
-        />
-      ))}
-    </svg>
-  );
-};
-
-// Corner component for the Art Deco frame
-const Corner = ({ position }: { position: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' }) => {
-  const isLeft = position.includes('left');
-  const isTop = position.includes('top');
-
-  return (
-    <div
-      className="absolute w-2 h-2 border border-primary"
-      style={{
-        [isTop ? 'top' : 'bottom']: -8,
-        [isLeft ? 'left' : 'right']: -8,
-      }}
-    >
-      {/* Horizontal extension */}
-      <div
-        className="absolute w-8 h-[15px]"
-        style={{
-          [isTop ? 'top' : 'bottom']: -1,
-          [isLeft ? 'left' : 'right']: 14,
-          [isTop ? 'borderTop' : 'borderBottom']: '1px solid hsl(var(--primary))',
-        }}
-      />
-      {/* Vertical extension */}
-      <div
-        className="absolute w-[15px] h-8"
-        style={{
-          [isTop ? 'top' : 'bottom']: 14,
-          [isLeft ? 'left' : 'right']: -1,
-          [isLeft ? 'borderLeft' : 'borderRight']: '1px solid hsl(var(--primary))',
-        }}
-      />
-    </div>
-  );
-};
-
-// Art Deco frame
-const DecoFrame = () => {
-  return (
-    <div className="absolute inset-5 border border-primary pointer-events-none">
-      <Corner position="top-left" />
-      <Corner position="top-right" />
-      <Corner position="bottom-left" />
-      <Corner position="bottom-right" />
-
-      {/* Horizontal bars extending beyond frame */}
-      <div
-        className="absolute top-[10px] bottom-[10px] -left-5 -right-5 border-t border-b border-primary pointer-events-none"
-      />
-
-      {/* Vertical bars extending beyond frame */}
-      <div
-        className="absolute -top-5 -bottom-5 left-[10px] right-[10px] border-l border-r border-primary pointer-events-none"
-      />
-    </div>
-  );
-};
-
-interface MenuButtonProps {
-  children: React.ReactNode;
+interface GildedButtonProps {
+  children: ReactNode;
   onClick: () => void;
-  primary?: boolean;
   animationClass?: string;
+  primary?: boolean;
 }
 
-const MenuButton = ({ children, onClick, primary = false, animationClass = '' }: MenuButtonProps) => {
-  const [hover, setHover] = useState(false);
-  const label = typeof children === 'string' ? children : 'Menu button';
+const cornerBase: CSSProperties = {
+  position: 'absolute',
+  width: 12,
+  height: 12,
+  borderStyle: 'solid',
+  borderColor: gilded.bronze,
+  transition: 'border-color .2s',
+};
+
+const GildedButton = ({
+  children,
+  onClick,
+  animationClass = '',
+  primary = false,
+}: GildedButtonProps) => {
+  const [hovered, setHovered] = useState(false);
+
+  const base: CSSProperties = {
+    position: 'relative',
+    width: 280,
+    padding: '16px 28px',
+    fontFamily: 'var(--font-menu)',
+    fontSize: 14,
+    letterSpacing: '0.3em',
+    textTransform: 'uppercase',
+    fontWeight: 600,
+    background: gilded.bg,
+    border: `2px solid ${hovered ? gilded.brass : gilded.bronze}`,
+    color: hovered ? gilded.brassBright : gilded.cream,
+    borderRadius: 2,
+    cursor: 'pointer',
+    transition: 'background .2s, color .2s, border-color .2s, box-shadow .2s',
+  };
+
+  const primaryStyle: CSSProperties = {
+    background: hovered ? gilded.brassBright : gilded.brass,
+    border: 'none',
+    color: gilded.bg,
+    boxShadow: 'none',
+  };
+
+  const hoverStyle: CSSProperties = {
+    background: gilded.panelHover,
+    boxShadow: primary ? 'none' : '0 0 18px hsl(43 74% 47% / 0.28)',
+  };
+
+  const cornerColor = hovered ? gilded.brass : gilded.bronze;
 
   return (
     <button
+      type="button"
       onClick={onClick}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      aria-label={`${label}${primary ? ' - Primary action' : ''}`}
-      className={`relative w-[280px] py-[18px] px-8 font-mono text-lg tracking-[0.25em] uppercase cursor-pointer transition-all duration-200 ${animationClass}`}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      className={animationClass}
       style={{
-        background: primary
-          ? (hover ? themeColors.accent : themeColors.primary)
-          : (hover ? 'hsla(var(--primary) / 0.15)' : 'transparent'),
-        border: primary ? 'none' : `2px solid ${hover ? themeColors.primary : themeColors.bronze}`,
-        color: primary ? themeColors.bg : (hover ? themeColors.accent : themeColors.foreground),
+        ...base,
+        ...(hovered ? hoverStyle : {}),
+        ...(primary ? primaryStyle : {}),
       }}
     >
       {!primary && (
         <>
-          {/* Corner accents */}
           <span
-            className="absolute -top-0.5 -left-0.5 w-3 h-3 transition-colors duration-200"
+            aria-hidden="true"
             style={{
-              borderTop: `2px solid ${hover ? themeColors.primary : themeColors.bronze}`,
-              borderLeft: `2px solid ${hover ? themeColors.primary : themeColors.bronze}`,
+              ...cornerBase,
+              top: -2,
+              left: -2,
+              borderWidth: '2px 0 0 2px',
+              borderColor: cornerColor,
             }}
           />
           <span
-            className="absolute -top-0.5 -right-0.5 w-3 h-3 transition-colors duration-200"
+            aria-hidden="true"
             style={{
-              borderTop: `2px solid ${hover ? themeColors.primary : themeColors.bronze}`,
-              borderRight: `2px solid ${hover ? themeColors.primary : themeColors.bronze}`,
+              ...cornerBase,
+              top: -2,
+              right: -2,
+              borderWidth: '2px 2px 0 0',
+              borderColor: cornerColor,
             }}
           />
           <span
-            className="absolute -bottom-0.5 -left-0.5 w-3 h-3 transition-colors duration-200"
+            aria-hidden="true"
             style={{
-              borderBottom: `2px solid ${hover ? themeColors.primary : themeColors.bronze}`,
-              borderLeft: `2px solid ${hover ? themeColors.primary : themeColors.bronze}`,
+              ...cornerBase,
+              bottom: -2,
+              left: -2,
+              borderWidth: '0 0 2px 2px',
+              borderColor: cornerColor,
             }}
           />
           <span
-            className="absolute -bottom-0.5 -right-0.5 w-3 h-3 transition-colors duration-200"
+            aria-hidden="true"
             style={{
-              borderBottom: `2px solid ${hover ? themeColors.primary : themeColors.bronze}`,
-              borderRight: `2px solid ${hover ? themeColors.primary : themeColors.bronze}`,
+              ...cornerBase,
+              right: -2,
+              bottom: -2,
+              borderWidth: '0 2px 2px 0',
+              borderColor: cornerColor,
             }}
           />
         </>
@@ -236,42 +161,95 @@ const MenuButton = ({ children, onClick, primary = false, animationClass = '' }:
 };
 
 export function GildedSplash() {
-  const { isExiting, handleContinue, handleLoad, handleSettings, getAnimationClass } = useSplashNavigation();
+  const { isExiting, handleContinue, handleLoad, handleSettings, getAnimationClass } =
+    useSplashNavigation();
 
   return (
-    <div className="min-h-screen bg-background relative overflow-hidden flex flex-col items-center">
-      {/* Theme switcher menu */}
+    <div
+      style={{
+        position: 'relative',
+        width: '100%',
+        minHeight: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'hsl(var(--background))',
+        overflow: 'hidden',
+      }}
+    >
       <SplashThemeMenu />
 
-      {/* DecoFrame fades out fast (not the clicked element) */}
-      <div className={isExiting ? 'animate-fade-out-fast' : ''}>
-        <DecoFrame />
+      <div
+        className={isExiting ? 'animate-fade-out-fast' : ''}
+        style={{ position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'none' }}
+      >
+        <DecoRays {...GILDED_SPLASH_RAYS} zIndex={0} />
+        <DecoFrameSliced
+          src={decoFrameR1C1}
+          meta={DECO_FRAME_META.r1c1}
+          scale={GILDED_SPLASH_FRAME.scale}
+          margin={GILDED_SPLASH_FRAME.margin}
+          tint={GILDED_SPLASH_FRAME.tint}
+          zIndex={2}
+        />
       </div>
 
-      {/* Hero section with sunburst */}
-      <div className={`relative w-full h-[200px] flex items-start justify-center overflow-visible ${isExiting ? 'animate-fade-out-fast' : ''}`}>
-        <HeroSunburst />
-
+      <div
+        className={isExiting ? 'animate-fade-out-fast' : ''}
+        style={{
+          position: 'relative',
+          zIndex: 4,
+          width: '100%',
+          height: 280,
+          display: 'flex',
+          alignItems: 'flex-start',
+          justifyContent: 'center',
+          overflow: 'visible',
+          marginTop: 60,
+          pointerEvents: 'none',
+        }}
+      >
         <h1
-          className={`font-display text-[112px] font-normal tracking-[0.1em] text-accent m-0 mt-9 relative z-10 deco-glow ${isExiting ? 'animate-fade-out-fast' : ''}`}
+          className="deco-glow"
+          style={{
+            position: 'relative',
+            zIndex: 4,
+            margin: '30px 0 0',
+            fontFamily: 'var(--font-display)',
+            fontSize: 128,
+            fontWeight: 400,
+            letterSpacing: '0.1em',
+            lineHeight: 1,
+            color: gilded.brassBright,
+            textShadow:
+              '0 0 12px hsl(43 74% 47% / .6), 0 0 24px hsl(43 74% 47% / .35)',
+          }}
         >
           NEXUS
         </h1>
       </div>
 
-      {/* Menu buttons */}
-      <div className="flex flex-col items-center gap-5 mt-10">
-        <MenuButton primary onClick={handleContinue} animationClass={getAnimationClass('continue')}>
+      <div
+        style={{
+          position: 'relative',
+          zIndex: 5,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 14,
+          marginTop: 36,
+        }}
+      >
+        <GildedButton primary onClick={handleContinue} animationClass={getAnimationClass('continue')}>
           Continue
-        </MenuButton>
-
-        <MenuButton onClick={handleLoad} animationClass={getAnimationClass('load')}>
+        </GildedButton>
+        <GildedButton onClick={handleLoad} animationClass={getAnimationClass('load')}>
           Load
-        </MenuButton>
-
-        <MenuButton onClick={handleSettings} animationClass={getAnimationClass('settings')}>
+        </GildedButton>
+        <GildedButton onClick={handleSettings} animationClass={getAnimationClass('settings')}>
           Settings
-        </MenuButton>
+        </GildedButton>
       </div>
     </div>
   );

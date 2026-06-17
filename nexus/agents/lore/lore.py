@@ -35,7 +35,7 @@ import asyncio
 import logging
 import json
 import time
-from typing import Dict, Optional, Any, List, Union
+from typing import Any, Dict, List, Optional, Union
 from pathlib import Path
 
 # Import NEXUS configuration loader
@@ -58,15 +58,6 @@ from nexus.agents.lore.logon_utility import LogonUtility
 
 from nexus.memory import ContextMemoryManager
 from nexus.memory.user_confirmation import request_input
-
-# Import MEMNON if available
-try:
-    from nexus.agents.memnon.memnon import MEMNON
-
-    MEMNON_AVAILABLE = True
-except ImportError:
-    MEMNON_AVAILABLE = False
-    logging.warning("MEMNON not available. Memory retrieval will be limited.")
 
 # Configure logger
 logger = logging.getLogger("nexus.lore")
@@ -211,11 +202,6 @@ class LORE:
             "MEMNON search."
         )
 
-        # MEMNON is REQUIRED
-        if not MEMNON_AVAILABLE:
-            raise RuntimeError(
-                "FATAL: MEMNON module not available! Cannot proceed without memory retrieval."
-            )
         self._initialize_memnon()
         if not self.memnon:
             raise RuntimeError(
@@ -244,6 +230,13 @@ class LORE:
 
     def _initialize_memnon(self):
         """Initialize MEMNON utility for memory retrieval"""
+        try:
+            from nexus.agents.memnon.memnon import MEMNON
+        except ImportError as e:
+            raise RuntimeError(
+                "FATAL: MEMNON module not available! Cannot proceed without memory retrieval."
+            ) from e
+
         try:
             # Create a minimal interface for MEMNON
             class MinimalInterface:
