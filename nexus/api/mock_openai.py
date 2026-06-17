@@ -616,7 +616,7 @@ class ResponsesRequest(BaseModel):
     tools: Optional[Any] = None  # pydantic_ai output tool ("final_result")
 
 
-def _requested_output_properties(request: "ResponsesRequest") -> set:
+def _requested_output_properties(request: "ResponsesRequest") -> set[str]:
     """Return the property names of the structured-output tool, if present.
 
     pydantic_ai delivers the caller's output schema as a ``final_result``

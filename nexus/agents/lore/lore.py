@@ -326,6 +326,8 @@ class LORE:
         self.turn_manager = None
         self.memory_manager = None
         self.memnon = None
+        self.logon = None
+        self._logon_initialized = False
         logger.info("LORE turn stack closed")
 
     async def process_turn(
