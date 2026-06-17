@@ -213,11 +213,9 @@ export function GildedSplash() {
         <h1
           className="deco-glow"
           style={{
-            position: 'relative',
-            zIndex: 4,
             margin: '8px 0 0',
             fontFamily: 'var(--font-display)',
-            fontSize: 128,
+            fontSize: 'clamp(96px, 18vh, 128px)',
             fontWeight: 400,
             letterSpacing: '0.1em',
             lineHeight: 1,
