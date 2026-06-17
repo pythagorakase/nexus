@@ -1,0 +1,13 @@
+{
+  "runtimeOrigin": "http://127.0.0.1:8002",
+  "statusPath": "/runtime/status",
+  "authHeader": "X-Nexus-Auth",
+  "authTokenEnv": "NEXUS_AUTH",
+  "runtimeCommand": ["poetry", "run", "nexus"],
+  "startArgs": ["--json", "up"],
+  "stopArgs": ["--json", "down"],
+  "workingDirectory": "../..",
+  "startupTimeoutSeconds": 90,
+  "pollIntervalMilliseconds": 500,
+  "commandTimeoutSeconds": 120
+}
