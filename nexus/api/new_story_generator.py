@@ -14,10 +14,9 @@ from typing import Dict, List, Optional, Type
 
 import frontmatter
 from pydantic import BaseModel, Field, ConfigDict
-from pydantic_ai import Agent
-from pydantic_ai.settings import ModelSettings
 
 from nexus.api.config_utils import get_wizard_max_tokens, get_wizard_retry_budget
+from nexus.api.native_structured_output import build_native_structured_provider
 from nexus.api.new_story_schemas import (
     SettingCard,
     CharacterSheet,
@@ -27,7 +26,6 @@ from nexus.api.new_story_schemas import (
     PlaceProfile,
     TransitionData,
 )
-from nexus.api.pydantic_ai_utils import build_message_history, build_pydantic_ai_model
 
 logger = logging.getLogger("nexus.api.new_story_generator")
 
@@ -48,9 +46,31 @@ class StoryComponentGenerator:
             model: Concrete model ID to use (must appear in the api_models registry).
         """
         self.model = model
-        self._model = build_pydantic_ai_model(model)
-        self._model_settings = ModelSettings(max_tokens=get_wizard_max_tokens())
+        self._max_tokens = get_wizard_max_tokens()
         self._retry_budget = get_wizard_retry_budget()
+
+    @staticmethod
+    def _prompt_with_history(
+        user_prompt: str, message_history: Optional[List[Dict[str, str]]]
+    ) -> str:
+        """Render optional prior chat messages into a native-provider prompt."""
+
+        if not message_history:
+            return user_prompt
+        rendered_history = []
+        for message in message_history:
+            role = message.get("role")
+            content = message.get("content")
+            if role in {"user", "assistant", "system"} and content:
+                rendered_history.append(f"{role.upper()}: {content}")
+        if not rendered_history:
+            return user_prompt
+        return (
+            "Conversation so far:\n"
+            + "\n\n".join(rendered_history)
+            + "\n\nCurrent request:\n"
+            + user_prompt
+        )
 
     def _run_structured(
         self,
@@ -59,16 +79,17 @@ class StoryComponentGenerator:
         schema_model: Type[BaseModel],
         message_history: Optional[List[Dict[str, str]]] = None,
     ) -> BaseModel:
-        agent = Agent(
-            model=self._model,
-            output_type=schema_model,
+        provider = build_native_structured_provider(
+            model=self.model,
+            max_tokens=self._max_tokens,
             system_prompt=system_prompt,
-            model_settings=self._model_settings,
-            retries=self._retry_budget,
+            structured_output_retries=self._retry_budget,
         )
-        history = build_message_history(message_history or [])
-        result = agent.run_sync(user_prompt, message_history=history)
-        return result.output
+        result, _llm_response = provider.get_structured_completion(
+            self._prompt_with_history(user_prompt, message_history),
+            schema_model,
+        )
+        return result
 
     def generate_setting_card(
         self,
@@ -508,12 +529,8 @@ class SetDesignerOutput(BaseModel):
     Contains the complete location hierarchy generated from a freeform sketch.
     """
 
-    layer: LayerDefinition = Field(
-        ..., description="World layer (planet/dimension)"
-    )
-    zone: ZoneDefinition = Field(
-        ..., description="Geographic zone/region"
-    )
+    layer: LayerDefinition = Field(..., description="World layer (planet/dimension)")
+    zone: ZoneDefinition = Field(..., description="Geographic zone/region")
     location: PlaceProfile = Field(
         ..., description="The specific starting place with latitude/longitude"
     )
@@ -521,7 +538,9 @@ class SetDesignerOutput(BaseModel):
 
 def _load_set_designer_prompt() -> str:
     """Load the set designer prompt from the prompts directory."""
-    prompt_path = Path(__file__).parent.parent.parent / "prompts" / "storyteller_set_designer.md"
+    prompt_path = (
+        Path(__file__).parent.parent.parent / "prompts" / "storyteller_set_designer.md"
+    )
     if not prompt_path.exists():
         raise FileNotFoundError(
             f"Set designer prompt not found at {prompt_path}. "
@@ -587,20 +606,17 @@ For latitude/longitude, use Earth coordinates that match any Earth-analog hints 
 or choose coordinates appropriate for the described environment (e.g., northern latitudes for
 cold climates, coastal coordinates for harbors, etc.)."""
 
-    pydantic_model = build_pydantic_ai_model(model)
-    model_settings = ModelSettings(max_tokens=get_wizard_max_tokens())
-    retry_budget = get_wizard_retry_budget()
-
-    agent = Agent(
-        model=pydantic_model,
-        output_type=SetDesignerOutput,
+    provider = build_native_structured_provider(
+        model=model,
+        max_tokens=get_wizard_max_tokens(),
         system_prompt=system_prompt,
-        model_settings=model_settings,
-        retries=retry_budget,
+        structured_output_retries=get_wizard_retry_budget(),
     )
 
-    result = await agent.run(user_prompt)
-    output = result.output
+    output, _llm_response = await provider.get_structured_completion_async(
+        user_prompt,
+        SetDesignerOutput,
+    )
 
     logger.info(
         "Set designer generated: %s -> %s -> %s at (%.2f, %.2f)",

@@ -56,6 +56,25 @@ class RetrogradeExpansionValidationError(ValueError):
     """Raised when an R6 expansion plan is shaped correctly but illegal."""
 
 
+class RetrogradePayloadEntry(BaseModel):
+    """Strict key/value entry for future world_events.payload sketches."""
+
+    key: str = Field(min_length=1)
+    value: str = Field(description="Payload value rendered as concise prose or JSON.")
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+
+def _stringify_payload_value(value: Any) -> str:
+    """Render arbitrary legacy payload values into strict-schema strings."""
+
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    return json.dumps(value, ensure_ascii=False, sort_keys=True)
+
+
 class RetrogradeExpansionParticipant(BaseModel):
     """One entity reference participating in a planned Retrograde event."""
 
@@ -110,10 +129,28 @@ class RetrogradeExpansionEventPlan(BaseModel):
         le=1,
         description="Optional future world_events.magnitude value.",
     )
-    payload: dict[str, Any] = Field(
-        default_factory=dict,
-        description="Small future world_events.payload sketch.",
+    payload: list[RetrogradePayloadEntry] = Field(
+        default_factory=list,
+        description="Small future world_events.payload sketch as key/value entries.",
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_legacy_payload(cls, data: Any) -> Any:
+        """Accept legacy payload dicts while emitting strict list schema."""
+
+        if not isinstance(data, dict):
+            return data
+        payload = data.get("payload")
+        if payload is None or isinstance(payload, list):
+            return data
+        if isinstance(payload, Mapping):
+            data = dict(data)
+            data["payload"] = [
+                {"key": str(key), "value": _stringify_payload_value(value)}
+                for key, value in payload.items()
+            ]
+        return data
 
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
@@ -353,34 +390,32 @@ def generate_expansion_with_skald(
 ) -> dict[str, Any]:
     """Make a non-mutating Skald call to weave selected seeds into an R6 plan."""
 
-    from pydantic_ai import Agent, ModelRetry, RunContext
-    from pydantic_ai.settings import ModelSettings
+    from pydantic_ai import ModelRetry
 
     from nexus.api.config_utils import (
         get_new_story_model,
         get_wizard_max_tokens,
         get_wizard_retry_budget,
     )
-    from nexus.api.pydantic_ai_utils import build_pydantic_ai_model
+    from nexus.api.native_structured_output import build_native_structured_provider
 
     prompt = render_expansion_prompt(
         packet=packet,
         seed_candidate_response=seed_candidate_response,
     )
     selected_model = model_name or get_new_story_model()
-    agent = Agent(
-        model=build_pydantic_ai_model(selected_model),
-        output_type=RetrogradeExpansionPlanResponse,
+    provider = build_native_structured_provider(
+        model=selected_model,
+        max_tokens=max_tokens or get_wizard_max_tokens(),
         system_prompt=(
             "You are Skald-as-weaver for a NEXUS Retrograde expansion pass. "
             "Return a non-mutating expansion plan only."
         ),
-        model_settings=ModelSettings(max_tokens=max_tokens or get_wizard_max_tokens()),
-        retries=get_wizard_retry_budget(),
+        structured_output_retries=get_wizard_retry_budget(),
     )
 
     async def _validate_output(
-        _ctx: RunContext[None],
+        _ctx: Any,
         output: RetrogradeExpansionPlanResponse,
     ) -> RetrogradeExpansionPlanResponse:
         try:
@@ -396,9 +431,11 @@ def generate_expansion_with_skald(
                 f"seed, or adding required refs:\n{exc}"
             ) from exc
 
-    agent.output_validator(_validate_output)
-    result = agent.run_sync(prompt)
-    response = result.output
+    provider.output_validator = _validate_output
+    response, _llm_response = provider.get_structured_completion(
+        prompt,
+        RetrogradeExpansionPlanResponse,
+    )
     if not isinstance(response, RetrogradeExpansionPlanResponse):
         raise TypeError(
             "Skald expansion call returned "

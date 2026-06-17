@@ -1028,7 +1028,7 @@ def _insert_world_event(
             if result.get("resolution") == "resolved"
         ],
         "location_ref": event.location_ref,
-        "payload": event.payload,
+        "payload": {entry.key: entry.value for entry in event.payload},
     }
     cur.execute(
         """

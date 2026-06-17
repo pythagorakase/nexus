@@ -216,27 +216,25 @@ def derive_trait_compile_inputs(
 ) -> TraitCompileInputs:
     """Make the structured-output Skald call that derives trait inputs."""
 
-    from pydantic_ai import Agent, ModelRetry, RunContext
-    from pydantic_ai.settings import ModelSettings
+    from pydantic_ai import ModelRetry
 
-    from nexus.api.pydantic_ai_utils import build_pydantic_ai_model
+    from nexus.api.native_structured_output import build_native_structured_provider
 
     selected = selected_canonical_traits(character)
     prompt = render_trait_input_prompt(character=character, setting=setting)
 
-    agent: Any = Agent(
-        model=build_pydantic_ai_model(model_name),
-        output_type=TraitCompileInputs,
+    provider: Any = build_native_structured_provider(
+        model=model_name,
+        max_tokens=max_tokens,
         system_prompt=(
             "You convert finished NEXUS character-wizard prose into typed "
             "trait compiler inputs. Follow the hard rules exactly."
         ),
-        model_settings=ModelSettings(max_tokens=max_tokens),
-        retries=retries,
+        structured_output_retries=retries,
     )
 
     async def _validate_output(
-        _ctx: RunContext[None], output: TraitCompileInputs
+        _ctx: Any, output: TraitCompileInputs
     ) -> TraitCompileInputs:
         issues = derived_input_issues(output, selected=selected)
         if issues:
@@ -247,9 +245,11 @@ def derive_trait_compile_inputs(
             )
         return output
 
-    agent.output_validator(_validate_output)
-    result = agent.run_sync(prompt)
-    output = result.output
+    provider.output_validator = _validate_output
+    output, _llm_response = provider.get_structured_completion(
+        prompt,
+        TraitCompileInputs,
+    )
     if not isinstance(output, TraitCompileInputs):
         raise TypeError(
             "Trait input derivation returned "

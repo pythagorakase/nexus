@@ -68,6 +68,13 @@ except ImportError:
 # For database connection (utilities only, no ORM)
 import sqlalchemy as sa
 from sqlalchemy import create_engine
+from pydantic import ValidationError
+
+from nexus.api.native_structured_output import (
+    anthropic_output_format,
+    retry_prompt,
+    run_output_validator,
+)
 
 # Configure logging
 logging.basicConfig(
@@ -439,7 +446,7 @@ class AnthropicProvider(LLMProvider):
         self, prompt: str, schema_model: Type
     ) -> Tuple[Any, LLMResponse]:
         """
-        Get a structured completion using a Pydantic model.
+        Get a structured completion using Anthropic native JSON schema output.
         
         Args:
             prompt: The input prompt
@@ -472,17 +479,15 @@ class AnthropicProvider(LLMProvider):
             "get_structured_completion",
             "get_structured_completion_async",
         )
-        agent = self._build_structured_agent(schema_model)
-        result = agent.run_sync(prompt)
-        return self._structured_result_to_response(result)
+        return self._get_structured_completion_native_sync(prompt, schema_model)
 
     async def get_structured_completion_async(
         self, prompt: str, schema_model: Type
     ) -> Tuple[Any, LLMResponse]:
         """Get a structured completion without blocking an existing event loop."""
-        agent = self._build_structured_agent(schema_model)
-        result = await agent.run(prompt)
-        return self._structured_result_to_response(result)
+        return await asyncio.to_thread(
+            self._get_structured_completion_native_sync, prompt, schema_model
+        )
 
     def _raise_if_running_loop(self, method_name: str, async_method_name: str) -> None:
         """Reject sync structured calls from async contexts with a clear error."""
@@ -496,94 +501,121 @@ class AnthropicProvider(LLMProvider):
             f"event loop; use AnthropicProvider.{async_method_name}() instead."
         )
 
-    def _build_structured_agent(self, schema_model: Type) -> Any:
-        """Build the Pydantic AI agent for structured output."""
-        try:
-            from pydantic_ai import Agent
-            from pydantic_ai.models.anthropic import AnthropicModel
-            from pydantic_ai.providers.anthropic import AnthropicProvider as PydanticAnthropicProvider
-            from pydantic_ai.settings import ModelSettings
-        except ImportError as exc:
-            raise ImportError(
-                "Pydantic AI is required for structured completions. "
-                "Install with 'pip install pydantic-ai'."
-            ) from exc
+    def _get_structured_completion_native_sync(
+        self, prompt: str, schema_model: Type
+    ) -> Tuple[Any, LLMResponse]:
+        """Run a native JSON-schema Messages request with bounded repair."""
 
-        logger.info(
-            "Using Pydantic AI structured output with model %s and schema %s",
-            self.model,
-            schema_model.__name__,
-        )
+        from pydantic_ai import ModelRetry
 
-        provider = PydanticAnthropicProvider(api_key=self.api_key)
-        model = AnthropicModel(model_name=self.model, provider=provider)
+        active_prompt = prompt
+        last_error: Optional[BaseException] = None
+        for attempt in range(self.structured_output_retries + 1):
+            try:
+                response = self.client.beta.messages.create(
+                    **self._build_native_structured_request_params(
+                        active_prompt, schema_model
+                    )
+                )
+                parsed_output = self._extract_native_parsed_output(
+                    response, schema_model
+                )
+                parsed_output = asyncio.run(
+                    run_output_validator(
+                        self.output_validator, parsed_output, retry=attempt
+                    )
+                )
+                return parsed_output, self._native_response_to_llm_response(
+                    parsed_output, response
+                )
+            except ModelRetry as exc:
+                last_error = exc
+                if attempt >= self.structured_output_retries:
+                    raise
+                active_prompt = retry_prompt(prompt, exc.message)
+            except (ValidationError, json.JSONDecodeError, ValueError) as exc:
+                last_error = exc
+                if attempt >= self.structured_output_retries:
+                    raise
+                active_prompt = retry_prompt(prompt, str(exc))
 
-        settings_kwargs = {"max_tokens": self.max_tokens}
-        model_fields = getattr(ModelSettings, "model_fields", None) or getattr(ModelSettings, "__fields__", {})
-        if (
-            "temperature" in model_fields
-            and self.temperature is not None
-            and not self.model.lower().startswith("claude-")
-        ):
-            settings_kwargs["temperature"] = self.temperature
-        if "top_p" in model_fields and self.top_p is not None:
-            settings_kwargs["top_p"] = self.top_p
-        if "top_k" in model_fields and self.top_k is not None:
-            settings_kwargs["top_k"] = self.top_k
+        raise RuntimeError("Structured completion failed") from last_error
 
-        model_settings = ModelSettings(**settings_kwargs)
+    def _build_native_structured_request_params(
+        self, prompt: str, schema_model: Type
+    ) -> Dict[str, Any]:
+        """Build Anthropic Messages params for native JSON schema output."""
 
-        agent = Agent(
-            model=model,
-            output_type=schema_model,
-            system_prompt=self.system_prompt,
-            model_settings=model_settings,
-            retries=self.structured_output_retries,
-        )
-        if self.output_validator is not None:
-            agent.output_validator(self.output_validator)
+        params: Dict[str, Any] = {
+            "model": self.model,
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": self.max_tokens,
+            "output_format": anthropic_output_format(schema_model),
+        }
+        if self.system_prompt:
+            params["system"] = self.system_prompt
+        if self.temperature is not None:
+            params["temperature"] = self.temperature
+        if self.top_p is not None:
+            params["top_p"] = self.top_p
+        if self.top_k is not None:
+            params["top_k"] = self.top_k
+        if self.thinking_enabled:
+            params["thinking"] = {
+                "type": "enabled",
+                "budget_tokens": self.thinking_budget_tokens,
+            }
+        return params
 
-        return agent
+    @staticmethod
+    def _extract_native_parsed_output(response: Any, schema_model: Type) -> Any:
+        """Extract and validate Anthropic native JSON output."""
 
-    def _structured_result_to_response(self, result: Any) -> Tuple[Any, LLMResponse]:
-        """Convert a Pydantic AI run result into the local response tuple."""
-        parsed_output = result.output
+        text_parts: List[str] = []
+        for block in getattr(response, "content", []) or []:
+            block_type = getattr(block, "type", None)
+            if block_type == "tool_use" and getattr(block, "input", None):
+                return schema_model.model_validate(block.input)
+            text = getattr(block, "text", None)
+            if block_type == "text" and text:
+                text_parts.append(text)
+
+        output_text = "".join(text_parts).strip()
+        if output_text:
+            return schema_model.model_validate_json(output_text)
+
+        raise ValueError("Anthropic structured response did not include JSON output")
+
+    def _native_response_to_llm_response(
+        self, parsed_output: Any, response: Any
+    ) -> LLMResponse:
+        """Convert an Anthropic native structured response into LLMResponse."""
 
         content = (
             parsed_output.model_dump_json()
             if hasattr(parsed_output, "model_dump_json")
             else json.dumps(parsed_output)
         )
+        usage = getattr(response, "usage", None)
+        input_tokens = getattr(usage, "input_tokens", 0) if usage else 0
+        output_tokens = getattr(usage, "output_tokens", 0) if usage else 0
+        cache_creation_tokens = (
+            getattr(usage, "cache_creation_input_tokens", 0) if usage else 0
+        ) or 0
+        cache_read_tokens = (
+            getattr(usage, "cache_read_input_tokens", 0) if usage else 0
+        ) or 0
 
-        usage = result.usage() if callable(getattr(result, "usage", None)) else getattr(result, "usage", None)
-        input_tokens = 0
-        output_tokens = 0
-        if usage:
-            if isinstance(usage, dict):
-                input_tokens = usage.get("input_tokens") or usage.get("request_tokens") or 0
-                output_tokens = usage.get("output_tokens") or usage.get("response_tokens") or 0
-            else:
-                input_tokens = (
-                    getattr(usage, "input_tokens", None)
-                    or getattr(usage, "request_tokens", None)
-                    or 0
-                )
-                output_tokens = (
-                    getattr(usage, "output_tokens", None)
-                    or getattr(usage, "response_tokens", None)
-                    or 0
-                )
-
-        llm_response = LLMResponse(
+        return LLMResponse(
             content=content,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             model=self.model,
-            raw_response=result,
+            raw_response=response,
+            cache_creation_tokens=cache_creation_tokens,
+            cache_read_tokens=cache_read_tokens,
         )
 
-        return parsed_output, llm_response
-    
     def count_tokens(self, text: str) -> int:
         """
         Count tokens for Anthropic models.

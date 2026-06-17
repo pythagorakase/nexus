@@ -287,15 +287,14 @@ def generate_seed_candidates_with_skald(
 ) -> dict[str, Any]:
     """Make a non-mutating Skald call to generate Retrograde seed candidates."""
 
-    from pydantic_ai import Agent, ModelRetry, RunContext
-    from pydantic_ai.settings import ModelSettings
+    from pydantic_ai import ModelRetry
 
     from nexus.api.config_utils import (
         get_new_story_model,
         get_wizard_max_tokens,
         get_wizard_retry_budget,
     )
-    from nexus.api.pydantic_ai_utils import build_pydantic_ai_model
+    from nexus.api.native_structured_output import build_native_structured_provider
 
     seed_generation_request = _required_mapping(
         packet.get("seed_generation_request"),
@@ -310,20 +309,19 @@ def generate_seed_candidates_with_skald(
         )
 
     selected_model = model_name or get_new_story_model()
-    agent = Agent(
-        model=build_pydantic_ai_model(selected_model),
-        output_type=RetrogradeSeedCandidateResponse,
+    provider = build_native_structured_provider(
+        model=selected_model,
+        max_tokens=max_tokens or get_wizard_max_tokens(),
         system_prompt=(
             "You are Skald-as-weaver for a NEXUS Retrograde seed pass. "
             "Generate candidate history seeds, select a subset, and do not "
             "claim any canonical write has occurred."
         ),
-        model_settings=ModelSettings(max_tokens=max_tokens or get_wizard_max_tokens()),
-        retries=get_wizard_retry_budget(),
+        structured_output_retries=get_wizard_retry_budget(),
     )
 
     async def _validate_output(
-        _ctx: RunContext[None],
+        _ctx: Any,
         output: RetrogradeSeedCandidateResponse,
     ) -> RetrogradeSeedCandidateResponse:
         try:
@@ -339,9 +337,11 @@ def generate_seed_candidates_with_skald(
                 f"the required refs:\n{exc}"
             ) from exc
 
-    agent.output_validator(_validate_output)
-    result = agent.run_sync(prompt)
-    response = result.output
+    provider.output_validator = _validate_output
+    response, _llm_response = provider.get_structured_completion(
+        prompt,
+        RetrogradeSeedCandidateResponse,
+    )
     if not isinstance(response, RetrogradeSeedCandidateResponse):
         raise TypeError(
             "Skald seed candidate call returned "
