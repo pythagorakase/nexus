@@ -99,6 +99,7 @@ class DatabaseManager:
         """
         self.db_url = db_url
         self.settings = settings or {}
+        self._closed = False
         self.engine = self._initialize_database_connection()
         self.Session = sessionmaker(bind=self.engine)
 
@@ -192,7 +193,21 @@ class DatabaseManager:
         Returns:
             SQLAlchemy session
         """
+        if self._closed:
+            raise RuntimeError("DatabaseManager is closed")
         return self.Session()
+
+    def close(self) -> None:
+        """Dispose the engine, returning all pooled connections to Postgres.
+
+        The narrative API builds a fresh MEMNON (and therefore a fresh
+        engine) per turn; without explicit disposal those pools sit in
+        reference-cycle garbage holding server-side connections until a full
+        GC that rarely arrives (issue #401). Deterministic teardown instead.
+        """
+        self.engine.dispose()
+        self._closed = True
+        logger.info("DatabaseManager engine disposed")
 
     def get_model_classes(self) -> Dict[str, Any]:
         """

@@ -4,8 +4,26 @@ import json
 
 import pytest
 
-from nexus.agents.logon.apex_schema import StorytellerResponseExtended
-from nexus.api.mock_openai import ResponsesRequest, _collect_text, responses_create
+from nexus.agents.logon.apex_schema import (
+    StorytellerResponseBootstrap,
+    StorytellerResponseExtended,
+)
+from nexus.api.mock_openai import (
+    ResponsesRequest,
+    _collect_text,
+    _requested_output_properties,
+    responses_create,
+)
+
+
+def _final_result_tool(schema_model) -> dict:
+    """Build the pydantic_ai-style output tool for a Storyteller schema."""
+    return {
+        "name": "final_result",
+        "type": "function",
+        "parameters": schema_model.model_json_schema(),
+        "strict": True,
+    }
 
 
 @pytest.mark.asyncio
@@ -120,6 +138,70 @@ async def test_mock_responses_prioritizes_orrery_fixture_over_cached_story() -> 
     payload = json.loads(response["output_text"])
     assert payload["narrative"].startswith("[TEST MODE]")
     assert payload["orrery_adjudications"][0]["proposal_id"] == "honor_debt:aaa"
+
+
+@pytest.mark.asyncio
+async def test_mock_responses_routes_turn_schema_without_orrery_proposals() -> None:
+    """A turn request with no Orrery section still gets an Extended payload.
+
+    Regression for the issue #401 reproduction blocker: keyword routing sent
+    proposal-free turn requests to the bootstrap-shaped payload, which fails
+    StorytellerResponseExtended validation and stalls TEST-mode turn loops.
+    """
+
+    response = await responses_create(
+        ResponsesRequest(
+            model="TEST",
+            input=[{"role": "user", "content": "Continue the protagonist story."}],
+            tools=[_final_result_tool(StorytellerResponseExtended)],
+        )
+    )
+
+    tool_call = response["output"][0]
+    assert tool_call["type"] == "function_call"
+    assert tool_call["name"] == "final_result"
+
+    payload = json.loads(response["output_text"])
+    assert json.loads(tool_call["arguments"]) == payload
+    parsed = StorytellerResponseExtended.model_validate(payload)
+    assert parsed.narrative.startswith("[TEST MODE]")
+    assert parsed.orrery_adjudications == []
+
+
+@pytest.mark.asyncio
+async def test_mock_responses_routes_bootstrap_schema_as_final_result_tool() -> None:
+    """Bootstrap structured output must also call the required output tool."""
+
+    response = await responses_create(
+        ResponsesRequest(
+            model="TEST",
+            input=[{"role": "user", "content": "Bootstrap the protagonist story."}],
+            tools=[_final_result_tool(StorytellerResponseBootstrap)],
+        )
+    )
+
+    tool_call = response["output"][0]
+    assert tool_call["type"] == "function_call"
+    assert tool_call["name"] == "final_result"
+    payload = json.loads(tool_call["arguments"])
+    StorytellerResponseBootstrap.model_validate(payload)
+
+
+def test_requested_output_properties_extracts_schema_fields() -> None:
+    """The output-tool discriminator sees the schema's top-level properties."""
+
+    request = ResponsesRequest(
+        model="TEST",
+        input=[],
+        tools=[_final_result_tool(StorytellerResponseBootstrap)],
+    )
+    fields = _requested_output_properties(request)
+    assert "narrative" in fields
+    assert "choices" in fields
+    assert "state_updates" not in fields
+
+    bare = ResponsesRequest(model="TEST", input=[])
+    assert _requested_output_properties(bare) == set()
 
 
 def test_collect_text_uses_first_prompt_like_key() -> None:

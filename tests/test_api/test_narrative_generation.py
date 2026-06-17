@@ -63,6 +63,10 @@ async def test_lore_phase_failure_is_reported_before_adapter_coercion(
             """Return the legacy failure string from LORE.process_turn."""
             return "Error processing turn: FATAL: No warm slice chunks retrieved."
 
+        def close(self) -> None:
+            """Match LORE's per-turn teardown contract (issue #401)."""
+            self.closed = True
+
     async def fake_get_chunk_info(
         conn: DummyConnection, chunk_id: int
     ) -> dict[str, Any]:
