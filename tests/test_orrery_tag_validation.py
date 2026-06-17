@@ -13,10 +13,15 @@ from nexus.agents.logon.apex_schema import (
     ReferenceType,
     StateUpdates,
 )
+from nexus.agents.logon.orrery_tag_schema import (
+    storyteller_openai_text_format,
+    storyteller_schema_with_runtime_tag_enums,
+)
 from nexus.agents.logon.orrery_tag_validation import (
     build_storyteller_tag_validator,
     collect_orrery_tag_issues,
 )
+from nexus.agents.orrery.tag_library import TagLibraryEntry
 from nexus.agents.orrery.tag_schemas import OrreryTagBestowal
 
 
@@ -138,3 +143,89 @@ def test_validator_skipped_without_slot_database() -> None:
     assert build_storyteller_tag_validator(None) is None
     assert build_storyteller_tag_validator("") is None
     assert build_storyteller_tag_validator("save_05") is not None
+
+
+def test_storyteller_schema_uses_runtime_tag_enums(monkeypatch) -> None:
+    """Native LOGON schema constrains Orrery tags by live entity kind."""
+
+    from nexus.agents.logon import orrery_tag_schema
+    from nexus.agents.logon.apex_schema import StorytellerResponseExtended
+
+    entries = [
+        _tag_entry("character", "bodyform", "human"),
+        _tag_entry("character", "disposition", "perceptive"),
+        _tag_entry("place", "place_class", "haven"),
+        _tag_entry("faction", "ideology", "loyalist"),
+    ]
+    monkeypatch.setattr(
+        orrery_tag_schema,
+        "read_tag_library",
+        lambda _dbname: entries,
+    )
+
+    schema = storyteller_schema_with_runtime_tag_enums(
+        StorytellerResponseExtended,
+        "save_05",
+    )
+
+    assert schema is not None
+    defs = schema["$defs"]
+    character_tags = defs["OrreryTagBestowalCharacter"]["properties"]["applied_tags"][
+        "items"
+    ]["enum"]
+    place_tags = defs["OrreryTagBestowalPlace"]["properties"]["applied_tags"]["items"][
+        "enum"
+    ]
+    faction_tags = defs["OrreryTagBestowalFaction"]["properties"]["tags_to_clear"][
+        "items"
+    ]["enum"]
+    assert character_tags == ["human", "perceptive"]
+    assert place_tags == ["haven"]
+    assert faction_tags == ["loyalist"]
+    assert (
+        defs["NewCharacter"]["properties"]["orrery_tags"]["anyOf"][0]["$ref"]
+        == "#/$defs/OrreryTagBestowalCharacter"
+    )
+    assert (
+        defs["LocationStateUpdate"]["properties"]["orrery_tags"]["anyOf"][0]["$ref"]
+        == "#/$defs/OrreryTagBestowalPlace"
+    )
+    assert (
+        defs["FactionStateUpdate"]["properties"]["orrery_tags"]["anyOf"][0]["$ref"]
+        == "#/$defs/OrreryTagBestowalFaction"
+    )
+
+
+def test_storyteller_openai_text_format_wraps_runtime_schema(monkeypatch) -> None:
+    from nexus.agents.logon import orrery_tag_schema
+    from nexus.agents.logon.apex_schema import StorytellerResponseExtended
+
+    monkeypatch.setattr(
+        orrery_tag_schema,
+        "read_tag_library",
+        lambda _dbname: [_tag_entry("character", "bodyform", "human")],
+    )
+
+    text_format = storyteller_openai_text_format(
+        StorytellerResponseExtended,
+        "save_05",
+    )
+
+    assert text_format is not None
+    assert text_format["type"] == "json_schema"
+    assert text_format["strict"] is True
+    assert text_format["schema"]["$defs"]["OrreryTagBestowalCharacter"]["properties"][
+        "applied_tags"
+    ]["items"]["enum"] == ["human"]
+
+
+def _tag_entry(entity_kind: str, category: str, tag: str) -> TagLibraryEntry:
+    return TagLibraryEntry(
+        entity_kind=entity_kind,
+        category=category,
+        tag=tag,
+        is_ephemeral=False,
+        description=f"{tag} description",
+        category_description=f"{category} description",
+        prompt_order=10,
+    )

@@ -48,8 +48,18 @@ def strict_json_schema(schema_model: Type[BaseModel]) -> Dict[str, Any]:
     return to_strict_json_schema(schema_model)
 
 
-def openai_response_text_format(schema_model: Type[BaseModel]) -> Dict[str, Any]:
+def openai_response_text_format(
+    schema_model: Type[BaseModel], *, schema: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
     """Build the OpenAI Responses API native strict text format payload."""
+
+    if schema is not None:
+        return {
+            "type": "json_schema",
+            "strict": True,
+            "name": schema_model.__name__,
+            "schema": schema,
+        }
 
     try:
         from openai.lib._parsing._responses import type_to_text_format_param
@@ -85,10 +95,17 @@ def anthropic_json_schema(schema_model: Type[BaseModel]) -> Dict[str, Any]:
     return _strip_anthropic_unsupported_schema_keys(strict_json_schema(schema_model))
 
 
-def anthropic_output_format(schema_model: Type[BaseModel]) -> Dict[str, Any]:
+def anthropic_output_format(
+    schema_model: Type[BaseModel], *, schema: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
     """Build the Anthropic beta Messages native JSON schema output format."""
 
-    return {"type": "json_schema", "schema": anthropic_json_schema(schema_model)}
+    schema_payload = (
+        _strip_anthropic_unsupported_schema_keys(schema)
+        if schema is not None
+        else anthropic_json_schema(schema_model)
+    )
+    return {"type": "json_schema", "schema": schema_payload}
 
 
 def anthropic_strict_tool(

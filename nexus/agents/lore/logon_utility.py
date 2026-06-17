@@ -103,6 +103,9 @@ class LogonUtility:
         self.provider: Optional[object] = None
         self._system_prompt: Optional[str] = None
         self._provider_bootstrap_mode: Optional[bool] = None
+        self._provider_wire_type: Optional[str] = None
+        self._validation_dbname: Optional[str] = None
+        self._schema_format_cache: Dict[type, Dict[str, Any]] = {}
 
     def _load_system_prompt(self, is_bootstrap: Optional[bool] = None) -> str:
         """Load and combine storyteller instructions with live slot context."""
@@ -294,8 +297,11 @@ class LogonUtility:
         except Exception:
             validation_dbname = None
         output_validator = build_storyteller_tag_validator(validation_dbname)
+        self._validation_dbname = validation_dbname
+        self._schema_format_cache = {}
 
         if provider_type == "anthropic":
+            self._provider_wire_type = "anthropic"
             self.provider = AnthropicProvider(
                 model=model,
                 max_tokens=apex_settings.get(
@@ -308,6 +314,7 @@ class LogonUtility:
         elif provider_type == "openai" or base_url:
             # Native OpenAI, or any OpenAI-compatible server registered with a
             # base_url in [global.model.api_models] (mock TEST, Ollama, vLLM).
+            self._provider_wire_type = "openai"
             self.provider = OpenAIProvider(
                 model=model,
                 temperature=apex_settings.get("temperature", 0.7),
@@ -365,6 +372,7 @@ class LogonUtility:
         # Format the context into a prompt
         prompt = self._format_context_prompt(context_payload)
         schema_model = self._select_response_schema(context_payload)
+        schema_kwargs = self._schema_format_kwargs(schema_model)
 
         # Get structured completion from provider
         # This returns a tuple of (parsed_object, llm_response)
@@ -372,6 +380,7 @@ class LogonUtility:
             parsed_response, _llm_response = self.provider.get_structured_completion(
                 prompt,
                 schema_model,
+                **schema_kwargs,
             )
             logger.debug(
                 "Received structured response with narrative length: %s",
@@ -389,12 +398,14 @@ class LogonUtility:
         self._ensure_provider(context_payload)
         prompt = self._format_context_prompt(context_payload)
         schema_model = self._select_response_schema(context_payload)
+        schema_kwargs = self._schema_format_kwargs(schema_model)
 
         try:
             parsed_response, _llm_response = (
                 await self.provider.get_structured_completion_async(
                     prompt,
                     schema_model,
+                    **schema_kwargs,
                 )
             )
             logger.debug(
@@ -414,6 +425,42 @@ class LogonUtility:
             return StorytellerResponseBootstrap
 
         return StorytellerResponseExtended
+
+    def _schema_format_kwargs(self, schema_model: type) -> Dict[str, Any]:
+        """Return provider-specific native schema overrides for LOGON."""
+
+        if not self._validation_dbname or not self._provider_wire_type:
+            return {}
+        if schema_model in self._schema_format_cache:
+            return self._schema_format_cache[schema_model]
+
+        kwargs: Dict[str, Any] = {}
+        try:
+            from nexus.agents.logon.orrery_tag_schema import (
+                storyteller_anthropic_output_format,
+                storyteller_openai_text_format,
+            )
+
+            if self._provider_wire_type == "anthropic":
+                output_format = storyteller_anthropic_output_format(
+                    schema_model, self._validation_dbname
+                )
+                if output_format is not None:
+                    kwargs = {"output_format": output_format}
+            else:
+                text_format = storyteller_openai_text_format(
+                    schema_model, self._validation_dbname
+                )
+                if text_format is not None:
+                    kwargs = {"text_format": text_format}
+        except Exception as exc:
+            logger.warning(
+                "Failed to build runtime storyteller schema constraints: %s",
+                exc,
+            )
+
+        self._schema_format_cache[schema_model] = kwargs
+        return kwargs
 
     @staticmethod
     def _is_bootstrap_context(context_payload: Optional[Mapping[str, Any]]) -> bool:

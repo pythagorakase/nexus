@@ -343,7 +343,11 @@ class OpenAIProvider(LLMProvider):
         return self._get_completion_unified(prompt, cache_key=cache_key)
     
     def get_structured_completion(
-        self, prompt: str, schema_model: Type
+        self,
+        prompt: str,
+        schema_model: Type,
+        *,
+        text_format: Optional[Dict[str, Any]] = None,
     ) -> Tuple[Any, LLMResponse]:
         """
         Get a structured completion using OpenAI native strict schema output.
@@ -379,14 +383,23 @@ class OpenAIProvider(LLMProvider):
             "get_structured_completion",
             "get_structured_completion_async",
         )
-        return self._get_structured_completion_native_sync(prompt, schema_model)
+        return self._get_structured_completion_native_sync(
+            prompt, schema_model, text_format=text_format
+        )
 
     async def get_structured_completion_async(
-        self, prompt: str, schema_model: Type
+        self,
+        prompt: str,
+        schema_model: Type,
+        *,
+        text_format: Optional[Dict[str, Any]] = None,
     ) -> Tuple[Any, LLMResponse]:
         """Get a structured completion without blocking an existing event loop."""
         return await asyncio.to_thread(
-            self._get_structured_completion_native_sync, prompt, schema_model
+            self._get_structured_completion_native_sync,
+            prompt,
+            schema_model,
+            text_format=text_format,
         )
 
     def _raise_if_running_loop(self, method_name: str, async_method_name: str) -> None:
@@ -402,7 +415,11 @@ class OpenAIProvider(LLMProvider):
         )
 
     def _get_structured_completion_native_sync(
-        self, prompt: str, schema_model: Type
+        self,
+        prompt: str,
+        schema_model: Type,
+        *,
+        text_format: Optional[Dict[str, Any]] = None,
     ) -> Tuple[Any, LLMResponse]:
         """Run a native strict-schema Responses request with bounded repair."""
 
@@ -414,7 +431,7 @@ class OpenAIProvider(LLMProvider):
             try:
                 response = self.client.responses.parse(
                     **self._build_native_structured_request_params(
-                        active_prompt, schema_model
+                        active_prompt, schema_model, text_format=text_format
                     )
                 )
                 parsed_output = self._extract_native_parsed_output(
@@ -442,7 +459,11 @@ class OpenAIProvider(LLMProvider):
         raise RuntimeError("Structured completion failed") from last_error
 
     def _build_native_structured_request_params(
-        self, prompt: str, schema_model: Type
+        self,
+        prompt: str,
+        schema_model: Type,
+        *,
+        text_format: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Build OpenAI Responses params for native strict structured output."""
 
@@ -454,8 +475,11 @@ class OpenAIProvider(LLMProvider):
             "model": self.model,
             "input": input_messages,
             "max_output_tokens": self.max_output_tokens,
-            "text_format": schema_model,
         }
+        if text_format is None:
+            request_params["text_format"] = schema_model
+        else:
+            request_params["text"] = {"format": text_format}
         if self.supports_temperature and self.temperature is not None:
             request_params["temperature"] = self.temperature
         if self.reasoning_effort:

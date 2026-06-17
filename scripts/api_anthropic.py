@@ -443,7 +443,11 @@ class AnthropicProvider(LLMProvider):
             raise
     
     def get_structured_completion(
-        self, prompt: str, schema_model: Type
+        self,
+        prompt: str,
+        schema_model: Type,
+        *,
+        output_format: Optional[Dict[str, Any]] = None,
     ) -> Tuple[Any, LLMResponse]:
         """
         Get a structured completion using Anthropic native JSON schema output.
@@ -479,14 +483,23 @@ class AnthropicProvider(LLMProvider):
             "get_structured_completion",
             "get_structured_completion_async",
         )
-        return self._get_structured_completion_native_sync(prompt, schema_model)
+        return self._get_structured_completion_native_sync(
+            prompt, schema_model, output_format=output_format
+        )
 
     async def get_structured_completion_async(
-        self, prompt: str, schema_model: Type
+        self,
+        prompt: str,
+        schema_model: Type,
+        *,
+        output_format: Optional[Dict[str, Any]] = None,
     ) -> Tuple[Any, LLMResponse]:
         """Get a structured completion without blocking an existing event loop."""
         return await asyncio.to_thread(
-            self._get_structured_completion_native_sync, prompt, schema_model
+            self._get_structured_completion_native_sync,
+            prompt,
+            schema_model,
+            output_format=output_format,
         )
 
     def _raise_if_running_loop(self, method_name: str, async_method_name: str) -> None:
@@ -502,7 +515,11 @@ class AnthropicProvider(LLMProvider):
         )
 
     def _get_structured_completion_native_sync(
-        self, prompt: str, schema_model: Type
+        self,
+        prompt: str,
+        schema_model: Type,
+        *,
+        output_format: Optional[Dict[str, Any]] = None,
     ) -> Tuple[Any, LLMResponse]:
         """Run a native JSON-schema Messages request with bounded repair."""
 
@@ -514,7 +531,7 @@ class AnthropicProvider(LLMProvider):
             try:
                 response = self.client.beta.messages.create(
                     **self._build_native_structured_request_params(
-                        active_prompt, schema_model
+                        active_prompt, schema_model, output_format=output_format
                     )
                 )
                 parsed_output = self._extract_native_parsed_output(
@@ -542,7 +559,11 @@ class AnthropicProvider(LLMProvider):
         raise RuntimeError("Structured completion failed") from last_error
 
     def _build_native_structured_request_params(
-        self, prompt: str, schema_model: Type
+        self,
+        prompt: str,
+        schema_model: Type,
+        *,
+        output_format: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Build Anthropic Messages params for native JSON schema output."""
 
@@ -550,7 +571,7 @@ class AnthropicProvider(LLMProvider):
             "model": self.model,
             "messages": [{"role": "user", "content": prompt}],
             "max_tokens": self.max_tokens,
-            "output_format": anthropic_output_format(schema_model),
+            "output_format": output_format or anthropic_output_format(schema_model),
         }
         if self.system_prompt:
             params["system"] = self.system_prompt

@@ -106,6 +106,44 @@ def test_openai_provider_uses_responses_parse_text_format() -> None:
     assert captured["max_output_tokens"] == 1234
 
 
+def test_openai_provider_accepts_native_text_format_override() -> None:
+    """Runtime-mutated schemas ride text.format and still parse to Pydantic."""
+
+    expected = _bootstrap_response()
+    captured = {}
+    text_format = {
+        "type": "json_schema",
+        "name": "RuntimeBootstrap",
+        "strict": True,
+        "schema": StorytellerResponseBootstrap.model_json_schema(),
+    }
+
+    class FakeResponses:
+        def parse(self, **kwargs):
+            captured.update(kwargs)
+            return SimpleNamespace(
+                output_parsed=None,
+                output_text=expected.model_dump_json(),
+                usage=SimpleNamespace(input_tokens=11, output_tokens=22),
+            )
+
+    provider = OpenAIProvider(
+        model="gpt-4.1",
+        api_key="test-key",
+        system_prompt="System prompt",
+        max_output_tokens=1234,
+    )
+    provider.client = SimpleNamespace(responses=FakeResponses())
+
+    parsed, _llm_response = provider.get_structured_completion(
+        "Prompt", StorytellerResponseBootstrap, text_format=text_format
+    )
+
+    assert parsed == expected
+    assert captured["text"]["format"] is text_format
+    assert "text_format" not in captured
+
+
 def test_anthropic_provider_uses_native_output_format() -> None:
     """Anthropic provider should call beta Messages with JSON schema output."""
 
@@ -116,9 +154,7 @@ def test_anthropic_provider_uses_native_output_format() -> None:
         def create(self, **kwargs):
             captured.update(kwargs)
             return SimpleNamespace(
-                content=[
-                    SimpleNamespace(type="text", text=expected.model_dump_json())
-                ],
+                content=[SimpleNamespace(type="text", text=expected.model_dump_json())],
                 usage=SimpleNamespace(input_tokens=33, output_tokens=44),
             )
 
@@ -142,3 +178,35 @@ def test_anthropic_provider_uses_native_output_format() -> None:
     assert "tools" not in captured
     assert captured["system"] == "System prompt"
     assert captured["max_tokens"] == 5678
+
+
+def test_anthropic_provider_accepts_native_output_format_override() -> None:
+    expected = _bootstrap_response()
+    captured = {}
+    output_format = {
+        "type": "json_schema",
+        "schema": StorytellerResponseBootstrap.model_json_schema(),
+    }
+
+    class FakeMessages:
+        def create(self, **kwargs):
+            captured.update(kwargs)
+            return SimpleNamespace(
+                content=[SimpleNamespace(type="text", text=expected.model_dump_json())],
+                usage=SimpleNamespace(input_tokens=33, output_tokens=44),
+            )
+
+    provider = AnthropicProvider(
+        model="claude-sonnet-4-5",
+        api_key="test-key",
+        system_prompt="System prompt",
+        max_tokens=5678,
+    )
+    provider.client = SimpleNamespace(beta=SimpleNamespace(messages=FakeMessages()))
+
+    parsed, _llm_response = provider.get_structured_completion(
+        "Prompt", StorytellerResponseBootstrap, output_format=output_format
+    )
+
+    assert parsed == expected
+    assert captured["output_format"] is output_format
