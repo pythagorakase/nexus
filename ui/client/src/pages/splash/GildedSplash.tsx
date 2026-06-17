@@ -70,7 +70,7 @@ const GildedButton = ({
   const base: CSSProperties = {
     position: 'relative',
     width: 280,
-    padding: '16px 28px',
+    padding: '14px 28px',
     fontFamily: 'var(--font-menu)',
     fontSize: 14,
     letterSpacing: '0.3em',
@@ -201,23 +201,21 @@ export function GildedSplash() {
           position: 'relative',
           zIndex: 4,
           width: '100%',
-          height: 280,
+          height: 'min(220px, 30vh)',
           display: 'flex',
           alignItems: 'flex-start',
           justifyContent: 'center',
           overflow: 'visible',
-          marginTop: 60,
+          marginTop: 0,
           pointerEvents: 'none',
         }}
       >
         <h1
           className="deco-glow"
           style={{
-            position: 'relative',
-            zIndex: 4,
-            margin: '30px 0 0',
+            margin: '8px 0 0',
             fontFamily: 'var(--font-display)',
-            fontSize: 128,
+            fontSize: 'clamp(96px, 18vh, 128px)',
             fontWeight: 400,
             letterSpacing: '0.1em',
             lineHeight: 1,
@@ -237,8 +235,8 @@ export function GildedSplash() {
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          gap: 14,
-          marginTop: 36,
+          gap: 12,
+          marginTop: 0,
         }}
       >
         <GildedButton primary onClick={handleContinue} animationClass={getAnimationClass('continue')}>
