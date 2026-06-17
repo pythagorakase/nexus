@@ -2,39 +2,15 @@
 #
 # IRIS - Integrated Runtime for Interactive Stories
 #
-# Interim single-origin launcher (issue #396, part 1): the FastAPI gateway
-# serves the built PWA, every API route, and the narrative websocket from
-# one origin. Node/Express is retired; the UI is built once and served
-# statically. Lane C2 replaces this script with `nexus up`.
+# Thin alias for the managed runtime (issue #396). All process management
+# lives in pure Python (nexus/runtime/); this script only forwards to it.
+#
+#   ./iris            == nexus up --foreground
+#   ./iris --slot 3   == nexus up --foreground --slot 3
 #
 # For HMR development, run the Vite dev server alongside the gateway:
-#   npm --prefix ui run dev    # serves the client on $APP_PORT (5001),
-#                              # proxying /api, /ws, and uploads here
-#
+#   npm --prefix ui run dev    # proxies /api, /ws, and uploads to :8002
 
 set -euo pipefail
-
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$ROOT_DIR"
-
-NEXUS_SLOT="${NEXUS_SLOT:-1}"
-GATEWAY_PORT="${NARRATIVE_API_PORT:-8002}"
-MOCK_OPENAI_PORT="${MOCK_OPENAI_PORT:-5102}"
-
-# Build the PWA if missing (first run). Rebuild manually after UI changes:
-#   npm --prefix ui run build
-if [ ! -f ui/dist/public/index.html ]; then
-  echo "Building UI (first run)..."
-  [ -d ui/node_modules ] || npm --prefix ui install
-  npm --prefix ui run build
-fi
-
-# Mock OpenAI server for the TEST model (cached responses).
-poetry run uvicorn nexus.api.mock_openai:app --host 127.0.0.1 \
-  --port "$MOCK_OPENAI_PORT" &
-MOCK_PID=$!
-trap 'kill "$MOCK_PID" 2>/dev/null || true' EXIT
-
-echo "Starting NEXUS gateway on port ${GATEWAY_PORT} (slot ${NEXUS_SLOT})..."
-NEXUS_SLOT="$NEXUS_SLOT" poetry run uvicorn nexus.api.narrative:app \
-  --host 127.0.0.1 --port "$GATEWAY_PORT"
+cd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec poetry run nexus up --foreground "$@"

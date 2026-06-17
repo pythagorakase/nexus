@@ -331,7 +331,9 @@ def test_drain_narration_outbox_does_not_lease_before_provider_ready() -> None:
     with pytest.raises(ValueError, match="Unsupported Orrery narration provider"):
         drain_narration_outbox_sync(
             slot=5,
-            settings={"orrery": {"narration": {"provider": "missing"}}},
+            settings={
+                "orrery": {"narration": {"provider": "missing", "model_ref": "TEST"}}
+            },
             conn=WorkerConn(cursor),
         )
 

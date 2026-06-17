@@ -2553,6 +2553,176 @@ def run_unlock(args: argparse.Namespace) -> Dict[str, Any]:
         return {"success": False, "error": str(e)}
 
 
+# =============================================================================
+# Managed runtime verbs (issue #396): up / down / restart / status / logs
+# =============================================================================
+
+
+def _runtime_supervisor(args: argparse.Namespace):
+    from nexus.runtime import Supervisor
+
+    return Supervisor.from_config(getattr(args, "config", None))
+
+
+def run_up(args: argparse.Namespace) -> Dict[str, Any]:
+    """Start the runtime per the configured profile."""
+    from nexus.runtime import RuntimeError_
+
+    try:
+        supervisor = _runtime_supervisor(args)
+        return supervisor.up(
+            slot=args.slot,
+            foreground=args.foreground,
+            echo=not args.json,
+        )
+    except (RuntimeError_, FileNotFoundError, requests.RequestException) as exc:
+        return {"success": False, "error": str(exc)}
+
+
+def run_down(args: argparse.Namespace) -> Dict[str, Any]:
+    """Stop managed services and remove pidfiles."""
+    from nexus.runtime import RuntimeError_
+
+    try:
+        supervisor = _runtime_supervisor(args)
+        result = supervisor.down(service=args.service)
+        if not args.json:
+            stopped = result.get("stopped", {})
+            if stopped:
+                for name, info in stopped.items():
+                    print(f"stopped {name} (pid {info['pid']})")
+            else:
+                print("nothing running")
+        return result
+    except (RuntimeError_, FileNotFoundError) as exc:
+        return {"success": False, "error": str(exc)}
+
+
+def run_restart(args: argparse.Namespace) -> Dict[str, Any]:
+    """Restart all managed services, or one by name."""
+    from nexus.runtime import RuntimeError_
+
+    try:
+        supervisor = _runtime_supervisor(args)
+        result = supervisor.restart(service=args.service, slot=args.slot)
+        if not args.json:
+            for name, record in result.get("services", {}).items():
+                print(f"restarted {name} (pid {record['pid']})")
+        return result
+    except (RuntimeError_, FileNotFoundError, requests.RequestException) as exc:
+        return {"success": False, "error": str(exc)}
+
+
+def _format_uptime(seconds: float) -> str:
+    total = int(seconds)
+    hours, remainder = divmod(total, 3600)
+    minutes, secs = divmod(remainder, 60)
+    return f"{hours}:{minutes:02d}:{secs:02d}"
+
+
+def _print_runtime_status(result: Dict[str, Any]) -> None:
+    runtime = result.get("runtime") or {}
+    print(f"NEXUS runtime - profile {result['profile']} - {result['gateway_url']}")
+    rows = []
+    health_by_service = runtime.get("services", {})
+    for name, proc in (result.get("processes") or {}).items():
+        health = health_by_service.get(name, {})
+        rows.append(
+            (
+                name,
+                proc.get("state", "-"),
+                str(proc.get("pid", "-")),
+                str(proc.get("port", "-")),
+                (
+                    _format_uptime(proc["uptime_seconds"])
+                    if proc.get("uptime_seconds") is not None
+                    else "-"
+                ),
+                "ok" if health.get("ok") else ("fail" if health else "-"),
+            )
+        )
+    if not rows:
+        # external/remote: render gateway health from the runtime endpoint
+        for name, health in health_by_service.items():
+            rows.append(
+                (
+                    name,
+                    "-",
+                    "-",
+                    str(health.get("port", "-")),
+                    "-",
+                    "ok" if health.get("ok") else "fail",
+                )
+            )
+    database = runtime.get("database") or {}
+    rows.append(
+        (
+            "database",
+            "-",
+            "-",
+            "-",
+            "-",
+            (
+                f"ok ({database.get('dbname')})"
+                if database.get("ok")
+                else f"fail ({database.get('error', 'unknown')})"
+            ),
+        )
+    )
+    header = ("SERVICE", "STATE", "PID", "PORT", "UPTIME", "HEALTH")
+    widths = [
+        max(len(str(row[i])) for row in [header] + rows) for i in range(len(header))
+    ]
+    for row in [header] + rows:
+        print("  ".join(str(cell).ljust(widths[i]) for i, cell in enumerate(row)))
+    if runtime.get("error"):
+        print(f"runtime endpoint: {runtime['error']}")
+    else:
+        auth = runtime.get("auth", {})
+        print(
+            f"version {runtime.get('version', '?')} - slot "
+            f"{runtime.get('slot', '?')} - auth {auth.get('header', '?')}"
+            f"{'' if auth.get('enforced') else ' (not enforced)'}"
+        )
+
+
+def run_status(args: argparse.Namespace) -> Dict[str, Any]:
+    """Render supervisor process state plus the gateway's /runtime/status."""
+    from nexus.runtime import RuntimeError_
+
+    try:
+        supervisor = _runtime_supervisor(args)
+        result = supervisor.status()
+        if not args.json:
+            _print_runtime_status(result)
+        return result
+    except (RuntimeError_, FileNotFoundError) as exc:
+        return {"success": False, "error": str(exc)}
+
+
+def run_logs(args: argparse.Namespace) -> Dict[str, Any]:
+    """Tail captured service logs; -f follows."""
+    from nexus.runtime import RuntimeError_
+
+    if args.json and args.follow:
+        return {"success": False, "error": "--json cannot be combined with -f"}
+    try:
+        supervisor = _runtime_supervisor(args)
+        stream = supervisor.logs(
+            service=args.service, lines=args.lines, follow=args.follow
+        )
+        if args.json:
+            return {"success": True, "service": args.service, "lines": list(stream)}
+        try:
+            for line in stream:
+                print(line)
+        except KeyboardInterrupt:
+            pass
+        return {"success": True}
+    except (RuntimeError_, FileNotFoundError) as exc:
+        return {"success": False, "error": str(exc)}
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build CLI argument parser with subcommands."""
     parser = argparse.ArgumentParser(
@@ -2560,6 +2730,11 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
+  nexus up                      Start the runtime (gateway + enabled services)
+  nexus up --foreground         Stay attached; Ctrl+C tears down
+  nexus status                  Runtime health, processes, slot, version
+  nexus logs gateway -f         Follow the gateway log
+  nexus down                    Stop the runtime
   nexus load --slot 5           Show current state of slot 5
   nexus continue --slot 5       Advance the story
   nexus continue --slot 5 --choice 1   Select choice #1
@@ -2598,6 +2773,60 @@ Examples:
     )
 
     subparsers = parser.add_subparsers(dest="command", required=True)
+
+    # Managed runtime verbs (issue #396)
+    def _add_config_arg(p: argparse.ArgumentParser) -> None:
+        p.add_argument(
+            "--config",
+            help="Path to nexus.toml (default: the repository's nexus.toml)",
+        )
+
+    up_parser = subparsers.add_parser(
+        "up", help="Start the NEXUS runtime (gateway + enabled services)"
+    )
+    up_parser.add_argument("--slot", type=int, help="Active slot (1-5)")
+    up_parser.add_argument(
+        "--foreground",
+        action="store_true",
+        help="Stay attached: stream logs, supervise, tear down on Ctrl+C",
+    )
+    _add_config_arg(up_parser)
+
+    down_parser = subparsers.add_parser("down", help="Stop managed runtime services")
+    down_parser.add_argument(
+        "service", nargs="?", default=None, help="Stop a single service by name"
+    )
+    _add_config_arg(down_parser)
+
+    restart_parser = subparsers.add_parser(
+        "restart", help="Restart managed runtime services"
+    )
+    restart_parser.add_argument(
+        "service", nargs="?", default=None, help="Restart a single service by name"
+    )
+    restart_parser.add_argument("--slot", type=int, help="Active slot (1-5)")
+    _add_config_arg(restart_parser)
+
+    status_parser = subparsers.add_parser(
+        "status", help="Show runtime health, processes, slot, and version"
+    )
+    _add_config_arg(status_parser)
+
+    logs_parser = subparsers.add_parser("logs", help="Tail captured service logs")
+    logs_parser.add_argument(
+        "service", nargs="?", default="gateway", help="Service name (default: gateway)"
+    )
+    logs_parser.add_argument(
+        "-n",
+        "--lines",
+        type=int,
+        default=None,
+        help="Line count (default: runtime.logs.tail_lines)",
+    )
+    logs_parser.add_argument(
+        "-f", "--follow", action="store_true", help="Follow the log"
+    )
+    _add_config_arg(logs_parser)
 
     # load command
     load_parser = subparsers.add_parser("load", help="Display current slot state")
@@ -3137,8 +3366,23 @@ def main() -> int:
             emit_error("Slot must be between 1 and 5", args.json)
             return 1
 
+    if args.command in ("up", "restart") and args.slot is not None:
+        if args.slot < 1 or args.slot > 5:
+            emit_error("Slot must be between 1 and 5", args.json)
+            return 1
+
     # Execute command
-    if args.command == "load":
+    if args.command == "up":
+        result = run_up(args)
+    elif args.command == "down":
+        result = run_down(args)
+    elif args.command == "restart":
+        result = run_restart(args)
+    elif args.command == "status":
+        result = run_status(args)
+    elif args.command == "logs":
+        result = run_logs(args)
+    elif args.command == "load":
         result = run_load(args)
     elif args.command == "continue":
         result = run_continue(args)

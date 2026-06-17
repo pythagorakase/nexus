@@ -90,9 +90,12 @@ conversational new-story wizard (setting, character traits, story seed).
 
 One origin serves everything: the FastAPI gateway
 (`nexus.api.narrative:app`, port 8002) owns every API route, the
-`/ws/narrative` websocket, and static serving of the built PWA
-(`ui/dist/public`) plus runtime image uploads. Node is build-time only —
-there is no Express layer. For development with HMR, the Vite dev server
+`/ws/narrative` websocket, `/runtime/status`, and static serving of the
+built PWA (`ui/dist/public`) plus runtime image uploads. Node is build-time
+only — there is no Express layer. The managed runtime (`nexus up` / `down`
+/ `restart` / `status` / `logs`, configured in `nexus.toml` `[runtime]`)
+starts and observes the whole system as one unit; `docs/runtime.md` is the
+client/runtime contract. For development with HMR, the Vite dev server
 (`npm --prefix ui run dev`, port 5001) serves the client and proxies
 `/api`, `/ws`, and upload routes to the gateway.
 
@@ -111,8 +114,14 @@ poetry run pre-commit install
 python scripts/migrate.py --status
 python scripts/migrate.py --all
 
-# Single-origin gateway (port 8002): APIs, websocket, and the built PWA
-./iris
+# Start the runtime: gateway (port 8002) + enabled services, detached
+nexus up
+nexus status          # health, processes, slot, version
+nexus logs gateway -f # follow the captured gateway log
+nexus down            # stop everything, no orphans
+
+# Or stay attached (./iris is an alias for this); Ctrl+C tears down
+nexus up --foreground
 
 # UI development with HMR: Vite dev server (port 5001) proxying to the gateway
 npm --prefix ui run dev
@@ -150,5 +159,6 @@ Formatting and linting: `poetry run black .`, `poetry run flake8`,
 - `docs/orrery_design_plan.md` — world engine stages, schema, and workers
 - `docs/orrery_retrograde_spec.md` — deep-history generation
 - `docs/hybrid_search.md`, `docs/vector_embeddings.md` — retrieval stack
+- `docs/runtime.md` — the client/runtime contract (profiles, auth header)
 - `docs/agent_workflow.md` — branch, PR, and review workflow for agents
 - `CLAUDE.md`, `AGENTS.md` — repository conventions for coding agents

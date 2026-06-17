@@ -15,31 +15,28 @@ from pydantic_ai.messages import (
 from pydantic_ai.models import Model
 from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.models.openai import OpenAIResponsesModel
-from pydantic_ai.providers.anthropic import AnthropicProvider as PydanticAnthropicProvider
+from pydantic_ai.providers.anthropic import (
+    AnthropicProvider as PydanticAnthropicProvider,
+)
 from pydantic_ai.providers.openai import OpenAIProvider as PydanticOpenAIProvider
 
-from nexus.config import load_settings
+from nexus.config import get_openai_compatible_endpoint
 from nexus.config.loader import get_provider_for_model
 from scripts.api_anthropic import AnthropicProvider as LegacyAnthropicProvider
 from scripts.api_openai import OpenAIProvider as LegacyOpenAIProvider
 
 
 def get_base_url_for_model(model: str) -> Optional[str]:
-    """Return a base URL override for the model, if configured."""
-    provider = get_provider_for_model(model)
-    if provider == "test":
-        settings = load_settings()
-        if settings.global_.api:
-            return settings.global_.api.test_mock_server_url
-        return "http://localhost:5102/v1"
-    if provider in {"openai", "anthropic"}:
-        return None
-    raise ValueError(f"Unknown provider for model {model!r}")
+    """Return the registry base_url for the model (None for native providers)."""
+    endpoint = get_openai_compatible_endpoint(model)
+    return endpoint["base_url"] if endpoint else None
 
 
 def build_pydantic_ai_model(model: str) -> Model:
     """Create a Pydantic AI model with the correct provider and credentials."""
     provider = get_provider_for_model(model)
+    if provider is None:
+        raise ValueError(f"Unknown provider for model {model!r}")
     if provider == "openai":
         legacy_provider = LegacyOpenAIProvider(model=model)
         pyd_provider = PydanticOpenAIProvider(api_key=legacy_provider.api_key)
@@ -48,13 +45,15 @@ def build_pydantic_ai_model(model: str) -> Model:
         legacy_provider = LegacyAnthropicProvider(model=model)
         pyd_provider = PydanticAnthropicProvider(api_key=legacy_provider.api_key)
         return AnthropicModel(model_name=model, provider=pyd_provider)
-    if provider == "test":
-        base_url = get_base_url_for_model(model)
-        pyd_provider = PydanticOpenAIProvider(
-            api_key="test-dummy-key", base_url=base_url
-        )
-        return OpenAIResponsesModel(model_name=model, provider=pyd_provider)
-    raise ValueError(f"Unknown provider for model {model!r}")
+    # Any other provider is an OpenAI-compatible server registered via
+    # base_url in [global.model.api_models] (mock TEST server, Ollama, vLLM).
+    endpoint = get_openai_compatible_endpoint(model)
+    if endpoint is None:
+        raise ValueError(f"No base_url registry entry for model {model!r}")
+    pyd_provider = PydanticOpenAIProvider(
+        api_key=endpoint["api_key"], base_url=endpoint["base_url"]
+    )
+    return OpenAIResponsesModel(model_name=model, provider=pyd_provider)
 
 
 def build_message_history(
