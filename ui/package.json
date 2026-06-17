@@ -7,6 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "check": "tsc",
+    "desktop:check": "cargo check --manifest-path src-tauri/Cargo.toml",
+    "desktop:dev": "npm run build && tauri dev",
+    "desktop:build": "npm run build && tauri build",
     "test": "vitest run"
   },
   "dependencies": {
@@ -72,6 +75,7 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.11.2",
     "@tailwindcss/typography": "^0.5.15",
     "@testing-library/jest-dom": "^6.4.8",
     "@testing-library/react": "^16.0.1",

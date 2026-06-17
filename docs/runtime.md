@@ -200,7 +200,7 @@ hosts. Consequences for deployment:
 
 ## What a Desktop Shell Needs to Know
 
-The entire integration surface for a future macOS/Windows/Linux shell:
+The entire integration surface for a macOS/Windows/Linux shell:
 
 1. Run `nexus up` (or link `nexus/runtime/` and call
    `Supervisor.from_config().up()`); the runtime owns its processes.
@@ -211,3 +211,7 @@ The entire integration surface for a future macOS/Windows/Linux shell:
 
 Nothing else about NEXUS internals — slots, databases, model processes,
 embedders — leaks across this boundary.
+
+The Tauri shell added for issue #399 implements this contract in
+`ui/src-tauri/`; see `docs/desktop.md` for run/build commands, the
+checkout-level desktop config, and the preserved browser workflow.

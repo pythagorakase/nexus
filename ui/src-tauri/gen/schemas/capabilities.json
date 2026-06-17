@@ -1,0 +1,1 @@
+{"default":{"identifier":"default","description":"Default permissions for the NEXUS desktop shell loading window.","local":true,"windows":["main"],"permissions":["core:default"]}}

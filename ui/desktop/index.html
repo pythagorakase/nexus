@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NEXUS</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="shell" aria-live="polite">
+      <section class="panel">
+        <img src="./icon.png" alt="" class="mark" />
+        <p class="eyebrow">NEXUS</p>
+        <h1>Opening runtime</h1>
+        <div class="meter" aria-hidden="true"><span></span></div>
+        <p id="status">Checking runtime</p>
+        <pre id="detail">http://127.0.0.1:8002</pre>
+      </section>
+    </main>
+    <script>
+      const status = document.getElementById("status");
+      const detail = document.getElementById("detail");
+
+      window.__nexusDesktopStatus = (label, message) => {
+        status.textContent = label;
+        detail.textContent = message || "";
+      };
+
+      window.__nexusDesktopReady = (origin, runtimeStatus) => {
+        const slot = runtimeStatus?.slot ?? "?";
+        status.textContent = "Runtime ready";
+        detail.textContent = `${origin} - slot ${slot}`;
+      };
+    </script>
+  </body>
+</html>
