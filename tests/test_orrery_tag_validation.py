@@ -244,6 +244,11 @@ def test_storyteller_anthropic_output_config_uses_compact_extended_schema(
         "_read_pair_tags",
         lambda _dbname: ["hiding", "shelters"],
     )
+    monkeypatch.setattr(
+        orrery_tag_schema,
+        "_read_event_types",
+        lambda _dbname: ["evade_pursuit", "slept"],
+    )
 
     output_config = storyteller_anthropic_output_config(
         StorytellerResponseExtended,
@@ -265,7 +270,20 @@ def test_storyteller_anthropic_output_config_uses_compact_extended_schema(
         "new_entities",
         "reasoning",
     }
-    assert schema["properties"]["state_updates"]["properties"] == {}
+    state_update_schema = schema["properties"]["state_updates"]
+    assert set(state_update_schema["properties"]) == {
+        "updates",
+    }
+    update_schema = state_update_schema["properties"]["updates"]["items"]
+    assert update_schema["properties"]["kind"]["enum"] == [
+        "character",
+        "place",
+        "faction",
+    ]
+    assert update_schema["properties"]["tag_add"] == {
+        "type": "string",
+        "description": "Registered tag name to apply.",
+    }
     entity_schema = schema["properties"]["new_entities"]["items"]
     assert entity_schema["properties"]["tag_hints"]["items"]["enum"] == [
         "haven",
@@ -275,6 +293,11 @@ def test_storyteller_anthropic_output_config_uses_compact_extended_schema(
     ]
     pair_tag_schema = entity_schema["properties"]["pair_tag_hints"]["items"]
     assert pair_tag_schema["properties"]["tag"]["enum"] == ["hiding", "shelters"]
+    adjudication_schema = schema["properties"]["orrery_adjudications"]["items"]
+    assert adjudication_schema["properties"]["replacement_event_type"]["enum"] == [
+        "evade_pursuit",
+        "slept",
+    ]
 
     response = StorytellerResponseExtended.model_validate(
         {
@@ -283,8 +306,17 @@ def test_storyteller_anthropic_output_config_uses_compact_extended_schema(
             "authorial_directives": ["Retrieve the lower stacks layout."],
             "chunk_metadata": {},
             "referenced_entities": {},
-            "state_updates": {},
-            "operations": None,
+            "state_updates": {
+                "updates": [
+                    {
+                        "kind": "character",
+                        "name": "Brena Tideloft",
+                        "status": "following a wet bell-sound",
+                        "tag_add": "perceptive",
+                    }
+                ]
+            },
+            "operations": {},
             "orrery_adjudications": [],
             "new_entities": [
                 {
@@ -295,11 +327,19 @@ def test_storyteller_anthropic_output_config_uses_compact_extended_schema(
                     "pair_tag_hints": [],
                 }
             ],
-            "reasoning": None,
+            "reasoning": "",
         }
     )
 
-    assert response.state_updates.characters == []
+    assert response.state_updates.characters[0].character_name == "Brena Tideloft"
+    assert (
+        response.state_updates.characters[0].current_activity
+        == "following a wet bell-sound"
+    )
+    assert response.state_updates.characters[0].orrery_tags is not None
+    assert response.state_updates.characters[0].orrery_tags.applied_tags == [
+        "perceptive"
+    ]
     assert response.new_entities[0].name == "Marra Kest"
 
 

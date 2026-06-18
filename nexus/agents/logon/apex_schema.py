@@ -153,9 +153,7 @@ class CharacterTraits(BaseModel):
         if not extras:
             return data
 
-        normalized = {
-            key: value for key, value in data.items() if key in field_names
-        }
+        normalized = {key: value for key, value in data.items() if key in field_names}
         normalized.setdefault("wildcard_name", "legacy_extra_data")
         normalized.setdefault(
             "wildcard_description",
@@ -916,7 +914,135 @@ class StateUpdates(BaseModel):
         default_factory=list, description="Faction state updates"
     )
 
+    @model_validator(mode="before")
+    @classmethod
+    def expand_compact_updates(cls, data: Any) -> Any:
+        """Accept Anthropic's compact scalar wire shape for state updates."""
+
+        if not isinstance(data, dict) or "updates" not in data:
+            return data
+
+        expanded = {
+            "characters": list(data.get("characters") or []),
+            "relationships": list(data.get("relationships") or []),
+            "locations": list(data.get("locations") or []),
+            "factions": list(data.get("factions") or []),
+        }
+        for raw_update in data.get("updates") or []:
+            if not isinstance(raw_update, dict):
+                continue
+            kind = raw_update.get("kind")
+            if kind == "character":
+                update = _compact_character_state_update(raw_update)
+                if update:
+                    expanded["characters"].append(update)
+            elif kind == "place":
+                update = _compact_location_state_update(raw_update)
+                if update:
+                    expanded["locations"].append(update)
+            elif kind == "faction":
+                update = _compact_faction_state_update(raw_update)
+                if update:
+                    expanded["factions"].append(update)
+            elif kind == "relationship":
+                update = _compact_relationship_update(raw_update)
+                if update:
+                    expanded["relationships"].append(update)
+        return expanded
+
     model_config = ConfigDict(extra="forbid")
+
+
+def _compact_character_state_update(row: Dict[str, Any]) -> Dict[str, Any]:
+    update: Dict[str, Any] = {}
+    _copy_if_present(row, update, "entity_id", "character_id")
+    name = row.get("name") or row.get("character_name")
+    if name:
+        update["character_name"] = str(name)
+    status = row.get("status")
+    if status and "current_activity" not in row:
+        update["current_activity"] = str(status)
+    _copy_if_present(row, update, "current_location")
+    _copy_if_present(row, update, "current_activity")
+    _copy_if_present(row, update, "emotional_state")
+    _apply_compact_orrery_tags(row, update)
+    return update
+
+
+def _compact_location_state_update(row: Dict[str, Any]) -> Dict[str, Any]:
+    update: Dict[str, Any] = {}
+    _copy_if_present(row, update, "entity_id", "place_id")
+    name = row.get("name") or row.get("place_name")
+    if name:
+        update["place_name"] = str(name)
+    status = row.get("status")
+    if status and "current_conditions" not in row:
+        update["current_conditions"] = str(status)
+    _copy_if_present(row, update, "current_conditions")
+    notable_change = row.get("notable_change") or row.get("status")
+    if notable_change:
+        update["notable_changes"] = [str(notable_change)]
+    _apply_compact_orrery_tags(row, update)
+    return update
+
+
+def _compact_faction_state_update(row: Dict[str, Any]) -> Dict[str, Any]:
+    update: Dict[str, Any] = {}
+    _copy_if_present(row, update, "entity_id", "faction_id")
+    name = row.get("name") or row.get("faction_name")
+    if name:
+        update["faction_name"] = str(name)
+    recent_action = row.get("recent_action") or row.get("status")
+    if recent_action:
+        update["recent_actions"] = [str(recent_action)]
+    target = row.get("stance_target")
+    stance = row.get("stance")
+    if target and stance:
+        update["stance_changes"] = [{"target": str(target), "stance": str(stance)}]
+    _apply_compact_orrery_tags(row, update)
+    return update
+
+
+def _compact_relationship_update(row: Dict[str, Any]) -> Dict[str, Any]:
+    update: Dict[str, Any] = {}
+    _copy_if_present(row, update, "entity_id", "character1_id")
+    _copy_if_present(row, update, "other_entity_id", "character2_id")
+    name = row.get("name") or row.get("character1_name")
+    other_name = row.get("other_name") or row.get("character2_name")
+    if name:
+        update["character1_name"] = str(name)
+    if other_name:
+        update["character2_name"] = str(other_name)
+    _copy_if_present(row, update, "relationship_type")
+    _copy_if_present(row, update, "emotional_valence")
+    _copy_if_present(row, update, "dynamic")
+    _copy_if_present(row, update, "recent_events")
+    return update
+
+
+def _apply_compact_orrery_tags(
+    row: Dict[str, Any],
+    update: Dict[str, Any],
+) -> None:
+    tag_add = row.get("tag_add")
+    tag_clear = row.get("tag_clear")
+    if not tag_add and not tag_clear:
+        return
+    update["orrery_tags"] = {
+        "applied_tags": [str(tag_add)] if tag_add else [],
+        "tags_to_clear": [str(tag_clear)] if tag_clear else [],
+    }
+
+
+def _copy_if_present(
+    source: Dict[str, Any],
+    target: Dict[str, Any],
+    key: str,
+    target_key: Optional[str] = None,
+) -> None:
+    value = source.get(key)
+    if value is not None and value != "":
+        target[target_key or key] = value
 
 
 class OrreryReplacementStateDelta(BaseModel):

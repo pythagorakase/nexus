@@ -103,6 +103,25 @@ def read_event_types(dbname: Optional[str] = None) -> list[str]:
         conn.close()
 
 
+def read_pair_tag_library(dbname: Optional[str] = None) -> list[str]:
+    """Read active Orrery pair-tag names from the target slot database."""
+
+    conn = _connect(dbname)
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT tag
+                FROM pair_tags
+                WHERE deprecated = FALSE
+                ORDER BY tag
+                """
+            )
+            return [str(row["tag"]) for row in cur.fetchall()]
+    finally:
+        conn.close()
+
+
 def format_tag_library_for_prompt(
     dbname: Optional[str] = None,
     *,

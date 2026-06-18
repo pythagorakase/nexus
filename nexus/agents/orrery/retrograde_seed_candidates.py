@@ -626,9 +626,12 @@ def _expand_wire_relationship(relationship: Mapping[str, Any]) -> dict[str, Any]
 
 
 def _split_ref(value: str, *, parts: int) -> tuple[str, ...]:
-    split = value.split("|", parts - 1)
-    if len(split) != parts:
-        return tuple("" for _ in range(parts))
+    split = value.split("|")
+    if len(split) != parts or any(part == "" for part in split):
+        raise ValueError(
+            f"Malformed compact Retrograde ref {value!r}; expected {parts} "
+            "non-empty pipe-delimited parts"
+        )
     return tuple(split)
 
 

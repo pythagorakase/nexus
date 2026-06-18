@@ -154,6 +154,22 @@ def test_seed_candidate_wire_payload_coerces_to_full_contract() -> None:
     assert response.selection_notes is None
 
 
+def test_seed_candidate_wire_payload_rejects_malformed_ref() -> None:
+    """Malformed compact refs stay retryable instead of becoming empty hints."""
+
+    vocabulary = _seed_test_vocabulary()
+    payload = _valid_response_payload(vocabulary)
+    payload["candidates"][0]["mechanical_hints"]["single_entity_tags"][0] = {
+        "entity_ref": "Mara",
+        "tag_ref": "character",
+        "supporting_event_ref": "event_001",
+        "rationale": "",
+    }
+
+    with pytest.raises(ValueError, match="Malformed compact Retrograde ref"):
+        coerce_seed_candidate_response_payload(payload)
+
+
 def test_seed_candidate_response_rejects_prompt_visible_mechanics() -> None:
     """Prompt-visible-only tags may guide prose but cannot become writes."""
 

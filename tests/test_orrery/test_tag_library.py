@@ -52,6 +52,13 @@ def test_format_tag_library_rejects_unknown_entity_kind() -> None:
         )
 
 
+def test_read_pair_tag_library_uses_shared_connection(monkeypatch) -> None:
+    rows = [{"tag": "hiding"}, {"tag": "shelters"}]
+    monkeypatch.setattr(tag_library, "_connect", lambda _dbname: _Conn(rows))
+
+    assert tag_library.read_pair_tag_library("save_05") == ["hiding", "shelters"]
+
+
 class _Conn:
     def __init__(self, rows: list[dict[str, Any]]) -> None:
         self.rows = rows
@@ -80,7 +87,7 @@ class _Cursor:
     def __exit__(self, *_exc: object) -> None:
         return None
 
-    def execute(self, _sql: str, params: tuple[object, ...]) -> None:
+    def execute(self, _sql: str, params: tuple[object, ...] = ()) -> None:
         self.params = params
 
     def fetchall(self) -> list[dict[str, Any]]:
