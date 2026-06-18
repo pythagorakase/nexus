@@ -14,6 +14,7 @@ from nexus.agents.logon.apex_schema import (
     StateUpdates,
 )
 from nexus.agents.logon.orrery_tag_schema import (
+    storyteller_anthropic_output_config,
     storyteller_openai_text_format,
     storyteller_schema_with_runtime_tag_enums,
 )
@@ -217,6 +218,89 @@ def test_storyteller_openai_text_format_wraps_runtime_schema(monkeypatch) -> Non
     assert text_format["schema"]["$defs"]["OrreryTagBestowalCharacter"]["properties"][
         "applied_tags"
     ]["items"]["enum"] == ["human"]
+
+
+def test_storyteller_anthropic_output_config_uses_compact_extended_schema(
+    monkeypatch,
+) -> None:
+    """Anthropic extended turns avoid the full DB-mirroring grammar."""
+
+    from nexus.agents.logon import orrery_tag_schema
+    from nexus.agents.logon.apex_schema import StorytellerResponseExtended
+
+    entries = [
+        _tag_entry("character", "bodyform", "human"),
+        _tag_entry("character", "disposition", "perceptive"),
+        _tag_entry("place", "place_class", "haven"),
+        _tag_entry("faction", "ideology", "loyalist"),
+    ]
+    monkeypatch.setattr(
+        orrery_tag_schema,
+        "read_tag_library",
+        lambda _dbname: entries,
+    )
+    monkeypatch.setattr(
+        orrery_tag_schema,
+        "_read_pair_tags",
+        lambda _dbname: ["hiding", "shelters"],
+    )
+
+    output_config = storyteller_anthropic_output_config(
+        StorytellerResponseExtended,
+        "save_05",
+    )
+
+    assert output_config is not None
+    schema = output_config["format"]["schema"]
+    assert "$defs" not in schema
+    assert set(schema["properties"]) == {
+        "narrative",
+        "choices",
+        "authorial_directives",
+        "chunk_metadata",
+        "referenced_entities",
+        "state_updates",
+        "operations",
+        "orrery_adjudications",
+        "new_entities",
+        "reasoning",
+    }
+    assert schema["properties"]["state_updates"]["properties"] == {}
+    entity_schema = schema["properties"]["new_entities"]["items"]
+    assert entity_schema["properties"]["tag_hints"]["items"]["enum"] == [
+        "haven",
+        "human",
+        "loyalist",
+        "perceptive",
+    ]
+    pair_tag_schema = entity_schema["properties"]["pair_tag_hints"]["items"]
+    assert pair_tag_schema["properties"]["tag"]["enum"] == ["hiding", "shelters"]
+
+    response = StorytellerResponseExtended.model_validate(
+        {
+            "narrative": "Brena follows the wet bell-sound into the stacks.",
+            "choices": ["Follow the footprints.", "Call for Odile."],
+            "authorial_directives": ["Retrieve the lower stacks layout."],
+            "chunk_metadata": {},
+            "referenced_entities": {},
+            "state_updates": {},
+            "operations": None,
+            "orrery_adjudications": [],
+            "new_entities": [
+                {
+                    "kind": "character",
+                    "name": "Marra Kest",
+                    "summary": "A drowned clerk animated by echo and current.",
+                    "tag_hints": [],
+                    "pair_tag_hints": [],
+                }
+            ],
+            "reasoning": None,
+        }
+    )
+
+    assert response.state_updates.characters == []
+    assert response.new_entities[0].name == "Marra Kest"
 
 
 def _tag_entry(entity_kind: str, category: str, tag: str) -> TagLibraryEntry:

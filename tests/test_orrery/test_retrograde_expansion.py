@@ -10,10 +10,13 @@ from pydantic import ValidationError
 
 from nexus.agents.orrery.retrograde_expansion import (
     RETROGRADE_EXPANSION_RESPONSE_SCHEMA_VERSION,
+    RetrogradeExpansionWireResponse,
     RetrogradeExpansionValidationError,
+    coerce_expansion_response_payload,
     render_expansion_prompt,
     validate_expansion_plan,
 )
+from nexus.api.native_structured_output import anthropic_json_schema
 from nexus.agents.orrery.retrograde_packet import build_seed_generation_request
 from nexus.agents.orrery.retrograde_seed_candidates import (
     SEED_CANDIDATE_RESPONSE_SCHEMA_VERSION,
@@ -43,6 +46,91 @@ def test_expansion_plan_accepts_row_shaped_dry_run_output() -> None:
     assert response.event_plan[0].event_type == vocabulary["event_types"][0]
 
 
+def test_wire_expansion_response_omits_deterministic_fields() -> None:
+    """Provider grammar excludes fields the runtime already knows."""
+
+    schema = anthropic_json_schema(RetrogradeExpansionWireResponse)
+
+    assert set(schema["properties"]) == {
+        "event_plan",
+        "mechanical_plan",
+        "thread_plan",
+        "coverage_notes",
+    }
+    assert "selected_seed_ids" not in schema["properties"]
+    assert "commit_readiness" not in schema["properties"]
+
+
+def test_wire_expansion_response_coerces_to_full_contract() -> None:
+    vocabulary = _expansion_test_vocabulary()
+    payload = _valid_expansion(vocabulary)
+    wire_payload = {
+        "event_plan": [
+            {
+                **payload["event_plan"][0],
+                "location_ref": "",
+                "magnitude": "",
+            }
+        ],
+        "mechanical_plan": [
+            {
+                "plan": "entity_tag",
+                "subject_ref": payload["entity_tag_plan"][0]["entity_ref"],
+                "subject_kind": payload["entity_tag_plan"][0]["entity_kind"],
+                "tag": payload["entity_tag_plan"][0]["tag"],
+                "object_ref": "",
+                "object_kind": "",
+                "relationship_type": "",
+                "source_event_ref": payload["entity_tag_plan"][0]["source_event_ref"],
+                "rationale": payload["entity_tag_plan"][0].get("rationale", ""),
+            },
+            {
+                "plan": "pair_tag",
+                "subject_ref": payload["pair_tag_plan"][0]["subject_ref"],
+                "subject_kind": payload["pair_tag_plan"][0]["subject_kind"],
+                "tag": payload["pair_tag_plan"][0]["tag"],
+                "object_ref": payload["pair_tag_plan"][0]["object_ref"],
+                "object_kind": payload["pair_tag_plan"][0]["object_kind"],
+                "relationship_type": "",
+                "source_event_ref": "",
+                "rationale": payload["pair_tag_plan"][0].get("rationale", ""),
+            },
+            {
+                "plan": "relationship",
+                "subject_ref": payload["relationship_plan"][0]["subject_ref"],
+                "subject_kind": payload["relationship_plan"][0]["subject_kind"],
+                "tag": "",
+                "object_ref": payload["relationship_plan"][0]["object_ref"],
+                "object_kind": payload["relationship_plan"][0]["object_kind"],
+                "relationship_type": payload["relationship_plan"][0][
+                    "relationship_type"
+                ],
+                "source_event_ref": payload["relationship_plan"][0]["source_event_ref"],
+                "rationale": payload["relationship_plan"][0].get("rationale", ""),
+            },
+        ],
+        "thread_plan": [
+            {
+                **payload["thread_plan"][0],
+                "note": "",
+            }
+        ],
+        "coverage_notes": payload["coverage_notes"],
+    }
+
+    response = coerce_expansion_response_payload(
+        wire_payload,
+        selected_seed_ids=["seed_001"],
+    )
+
+    assert response.schema_version == RETROGRADE_EXPANSION_RESPONSE_SCHEMA_VERSION
+    assert response.selected_seed_ids == ["seed_001"]
+    assert response.commit_readiness.writes == "none"
+    assert len(response.entity_tag_plan) == 1
+    assert len(response.pair_tag_plan) == 1
+    assert len(response.relationship_plan) == 1
+
+
 def test_expansion_prompt_includes_selected_seeds_and_commit_blockers() -> None:
     """R6 prompt rendering names the dry-run boundary and selected seed surface."""
 
@@ -55,9 +143,11 @@ def test_expansion_prompt_includes_selected_seeds_and_commit_blockers() -> None:
     assert "RETROGRADE_EXPANSION_REQUEST" in prompt
     assert "seed_001" in prompt
     assert "pre_game_tick_chunk_id" in prompt
-    assert "relationship_plan currently supports only character->character" in prompt
+    assert (
+        "relationship mechanics currently support only character->character" in prompt
+    )
     assert "registered_tags_by_entity_kind" in prompt
-    assert RETROGRADE_EXPANSION_RESPONSE_SCHEMA_VERSION in prompt
+    assert "deterministic_fields_filled_by_runtime" in prompt
 
 
 def test_expansion_plan_rejects_non_selected_event_seed() -> None:

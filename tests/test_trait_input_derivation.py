@@ -26,9 +26,11 @@ from nexus.api.trait_compiler_schemas import (
     TraitCompileInputs,
 )
 from nexus.api.trait_input_derivation import (
+    coerce_selected_trait_inputs,
     derived_input_issues,
     render_trait_input_prompt,
     selected_canonical_traits,
+    selected_trait_compile_inputs_model,
 )
 
 
@@ -78,6 +80,38 @@ def _setting() -> SettingCard:
 def test_selected_canonical_traits_maps_reputation_to_fame() -> None:
     character = _character(["patron", "reputation", "dependents"])
     assert selected_canonical_traits(character) == ["patron", "fame", "dependents"]
+
+
+def test_selected_trait_schema_contains_only_selected_fields() -> None:
+    schema_model = selected_trait_compile_inputs_model(
+        ["patron", "dependents", "resources"]
+    )
+    schema = schema_model.model_json_schema()
+
+    assert set(schema["properties"]) == {"patron", "dependents", "resources"}
+    assert "status" not in schema["properties"]
+    assert "obligations" not in schema["properties"]
+
+
+def test_selected_trait_schema_coerces_to_full_contract() -> None:
+    schema_model = selected_trait_compile_inputs_model(
+        ["patron", "dependents", "resources"]
+    )
+    selected_output = schema_model(
+        patron=PatronTraitInput(name="Doctor Imari Voss"),
+        dependents=DependentsTraitInput(
+            targets=[DependentTargetInput(name="Juno Reyes")]
+        ),
+        resources=SingleEntityTraitInput(level="comfortable"),
+    )
+
+    coerced = coerce_selected_trait_inputs(selected_output)
+
+    assert isinstance(coerced, TraitCompileInputs)
+    assert coerced.patron is not None
+    assert coerced.dependents is not None
+    assert coerced.resources is not None
+    assert coerced.status is None
 
 
 def test_valid_inputs_produce_no_issues() -> None:

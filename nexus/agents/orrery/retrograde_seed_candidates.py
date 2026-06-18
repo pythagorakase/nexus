@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import Annotated, Any, Literal, Mapping, Optional, cast
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, create_model, model_validator
 
 from nexus.agents.orrery.retrograde_vocabulary import (
     ENTITY_REF_MAX_LENGTH,
@@ -130,6 +130,95 @@ class RetrogradeMechanicalHints(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
 
+class RetrogradeWireSingleEntityTagHint(BaseModel):
+    """Provider-facing tag hint using a grammar-safe kind/tag enum ref."""
+
+    entity_ref: EntityRef
+    tag_ref: str = Field(
+        min_length=1,
+        description="Exact single-entity tag ref in the form entity_kind|tag.",
+    )
+    supporting_event_ref: str = Field(
+        default="",
+        description="Event ref for event-anchored tags, or empty string.",
+    )
+    rationale: str = Field(default="")
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+
+class RetrogradeWirePairTagHint(BaseModel):
+    """Provider-facing pair tag hint using a grammar-safe kind/tag enum ref."""
+
+    subject_ref: EntityRef
+    tag_ref: str = Field(
+        min_length=1,
+        description="Exact pair tag ref in the form subject_kind|object_kind|tag.",
+    )
+    object_ref: EntityRef
+    rationale: str = Field(default="")
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+
+class RetrogradeWireRelationshipHint(BaseModel):
+    """Provider-facing relationship hint using a grammar-safe kind/type ref."""
+
+    subject_ref: EntityRef
+    relationship_ref: str = Field(
+        min_length=1,
+        description=(
+            "Exact relationship ref in the form "
+            "subject_kind|object_kind|relationship_type."
+        ),
+    )
+    object_ref: EntityRef
+    rationale: str = Field(default="")
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+
+class RetrogradeWireMechanicalHints(BaseModel):
+    """Provider-facing hints with dynamic enum fields injected at runtime."""
+
+    events: list[RetrogradeSeedEventHint] = Field(default_factory=list)
+    single_entity_tags: list[RetrogradeWireSingleEntityTagHint] = Field(
+        default_factory=list
+    )
+    pair_tags: list[RetrogradeWirePairTagHint] = Field(default_factory=list)
+    relationships: list[RetrogradeWireRelationshipHint] = Field(default_factory=list)
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+
+class RetrogradeWireSeedCandidate(BaseModel):
+    """Provider-facing seed candidate with compact mechanical refs."""
+
+    seed_id: str = Field(min_length=1)
+    summary: str = Field(min_length=1, max_length=1200)
+    origin_friction: Literal["low", "medium", "high"]
+    present_leaf_anchor: str = Field(min_length=1, max_length=800)
+    coverage_functions: list[str] = Field(default_factory=list)
+    mechanical_hints: RetrogradeWireMechanicalHints = Field(
+        default_factory=RetrogradeWireMechanicalHints
+    )
+    defer_or_reject_if: list[str] = Field(default_factory=list)
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+
+class RetrogradeWireSeedCandidateResponse(BaseModel):
+    """Provider-facing seed response with compact mechanical refs."""
+
+    schema_version: SeedCandidateSchemaVersion = SEED_CANDIDATE_RESPONSE_SCHEMA_VERSION
+    candidates: list[RetrogradeWireSeedCandidate] = Field(default_factory=list)
+    selected_seed_ids: list[str] = Field(default_factory=list)
+    rejected_seed_ids: list[str] = Field(default_factory=list)
+    selection_notes: str = Field(default="")
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+
 class RetrogradeSeedCandidate(BaseModel):
     """One over-generated Retrograde seed candidate."""
 
@@ -222,6 +311,94 @@ def seed_candidate_response_schema() -> dict[str, Any]:
     return RetrogradeSeedCandidateResponse.model_json_schema()
 
 
+def seed_candidate_wire_response_model(
+    *,
+    seed_generation_request: Mapping[str, Any],
+    vocabulary: SeedEligibleVocabulary,
+) -> type[BaseModel]:
+    """Build the provider-facing R4/R5 schema from live Orrery vocabulary."""
+
+    event_hint_model = create_model(
+        "RetrogradeWireSeedEventHintRuntime",
+        __base__=RetrogradeSeedEventHint,
+        event_type=(
+            _literal_or_str(vocabulary["event_types"]),
+            Field(description="Registered Orrery event type."),
+        ),
+    )
+    single_tag_model = create_model(
+        "RetrogradeWireSingleEntityTagHintRuntime",
+        __base__=RetrogradeWireSingleEntityTagHint,
+        tag_ref=(
+            _literal_or_str(_single_entity_tag_refs(vocabulary)),
+            Field(
+                description=(
+                    "Exact single-entity tag ref from "
+                    "allowed_vocabulary.single_entity_tag_refs."
+                )
+            ),
+        ),
+    )
+    pair_tag_model = create_model(
+        "RetrogradeWirePairTagHintRuntime",
+        __base__=RetrogradeWirePairTagHint,
+        tag_ref=(
+            _literal_or_str(_pair_tag_refs(vocabulary)),
+            Field(
+                description=(
+                    "Exact pair tag ref from allowed_vocabulary.pair_tag_refs."
+                )
+            ),
+        ),
+    )
+    relationship_model = create_model(
+        "RetrogradeWireRelationshipHintRuntime",
+        __base__=RetrogradeWireRelationshipHint,
+        relationship_ref=(
+            _literal_or_str(_relationship_refs(vocabulary)),
+            Field(
+                description=(
+                    "Exact relationship ref from "
+                    "allowed_vocabulary.relationship_refs."
+                )
+            ),
+        ),
+    )
+    mechanical_hints_model = create_model(
+        "RetrogradeWireMechanicalHintsRuntime",
+        __base__=RetrogradeWireMechanicalHints,
+        events=(list[event_hint_model], Field(default_factory=list)),
+        single_entity_tags=(list[single_tag_model], Field(default_factory=list)),
+        pair_tags=(list[pair_tag_model], Field(default_factory=list)),
+        relationships=(list[relationship_model], Field(default_factory=list)),
+    )
+    coverage_type = _literal_or_str(_coverage_function_ids(seed_generation_request))
+    candidate_model = create_model(
+        "RetrogradeWireSeedCandidateRuntime",
+        __base__=RetrogradeWireSeedCandidate,
+        coverage_functions=(list[coverage_type], Field(default_factory=list)),
+        mechanical_hints=(
+            mechanical_hints_model,
+            Field(default_factory=mechanical_hints_model),
+        ),
+    )
+    return create_model(
+        "RetrogradeWireSeedCandidateResponseRuntime",
+        __base__=RetrogradeWireSeedCandidateResponse,
+        candidates=(list[candidate_model], Field(default_factory=list)),
+    )
+
+
+def coerce_seed_candidate_response_payload(
+    payload: Mapping[str, Any],
+) -> RetrogradeSeedCandidateResponse:
+    """Expand provider-facing mechanical refs into the full app contract."""
+
+    data = _expand_wire_seed_candidate_payload(payload)
+    data.setdefault("schema_version", SEED_CANDIDATE_RESPONSE_SCHEMA_VERSION)
+    return RetrogradeSeedCandidateResponse.model_validate(data)
+
+
 def render_seed_generation_prompt(
     *,
     seed_generation_request: Mapping[str, Any],
@@ -267,7 +444,7 @@ def validate_seed_candidate_response(
 ) -> RetrogradeSeedCandidateResponse:
     """Validate a Skald seed response against request budgets and vocabulary."""
 
-    response = RetrogradeSeedCandidateResponse.model_validate(payload)
+    response = coerce_seed_candidate_response_payload(payload)
     issues = _response_contract_issues(
         response=response,
         seed_generation_request=seed_generation_request,
@@ -307,6 +484,10 @@ def generate_seed_candidates_with_skald(
             seed_generation_request=seed_generation_request,
             vocabulary=vocabulary,
         )
+    schema_model = seed_candidate_wire_response_model(
+        seed_generation_request=seed_generation_request,
+        vocabulary=vocabulary,
+    )
 
     selected_model = model_name or get_new_story_model()
     provider = build_native_structured_provider(
@@ -322,11 +503,14 @@ def generate_seed_candidates_with_skald(
 
     async def _validate_output(
         _ctx: Any,
-        output: RetrogradeSeedCandidateResponse,
+        output: BaseModel,
     ) -> RetrogradeSeedCandidateResponse:
         try:
+            payload = coerce_seed_candidate_response_payload(
+                output.model_dump(mode="json")
+            )
             return validate_seed_candidate_response(
-                payload=output.model_dump(mode="json"),
+                payload=payload.model_dump(mode="json"),
                 seed_generation_request=seed_generation_request,
                 vocabulary=vocabulary,
             )
@@ -340,7 +524,7 @@ def generate_seed_candidates_with_skald(
     provider.output_validator = _validate_output
     response, _llm_response = provider.get_structured_completion(
         prompt,
-        RetrogradeSeedCandidateResponse,
+        schema_model,
     )
     if not isinstance(response, RetrogradeSeedCandidateResponse):
         raise TypeError(
@@ -353,6 +537,168 @@ def generate_seed_candidates_with_skald(
         "prompt_chars": len(prompt),
         "seed_candidate_response": response.model_dump(mode="json"),
     }
+
+
+def _expand_wire_seed_candidate_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
+    data = dict(payload)
+    candidates = data.get("candidates")
+    if not isinstance(candidates, list):
+        return data
+
+    expanded_candidates = []
+    for candidate in candidates:
+        candidate_row = dict(candidate)
+        hints = candidate_row.get("mechanical_hints")
+        if isinstance(hints, Mapping):
+            candidate_row["mechanical_hints"] = _expand_wire_mechanical_hints(hints)
+        expanded_candidates.append(candidate_row)
+
+    data["candidates"] = expanded_candidates
+    if data.get("selection_notes") == "":
+        data["selection_notes"] = None
+    return data
+
+
+def _expand_wire_mechanical_hints(hints: Mapping[str, Any]) -> dict[str, Any]:
+    data = dict(hints)
+    data["single_entity_tags"] = [
+        _expand_wire_single_entity_tag(tag)
+        for tag in data.get("single_entity_tags") or []
+    ]
+    data["pair_tags"] = [
+        _expand_wire_pair_tag(tag) for tag in data.get("pair_tags") or []
+    ]
+    data["relationships"] = [
+        _expand_wire_relationship(relationship)
+        for relationship in data.get("relationships") or []
+    ]
+    return data
+
+
+def _expand_wire_single_entity_tag(tag: Mapping[str, Any]) -> dict[str, Any]:
+    if "tag_ref" not in tag:
+        return dict(tag)
+
+    entity_kind, tag_name = _split_ref(str(tag.get("tag_ref", "")), parts=2)
+    return {
+        "entity_ref": tag.get("entity_ref"),
+        "entity_kind": entity_kind,
+        "tag": tag_name,
+        "supporting_event_ref": _none_if_empty(tag.get("supporting_event_ref")),
+        "rationale": _none_if_empty(tag.get("rationale")),
+    }
+
+
+def _expand_wire_pair_tag(tag: Mapping[str, Any]) -> dict[str, Any]:
+    if "tag_ref" not in tag:
+        return dict(tag)
+
+    subject_kind, object_kind, tag_name = _split_ref(
+        str(tag.get("tag_ref", "")),
+        parts=3,
+    )
+    return {
+        "subject_ref": tag.get("subject_ref"),
+        "subject_kind": subject_kind,
+        "tag": tag_name,
+        "object_ref": tag.get("object_ref"),
+        "object_kind": object_kind,
+        "rationale": _none_if_empty(tag.get("rationale")),
+    }
+
+
+def _expand_wire_relationship(relationship: Mapping[str, Any]) -> dict[str, Any]:
+    if "relationship_ref" not in relationship:
+        return dict(relationship)
+
+    subject_kind, object_kind, relationship_type = _split_ref(
+        str(relationship.get("relationship_ref", "")),
+        parts=3,
+    )
+    return {
+        "subject_ref": relationship.get("subject_ref"),
+        "subject_kind": subject_kind,
+        "relationship_type": relationship_type,
+        "object_ref": relationship.get("object_ref"),
+        "object_kind": object_kind,
+        "rationale": _none_if_empty(relationship.get("rationale")),
+    }
+
+
+def _split_ref(value: str, *, parts: int) -> tuple[str, ...]:
+    split = value.split("|", parts - 1)
+    if len(split) != parts:
+        return tuple("" for _ in range(parts))
+    return tuple(split)
+
+
+def _none_if_empty(value: Any) -> Any:
+    if value == "":
+        return None
+    return value
+
+
+def _literal_or_str(values: list[str]) -> Any:
+    unique_values = tuple(dict.fromkeys(str(value) for value in values if value))
+    if not unique_values:
+        return str
+    return Literal.__getitem__(unique_values)
+
+
+def _coverage_function_ids(seed_generation_request: Mapping[str, Any]) -> list[str]:
+    return [
+        str(function.get("id"))
+        for function in seed_generation_request.get("coverage_functions", [])
+        if isinstance(function, Mapping) and function.get("id")
+    ]
+
+
+def _single_entity_tag_refs(vocabulary: SeedEligibleVocabulary) -> list[str]:
+    tags_by_entity_kind = {
+        kind: set(tags)
+        for kind, tags in vocabulary.get("registered_tags_by_entity_kind", {}).items()
+    }
+    allowed_mechanical_tags = set(
+        vocabulary.get("registered_tags_by_seed_policy", {}).get("stable_seed", [])
+    ) | set(
+        vocabulary.get("registered_tags_by_seed_policy", {}).get("event_anchored", [])
+    )
+    if not tags_by_entity_kind:
+        tags_by_entity_kind = {
+            kind: set(vocabulary.get("registered_single_entity_tags", []))
+            for kind in vocabulary["entity_kinds"]
+        }
+
+    refs: list[str] = []
+    for kind in vocabulary["entity_kinds"]:
+        for tag in sorted(
+            tags_by_entity_kind.get(kind, set()) & allowed_mechanical_tags
+        ):
+            refs.append(_join_ref(kind, tag))
+    return refs
+
+
+def _pair_tag_refs(vocabulary: SeedEligibleVocabulary) -> list[str]:
+    refs: list[str] = []
+    for definition in vocabulary["multi_entity_tag_definitions"]:
+        tag = str(definition["tag"])
+        for subject_kind in definition["subject_kinds"]:
+            for object_kind in definition["object_kinds"]:
+                refs.append(_join_ref(subject_kind, object_kind, tag))
+    return refs
+
+
+def _relationship_refs(vocabulary: SeedEligibleVocabulary) -> list[str]:
+    refs: list[str] = []
+    for subject_kind in vocabulary["entity_kinds"]:
+        for object_kind in vocabulary["entity_kinds"]:
+            for relationship_type in vocabulary["relationship_types"]:
+                refs.append(_join_ref(subject_kind, object_kind, relationship_type))
+    return refs
+
+
+def _join_ref(*parts: str) -> str:
+    return "|".join(str(part) for part in parts)
 
 
 def _response_contract_issues(
@@ -656,6 +1002,9 @@ def _prompt_vocabulary(vocabulary: SeedEligibleVocabulary) -> dict[str, Any]:
             "registered_tags_by_entity_kind", {}
         ),
         "multi_entity_tag_definitions": vocabulary["multi_entity_tag_definitions"],
+        "single_entity_tag_refs": _single_entity_tag_refs(vocabulary),
+        "pair_tag_refs": _pair_tag_refs(vocabulary),
+        "relationship_refs": _relationship_refs(vocabulary),
     }
 
 
@@ -686,10 +1035,18 @@ def _prompt_response_contract() -> dict[str, Any]:
         ],
         "mechanical_hint_fields": [
             "events",
-            "single_entity_tags",
-            "pair_tags",
-            "relationships",
+            "single_entity_tags: entity_ref, tag_ref, supporting_event_ref, rationale",
+            "pair_tags: subject_ref, tag_ref, object_ref, rationale",
+            "relationships: subject_ref, relationship_ref, object_ref, rationale",
         ],
+        "compact_ref_format": {
+            "single_entity_tags.tag_ref": "entity_kind|tag",
+            "pair_tags.tag_ref": "subject_kind|object_kind|tag",
+            "relationships.relationship_ref": (
+                "subject_kind|object_kind|relationship_type"
+            ),
+            "absence": "Use empty strings for absent supporting_event_ref/rationale.",
+        },
     }
 
 
@@ -703,12 +1060,18 @@ def _hard_validation_rules() -> list[str]:
             "inside the same candidate."
         ),
         (
+            "single_entity_tags use tag_ref values from "
+            "allowed_vocabulary.single_entity_tag_refs; this encodes the legal "
+            "entity_kind|tag pair."
+        ),
+        (
             "Prompt-visible-only tags may influence prose but must not appear in "
             "mechanical_hints.single_entity_tags."
         ),
         (
-            "Pair tags must use the exact subject_kind/object_kind constraints "
-            "from multi_entity_tag_definitions."
+            "Pair tags use tag_ref values from allowed_vocabulary.pair_tag_refs; "
+            "relationships use relationship_ref values from "
+            "allowed_vocabulary.relationship_refs."
         ),
         (
             "Single-entity tags must be registered for the tagged entity_kind "

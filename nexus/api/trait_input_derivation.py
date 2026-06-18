@@ -19,7 +19,9 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, List, Optional
+from typing import TYPE_CHECKING, Any, List, Optional, Type
+
+from pydantic import BaseModel, ConfigDict, create_model
 
 from nexus.agents.orrery.status_family import STATUS_LEVELS
 from nexus.api.trait_compiler import FAME_TAGS, RESOURCE_TAGS
@@ -40,6 +42,18 @@ PATRON_FUNCTIONS = ("mentors", "sponsors", "protects", "authority_over")
 
 # Trait fields on TraitCompileInputs that target other entities by name.
 _RELATIONSHIP_TRAITS = ("allies", "contacts", "enemies")
+_DERIVABLE_TRAITS = (
+    "resources",
+    "fame",
+    "status",
+    "allies",
+    "contacts",
+    "enemies",
+    "domain",
+    "patron",
+    "dependents",
+    "obligations",
+)
 
 
 def selected_canonical_traits(character: "CharacterSheet") -> List[str]:
@@ -48,6 +62,35 @@ def selected_canonical_traits(character: "CharacterSheet") -> List[str]:
     return [
         canonical_trait_name(str(trait.name)) for trait in character.get_trait_entries()
     ]
+
+
+def selected_trait_compile_inputs_model(selected: List[str]) -> Type[BaseModel]:
+    """Return a compact schema model containing only selected trait fields."""
+
+    fields: dict[str, tuple[Any, None]] = {}
+    for trait in selected:
+        canonical = canonical_trait_name(trait)
+        if canonical not in _DERIVABLE_TRAITS:
+            raise ValueError(f"Cannot derive unknown trait input field: {trait!r}")
+        source_field = TraitCompileInputs.model_fields[canonical]
+        fields[canonical] = (source_field.annotation, None)
+
+    suffix = "".join(part.title() for part in fields) or "Empty"
+    return create_model(
+        f"TraitCompileInputsSelected{suffix}",
+        __config__=ConfigDict(str_strip_whitespace=True, extra="forbid"),
+        **fields,
+    )
+
+
+def coerce_selected_trait_inputs(output: BaseModel) -> TraitCompileInputs:
+    """Convert a selected-trait schema response into the full app contract."""
+
+    if isinstance(output, TraitCompileInputs):
+        return output
+    return TraitCompileInputs.model_validate(
+        output.model_dump(mode="json", exclude_none=True)
+    )
 
 
 def derived_input_issues(
@@ -222,6 +265,7 @@ def derive_trait_compile_inputs(
 
     selected = selected_canonical_traits(character)
     prompt = render_trait_input_prompt(character=character, setting=setting)
+    schema_model = selected_trait_compile_inputs_model(selected)
 
     provider: Any = build_native_structured_provider(
         model=model_name,
@@ -233,22 +277,21 @@ def derive_trait_compile_inputs(
         structured_output_retries=retries,
     )
 
-    async def _validate_output(
-        _ctx: Any, output: TraitCompileInputs
-    ) -> TraitCompileInputs:
-        issues = derived_input_issues(output, selected=selected)
+    async def _validate_output(_ctx: Any, output: BaseModel) -> TraitCompileInputs:
+        trait_inputs = coerce_selected_trait_inputs(output)
+        issues = derived_input_issues(trait_inputs, selected=selected)
         if issues:
             formatted = "\n".join(f"- {issue}" for issue in issues)
             raise ModelRetry(
                 "Derived trait inputs violate the hard rules. Fix every "
                 f"issue and resubmit:\n{formatted}"
             )
-        return output
+        return trait_inputs
 
     provider.output_validator = _validate_output
     output, _llm_response = provider.get_structured_completion(
         prompt,
-        TraitCompileInputs,
+        schema_model,
     )
     if not isinstance(output, TraitCompileInputs):
         raise TypeError(

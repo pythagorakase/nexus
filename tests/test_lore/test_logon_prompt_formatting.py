@@ -269,6 +269,7 @@ def test_context_prompt_includes_orrery_bleed_menu_controls() -> None:
     assert "=== ORRERY AMBIENT PERIPHERALS ===" in prompt
     assert "optional ambient peripherals from off-screen events" in prompt
     assert "Ignore freely, render subtly" in prompt
+    assert "include that exact name at least once" in prompt
     assert "[digital] Mara: street cameras briefly lose Mara" in prompt
 
 

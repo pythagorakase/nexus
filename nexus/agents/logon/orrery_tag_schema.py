@@ -4,8 +4,11 @@ from __future__ import annotations
 
 from copy import deepcopy
 import logging
-from typing import Any, Dict, Mapping, Optional, Type
+import os
+from typing import Any, Dict, Mapping, Optional, Sequence, Type
 
+import psycopg2
+from psycopg2.extras import RealDictCursor
 from pydantic import BaseModel
 
 from nexus.agents.orrery.tag_library import read_tag_library
@@ -49,10 +52,79 @@ def storyteller_anthropic_output_config(
 ) -> Optional[Dict[str, Any]]:
     """Build an Anthropic output_config with live tag enums for LOGON responses."""
 
+    compact_schema = storyteller_anthropic_compact_schema(schema_model, dbname)
+    if compact_schema is not None:
+        return anthropic_output_config(schema_model, schema=compact_schema)
+
     schema = storyteller_schema_with_runtime_tag_enums(schema_model, dbname)
     if schema is None:
         return None
     return anthropic_output_config(schema_model, schema=schema)
+
+
+def storyteller_anthropic_compact_schema(
+    schema_model: Type[BaseModel],
+    dbname: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """Return a compact Anthropic wire schema for extended storyteller turns."""
+
+    if schema_model.__name__ != "StorytellerResponseExtended":
+        return None
+    tag_names, pair_tag_names = _compact_new_entity_vocabulary(dbname)
+
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "narrative": {
+                "type": "string",
+                "description": "The narrative prose.",
+            },
+            "choices": _string_array_schema(
+                "Player choices, each as a complete actionable option."
+            ),
+            "authorial_directives": _string_array_schema(
+                "Focused retrieval priorities for the next turn."
+            ),
+            "chunk_metadata": _empty_object_schema(
+                "Default chunk metadata; runtime fills normal chronology."
+            ),
+            "referenced_entities": _empty_object_schema(
+                "Default referenced entity set; leave empty in compact Anthropic wire."
+            ),
+            "state_updates": _empty_object_schema(
+                "Default state updates; leave empty unless using full provider schema."
+            ),
+            "operations": _nullable_schema(_empty_object_schema("No operations.")),
+            "orrery_adjudications": {
+                "type": "array",
+                "items": _compact_orrery_adjudication_schema(),
+                "description": "Optional defer/replace/void rulings.",
+            },
+            "new_entities": {
+                "type": "array",
+                "items": _compact_new_entity_schema(tag_names, pair_tag_names),
+                "description": (
+                    "Sparing declarations for newly introduced persistent entities."
+                ),
+            },
+            "reasoning": _nullable_schema(
+                {"type": "string", "description": "Optional debug reasoning."}
+            ),
+        },
+        "required": [
+            "narrative",
+            "choices",
+            "authorial_directives",
+            "chunk_metadata",
+            "referenced_entities",
+            "state_updates",
+            "operations",
+            "orrery_adjudications",
+            "new_entities",
+            "reasoning",
+        ],
+    }
 
 
 def storyteller_schema_with_runtime_tag_enums(
@@ -103,6 +175,160 @@ def storyteller_schema_with_runtime_tag_enums(
     return schema if replaced else None
 
 
+def _string_array_schema(description: str) -> Dict[str, Any]:
+    return {
+        "type": "array",
+        "items": {"type": "string"},
+        "description": description,
+    }
+
+
+def _enum_string_array_schema(
+    description: str,
+    values: Sequence[str],
+) -> Dict[str, Any]:
+    items: Dict[str, Any] = {"type": "string"}
+    if values:
+        items["enum"] = list(values)
+    return {
+        "type": "array",
+        "items": items,
+        "description": description,
+    }
+
+
+def _enum_string_schema(values: Sequence[str]) -> Dict[str, Any]:
+    schema: Dict[str, Any] = {"type": "string"}
+    if values:
+        schema["enum"] = list(values)
+    return schema
+
+
+def _empty_object_schema(description: str) -> Dict[str, Any]:
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {},
+        "description": description,
+    }
+
+
+def _nullable_schema(schema: Mapping[str, Any]) -> Dict[str, Any]:
+    return {"anyOf": [dict(schema), {"type": "null"}]}
+
+
+def _compact_new_entity_schema(
+    tag_names: Sequence[str],
+    pair_tag_names: Sequence[str],
+) -> Dict[str, Any]:
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "kind": {"type": "string", "enum": ["character", "place", "faction"]},
+            "name": {"type": "string"},
+            "summary": {"type": "string"},
+            "tag_hints": _enum_string_array_schema(
+                "Registered single-entity tag names.",
+                tag_names,
+            ),
+            "pair_tag_hints": {
+                "type": "array",
+                "items": _compact_pair_tag_hint_schema(pair_tag_names),
+            },
+        },
+        "required": [
+            "kind",
+            "name",
+            "summary",
+            "tag_hints",
+            "pair_tag_hints",
+        ],
+    }
+
+
+def _compact_pair_tag_hint_schema(pair_tag_names: Sequence[str]) -> Dict[str, Any]:
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "tag": _enum_string_schema(pair_tag_names),
+            "other_entity_name": {"type": "string"},
+            "declared_entity_role": {
+                "type": "string",
+                "enum": ["subject", "object"],
+            },
+        },
+        "required": ["tag", "other_entity_name", "declared_entity_role"],
+    }
+
+
+def _compact_orrery_adjudication_schema() -> Dict[str, Any]:
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "proposal_id": {"type": "string"},
+            "action": {"type": "string", "enum": ["defer", "replace", "void"]},
+            "note": _nullable_schema({"type": "string"}),
+            "replacement_state_delta": _nullable_schema(
+                _compact_replacement_state_delta_schema()
+            ),
+            "replacement_event_type": _nullable_schema({"type": "string"}),
+        },
+        "required": [
+            "proposal_id",
+            "action",
+            "note",
+            "replacement_state_delta",
+            "replacement_event_type",
+        ],
+    }
+
+
+def _compact_replacement_state_delta_schema() -> Dict[str, Any]:
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "character_current_activity": _nullable_schema({"type": "string"}),
+            "entity_tags_add": _string_array_schema("Actor tags to add."),
+            "entity_tags_remove": _string_array_schema("Actor tags to clear."),
+            "entity_tags_target_add": _string_array_schema("Target tags to add."),
+            "entity_tags_target_remove": _string_array_schema("Target tags to clear."),
+            "entity_pair_tags_target_clear_inbound": _string_array_schema(
+                "Inbound target pair-tags to clear."
+            ),
+        },
+        "required": [
+            "character_current_activity",
+            "entity_tags_add",
+            "entity_tags_remove",
+            "entity_tags_target_add",
+            "entity_tags_target_remove",
+            "entity_pair_tags_target_clear_inbound",
+        ],
+    }
+
+
+def _compact_new_entity_vocabulary(
+    dbname: Optional[str],
+) -> tuple[list[str], list[str]]:
+    if not dbname:
+        return [], []
+    try:
+        tags_by_kind = _read_tags_by_kind(dbname)
+        tag_names = sorted({tag for tags in tags_by_kind.values() for tag in tags})
+        pair_tag_names = _read_pair_tags(dbname)
+    except Exception as exc:
+        logger.warning(
+            "Failed to load compact Anthropic storyteller vocab enums: %s",
+            exc,
+        )
+        return [], []
+    return tag_names, pair_tag_names
+
+
 def _read_tags_by_kind(dbname: str) -> dict[str, list[str]]:
     tags_by_kind = {kind: [] for kind in _KIND_DEF_NAMES}
     for entry in read_tag_library(dbname):
@@ -112,6 +338,29 @@ def _read_tags_by_kind(dbname: str) -> dict[str, list[str]]:
         for kind, tags in tags_by_kind.items()
         if kind in _KIND_DEF_NAMES
     }
+
+
+def _read_pair_tags(dbname: str) -> list[str]:
+    conn = psycopg2.connect(
+        dbname=dbname,
+        user=os.environ.get("PGUSER", "pythagor"),
+        host=os.environ.get("PGHOST", "localhost"),
+        port=os.environ.get("PGPORT", "5432"),
+        cursor_factory=RealDictCursor,
+    )
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT tag
+                FROM pair_tags
+                WHERE deprecated = FALSE
+                ORDER BY tag
+                """
+            )
+            return [str(row["tag"]) for row in cur.fetchall()]
+    finally:
+        conn.close()
 
 
 def _bestowal_def_with_tag_enum(
