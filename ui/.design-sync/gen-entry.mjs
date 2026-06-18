@@ -7,7 +7,7 @@
 // ts-morph is resolved from the staged converter deps (.ds-sync/node_modules).
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
-import { writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve, relative, basename } from "node:path";
 import { execSync } from "node:child_process";
 
@@ -77,6 +77,9 @@ for (const f of files) {
 // The preview provider (cfg.provider) rides the Vite bundle so window.NexusIris
 // exposes it; it imports app contexts, so it can't go through the converter's esbuild.
 entry.push('export { DesignThemeRoot } from "../ds-provider";');
+// .design-sync/.cache/ is gitignored and absent on a fresh checkout — create it
+// before writing the generated entry/srcMap (Codex review).
+mkdirSync(resolve(UI, ".design-sync/.cache"), { recursive: true });
 writeFileSync(resolve(UI, ".design-sync/.cache/lib-entry.tsx"), entry.join("\n") + "\n");
 writeFileSync(
   resolve(UI, ".design-sync/.cache/componentSrcMap.json"),
