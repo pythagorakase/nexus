@@ -441,6 +441,18 @@ fn resolve_working_directory(
     config: &DesktopConfig,
     source_path: Option<&Path>,
 ) -> Result<PathBuf, String> {
+    resolve_working_directory_with_bundled_config_dir(
+        config,
+        source_path,
+        bundled_config_dir().as_deref(),
+    )
+}
+
+fn resolve_working_directory_with_bundled_config_dir(
+    config: &DesktopConfig,
+    source_path: Option<&Path>,
+    bundled_config_dir: Option<&Path>,
+) -> Result<PathBuf, String> {
     if let Some(path) = &config.working_directory {
         let resolved = if path.is_absolute() {
             path.clone()
@@ -449,20 +461,32 @@ fn resolve_working_directory(
                 .parent()
                 .unwrap_or_else(|| Path::new("."))
                 .join(path)
-        } else if let Some(repo_root) = discover_repo_root() {
-            repo_root.join(path)
+        } else if let Some(config_dir) = bundled_config_dir {
+            config_dir.join(path)
         } else {
-            env::current_dir()
-                .map_err(|error| format!("failed to resolve current directory: {error}"))?
-                .join(path)
+            return Err(format!(
+                "relative workingDirectory {} has no config file anchor; set \
+                 NEXUS_DESKTOP_CONFIG or use an absolute workingDirectory",
+                path.display()
+            ));
         };
-        return Ok(resolved);
+        return Ok(canonicalize_if_possible(resolved));
     }
     discover_repo_root()
         .or_else(|| env::current_dir().ok())
         .ok_or_else(|| {
             "failed to resolve desktop runtime working directory; set workingDirectory".to_string()
         })
+}
+
+fn bundled_config_dir() -> Option<PathBuf> {
+    option_env!("NEXUS_BUILD_CONFIG_DIR")
+        .map(PathBuf::from)
+        .filter(|path| path.exists())
+}
+
+fn canonicalize_if_possible(path: PathBuf) -> PathBuf {
+    path.canonicalize().unwrap_or(path)
 }
 
 fn discover_repo_root() -> Option<PathBuf> {
@@ -662,5 +686,38 @@ mod tests {
         assert!(summary.contains("database ok"));
         assert!(summary.contains("gateway:ok"));
         assert!(summary.contains("mock_openai:down"));
+    }
+
+    #[test]
+    fn bundled_config_relative_working_directory_uses_build_config_dir() {
+        let temp_root = env::temp_dir().join(format!("nexus-desktop-test-{}", std::process::id()));
+        let config_dir = temp_root.join("ui/src-tauri");
+        fs::create_dir_all(&config_dir).unwrap();
+
+        let config = DesktopConfig {
+            working_directory: Some(PathBuf::from("../..")),
+            ..DesktopConfig::default()
+        };
+
+        let working_directory =
+            resolve_working_directory_with_bundled_config_dir(&config, None, Some(&config_dir))
+                .unwrap();
+
+        assert_eq!(working_directory, temp_root.canonicalize().unwrap());
+        let _ = fs::remove_dir_all(temp_root);
+    }
+
+    #[test]
+    fn bundled_config_relative_working_directory_requires_anchor() {
+        let config = DesktopConfig {
+            working_directory: Some(PathBuf::from("../..")),
+            ..DesktopConfig::default()
+        };
+
+        let error =
+            resolve_working_directory_with_bundled_config_dir(&config, None, None).unwrap_err();
+
+        assert!(error.contains("relative workingDirectory"));
+        assert!(error.contains("NEXUS_DESKTOP_CONFIG"));
     }
 }
