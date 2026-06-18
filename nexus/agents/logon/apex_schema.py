@@ -15,6 +15,7 @@ Key improvements over legacy schema:
 All models use Pydantic v2 for validation and serialization.
 """
 
+import json
 import logging
 from typing import List, Optional, Dict, Any, Union, Literal
 from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
@@ -113,6 +114,14 @@ class CharacterTraits(BaseModel):
     domain: Optional[str] = Field(
         default=None, description="Place or area you control or claim"
     )
+    role: Optional[str] = Field(
+        default=None,
+        description="Legacy freeform role note for partially introduced characters",
+    )
+    asset: Optional[str] = Field(
+        default=None,
+        description="Legacy freeform asset note for partially introduced characters",
+    )
 
     # Liabilities
     enemies: Optional[str] = Field(
@@ -132,7 +141,27 @@ class CharacterTraits(BaseModel):
         description="What this trait means - capability, possession, relationship, or curse",
     )
 
-    model_config = ConfigDict(extra="allow")
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_legacy_extra_trait_keys(cls, data: Any) -> Any:
+        """Fold legacy arbitrary extra_data keys into strict wildcard prose."""
+
+        if not isinstance(data, dict):
+            return data
+        field_names = set(cls.model_fields)
+        extras = {key: value for key, value in data.items() if key not in field_names}
+        if not extras:
+            return data
+
+        normalized = {key: value for key, value in data.items() if key in field_names}
+        normalized.setdefault("wildcard_name", "legacy_extra_data")
+        normalized.setdefault(
+            "wildcard_description",
+            json.dumps(extras, ensure_ascii=False, sort_keys=True),
+        )
+        return normalized
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class PlaceDetails(BaseModel):
@@ -190,7 +219,7 @@ class PlaceDetails(BaseModel):
         default_factory=list, description="Current rumors or gossip (max 3)"
     )
 
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="forbid")
 
 
 class FactionDetails(BaseModel):
@@ -215,7 +244,35 @@ class FactionDetails(BaseModel):
         default=None, description="Key traditions or rituals"
     )
 
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="forbid")
+
+
+class NamedObservation(BaseModel):
+    """Strict key/value observation entry for JSONB-style side notes."""
+
+    key: str = Field(min_length=1, description="Observation key or label")
+    value: str = Field(description="Observation value as concise prose")
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+
+class FactionStanceChange(BaseModel):
+    """Strict faction stance change entry."""
+
+    target: str = Field(min_length=1, description="Faction, group, or entity target")
+    stance: str = Field(description="Updated stance toward the target")
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+
+def _stringify_structured_value(value: Any) -> str:
+    """Render arbitrary legacy observation values into strict-schema prose."""
+
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    return json.dumps(value, ensure_ascii=False, sort_keys=True)
 
 
 # ============================================================================
@@ -700,8 +757,12 @@ class CharacterStateUpdate(BaseModel):
     emotional_state: Optional[str] = Field(
         default=None, description="Character's emotional state"
     )
-    extra_observations: Optional[Dict[str, Any]] = Field(
-        default=None, description="Additional observations stored in extra_data JSONB"
+    extra_observations: List[NamedObservation] = Field(
+        default_factory=list,
+        description=(
+            "Additional observations for extra_data JSONB as strict key/value "
+            "entries."
+        ),
     )
     orrery_tags: Optional[OrreryTagBestowal] = Field(
         default=None,
@@ -712,6 +773,20 @@ class CharacterStateUpdate(BaseModel):
             "Use only registered tag names."
         ),
     )
+
+    @field_validator("extra_observations", mode="before")
+    @classmethod
+    def normalize_extra_observations(cls, value: Any) -> Any:
+        """Accept legacy dict observations while emitting strict list schema."""
+
+        if value is None or isinstance(value, list):
+            return value
+        if isinstance(value, dict):
+            return [
+                {"key": str(key), "value": _stringify_structured_value(item)}
+                for key, item in value.items()
+            ]
+        return value
 
     model_config = ConfigDict(extra="forbid")
 
@@ -790,8 +865,9 @@ class FactionStateUpdate(BaseModel):
             "facts through world_events or accepted Orrery tags."
         ),
     )
-    stance_changes: Optional[Dict[str, str]] = Field(
-        default=None, description="Changes in stance toward other entities"
+    stance_changes: List[FactionStanceChange] = Field(
+        default_factory=list,
+        description="Changes in stance toward other entities as strict entries",
     )
     orrery_tags: Optional[OrreryTagBestowal] = Field(
         default=None,
@@ -802,6 +878,20 @@ class FactionStateUpdate(BaseModel):
             "tags_to_clear to retire active tags that no longer apply."
         ),
     )
+
+    @field_validator("stance_changes", mode="before")
+    @classmethod
+    def normalize_stance_changes(cls, value: Any) -> Any:
+        """Accept legacy stance-change dicts while emitting strict list schema."""
+
+        if value is None or isinstance(value, list):
+            return value
+        if isinstance(value, dict):
+            return [
+                {"target": str(target), "stance": _stringify_structured_value(stance)}
+                for target, stance in value.items()
+            ]
+        return value
 
     model_config = ConfigDict(extra="forbid")
 
@@ -824,7 +914,135 @@ class StateUpdates(BaseModel):
         default_factory=list, description="Faction state updates"
     )
 
+    @model_validator(mode="before")
+    @classmethod
+    def expand_compact_updates(cls, data: Any) -> Any:
+        """Accept Anthropic's compact scalar wire shape for state updates."""
+
+        if not isinstance(data, dict) or "updates" not in data:
+            return data
+
+        expanded = {
+            "characters": list(data.get("characters") or []),
+            "relationships": list(data.get("relationships") or []),
+            "locations": list(data.get("locations") or []),
+            "factions": list(data.get("factions") or []),
+        }
+        for raw_update in data.get("updates") or []:
+            if not isinstance(raw_update, dict):
+                continue
+            kind = raw_update.get("kind")
+            if kind == "character":
+                update = _compact_character_state_update(raw_update)
+                if update:
+                    expanded["characters"].append(update)
+            elif kind == "place":
+                update = _compact_location_state_update(raw_update)
+                if update:
+                    expanded["locations"].append(update)
+            elif kind == "faction":
+                update = _compact_faction_state_update(raw_update)
+                if update:
+                    expanded["factions"].append(update)
+            elif kind == "relationship":
+                update = _compact_relationship_update(raw_update)
+                if update:
+                    expanded["relationships"].append(update)
+        return expanded
+
     model_config = ConfigDict(extra="forbid")
+
+
+def _compact_character_state_update(row: Dict[str, Any]) -> Dict[str, Any]:
+    update: Dict[str, Any] = {}
+    _copy_if_present(row, update, "entity_id", "character_id")
+    name = row.get("name") or row.get("character_name")
+    if name:
+        update["character_name"] = str(name)
+    status = row.get("status")
+    if status and "current_activity" not in row:
+        update["current_activity"] = str(status)
+    _copy_if_present(row, update, "current_location")
+    _copy_if_present(row, update, "current_activity")
+    _copy_if_present(row, update, "emotional_state")
+    _apply_compact_orrery_tags(row, update)
+    return update
+
+
+def _compact_location_state_update(row: Dict[str, Any]) -> Dict[str, Any]:
+    update: Dict[str, Any] = {}
+    _copy_if_present(row, update, "entity_id", "place_id")
+    name = row.get("name") or row.get("place_name")
+    if name:
+        update["place_name"] = str(name)
+    status = row.get("status")
+    if status and "current_conditions" not in row:
+        update["current_conditions"] = str(status)
+    _copy_if_present(row, update, "current_conditions")
+    notable_change = row.get("notable_change") or row.get("status")
+    if notable_change:
+        update["notable_changes"] = [str(notable_change)]
+    _apply_compact_orrery_tags(row, update)
+    return update
+
+
+def _compact_faction_state_update(row: Dict[str, Any]) -> Dict[str, Any]:
+    update: Dict[str, Any] = {}
+    _copy_if_present(row, update, "entity_id", "faction_id")
+    name = row.get("name") or row.get("faction_name")
+    if name:
+        update["faction_name"] = str(name)
+    recent_action = row.get("recent_action") or row.get("status")
+    if recent_action:
+        update["recent_actions"] = [str(recent_action)]
+    target = row.get("stance_target")
+    stance = row.get("stance")
+    if target and stance:
+        update["stance_changes"] = [{"target": str(target), "stance": str(stance)}]
+    _apply_compact_orrery_tags(row, update)
+    return update
+
+
+def _compact_relationship_update(row: Dict[str, Any]) -> Dict[str, Any]:
+    update: Dict[str, Any] = {}
+    _copy_if_present(row, update, "entity_id", "character1_id")
+    _copy_if_present(row, update, "other_entity_id", "character2_id")
+    name = row.get("name") or row.get("character1_name")
+    other_name = row.get("other_name") or row.get("character2_name")
+    if name:
+        update["character1_name"] = str(name)
+    if other_name:
+        update["character2_name"] = str(other_name)
+    _copy_if_present(row, update, "relationship_type")
+    _copy_if_present(row, update, "emotional_valence")
+    _copy_if_present(row, update, "dynamic")
+    _copy_if_present(row, update, "recent_events")
+    return update
+
+
+def _apply_compact_orrery_tags(
+    row: Dict[str, Any],
+    update: Dict[str, Any],
+) -> None:
+    tag_add = row.get("tag_add")
+    tag_clear = row.get("tag_clear")
+    if not tag_add and not tag_clear:
+        return
+    update["orrery_tags"] = {
+        "applied_tags": [str(tag_add)] if tag_add else [],
+        "tags_to_clear": [str(tag_clear)] if tag_clear else [],
+    }
+
+
+def _copy_if_present(
+    source: Dict[str, Any],
+    target: Dict[str, Any],
+    key: str,
+    target_key: Optional[str] = None,
+) -> None:
+    value = source.get(key)
+    if value is not None and value != "":
+        target[target_key or key] = value
 
 
 class OrreryReplacementStateDelta(BaseModel):

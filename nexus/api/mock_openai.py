@@ -612,12 +612,38 @@ class ResponsesRequest(BaseModel):
     max_output_tokens: Optional[int] = None
     temperature: Optional[float] = None
     reasoning: Optional[Dict[str, Any]] = None
+    text: Optional[Dict[str, Any]] = None  # OpenAI native strict text.format
     text_format: Optional[Any] = None  # Pydantic schema for structured output
     tools: Optional[Any] = None  # pydantic_ai output tool ("final_result")
 
 
+def _schema_property_names(payload: Any) -> set[str]:
+    """Return top-level property names from OpenAI structured-output payloads."""
+
+    if not isinstance(payload, dict):
+        return set()
+    if "format" in payload:
+        return _schema_property_names(payload.get("format"))
+    if payload.get("type") == "json_schema":
+        schema = payload.get("schema")
+        if schema is None and isinstance(payload.get("json_schema"), dict):
+            schema = payload["json_schema"].get("schema")
+        if isinstance(schema, dict):
+            return set((schema.get("properties") or {}).keys())
+    return set((payload.get("properties") or {}).keys())
+
+
+def _requested_output_uses_final_result_tool(request: "ResponsesRequest") -> bool:
+    """Return whether the request expects a Pydantic-AI final_result call."""
+
+    for tool in request.tools or []:
+        if isinstance(tool, dict) and tool.get("name") == "final_result":
+            return True
+    return False
+
+
 def _requested_output_properties(request: "ResponsesRequest") -> set[str]:
-    """Return the property names of the structured-output tool, if present.
+    """Return the property names of the requested structured output, if present.
 
     pydantic_ai delivers the caller's output schema as a ``final_result``
     function tool with ``tool_choice: required``; the schema's top-level
@@ -625,11 +651,20 @@ def _requested_output_properties(request: "ResponsesRequest") -> set[str]:
     against. Routing on this is exact, where the legacy keyword sniffing of
     the prompt text was not (a turn request without Orrery proposals used to
     fall through to the bootstrap-shaped payload and fail validation).
+
+    Native OpenAI structured output arrives as ``text.format`` with the same
+    top-level schema properties.
     """
+    fields = _schema_property_names(request.text)
+    if fields:
+        return fields
+    fields = _schema_property_names(request.text_format)
+    if fields:
+        return fields
     for tool in request.tools or []:
         if isinstance(tool, dict) and tool.get("name") == "final_result":
             params = tool.get("parameters") or {}
-            return set((params.get("properties") or {}).keys())
+            return _schema_property_names(params)
     return set()
 
 
@@ -866,17 +901,19 @@ async def responses_create(request: ResponsesRequest):
     # (StorytellerResponseBootstrap) do not.
     output_fields = _requested_output_properties(request)
     if output_fields:
+        final_result_tool = _requested_output_uses_final_result_tool(request)
         if "state_updates" in output_fields:
             logger.info(
                 "[MOCK] Extended turn schema requested (%d Orrery proposals)",
                 len(proposal_ids),
             )
             return _responses_payload(
-                _mock_storyteller_response(input_text), final_result_tool=True
+                _mock_storyteller_response(input_text),
+                final_result_tool=final_result_tool,
             )
         logger.info("[MOCK] Bootstrap schema requested, returning cached bootstrap")
         return _responses_payload(
-            get_cached_bootstrap_narrative(), final_result_tool=True
+            get_cached_bootstrap_narrative(), final_result_tool=final_result_tool
         )
 
     # Legacy keyword routing for callers without a structured-output tool.
@@ -897,7 +934,7 @@ async def responses_create(request: ResponsesRequest):
         return _responses_payload(get_cached_bootstrap_narrative())
 
     # Default fallback for non-narrative requests
-    logger.warning(f"[MOCK] Unknown responses request type")
+    logger.warning("[MOCK] Unknown responses request type")
     return {
         "id": f"resp-mock-{uuid.uuid4().hex[:8]}",
         "object": "response",

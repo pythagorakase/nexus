@@ -65,7 +65,11 @@ def test_provider_routes_to_mock_server():
         "Generate narrative for the story protagonist",
         StorytellerResponseExtended,
     )
-    
+
     assert len(response.narrative) > 100, "Narrative too short"
-    assert len(response.choices) == 3, f"Expected 3 choices, got {len(response.choices)}"
-    assert "tram" in response.narrative.lower() or "satchel" in response.narrative.lower()
+    assert len(response.choices) == 3, (
+        f"Expected 3 choices, got {len(response.choices)}"
+    )
+    assert response.narrative.startswith("[TEST MODE]")
+    assert response.orrery_adjudications == []
+    assert "deterministic mock control" in response.narrative

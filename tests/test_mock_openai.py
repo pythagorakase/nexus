@@ -14,6 +14,7 @@ from nexus.api.mock_openai import (
     _requested_output_properties,
     responses_create,
 )
+from nexus.api.native_structured_output import openai_response_text_format
 
 
 def _final_result_tool(schema_model) -> dict:
@@ -24,6 +25,12 @@ def _final_result_tool(schema_model) -> dict:
         "parameters": schema_model.model_json_schema(),
         "strict": True,
     }
+
+
+def _native_text_format(schema_model) -> dict:
+    """Build the OpenAI native Responses text.format payload."""
+
+    return {"format": openai_response_text_format(schema_model)}
 
 
 @pytest.mark.asyncio
@@ -169,6 +176,27 @@ async def test_mock_responses_routes_turn_schema_without_orrery_proposals() -> N
 
 
 @pytest.mark.asyncio
+async def test_mock_responses_routes_turn_schema_as_native_text_format() -> None:
+    """Native OpenAI strict schemas should route without a final_result tool."""
+
+    response = await responses_create(
+        ResponsesRequest(
+            model="TEST",
+            input=[{"role": "user", "content": "Continue the protagonist story."}],
+            text=_native_text_format(StorytellerResponseExtended),
+        )
+    )
+
+    message = response["output"][0]
+    assert message["type"] == "message"
+
+    payload = json.loads(response["output_text"])
+    parsed = StorytellerResponseExtended.model_validate(payload)
+    assert parsed.narrative.startswith("[TEST MODE]")
+    assert parsed.orrery_adjudications == []
+
+
+@pytest.mark.asyncio
 async def test_mock_responses_routes_bootstrap_schema_as_final_result_tool() -> None:
     """Bootstrap structured output must also call the required output tool."""
 
@@ -187,6 +215,23 @@ async def test_mock_responses_routes_bootstrap_schema_as_final_result_tool() -> 
     StorytellerResponseBootstrap.model_validate(payload)
 
 
+@pytest.mark.asyncio
+async def test_mock_responses_routes_bootstrap_schema_as_native_text_format() -> None:
+    """Bootstrap native structured output should return message JSON."""
+
+    response = await responses_create(
+        ResponsesRequest(
+            model="TEST",
+            input=[{"role": "user", "content": "Bootstrap the protagonist story."}],
+            text=_native_text_format(StorytellerResponseBootstrap),
+        )
+    )
+
+    message = response["output"][0]
+    assert message["type"] == "message"
+    StorytellerResponseBootstrap.model_validate_json(response["output_text"])
+
+
 def test_requested_output_properties_extracts_schema_fields() -> None:
     """The output-tool discriminator sees the schema's top-level properties."""
 
@@ -199,6 +244,15 @@ def test_requested_output_properties_extracts_schema_fields() -> None:
     assert "narrative" in fields
     assert "choices" in fields
     assert "state_updates" not in fields
+
+    native_request = ResponsesRequest(
+        model="TEST",
+        input=[],
+        text=_native_text_format(StorytellerResponseExtended),
+    )
+    native_fields = _requested_output_properties(native_request)
+    assert "state_updates" in native_fields
+    assert "referenced_entities" in native_fields
 
     bare = ResponsesRequest(model="TEST", input=[])
     assert _requested_output_properties(bare) == set()

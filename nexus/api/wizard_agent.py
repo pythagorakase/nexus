@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 import frontmatter
-from pydantic_ai import Agent, CallDeferred, ModelRetry
+from pydantic_ai import Agent, CallDeferred, ModelRetry, NativeOutput
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.tools import DeferredToolRequests, RunContext
 
@@ -563,6 +563,7 @@ _wizard_retries = get_wizard_retry_budget()
 
 # Type alias for agent output
 AgentOutput = WizardResponse | DeferredToolRequests
+_wizard_response_output = NativeOutput(WizardResponse, strict=True)
 
 
 def _make_accept_fate_validator(tool_name: str):
@@ -592,7 +593,7 @@ def _make_accept_fate_validator(tool_name: str):
 
 # Config 1: Setting phase, normal flow (WizardResponse + submit_world_document)
 _setting_agent = Agent(
-    output_type=(WizardResponse, DeferredToolRequests),
+    output_type=(_wizard_response_output, DeferredToolRequests),
     instructions=build_wizard_prompt,
     deps_type=WizardContext,
     model_settings=_wizard_model_settings,
@@ -602,7 +603,7 @@ _setting_agent.tool(retries=_wizard_retries)(_submit_world_impl)
 
 # Config 2: Setting phase, accept_fate (forces submit_world_document)
 _setting_accept_agent = Agent(
-    output_type=(WizardResponse, DeferredToolRequests),
+    output_type=(_wizard_response_output, DeferredToolRequests),
     instructions=build_wizard_prompt,
     deps_type=WizardContext,
     model_settings=_wizard_model_settings,
@@ -619,7 +620,7 @@ _setting_accept_agent.output_validator(
 
 # Config 3: Character/concept, normal flow
 _concept_agent = Agent(
-    output_type=(WizardResponse, DeferredToolRequests),
+    output_type=(_wizard_response_output, DeferredToolRequests),
     instructions=build_wizard_prompt,
     deps_type=WizardContext,
     model_settings=_wizard_model_settings,
@@ -629,7 +630,7 @@ _concept_agent.tool(retries=_wizard_retries)(_submit_concept_impl)
 
 # Config 4: Character/concept, accept_fate (forces submit_character_concept)
 _concept_accept_agent = Agent(
-    output_type=(WizardResponse, DeferredToolRequests),
+    output_type=(_wizard_response_output, DeferredToolRequests),
     instructions=build_wizard_prompt,
     deps_type=WizardContext,
     model_settings=_wizard_model_settings,
@@ -647,7 +648,7 @@ _concept_accept_agent.output_validator(
 # Config 5: Character/traits, normal flow only
 # (accept_fate for traits is handled deterministically in wizard_chat.py)
 _traits_agent = Agent(
-    output_type=(WizardResponse, DeferredToolRequests),
+    output_type=(_wizard_response_output, DeferredToolRequests),
     instructions=build_wizard_prompt,
     deps_type=WizardContext,
     model_settings=_wizard_model_settings,
@@ -661,7 +662,7 @@ _traits_agent.tool(retries=_wizard_retries)(_submit_traits_impl)
 
 # Config 7: Character/wildcard, normal flow
 _wildcard_agent = Agent(
-    output_type=(WizardResponse, DeferredToolRequests),
+    output_type=(_wizard_response_output, DeferredToolRequests),
     instructions=build_wizard_prompt,
     deps_type=WizardContext,
     model_settings=_wizard_model_settings,
@@ -671,7 +672,7 @@ _wildcard_agent.tool(retries=_wizard_retries)(_submit_wildcard_impl)
 
 # Config 8: Character/wildcard, accept_fate (forces submit_wildcard_trait)
 _wildcard_accept_agent = Agent(
-    output_type=(WizardResponse, DeferredToolRequests),
+    output_type=(_wizard_response_output, DeferredToolRequests),
     instructions=build_wizard_prompt,
     deps_type=WizardContext,
     model_settings=_wizard_model_settings,
@@ -688,7 +689,7 @@ _wildcard_accept_agent.output_validator(
 
 # Config 9: Seed phase, normal flow
 _seed_agent = Agent(
-    output_type=(WizardResponse, DeferredToolRequests),
+    output_type=(_wizard_response_output, DeferredToolRequests),
     instructions=build_wizard_prompt,
     deps_type=WizardContext,
     model_settings=_wizard_model_settings,
@@ -698,7 +699,7 @@ _seed_agent.tool(retries=_wizard_retries)(_submit_scenario_impl)
 
 # Config 10: Seed phase, accept_fate (forces submit_starting_scenario)
 _seed_accept_agent = Agent(
-    output_type=(WizardResponse, DeferredToolRequests),
+    output_type=(_wizard_response_output, DeferredToolRequests),
     instructions=build_wizard_prompt,
     deps_type=WizardContext,
     model_settings=_wizard_model_settings,

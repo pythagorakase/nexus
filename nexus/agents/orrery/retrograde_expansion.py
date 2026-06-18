@@ -56,6 +56,25 @@ class RetrogradeExpansionValidationError(ValueError):
     """Raised when an R6 expansion plan is shaped correctly but illegal."""
 
 
+class RetrogradePayloadEntry(BaseModel):
+    """Strict key/value entry for future world_events.payload sketches."""
+
+    key: str = Field(min_length=1)
+    value: str = Field(description="Payload value rendered as concise prose or JSON.")
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+
+def _stringify_payload_value(value: Any) -> str:
+    """Render arbitrary legacy payload values into strict-schema strings."""
+
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    return json.dumps(value, ensure_ascii=False, sort_keys=True)
+
+
 class RetrogradeExpansionParticipant(BaseModel):
     """One entity reference participating in a planned Retrograde event."""
 
@@ -110,10 +129,28 @@ class RetrogradeExpansionEventPlan(BaseModel):
         le=1,
         description="Optional future world_events.magnitude value.",
     )
-    payload: dict[str, Any] = Field(
-        default_factory=dict,
-        description="Small future world_events.payload sketch.",
+    payload: list[RetrogradePayloadEntry] = Field(
+        default_factory=list,
+        description="Small future world_events.payload sketch as key/value entries.",
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_legacy_payload(cls, data: Any) -> Any:
+        """Accept legacy payload dicts while emitting strict list schema."""
+
+        if not isinstance(data, dict):
+            return data
+        payload = data.get("payload")
+        if payload is None or isinstance(payload, list):
+            return data
+        if isinstance(payload, Mapping):
+            data = dict(data)
+            data["payload"] = [
+                {"key": str(key), "value": _stringify_payload_value(value)}
+                for key, value in payload.items()
+            ]
+        return data
 
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
@@ -202,6 +239,85 @@ class RetrogradeExpansionCommitReadiness(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
 
+class RetrogradeExpansionWireEventPlan(BaseModel):
+    """Provider-facing event plan with absence represented as empty strings."""
+
+    event_ref: str = Field(min_length=1)
+    seed_ids: list[str] = Field(default_factory=list)
+    event_type: str = Field(min_length=1)
+    summary: str = Field(min_length=1)
+    chronology: Literal["deep_past", "recent_past", "opening_pressure"]
+    participants: list[RetrogradeExpansionParticipant] = Field(default_factory=list)
+    location_ref: str = Field(
+        default="",
+        description="Prompt-local place name, or empty string when absent.",
+    )
+    changed_fields: list[str] = Field(default_factory=list)
+    magnitude: str = Field(
+        default="",
+        description="0..1 as text, or empty string when absent.",
+    )
+    payload: list[RetrogradePayloadEntry] = Field(default_factory=list)
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+
+class RetrogradeExpansionWireMechanicPlan(BaseModel):
+    """Provider-facing generic mechanics row expanded by runtime."""
+
+    plan: Literal["entity_tag", "pair_tag", "relationship"]
+    subject_ref: EntityRef
+    subject_kind: str = Field(min_length=1)
+    tag: str = Field(
+        default="",
+        description="Single-entity or pair tag; empty for relationship rows.",
+    )
+    object_ref: str = Field(
+        default="",
+        description="Object entity ref for pair tags/relationships; empty otherwise.",
+    )
+    object_kind: str = Field(
+        default="",
+        description="Object entity kind for pair tags/relationships; empty otherwise.",
+    )
+    relationship_type: str = Field(
+        default="",
+        description="Relationship type for relationship rows; empty otherwise.",
+    )
+    source_event_ref: str = Field(
+        default="",
+        description="Planned event_ref source, or empty string when absent.",
+    )
+    rationale: str = Field(default="")
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+
+class RetrogradeExpansionWireThreadPlan(BaseModel):
+    """Provider-facing thread accounting with absence represented as strings."""
+
+    seed_id: str = Field(min_length=1)
+    status: Literal["woven", "deferred", "rejected"]
+    event_refs: list[str] = Field(default_factory=list)
+    present_leaf_anchor: str = Field(min_length=1)
+    note: str = Field(default="")
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+
+class RetrogradeExpansionWireResponse(BaseModel):
+    """Provider-facing R6 response with deterministic fields omitted."""
+
+    event_plan: list[RetrogradeExpansionWireEventPlan] = Field(default_factory=list)
+    mechanical_plan: list[RetrogradeExpansionWireMechanicPlan] = Field(
+        default_factory=list
+    )
+    thread_plan: list[RetrogradeExpansionWireThreadPlan] = Field(default_factory=list)
+    coverage_notes: list[str] = Field(default_factory=list)
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+
 class RetrogradeExpansionPlanResponse(BaseModel):
     """Structured R6 response from Skald-as-weaver."""
 
@@ -254,6 +370,104 @@ def expansion_response_schema() -> dict[str, Any]:
     """Return the Pydantic JSON schema for R6 expansion responses."""
 
     return RetrogradeExpansionPlanResponse.model_json_schema()
+
+
+def coerce_expansion_response_payload(
+    payload: Mapping[str, Any],
+    *,
+    selected_seed_ids: list[str],
+) -> RetrogradeExpansionPlanResponse:
+    """Fill deterministic R6 fields and return the full app contract."""
+
+    data = _expand_wire_payload(payload)
+    data.setdefault("schema_version", RETROGRADE_EXPANSION_RESPONSE_SCHEMA_VERSION)
+    data.setdefault("selected_seed_ids", list(selected_seed_ids))
+    data.setdefault("commit_readiness", {})
+    return RetrogradeExpansionPlanResponse.model_validate(data)
+
+
+def _none_if_empty(value: Any) -> Any:
+    if value == "":
+        return None
+    return value
+
+
+def _float_if_present(value: Any) -> Optional[float]:
+    if value in {"", None}:
+        return None
+    return float(value)
+
+
+def _expand_wire_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Expand compact provider mechanics into the full persistence plan shape."""
+
+    data = dict(payload)
+    if "mechanical_plan" not in data:
+        return data
+
+    event_plan = []
+    for event in data.get("event_plan") or []:
+        row = dict(event)
+        row["location_ref"] = _none_if_empty(row.get("location_ref"))
+        row["magnitude"] = _float_if_present(row.get("magnitude"))
+        event_plan.append(row)
+
+    entity_tag_plan = []
+    pair_tag_plan = []
+    relationship_plan = []
+    for mechanic in data.get("mechanical_plan") or []:
+        plan = str(mechanic.get("plan"))
+        source_event_ref = _none_if_empty(mechanic.get("source_event_ref"))
+        rationale = _none_if_empty(mechanic.get("rationale"))
+        if plan == "entity_tag":
+            entity_tag_plan.append(
+                {
+                    "entity_ref": mechanic.get("subject_ref"),
+                    "entity_kind": mechanic.get("subject_kind"),
+                    "tag": mechanic.get("tag"),
+                    "source_event_ref": source_event_ref,
+                    "rationale": rationale,
+                }
+            )
+        elif plan == "pair_tag":
+            pair_tag_plan.append(
+                {
+                    "subject_ref": mechanic.get("subject_ref"),
+                    "subject_kind": mechanic.get("subject_kind"),
+                    "tag": mechanic.get("tag"),
+                    "object_ref": mechanic.get("object_ref"),
+                    "object_kind": mechanic.get("object_kind"),
+                    "source_event_ref": source_event_ref,
+                    "rationale": rationale,
+                }
+            )
+        elif plan == "relationship":
+            relationship_plan.append(
+                {
+                    "subject_ref": mechanic.get("subject_ref"),
+                    "subject_kind": mechanic.get("subject_kind"),
+                    "relationship_type": mechanic.get("relationship_type"),
+                    "object_ref": mechanic.get("object_ref"),
+                    "object_kind": mechanic.get("object_kind"),
+                    "source_event_ref": source_event_ref,
+                    "rationale": rationale,
+                }
+            )
+
+    thread_plan = []
+    for thread in data.get("thread_plan") or []:
+        row = dict(thread)
+        row["note"] = _none_if_empty(row.get("note"))
+        thread_plan.append(row)
+
+    return {
+        "event_plan": event_plan,
+        "entity_tag_plan": entity_tag_plan,
+        "pair_tag_plan": pair_tag_plan,
+        "relationship_plan": relationship_plan,
+        "thread_plan": thread_plan,
+        "coverage_notes": data.get("coverage_notes") or [],
+    }
 
 
 def render_expansion_prompt(
@@ -330,7 +544,10 @@ def validate_expansion_plan(
         seed_generation_request=seed_generation_request,
         vocabulary=vocabulary,
     )
-    response = RetrogradeExpansionPlanResponse.model_validate(payload)
+    response = coerce_expansion_response_payload(
+        payload,
+        selected_seed_ids=list(candidates.selected_seed_ids),
+    )
     issues = _expansion_contract_issues(
         response=response,
         selected_seed_ids=set(candidates.selected_seed_ids),
@@ -353,35 +570,33 @@ def generate_expansion_with_skald(
 ) -> dict[str, Any]:
     """Make a non-mutating Skald call to weave selected seeds into an R6 plan."""
 
-    from pydantic_ai import Agent, ModelRetry, RunContext
-    from pydantic_ai.settings import ModelSettings
+    from pydantic_ai import ModelRetry
 
     from nexus.api.config_utils import (
         get_new_story_model,
         get_wizard_max_tokens,
         get_wizard_retry_budget,
     )
-    from nexus.api.pydantic_ai_utils import build_pydantic_ai_model
+    from nexus.api.native_structured_output import build_native_structured_provider
 
     prompt = render_expansion_prompt(
         packet=packet,
         seed_candidate_response=seed_candidate_response,
     )
     selected_model = model_name or get_new_story_model()
-    agent = Agent(
-        model=build_pydantic_ai_model(selected_model),
-        output_type=RetrogradeExpansionPlanResponse,
+    provider = build_native_structured_provider(
+        model=selected_model,
+        max_tokens=max_tokens or get_wizard_max_tokens(),
         system_prompt=(
             "You are Skald-as-weaver for a NEXUS Retrograde expansion pass. "
             "Return a non-mutating expansion plan only."
         ),
-        model_settings=ModelSettings(max_tokens=max_tokens or get_wizard_max_tokens()),
-        retries=get_wizard_retry_budget(),
+        structured_output_retries=get_wizard_retry_budget(),
     )
 
     async def _validate_output(
-        _ctx: RunContext[None],
-        output: RetrogradeExpansionPlanResponse,
+        _ctx: Any,
+        output: RetrogradeExpansionWireResponse,
     ) -> RetrogradeExpansionPlanResponse:
         try:
             return validate_expansion_plan(
@@ -396,9 +611,11 @@ def generate_expansion_with_skald(
                 f"seed, or adding required refs:\n{exc}"
             ) from exc
 
-    agent.output_validator(_validate_output)
-    result = agent.run_sync(prompt)
-    response = result.output
+    provider.output_validator = _validate_output
+    response, _llm_response = provider.get_structured_completion(
+        prompt,
+        RetrogradeExpansionWireResponse,
+    )
     if not isinstance(response, RetrogradeExpansionPlanResponse):
         raise TypeError(
             "Skald expansion call returned "
@@ -807,10 +1024,15 @@ def _hard_validation_rules() -> list[str]:
         "Every selected seed must appear once in thread_plan.",
         "Woven threads must reference planned event_ref values.",
         (
-            "Event-anchored single-entity tags require source_event_ref that "
+            "mechanical_plan rows use plan='entity_tag', 'pair_tag', or "
+            "'relationship'. Leave fields irrelevant to that plan as empty "
+            "strings."
+        ),
+        (
+            "Event-anchored entity_tag mechanics require source_event_ref that "
             "matches event_plan.event_ref."
         ),
-        "Prompt-visible-only tags must not appear in entity_tag_plan.",
+        "Prompt-visible-only tags must not appear in mechanical_plan.",
         "Pair tags must obey registered subject/object kind constraints.",
         (
             "Single-entity tags must be registered for the tagged entity_kind "
@@ -818,18 +1040,14 @@ def _hard_validation_rules() -> list[str]:
             "kind is illegal."
         ),
         (
-            "relationship_plan currently supports only character->character "
+            "relationship mechanics currently support only character->character "
             "rows; express faction/place pressure through events or pair tags."
         ),
         (
-            "Entity refs (entity_ref, subject_ref, object_ref, location_ref) "
+            "Entity refs (subject_ref, object_ref, location_ref) "
             f"are proper names of at most {ENTITY_REF_MAX_LENGTH} characters "
             "-- never sentences or descriptive phrases. New implied entities "
             "get a short invented name, not a description."
-        ),
-        (
-            "commit_readiness must keep writes='none' and include both current "
-            "commit blockers."
         ),
     ]
 
@@ -838,16 +1056,22 @@ def _prompt_response_contract() -> dict[str, Any]:
     """Return a compact prompt-facing R6 response contract."""
 
     return {
-        "schema_version": RETROGRADE_EXPANSION_RESPONSE_SCHEMA_VERSION,
         "top_level_fields": [
-            "schema_version",
-            "selected_seed_ids",
             "event_plan",
-            "entity_tag_plan",
-            "pair_tag_plan",
-            "relationship_plan",
+            "mechanical_plan",
             "thread_plan",
             "coverage_notes",
+        ],
+        "mechanical_plan_fields": {
+            "common": ["plan", "subject_ref", "subject_kind", "source_event_ref"],
+            "entity_tag": ["tag"],
+            "pair_tag": ["tag", "object_ref", "object_kind"],
+            "relationship": ["relationship_type", "object_ref", "object_kind"],
+            "unused_fields": "Use empty strings for fields irrelevant to the plan.",
+        },
+        "deterministic_fields_filled_by_runtime": [
+            "schema_version",
+            "selected_seed_ids",
             "commit_readiness",
         ],
     }

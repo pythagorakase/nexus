@@ -13,10 +13,16 @@ from nexus.agents.logon.apex_schema import (
     ReferenceType,
     StateUpdates,
 )
+from nexus.agents.logon.orrery_tag_schema import (
+    storyteller_anthropic_output_config,
+    storyteller_openai_text_format,
+    storyteller_schema_with_runtime_tag_enums,
+)
 from nexus.agents.logon.orrery_tag_validation import (
     build_storyteller_tag_validator,
     collect_orrery_tag_issues,
 )
+from nexus.agents.orrery.tag_library import TagLibraryEntry
 from nexus.agents.orrery.tag_schemas import OrreryTagBestowal
 
 
@@ -138,3 +144,212 @@ def test_validator_skipped_without_slot_database() -> None:
     assert build_storyteller_tag_validator(None) is None
     assert build_storyteller_tag_validator("") is None
     assert build_storyteller_tag_validator("save_05") is not None
+
+
+def test_storyteller_schema_uses_runtime_tag_enums(monkeypatch) -> None:
+    """Native LOGON schema constrains Orrery tags by live entity kind."""
+
+    from nexus.agents.logon import orrery_tag_schema
+    from nexus.agents.logon.apex_schema import StorytellerResponseExtended
+
+    entries = [
+        _tag_entry("character", "bodyform", "human"),
+        _tag_entry("character", "disposition", "perceptive"),
+        _tag_entry("place", "place_class", "haven"),
+        _tag_entry("faction", "ideology", "loyalist"),
+    ]
+    monkeypatch.setattr(
+        orrery_tag_schema,
+        "read_tag_library",
+        lambda _dbname: entries,
+    )
+
+    schema = storyteller_schema_with_runtime_tag_enums(
+        StorytellerResponseExtended,
+        "save_05",
+    )
+
+    assert schema is not None
+    defs = schema["$defs"]
+    character_tags = defs["OrreryTagBestowalCharacter"]["properties"]["applied_tags"][
+        "items"
+    ]["enum"]
+    place_tags = defs["OrreryTagBestowalPlace"]["properties"]["applied_tags"]["items"][
+        "enum"
+    ]
+    faction_tags = defs["OrreryTagBestowalFaction"]["properties"]["tags_to_clear"][
+        "items"
+    ]["enum"]
+    assert character_tags == ["human", "perceptive"]
+    assert place_tags == ["haven"]
+    assert faction_tags == ["loyalist"]
+    assert (
+        defs["NewCharacter"]["properties"]["orrery_tags"]["anyOf"][0]["$ref"]
+        == "#/$defs/OrreryTagBestowalCharacter"
+    )
+    assert (
+        defs["LocationStateUpdate"]["properties"]["orrery_tags"]["anyOf"][0]["$ref"]
+        == "#/$defs/OrreryTagBestowalPlace"
+    )
+    assert (
+        defs["FactionStateUpdate"]["properties"]["orrery_tags"]["anyOf"][0]["$ref"]
+        == "#/$defs/OrreryTagBestowalFaction"
+    )
+
+
+def test_storyteller_openai_text_format_wraps_runtime_schema(monkeypatch) -> None:
+    from nexus.agents.logon import orrery_tag_schema
+    from nexus.agents.logon.apex_schema import StorytellerResponseExtended
+
+    monkeypatch.setattr(
+        orrery_tag_schema,
+        "read_tag_library",
+        lambda _dbname: [_tag_entry("character", "bodyform", "human")],
+    )
+
+    text_format = storyteller_openai_text_format(
+        StorytellerResponseExtended,
+        "save_05",
+    )
+
+    assert text_format is not None
+    assert text_format["type"] == "json_schema"
+    assert text_format["strict"] is True
+    assert text_format["schema"]["$defs"]["OrreryTagBestowalCharacter"]["properties"][
+        "applied_tags"
+    ]["items"]["enum"] == ["human"]
+
+
+def test_storyteller_anthropic_output_config_uses_compact_extended_schema(
+    monkeypatch,
+) -> None:
+    """Anthropic extended turns avoid the full DB-mirroring grammar."""
+
+    from nexus.agents.logon import orrery_tag_schema
+    from nexus.agents.logon.apex_schema import StorytellerResponseExtended
+
+    entries = [
+        _tag_entry("character", "bodyform", "human"),
+        _tag_entry("character", "disposition", "perceptive"),
+        _tag_entry("place", "place_class", "haven"),
+        _tag_entry("faction", "ideology", "loyalist"),
+    ]
+    monkeypatch.setattr(
+        orrery_tag_schema,
+        "read_tag_library",
+        lambda _dbname: entries,
+    )
+    monkeypatch.setattr(
+        orrery_tag_schema,
+        "_read_pair_tags",
+        lambda _dbname: ["hiding", "shelters"],
+    )
+    monkeypatch.setattr(
+        orrery_tag_schema,
+        "_read_event_types",
+        lambda _dbname: ["evade_pursuit", "slept"],
+    )
+
+    output_config = storyteller_anthropic_output_config(
+        StorytellerResponseExtended,
+        "save_05",
+    )
+
+    assert output_config is not None
+    schema = output_config["format"]["schema"]
+    assert "$defs" not in schema
+    assert set(schema["properties"]) == {
+        "narrative",
+        "choices",
+        "authorial_directives",
+        "chunk_metadata",
+        "referenced_entities",
+        "state_updates",
+        "operations",
+        "orrery_adjudications",
+        "new_entities",
+        "reasoning",
+    }
+    state_update_schema = schema["properties"]["state_updates"]
+    assert set(state_update_schema["properties"]) == {
+        "updates",
+    }
+    update_schema = state_update_schema["properties"]["updates"]["items"]
+    assert update_schema["properties"]["kind"]["enum"] == [
+        "character",
+        "place",
+        "faction",
+    ]
+    assert update_schema["properties"]["tag_add"] == {
+        "type": "string",
+        "description": "Registered tag name to apply.",
+    }
+    entity_schema = schema["properties"]["new_entities"]["items"]
+    assert entity_schema["properties"]["tag_hints"]["items"]["enum"] == [
+        "haven",
+        "human",
+        "loyalist",
+        "perceptive",
+    ]
+    pair_tag_schema = entity_schema["properties"]["pair_tag_hints"]["items"]
+    assert pair_tag_schema["properties"]["tag"]["enum"] == ["hiding", "shelters"]
+    adjudication_schema = schema["properties"]["orrery_adjudications"]["items"]
+    assert adjudication_schema["properties"]["replacement_event_type"]["enum"] == [
+        "evade_pursuit",
+        "slept",
+    ]
+
+    response = StorytellerResponseExtended.model_validate(
+        {
+            "narrative": "Brena follows the wet bell-sound into the stacks.",
+            "choices": ["Follow the footprints.", "Call for Odile."],
+            "authorial_directives": ["Retrieve the lower stacks layout."],
+            "chunk_metadata": {},
+            "referenced_entities": {},
+            "state_updates": {
+                "updates": [
+                    {
+                        "kind": "character",
+                        "name": "Brena Tideloft",
+                        "status": "following a wet bell-sound",
+                        "tag_add": "perceptive",
+                    }
+                ]
+            },
+            "operations": {},
+            "orrery_adjudications": [],
+            "new_entities": [
+                {
+                    "kind": "character",
+                    "name": "Marra Kest",
+                    "summary": "A drowned clerk animated by echo and current.",
+                    "tag_hints": [],
+                    "pair_tag_hints": [],
+                }
+            ],
+            "reasoning": "",
+        }
+    )
+
+    assert response.state_updates.characters[0].character_name == "Brena Tideloft"
+    assert (
+        response.state_updates.characters[0].current_activity
+        == "following a wet bell-sound"
+    )
+    assert response.state_updates.characters[0].orrery_tags is not None
+    assert response.state_updates.characters[0].orrery_tags.applied_tags == [
+        "perceptive"
+    ]
+    assert response.new_entities[0].name == "Marra Kest"
+
+
+def _tag_entry(entity_kind: str, category: str, tag: str) -> TagLibraryEntry:
+    return TagLibraryEntry(
+        entity_kind=entity_kind,
+        category=category,
+        tag=tag,
+        is_ephemeral=False,
+        description=f"{tag} description",
+        category_description=f"{category} description",
+        prompt_order=10,
+    )

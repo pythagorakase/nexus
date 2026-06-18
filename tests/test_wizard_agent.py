@@ -326,6 +326,7 @@ from nexus.api.wizard_agent import (
     _seed_accept_agent,
 )
 from nexus.api.new_story_schemas import WizardResponse
+from pydantic_ai import NativeOutput
 from pydantic_ai.tools import DeferredToolRequests
 
 
@@ -342,10 +343,12 @@ class TestAgentFactoryStructure:
             _seed_agent,
         ]
         for agent in normal_agents:
-            # output_type should be a tuple containing WizardResponse
-            assert (
-                WizardResponse in agent.output_type
-            ), f"Agent {agent} should allow WizardResponse"
+            native_outputs = [
+                item for item in agent.output_type if isinstance(item, NativeOutput)
+            ]
+            assert native_outputs, f"Agent {agent} should allow WizardResponse"
+            assert native_outputs[0].outputs is WizardResponse
+            assert native_outputs[0].strict is True
 
     def test_accept_fate_agents_have_validators(self):
         """Accept-fate agents should have output validators to reject WizardResponse."""
