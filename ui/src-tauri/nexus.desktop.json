@@ -5,6 +5,7 @@
   "authTokenEnv": "NEXUS_AUTH",
   "runtimeCommand": ["poetry", "run", "nexus"],
   "startArgs": ["--json", "up"],
+  "restartArgs": ["--json", "restart"],
   "stopArgs": ["--json", "down"],
   "workingDirectory": "../..",
   "startupTimeoutSeconds": 90,

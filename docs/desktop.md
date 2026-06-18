@@ -42,6 +42,7 @@ It defines the runtime origin, status path, auth header, and CLI command:
   "authTokenEnv": "NEXUS_AUTH",
   "runtimeCommand": ["poetry", "run", "nexus"],
   "startArgs": ["--json", "up"],
+  "restartArgs": ["--json", "restart"],
   "stopArgs": ["--json", "down"],
   "workingDirectory": "../..",
   "commandTimeoutSeconds": 120
@@ -61,6 +62,9 @@ Poetry from the repo root. Packaged or globally installed environments can set
   the runtime on quit.
 - If the shell runs the start command, it records ownership and runs the stop
   command on quit.
+- If `up` reports an existing managed service pid but `/runtime/status` is not
+  healthy, the shell runs `restartArgs`, waits for readiness, and then treats
+  the restarted runtime as shell-owned.
 - The shell talks only to the runtime contract: origin, status surface, auth
   header, and CLI entrypoint.
 - If startup fails before a window can be shown, the shell writes
