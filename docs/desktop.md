@@ -62,9 +62,10 @@ Poetry from the repo root. Packaged or globally installed environments can set
   the runtime on quit.
 - If the shell runs the start command, it records ownership and runs the stop
   command on quit.
-- If `up` reports an existing managed service pid but `/runtime/status` is not
-  healthy, the shell runs `restartArgs`, waits for readiness, and then treats
-  the restarted runtime as shell-owned.
+- If the first `/runtime/status` probe is unhealthy, `up` reports an existing
+  managed service pid, and follow-up probes still cannot attach, the shell
+  runs `restartArgs`, waits for readiness, and then treats the restarted
+  runtime as shell-owned.
 - The shell talks only to the runtime contract: origin, status surface, auth
   header, and CLI entrypoint.
 - If startup fails before a window can be shown, the shell writes

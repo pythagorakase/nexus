@@ -21,6 +21,8 @@ const DEFAULT_AUTH_TOKEN_ENV: &str = "NEXUS_AUTH";
 const DEFAULT_COMMAND_TIMEOUT_SECONDS: u64 = 120;
 const MIN_STARTUP_TIMEOUT_SECONDS: u64 = 5;
 const MIN_COMMAND_TIMEOUT_SECONDS: u64 = 5;
+const SERVICE_ALREADY_RUNNING_FRAGMENT: &str = "is already running";
+const SERVICE_RESTART_SUGGESTION_FRAGMENT: &str = "nexus restart";
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 #[serde(default, rename_all = "camelCase")]
@@ -152,6 +154,16 @@ fn ensure_runtime_ready(
                 }
             }
             if service_already_running_error(&error) {
+                if let Ok(status) = fetch_runtime_status(config) {
+                    if status.get("ok").and_then(Value::as_bool).unwrap_or(false) {
+                        set_loading_status(
+                            window,
+                            "Attached before restart",
+                            &runtime_summary(&status),
+                        );
+                        return Ok(status);
+                    }
+                }
                 set_loading_status(
                     window,
                     "Restarting managed runtime",
@@ -159,10 +171,17 @@ fn ensure_runtime_ready(
                 );
                 match run_runtime_command(config, &config.config.restart_args) {
                     Ok(output) => {
+                        // A successful restart means this shell created the
+                        // replacement process. Keep ownership even if the
+                        // readiness probe times out, so closing the shell can
+                        // still clean up the process it restarted.
                         runtime_owned_by_shell.store(true, Ordering::SeqCst);
-                        if !output.trim().is_empty() {
-                            set_loading_status(window, "Runtime restarted", output.trim());
-                        }
+                        let detail = if output.trim().is_empty() {
+                            "(no output)"
+                        } else {
+                            output.trim()
+                        };
+                        set_loading_status(window, "Runtime restarted", detail);
                     }
                     Err(restart_error) => {
                         return Err(format!(
@@ -233,7 +252,18 @@ fn fetch_runtime_status(config: &ResolvedDesktopConfig) -> Result<Value, String>
 }
 
 fn service_already_running_error(error: &str) -> bool {
-    error.contains("is already running") && error.contains("nexus restart")
+    let message = runtime_command_json_error(error).unwrap_or_else(|| error.to_string());
+    message.contains(SERVICE_ALREADY_RUNNING_FRAGMENT)
+        && message.contains(SERVICE_RESTART_SUGGESTION_FRAGMENT)
+}
+
+fn runtime_command_json_error(error: &str) -> Option<String> {
+    let start = error.find('{')?;
+    let value = serde_json::from_str::<Value>(&error[start..]).ok()?;
+    value
+        .get("error")
+        .and_then(Value::as_str)
+        .map(str::to_string)
 }
 
 fn run_runtime_command(config: &ResolvedDesktopConfig, args: &[String]) -> Result<String, String> {
@@ -748,6 +778,15 @@ mod tests {
             already running (pid 56729). Use 'nexus restart' or 'nexus down' first.\"}";
 
         assert!(service_already_running_error(error));
+        assert_eq!(
+            runtime_command_json_error(error).as_deref(),
+            Some("Service 'gateway' is already running (pid 56729). Use 'nexus restart' or 'nexus down' first.")
+        );
+        assert!(!service_already_running_error(""));
+        assert!(!service_already_running_error("   "));
+        assert!(!service_already_running_error(
+            "Service 'gateway' is already running"
+        ));
         assert!(!service_already_running_error(
             "Poetry could not find pyproject.toml"
         ));
