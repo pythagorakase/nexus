@@ -441,10 +441,15 @@ fn resolve_working_directory(
     config: &DesktopConfig,
     source_path: Option<&Path>,
 ) -> Result<PathBuf, String> {
+    let baked_config_dir = if source_path.is_none() {
+        bundled_config_dir()
+    } else {
+        None
+    };
     resolve_working_directory_with_bundled_config_dir(
         config,
         source_path,
-        bundled_config_dir().as_deref(),
+        baked_config_dir.as_deref(),
     )
 }
 
@@ -474,6 +479,7 @@ fn resolve_working_directory_with_bundled_config_dir(
     }
     discover_repo_root()
         .or_else(|| env::current_dir().ok())
+        .map(canonicalize_if_possible)
         .ok_or_else(|| {
             "failed to resolve desktop runtime working directory; set workingDirectory".to_string()
         })
@@ -632,6 +638,24 @@ fn applescript_string(value: &str) -> String {
 mod tests {
     use super::*;
 
+    struct TempRoot {
+        path: PathBuf,
+    }
+
+    impl TempRoot {
+        fn new(name: &str) -> Self {
+            let path = env::temp_dir().join(format!("{name}-{}", std::process::id()));
+            let _ = fs::remove_dir_all(&path);
+            Self { path }
+        }
+    }
+
+    impl Drop for TempRoot {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.path);
+        }
+    }
+
     #[test]
     fn desktop_config_defaults_to_runtime_contract() {
         let config = DesktopConfig::default();
@@ -690,8 +714,8 @@ mod tests {
 
     #[test]
     fn bundled_config_relative_working_directory_uses_build_config_dir() {
-        let temp_root = env::temp_dir().join(format!("nexus-desktop-test-{}", std::process::id()));
-        let config_dir = temp_root.join("ui/src-tauri");
+        let temp_root = TempRoot::new("nexus-desktop-test-bundled-cwd");
+        let config_dir = temp_root.path.join("ui/src-tauri");
         fs::create_dir_all(&config_dir).unwrap();
 
         let config = DesktopConfig {
@@ -703,8 +727,34 @@ mod tests {
             resolve_working_directory_with_bundled_config_dir(&config, None, Some(&config_dir))
                 .unwrap();
 
-        assert_eq!(working_directory, temp_root.canonicalize().unwrap());
-        let _ = fs::remove_dir_all(temp_root);
+        assert_eq!(working_directory, temp_root.path.canonicalize().unwrap());
+    }
+
+    #[test]
+    fn source_config_path_takes_priority_over_bundled_config_dir() {
+        let temp_root = TempRoot::new("nexus-desktop-test-source-priority");
+        let source_dir = temp_root.path.join("source");
+        let bundled_dir = temp_root.path.join("bundled");
+        fs::create_dir_all(source_dir.join("subdir")).unwrap();
+        fs::create_dir_all(bundled_dir.join("subdir")).unwrap();
+        let source_path = source_dir.join("nexus.desktop.json");
+
+        let config = DesktopConfig {
+            working_directory: Some(PathBuf::from("subdir")),
+            ..DesktopConfig::default()
+        };
+
+        let working_directory = resolve_working_directory_with_bundled_config_dir(
+            &config,
+            Some(&source_path),
+            Some(&bundled_dir),
+        )
+        .unwrap();
+
+        assert_eq!(
+            working_directory,
+            source_dir.join("subdir").canonicalize().unwrap()
+        );
     }
 
     #[test]
