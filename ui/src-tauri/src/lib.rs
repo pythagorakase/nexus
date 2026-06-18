@@ -21,6 +21,8 @@ const DEFAULT_AUTH_TOKEN_ENV: &str = "NEXUS_AUTH";
 const DEFAULT_COMMAND_TIMEOUT_SECONDS: u64 = 120;
 const MIN_STARTUP_TIMEOUT_SECONDS: u64 = 5;
 const MIN_COMMAND_TIMEOUT_SECONDS: u64 = 5;
+const SERVICE_ALREADY_RUNNING_FRAGMENT: &str = "is already running";
+const SERVICE_RESTART_SUGGESTION_FRAGMENT: &str = "nexus restart";
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 #[serde(default, rename_all = "camelCase")]
@@ -31,6 +33,7 @@ pub struct DesktopConfig {
     pub auth_token_env: String,
     pub runtime_command: Vec<String>,
     pub start_args: Vec<String>,
+    pub restart_args: Vec<String>,
     pub stop_args: Vec<String>,
     pub working_directory: Option<PathBuf>,
     pub startup_timeout_seconds: u64,
@@ -47,6 +50,7 @@ impl Default for DesktopConfig {
             auth_token_env: DEFAULT_AUTH_TOKEN_ENV.to_string(),
             runtime_command: vec!["nexus".to_string()],
             start_args: vec!["--json".to_string(), "up".to_string()],
+            restart_args: vec!["--json".to_string(), "restart".to_string()],
             stop_args: vec!["--json".to_string(), "down".to_string()],
             working_directory: None,
             startup_timeout_seconds: 90,
@@ -149,6 +153,45 @@ fn ensure_runtime_ready(
                     return Ok(status);
                 }
             }
+            if service_already_running_error(&error) {
+                if let Ok(status) = fetch_runtime_status(config) {
+                    if status.get("ok").and_then(Value::as_bool).unwrap_or(false) {
+                        set_loading_status(
+                            window,
+                            "Attached before restart",
+                            &runtime_summary(&status),
+                        );
+                        return Ok(status);
+                    }
+                }
+                set_loading_status(
+                    window,
+                    "Restarting managed runtime",
+                    "Existing service pid was stale or unhealthy",
+                );
+                match run_runtime_command(config, &config.config.restart_args) {
+                    Ok(output) => {
+                        // A successful restart means this shell created the
+                        // replacement process. Keep ownership even if the
+                        // readiness probe times out, so closing the shell can
+                        // still clean up the process it restarted.
+                        runtime_owned_by_shell.store(true, Ordering::SeqCst);
+                        let detail = if output.trim().is_empty() {
+                            "(no output)"
+                        } else {
+                            output.trim()
+                        };
+                        set_loading_status(window, "Runtime restarted", detail);
+                    }
+                    Err(restart_error) => {
+                        return Err(format!(
+                            "startup found an existing runtime service, but restart failed:\n\
+                             initial up error:\n{error}\n\nrestart error:\n{restart_error}"
+                        ));
+                    }
+                }
+                return wait_for_runtime_ready(config, window);
+            }
             return Err(error);
         }
     }
@@ -206,6 +249,21 @@ fn fetch_runtime_status(config: &ResolvedDesktopConfig) -> Result<Value, String>
     response
         .json::<Value>()
         .map_err(|error| format!("{url}: invalid JSON: {error}"))
+}
+
+fn service_already_running_error(error: &str) -> bool {
+    let message = runtime_command_json_error(error).unwrap_or_else(|| error.to_string());
+    message.contains(SERVICE_ALREADY_RUNNING_FRAGMENT)
+        && message.contains(SERVICE_RESTART_SUGGESTION_FRAGMENT)
+}
+
+fn runtime_command_json_error(error: &str) -> Option<String> {
+    let start = error.find('{')?;
+    let value = serde_json::from_str::<Value>(&error[start..]).ok()?;
+    value
+        .get("error")
+        .and_then(Value::as_str)
+        .map(str::to_string)
 }
 
 fn run_runtime_command(config: &ResolvedDesktopConfig, args: &[String]) -> Result<String, String> {
@@ -663,6 +721,7 @@ mod tests {
         assert_eq!(config.status_path, "/runtime/status");
         assert_eq!(config.auth_header, "X-Nexus-Auth");
         assert_eq!(config.start_args, vec!["--json", "up"]);
+        assert_eq!(config.restart_args, vec!["--json", "restart"]);
         assert_eq!(config.stop_args, vec!["--json", "down"]);
     }
 
@@ -710,6 +769,27 @@ mod tests {
         assert!(summary.contains("database ok"));
         assert!(summary.contains("gateway:ok"));
         assert!(summary.contains("mock_openai:down"));
+    }
+
+    #[test]
+    fn service_already_running_error_matches_json_cli_failure() {
+        let error = "/Users/pythagor/.local/bin/poetry run nexus --json up \
+            exited with exit status: 1: {\"error\": \"Service 'gateway' is \
+            already running (pid 56729). Use 'nexus restart' or 'nexus down' first.\"}";
+
+        assert!(service_already_running_error(error));
+        assert_eq!(
+            runtime_command_json_error(error).as_deref(),
+            Some("Service 'gateway' is already running (pid 56729). Use 'nexus restart' or 'nexus down' first.")
+        );
+        assert!(!service_already_running_error(""));
+        assert!(!service_already_running_error("   "));
+        assert!(!service_already_running_error(
+            "Service 'gateway' is already running"
+        ));
+        assert!(!service_already_running_error(
+            "Poetry could not find pyproject.toml"
+        ));
     }
 
     #[test]
