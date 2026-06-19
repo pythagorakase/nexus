@@ -101,16 +101,22 @@ Full-screen compositions (splash/*, ErrorBoundary fallback): size the wrapper to
 
 Screenshot groups: `ai/*` → `ai`; shadcn primitives + loose → `general`; deco/veil/splash → own dirs.
 
-## Deferred components (floor cards — authorable later)
+## Data-bound rescues (fetch stub) — no floor cards remain
 
-- **CharactersPane**, **SettingsPane** — data-bound panes gated on live `useQuery`
-  fetches; render blank / an error-state notice statically, so they ship as floor
-  cards. To author them, extend the `DesignThemeRoot` fetch stub (in
-  `ds-provider.tsx`) to mock their endpoints (`/api/characters*`, `/api/settings`).
-  Caution: `/api/settings` also drives the Theme/Font providers — a mock must return
-  `ui.theme: "veil"` or it changes every card's theme.
-- SlotSelector / SeedPhase / LocationPhase were rescued: SlotSelector via the
-  `/api/story/new/slots` stub; the two phases card their on-brand generating states.
+All 95 components ship as authored cards. The data-bound panes render populated via
+the GET-only `DesignThemeRoot` fetch stub (`ds-provider.tsx`):
+
+- **CharactersPane** — mocks `/api/characters` (cast roster) + `/api/characters/<id>/images`
+  (→ `[]`). The images route MUST match the `<id>` segment; a stub that only matches
+  `/api/characters/images` falls through to the cast mock and crashes on
+  `portraitSrc(undefined)` — that was the original blank-card cause.
+- **SettingsPane** — mocks `/api/settings` with a full payload (model roles, slider
+  bounds, keeper fonts). The theme it returns ECHOES the preview's own
+  `localStorage["nexus-theme"]`, NOT a hardcoded `"veil"` — otherwise the Theme/Font
+  providers adopt the mock's theme and override every deco/splash card. Per-component
+  capture isolation keeps this from bleeding across cards.
+- SlotSelector via `/api/story/new/slots`; SeedPhase / LocationPhase card their
+  on-brand generating states.
 
 ## ds-provider QueryClient
 

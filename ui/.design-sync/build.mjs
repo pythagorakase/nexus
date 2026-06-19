@@ -8,7 +8,7 @@
 // — but config.json's committed componentSrcMap is static; on a component add,
 // re-merge it (see .design-sync/NOTES.md).
 import { execFileSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 
 const run = (cmd, args) => execFileSync(cmd, args, { stdio: "inherit" });
 
@@ -16,6 +16,12 @@ run("node", [".design-sync/gen-entry.mjs"]);
 run("npx", ["vite", "build", "--config", ".design-sync/vite.lib.config.mts"]);
 
 const CSS = ".design-sync/.cache/lib-dist/style.css";
+if (!existsSync(CSS)) {
+  throw new Error(
+    `[build] expected Vite stylesheet at ${CSS} but it's missing — did the lib build emit CSS? ` +
+      `Check cssCodeSplit:false in vite.lib.config.mts. (Claude review)`,
+  );
+}
 let css = readFileSync(CSS, "utf8");
 // "/fonts/X.ttf" -> "../../../client/public/fonts/X.ttf" (relative to the css dir
 // ui/.design-sync/.cache/lib-dist/ -> ui/client/public/fonts/)
