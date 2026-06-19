@@ -16,7 +16,6 @@ class ContextPackage:
     baseline_chunks: Set[int] = field(default_factory=set)
     baseline_entities: Dict[str, Any] = field(default_factory=dict)
     baseline_themes: List[str] = field(default_factory=list)
-    authorial_directives: List[str] = field(default_factory=list)
     structured_passages: List[Dict[str, Any]] = field(default_factory=list)
     token_usage: Dict[str, int] = field(default_factory=dict)
     divergence_detected: bool = False
@@ -33,7 +32,6 @@ class PassTransition:
     expected_user_themes: List[str] = field(default_factory=list)
     assembled_context: Dict[str, Any] = field(default_factory=dict)
     remaining_budget: int = 0
-    authorial_directives: List[str] = field(default_factory=list)
     structured_passages: List[Dict[str, Any]] = field(default_factory=list)
 
 
@@ -82,7 +80,10 @@ class ContextStateManager:
             if chunk_id is None:
                 continue
             if self._context:
-                if chunk_id in self._context.baseline_chunks or chunk_id in self._context.additional_chunks:
+                if (
+                    chunk_id in self._context.baseline_chunks
+                    or chunk_id in self._context.additional_chunks
+                ):
                     self._chunk_cache[chunk_id] = chunk
             else:
                 self._chunk_cache[chunk_id] = chunk
@@ -113,13 +114,20 @@ class ContextStateManager:
     def is_chunk_known(self, chunk_id: int) -> bool:
         if not self._context:
             return False
-        return chunk_id in self._context.baseline_chunks or chunk_id in self._context.additional_chunks
+        return (
+            chunk_id in self._context.baseline_chunks
+            or chunk_id in self._context.additional_chunks
+        )
 
-    def register_additional_chunks(self, chunks: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def register_additional_chunks(
+        self, chunks: Iterable[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
         """Register additional chunks and return only the truly new entries."""
 
         if not self._context:
-            logger.debug("No baseline context loaded; skipping additional chunk registration")
+            logger.debug(
+                "No baseline context loaded; skipping additional chunk registration"
+            )
             return []
 
         new_chunks: List[Dict[str, Any]] = []
@@ -136,7 +144,9 @@ class ContextStateManager:
         if not self._context:
             return []
         # Return chunks in a deterministic order: baseline first, then additional
-        ordered_ids = list(self._context.baseline_chunks) + list(self._context.additional_chunks)
+        ordered_ids = list(self._context.baseline_chunks) + list(
+            self._context.additional_chunks
+        )
         seen: Set[int] = set()
         result: List[Dict[str, Any]] = []
         for chunk_id in ordered_ids:
@@ -172,7 +182,11 @@ class ContextStateManager:
         available = self.get_remaining_budget()
         to_consume = min(available, amount)
         self._transition.remaining_budget = max(0, available - to_consume)
-        logger.debug("Consumed %s tokens from remaining budget (now %s)", to_consume, self._transition.remaining_budget)
+        logger.debug(
+            "Consumed %s tokens from remaining budget (now %s)",
+            to_consume,
+            self._transition.remaining_budget,
+        )
         return to_consume
 
     def adjust_budget(self, remaining_budget: int) -> None:
@@ -183,7 +197,9 @@ class ContextStateManager:
     # ------------------------------------------------------------------
     # Divergence tracking
     # ------------------------------------------------------------------
-    def update_divergence(self, detected: bool, confidence: float, gaps: Dict[str, str]) -> None:
+    def update_divergence(
+        self, detected: bool, confidence: float, gaps: Dict[str, str]
+    ) -> None:
         if not self._context:
             return
         self._context.divergence_detected = detected

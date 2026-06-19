@@ -15,27 +15,22 @@ from nexus.agents.logon.apex_schema import (
 )
 
 
-def test_bootstrap_response_schema_accepts_directives_but_not_metadata() -> None:
-    """Bootstrap responses should include successor directives, not entity metadata."""
+def test_bootstrap_response_schema_rejects_legacy_directives_and_metadata() -> None:
+    """Bootstrap responses should only include narrative and choices."""
 
     response = StorytellerResponseBootstrap(
         narrative="The story begins.",
         choices=["Step forward.", "Look around."],
-        authorial_directives=["Retrieve the starting room and visible companion."],
     )
 
     assert response.narrative == "The story begins."
     assert response.choices == ["Step forward.", "Look around."]
-    assert response.authorial_directives == [
-        "Retrieve the starting room and visible companion."
-    ]
 
     with pytest.raises(ValidationError):
         StorytellerResponseBootstrap(
             narrative="The story begins.",
             choices=["Step forward.", "Look around."],
             authorial_directives=["Retrieve the starting room."],
-            referenced_entities={"characters": []},
         )
 
 
@@ -48,9 +43,6 @@ def test_create_minimal_response_includes_valid_choices() -> None:
     assert response.choices == [
         "Continue.",
         "Wait and observe.",
-    ]
-    assert response.authorial_directives == [
-        "Preserve the immediate scene continuity and unresolved player choice."
     ]
 
 
@@ -130,9 +122,6 @@ def test_extended_response_accepts_partial_new_character_context() -> None:
     response = StorytellerResponseExtended(
         narrative="The watcher steps into the pharmacy light.",
         choices=["Ask his name.", "Step back."],
-        authorial_directives=[
-            "Retrieve Adrian Vale's prior appearances and brass token references."
-        ],
         chunk_metadata={
             "chronology": {
                 "episode_transition": "continue",

@@ -13,9 +13,6 @@ def test_response_to_incubator_serializes_current_reference_schema() -> None:
     response = StorytellerResponseExtended(
         narrative="Jonas waits beneath the pharmacy sign.",
         choices=["Follow Jonas.", "Answer the phone."],
-        authorial_directives=[
-            "Retrieve Jonas Vale's prior interactions with Eleanor Voss."
-        ],
         chunk_metadata={
             "chronology": {
                 "episode_transition": "continue",
@@ -66,9 +63,7 @@ def test_response_to_incubator_serializes_current_reference_schema() -> None:
     )
 
     assert incubator["metadata_updates"]["chronology"]["time_delta_minutes"] == 1
-    assert incubator["authorial_directives"] == [
-        "Retrieve Jonas Vale's prior interactions with Eleanor Voss."
-    ]
+    assert "authorial_directives" not in incubator
     reference_updates = incubator["reference_updates"]
     assert reference_updates["characters"][0]["character_name"] == "Eleanor Voss"
     assert reference_updates["characters"][1]["new_character"]["name"] == "Jonas Vale"

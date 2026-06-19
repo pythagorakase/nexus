@@ -574,10 +574,6 @@ async def story_turn(
         if hasattr(turn_context, "token_counts"):
             context_dict["token_counts"] = turn_context.token_counts
 
-        # Add authorial directives if available
-        if hasattr(turn_context, "authorial_directives"):
-            context_dict["authorial_directives"] = turn_context.authorial_directives
-
         context_payload = context_dict
 
     await manager.append_turn(
@@ -685,10 +681,6 @@ async def regenerate_turn(
         # Add token counts if available
         if hasattr(turn_context, "token_counts"):
             context_dict["token_counts"] = turn_context.token_counts
-
-        # Add authorial directives if available
-        if hasattr(turn_context, "authorial_directives"):
-            context_dict["authorial_directives"] = turn_context.authorial_directives
 
         context_payload = context_dict
 

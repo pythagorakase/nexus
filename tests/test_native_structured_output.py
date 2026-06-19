@@ -22,7 +22,6 @@ def _bootstrap_response() -> StorytellerResponseBootstrap:
     return StorytellerResponseBootstrap(
         narrative="[TEST MODE] Native structured output.",
         choices=["Continue", "Wait"],
-        authorial_directives=["Retrieve recent context."],
     )
 
 
@@ -46,6 +45,8 @@ def test_openai_response_text_format_is_native_strict_json_schema() -> None:
     assert schema["additionalProperties"] is False
     assert "state_updates" in schema["required"]
     assert "state_updates" in schema["properties"]
+    assert "authorial_directives" not in schema["required"]
+    assert "authorial_directives" not in schema["properties"]
 
 
 def test_anthropic_output_format_uses_native_json_schema_shape() -> None:
@@ -152,6 +153,70 @@ def test_openai_provider_accepts_native_text_format_override() -> None:
     assert parsed == expected
     assert captured["text"]["format"] is text_format
     assert "text_format" not in captured
+
+
+def test_openai_base_url_falls_back_to_chat_response_format() -> None:
+    """Local OpenAI-compatible servers may reject Responses json_schema format."""
+
+    expected = _bootstrap_response()
+    captured = {"responses_called": False}
+    text_format = openai_response_text_format(StorytellerResponseBootstrap)
+
+    class UnsupportedJsonSchema(Exception):
+        status_code = 422
+
+        def __str__(self) -> str:
+            return "Input should be 'text' or 'json_object'; " "input: 'json_schema'"
+
+    class FakeResponses:
+        def parse(self, **kwargs):
+            captured["responses_called"] = True
+            captured["responses_kwargs"] = kwargs
+            raise UnsupportedJsonSchema()
+
+    class FakeChatCompletions:
+        def create(self, **kwargs):
+            captured["chat_kwargs"] = kwargs
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(content=expected.model_dump_json())
+                    )
+                ],
+                usage=SimpleNamespace(prompt_tokens=55, completion_tokens=66),
+            )
+
+    provider = OpenAIProvider(
+        model="local-test-model",
+        api_key="test-key",
+        base_url="http://127.0.0.1:8012/v1",
+        system_prompt="System prompt",
+        max_output_tokens=1234,
+    )
+    provider.client = SimpleNamespace(
+        responses=FakeResponses(),
+        chat=SimpleNamespace(completions=FakeChatCompletions()),
+    )
+
+    parsed, llm_response = provider.get_structured_completion(
+        "Prompt", StorytellerResponseBootstrap, text_format=text_format
+    )
+
+    assert captured["responses_called"] is True
+    assert parsed == expected
+    assert llm_response.input_tokens == 55
+    assert llm_response.output_tokens == 66
+    chat_kwargs = captured["chat_kwargs"]
+    assert chat_kwargs["messages"][0] == {"role": "system", "content": "System prompt"}
+    assert chat_kwargs["max_tokens"] == 1234
+    assert chat_kwargs["response_format"] == {
+        "type": "json_schema",
+        "json_schema": {
+            "name": text_format["name"],
+            "schema": text_format["schema"],
+            "strict": True,
+        },
+    }
 
 
 def test_anthropic_provider_uses_native_output_format() -> None:

@@ -1,4 +1,4 @@
-"""Turn cycle plumbing tests for authorial directives."""
+"""Turn cycle plumbing tests for directive-free retrieval."""
 
 from __future__ import annotations
 
@@ -35,13 +35,11 @@ def _stub_baseline(
     narrative: str,
     warm_slice: list[Dict[str, Any]],
     token_usage: Dict[str, int],
-    directives: list[str],
 ) -> ContextPackage:
     package = ContextPackage(
         baseline_chunks={chunk["chunk_id"] for chunk in warm_slice},
         baseline_entities={},
         baseline_themes=[],
-        authorial_directives=directives,
         structured_passages=[],
         token_usage=token_usage,
     )
@@ -50,26 +48,20 @@ def _stub_baseline(
         expected_user_themes=[],
         assembled_context={},
         remaining_budget=token_usage.get("total_available", 0),
-        authorial_directives=directives,
         structured_passages=[],
     )
     manager.context_state.store_baseline(package, transition, warm_slice)
     return package
 
 
-def test_integrate_response_passes_generated_authorial_directives(
+def test_integrate_response_does_not_pass_authorial_directives(
     turn_manager: TurnCycleManager, monkeypatch: pytest.MonkeyPatch
-):
+) -> None:
     ctx = TurnContext(
-        turn_id="turn_directive",
+        turn_id="turn_no_directives",
         user_input="Test input",
         start_time=time.time(),
     )
-    ctx.authorial_directives = ["Incoming directive"]
-    ctx.generated_authorial_directives = [
-        "Generated directive A",
-        "Generated directive B",
-    ]
     ctx.warm_slice = [{"chunk_id": 999, "text": "Recent narrative."}]
     ctx.retrieved_passages = []
     ctx.token_counts = {
@@ -81,17 +73,13 @@ def test_integrate_response_passes_generated_authorial_directives(
 
     captured: Dict[str, Any] = {}
 
-    def fake_handle_storyteller_response(**kwargs):
-        captured["authorial_directives"] = kwargs.get("authorial_directives")
-        captured["execute_authorial_directives"] = kwargs.get(
-            "execute_authorial_directives"
-        )
+    def fake_handle_storyteller_response(**kwargs: Any) -> ContextPackage:
+        captured.update(kwargs)
         return _stub_baseline(
             turn_manager.lore.memory_manager,
             kwargs.get("narrative", ""),
             ctx.warm_slice,
             kwargs.get("token_usage", {}),
-            kwargs.get("authorial_directives", []),
         )
 
     monkeypatch.setattr(
@@ -102,26 +90,22 @@ def test_integrate_response_passes_generated_authorial_directives(
 
     asyncio.run(turn_manager.integrate_response(ctx, "Story chunk text"))
 
-    assert captured["authorial_directives"] == ctx.generated_authorial_directives
-    assert captured["execute_authorial_directives"] is False
+    assert "authorial_directives" not in captured
+    assert "execute_authorial_directives" not in captured
     baseline_snapshot = ctx.memory_state["pass1"]
-    assert (
-        baseline_snapshot["authorial_directives"] == ctx.generated_authorial_directives
-    )
+    assert "authorial_directives" not in baseline_snapshot
     assert baseline_snapshot["structured_passages"] == []
 
 
-def test_warm_analysis_loads_parent_authorial_directives(
+def test_warm_analysis_ignores_parent_authorial_directives(
     turn_manager: TurnCycleManager,
-):
+) -> None:
     class DummyMemnon:
         def get_chunk_by_id(self, chunk_id: int) -> Dict[str, Any]:
             return {
                 "id": chunk_id,
                 "text": "Parent scene.",
-                "authorial_directives": [
-                    "Retrieve the missing ledger and ash-boiler escape route."
-                ],
+                "authorial_directives": ["Legacy directive should be ignored."],
             }
 
         def get_recent_chunks(self, limit: int) -> Dict[str, Any]:
@@ -129,7 +113,7 @@ def test_warm_analysis_loads_parent_authorial_directives(
 
     turn_manager.lore.memnon = DummyMemnon()
     ctx = TurnContext(
-        turn_id="turn_parent_directives",
+        turn_id="turn_parent_no_directives",
         user_input="Continue.",
         start_time=time.time(),
         target_chunk_id=42,
@@ -137,64 +121,17 @@ def test_warm_analysis_loads_parent_authorial_directives(
 
     asyncio.run(turn_manager.perform_warm_analysis(ctx))
 
-    assert ctx.authorial_directives == [
-        "Retrieve the missing ledger and ash-boiler escape route."
-    ]
     assert ctx.phase_states["warm_analysis"]["analysis"]["source"] == (
         "programmatic_warm_slice"
     )
-    assert ctx.phase_states["warm_analysis"]["authorial_directive_count"] == 1
-
-
-def test_deep_queries_use_authorial_directives_without_generated_queries(
-    turn_manager: TurnCycleManager,
-):
-    class DummyMemnon:
-        def __init__(self) -> None:
-            self.queries: list[str] = []
-
-        def query_memory(
-            self, query: str, k: int, use_hybrid: bool
-        ) -> Dict[str, list[Dict[str, Any]]]:
-            self.queries.append(query)
-            return {
-                "results": [
-                    {
-                        "id": len(self.queries),
-                        "score": 1.0,
-                        "text": f"Result for {query}",
-                    }
-                ]
-            }
-
-    memnon = DummyMemnon()
-    turn_manager.lore.memnon = memnon
-
-    ctx = TurnContext(
-        turn_id="turn_deep_directives",
-        user_input="Continue.",
-        start_time=time.time(),
+    assert "authorial_directive_count" not in ctx.phase_states["warm_analysis"]
+    assert (
+        "authorial_directive_count" not in ctx.phase_states["warm_analysis"]["analysis"]
     )
-    ctx.authorial_directives = [
-        "Directive query A",
-        "Directive query B",
-    ]
-    ctx.phase_states["warm_analysis"] = {"analysis": {"themes": ["testing"]}}
-
-    asyncio.run(turn_manager.execute_deep_queries(ctx))
-
-    assert memnon.queries == ["Directive query A", "Directive query B"]
-    assert ctx.phase_states["deep_queries"]["query_sources"] == {
-        "raw_chunk": 0,
-        "authorial_directive": 2,
-        "llm_generated": 0,
-    }
 
 
-def test_deep_queries_use_raw_chunk_before_targeted_queries(
-    turn_manager: TurnCycleManager,
-):
-    """Full chunk text should seed retrieval before narrower query paths."""
+def test_deep_queries_use_raw_chunk_only(turn_manager: TurnCycleManager) -> None:
+    """Full chunk text should seed retrieval without successor directives."""
 
     class DummyMemnon:
         def __init__(self) -> None:
@@ -229,134 +166,24 @@ def test_deep_queries_use_raw_chunk_before_targeted_queries(
             "full_text": "Full parent chunk text with all the messy narrative details.",
         }
     ]
-    ctx.authorial_directives = [
-        "Directive query A",
-        "Directive query B",
-    ]
     ctx.phase_states["warm_analysis"] = {"analysis": {"themes": ["testing"]}}
 
     asyncio.run(turn_manager.execute_deep_queries(ctx))
 
     assert memnon.queries == [
-        "Full parent chunk text with all the messy narrative details.",
-        "Directive query A",
-        "Directive query B",
+        "Full parent chunk text with all the messy narrative details."
     ]
     assert ctx.phase_states["deep_queries"]["query_sources"] == {
         "raw_chunk": 1,
-        "authorial_directive": 2,
         "llm_generated": 0,
     }
 
 
-def test_deep_queries_warn_when_raw_chunk_suppresses_directives(
+def test_deep_queries_can_skip_without_raw_text(
     turn_manager: TurnCycleManager,
     caplog: pytest.LogCaptureFixture,
-):
-    """A one-query budget should trace that raw text displaced directives."""
-
-    class DummyMemnon:
-        def __init__(self) -> None:
-            self.queries: list[str] = []
-
-        def query_memory(
-            self, query: str, k: int, use_hybrid: bool
-        ) -> Dict[str, list[Dict[str, Any]]]:
-            self.queries.append(query)
-            return {
-                "results": [
-                    {
-                        "id": len(self.queries),
-                        "score": 1.0,
-                        "text": f"Result for {query[:20]}",
-                    }
-                ]
-            }
-
-    memnon = DummyMemnon()
-    turn_manager.lore.memnon = memnon
-    turn_manager.lore.settings["lore"] = {"retrieval": {"max_deep_queries": 1}}
-
-    ctx = TurnContext(
-        turn_id="turn_deep_raw_chunk_budget",
-        user_input="Continue.",
-        start_time=time.time(),
-    )
-    ctx.warm_slice = [
-        {
-            "id": 10,
-            "is_target": True,
-            "text": "Full parent chunk text.",
-        }
-    ]
-    ctx.authorial_directives = ["Directive query A"]
-    ctx.phase_states["warm_analysis"] = {"analysis": {"themes": ["testing"]}}
-
-    with caplog.at_level(logging.WARNING, logger="nexus.lore.turn_cycle"):
-        asyncio.run(turn_manager.execute_deep_queries(ctx))
-
-    assert memnon.queries == ["Full parent chunk text."]
-    assert "all authorial directives suppressed" in caplog.text
-    assert ctx.phase_states["deep_queries"]["query_sources"] == {
-        "raw_chunk": 1,
-        "authorial_directive": 0,
-        "llm_generated": 0,
-    }
-
-
-def test_deep_queries_obey_configured_query_budget(
-    turn_manager: TurnCycleManager,
-):
-    """The deep-query budget should come from LORE retrieval settings."""
-
-    class DummyMemnon:
-        def __init__(self) -> None:
-            self.queries: list[str] = []
-
-        def query_memory(
-            self, query: str, k: int, use_hybrid: bool
-        ) -> Dict[str, list[Dict[str, Any]]]:
-            self.queries.append(query)
-            return {
-                "results": [
-                    {
-                        "id": len(self.queries),
-                        "score": 1.0,
-                        "text": f"Result for {query}",
-                    }
-                ]
-            }
-
-    memnon = DummyMemnon()
-    turn_manager.lore.memnon = memnon
-    turn_manager.lore.settings["lore"] = {"retrieval": {"max_deep_queries": 3}}
-
-    ctx = TurnContext(
-        turn_id="turn_deep_budget",
-        user_input="Continue.",
-        start_time=time.time(),
-    )
-    ctx.authorial_directives = [
-        "Directive query A",
-        "Directive query B",
-    ]
-    ctx.phase_states["warm_analysis"] = {"analysis": {"themes": ["testing"]}}
-
-    asyncio.run(turn_manager.execute_deep_queries(ctx))
-
-    assert memnon.queries == ["Directive query A", "Directive query B"]
-    assert ctx.phase_states["deep_queries"]["query_sources"] == {
-        "raw_chunk": 0,
-        "authorial_directive": 2,
-        "llm_generated": 0,
-    }
-
-
-def test_deep_queries_can_skip_without_raw_text_or_directives(
-    turn_manager: TurnCycleManager,
-    caplog: pytest.LogCaptureFixture,
-):
-    """Missing raw text and directives should skip retrieval."""
+) -> None:
+    """Missing raw text should skip retrieval."""
 
     class DummyMemnon:
         def query_memory(
@@ -379,10 +206,9 @@ def test_deep_queries_can_skip_without_raw_text_or_directives(
         asyncio.run(turn_manager.execute_deep_queries(ctx))
 
     assert ctx.retrieved_passages == []
-    assert "No raw chunk text or authorial directives" in caplog.text
+    assert "No raw chunk text available for deep queries" in caplog.text
     assert ctx.phase_states["deep_queries"]["query_sources"] == {
         "raw_chunk": 0,
-        "authorial_directive": 0,
         "llm_generated": 0,
     }
 
@@ -405,7 +231,6 @@ def test_integrate_response_sorts_mixed_chunk_id_payloads(
             baseline_chunks={3, "2", 1},
             baseline_entities={},
             baseline_themes=[],
-            authorial_directives=[],
             structured_passages=[],
             token_usage=kwargs.get("token_usage", {}),
         )

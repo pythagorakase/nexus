@@ -18,7 +18,6 @@ from psycopg2.extras import RealDictCursor
 
 from nexus.agents.lore.lore import LORE
 from nexus.api.lore_adapter import (
-    extract_authorial_directives,
     response_to_incubator,
     validate_incubator_data,
 )
@@ -281,11 +280,10 @@ async def write_to_incubator(conn, data: Dict[str, Any]):
             id, chunk_id, parent_chunk_id, user_text, storyteller_text,
             choice_object, choice_text,
             metadata_updates, entity_updates, reference_updates,
-            authorial_directives, orrery_proposal, orrery_adjudications,
+            orrery_proposal, orrery_adjudications,
             new_entities, session_id, llm_response_id, status
         ) VALUES (
-            TRUE, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-            %s
+            TRUE, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
         )
         """
 
@@ -305,7 +303,6 @@ async def write_to_incubator(conn, data: Dict[str, Any]):
                 json.dumps(data["metadata_updates"]),
                 json.dumps(data["entity_updates"]),
                 json.dumps(data["reference_updates"]),
-                json.dumps(data.get("authorial_directives", [])),
                 (
                     json.dumps(data.get("orrery_proposal"))
                     if data.get("orrery_proposal")
@@ -514,7 +511,6 @@ async def generate_bootstrap_narrative(
             "places": [],
             "factions": [],
         },
-        "authorial_directives": extract_authorial_directives(story_response),
         "orrery_adjudications": [],
         "session_id": session_id,
         "llm_response_id": f"bootstrap_{uuid.uuid4().hex[:8]}",

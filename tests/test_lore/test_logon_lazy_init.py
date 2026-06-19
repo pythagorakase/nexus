@@ -53,9 +53,6 @@ class _DummyProvider:
     def _response(self, prompt: str) -> StorytellerResponseMinimal:
         return StorytellerResponseMinimal(
             narrative=f"dummy:{prompt[:20]}",
-            authorial_directives=[
-                "Retrieve the immediate prior scene and unresolved player choice."
-            ],
             choices=[
                 "Continue.",
                 "Wait and observe.",
