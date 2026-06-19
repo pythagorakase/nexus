@@ -21,7 +21,7 @@ try {
   console.error(
     "[gen-entry] ts-morph not found under .ds-sync/ — run the design-sync setup first:\n" +
       "  (cd .ds-sync && npm i esbuild ts-morph @types/react)\n" +
-      "See .design-sync/NOTES.md. (Claude review)",
+      "See .design-sync/NOTES.md.",
   );
   process.exit(1);
 }
@@ -63,13 +63,15 @@ for (const f of files) {
       if (Node.isVariableDeclaration(d)) {
         const init = d.getInitializer?.();
         if (!init) return false;
-        // Keep functions/arrows, forwardRef|memo calls, and re-exports
-        // (const X = Primitive.Root); exclude PascalCase primitive constants
-        // (string/number) that merely pass isComp (Claude review).
-        return !(
-          Node.isStringLiteral(init) ||
-          Node.isNoSubstitutionTemplateLiteral(init) ||
-          Node.isNumericLiteral(init)
+        // Allowlist of component-shaped initializers: functions/arrows,
+        // forwardRef|memo|cva calls, and `const X = Ns.Root` re-exports. An
+        // allowlist (vs excluding known scalar literals) can't silently admit a
+        // PascalCase `= {}` / `= true` / `= null` constant as a component.
+        return (
+          Node.isArrowFunction(init) ||
+          Node.isFunctionExpression(init) ||
+          Node.isCallExpression(init) ||
+          Node.isPropertyAccessExpression(init)
         );
       }
       return false;

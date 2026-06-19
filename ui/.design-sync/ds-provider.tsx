@@ -66,11 +66,11 @@ if (typeof window !== "undefined" && !(window as any).__dsFetchStubbed) {
     const url = typeof input === "string" ? input : input?.url ?? "";
     if (method === "GET") {
       if (url.includes("/api/settings")) {
-        const theme = window.localStorage?.getItem("nexus-theme") || "veil";
+        const theme = window.localStorage.getItem("nexus-theme") || "veil";
         return Promise.resolve(json(SETTINGS(theme)));
       }
       if (url.includes("/api/story/new/slots")) return Promise.resolve(json(SLOTS));
-      if (url.includes("/api/characters/") && url.includes("/images")) return Promise.resolve(json([]));
+      if (/\/api\/characters\/[^/]+\/images(\?|$)/.test(url)) return Promise.resolve(json([]));
       if (url.includes("/api/characters")) return Promise.resolve(json(CAST));
     }
     return realFetch(input as any, init);

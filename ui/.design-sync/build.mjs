@@ -19,7 +19,7 @@ const CSS = ".design-sync/.cache/lib-dist/style.css";
 if (!existsSync(CSS)) {
   throw new Error(
     `[build] expected Vite stylesheet at ${CSS} but it's missing — did the lib build emit CSS? ` +
-      `Check cssCodeSplit:false in vite.lib.config.mts. (Claude review)`,
+      `Check cssCodeSplit:false in vite.lib.config.mts.`,
   );
 }
 let css = readFileSync(CSS, "utf8");

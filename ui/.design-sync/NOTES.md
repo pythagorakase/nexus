@@ -114,7 +114,10 @@ the GET-only `DesignThemeRoot` fetch stub (`ds-provider.tsx`):
   bounds, keeper fonts). The theme it returns ECHOES the preview's own
   `localStorage["nexus-theme"]`, NOT a hardcoded `"veil"` — otherwise the Theme/Font
   providers adopt the mock's theme and override every deco/splash card. Per-component
-  capture isolation keeps this from bleeding across cards.
+  capture isolation keeps this from bleeding across cards. Its preview wrapper keeps
+  the `nexus-shell` class (overriding 100vh + the 52px TopBar grid row) so the
+  RESET/COMMIT footer buttons get their shell-scoped `.btn-soft`/`.btn-primary`
+  styling — a bare flex wrapper renders them as default browser buttons (Codex review).
 - SlotSelector via `/api/story/new/slots`; SeedPhase / LocationPhase card their
   on-brand generating states.
 
