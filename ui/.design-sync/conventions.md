@@ -60,8 +60,9 @@ custom layout glue, reference tokens directly: `hsl(var(--primary))`,
 
 ## Where the truth lives
 
-- `styles.css` — the token + font + component-style closure every design
-  receives. Read it before styling.
+- `styles.css` (in this synced project) — the token + font + component-style
+  closure every design receives. Read it before styling. Upstream source:
+  `client/src/index.css` + `tailwind.config.ts`, compiled by the design-sync build.
 - `components/<group>/<Name>/<Name>.prompt.md` — per-component usage notes.
 - `components/<group>/<Name>/<Name>.d.ts` — the prop contract (`<Name>Props`).
 

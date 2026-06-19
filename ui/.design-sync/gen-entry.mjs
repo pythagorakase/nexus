@@ -14,7 +14,17 @@ import { execSync } from "node:child_process";
 const UI = fileURLToPath(new URL("..", import.meta.url)); // ui/
 const SRC = resolve(UI, "client/src");
 const require = createRequire(resolve(UI, ".ds-sync/package.json"));
-const { Project, Node, ts } = require("ts-morph");
+let Project, Node, ts;
+try {
+  ({ Project, Node, ts } = require("ts-morph"));
+} catch {
+  console.error(
+    "[gen-entry] ts-morph not found under .ds-sync/ — run the design-sync setup first:\n" +
+      "  (cd .ds-sync && npm i esbuild ts-morph @types/react)\n" +
+      "See .design-sync/NOTES.md.",
+  );
+  process.exit(1);
+}
 
 const files = execSync(
   `find "${SRC}/components" "${SRC}/pages" -type f \\( -name '*.tsx' -o -name '*.jsx' \\)`,
@@ -48,15 +58,25 @@ for (const f of files) {
         ? decls.map((d) => d.getName?.()).find((n) => n && n !== "default")
         : name;
     if (!real || !isComp(real)) continue;
-    if (
-      !decls.some(
-        (d) =>
-          Node.isVariableDeclaration(d) ||
-          Node.isFunctionDeclaration(d) ||
-          Node.isClassDeclaration(d),
-      )
-    )
-      continue;
+    const isComponentDecl = decls.some((d) => {
+      if (Node.isFunctionDeclaration(d) || Node.isClassDeclaration(d)) return true;
+      if (Node.isVariableDeclaration(d)) {
+        const init = d.getInitializer?.();
+        if (!init) return false;
+        // Allowlist of component-shaped initializers: functions/arrows,
+        // forwardRef|memo|cva calls, and `const X = Ns.Root` re-exports. An
+        // allowlist (vs excluding known scalar literals) can't silently admit a
+        // PascalCase `= {}` / `= true` / `= null` constant as a component.
+        return (
+          Node.isArrowFunction(init) ||
+          Node.isFunctionExpression(init) ||
+          Node.isCallExpression(init) ||
+          Node.isPropertyAccessExpression(init)
+        );
+      }
+      return false;
+    });
+    if (!isComponentDecl) continue;
     if (name === "default") def = real;
     else named.add(real);
   }
