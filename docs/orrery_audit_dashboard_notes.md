@@ -5,6 +5,23 @@ worker, retrograde cluster, tag_writer, migrations 023/024). Goal: move Orrery f
 toward "reliably generates appropriate and dynamic resolutions," and design a dashboard that
 makes its reasoning visible and auditable.
 
+## Current Checkout Delta
+
+These notes originally framed an explain-evaluator as the first backend gap. In the current
+checkout, that primitive already exists:
+
+- `nexus/agents/orrery/explain.py` provides `trace_condition()`, `explain_template()`, and
+  `explain_stack()`.
+- The trace model already returns condition-tree pass/fail results, branch traces, whole-stack
+  winner/shadowed metadata, drive band, present-target policy, event type, magnitude, narrative
+  stub, and state delta.
+- `nexus/agents/orrery/demo.py --explain` emits the shape the dashboard should consume.
+- `tests/test_orrery/test_explain.py` guards the important invariant: explain output must match
+  production `evaluate_stack()` selection while retaining the shadowed packages.
+
+So the next step is not "invent explainability"; it is **connect the existing explain stack to
+real slot hydration, entity name/context hydration, overrides, and a localhost UI**.
+
 ---
 
 ## Two Findings That Reframe the Work
@@ -48,20 +65,32 @@ How expensive is honest reconstruction? Mixed, and worth knowing precisely:
 
 Label every mode in the UI so we never silently audit a chimera.
 
-### "Why Did This Fire?" Has No Answer Yet
+### "Why Did This Fire?" Now Has a Core Primitive
 
 Conditions are opaque `bool`-returning callables (`Condition`), composed via
 `CompoundCondition(op, children)`. `evaluate()` returns only the winning branch — no record of
-which gate clauses passed, which branches lost, or why. The hover-audit UX Neil wants ("what
-tags and conditions triggered the package") **has no backend to read from.**
+which gate clauses passed, which branches lost, or why. The hover-audit UX ("what tags and
+conditions triggered the package") used to have no backend to read from.
 
 Good news: the condition tree is already introspectable. `_condition_tree_leaves()` walks it;
 `CompoundCondition` exposes `.op` and `.children`; leaf predicates carry human names via
-`__name__` (e.g. `has_any_intimacy_suppressor(@actor)`). So an **explain-evaluator** that walks
-the tree and returns a result-annotated copy (each node → passed/failed + the values it read)
-is very doable. **This is the single most important backend addition** — it powers the entire
-audit experience. Build it as a parallel `evaluate_explained()` that mirrors `evaluate()` but
-records a trace, so the production path stays untouched.
+`__name__` (e.g. `has_any_intimacy_suppressor(@actor)`). `nexus/agents/orrery/explain.py`
+now uses those surfaces to produce a whole-stack trace without touching the production resolver
+hot path.
+
+What it does today:
+
+- walks compound gates exhaustively and records pass/fail at each node
+- renders predicate prose through the same catalog machinery as `docs/orrery_packages.md`
+- cross-checks each explanation against production `evaluate()` and fails loudly on divergence
+- returns every priority-ordered template, with the actual winner and shadowed packages flagged
+
+What it does **not** do yet:
+
+- expose the underlying values that made a leaf predicate true/false (`sleep debt = 18.4`,
+  `actor tags include off_grid`, etc.)
+- explain real slot actors in an API response; the existing demo harness is preset-based
+- combine traces with rich entity hover data, adjudication history, or sandbox overrides
 
 ---
 
@@ -83,7 +112,7 @@ Per off-screen actor, every tick:
    along as an output, but never actually drives a choice.
 
 `priority` is a fixed global int. The `drive_band_priority_warnings()` lint exists precisely
-because a static ladder across 18 packages is brittle to author — that lint is a smell pointing
+because a static ladder across 25 packages is brittle to author — that lint is a smell pointing
 at finding #3 below.
 
 ---
@@ -100,11 +129,11 @@ both the engine and the way you already think:
 
 | Band | Packages |
 |---|---|
-| `CRISIS_CONSTRAINT` | EVADE_PURSUERS, PROTECT_KIN, TEND_WOUNDED, HIDE, WARN_ALLY |
+| `CRISIS_CONSTRAINT` | EVADE_PURSUERS, PROTECT_KIN, TEND_WOUNDED, HIDE, WARN_ALLY, MAINTAIN_COVER |
 | `EMBODIED_MAINTENANCE` | **SLEEP, DRINK, EAT** (the SunHelm trio) |
-| `ANCHORED_ROUTINE` | ROUTINE_COMMUTE, TRAVEL |
-| `AFFILIATION` | CHECK_ON_DEPENDENT, KEEP_VIGIL, REACH_OUT_TO_KIN, MOURN_LOSS |
-| `PROJECT_IDENTITY` | EXTRACT_VENGEANCE, HONOR_DEBT, PURSUE_GHOST_LEAD, CULTIVATE_INFORMANT, SURVEIL, CONSULT_RIVAL |
+| `ANCHORED_ROUTINE` | ROUTINE_COMMUTE, TRAVEL, WORK |
+| `AFFILIATION` | CHECK_ON_DEPENDENT, KEEP_VIGIL, REACH_OUT_TO_KIN, MOURN_LOSS, SOCIALIZE, INTIMACY |
+| `PROJECT_IDENTITY` | EXTRACT_VENGEANCE, HONOR_DEBT, PURSUE_GHOST_LEAD, CULTIVATE_INFORMANT, SURVEIL, CONSULT_RIVAL, TEND_CRAFT |
 
 ### Cross-Cutting Axes (filter/highlight, not primary grouping)
 
@@ -126,7 +155,7 @@ both the engine and the way you already think:
   behavior across many packages: `INTIMACY_SUPPRESSOR_TAGS`, `HIDDEN_TAGS` (composed into
   `DRAMATIC_CONTACT_TAGS`), `CONSTRAINED_TAGS`, `PUBLIC_MOBILITY_TAGS`, `PUBLIC_PLACE_CLASSES`,
   `ESTABLISHED_PARTNER_RELATIONSHIP_TYPES`. A single ephemeral like `grudge_active` silently
-  suppresses ~5 social packages. When a resolution feels "wrong," an invisible family tag is
+  suppresses several other packages. When a resolution feels "wrong," an invisible family tag is
   often the cause — so the hover-audit must name the family responsible.
 
 ### The SunHelm Trio in Context
@@ -148,9 +177,9 @@ is imminent. So "the trio" is really "a band with an extra intra-band coupling."
    **reproducible** (tests still assert exact outcomes) while a character no longer "drinks
    routinely" identically every eligible tick. Smallest change, biggest dynamism payoff.
 2. **Intensity-modulated temperature.** Let how *hard* the gate matched lower the temperature:
-   desperate states (sleep debt 48) resolve sharply; mild states wander. Needs a scalar
-   "match intensity" alongside the boolean — see the explain-evaluator, which computes this
-   anyway.
+   desperate states (sleep debt 48) resolve sharply; mild states wander. This needs a scalar
+   "match intensity" alongside today's boolean traces; the explain layer is the natural place
+   to expose it once predicates can report structured evidence.
 
 ### Appropriateness (winner-take-all flattens off-screen life)
 
@@ -188,36 +217,56 @@ is imminent. So "the trio" is really "a band with an extra intra-band coupling."
 
 ## The Audit Dashboard
 
-### Form Factor — Recommendation: Standalone localhost First
+### Form Factor — Recommendation: Localhost Dev Surface First
 
-Build a standalone localhost app now; fold into the desktop app as a hidden dev pane only once
-the information architecture has stabilized (and even then, likely by embedding the same view
-behind a dev flag). Reasons:
+Build a localhost dev surface now; fold it into the desktop app as a hidden developer pane only
+once the information architecture has stabilized. "Standalone" should mean "isolated from the
+player UI and safe to iterate," not necessarily "a totally separate tech stack." In the current
+repo, two shapes both fit:
+
+- a small FastAPI app plus single-page frontend dedicated to Orrery auditing
+- a dev-only `/dev/orrery` route in the existing React/Vite app, backed by `/api/dev/orrery/*`
+  endpoints and excluded from production/player affordances
+
+Reasons:
 
 - The resolver is already pure-Python and side-effect-free (`resolve_dry_run` writes nothing),
-  so a thin FastAPI + single-page frontend is the shortest path. `demo.py` is already a
-  standalone harness to crib from.
+  so a thin FastAPI + single-page frontend is a short path. `demo.py --explain` is already a
+  standalone JSON harness to crib from.
 - Dev affordances (raw JSON, override forms, batch-over-chunks, coverage reports) should never
-  ship in the player UI — keeping them out of IRIS avoids polluting it.
+  ship in the player UI.
 - It iterates independently of the desktop release cycle.
 - It doubles as the anti-mock test/CI surface you like: real DB, real resolver, real API-free
   determinism — assert resolver behavior over real historical slots.
 
-This fits NEXUS conventions cleanly: configurable via `nexus.toml`, surfaces errors loudly, no
-mocks.
+This fits NEXUS conventions cleanly: configurable via `nexus.toml`, surfaces errors loudly,
+keeps writes out of the audit path, and avoids mocks.
 
 ### Backend — What Exists vs. What to Add
 
 Already there: `hydrate_world_state()`, `compose_actor_bindings()` /
 `compose_actor_target_bindings()`, `resolve_dry_run()` → `OrreryTickProposal`,
-`_load_entity_names()`, `OrreryResolutionDraft.to_dict()`.
+`_load_entity_names()`, `OrreryResolutionDraft.to_dict()`, `explain_stack()`,
+`StackExplanation.to_dict()`, and the `demo.py --explain` JSON payload.
 
 To add:
-- `evaluate_explained()` — the explain-evaluator (condition-tree trace). *Priority one.*
-- As-of hydration variants for tags/pairs/relationships (+ overrides layer on `WorldState`).
-- Three endpoints: `GET /state` (slot, anchor, overrides) → snapshot; `POST /resolve` →
-  full per-actor stack **with traces and the shadowed stack**; `GET /catalog` → templates
-  grouped by drive band with cross-cutting metadata.
+- A slot-backed explained resolver: hydrate real slot `WorldState`, compose actor/target
+  bindings, run `explain_stack()` for each binding set, and attach entity names.
+- An entity hover/context hydrator: tags grouped durable/ephemeral/family, pair tags,
+  relationships/trust, needs, travel state, routine anchors, current place/classes, recent
+  events.
+- An overrides layer on `WorldState` for what-if mode (toggle tag, move actor, set need, inject
+  event) without touching canonical tables.
+- As-of hydration variants for tags/pairs/relationships.
+- Three minimal endpoints: `GET /catalog` → templates grouped by drive band with cross-cutting
+  metadata; `POST /resolve` → full per-actor stack **with traces and the shadowed stack**;
+  `POST /context/entities` → hover/context payload for the entity ids visible in a result.
+- Optional later endpoint: `GET /history/adjudications` to compare proposal → Skald
+  adjudication → committed resolution patterns.
+
+One caveat for the current `explain_stack()`: it records pass/fail, not the raw values read by
+leaf predicates. That is enough for the first dashboard. A richer "why this leaf was true"
+layer probably requires predicate helpers to return structured evidence, not just booleans.
 
 ### Organization
 
@@ -242,13 +291,29 @@ decision (priority/score) and clearly mark **winner vs. shadowed**.
 - **Health strip:** counts per band, coverage gaps, priority-inversion warnings (existing
   lint), never/always-win packages across the loaded window.
 
+### Questions the Dashboard Should Answer Fast
+
+- Why did this actor get this package instead of another plausible package?
+- Which package would have fired if the winner were disabled or deprioritized?
+- Which specific tag, pair tag, need, location class, recent event, or cooldown suppressed the
+  package I expected?
+- Which actors have no plausible package at all?
+- Which packages never win in this slot, and which branches are dead behind their gates?
+- Which two-party packages are targeting on-screen entities as scene pressure rather than
+  committing off-screen state?
+- How often does Skald defer, replace, or void each package after seeing the proposal?
+- Is the current "clock" mode an honest replay, or a current-state what-if with older event
+  windows?
+
 ---
 
 ## Suggested Sequence
 
-1. `evaluate_explained()` + `POST /resolve` returning per-actor stacks with traces and the
-   shadowed stack. (Unlocks the whole audit experience on current-state.)
-2. Standalone localhost SPA: drive-band grouping, resolution cards, hover-audit, why-popover.
+1. Slot-backed `POST /resolve` that wraps the existing `explain_stack()` and returns per-actor
+   stacks with traces, winners, and shadowed packages. (Unlocks the whole audit experience on
+   current-state.)
+2. Localhost SPA or dev-only `/dev/orrery` route: drive-band grouping, resolution cards,
+   hover-audit, why-popover.
 3. Override/sandbox layer on `WorldState` (the high-value what-if mode).
 4. Coverage analyzer (batch over historical chunks) — auditing doubles as CI.
 5. True as-of reconstruction for tags/pairs/relationships; flag position as approximate until
