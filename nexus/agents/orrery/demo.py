@@ -6,6 +6,7 @@ import argparse
 import json
 from typing import Dict
 
+from nexus.agents.orrery.explain import explain_stack
 from nexus.agents.orrery.substrate import (
     Bindings,
     EventRecord,
@@ -335,6 +336,36 @@ def run_preset(name: str) -> dict:
     }
 
 
+def _resolve_preset(name: str) -> tuple[WorldState, Bindings]:
+    """Return the (state, bindings) pair for a named preset."""
+
+    actor_only_presets = build_presets()
+    multi_slot_presets = build_multi_slot_presets()
+    if name in actor_only_presets:
+        return actor_only_presets[name], {Slot.ACTOR: ACTOR_ID}
+    if name in multi_slot_presets:
+        preset = multi_slot_presets[name]
+        return preset["state"], preset["bindings"]
+    raise ValueError(f"Unknown Orrery demo preset: {name}")
+
+
+def run_preset_explained(name: str) -> dict:
+    """Evaluate one preset and return the full audit explanation for the stack.
+
+    Unlike :func:`run_preset` (which reports only the winning resolution), this
+    returns the priority-ordered explanation for every template — winner,
+    shadowed packages, gate pass/fail traces, and branch selection — exactly the
+    payload the audit dashboard consumes.
+    """
+
+    validate_always_fallbacks(BUILTIN_TEMPLATES)
+    state, bindings = _resolve_preset(name)
+    explanation = explain_stack(BUILTIN_TEMPLATES, state, bindings)
+    payload = explanation.to_dict()
+    payload["preset"] = name
+    return payload
+
+
 def _all_preset_names() -> list[str]:
     """All known preset names across actor-only and multi-slot harnesses."""
 
@@ -351,8 +382,16 @@ def main() -> None:
         default="hunted",
         help="Demo preset to evaluate",
     )
+    parser.add_argument(
+        "--explain",
+        action="store_true",
+        help="Emit the full audit explanation (winner + shadowed + gate traces)",
+    )
     args = parser.parse_args()
-    print(json.dumps(run_preset(args.preset), indent=2, sort_keys=True))
+    if args.explain:
+        print(json.dumps(run_preset_explained(args.preset), indent=2, sort_keys=True))
+    else:
+        print(json.dumps(run_preset(args.preset), indent=2, sort_keys=True))
 
 
 if __name__ == "__main__":
