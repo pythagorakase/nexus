@@ -344,10 +344,10 @@ class OpenAIProvider(LLMProvider):
         # Detect model type
         model_lower = self.model.lower()
         self.is_reasoning_model = (
-            "gpt-5" in model_lower
+            "gpt-5" in model_lower  # pin: family-prefix feature detection
             or model_lower == "o3"
             or model_lower.startswith("o3-")
-        )  # pin: family-prefix feature detection
+        )
         self.supports_temperature = not self.is_reasoning_model
 
         # Create client with optional base_url for mock servers
