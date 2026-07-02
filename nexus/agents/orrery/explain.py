@@ -28,6 +28,7 @@ from dataclasses import dataclass, field
 from typing import Any, Iterable, List, Mapping, Optional, Tuple
 
 from nexus.agents.orrery.catalog import _render_predicate_name
+from nexus.agents.orrery.evidence import resolve_evidence
 from nexus.agents.orrery.substrate import (
     Bindings,
     CompoundCondition,
@@ -54,6 +55,7 @@ class ConditionTrace:
     result: bool
     op: Optional[str] = None
     children: Tuple["ConditionTrace", ...] = ()
+    evidence: Optional[Mapping[str, Any]] = None
 
     @property
     def is_leaf(self) -> bool:
@@ -68,6 +70,10 @@ class ConditionTrace:
         if self.op is not None:
             node["op"] = self.op
             node["children"] = [child.to_dict() for child in self.children]
+        else:
+            node["evidence"] = (
+                dict(self.evidence) if self.evidence is not None else None
+            )
         return node
 
 
@@ -206,10 +212,22 @@ def trace_condition(
         )
 
     name = getattr(condition, "__name__", repr(condition))
+    result = bool(condition(state, bindings))
+    evidence = resolve_evidence(name, state, bindings)
+    # Evidence recomputes its own verdict from the parsed name; a mismatch
+    # means the factory closure and the evidence resolver have drifted.
+    # evidence["result"] is None only for name-unrecoverable filters
+    # (recent_event's changed_fields marker), where no cross-check is possible.
+    if evidence["result"] is not None and bool(evidence["result"]) != result:
+        raise AssertionError(
+            f"evidence/predicate divergence for {name!r}: predicate returned "
+            f"{result}, evidence recomputed {evidence['result']}"
+        )
     return ConditionTrace(
         raw=name,
         prose=_render_predicate_name(name),
-        result=bool(condition(state, bindings)),
+        result=result,
+        evidence=evidence,
     )
 
 
