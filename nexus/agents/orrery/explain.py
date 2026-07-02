@@ -115,9 +115,15 @@ class TemplateExplanation:
     magnitude: float
     event_type: Optional[str]
     narrative_stub: Optional[str]
+    binding_hash: str
     state_delta: Mapping[str, Any] = field(default_factory=dict)
+    changed_fields: Tuple[str, ...] = ()
+    scene_pressure_stub: Optional[str] = None
 
     def to_dict(self) -> dict[str, Any]:
+        # Payload hygiene: a non-fired template's magnitude/event_type are
+        # Resolution defaults (0.0 / None), not observations — null them so a
+        # consumer can't render them as meaningful.
         return {
             "template_id": self.template_id,
             "priority": self.priority,
@@ -130,10 +136,13 @@ class TemplateExplanation:
             "fired": self.fired,
             "chosen_branch": self.chosen_branch,
             "branches": [branch.to_dict() for branch in self.branches],
-            "magnitude": self.magnitude,
-            "event_type": self.event_type,
+            "magnitude": self.magnitude if self.fired else None,
+            "event_type": self.event_type if self.fired else None,
             "narrative_stub": self.narrative_stub,
+            "binding_hash": self.binding_hash,
             "state_delta": dict(self.state_delta),
+            "changed_fields": list(self.changed_fields),
+            "scene_pressure_stub": self.scene_pressure_stub,
         }
 
 
@@ -273,7 +282,10 @@ def explain_template(
         magnitude=truth.magnitude,
         event_type=truth.event_type,
         narrative_stub=truth.narrative_stub,
+        binding_hash=truth.binding_hash,
         state_delta=dict(truth.state_delta),
+        changed_fields=truth.changed_fields,
+        scene_pressure_stub=truth.scene_pressure_stub,
     )
 
 

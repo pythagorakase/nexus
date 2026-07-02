@@ -206,6 +206,12 @@ enabled = true
 [orrery.binding]
 window_chunks = 30
 
+[orrery.dashboard]
+# Registers the read-only /api/dev/orrery/* audit router on the gateway.
+# Server-side gate (import.meta.env.DEV only hides the client bundle) — flip
+# to false before exposing the gateway beyond localhost (issue #415).
+enabled = true
+
 [orrery.route_graph]
 max_edges_per_query = 5000
 

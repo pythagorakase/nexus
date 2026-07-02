@@ -9,6 +9,7 @@ from nexus.config import load_settings
 from nexus.api.new_story_schemas import Genre
 from nexus.config.settings_models import (
     OrreryBleedSettings,
+    OrreryDashboardSettings,
     OrreryPromoteSettings,
     OrreryRetrogradeMaturationSettings,
     OrreryRetrogradeWeirdGenreBands,
@@ -48,6 +49,7 @@ def test_orrery_settings_resolve_model_reference() -> None:
         "intimacy": 16,
     }
     assert settings.orrery.sunhelm.pressure.min_severity_level == 2
+    assert settings.orrery.dashboard.enabled is True
     weird = settings.orrery.retrograde.weird
     assert weird.default_level == "medium"
     assert weird.dev.cli_flag == "--weird"
@@ -56,6 +58,12 @@ def test_orrery_settings_resolve_model_reference() -> None:
     assert set(weird.bands_by_genre) == {genre.value for genre in Genre}
     assert weird.bands_by_genre["cyberpunk"].medium.min == 0.36
     assert weird.bands_by_genre["historical"].medium.min == 0.12
+
+
+def test_orrery_dashboard_defaults_to_disabled() -> None:
+    """Fresh checkouts must not expose the dev audit router implicitly."""
+
+    assert OrreryDashboardSettings().enabled is False
 
 
 def test_orrery_bleed_accepts_deprecated_selection_keys() -> None:
