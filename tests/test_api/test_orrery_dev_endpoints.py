@@ -623,4 +623,164 @@ def test_dashboard_flag_gates_router_registration(tmp_path: Path) -> None:
         "/api/dev/orrery/catalog",
         "/api/dev/orrery/resolve",
         "/api/dev/orrery/context/entities",
+        "/api/dev/orrery/coverage",
     }
+
+
+# ---------------------------------------------------------------------------
+# Coverage analyzer
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.requires_postgres
+@pytest.mark.parametrize("slot", AUDIT_SLOTS)
+def test_coverage_report_is_internally_consistent(
+    client: TestClient, slot: int
+) -> None:
+    response = client.post(
+        "/api/dev/orrery/coverage", json={"slot": slot, "count": 3, "stride": 5}
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+
+    assert payload["anchor_chunk_ids"] == sorted(payload["anchor_chunk_ids"])
+    assert 1 <= len(payload["anchor_chunk_ids"]) <= 3
+    assert [a["anchor_chunk_id"] for a in payload["anchors"]] == payload[
+        "anchor_chunk_ids"
+    ]
+
+    templates_by_id = {t.id: t for t in BUILTIN_TEMPLATES}
+    assert set(payload["templates"]) == set(templates_by_id)
+    total_won = 0
+    for template_id, stats in payload["templates"].items():
+        assert (
+            stats["won"] <= stats["fired"] <= stats["gate_passed"] <= stats["evaluated"]
+        ), template_id
+        authored_labels = [b.label for b in templates_by_id[template_id].branches]
+        assert sorted(stats["branch_chosen"]) == sorted(authored_labels)
+        assert sum(stats["branch_chosen"].values()) == stats["fired"]
+        total_won += stats["won"]
+
+    # Winner counts per anchor band tally must reconcile with template wins.
+    band_total = sum(
+        count
+        for anchor in payload["anchors"]
+        for count in anchor["winners_by_band"].values()
+    )
+    assert band_total == total_won
+
+    # Derived lists partition consistently.
+    assert not set(payload["never_fired"]) & set(payload["fired_never_won"])
+    for template_id in payload["never_fired"]:
+        assert payload["templates"][template_id]["fired"] == 0
+    for template_id in payload["fired_never_won"]:
+        stats = payload["templates"][template_id]
+        assert stats["fired"] > 0 and stats["won"] == 0
+
+    for gap in payload["gap_actors"]:
+        assert 0 < gap["gapped_anchors"] <= gap["seen_anchors"]
+
+    # The static lint re-derives exactly the four dead gate arms.
+    assert set(payload["dead_gate_arms"]) == {
+        "threat_issued",
+        "compliance_alert",
+        "faction_realignment",
+        "encoded_message",
+    }
+    assert set(payload["hydration_honesty"]) == {
+        "rewound_to_anchor",
+        "current_projection",
+    }
+
+
+@pytest.mark.requires_postgres
+def test_coverage_head_anchor_reconciles_with_production(
+    client: TestClient,
+    production_proposals: dict[int, tuple[Optional[int], OrreryTickProposal]],
+) -> None:
+    """Per-anchor band tallies must equal the production resolution count."""
+
+    for slot in AUDIT_SLOTS:
+        anchor_chunk_id, proposal = production_proposals[slot]
+        if anchor_chunk_id is None:
+            continue
+        response = client.post(
+            "/api/dev/orrery/coverage",
+            json={"slot": slot, "anchor_chunk_ids": [anchor_chunk_id]},
+        )
+        assert response.status_code == 200, response.text
+        payload = response.json()
+        (anchor,) = payload["anchors"]
+        assert anchor["anchor_chunk_id"] == anchor_chunk_id
+        assert sum(anchor["winners_by_band"].values()) == len(proposal.resolutions)
+
+
+@pytest.mark.requires_postgres
+def test_coverage_data_quality_matches_sql_oracle(client: TestClient) -> None:
+    """save_05 exhibits the NULL-world-time bestowal pathology; the health
+    strip must report exactly what SQL reports."""
+
+    response = client.post("/api/dev/orrery/coverage", json={"slot": 5, "count": 1})
+    assert response.status_code == 200, response.text
+    findings = response.json()["data_quality"]["null_world_time_bestowals"]
+
+    engine = create_engine(get_slot_db_url(slot=5))
+    try:
+        with Session(engine) as session:
+            oracle_nulls, oracle_active = session.execute(
+                text(
+                    """
+                    SELECT count(*) FILTER (WHERE applied_at_world_time IS NULL),
+                           count(*)
+                    FROM entity_tags WHERE cleared_at IS NULL
+                    """
+                )
+            ).one()
+    finally:
+        engine.dispose()
+
+    tag_rows = [f for f in findings if f["bestowal_table"] == "entity_tags"]
+    assert sum(f["null_world_time_rows"] for f in tag_rows) == oracle_nulls
+    assert sum(f["active_rows"] for f in tag_rows) == oracle_active
+    assert oracle_nulls > 0, (
+        "save_05 no longer exhibits the NULL-world-time pathology — the "
+        "data-quality assertion is vacuous; repoint at a slot that does"
+    )
+
+
+@pytest.mark.requires_postgres
+def test_coverage_anchor_cap_and_sampling(client: TestClient) -> None:
+    from nexus.config import load_settings_as_dict
+
+    max_anchors = load_settings_as_dict()["orrery"]["dashboard"]["coverage_max_anchors"]
+
+    over = client.post(
+        "/api/dev/orrery/coverage", json={"slot": 2, "count": max_anchors + 1}
+    )
+    assert over.status_code == 400
+    assert "coverage_max_anchors" in over.json()["detail"]
+
+    over_explicit = client.post(
+        "/api/dev/orrery/coverage",
+        json={"slot": 2, "anchor_chunk_ids": list(range(1, max_anchors + 2))},
+    )
+    assert over_explicit.status_code == 400
+
+    # Stride sampling walks real chunk ids backward from the head.
+    engine = create_engine(get_slot_db_url(slot=2))
+    try:
+        with Session(engine) as session:
+            ids_desc = list(
+                session.execute(
+                    text("SELECT id FROM narrative_chunks ORDER BY id DESC LIMIT 9")
+                ).scalars()
+            )
+    finally:
+        engine.dispose()
+    expected = sorted(ids_desc[::3][:3])
+
+    response = client.post(
+        "/api/dev/orrery/coverage", json={"slot": 2, "count": 3, "stride": 3}
+    )
+    assert response.status_code == 200
+    assert response.json()["anchor_chunk_ids"] == expected

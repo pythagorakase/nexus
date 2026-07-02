@@ -22,6 +22,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
 from nexus.agents.orrery.audit import build_catalog, entity_context, explain_dry_run
+from nexus.agents.orrery.coverage import analyze_coverage, sample_anchor_ids
 from nexus.agents.orrery.overrides import (
     EventOverride,
     LocationOverride,
@@ -188,6 +189,30 @@ class OrreryResolveRequest(BaseModel):
     )
 
 
+class OrreryCoverageRequest(BaseModel):
+    """Parameters for a batch coverage analysis over historical anchors."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    slot: Optional[int] = Field(default=None)
+    anchor_chunk_ids: Optional[List[int]] = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "Explicit anchors to analyze. When omitted, `count`/`stride`/"
+            "`end_chunk_id` sample real chunk ids walking backward from the "
+            "slot head."
+        ),
+    )
+    count: int = Field(default=10, ge=1)
+    stride: int = Field(default=1, ge=1)
+    end_chunk_id: Optional[int] = Field(default=None)
+    window_chunks: Optional[int] = Field(
+        default=None,
+        description="Binding window; defaults to [orrery.binding] window_chunks.",
+    )
+
+
 class OrreryEntityContextRequest(BaseModel):
     """Parameters for the entity hover/context payload."""
 
@@ -310,4 +335,60 @@ async def post_entity_context(
             anchor_chunk_id=anchor_chunk_id,
             recent_events_limit=request.recent_events_limit,
             sunhelm_settings=orrery.get("sunhelm"),
+        )
+
+
+@router.post("/coverage")
+async def post_coverage(request: OrreryCoverageRequest) -> dict[str, Any]:
+    """Batch coverage analysis over historical anchors. Read-only.
+
+    Each anchor is a full explained dry-run tick, so the anchor count is
+    bounded by [orrery.dashboard] coverage_max_anchors.
+    """
+
+    orrery = _orrery_settings()
+    dashboard = orrery.get("dashboard", {})
+    max_anchors = int(dashboard["coverage_max_anchors"])
+    epoch_min = int(dashboard["coverage_epoch_min_world_times"])
+    window_chunks = (
+        request.window_chunks
+        if request.window_chunks is not None
+        else int(orrery["binding"]["window_chunks"])
+    )
+    requested = (
+        len(request.anchor_chunk_ids)
+        if request.anchor_chunk_ids is not None
+        else request.count
+    )
+    if requested > max_anchors:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Coverage request asks for {requested} anchors; "
+                f"[orrery.dashboard] coverage_max_anchors is {max_anchors}"
+            ),
+        )
+    with _slot_session(request.slot) as session:
+        anchor_chunk_ids = (
+            list(request.anchor_chunk_ids)
+            if request.anchor_chunk_ids is not None
+            else sample_anchor_ids(
+                session,
+                count=request.count,
+                stride=request.stride,
+                end_chunk_id=request.end_chunk_id,
+            )
+        )
+        if not anchor_chunk_ids:
+            raise HTTPException(
+                status_code=400,
+                detail="No anchors to analyze: the slot has no narrative chunks",
+            )
+        return analyze_coverage(
+            session,
+            BUILTIN_TEMPLATES,
+            anchor_chunk_ids=anchor_chunk_ids,
+            window_chunks=window_chunks,
+            sunhelm_settings=orrery.get("sunhelm"),
+            epoch_min_world_times=epoch_min,
         )
