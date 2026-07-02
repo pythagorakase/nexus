@@ -50,6 +50,8 @@ def test_orrery_settings_resolve_model_reference() -> None:
     }
     assert settings.orrery.sunhelm.pressure.min_severity_level == 2
     assert settings.orrery.dashboard.enabled is False
+    assert settings.orrery.dashboard.coverage_max_anchors == 50
+    assert settings.orrery.dashboard.coverage_epoch_min_world_times == 10
     weird = settings.orrery.retrograde.weird
     assert weird.default_level == "medium"
     assert weird.dev.cli_flag == "--weird"

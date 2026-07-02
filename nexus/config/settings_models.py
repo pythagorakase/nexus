@@ -1002,6 +1002,24 @@ class OrreryDashboardSettings(BaseModel):
             "explicitly for local development."
         ),
     )
+    coverage_max_anchors: int = Field(
+        default=50,
+        ge=1,
+        description=(
+            "Upper bound on anchors a single POST /api/dev/orrery/coverage "
+            "request may analyze; each anchor is a full explained dry-run "
+            "tick, so this bounds request latency and payload size."
+        ),
+    )
+    coverage_epoch_min_world_times: int = Field(
+        default=10,
+        ge=2,
+        description=(
+            "Data-quality lint threshold: a single wall-clock second whose "
+            "bestowals carry at least this many distinct world times is "
+            "flagged as a retrograde backfill epoch."
+        ),
+    )
 
 
 class OrrerySettings(BaseModel):
