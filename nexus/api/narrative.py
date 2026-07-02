@@ -94,6 +94,30 @@ app.include_router(reader_router)
 app.include_router(asset_router)
 
 
+def _include_orrery_dev_router(target_app: FastAPI, settings: Any = None) -> None:
+    """Register the audit-dashboard router iff [orrery.dashboard] enabled.
+
+    Server-side gate: the client bundle's import.meta.env.DEV check cannot
+    protect the API once the gateway is exposed beyond localhost (issue
+    #415). Evaluated once at import — flag changes need a gateway restart.
+    ``settings`` is injectable so both arms of the gate are testable.
+    """
+
+    if settings is None:
+        from nexus.config import load_settings as _load_typed_settings
+
+        settings = _load_typed_settings()
+
+    orrery_settings = settings.orrery
+    if orrery_settings is not None and orrery_settings.dashboard.enabled:
+        from nexus.api.orrery_dev_endpoints import router as orrery_dev_router
+
+        target_app.include_router(orrery_dev_router)
+
+
+_include_orrery_dev_router(app)
+
+
 # WebSocket connection manager
 class ConnectionManager:
     def __init__(self):

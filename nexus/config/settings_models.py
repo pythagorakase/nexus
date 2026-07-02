@@ -987,6 +987,23 @@ class OrreryRetrogradeSettings(BaseModel):
     )
 
 
+class OrreryDashboardSettings(BaseModel):
+    """Audit-dashboard settings for the Orrery dev surface."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = Field(
+        default=False,
+        description=(
+            "Register the /api/dev/orrery/* audit router on the gateway. "
+            "Server-side gate: import.meta.env.DEV only hides the client "
+            "bundle, so this flag is what keeps the dev surface off any "
+            "externally exposed gateway (issue #415). Default off; enable "
+            "explicitly for local development."
+        ),
+    )
+
+
 class OrrerySettings(BaseModel):
     """Orrery off-screen behavior settings.
 
@@ -1006,6 +1023,7 @@ class OrrerySettings(BaseModel):
     promote: OrreryPromoteSettings = Field(default_factory=OrreryPromoteSettings)
     sunhelm: OrrerySunhelmSettings = Field(default_factory=OrrerySunhelmSettings)
     retrograde: OrreryRetrogradeSettings
+    dashboard: OrreryDashboardSettings = Field(default_factory=OrreryDashboardSettings)
 
 
 # =============================================================================

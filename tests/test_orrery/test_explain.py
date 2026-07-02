@@ -49,6 +49,9 @@ def test_explain_stack_matches_evaluate_stack(preset_name: str) -> None:
     assert winner.chosen_branch == truth.branch_label
     assert winner.magnitude == truth.magnitude
     assert winner.event_type == truth.event_type
+    assert winner.binding_hash == truth.binding_hash
+    assert winner.changed_fields == truth.changed_fields
+    assert winner.scene_pressure_stub == truth.scene_pressure_stub
 
 
 def test_every_template_is_explained_in_priority_order() -> None:
@@ -128,3 +131,25 @@ def test_explanation_is_json_serializable() -> None:
     assert payload["templates"]
     winner = next(t for t in payload["templates"] if t["is_winner"])
     assert winner["gate_trace"]["result"] is True
+    assert winner["binding_hash"]
+    assert isinstance(winner["changed_fields"], list)
+    assert "scene_pressure_stub" in winner
+
+
+def test_non_fired_templates_null_magnitude_and_event_in_payload() -> None:
+    """Resolution defaults on non-fired templates must not look like data."""
+
+    state, bindings = _resolve_preset("kin_danger")
+    explanation = explain_stack(BUILTIN_TEMPLATES, state, bindings)
+    payload = explanation.to_dict()
+
+    non_fired = [t for t in payload["templates"] if not t["fired"]]
+    assert non_fired, "preset expected to leave some templates un-fired"
+    for template in non_fired:
+        assert template["magnitude"] is None
+        assert template["event_type"] is None
+
+    fired = [t for t in payload["templates"] if t["fired"]]
+    assert fired
+    for template in fired:
+        assert template["magnitude"] is not None
