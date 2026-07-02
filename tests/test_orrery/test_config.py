@@ -49,7 +49,7 @@ def test_orrery_settings_resolve_model_reference() -> None:
         "intimacy": 16,
     }
     assert settings.orrery.sunhelm.pressure.min_severity_level == 2
-    assert settings.orrery.dashboard.enabled is True
+    assert settings.orrery.dashboard.enabled is False
     weird = settings.orrery.retrograde.weird
     assert weird.default_level == "medium"
     assert weird.dev.cli_flag == "--weird"

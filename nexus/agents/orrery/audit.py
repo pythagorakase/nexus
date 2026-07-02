@@ -799,6 +799,11 @@ def entity_context(
 
     travel_states = _load_travel_states(session)
     routine_anchors = _load_routine_anchors(session)
+    anchors_by_entity: dict[int, list[dict[str, Any]]] = {}
+    for (anchor_entity_id, _), anchor in sorted(
+        routine_anchors.items(), key=lambda item: item[0]
+    ):
+        anchors_by_entity.setdefault(anchor_entity_id, []).append(asdict(anchor))
 
     events_by_entity: dict[int, list[dict[str, Any]]] = {}
     # Anchor-bound like production _load_recent_events: a historical anchor
@@ -884,13 +889,7 @@ def entity_context(
                 }
         tag_rows = tags_by_entity.get(entity_id, [])
         travel = travel_states.get(entity_id)
-        anchors = [
-            asdict(anchor)
-            for (anchor_entity_id, _), anchor in sorted(
-                routine_anchors.items(), key=lambda item: item[0]
-            )
-            if anchor_entity_id == entity_id
-        ]
+        anchors = anchors_by_entity.get(entity_id, [])
         entities.append(
             {
                 "entity_id": entity_id,
