@@ -543,11 +543,14 @@ def commit_incubator_to_database_sync(
                 or orrery_result.skipped_existing_count
                 or orrery_result.adjudication_count
                 or orrery_result.cleared_tag_count
+                or orrery_result.scene_pressure_count
+                or orrery_result.prompt_exposure_count
             ):
                 logger.info(
                     "Committed Orrery tick for chunk %s: %s resolutions, %s events, "
                     "%s tag mutations, %s cleared tags, %s existing skipped, "
-                    "%s adjudications (%s deferred, %s voided, %s replaced)",
+                    "%s adjudications (%s deferred, %s voided, %s replaced), "
+                    "%s scene pressures, %s prompt exposures",
                     chunk_id,
                     orrery_result.resolution_count,
                     orrery_result.event_count,
@@ -558,6 +561,8 @@ def commit_incubator_to_database_sync(
                     orrery_result.deferred_count,
                     orrery_result.voided_count,
                     orrery_result.replaced_count,
+                    orrery_result.scene_pressure_count,
+                    orrery_result.prompt_exposure_count,
                 )
 
             # Step 8.6: Process Skald new-entity declarations inside the

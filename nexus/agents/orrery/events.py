@@ -382,8 +382,14 @@ def commit_orrery_tick_sync(
                 # A replace-with-delta ruling must reach the history log even
                 # when the resolution row already exists (idempotent
                 # re-commit): resolve the existing id instead of silently
-                # dropping the ruling.
-                if adjudicated.adjudication is not None:
+                # dropping the ruling. The log has no unique key, so guard
+                # against duplicate rows on repeated re-commits.
+                if (
+                    adjudicated.adjudication is not None
+                    and not _replace_already_logged_sync(
+                        cur, draft, tick_chunk_id=tick_chunk_id
+                    )
+                ):
                     if adjudicated.adjudication.action == "replace":
                         replaced_count += 1
                     _insert_adjudication_log_sync(
@@ -583,8 +589,14 @@ async def commit_orrery_tick_async(
         if resolution_id is None:
             skipped_existing_count += 1
             # Same idempotent-re-commit guarantee as the sync twin: the
-            # replace ruling reaches the log with the existing resolution id.
-            if adjudicated.adjudication is not None:
+            # replace ruling reaches the log with the existing resolution id,
+            # guarded against duplicate rows on repeated re-commits.
+            if (
+                adjudicated.adjudication is not None
+                and not await _replace_already_logged_async(
+                    conn, draft, tick_chunk_id=tick_chunk_id
+                )
+            ):
                 if adjudicated.adjudication.action == "replace":
                     replaced_count += 1
                 await _insert_adjudication_log_async(
@@ -1026,6 +1038,43 @@ async def _insert_adjudication_log_async(
         applied_resolution_id,
         _scalar_entity_binding(draft.bindings, "actor"),
         json.dumps(dict(draft.bindings)),
+    )
+
+
+def _replace_already_logged_sync(
+    cur: Any,
+    draft: OrreryResolutionDraft,
+    *,
+    tick_chunk_id: int,
+) -> bool:
+    cur.execute(
+        """
+        SELECT 1 FROM orrery_adjudication_log
+        WHERE tick_chunk_id = %s AND proposal_id = %s AND action = 'replace'
+        LIMIT 1
+        """,
+        (tick_chunk_id, draft.proposal_id),
+    )
+    return cur.fetchone() is not None
+
+
+async def _replace_already_logged_async(
+    conn: Any,
+    draft: OrreryResolutionDraft,
+    *,
+    tick_chunk_id: int,
+) -> bool:
+    return (
+        await conn.fetchval(
+            """
+            SELECT 1 FROM orrery_adjudication_log
+            WHERE tick_chunk_id = $1 AND proposal_id = $2 AND action = 'replace'
+            LIMIT 1
+            """,
+            tick_chunk_id,
+            draft.proposal_id,
+        )
+        is not None
     )
 
 

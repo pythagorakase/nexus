@@ -220,6 +220,35 @@ def test_commit_persists_enriched_history_then_rolls_back() -> None:
             # land, pointing at the resolution row that already existed.
             assert replace_row[1] == existing_resolution_id
             assert replace_row[2] == actor_entity_id
+
+        # --- Round 3: a third commit must not duplicate the replace row ----
+        result_three = commit_orrery_tick_sync(
+            conn,
+            proposal,
+            tick_chunk_id=anchor_chunk_id,
+            slot=WRITE_SLOT,
+            adjudications=[
+                {
+                    "proposal_id": ratified.proposal_id,
+                    "action": "replace",
+                    "replacement_state_delta": {
+                        "character.current_activity": "audit-history probe"
+                    },
+                },
+            ],
+        )
+        assert result_three.replaced_count == 0
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT count(*) FROM orrery_adjudication_log
+                WHERE binding_hash = %s AND action = 'replace'
+                """,
+                (ratify_hash,),
+            )
+            assert (
+                cur.fetchone()[0] == 1
+            ), "repeated re-commits must not inflate replace history"
     finally:
         conn.rollback()
         conn.close()
