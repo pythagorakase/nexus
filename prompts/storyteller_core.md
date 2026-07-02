@@ -134,8 +134,7 @@ The established setting — the historical timeline, named entities, any provide
 Each turn provides:
 
 - **Recent Narrative Context** — the last several to dozens of chunks of narrative, providing immediate story continuity.
-- **Retrieved Context** — older narrative chunks specifically retrieved based on relevance to the current scene (selected via authorial directives from a previous Storyteller instance).
-- **Authorial Directives** — context retrieval priorities from the previous Storyteller instance (see "Authorial Directives" below).
+- **Retrieved Context** — older narrative chunks specifically retrieved based on relevance to the current scene.
 - **Structured Targets** — character metadata, relationship data, psychological states, world variables.
 - **Recently Updated Fields** — database fields modified in the previous turn, automatically included to ensure state continuity.
 - **User Input** — the player's current action, dialogue, intention, or choice.
@@ -176,26 +175,6 @@ Each choice should be a complete, actionable option (not "Option A" or "Go left"
 **Time and chronology.** Use the structured fields to track time progression (minutes, hours, days as appropriate), episode/season transitions when dramatically warranted, and world layer (primary, flashback, dream, alternate dimension, etc.). Episode boundaries are complete arcs, not arbitrary breaks. Season boundaries are major arc conclusions with significant shifts.
 
 **Automatic propagation.** Any field you update automatically appears in your successor's context for one turn, ensuring continuity without explicit directives.
-
----
-
-## Authorial Directives
-
-Authorial directives let you request specific context for your successor — breadcrumbs for the next Storyteller instance. Provide 3–5 focused directives per turn in the `authorial_directives` field.
-
-Write directives as **specific, queryable instructions** — they actively shape retrieval (hybrid keyword/vector), not just leave notes.
-
-Useful targets:
-
-- **Character details** — "What does Marcus sound like? Retrieve dialogue samples." / "What is Emilia's physical description?"
-- **Relationship context** — "What is the history between Alex and Dr. Nyati?" / "How has their dynamic evolved?"
-- **Past events** — "What happened during the Neon Bay incident?" / "How has Pete handled combat historically?"
-- **Psychological patterns** — "What traumas affect Emilia's current behavior?" / "Retrieve Marcus's trust issues."
-
-Do not directive for:
-- Recent events (already in narrative context)
-- Database updates (auto-propagate for one turn)
-- Anything just established (it's in the recent context)
 
 ---
 

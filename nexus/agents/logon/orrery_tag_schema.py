@@ -84,9 +84,6 @@ def storyteller_anthropic_compact_schema(
             "choices": _string_array_schema(
                 "Player choices, each as a complete actionable option."
             ),
-            "authorial_directives": _string_array_schema(
-                "Focused retrieval priorities for the next turn."
-            ),
             "chunk_metadata": _empty_object_schema(
                 "Default chunk metadata; runtime fills normal chronology."
             ),
@@ -112,7 +109,6 @@ def storyteller_anthropic_compact_schema(
         "required": [
             "narrative",
             "choices",
-            "authorial_directives",
             "chunk_metadata",
             "referenced_entities",
             "state_updates",

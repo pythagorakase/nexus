@@ -11,7 +11,6 @@ You are writing **chunk #1**—the first narrative beat of a new story. You have
 ### What Doesn't Apply Yet
 
 - **"Recent Narrative Context"** — There is none; you're creating it
-- **"Previous Storyteller's authorial directives"** — You are the first instance
 - **"Recently updated fields"** — Nothing has been modified yet
 
 ### What You Have Instead
@@ -32,12 +31,6 @@ You are writing **chunk #1**—the first narrative beat of a new story. You have
 **Filter through the protagonist.** Their traits should feel lived-in, not introduced. The "steady hands and guilty conscience" shows in what they notice and how they react—not in exposition about their past.
 
 **Honor the seed's promise.** The story is already in motion. The tension source is active. The stakes are real *now*. No preamble, no "ordinary world" setup—drop into the situation the seed describes.
-
----
-
-## Authorial Directives
-
-Even without a predecessor, populate `authorial_directives` to guide chunk #2. What context would help your successor continue what you've started? What details did you establish that should be retrievable? What questions might arise from where you left off?
 
 ---
 

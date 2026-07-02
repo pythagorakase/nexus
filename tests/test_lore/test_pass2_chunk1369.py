@@ -130,24 +130,19 @@ def test_pass2_handles_karaoke_divergence(
             "retrieved_passages": {"results": authorial_passages},
             "analysis": analysis,
         },
-        authorial_directives=AUTHORIAL_DIRECTIVES,
     )
     assert KARAOKE_CHUNK_ID in baseline.baseline_chunks
-    assert baseline.authorial_directives == AUTHORIAL_DIRECTIVES
     assert structured_stub in baseline.structured_passages
 
     state_context = lore_agent.memory_manager.context_state.context
     transition = lore_agent.memory_manager.context_state.transition
     assert state_context is not None
     assert transition is not None
-    assert state_context.authorial_directives == AUTHORIAL_DIRECTIVES
-    assert transition.authorial_directives == AUTHORIAL_DIRECTIVES
     assert structured_stub in state_context.structured_passages
     assert state_context.structured_passages == transition.structured_passages
 
     directive_history = lore_agent.memory_manager.query_memory.snapshot()["pass1"]
-    for directive in AUTHORIAL_DIRECTIVES:
-        assert directive in directive_history
+    assert directive_history == []
 
     divergence_prompt = (
         "Walk me back through the Virginia Beach karaoke ambush—the Driftlight cocktails, "

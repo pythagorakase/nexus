@@ -111,7 +111,6 @@ def test_extended_response_carries_new_entities() -> None:
         {
             "narrative": "A stranger watches from the mezzanine.",
             "choices": ["Approach the stranger.", "Leave quietly."],
-            "authorial_directives": ["Who is the stranger on the mezzanine?"],
             "chunk_metadata": {},
             "referenced_entities": {},
             "state_updates": {},
@@ -134,7 +133,6 @@ def test_extended_response_new_entities_defaults_empty() -> None:
         {
             "narrative": "Nothing new under the neon.",
             "choices": ["Continue.", "Wait."],
-            "authorial_directives": ["Keep scene continuity."],
             "chunk_metadata": {},
             "referenced_entities": {},
             "state_updates": {},

@@ -93,7 +93,6 @@ def test_pass1_baseline_tracks_chunks_and_budget(
     assert package.token_usage["baseline_tokens"] == 630
     assert package.token_usage["reserved_for_pass2"] == 300
     assert package.token_usage["reserve_shortfall"] == 0
-    assert package.authorial_directives == []
     assert package.structured_passages == []
 
     transition = manager.context_state.transition
@@ -228,61 +227,6 @@ def test_entity_detector_raises_when_database_load_fails():
         HighSpecificityEntityDetector(BrokenDB())
 
 
-def test_pass1_stores_authorial_directives(
-    minimal_settings, dummy_memnon, baseline_inputs
-):
-    manager = ContextMemoryManager(minimal_settings, memnon=dummy_memnon)
-
-    directives = [
-        "  Vault alarm subsystem overrides  ",
-        "Dynacorp retaliation forecasts",
-    ]
-
-    package = manager.handle_storyteller_response(
-        narrative=baseline_inputs["narrative"],
-        warm_slice=baseline_inputs["warm_slice"],
-        retrieved_passages=baseline_inputs["retrieved"],
-        token_usage=baseline_inputs["token_usage"],
-        authorial_directives=directives,
-    )
-
-    trimmed = [directive.strip() for directive in directives]
-    assert package.authorial_directives == trimmed
-
-    state_context = manager.context_state.context
-    transition = manager.context_state.transition
-    assert state_context is not None
-    assert transition is not None
-    assert state_context.authorial_directives == trimmed
-    assert transition.authorial_directives == trimmed
-
-    history = manager.query_memory.snapshot()
-    for directive in trimmed:
-        assert directive in history["pass1"]
-    assert history["pass2"] == []
-
-
-def test_pass1_can_store_authorial_directives_without_executing_queries(
-    minimal_settings, dummy_memnon, baseline_inputs
-):
-    manager = ContextMemoryManager(minimal_settings, memnon=dummy_memnon)
-
-    package = manager.handle_storyteller_response(
-        narrative=baseline_inputs["narrative"],
-        warm_slice=baseline_inputs["warm_slice"],
-        retrieved_passages=baseline_inputs["retrieved"],
-        token_usage=baseline_inputs["token_usage"],
-        authorial_directives=["Retrieve next-turn context."],
-        execute_authorial_directives=False,
-    )
-
-    assert package.authorial_directives == ["Retrieve next-turn context."]
-    assert dummy_memnon.queries == []
-
-    history = manager.query_memory.snapshot()
-    assert history["pass1"] == ["Retrieve next-turn context."]
-
-
 def test_pass1_separates_structured_passages(
     minimal_settings, dummy_memnon, baseline_inputs
 ):
@@ -401,7 +345,6 @@ def test_get_memory_summary_reports_state(
 
     assert summary["pass1"]["baseline_chunks"] == 3
     assert summary["pass1"]["token_usage"]["baseline_tokens"] == 630
-    assert summary["pass1"]["authorial_directives"] == []
     assert summary["pass1"]["structured_passages"] == []
     assert summary["pass2"]["divergence_detected"] is True
     assert summary["pass2"]["usage"]["remaining_budget"] >= 0

@@ -1668,7 +1668,6 @@ class MEMNON:
                     SELECT 
                         nc.id,
                         nc.raw_text,
-                        COALESCE(nc.authorial_directives, '[]'::jsonb) AS authorial_directives,
                         cm.season,
                         cm.episode,
                         cm.scene,
@@ -1684,7 +1683,6 @@ class MEMNON:
                     GROUP BY
                         nc.id,
                         nc.raw_text,
-                        nc.authorial_directives,
                         cm.season,
                         cm.episode,
                         cm.scene,
@@ -1706,10 +1704,6 @@ class MEMNON:
                     return {
                         "id": result.id,
                         "text": result.raw_text,
-                        "authorial_directives": getattr(
-                            result, "authorial_directives", []
-                        )
-                        or [],
                         "header": header,
                         "full_text": header + "\n" + result.raw_text,
                     }
@@ -1744,7 +1738,6 @@ class MEMNON:
                 query = text(
                     """
                     SELECT nc.id, nc.raw_text,
-                           COALESCE(nc.authorial_directives, '[]'::jsonb) AS authorial_directives,
                            cm.season, cm.episode, cm.scene AS scene_number,
                            cm.world_layer
                     FROM narrative_chunks nc
@@ -1779,10 +1772,6 @@ class MEMNON:
                         {
                             "id": result.id,
                             "text": result.raw_text,
-                            "authorial_directives": getattr(
-                                result, "authorial_directives", []
-                            )
-                            or [],
                             "metadata": {
                                 "season": result.season,
                                 "episode": result.episode,

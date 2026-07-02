@@ -21,10 +21,6 @@ from typing import List, Optional, Dict, Any, Union, Literal
 from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
 from datetime import datetime
 
-from nexus.util.authorial_directives import (
-    normalize_authorial_directives as normalize_directive_list,
-)
-
 # Import all database ENUMs
 from nexus.agents.logon.apex_enums import (
     AgentType,
@@ -1178,31 +1174,7 @@ class Operations(BaseModel):
 # ============================================================================
 
 
-class AuthorialDirectivesMixin(BaseModel):
-    """Fields shared by Storyteller response schemas."""
-
-    authorial_directives: List[str] = Field(
-        min_length=1,
-        max_length=5,
-        description=(
-            "Focused retrieval priorities for the next Storyteller turn. "
-            "Use concrete people, places, factions, objects, unresolved questions, "
-            "or continuity facts that should be easy for MEMNON to retrieve."
-        ),
-    )
-
-    @field_validator("authorial_directives")
-    @classmethod
-    def normalize_authorial_directives(cls, directives: List[str]) -> List[str]:
-        """Trim empty directive strings before persistence and prompt echoing."""
-
-        normalized = normalize_directive_list(directives)
-        if not normalized:
-            raise ValueError("authorial_directives must include at least one directive")
-        return normalized
-
-
-class StorytellerResponseBootstrap(AuthorialDirectivesMixin):
+class StorytellerResponseBootstrap(BaseModel):
     """Bootstrap response for first-chunk narrative generation."""
 
     narrative: str = Field(description="The opening narrative prose")
@@ -1215,7 +1187,7 @@ class StorytellerResponseBootstrap(AuthorialDirectivesMixin):
     model_config = ConfigDict(extra="forbid")
 
 
-class StorytellerResponseMinimal(AuthorialDirectivesMixin):
+class StorytellerResponseMinimal(BaseModel):
     """Minimal response for quick narrative generation."""
 
     narrative: str = Field(description="The narrative prose (500-1500 words)")
@@ -1243,7 +1215,7 @@ class StorytellerResponseMinimal(AuthorialDirectivesMixin):
     model_config = ConfigDict(extra="forbid")
 
 
-class StorytellerResponseStandard(AuthorialDirectivesMixin):
+class StorytellerResponseStandard(BaseModel):
     """Standard response with narrative and essential metadata."""
 
     narrative: str = Field(description="The narrative prose (500-1500 words)")
@@ -1275,7 +1247,7 @@ class StorytellerResponseStandard(AuthorialDirectivesMixin):
     model_config = ConfigDict(extra="forbid")
 
 
-class StorytellerResponseExtended(AuthorialDirectivesMixin):
+class StorytellerResponseExtended(BaseModel):
     """Extended response with all features including operations."""
 
     narrative: str = Field(description="The narrative prose (500-1500 words)")
@@ -1424,9 +1396,6 @@ def create_minimal_response(narrative_text: str) -> StorytellerResponseMinimal:
     """
     return StorytellerResponseMinimal(
         narrative=narrative_text,
-        authorial_directives=[
-            "Preserve the immediate scene continuity and unresolved player choice."
-        ],
         choices=[
             "Continue.",
             "Wait and observe.",

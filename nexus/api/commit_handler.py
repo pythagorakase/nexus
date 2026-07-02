@@ -56,7 +56,6 @@ async def fetch_incubator_data(
         SELECT chunk_id, parent_chunk_id, user_text, storyteller_text,
                choice_object, choice_text, orrery_proposal,
                COALESCE(orrery_adjudications, '[]'::jsonb) AS orrery_adjudications,
-               COALESCE(authorial_directives, '[]'::jsonb) AS authorial_directives,
                metadata_updates, entity_updates, reference_updates,
                llm_response_id, status
         FROM incubator
@@ -103,7 +102,6 @@ async def insert_narrative_chunk(
     storyteller_text: Optional[str],
     choice_object: Optional[Dict[str, Any]],
     choice_text: Optional[str],
-    authorial_directives: Optional[List[str]],
 ) -> int:
     """
     Insert a new narrative chunk and return its ID.
@@ -113,17 +111,15 @@ async def insert_narrative_chunk(
     chunk_id = await conn.fetchval(
         """
         INSERT INTO narrative_chunks (
-            raw_text, storyteller_text, choice_object, choice_text,
-            authorial_directives
+            raw_text, storyteller_text, choice_object, choice_text
         )
-        VALUES ($1, $2, $3::jsonb, $4, $5::jsonb)
+        VALUES ($1, $2, $3::jsonb, $4)
         RETURNING id
         """,
         raw_text,
         storyteller_text,
         json.dumps(choice_object) if choice_object else None,
         choice_text,
-        json.dumps(authorial_directives or []),
     )
     logger.info(f"Created narrative chunk {chunk_id}")
     return chunk_id
@@ -466,7 +462,6 @@ async def commit_incubator_to_database(
                 storyteller_text=storyteller_text,
                 choice_object=choice_object,
                 choice_text=choice_text,
-                authorial_directives=incubator.get("authorial_directives"),
             )
             if chunk_id is None:
                 raise ValueError("Failed to obtain chunk_id after insert")

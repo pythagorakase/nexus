@@ -261,7 +261,6 @@ def test_storyteller_anthropic_output_config_uses_compact_extended_schema(
     assert set(schema["properties"]) == {
         "narrative",
         "choices",
-        "authorial_directives",
         "chunk_metadata",
         "referenced_entities",
         "state_updates",
@@ -303,7 +302,6 @@ def test_storyteller_anthropic_output_config_uses_compact_extended_schema(
         {
             "narrative": "Brena follows the wet bell-sound into the stacks.",
             "choices": ["Follow the footprints.", "Call for Odile."],
-            "authorial_directives": ["Retrieve the lower stacks layout."],
             "chunk_metadata": {},
             "referenced_entities": {},
             "state_updates": {

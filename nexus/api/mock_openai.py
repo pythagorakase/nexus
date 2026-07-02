@@ -121,7 +121,7 @@ def query_bootstrap_narrative() -> Dict[str, Any]:
             cur.execute(
                 """
                 SELECT storyteller_text, choice_object, metadata_updates,
-                       reference_updates, authorial_directives
+                       reference_updates
                 FROM incubator
                 WHERE id = TRUE
             """
@@ -771,9 +771,6 @@ def _mock_storyteller_response(prompt: str) -> Dict[str, Any]:
             "Pause and reassess the pressure around the scene.",
             "Shift attention to the quieter off-screen consequence.",
         ],
-        "authorial_directives": [
-            "Retrieve the immediate prior scene and unresolved Orrery pressure."
-        ],
         "chunk_metadata": {
             "chronology": {
                 "episode_transition": "continue",
@@ -855,7 +852,7 @@ def get_cached_bootstrap_narrative() -> Dict[str, Any]:
     Get bootstrap narrative from mock database.
 
     Queries incubator and transforms to StorytellerResponseBootstrap format
-    (narrative + choices + authorial_directives, extra fields forbidden).
+    (narrative + choices, extra fields forbidden).
     Must match the exact schema in nexus/agents/logon/apex_schema.py: the
     bootstrap path validates StorytellerResponseBootstrap, which rejects the
     Extended-shaped payload this function used to emit.
@@ -867,7 +864,6 @@ def get_cached_bootstrap_narrative() -> Dict[str, Any]:
         return {
             "narrative": "[TEST MODE] No mock data available",
             "choices": ["Continue", "Wait"],
-            "authorial_directives": ["Retrieve the immediate prior scene."],
         }
 
     # Extract choices from choice_object
@@ -877,8 +873,6 @@ def get_cached_bootstrap_narrative() -> Dict[str, Any]:
     return {
         "narrative": row.get("storyteller_text", ""),
         "choices": choices,
-        "authorial_directives": row.get("authorial_directives")
-        or ["Retrieve the immediate prior scene."],
     }
 
 
