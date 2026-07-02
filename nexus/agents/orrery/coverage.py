@@ -68,6 +68,13 @@ class _TemplateTally:
     gate_passed: int = 0
     fired: int = 0
     won: int = 0
+    # Present-target pressure stacks tallied separately: their winners are
+    # prompt pressures, not resolutions, so they must not blur the
+    # resolution-side reconciliation — but a pressure firing is still a
+    # firing for never-fired and gap purposes.
+    pressure_evaluated: int = 0
+    pressure_fired: int = 0
+    pressure_won: int = 0
 
     def __post_init__(self) -> None:
         self.branch_chosen: dict[str, int] = {label: 0 for label in self.branch_labels}
@@ -91,24 +98,29 @@ def sample_anchor_ids(
     if stride < 1:
         raise ValueError(f"anchor sample stride must be >= 1, got {stride}")
     end_clause = "WHERE id <= :end_chunk_id" if end_chunk_id is not None else ""
-    params: dict[str, Any] = {"limit": count * stride}
+    params: dict[str, Any] = {"stride": stride, "limit": count}
     if end_chunk_id is not None:
         params["end_chunk_id"] = end_chunk_id
+    # Stride inside SQL so only `count` ids ever reach Python — a large
+    # stride must not scale the fetched row set (review finding on #423).
     rows = session.execute(
         text(
             f"""
             /* orrery_coverage:sample_anchors */
-            SELECT id FROM narrative_chunks
-            {end_clause}
+            SELECT id FROM (
+                SELECT id,
+                       row_number() OVER (ORDER BY id DESC) AS rn
+                FROM narrative_chunks
+                {end_clause}
+            ) ordered
+            WHERE mod(rn - 1, :stride) = 0
             ORDER BY id DESC
             LIMIT :limit
             """
         ),
         params,
     ).scalars()
-    descending = list(rows)
-    sampled = descending[::stride][:count]
-    return sorted(sampled)
+    return sorted(rows)
 
 
 def _resolution_stacks(
@@ -145,6 +157,15 @@ def _tally_report(
                     winners_by_band[item.drive_band] = (
                         winners_by_band.get(item.drive_band, 0) + 1
                     )
+        for stack in group.scene_pressure_stacks:
+            for item in stack.templates:
+                tally = tallies[item.template_id]
+                tally.pressure_evaluated += 1
+                if item.fired:
+                    fired_anywhere = True
+                    tally.pressure_fired += 1
+                if item.template_id == stack.winner_id:
+                    tally.pressure_won += 1
         actor_gaps = gap_counts.setdefault(
             group.actor_entity_id, {"seen_anchors": 0, "gapped_anchors": 0}
         )
@@ -325,6 +346,9 @@ def analyze_coverage(
             "gate_passed": tally.gate_passed,
             "fired": tally.fired,
             "won": tally.won,
+            "pressure_evaluated": tally.pressure_evaluated,
+            "pressure_fired": tally.pressure_fired,
+            "pressure_won": tally.pressure_won,
             "branch_chosen": dict(tally.branch_chosen),
             "branch_labels_never_chosen": [
                 label for label, chosen in tally.branch_chosen.items() if chosen == 0

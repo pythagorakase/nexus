@@ -659,6 +659,8 @@ def test_coverage_report_is_internally_consistent(
         authored_labels = [b.label for b in templates_by_id[template_id].branches]
         assert sorted(stats["branch_chosen"]) == sorted(authored_labels)
         assert sum(stats["branch_chosen"].values()) == stats["fired"]
+        assert stats["pressure_won"] <= stats["pressure_fired"], template_id
+        assert stats["pressure_fired"] <= stats["pressure_evaluated"], template_id
         total_won += stats["won"]
 
     # Winner counts per anchor band tally must reconcile with template wins.
@@ -672,7 +674,9 @@ def test_coverage_report_is_internally_consistent(
     # Derived lists partition consistently.
     assert not set(payload["never_fired"]) & set(payload["fired_never_won"])
     for template_id in payload["never_fired"]:
+        # never_fired means no resolution-stack AND no pressure-stack firing.
         assert payload["templates"][template_id]["fired"] == 0
+        assert payload["templates"][template_id]["pressure_fired"] == 0
     for template_id in payload["fired_never_won"]:
         stats = payload["templates"][template_id]
         assert stats["fired"] > 0 and stats["won"] == 0
