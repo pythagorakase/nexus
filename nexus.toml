@@ -206,6 +206,13 @@ enabled = true
 [orrery.binding]
 window_chunks = 30
 
+[orrery.prompt]
+# Render caps for Orrery material in the storyteller prompt. The commit-time
+# prompt-exposure log records the same first-N slice, so these are also the
+# boundary between "ratified by omission" and "never shown".
+max_rendered_proposals = 5
+max_rendered_pressures = 5
+
 [orrery.dashboard]
 # Registers the read-only /api/dev/orrery/* audit router on the gateway.
 # Server-side gate (import.meta.env.DEV only hides the client bundle): the

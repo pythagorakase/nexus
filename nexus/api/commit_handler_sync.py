@@ -536,6 +536,7 @@ def commit_incubator_to_database_sync(
                 world_layer=world_layer,
                 adjudications=incubator.get("orrery_adjudications"),
                 storyteller_state_updates=incubator.get("entity_updates"),
+                prompt_settings=_orrery_prompt_settings(),
             )
             if (
                 orrery_result.resolution_count
@@ -702,3 +703,12 @@ def _apply_state_tags(cur, *, kind, subtype_table, subtype_id, bestowal) -> None
     )
     if any(counters.values()):
         logger.info(f"Tag bestowal {kind}/{subtype_id}: {counters}")
+
+
+def _orrery_prompt_settings() -> Any:
+    """[orrery.prompt] render caps, so the prompt-exposure log matches what
+    logon_utility actually rendered for this tick."""
+
+    from nexus.config import load_settings_as_dict
+
+    return (load_settings_as_dict().get("orrery") or {}).get("prompt")

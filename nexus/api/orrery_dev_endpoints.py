@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 
 from nexus.agents.orrery.audit import build_catalog, entity_context, explain_dry_run
 from nexus.agents.orrery.coverage import analyze_coverage, sample_anchor_ids
+from nexus.agents.orrery.history import adjudication_history
 from nexus.agents.orrery.overrides import (
     EventOverride,
     LocationOverride,
@@ -392,3 +393,18 @@ async def post_coverage(request: OrreryCoverageRequest) -> dict[str, Any]:
             sunhelm_settings=orrery.get("sunhelm"),
             epoch_min_world_times=epoch_min,
         )
+
+
+@router.get("/history/adjudications")
+async def get_adjudication_history(
+    slot: Optional[int] = None,
+    template_id: Optional[str] = None,
+) -> dict[str, Any]:
+    """Adjudication ledger: action rates, lifecycle funnel, defer streaks.
+
+    Read-only. Faceted by adjudication_source in the payload; epoch block
+    reports how much of the ledger predates the 063 enrichment.
+    """
+
+    with _slot_session(slot) as session:
+        return adjudication_history(session, template_id=template_id)

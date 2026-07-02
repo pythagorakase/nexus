@@ -496,6 +496,7 @@ async def commit_incubator_to_database(
                 world_layer=world_layer,
                 adjudications=incubator.get("orrery_adjudications"),
                 storyteller_state_updates=incubator.get("entity_updates"),
+                prompt_settings=_orrery_prompt_settings(),
             )
             if (
                 orrery_result.resolution_count
@@ -536,3 +537,12 @@ async def commit_incubator_to_database(
 
     logger.info("Successfully committed chunk %s from session %s", chunk_id, session_id)
     return chunk_id
+
+
+def _orrery_prompt_settings() -> Any:
+    """[orrery.prompt] render caps, so the prompt-exposure log matches what
+    logon_utility actually rendered for this tick."""
+
+    from nexus.config import load_settings_as_dict
+
+    return (load_settings_as_dict().get("orrery") or {}).get("prompt")

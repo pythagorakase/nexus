@@ -1022,6 +1022,31 @@ class OrreryDashboardSettings(BaseModel):
     )
 
 
+class OrreryPromptSettings(BaseModel):
+    """Render caps for Orrery material in the storyteller prompt.
+
+    The commit-time prompt-exposure log (orrery_prompt_exposures) records the
+    same first-N slice these caps produce at render time — the two sites must
+    read the same values or the recorded "shown set" lies.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    max_rendered_proposals: int = Field(
+        default=5,
+        ge=1,
+        description=(
+            "How many current-tick Orrery proposals the storyteller prompt "
+            "renders (ratify-by-omission applies only to rendered rows)."
+        ),
+    )
+    max_rendered_pressures: int = Field(
+        default=5,
+        ge=1,
+        description=("How many scene pressures the storyteller prompt renders."),
+    )
+
+
 class OrrerySettings(BaseModel):
     """Orrery off-screen behavior settings.
 
@@ -1042,6 +1067,7 @@ class OrrerySettings(BaseModel):
     sunhelm: OrrerySunhelmSettings = Field(default_factory=OrrerySunhelmSettings)
     retrograde: OrreryRetrogradeSettings
     dashboard: OrreryDashboardSettings = Field(default_factory=OrreryDashboardSettings)
+    prompt: OrreryPromptSettings = Field(default_factory=OrreryPromptSettings)
 
 
 # =============================================================================

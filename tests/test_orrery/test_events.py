@@ -959,8 +959,10 @@ def test_commit_orrery_tick_does_not_cancel_travel_for_activity_only_update() ->
     )
 
 
-def test_commit_orrery_tick_does_not_count_duplicate_replacement() -> None:
-    """Replacement metrics describe applied or handled replacements, not duplicates."""
+def test_commit_orrery_tick_logs_duplicate_replacement() -> None:
+    """A replace ruling on an already-committed resolution still reaches the
+    history log (the pre-063 writer silently dropped it) and counts as a
+    handled replacement even though the resolution insert conflicts."""
 
     cursor = RecordingCursor(duplicate_resolution=True)
     result = commit_orrery_tick_sync(
@@ -981,7 +983,11 @@ def test_commit_orrery_tick_does_not_count_duplicate_replacement() -> None:
     )
 
     assert result.skipped_existing_count == 1
-    assert result.replaced_count == 0
+    assert result.replaced_count == 1
+    log_statements = [
+        sql for sql, _params in cursor.executed if "orrery_adjudication_log" in sql
+    ]
+    assert log_statements, "duplicate replace ruling must reach the history log"
 
 
 def test_commit_orrery_tick_skips_existing_resolution_without_double_writes() -> None:
