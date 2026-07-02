@@ -17,6 +17,14 @@ composed (actor, target) bindings; an actor with no composed pair gets an
 explicit not-applicable marker instead (scoped to the off-screen two-party
 stack — the present-target pressure pass depends on scene composition, not on
 a per-actor binding decision).
+
+What-if mode: :func:`explain_dry_run` optionally takes a
+:class:`~nexus.agents.orrery.overrides.WorldStateOverrides` set. Hydration and
+binding composition run once (SQL); the tick is then explained twice — against
+the hydrated state and against a copy with the overrides applied — and every
+sandbox stack carries a compact diff against its baseline twin. Overrides edit
+world state only: the actor roster and pair composition come from SQL, so the
+payload's override echo carries the ``world_state_only`` scope marker.
 """
 
 from __future__ import annotations
@@ -24,11 +32,16 @@ from __future__ import annotations
 import re
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Iterable, List, Mapping, Optional, Tuple
+from typing import Any, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from sqlalchemy import text
 
 from nexus.agents.orrery.explain import StackExplanation, explain_stack
+from nexus.agents.orrery.overrides import (
+    OverrideValidationError,
+    WorldStateOverrides,
+    apply_overrides,
+)
 from nexus.agents.orrery.needs import (
     NEED_SEVERITY_PREFIX,
     coerce_need_tuning,
@@ -75,13 +88,21 @@ NOT_APPLICABLE_REASON = "no_target_bound"
 
 @dataclass(frozen=True, slots=True)
 class ActorGroupExplanation:
-    """All explained stacks for one off-screen actor in one tick."""
+    """All explained stacks for one off-screen actor in one tick.
+
+    In what-if mode the ``*_diff`` fields align positionally with their stack
+    fields (same binding composition on both sides of the diff); in current
+    mode they stay ``None``/empty.
+    """
 
     actor_entity_id: int
     actor_stack: StackExplanation
     two_party_stacks: Tuple[StackExplanation, ...] = ()
     scene_pressure_stacks: Tuple[StackExplanation, ...] = ()
     not_applicable: Tuple[Mapping[str, Any], ...] = ()
+    actor_stack_diff: Optional[Mapping[str, Any]] = None
+    two_party_stack_diffs: Tuple[Optional[Mapping[str, Any]], ...] = ()
+    scene_pressure_stack_diffs: Tuple[Optional[Mapping[str, Any]], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,6 +121,9 @@ class ExplainedTickReport:
     locations: Mapping[int, Any]
     location_names: Mapping[int, str]
     activities: Mapping[int, str]
+    mode: str = "current"
+    overrides: Optional[Mapping[str, Any]] = None
+    need_pressures_diff: Optional[Mapping[str, Any]] = None
     generated_at: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
@@ -114,9 +138,16 @@ class ExplainedTickReport:
             "time_of_day": self.time_of_day,
             "weather": self.weather,
             "actor_count": self.actor_count,
+            "mode": self.mode,
+            "overrides": dict(self.overrides) if self.overrides is not None else None,
             "generated_at": self.generated_at,
             "actors": [self._group_payload(group) for group in self.actors],
             "need_pressures": [draft.to_dict() for draft in self.need_pressures],
+            "need_pressures_diff": (
+                dict(self.need_pressures_diff)
+                if self.need_pressures_diff is not None
+                else None
+            ),
             "entity_names": {
                 str(entity_id): name for entity_id, name in self.entity_names.items()
             },
@@ -131,23 +162,37 @@ class ExplainedTickReport:
                 "place_id": place_id,
                 "name": self.location_names.get(place_id),
             }
+        two_party_diffs: Tuple[Optional[Mapping[str, Any]], ...] = (
+            group.two_party_stack_diffs or (None,) * len(group.two_party_stacks)
+        )
+        pressure_diffs: Tuple[Optional[Mapping[str, Any]], ...] = (
+            group.scene_pressure_stack_diffs
+            or (None,) * len(group.scene_pressure_stacks)
+        )
         return {
             "actor_entity_id": actor_id,
             "actor_name": _entity_label(actor_id, self.entity_names),
             "location": location,
             "activity": self.activities.get(actor_id),
-            "actor_stack": self._stack_payload(group.actor_stack),
+            "actor_stack": self._stack_payload(
+                group.actor_stack, group.actor_stack_diff
+            ),
             "two_party_stacks": [
-                self._stack_payload(stack) for stack in group.two_party_stacks
+                self._stack_payload(stack, diff)
+                for stack, diff in zip(group.two_party_stacks, two_party_diffs)
             ],
             "scene_pressure_stacks": [
-                self._stack_payload(stack) for stack in group.scene_pressure_stacks
+                self._stack_payload(stack, diff)
+                for stack, diff in zip(group.scene_pressure_stacks, pressure_diffs)
             ],
             "not_applicable": [dict(item) for item in group.not_applicable],
         }
 
-    def _stack_payload(self, stack: StackExplanation) -> dict[str, Any]:
+    def _stack_payload(
+        self, stack: StackExplanation, diff: Optional[Mapping[str, Any]] = None
+    ) -> dict[str, Any]:
         payload = stack.to_dict()
+        payload["diff"] = dict(diff) if diff is not None else None
         payload["binding_names"] = {
             slot: _entity_label(value, self.entity_names)
             for slot, value in stack.bindings.items()
@@ -178,6 +223,240 @@ class ExplainedTickReport:
         return payload
 
 
+@dataclass(frozen=True, slots=True)
+class _TickStacks:
+    """One state's explained stacks — the unit the what-if diff compares."""
+
+    actor_stacks: Mapping[int, StackExplanation]
+    two_party_stacks: Mapping[int, List[StackExplanation]]
+    pressure_stacks: Mapping[int, List[StackExplanation]]
+    need_pressure_specs: Sequence[Mapping[str, Any]]
+
+
+def _stack_diff(
+    baseline: StackExplanation, sandbox: StackExplanation
+) -> dict[str, Any]:
+    """Compact outcome diff between the same stack under two states.
+
+    ``changed`` tracks the *card-level* outcome (winner or its branch);
+    ``changed_template_ids`` tracks every template whose fired flag or chosen
+    branch moved, so shadowed/ghost rows can carry diff markers too.
+    """
+
+    if dict(baseline.bindings) != dict(sandbox.bindings):
+        raise AssertionError(
+            "what-if diff misalignment: baseline and sandbox stacks carry "
+            f"different bindings ({dict(baseline.bindings)} vs "
+            f"{dict(sandbox.bindings)})"
+        )
+    baseline_by_id = {item.template_id: item for item in baseline.templates}
+    changed_template_ids = [
+        item.template_id
+        for item in sandbox.templates
+        if baseline_by_id[item.template_id].fired != item.fired
+        or baseline_by_id[item.template_id].chosen_branch != item.chosen_branch
+    ]
+    baseline_winner = (
+        baseline_by_id[baseline.winner_id] if baseline.winner_id is not None else None
+    )
+    sandbox_winner = next(
+        (item for item in sandbox.templates if item.template_id == sandbox.winner_id),
+        None,
+    )
+    changed = baseline.winner_id != sandbox.winner_id or (
+        baseline_winner is not None
+        and sandbox_winner is not None
+        and baseline_winner.chosen_branch != sandbox_winner.chosen_branch
+    )
+    return {
+        "changed": changed,
+        "baseline_winner_id": baseline.winner_id,
+        "baseline_chosen_branch": (
+            baseline_winner.chosen_branch if baseline_winner is not None else None
+        ),
+        "baseline_magnitude": (
+            baseline_winner.magnitude
+            if baseline_winner is not None and baseline_winner.fired
+            else None
+        ),
+        "changed_template_ids": changed_template_ids,
+    }
+
+
+def _need_pressure_diff(
+    baseline: Tuple[OrreryScenePressureDraft, ...],
+    sandbox: Tuple[OrreryScenePressureDraft, ...],
+) -> dict[str, Any]:
+    """Added/removed/changed need pressures keyed by (template, binding)."""
+
+    def _key(draft: OrreryScenePressureDraft) -> Tuple[str, str]:
+        return (draft.template_id, draft.binding_hash)
+
+    baseline_by_key = {_key(draft): draft for draft in baseline}
+    sandbox_by_key = {_key(draft): draft for draft in sandbox}
+    added = sorted(sandbox_by_key.keys() - baseline_by_key.keys())
+    removed = sorted(baseline_by_key.keys() - sandbox_by_key.keys())
+    changed = [
+        {
+            "current": sandbox_by_key[key].to_dict(),
+            "baseline": baseline_by_key[key].to_dict(),
+        }
+        for key in sorted(sandbox_by_key.keys() & baseline_by_key.keys())
+        if sandbox_by_key[key].to_dict() != baseline_by_key[key].to_dict()
+    ]
+    return {
+        "added": [sandbox_by_key[key].to_dict() for key in added],
+        "removed": [baseline_by_key[key].to_dict() for key in removed],
+        "changed": changed,
+    }
+
+
+def _override_entity_ids(overrides: WorldStateOverrides) -> set[int]:
+    """Every entity id an override set references, for validation and naming."""
+
+    entity_ids: set[int] = set()
+    for tag_override in overrides.tags:
+        entity_ids.add(tag_override.entity_id)
+    for pair_override in overrides.pair_tags:
+        entity_ids.add(pair_override.subject_entity_id)
+        entity_ids.add(pair_override.object_entity_id)
+    for need_override in overrides.needs:
+        entity_ids.add(need_override.entity_id)
+    for location_override in overrides.locations:
+        entity_ids.add(location_override.entity_id)
+    for event_override in overrides.events:
+        for value in (
+            event_override.actor_entity_id,
+            event_override.target_entity_id,
+        ):
+            if value is not None:
+                entity_ids.add(value)
+    return entity_ids
+
+
+def _validate_overrides(session: Any, overrides: WorldStateOverrides) -> None:
+    """Validate an override set against the slot's live vocabularies.
+
+    State-independent checks only — the state-dependent toggle checks (add an
+    already-present tag, remove an absent one) live in ``apply_overrides``.
+    Raises ``ValueError`` with a message naming every offending value.
+    """
+
+    entity_ids = _override_entity_ids(overrides)
+    if entity_ids:
+        known_entities = set(
+            session.execute(
+                text(
+                    """
+                    /* orrery_audit:override_entities */
+                    SELECT id FROM entities WHERE id = ANY(:ids)
+                    """
+                ),
+                {"ids": sorted(entity_ids)},
+            ).scalars()
+        )
+        missing_entities = entity_ids - known_entities
+        if missing_entities:
+            raise OverrideValidationError(
+                "Override references unknown entity ids: " f"{sorted(missing_entities)}"
+            )
+
+    if overrides.tags:
+        requested = {item.tag for item in overrides.tags}
+        vocab = {
+            row["tag"]: row["is_ephemeral"]
+            for row in session.execute(
+                text(
+                    """
+                    /* orrery_audit:override_tag_vocab */
+                    SELECT tag, is_ephemeral FROM tags
+                    WHERE tag = ANY(:tags) AND NOT deprecated
+                    """
+                ),
+                {"tags": sorted(requested)},
+            ).mappings()
+        }
+        unknown_tags = requested - vocab.keys()
+        if unknown_tags:
+            raise OverrideValidationError(
+                f"Override references unknown or deprecated tags: "
+                f"{sorted(unknown_tags)}"
+            )
+        for item in overrides.tags:
+            if vocab[item.tag] != item.ephemeral:
+                actual = "ephemeral" if vocab[item.tag] else "durable"
+                requested_layer = "ephemeral" if item.ephemeral else "durable"
+                raise OverrideValidationError(
+                    f"Tag {item.tag!r} is {actual} in the vocabulary but the "
+                    f"override targets the {requested_layer} layer — predicates "
+                    "read the two layers separately, so the override would "
+                    "fabricate unreachable state"
+                )
+
+    if overrides.pair_tags:
+        requested = {item.tag for item in overrides.pair_tags}
+        known_pair_tags = set(
+            session.execute(
+                text(
+                    """
+                    /* orrery_audit:override_pair_tag_vocab */
+                    SELECT tag FROM pair_tags
+                    WHERE tag = ANY(:tags) AND NOT deprecated
+                    """
+                ),
+                {"tags": sorted(requested)},
+            ).scalars()
+        )
+        unknown_pair_tags = requested - known_pair_tags
+        if unknown_pair_tags:
+            raise OverrideValidationError(
+                f"Override references unknown or deprecated pair tags: "
+                f"{sorted(unknown_pair_tags)}"
+            )
+
+    if overrides.events:
+        requested = {item.event_type for item in overrides.events}
+        known_events = set(
+            session.execute(
+                text(
+                    """
+                    /* orrery_audit:override_event_vocab */
+                    SELECT type FROM event_types
+                    WHERE type = ANY(:types) AND NOT deprecated
+                    """
+                ),
+                {"types": sorted(requested)},
+            ).scalars()
+        )
+        unknown_events = requested - known_events
+        if unknown_events:
+            raise OverrideValidationError(
+                f"Override references unknown or deprecated event types: "
+                f"{sorted(unknown_events)}"
+            )
+
+    place_ids = {item.place_id for item in overrides.locations} | {
+        item.location_id for item in overrides.events if item.location_id is not None
+    }
+    if place_ids:
+        known_places = set(
+            session.execute(
+                text(
+                    """
+                    /* orrery_audit:override_places */
+                    SELECT id FROM places WHERE id = ANY(:ids)
+                    """
+                ),
+                {"ids": sorted(place_ids)},
+            ).scalars()
+        )
+        missing_places = place_ids - known_places
+        if missing_places:
+            raise OverrideValidationError(
+                f"Override references unknown place ids: {sorted(missing_places)}"
+            )
+
+
 def explain_dry_run(
     session: Any,
     templates: Iterable[Template],
@@ -186,12 +465,19 @@ def explain_dry_run(
     window_chunks: int,
     sunhelm_settings: Optional[Any] = None,
     world_time_override: Optional[datetime] = None,
+    overrides: Optional[WorldStateOverrides] = None,
 ) -> ExplainedTickReport:
     """Hydrate, bind, and explain Orrery packages without database writes.
 
     Every step below has a line-for-line counterpart in ``resolve_dry_run``;
     keep them in lockstep. Winner/branch parity with production is enforced
     per template by ``explain_template``'s cross-check against ``evaluate``.
+
+    With a non-empty ``overrides`` set the report switches to what-if mode:
+    hydration and binding composition still run once, the overrides are
+    validated against the slot's vocabularies and applied to a copy of the
+    state, and both the baseline and sandbox states are explained so each
+    sandbox stack carries a diff against its baseline twin.
     """
 
     need_tuning = coerce_need_tuning(sunhelm_settings)
@@ -230,15 +516,15 @@ def explain_dry_run(
         anchor_chunk_id=anchor_chunk_id,
         window_chunks=window_chunks,
     )
-    actor_stacks: dict[int, StackExplanation] = {}
-    for bindings in actor_bindings:
-        actor_stacks[bindings[Slot.ACTOR]] = explain_stack(
-            actor_only_templates, state, bindings
-        )
-    actor_ids = set(actor_stacks)
+    actor_ids = {bindings[Slot.ACTOR] for bindings in actor_bindings}
 
-    two_party_stacks: dict[int, List[StackExplanation]] = {}
-    pressure_stacks: dict[int, List[StackExplanation]] = {}
+    pressure_templates = [
+        template
+        for template in actor_target_templates
+        if template.present_target_policy is PresentTargetPolicy.STORYTELLER_PRESSURE
+    ]
+    offscreen_pair_bindings: Sequence[dict[Slot, Any]] = ()
+    present_pair_bindings: Sequence[dict[Slot, Any]] = ()
     if actor_target_templates:
         offscreen_pair_bindings = compose_actor_target_bindings(
             session,
@@ -247,17 +533,6 @@ def explain_dry_run(
             actor_ids=actor_ids,
             target_presence="offscreen",
         )
-        for bindings in offscreen_pair_bindings:
-            two_party_stacks.setdefault(bindings[Slot.ACTOR], []).append(
-                explain_stack(actor_target_templates, state, bindings)
-            )
-
-        pressure_templates = [
-            template
-            for template in actor_target_templates
-            if template.present_target_policy
-            is PresentTargetPolicy.STORYTELLER_PRESSURE
-        ]
         if pressure_templates:
             present_pair_bindings = compose_actor_target_bindings(
                 session,
@@ -266,51 +541,96 @@ def explain_dry_run(
                 actor_ids=actor_ids,
                 target_presence="present",
             )
-            for bindings in present_pair_bindings:
-                pressure_stacks.setdefault(bindings[Slot.ACTOR], []).append(
-                    explain_stack(pressure_templates, state, bindings)
-                )
 
     present_actor_ids = _present_actor_ids_at_anchor(
         session, anchor_chunk_id=anchor_chunk_id
     )
-    need_pressure_specs = _present_need_pressure_specs(
-        state,
-        present_actor_ids=present_actor_ids,
-        need_tuning=need_tuning,
-    )
 
-    entity_ids: set[int] = {spec["actor_entity_id"] for spec in need_pressure_specs}
-    all_stacks: list[StackExplanation] = list(actor_stacks.values())
-    for stacks in two_party_stacks.values():
+    def _explain_tick(tick_state: Any) -> _TickStacks:
+        """Explain every composed binding set against one state snapshot."""
+
+        actor_stacks: dict[int, StackExplanation] = {}
+        for bindings in actor_bindings:
+            actor_stacks[bindings[Slot.ACTOR]] = explain_stack(
+                actor_only_templates, tick_state, bindings
+            )
+        two_party_stacks: dict[int, List[StackExplanation]] = {}
+        for pair_bindings in offscreen_pair_bindings:
+            two_party_stacks.setdefault(pair_bindings[Slot.ACTOR], []).append(
+                explain_stack(actor_target_templates, tick_state, pair_bindings)
+            )
+        pressure_stacks: dict[int, List[StackExplanation]] = {}
+        for pair_bindings in present_pair_bindings:
+            pressure_stacks.setdefault(pair_bindings[Slot.ACTOR], []).append(
+                explain_stack(pressure_templates, tick_state, pair_bindings)
+            )
+        need_pressure_specs = _present_need_pressure_specs(
+            tick_state,
+            present_actor_ids=present_actor_ids,
+            need_tuning=need_tuning,
+        )
+        return _TickStacks(
+            actor_stacks=actor_stacks,
+            two_party_stacks=two_party_stacks,
+            pressure_stacks=pressure_stacks,
+            need_pressure_specs=need_pressure_specs,
+        )
+
+    baseline = _explain_tick(state)
+    what_if = overrides is not None and not overrides.is_empty
+    if what_if:
+        assert overrides is not None  # narrowed by what_if
+        _validate_overrides(session, overrides)
+        active_state = apply_overrides(state, overrides)
+        active = _explain_tick(active_state)
+    else:
+        active_state = state
+        active = baseline
+
+    entity_ids: set[int] = {
+        spec["actor_entity_id"]
+        for tick in (baseline, active)
+        for spec in tick.need_pressure_specs
+    }
+    all_stacks: list[StackExplanation] = list(active.actor_stacks.values())
+    for stacks in active.two_party_stacks.values():
         all_stacks.extend(stacks)
-    for stacks in pressure_stacks.values():
+    for stacks in active.pressure_stacks.values():
         all_stacks.extend(stacks)
     for stack in all_stacks:
         for value in stack.bindings.values():
             if isinstance(value, int):
                 entity_ids.add(value)
+    if what_if:
+        assert overrides is not None
+        entity_ids |= _override_entity_ids(overrides)
     place_entity_ids = {
-        state.location_entity_ids[place_id]
+        active_state.location_entity_ids[place_id]
         for actor_id in actor_ids
-        if (place_id := state.locations.get(actor_id)) is not None
-        and place_id in state.location_entity_ids
+        if (place_id := active_state.locations.get(actor_id)) is not None
+        and place_id in active_state.location_entity_ids
     }
     entity_names = _load_entity_names(session, entity_ids | place_entity_ids)
     location_names = {
         place_id: entity_names[entity_id]
-        for place_id, entity_id in state.location_entity_ids.items()
+        for place_id, entity_id in active_state.location_entity_ids.items()
         if entity_id in entity_names
     }
 
-    need_pressures = tuple(
-        _scene_pressure_from_need_spec(
-            spec,
-            entity_names,
-            need_tuning=need_tuning,
+    def _pressures(tick: _TickStacks) -> Tuple[OrreryScenePressureDraft, ...]:
+        return tuple(
+            _scene_pressure_from_need_spec(
+                spec,
+                entity_names,
+                need_tuning=need_tuning,
+            )
+            for spec in tick.need_pressure_specs
         )
-        for spec in need_pressure_specs
-    )
+
+    need_pressures = _pressures(active)
+    need_pressures_diff: Optional[dict[str, Any]] = None
+    if what_if:
+        need_pressures_diff = _need_pressure_diff(_pressures(baseline), need_pressures)
 
     not_applicable_markers = tuple(
         {
@@ -321,32 +641,62 @@ def explain_dry_run(
         }
         for template in actor_target_templates
     )
-    groups = tuple(
-        ActorGroupExplanation(
+
+    def _group(actor_id: int) -> ActorGroupExplanation:
+        two_party = tuple(active.two_party_stacks.get(actor_id, ()))
+        pressures = tuple(active.pressure_stacks.get(actor_id, ()))
+        actor_stack_diff: Optional[Mapping[str, Any]] = None
+        two_party_diffs: Tuple[Optional[Mapping[str, Any]], ...] = ()
+        pressure_diffs: Tuple[Optional[Mapping[str, Any]], ...] = ()
+        if what_if:
+            actor_stack_diff = _stack_diff(
+                baseline.actor_stacks[actor_id], active.actor_stacks[actor_id]
+            )
+            two_party_diffs = tuple(
+                _stack_diff(base_stack, sandbox_stack)
+                for base_stack, sandbox_stack in zip(
+                    baseline.two_party_stacks.get(actor_id, ()),
+                    two_party,
+                    strict=True,
+                )
+            )
+            pressure_diffs = tuple(
+                _stack_diff(base_stack, sandbox_stack)
+                for base_stack, sandbox_stack in zip(
+                    baseline.pressure_stacks.get(actor_id, ()),
+                    pressures,
+                    strict=True,
+                )
+            )
+        return ActorGroupExplanation(
             actor_entity_id=actor_id,
-            actor_stack=actor_stacks[actor_id],
-            two_party_stacks=tuple(two_party_stacks.get(actor_id, ())),
-            scene_pressure_stacks=tuple(pressure_stacks.get(actor_id, ())),
-            not_applicable=(
-                not_applicable_markers if not two_party_stacks.get(actor_id) else ()
-            ),
+            actor_stack=active.actor_stacks[actor_id],
+            two_party_stacks=two_party,
+            scene_pressure_stacks=pressures,
+            not_applicable=(not_applicable_markers if not two_party else ()),
+            actor_stack_diff=actor_stack_diff,
+            two_party_stack_diffs=two_party_diffs,
+            scene_pressure_stack_diffs=pressure_diffs,
         )
-        for actor_id in sorted(actor_ids)
-    )
+
+    groups = tuple(_group(actor_id) for actor_id in sorted(actor_ids))
 
     return ExplainedTickReport(
         anchor_chunk_id=anchor_chunk_id,
         window_chunks=window_chunks,
-        world_time=state.world_time,
-        time_of_day=state.time_of_day,
-        weather=state.weather,
+        world_time=active_state.world_time,
+        time_of_day=active_state.time_of_day,
+        weather=active_state.weather,
         actor_count=len(actor_ids),
         actors=groups,
         need_pressures=need_pressures,
         entity_names=entity_names,
-        locations=dict(state.locations),
+        locations=dict(active_state.locations),
         location_names=location_names,
-        activities=dict(state.activities),
+        activities=dict(active_state.activities),
+        mode="what_if" if what_if else "current",
+        overrides=overrides.to_dict() if what_if and overrides is not None else None,
+        need_pressures_diff=need_pressures_diff,
     )
 
 

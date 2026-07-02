@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import logging
 from contextlib import contextmanager
-from typing import Any, Iterator, List, Optional
+from typing import Any, Iterator, List, Literal, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
@@ -22,12 +22,138 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
 from nexus.agents.orrery.audit import build_catalog, entity_context, explain_dry_run
+from nexus.agents.orrery.overrides import (
+    EventOverride,
+    LocationOverride,
+    NeedOverride,
+    OverrideValidationError,
+    PairTagOverride,
+    TagOverride,
+    WorldStateOverrides,
+)
 from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
 from nexus.api.slot_utils import get_slot_db_url
 
 logger = logging.getLogger("nexus.api.orrery_dev_endpoints")
 
 router = APIRouter(prefix="/api/dev/orrery", tags=["orrery-dev"])
+
+
+class OrreryTagOverrideModel(BaseModel):
+    """Toggle one durable or ephemeral tag on one entity."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    entity_id: int
+    tag: str
+    op: Literal["add", "remove"]
+    ephemeral: bool = Field(
+        default=False,
+        description=(
+            "Layer to edit; must match the tag vocabulary's is_ephemeral flag "
+            "(validated server-side)."
+        ),
+    )
+
+
+class OrreryPairTagOverrideModel(BaseModel):
+    """Toggle one directed pair tag between two entities."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    subject_entity_id: int
+    object_entity_id: int
+    tag: str
+    op: Literal["add", "remove"]
+
+
+class OrreryNeedOverrideModel(BaseModel):
+    """Set one entity's debt score for one need type."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    entity_id: int
+    need_type: str
+    debt_score: float = Field(ge=0)
+
+
+class OrreryLocationOverrideModel(BaseModel):
+    """Move one entity to a place."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    entity_id: int
+    place_id: int
+
+
+class OrreryEventOverrideModel(BaseModel):
+    """Inject a recent event ticks_ago ticks before the anchor tick."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    event_type: str
+    actor_entity_id: Optional[int] = None
+    target_entity_id: Optional[int] = None
+    location_id: Optional[int] = None
+    ticks_ago: int = Field(default=0, ge=0)
+    changed_fields: List[str] = Field(default_factory=list)
+
+
+class OrreryOverridesModel(BaseModel):
+    """What-if override set applied to a copy of the hydrated world state."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    tags: List[OrreryTagOverrideModel] = Field(default_factory=list)
+    pair_tags: List[OrreryPairTagOverrideModel] = Field(default_factory=list)
+    needs: List[OrreryNeedOverrideModel] = Field(default_factory=list)
+    locations: List[OrreryLocationOverrideModel] = Field(default_factory=list)
+    events: List[OrreryEventOverrideModel] = Field(default_factory=list)
+
+    def to_overrides(self) -> WorldStateOverrides:
+        return WorldStateOverrides(
+            tags=tuple(
+                TagOverride(
+                    entity_id=item.entity_id,
+                    tag=item.tag,
+                    op=item.op,
+                    ephemeral=item.ephemeral,
+                )
+                for item in self.tags
+            ),
+            pair_tags=tuple(
+                PairTagOverride(
+                    subject_entity_id=item.subject_entity_id,
+                    object_entity_id=item.object_entity_id,
+                    tag=item.tag,
+                    op=item.op,
+                )
+                for item in self.pair_tags
+            ),
+            needs=tuple(
+                NeedOverride(
+                    entity_id=item.entity_id,
+                    need_type=item.need_type,
+                    debt_score=item.debt_score,
+                )
+                for item in self.needs
+            ),
+            locations=tuple(
+                LocationOverride(entity_id=item.entity_id, place_id=item.place_id)
+                for item in self.locations
+            ),
+            events=tuple(
+                EventOverride(
+                    event_type=item.event_type,
+                    actor_entity_id=item.actor_entity_id,
+                    target_entity_id=item.target_entity_id,
+                    location_id=item.location_id,
+                    ticks_ago=item.ticks_ago,
+                    changed_fields=tuple(item.changed_fields),
+                )
+                for item in self.events
+            ),
+        )
 
 
 class OrreryResolveRequest(BaseModel):
@@ -49,6 +175,16 @@ class OrreryResolveRequest(BaseModel):
     window_chunks: Optional[int] = Field(
         default=None,
         description="Binding window; defaults to [orrery.binding] window_chunks.",
+    )
+    overrides: Optional[OrreryOverridesModel] = Field(
+        default=None,
+        description=(
+            "What-if override set. When present and non-empty the response "
+            "switches to what_if mode: the tick is explained against a copy "
+            "of the world state with these edits applied, and every stack "
+            "carries a diff against the un-overridden baseline. Overrides "
+            "never touch the database."
+        ),
     )
 
 
@@ -130,22 +266,29 @@ async def post_resolve(request: OrreryResolveRequest) -> dict[str, Any]:
         if request.window_chunks is not None
         else int(orrery["binding"]["window_chunks"])
     )
+    overrides = (
+        request.overrides.to_overrides() if request.overrides is not None else None
+    )
     with _slot_session(request.slot) as session:
         anchor_chunk_id = (
             request.anchor_chunk_id
             if request.anchor_chunk_id is not None
             else _default_anchor_chunk_id(session)
         )
-        report = explain_dry_run(
-            session,
-            BUILTIN_TEMPLATES,
-            anchor_chunk_id=anchor_chunk_id,
-            window_chunks=window_chunks,
-            sunhelm_settings=orrery.get("sunhelm"),
-        )
-    payload = report.to_dict()
-    payload["mode"] = "current"
-    return payload
+        try:
+            report = explain_dry_run(
+                session,
+                BUILTIN_TEMPLATES,
+                anchor_chunk_id=anchor_chunk_id,
+                window_chunks=window_chunks,
+                sunhelm_settings=orrery.get("sunhelm"),
+                overrides=overrides,
+            )
+        except OverrideValidationError as exc:
+            # Override validation (unknown vocab, no-op toggles) is caller
+            # error, not a server fault; anything else propagates as 500.
+            raise HTTPException(status_code=400, detail=str(exc))
+    return report.to_dict()
 
 
 @router.post("/context/entities")
