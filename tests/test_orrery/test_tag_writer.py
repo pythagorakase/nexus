@@ -68,14 +68,20 @@ class FakeCursor:
         self.entity_tags = list(entity_tags or [])
         self.category_registry = category_registry or _default_category_registry()
         self.world_time = world_time
+        self.chunk_world_times: dict[int, datetime] = {}
         self.rowcount = 0
         self._next_row: Any = None
         self._next_rows: list[Any] = []
         self._next_id = 1000
+        self._next_entity_tag_id = 1
+        for row in self.entity_tags:
+            row.setdefault("id", self._next_entity_tag_id)
+            self._next_entity_tag_id += 1
         self.inserted_tag_rows: list[dict[str, Any]] = []
         self.inserted_entity_tag_rows: list[dict[str, Any]] = []
         self.inserted_category_rows: list[dict[str, Any]] = []
         self.cleared_keys: list[tuple[int, int]] = []
+        self.clearance_log_rows: list[dict[str, Any]] = []
 
     def execute(self, sql: str, params: Optional[tuple] = None) -> None:
         params = params or ()
@@ -83,6 +89,34 @@ class FakeCursor:
         sql_upper = sql_trimmed.upper()
         if sql_upper.startswith("SELECT MAX(WORLD_TIME)"):
             self._next_row = _FakeRow({"world_time": self.world_time}, ["world_time"])
+            self.rowcount = 1
+            return
+        if sql_upper.startswith("SELECT WORLD_TIME FROM CHUNK_METADATA"):
+            (chunk_id,) = params
+            world_time = self.chunk_world_times.get(chunk_id)
+            self._next_row = (
+                _FakeRow({"world_time": world_time}, ["world_time"])
+                if world_time is not None
+                else None
+            )
+            self.rowcount = 1 if world_time is not None else 0
+            return
+        if sql_upper.startswith("INSERT INTO TAG_CLEARANCE_LOG"):
+            cleared_id, world_time, justification, source_chunk_id = params
+            key = (
+                "entity_pair_tag_id"
+                if "ENTITY_PAIR_TAG_ID" in sql_upper
+                else "entity_tag_id"
+            )
+            self.clearance_log_rows.append(
+                {
+                    key: cleared_id,
+                    "mechanism": "authored",
+                    "cleared_at_world_time": world_time,
+                    "justification": justification,
+                    "source_chunk_id": source_chunk_id,
+                }
+            )
             self.rowcount = 1
             return
         if (
@@ -166,15 +200,15 @@ class FakeCursor:
             self.rowcount = 1
             return
         if sql_upper.startswith("INSERT INTO ENTITY_TAGS"):
-            if len(params) == 4:
-                entity_id, tag_id, world_time, source_kind = params
-                expires_at_world_time = None
-                duration_override = None
-            else:
-                entity_id, tag_id, world_time, expires_at_world_time, source_kind = (
-                    params[:5]
-                )
-                duration_override = params[5] if len(params) > 5 else None
+            (
+                entity_id,
+                tag_id,
+                world_time,
+                expires_at_world_time,
+                source_kind,
+                source_chunk_id,
+            ) = params[:6]
+            duration_override = params[6] if len(params) > 6 else None
             for row in self.entity_tags:
                 if (
                     row["entity_id"] == entity_id
@@ -189,24 +223,29 @@ class FakeCursor:
                         row["applied_at_world_time"] = world_time
                         row["expires_at_world_time"] = base + duration_override
                         row["source_kind"] = source_kind
+                        row["source_chunk_id"] = source_chunk_id
                         self.rowcount = 1
                         return
                     if "DO UPDATE SET" in sql_upper:
                         row["applied_at_world_time"] = world_time
                         row["expires_at_world_time"] = expires_at_world_time
                         row["source_kind"] = source_kind
+                        row["source_chunk_id"] = source_chunk_id
                         self.rowcount = 1
                         return
                     self.rowcount = 0
                     return
             new_row = {
+                "id": self._next_entity_tag_id,
                 "entity_id": entity_id,
                 "tag_id": tag_id,
                 "applied_at_world_time": world_time,
                 "expires_at_world_time": expires_at_world_time,
                 "source_kind": source_kind,
+                "source_chunk_id": source_chunk_id,
                 "cleared_at": None,
             }
+            self._next_entity_tag_id += 1
             self.entity_tags.append(new_row)
             self.inserted_entity_tag_rows.append(new_row)
             self.rowcount = 1
@@ -214,7 +253,7 @@ class FakeCursor:
         if sql_upper.startswith("UPDATE ENTITY_TAGS ET") and "T.TAG =" in sql_upper:
             entity_id, tag = params
             tag_row = self.tags.get(tag)
-            cleared = 0
+            cleared_ids: list[int] = []
             if (
                 tag_row is not None
                 and not tag_row.get("deprecated")
@@ -228,13 +267,13 @@ class FakeCursor:
                         and row["cleared_at"] is None
                     ):
                         row["cleared_at"] = "now"
-                        cleared += 1
+                        cleared_ids.append(row["id"])
                         self.cleared_keys.append((entity_id, tag_id))
-            self.rowcount = cleared
+            self._queue_returning_ids(cleared_ids)
             return
         if sql_upper.startswith("UPDATE ENTITY_TAGS ET"):
             entity_id, category, keep_tag_id = params
-            cleared = 0
+            cleared_ids = []
             tag_id_to_category = {
                 row["id"]: row["category"] for row in self.tags.values()
             }
@@ -246,13 +285,13 @@ class FakeCursor:
                     and tag_id_to_category.get(row["tag_id"]) == category
                 ):
                     row["cleared_at"] = "now"
-                    cleared += 1
+                    cleared_ids.append(row["id"])
                     self.cleared_keys.append((entity_id, row["tag_id"]))
-            self.rowcount = cleared
+            self._queue_returning_ids(cleared_ids)
             return
         if sql_upper.startswith("UPDATE ENTITY_TAGS"):
             entity_id, tag_id = params
-            cleared = 0
+            cleared_ids = []
             for row in self.entity_tags:
                 if (
                     row["entity_id"] == entity_id
@@ -260,11 +299,16 @@ class FakeCursor:
                     and row["cleared_at"] is None
                 ):
                     row["cleared_at"] = "now"
-                    cleared += 1
+                    cleared_ids.append(row["id"])
                     self.cleared_keys.append((entity_id, tag_id))
-            self.rowcount = cleared
+            self._queue_returning_ids(cleared_ids)
             return
         raise AssertionError(f"FakeCursor: unhandled SQL: {sql_trimmed[:80]!r}")
+
+    def _queue_returning_ids(self, cleared_ids: list[int]) -> None:
+        """Model ``UPDATE ... RETURNING id``: queue one id-row per cleared row."""
+        self._next_rows = [_FakeRow({"id": row_id}, ["id"]) for row_id in cleared_ids]
+        self.rowcount = len(cleared_ids)
 
     def fetchone(self):
         row = self._next_row
@@ -533,6 +577,9 @@ def test_clears_existing_tag():
     )
     assert counters["cleared"] == 1
     assert cur.cleared_keys == [(11, tag_id)]
+    assert len(cur.clearance_log_rows) == 1
+    assert cur.clearance_log_rows[0]["entity_tag_id"] == cur.entity_tags[0]["id"]
+    assert cur.clearance_log_rows[0]["mechanism"] == "authored"
 
 
 def test_clear_entity_tag_marks_known_active_tag_cleared():
@@ -555,6 +602,8 @@ def test_clear_entity_tag_marks_known_active_tag_cleared():
     assert cleared is True
     assert cur.entity_tags[0]["cleared_at"] == "now"
     assert cur.cleared_keys == [(11, tag_id)]
+    assert len(cur.clearance_log_rows) == 1
+    assert cur.clearance_log_rows[0]["entity_tag_id"] == cur.entity_tags[0]["id"]
 
 
 def test_clear_entity_tag_is_idempotent():
@@ -574,6 +623,8 @@ def test_clear_entity_tag_is_idempotent():
 
     assert clear_entity_tag(cur, entity_id=11, tag="scrying_target") is True
     assert clear_entity_tag(cur, entity_id=11, tag="scrying_target") is False
+    # Only the first (effective) clear writes a clearance-log row.
+    assert len(cur.clearance_log_rows) == 1
 
 
 def test_clear_entity_tag_returns_false_when_no_active_row():

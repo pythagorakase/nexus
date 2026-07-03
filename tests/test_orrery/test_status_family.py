@@ -47,12 +47,34 @@ class _PairCursor:
         self.rowcount = 0
         self._next_row: Any = None
         self._next_rows: list[Any] = []
+        self._next_pair_row_id = 1
+        for row in self.entity_pair_tags:
+            row.setdefault("id", self._next_pair_row_id)
+            self._next_pair_row_id += 1
+        self.clearance_log_rows: list[dict[str, Any]] = []
 
     def execute(self, sql: str, params: Optional[tuple] = None) -> None:
         params = params or ()
         sql_upper = sql.strip().upper()
         if sql_upper.startswith("SELECT MAX(WORLD_TIME)"):
             self._next_row = _FakeRow({"world_time": _WORLD_TIME}, ["world_time"])
+            self.rowcount = 1
+            return
+        if sql_upper.startswith("SELECT WORLD_TIME FROM CHUNK_METADATA"):
+            self._next_row = None
+            self.rowcount = 0
+            return
+        if sql_upper.startswith("INSERT INTO TAG_CLEARANCE_LOG"):
+            entity_pair_tag_id, world_time, justification, source_chunk_id = params
+            self.clearance_log_rows.append(
+                {
+                    "entity_pair_tag_id": entity_pair_tag_id,
+                    "mechanism": "authored",
+                    "cleared_at_world_time": world_time,
+                    "justification": justification,
+                    "source_chunk_id": source_chunk_id,
+                }
+            )
             self.rowcount = 1
             return
         if sql_upper.startswith("SELECT ID, SUBJECT_KINDS, OBJECT_KINDS"):
@@ -75,7 +97,7 @@ class _PairCursor:
         if sql_upper.startswith("UPDATE ENTITY_PAIR_TAGS EPT"):
             subject_id, object_id, tags = params
             tag_names = set(tags)
-            cleared = 0
+            cleared_ids: list[int] = []
             id_to_tag = {row["id"]: tag for tag, row in self.pair_tags.items()}
             for row in self.entity_pair_tags:
                 if (
@@ -85,11 +107,22 @@ class _PairCursor:
                     and id_to_tag.get(row["pair_tag_id"]) in tag_names
                 ):
                     row["cleared_at"] = "now"
-                    cleared += 1
-            self.rowcount = cleared
+                    cleared_ids.append(row["id"])
+            # UPDATE ... RETURNING ept.id
+            self._next_rows = [
+                _FakeRow({"id": row_id}, ["id"]) for row_id in cleared_ids
+            ]
+            self.rowcount = len(cleared_ids)
             return
         if sql_upper.startswith("INSERT INTO ENTITY_PAIR_TAGS"):
-            subject_id, object_id, pair_tag_id, world_time, source_kind = params
+            (
+                subject_id,
+                object_id,
+                pair_tag_id,
+                world_time,
+                source_kind,
+                source_chunk_id,
+            ) = params
             for row in self.entity_pair_tags:
                 if (
                     row["subject_entity_id"] == subject_id
@@ -101,14 +134,17 @@ class _PairCursor:
                     return
             self.entity_pair_tags.append(
                 {
+                    "id": self._next_pair_row_id,
                     "subject_entity_id": subject_id,
                     "object_entity_id": object_id,
                     "pair_tag_id": pair_tag_id,
                     "applied_at_world_time": world_time,
                     "source_kind": source_kind,
+                    "source_chunk_id": source_chunk_id,
                     "cleared_at": None,
                 }
             )
+            self._next_pair_row_id += 1
             self.rowcount = 1
             return
         if sql_upper.startswith("SELECT EPT.OBJECT_ENTITY_ID"):
@@ -275,6 +311,12 @@ def test_status_bestowal_replaces_status_family_within_one_scope_edge() -> None:
         and row["cleared_at"] is None
     ]
     assert len(active_rows_for_scope) == 1
+    # Ladder replacement logs each displaced sibling in tag_clearance_log.
+    assert len(cur.clearance_log_rows) == 2
+    assert all(
+        log["mechanism"] == "authored" and log["entity_pair_tag_id"] is not None
+        for log in cur.clearance_log_rows
+    )
 
 
 def test_status_bestowal_self_scope_error_uses_scope_parameter_name() -> None:

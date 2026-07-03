@@ -1363,7 +1363,13 @@ def _apply_state_delta_sync(
             )
 
     for tag in draft.state_delta.get("entity_tags.add", ()) or ():
-        if _add_entity_tag_sync(cur, actor_entity_id, str(tag), draft.template_id):
+        if _add_entity_tag_sync(
+            cur,
+            actor_entity_id,
+            str(tag),
+            draft.template_id,
+            source_chunk_id=source_chunk_id,
+        ):
             tag_mutations += 1
     for tag in draft.state_delta.get("entity_tags.remove", ()) or ():
         tag_mutations += _remove_entity_tag_sync(
@@ -1384,7 +1390,13 @@ def _apply_state_delta_sync(
         if target_entity_id is None:
             raise ValueError(f"Orrery draft {draft.template_id} has no target binding")
         for tag in target_tag_adds:
-            if _add_entity_tag_sync(cur, target_entity_id, str(tag), draft.template_id):
+            if _add_entity_tag_sync(
+                cur,
+                target_entity_id,
+                str(tag),
+                draft.template_id,
+                source_chunk_id=source_chunk_id,
+            ):
                 tag_mutations += 1
         for tag in target_tag_removes:
             tag_mutations += _remove_entity_tag_sync(
@@ -1400,6 +1412,8 @@ def _apply_state_delta_sync(
                 cur,
                 object_entity_id=target_entity_id,
                 tag=str(tag),
+                template_id=draft.template_id,
+                source_chunk_id=source_chunk_id,
             )
     if "need.fulfill" in draft.state_delta:
         tag_mutations += _apply_need_fulfillment_sync(
@@ -1474,7 +1488,11 @@ async def _apply_state_delta_async(
 
     for tag in draft.state_delta.get("entity_tags.add", ()) or ():
         if await _add_entity_tag_async(
-            conn, actor_entity_id, str(tag), draft.template_id
+            conn,
+            actor_entity_id,
+            str(tag),
+            draft.template_id,
+            source_chunk_id=source_chunk_id,
         ):
             tag_mutations += 1
     for tag in draft.state_delta.get("entity_tags.remove", ()) or ():
@@ -1497,7 +1515,11 @@ async def _apply_state_delta_async(
             raise ValueError(f"Orrery draft {draft.template_id} has no target binding")
         for tag in target_tag_adds:
             if await _add_entity_tag_async(
-                conn, target_entity_id, str(tag), draft.template_id
+                conn,
+                target_entity_id,
+                str(tag),
+                draft.template_id,
+                source_chunk_id=source_chunk_id,
             ):
                 tag_mutations += 1
         for tag in target_tag_removes:
@@ -1514,6 +1536,8 @@ async def _apply_state_delta_async(
                 conn,
                 object_entity_id=target_entity_id,
                 tag=str(tag),
+                template_id=draft.template_id,
+                source_chunk_id=source_chunk_id,
             )
     if "need.fulfill" in draft.state_delta:
         tag_mutations += await _apply_need_fulfillment_async(
@@ -2219,6 +2243,28 @@ async def _apply_travel_arrive_async(
         )
 
 
+def _chunk_world_time_sync(cur: Any, source_chunk_id: int) -> Any:
+    """The chunk's in-world time, or None — NEVER a wall-clock fallback.
+
+    Provenance columns (applied_at_world_time, cleared_at_world_time) must
+    stay NULL rather than lie with wall time when chunk_metadata is missing.
+    """
+
+    cur.execute(
+        "SELECT world_time FROM chunk_metadata WHERE chunk_id = %s",
+        (source_chunk_id,),
+    )
+    row = cur.fetchone()
+    return _row_get(row, "world_time", 0) if row else None
+
+
+async def _chunk_world_time_async(conn: Any, source_chunk_id: int) -> Any:
+    return await conn.fetchval(
+        "SELECT world_time FROM chunk_metadata WHERE chunk_id = $1",
+        source_chunk_id,
+    )
+
+
 def _tick_world_time_sync(cur: Any, source_chunk_id: int) -> Any:
     cur.execute(
         "SELECT world_time FROM chunk_metadata WHERE chunk_id = %s",
@@ -2414,7 +2460,13 @@ def _sync_need_severity_tags_sync(
     if (
         desired
         and desired not in current_tags
-        and _add_entity_tag_sync(cur, actor_entity_id, desired, template_id)
+        and _add_entity_tag_sync(
+            cur,
+            actor_entity_id,
+            desired,
+            template_id,
+            source_chunk_id=source_chunk_id,
+        )
     ):
         mutations += 1
     return mutations
@@ -2451,7 +2503,13 @@ async def _sync_need_severity_tags_async(
     if (
         desired
         and desired not in current_tags
-        and await _add_entity_tag_async(conn, actor_entity_id, desired, template_id)
+        and await _add_entity_tag_async(
+            conn,
+            actor_entity_id,
+            desired,
+            template_id,
+            source_chunk_id=source_chunk_id,
+        )
     ):
         mutations += 1
     return mutations
@@ -2505,17 +2563,28 @@ def _add_entity_tag_sync(
     entity_id: int,
     tag: str,
     template_id: str,
+    *,
+    source_chunk_id: int,
 ) -> bool:
     tag_id = _registered_tag_id_sync(cur, tag)
 
     cur.execute(
         """
-        INSERT INTO entity_tags (entity_id, tag_id, template_id, source_kind)
-        VALUES (%s, %s, %s, 'template')
+        INSERT INTO entity_tags (
+            entity_id, tag_id, template_id, source_kind,
+            applied_at_world_time, source_chunk_id
+        )
+        VALUES (%s, %s, %s, 'template', %s, %s)
         ON CONFLICT DO NOTHING
         RETURNING id
         """,
-        (entity_id, tag_id, template_id),
+        (
+            entity_id,
+            tag_id,
+            template_id,
+            _chunk_world_time_sync(cur, source_chunk_id),
+            source_chunk_id,
+        ),
     )
     return cur.fetchone() is not None
 
@@ -2542,19 +2611,26 @@ async def _add_entity_tag_async(
     entity_id: int,
     tag: str,
     template_id: str,
+    *,
+    source_chunk_id: int,
 ) -> bool:
     tag_id = await _registered_tag_id_async(conn, tag)
 
     inserted_id = await conn.fetchval(
         """
-        INSERT INTO entity_tags (entity_id, tag_id, template_id, source_kind)
-        VALUES ($1, $2, $3, 'template')
+        INSERT INTO entity_tags (
+            entity_id, tag_id, template_id, source_kind,
+            applied_at_world_time, source_chunk_id
+        )
+        VALUES ($1, $2, $3, 'template', $4, $5)
         ON CONFLICT DO NOTHING
         RETURNING id
         """,
         entity_id,
         tag_id,
         template_id,
+        await _chunk_world_time_async(conn, source_chunk_id),
+        source_chunk_id,
     )
     return inserted_id is not None
 
@@ -2621,6 +2697,8 @@ def _clear_inbound_pair_tags_sync(
     *,
     object_entity_id: int,
     tag: str,
+    template_id: str,
+    source_chunk_id: int,
 ) -> int:
     cur.execute(
         """
@@ -2631,13 +2709,34 @@ def _clear_inbound_pair_tags_sync(
           AND ept.object_entity_id = %s
           AND pt.tag = %s
           AND ept.cleared_at IS NULL
+        RETURNING ept.id
         """,
         (object_entity_id, tag),
     )
-    rowcount = getattr(cur, "rowcount", 0)
-    if rowcount is None or rowcount < 0:
-        return 0
-    return int(rowcount)
+    cleared_ids = [_row_get(row, "id", 0) for row in cur.fetchall()]
+    world_time = _chunk_world_time_sync(cur, source_chunk_id)
+    for pair_tag_row_id in cleared_ids:
+        cur.execute(
+            """
+            INSERT INTO tag_clearance_log (
+                entity_pair_tag_id, mechanism, cleared_at_world_time,
+                justification, source_chunk_id
+            ) VALUES (%s, 'authored', %s, %s::jsonb, %s)
+            """,
+            (
+                pair_tag_row_id,
+                world_time,
+                json.dumps(
+                    {
+                        "template_id": template_id,
+                        "state_delta": "entity_pair_tags_target.clear_inbound",
+                        "tag": tag,
+                    }
+                ),
+                source_chunk_id,
+            ),
+        )
+    return len(cleared_ids)
 
 
 async def _remove_entity_tag_async(
@@ -2685,8 +2784,10 @@ async def _clear_inbound_pair_tags_async(
     *,
     object_entity_id: int,
     tag: str,
+    template_id: str,
+    source_chunk_id: int,
 ) -> int:
-    status = await conn.execute(
+    rows = await conn.fetch(
         """
         UPDATE entity_pair_tags ept
         SET cleared_at = now()
@@ -2695,11 +2796,33 @@ async def _clear_inbound_pair_tags_async(
           AND ept.object_entity_id = $1
           AND pt.tag = $2
           AND ept.cleared_at IS NULL
+        RETURNING ept.id
         """,
         object_entity_id,
         tag,
     )
-    return _affected_count(status)
+    cleared_ids = [_row_get(row, "id", 0) for row in rows]
+    world_time = await _chunk_world_time_async(conn, source_chunk_id)
+    for pair_tag_row_id in cleared_ids:
+        await conn.execute(
+            """
+            INSERT INTO tag_clearance_log (
+                entity_pair_tag_id, mechanism, cleared_at_world_time,
+                justification, source_chunk_id
+            ) VALUES ($1, 'authored', $2, $3::jsonb, $4)
+            """,
+            pair_tag_row_id,
+            world_time,
+            json.dumps(
+                {
+                    "template_id": template_id,
+                    "state_delta": "entity_pair_tags_target.clear_inbound",
+                    "tag": tag,
+                }
+            ),
+            source_chunk_id,
+        )
+    return len(cleared_ids)
 
 
 def _emit_world_event_sync(

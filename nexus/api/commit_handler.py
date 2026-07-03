@@ -233,7 +233,9 @@ async def insert_faction_references(
 
 
 async def apply_state_updates(
-    conn: asyncpg.Connection, state_updates: StateUpdates
+    conn: asyncpg.Connection,
+    state_updates: StateUpdates,
+    source_chunk_id: Optional[int] = None,
 ) -> None:
     """
     Apply entity state updates from the LLM response.
@@ -284,6 +286,7 @@ async def apply_state_updates(
                     subtype_table="characters",
                     subtype_id=char_update.character_id,
                     bestowal=bestowal,
+                    source_chunk_id=source_chunk_id,
                 )
 
     # Update place states. The schema field is current_conditions
@@ -310,6 +313,7 @@ async def apply_state_updates(
                 subtype_table="places",
                 subtype_id=place_update.place_id,
                 bestowal=bestowal,
+                source_chunk_id=source_chunk_id,
             )
 
     for faction_update in state_updates.factions:
@@ -321,6 +325,7 @@ async def apply_state_updates(
                 subtype_table="factions",
                 subtype_id=faction_update.faction_id,
                 bestowal=bestowal,
+                source_chunk_id=source_chunk_id,
             )
 
 
@@ -331,6 +336,7 @@ async def apply_state_tags_async(
     subtype_table: str,
     subtype_id: int,
     bestowal,
+    source_chunk_id: Optional[int] = None,
 ) -> None:
     """Look up the entity_id for a subtype row and apply Skald-bestowed tags."""
 
@@ -348,6 +354,7 @@ async def apply_state_tags_async(
         entity_kind=kind,
         bestowal=bestowal,
         source_kind="skald_inline",
+        source_chunk_id=source_chunk_id,
     )
     if any(counters.values()):
         logger.info(f"Tag bestowal {kind}/{subtype_id}: {counters}")
@@ -485,7 +492,7 @@ async def commit_incubator_to_database(
             # Step 8: Update entity states (if provided)
             if incubator.get("entity_updates"):
                 state_updates = StateUpdates(**incubator["entity_updates"])
-                await apply_state_updates(conn, state_updates)
+                await apply_state_updates(conn, state_updates, source_chunk_id=chunk_id)
 
             # Step 8.5: Commit Orrery proposal inside the accepted-chunk transaction
             orrery_result = await commit_orrery_tick_async(

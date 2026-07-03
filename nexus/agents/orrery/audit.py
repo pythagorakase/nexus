@@ -907,10 +907,15 @@ def build_catalog(
 # ---------------------------------------------------------------------------
 
 
-def _tag_provenance(applied_at_world_time: Optional[datetime]) -> str:
-    # "exact" is reserved for rows carrying a source_chunk_id bestowal key,
-    # which does not exist pre-migration (see the reconstruction-sufficiency
-    # notes in docs/orrery_audit_dashboard_notes.md).
+def _tag_provenance(
+    applied_at_world_time: Optional[datetime],
+    source_chunk_id: Optional[int] = None,
+) -> str:
+    # Three tiers per the reconstruction-sufficiency notes: "exact" rows
+    # carry the migration-064 chunk bestowal key; "approximate" rows have
+    # only an in-world timestamp; the rest are "unknowable".
+    if source_chunk_id is not None:
+        return "exact"
     return "approximate" if applied_at_world_time is not None else "unknowable"
 
 
@@ -964,7 +969,7 @@ def entity_context(
             /* orrery_audit:entity_tags */
             SELECT entity_id, tag, category, is_ephemeral, source_kind::text
                    AS source_kind, template_id, applied_at,
-                   applied_at_world_time
+                   applied_at_world_time, source_chunk_id
             FROM entity_tags_current
             WHERE entity_id = ANY(:ids)
             ORDER BY entity_id, tag
@@ -982,7 +987,10 @@ def entity_context(
                 "template_id": row["template_id"],
                 "applied_at": _iso(row["applied_at"]),
                 "applied_at_world_time": _iso(row["applied_at_world_time"]),
-                "provenance": _tag_provenance(row["applied_at_world_time"]),
+                "source_chunk_id": row["source_chunk_id"],
+                "provenance": _tag_provenance(
+                    row["applied_at_world_time"], row["source_chunk_id"]
+                ),
                 "families": [
                     name
                     for name, members in _TAG_FAMILY_TAG_SETS.items()
@@ -1007,7 +1015,8 @@ def entity_context(
                    ept.source_kind::text AS source_kind,
                    ept.template_id,
                    ept.applied_at,
-                   ept.applied_at_world_time
+                   ept.applied_at_world_time,
+                   ept.source_chunk_id
             FROM entity_pair_tags ept
             JOIN pair_tags pt ON pt.id = ept.pair_tag_id
             WHERE ept.cleared_at IS NULL
@@ -1028,7 +1037,10 @@ def entity_context(
             "template_id": row["template_id"],
             "applied_at": _iso(row["applied_at"]),
             "applied_at_world_time": _iso(row["applied_at_world_time"]),
-            "provenance": _tag_provenance(row["applied_at_world_time"]),
+            "source_chunk_id": row["source_chunk_id"],
+            "provenance": _tag_provenance(
+                row["applied_at_world_time"], row["source_chunk_id"]
+            ),
         }
         if subject_id in kinds:
             pair_tags_by_entity.setdefault(subject_id, []).append(

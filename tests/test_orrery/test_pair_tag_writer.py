@@ -125,6 +125,21 @@ def test_entities(
                 ids_in_scope = [char_a, char_b]
                 if faction is not None:
                     ids_in_scope.append(faction)
+                # tag_clearance_log references entity_pair_tags without
+                # ON DELETE CASCADE (migration 064); purge log rows for the
+                # test-created pair rows first or their DELETE FK-fails.
+                cur.execute(
+                    """
+                    DELETE FROM tag_clearance_log
+                    WHERE entity_pair_tag_id IN (
+                        SELECT id FROM entity_pair_tags
+                        WHERE subject_entity_id = ANY(%s)
+                          AND object_entity_id = ANY(%s)
+                          AND NOT (id = ANY(%s))
+                    )
+                    """,
+                    (ids_in_scope, ids_in_scope, list(entities.preexisting_ids)),
+                )
                 cur.execute(
                     """
                     DELETE FROM entity_pair_tags
