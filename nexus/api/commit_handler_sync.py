@@ -25,6 +25,11 @@ from nexus.agents.orrery.events import commit_orrery_tick_sync
 from nexus.agents.orrery.retrograde_maturation import (
     enqueue_declared_entity_maturations,
 )
+from nexus.agents.orrery.reconstruction import (
+    capture_state_checkpoint_sync,
+    log_state_delta_sync,
+    set_commit_chunk_attribution_sync,
+)
 from nexus.agents.orrery.tag_writer import _row_value, apply_tag_bestowal
 from nexus.api.db_converters import chronology_to_db_values
 from nexus.api.summary_triggers import (
@@ -445,6 +450,9 @@ def commit_incubator_to_database_sync(
                 if chunk_id is None:
                     raise ValueError("Failed to obtain chunk_id after insert")
                 logger.info("Created narrative chunk %s", chunk_id)
+                # Attribute trigger-versioned writes in this transaction
+                # (relationship_versions) to the committing chunk.
+                set_commit_chunk_attribution_sync(cur, chunk_id)
 
             # Step 6: Insert chunk metadata
             with conn.cursor() as cur:
@@ -565,6 +573,19 @@ def commit_incubator_to_database_sync(
                     orrery_result.prompt_exposure_count,
                 )
 
+            # Step 8.55: interval state checkpoint (reconstruction bar 7c)
+            checkpoint_interval = _orrery_checkpoint_interval()
+            if checkpoint_interval and chunk_id % checkpoint_interval == 0:
+                checkpoint_id = capture_state_checkpoint_sync(
+                    cur, chunk_id=chunk_id, label="interval"
+                )
+                if checkpoint_id is not None:
+                    logger.info(
+                        "State checkpoint %s taken at chunk %s",
+                        checkpoint_id,
+                        chunk_id,
+                    )
+
             # Step 8.6: Process Skald new-entity declarations inside the
             # commit transaction (Retrograde stub maturation outbox, spec
             # decisions 9/10/12): validate hints, create stubs, and enqueue
@@ -625,18 +646,28 @@ def apply_state_updates_sync(
             if char_update.character_id:
                 updates = []
                 params = []
+                written_fields = []
 
                 if char_update.emotional_state:
                     updates.append("emotional_state = %s")
                     params.append(char_update.emotional_state)
+                    written_fields.append(
+                        ("characters.emotional_state", char_update.emotional_state)
+                    )
 
                 if char_update.current_activity:
                     updates.append("current_activity = %s")
                     params.append(char_update.current_activity)
+                    written_fields.append(
+                        ("characters.current_activity", char_update.current_activity)
+                    )
 
                 if char_update.current_location:
                     updates.append("current_location = %s")
                     params.append(char_update.current_location)
+                    written_fields.append(
+                        ("characters.current_location", char_update.current_location)
+                    )
 
                 if updates:
                     params.append(char_update.character_id)
@@ -645,6 +676,24 @@ def apply_state_updates_sync(
                         params,
                     )
                     logger.info(f"Updated character {char_update.character_id}")
+                    if source_chunk_id is not None:
+                        cur.execute(
+                            "SELECT entity_id FROM characters WHERE id = %s",
+                            (char_update.character_id,),
+                        )
+                        row = cur.fetchone()
+                        char_entity_id = (
+                            _row_value(row, "entity_id", 0) if row else None
+                        )
+                        for field, value in written_fields:
+                            log_state_delta_sync(
+                                cur,
+                                source_chunk_id=source_chunk_id,
+                                writer="skald_state_update",
+                                entity_id=char_entity_id,
+                                field=field,
+                                new_value=value,
+                            )
 
                 bestowal = getattr(char_update, "orrery_tags", None)
                 if char_update.character_id and bestowal is not None:
@@ -667,6 +716,20 @@ def apply_state_updates_sync(
                     (place_update.current_conditions, place_update.place_id),
                 )
                 logger.info(f"Updated place {place_update.place_id}")
+                if source_chunk_id is not None:
+                    cur.execute(
+                        "SELECT entity_id FROM places WHERE id = %s",
+                        (place_update.place_id,),
+                    )
+                    row = cur.fetchone()
+                    log_state_delta_sync(
+                        cur,
+                        source_chunk_id=source_chunk_id,
+                        writer="skald_state_update",
+                        entity_id=_row_value(row, "entity_id", 0) if row else None,
+                        field="places.current_status",
+                        new_value=place_update.current_conditions,
+                    )
 
             bestowal = getattr(place_update, "orrery_tags", None)
             if place_update.place_id and bestowal is not None:
@@ -731,3 +794,13 @@ def _orrery_prompt_settings() -> Any:
     from nexus.config import load_settings_as_dict
 
     return (load_settings_as_dict().get("orrery") or {}).get("prompt")
+
+
+def _orrery_checkpoint_interval() -> int:
+    """[orrery.reconstruction] checkpoint cadence; 0 disables."""
+
+    from nexus.config import load_settings_as_dict
+
+    orrery = load_settings_as_dict().get("orrery") or {}
+    reconstruction = orrery.get("reconstruction") or {}
+    return int(reconstruction.get("checkpoint_interval_chunks", 0))
