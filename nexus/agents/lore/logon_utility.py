@@ -633,6 +633,25 @@ class LogonUtility:
                     f"[Score: {passage.get('score', 0):.2f}] {passage.get('text', '')}"
                 )
 
+        # Render caps shared with the commit-time prompt-exposure log
+        # (orrery_prompt_exposures): both sides must slice identically or the
+        # recorded "shown set" lies. Model defaults keep a single source when
+        # the orrery section is absent.
+        from nexus.config.settings_models import OrreryPromptSettings
+
+        _prompt_defaults = OrreryPromptSettings()
+        _prompt_cfg = (self.settings.get("orrery") or {}).get("prompt") or {}
+        max_rendered_proposals = int(
+            _prompt_cfg.get(
+                "max_rendered_proposals", _prompt_defaults.max_rendered_proposals
+            )
+        )
+        max_rendered_pressures = int(
+            _prompt_cfg.get(
+                "max_rendered_pressures", _prompt_defaults.max_rendered_pressures
+            )
+        )
+
         imminent_activity = context.get("orrery_imminent_activity") or []
         if imminent_activity:
             sections.append("\n=== ORRERY IMMINENT ACTIVITY ===")
@@ -645,7 +664,7 @@ class LogonUtility:
                 "only emits a world_event if you provide replacement_event_type. "
                 "Refer only to proposal_id; do not rely on prose parsing."
             )
-            for proposal in imminent_activity[:5]:
+            for proposal in imminent_activity[:max_rendered_proposals]:
                 if not isinstance(proposal, dict):
                     continue
                 proposal_id = proposal.get("proposal_id")
@@ -663,7 +682,7 @@ class LogonUtility:
                 "adapt, delay, ignore, or incorporate them. Do not let Orrery "
                 "decide what present characters do."
             )
-            for pressure in scene_pressures[:5]:
+            for pressure in scene_pressures[:max_rendered_pressures]:
                 if not isinstance(pressure, dict):
                     continue
                 label = pressure.get("branch_label") or pressure.get("template_id")

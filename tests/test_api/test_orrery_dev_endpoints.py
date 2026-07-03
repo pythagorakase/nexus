@@ -624,6 +624,7 @@ def test_dashboard_flag_gates_router_registration(tmp_path: Path) -> None:
         "/api/dev/orrery/resolve",
         "/api/dev/orrery/context/entities",
         "/api/dev/orrery/coverage",
+        "/api/dev/orrery/history/adjudications",
     }
 
 
@@ -788,3 +789,23 @@ def test_coverage_anchor_cap_and_sampling(client: TestClient) -> None:
     )
     assert response.status_code == 200
     assert response.json()["anchor_chunk_ids"] == expected
+
+
+@pytest.mark.requires_postgres
+def test_adjudication_history_endpoint_over_http(client: TestClient) -> None:
+    response = client.get("/api/dev/orrery/history/adjudications?slot=5")
+    assert response.status_code == 200
+    payload = response.json()
+    assert set(payload["totals"]["actions"]) == {"defer", "replace", "void"}
+    assert (
+        payload["epoch"]["log_rows_total"] >= payload["epoch"]["log_rows_with_subject"]
+    )
+    for streak in payload["defer_streaks"]:
+        assert streak["outcome"] in {"ratified", "replace", "void", "open"}
+
+    filtered = client.get(
+        "/api/dev/orrery/history/adjudications?slot=5&template_id=surveil"
+    )
+    assert filtered.status_code == 200
+    filtered_payload = filtered.json()
+    assert set(filtered_payload["templates"]) <= {"surveil"}

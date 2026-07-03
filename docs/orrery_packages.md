@@ -2153,6 +2153,7 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `migrations/056_orrery_routine_anchors.py`
 - `migrations/057_orrery_need_bodyform_applicability.py`
 - `migrations/059_orrery_social_travel_event.py`
+- `migrations/063_orrery_adjudication_history.sql`
 
 ### Tags queried as durable (via `has_tag` / `lacks_tag` / `has_any_tag`)
 

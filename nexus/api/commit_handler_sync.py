@@ -536,17 +536,21 @@ def commit_incubator_to_database_sync(
                 world_layer=world_layer,
                 adjudications=incubator.get("orrery_adjudications"),
                 storyteller_state_updates=incubator.get("entity_updates"),
+                prompt_settings=_orrery_prompt_settings(),
             )
             if (
                 orrery_result.resolution_count
                 or orrery_result.skipped_existing_count
                 or orrery_result.adjudication_count
                 or orrery_result.cleared_tag_count
+                or orrery_result.scene_pressure_count
+                or orrery_result.prompt_exposure_count
             ):
                 logger.info(
                     "Committed Orrery tick for chunk %s: %s resolutions, %s events, "
                     "%s tag mutations, %s cleared tags, %s existing skipped, "
-                    "%s adjudications (%s deferred, %s voided, %s replaced)",
+                    "%s adjudications (%s deferred, %s voided, %s replaced), "
+                    "%s scene pressures, %s prompt exposures",
                     chunk_id,
                     orrery_result.resolution_count,
                     orrery_result.event_count,
@@ -557,6 +561,8 @@ def commit_incubator_to_database_sync(
                     orrery_result.deferred_count,
                     orrery_result.voided_count,
                     orrery_result.replaced_count,
+                    orrery_result.scene_pressure_count,
+                    orrery_result.prompt_exposure_count,
                 )
 
             # Step 8.6: Process Skald new-entity declarations inside the
@@ -702,3 +708,12 @@ def _apply_state_tags(cur, *, kind, subtype_table, subtype_id, bestowal) -> None
     )
     if any(counters.values()):
         logger.info(f"Tag bestowal {kind}/{subtype_id}: {counters}")
+
+
+def _orrery_prompt_settings() -> Any:
+    """[orrery.prompt] render caps, so the prompt-exposure log matches what
+    logon_utility actually rendered for this tick."""
+
+    from nexus.config import load_settings_as_dict
+
+    return (load_settings_as_dict().get("orrery") or {}).get("prompt")

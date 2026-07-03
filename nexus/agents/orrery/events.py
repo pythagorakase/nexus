@@ -95,6 +95,31 @@ class CommitOrreryTickResult:
     deferred_count: int = 0
     voided_count: int = 0
     replaced_count: int = 0
+    scene_pressure_count: int = 0
+    prompt_exposure_count: int = 0
+
+
+def _coerce_prompt_limits(prompt_settings: Any) -> tuple[int, int]:
+    """Resolve the storyteller render caps for prompt-exposure logging.
+
+    Accepts the [orrery.prompt] mapping (or the Pydantic model); ``None``
+    resolves to the model defaults. Must agree with the render slice in
+    nexus/agents/lore/logon_utility.py or the recorded shown set lies.
+    """
+
+    from nexus.config.settings_models import OrreryPromptSettings
+
+    if prompt_settings is None:
+        prompt_settings = OrreryPromptSettings()
+    if isinstance(prompt_settings, OrreryPromptSettings):
+        return (
+            prompt_settings.max_rendered_proposals,
+            prompt_settings.max_rendered_pressures,
+        )
+    return (
+        int(prompt_settings["max_rendered_proposals"]),
+        int(prompt_settings["max_rendered_pressures"]),
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -238,6 +263,7 @@ def commit_orrery_tick_sync(
     sunhelm_settings: Optional[Any] = None,
     adjudications: Any = None,
     storyteller_state_updates: Any = None,
+    prompt_settings: Optional[Any] = None,
 ) -> CommitOrreryTickResult:
     """Materialize a preview proposal inside the accepted-chunk transaction."""
 
@@ -256,8 +282,28 @@ def commit_orrery_tick_sync(
             cur,
             source_chunk_id=tick_chunk_id,
         )
+        # Pressures and exposures persist even on resolution-free ticks —
+        # a tick can carry scene pressure with zero off-screen resolutions.
+        scene_pressure_count = 0
+        prompt_exposure_count = 0
+        if coerced is not None:
+            max_proposals, max_pressures = _coerce_prompt_limits(prompt_settings)
+            scene_pressure_count = _insert_scene_pressures_sync(
+                cur, coerced, tick_chunk_id=tick_chunk_id
+            )
+            prompt_exposure_count = _insert_prompt_exposures_sync(
+                cur,
+                coerced,
+                tick_chunk_id=tick_chunk_id,
+                max_proposals=max_proposals,
+                max_pressures=max_pressures,
+            )
         if not has_resolutions:
-            return CommitOrreryTickResult(cleared_tag_count=expired_tag_count)
+            return CommitOrreryTickResult(
+                cleared_tag_count=expired_tag_count,
+                scene_pressure_count=scene_pressure_count,
+                prompt_exposure_count=prompt_exposure_count,
+            )
 
         assert coerced is not None
         entity_ids = _entity_ids_from_proposal(coerced)
@@ -333,6 +379,29 @@ def commit_orrery_tick_sync(
             )
             if resolution_id is None:
                 skipped_existing_count += 1
+                # A replace-with-delta ruling must reach the history log even
+                # when the resolution row already exists (idempotent
+                # re-commit): resolve the existing id instead of silently
+                # dropping the ruling. The log has no unique key, so guard
+                # against duplicate rows on repeated re-commits.
+                if (
+                    adjudicated.adjudication is not None
+                    and not _replace_already_logged_sync(
+                        cur, draft, tick_chunk_id=tick_chunk_id
+                    )
+                ):
+                    if adjudicated.adjudication.action == "replace":
+                        replaced_count += 1
+                    _insert_adjudication_log_sync(
+                        cur,
+                        draft,
+                        adjudicated.adjudication,
+                        tick_chunk_id=tick_chunk_id,
+                        adjudication_source=adjudicated.adjudication_source,
+                        applied_resolution_id=_existing_resolution_id_sync(
+                            cur, draft, tick_chunk_id=tick_chunk_id
+                        ),
+                    )
                 continue
 
             if adjudicated.adjudication is not None:
@@ -387,6 +456,8 @@ def commit_orrery_tick_sync(
         deferred_count=deferred_count,
         voided_count=voided_count,
         replaced_count=replaced_count,
+        scene_pressure_count=scene_pressure_count,
+        prompt_exposure_count=prompt_exposure_count,
     )
 
 
@@ -400,6 +471,7 @@ async def commit_orrery_tick_async(
     sunhelm_settings: Optional[Any] = None,
     adjudications: Any = None,
     storyteller_state_updates: Any = None,
+    prompt_settings: Optional[Any] = None,
 ) -> CommitOrreryTickResult:
     """Async parity wrapper for tests and non-production commit callers."""
 
@@ -417,8 +489,28 @@ async def commit_orrery_tick_async(
         conn,
         source_chunk_id=tick_chunk_id,
     )
+    # Pressures and exposures persist even on resolution-free ticks — a tick
+    # can carry scene pressure with zero off-screen resolutions.
+    scene_pressure_count = 0
+    prompt_exposure_count = 0
+    if coerced is not None:
+        max_proposals, max_pressures = _coerce_prompt_limits(prompt_settings)
+        scene_pressure_count = await _insert_scene_pressures_async(
+            conn, coerced, tick_chunk_id=tick_chunk_id
+        )
+        prompt_exposure_count = await _insert_prompt_exposures_async(
+            conn,
+            coerced,
+            tick_chunk_id=tick_chunk_id,
+            max_proposals=max_proposals,
+            max_pressures=max_pressures,
+        )
     if not has_resolutions:
-        return CommitOrreryTickResult(cleared_tag_count=expired_tag_count)
+        return CommitOrreryTickResult(
+            cleared_tag_count=expired_tag_count,
+            scene_pressure_count=scene_pressure_count,
+            prompt_exposure_count=prompt_exposure_count,
+        )
 
     assert coerced is not None
     entity_ids = _entity_ids_from_proposal(coerced)
@@ -496,6 +588,27 @@ async def commit_orrery_tick_async(
         )
         if resolution_id is None:
             skipped_existing_count += 1
+            # Same idempotent-re-commit guarantee as the sync twin: the
+            # replace ruling reaches the log with the existing resolution id,
+            # guarded against duplicate rows on repeated re-commits.
+            if (
+                adjudicated.adjudication is not None
+                and not await _replace_already_logged_async(
+                    conn, draft, tick_chunk_id=tick_chunk_id
+                )
+            ):
+                if adjudicated.adjudication.action == "replace":
+                    replaced_count += 1
+                await _insert_adjudication_log_async(
+                    conn,
+                    draft,
+                    adjudicated.adjudication,
+                    tick_chunk_id=tick_chunk_id,
+                    adjudication_source=adjudicated.adjudication_source,
+                    applied_resolution_id=await _existing_resolution_id_async(
+                        conn, draft, tick_chunk_id=tick_chunk_id
+                    ),
+                )
             continue
 
         if adjudicated.adjudication is not None:
@@ -550,6 +663,8 @@ async def commit_orrery_tick_async(
         deferred_count=deferred_count,
         voided_count=voided_count,
         replaced_count=replaced_count,
+        scene_pressure_count=scene_pressure_count,
+        prompt_exposure_count=prompt_exposure_count,
     )
 
 
@@ -856,8 +971,10 @@ def _insert_adjudication_log_sync(
         INSERT INTO orrery_adjudication_log (
             tick_chunk_id, proposal_id, template_id, binding_hash, action,
             adjudication_source, skald_note, original_state_delta,
-            replacement_state_delta, replacement_event_type, applied_resolution_id
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s, %s)
+            replacement_state_delta, replacement_event_type,
+            applied_resolution_id, actor_entity_id, bindings
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s, %s,
+                  %s, %s::jsonb)
         """,
         (
             tick_chunk_id,
@@ -875,6 +992,8 @@ def _insert_adjudication_log_sync(
             ),
             adjudication.replacement_event_type,
             applied_resolution_id,
+            _scalar_entity_binding(draft.bindings, "actor"),
+            json.dumps(dict(draft.bindings)),
         ),
     )
 
@@ -897,8 +1016,10 @@ async def _insert_adjudication_log_async(
         INSERT INTO orrery_adjudication_log (
             tick_chunk_id, proposal_id, template_id, binding_hash, action,
             adjudication_source, skald_note, original_state_delta,
-            replacement_state_delta, replacement_event_type, applied_resolution_id
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10, $11)
+            replacement_state_delta, replacement_event_type,
+            applied_resolution_id, actor_entity_id, bindings
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10, $11,
+                  $12, $13::jsonb)
         """,
         tick_chunk_id,
         adjudication.proposal_id,
@@ -915,7 +1036,235 @@ async def _insert_adjudication_log_async(
         ),
         adjudication.replacement_event_type,
         applied_resolution_id,
+        _scalar_entity_binding(draft.bindings, "actor"),
+        json.dumps(dict(draft.bindings)),
     )
+
+
+def _replace_already_logged_sync(
+    cur: Any,
+    draft: OrreryResolutionDraft,
+    *,
+    tick_chunk_id: int,
+) -> bool:
+    cur.execute(
+        """
+        SELECT 1 FROM orrery_adjudication_log
+        WHERE tick_chunk_id = %s AND proposal_id = %s AND action = 'replace'
+        LIMIT 1
+        """,
+        (tick_chunk_id, draft.proposal_id),
+    )
+    return cur.fetchone() is not None
+
+
+async def _replace_already_logged_async(
+    conn: Any,
+    draft: OrreryResolutionDraft,
+    *,
+    tick_chunk_id: int,
+) -> bool:
+    return (
+        await conn.fetchval(
+            """
+            SELECT 1 FROM orrery_adjudication_log
+            WHERE tick_chunk_id = $1 AND proposal_id = $2 AND action = 'replace'
+            LIMIT 1
+            """,
+            tick_chunk_id,
+            draft.proposal_id,
+        )
+        is not None
+    )
+
+
+def _existing_resolution_id_sync(
+    cur: Any,
+    draft: OrreryResolutionDraft,
+    *,
+    tick_chunk_id: int,
+) -> Optional[int]:
+    cur.execute(
+        """
+        SELECT id FROM orrery_resolutions
+        WHERE tick_chunk_id = %s AND template_id = %s AND binding_hash = %s
+        """,
+        (tick_chunk_id, draft.template_id, draft.binding_hash),
+    )
+    row = cur.fetchone()
+    if not row:
+        return None
+    return _row_get(row, "id", 0)
+
+
+async def _existing_resolution_id_async(
+    conn: Any,
+    draft: OrreryResolutionDraft,
+    *,
+    tick_chunk_id: int,
+) -> Optional[int]:
+    return await conn.fetchval(
+        """
+        SELECT id FROM orrery_resolutions
+        WHERE tick_chunk_id = $1 AND template_id = $2 AND binding_hash = $3
+        """,
+        tick_chunk_id,
+        draft.template_id,
+        draft.binding_hash,
+    )
+
+
+def _insert_scene_pressures_sync(cur: Any, proposal: Any, *, tick_chunk_id: int) -> int:
+    count = 0
+    for pressure in proposal.scene_pressures:
+        cur.execute(
+            """
+            INSERT INTO orrery_scene_pressures (
+                tick_chunk_id, template_id, binding_hash, actor_entity_id,
+                target_entity_id, priority, magnitude, branch_label,
+                pressure_stub, prompt_text, bindings
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb)
+            ON CONFLICT (tick_chunk_id, template_id, binding_hash) DO NOTHING
+            RETURNING id
+            """,
+            (
+                tick_chunk_id,
+                pressure.template_id,
+                pressure.binding_hash,
+                _scalar_entity_binding(pressure.bindings, "actor"),
+                _scalar_entity_binding(pressure.bindings, "target"),
+                pressure.priority,
+                pressure.magnitude,
+                pressure.branch_label,
+                pressure.pressure_stub,
+                pressure.prompt_text,
+                json.dumps(dict(pressure.bindings)),
+            ),
+        )
+        if cur.fetchone():
+            count += 1
+    return count
+
+
+async def _insert_scene_pressures_async(
+    conn: Any, proposal: Any, *, tick_chunk_id: int
+) -> int:
+    count = 0
+    for pressure in proposal.scene_pressures:
+        inserted = await conn.fetchval(
+            """
+            INSERT INTO orrery_scene_pressures (
+                tick_chunk_id, template_id, binding_hash, actor_entity_id,
+                target_entity_id, priority, magnitude, branch_label,
+                pressure_stub, prompt_text, bindings
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb)
+            ON CONFLICT (tick_chunk_id, template_id, binding_hash) DO NOTHING
+            RETURNING id
+            """,
+            tick_chunk_id,
+            pressure.template_id,
+            pressure.binding_hash,
+            _scalar_entity_binding(pressure.bindings, "actor"),
+            _scalar_entity_binding(pressure.bindings, "target"),
+            pressure.priority,
+            pressure.magnitude,
+            pressure.branch_label,
+            pressure.pressure_stub,
+            pressure.prompt_text,
+            json.dumps(dict(pressure.bindings)),
+        )
+        if inserted is not None:
+            count += 1
+    return count
+
+
+def _prompt_exposure_rows(
+    proposal: Any, *, max_proposals: int, max_pressures: int
+) -> list[tuple[str, str, str, int]]:
+    """(kind, template_id, binding_hash, position) for the rendered slice.
+
+    Mirrors the render slices in logon_utility's storyteller prompt: the
+    first N proposals and first N pressures in proposal order.
+    """
+
+    rows: list[tuple[str, str, str, int]] = []
+    for position, draft in enumerate(proposal.resolutions[:max_proposals]):
+        rows.append(("resolution", draft.template_id, draft.binding_hash, position))
+    for position, pressure in enumerate(proposal.scene_pressures[:max_pressures]):
+        rows.append(
+            ("scene_pressure", pressure.template_id, pressure.binding_hash, position)
+        )
+    return rows
+
+
+def _insert_prompt_exposures_sync(
+    cur: Any,
+    proposal: Any,
+    *,
+    tick_chunk_id: int,
+    max_proposals: int,
+    max_pressures: int,
+) -> int:
+    count = 0
+    for kind, template_id, binding_hash, position in _prompt_exposure_rows(
+        proposal, max_proposals=max_proposals, max_pressures=max_pressures
+    ):
+        cur.execute(
+            """
+            INSERT INTO orrery_prompt_exposures (
+                tick_chunk_id, kind, proposal_id, template_id, binding_hash,
+                position
+            ) VALUES (%s, %s, %s, %s, %s, %s)
+            ON CONFLICT (tick_chunk_id, kind, template_id, binding_hash)
+                DO NOTHING
+            RETURNING id
+            """,
+            (
+                tick_chunk_id,
+                kind,
+                f"{template_id}:{binding_hash}",
+                template_id,
+                binding_hash,
+                position,
+            ),
+        )
+        if cur.fetchone():
+            count += 1
+    return count
+
+
+async def _insert_prompt_exposures_async(
+    conn: Any,
+    proposal: Any,
+    *,
+    tick_chunk_id: int,
+    max_proposals: int,
+    max_pressures: int,
+) -> int:
+    count = 0
+    for kind, template_id, binding_hash, position in _prompt_exposure_rows(
+        proposal, max_proposals=max_proposals, max_pressures=max_pressures
+    ):
+        inserted = await conn.fetchval(
+            """
+            INSERT INTO orrery_prompt_exposures (
+                tick_chunk_id, kind, proposal_id, template_id, binding_hash,
+                position
+            ) VALUES ($1, $2, $3, $4, $5, $6)
+            ON CONFLICT (tick_chunk_id, kind, template_id, binding_hash)
+                DO NOTHING
+            RETURNING id
+            """,
+            tick_chunk_id,
+            kind,
+            f"{template_id}:{binding_hash}",
+            template_id,
+            binding_hash,
+            position,
+        )
+        if inserted is not None:
+            count += 1
+    return count
 
 
 def _insert_resolution_sync(
