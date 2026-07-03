@@ -38,6 +38,7 @@ from nexus.agents.orrery.substrate import (
     Slot,
     Template,
     WorldState,
+    binding_hash,
     evaluate,
     select_branch,
 )
@@ -254,13 +255,11 @@ def explain_template(
     branch_traces: List[BranchTrace] = []
     chosen_branch: Optional[str] = None
     if gate_passed:
-        from nexus.agents.orrery.substrate import binding_hash as _binding_hash
-
         chosen, considered_flags = select_branch(
             template,
             state,
             bindings,
-            digest=_binding_hash(bindings),
+            digest=binding_hash(bindings),
             selection=selection,
         )
         chosen_branch = chosen.label if chosen is not None else None
