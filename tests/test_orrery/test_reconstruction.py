@@ -233,3 +233,21 @@ def test_unattributed_relationship_write_versions_with_null_chunk() -> None:
     finally:
         conn.rollback()
         conn.close()
+
+
+def test_migration_genesis_sections_mirror_checkpoint_sections() -> None:
+    """The 065 genesis backfill duplicates CHECKPOINT_SECTIONS in SQL; this
+    tripwire fails if either side gains a section the other lacks."""
+
+    from pathlib import Path
+
+    migration = Path("migrations/065_reconstructability.sql").read_text()
+    genesis = migration[migration.index("jsonb_build_object") :]
+    for section in CHECKPOINT_SECTIONS:
+        assert (
+            f"'{section}', (" in genesis
+        ), f"migration genesis backfill lacks section {section!r}"
+    import re
+
+    migration_sections = set(re.findall(r"'(\w+)', \(SELECT", genesis))
+    assert migration_sections == set(CHECKPOINT_SECTIONS)

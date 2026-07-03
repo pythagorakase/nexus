@@ -131,3 +131,28 @@ DROP TRIGGER IF EXISTS trg_version_faction_relationships
 CREATE TRIGGER trg_version_faction_relationships
     BEFORE UPDATE OR DELETE ON faction_relationships
     FOR EACH ROW EXECUTE FUNCTION fn_version_relationship_row();
+
+-- Retro-fitted genesis checkpoint: the migration itself establishes the
+-- instrumentation-era boundary so no environment depends on remembering to
+-- run scripts/checkpoint_state.py. Idempotent: skipped when any genesis
+-- checkpoint already exists. Sections must mirror
+-- nexus/agents/orrery/reconstruction.CHECKPOINT_SECTIONS (tested).
+INSERT INTO state_checkpoints (chunk_id, label, state)
+SELECT
+    (SELECT max(id) FROM narrative_chunks),
+    'genesis',
+    jsonb_build_object(
+        'entity_tags', (SELECT coalesce(jsonb_agg(to_jsonb(t)), '[]'::jsonb) FROM (SELECT * FROM entity_tags WHERE cleared_at IS NULL) t),
+        'entity_pair_tags', (SELECT coalesce(jsonb_agg(to_jsonb(t)), '[]'::jsonb) FROM (SELECT * FROM entity_pair_tags WHERE cleared_at IS NULL) t),
+        'characters', (SELECT coalesce(jsonb_agg(to_jsonb(t)), '[]'::jsonb) FROM (SELECT id, entity_id, current_location, current_activity, emotional_state FROM characters) t),
+        'places', (SELECT coalesce(jsonb_agg(to_jsonb(t)), '[]'::jsonb) FROM (SELECT id, entity_id, current_status FROM places) t),
+        'character_relationships', (SELECT coalesce(jsonb_agg(to_jsonb(t)), '[]'::jsonb) FROM character_relationships t),
+        'faction_character_relationships', (SELECT coalesce(jsonb_agg(to_jsonb(t)), '[]'::jsonb) FROM faction_character_relationships t),
+        'faction_relationships', (SELECT coalesce(jsonb_agg(to_jsonb(t)), '[]'::jsonb) FROM faction_relationships t),
+        'character_need_states', (SELECT coalesce(jsonb_agg(to_jsonb(t)), '[]'::jsonb) FROM character_need_states t),
+        'character_travel_states', (SELECT coalesce(jsonb_agg(to_jsonb(t)), '[]'::jsonb) FROM character_travel_states t),
+        'character_routine_anchors', (SELECT coalesce(jsonb_agg(to_jsonb(t)), '[]'::jsonb) FROM character_routine_anchors t)
+    )
+WHERE NOT EXISTS (
+    SELECT 1 FROM state_checkpoints WHERE label = 'genesis'
+);

@@ -573,12 +573,15 @@ def commit_incubator_to_database_sync(
                     orrery_result.prompt_exposure_count,
                 )
 
-            # Step 8.55: interval state checkpoint (reconstruction bar 7c)
+            # Step 8.55: interval state checkpoint (reconstruction bar 7c).
+            # Fresh cursor: the earlier `with conn.cursor()` blocks have
+            # closed theirs by this point (review finding on #428).
             checkpoint_interval = _orrery_checkpoint_interval()
             if checkpoint_interval and chunk_id % checkpoint_interval == 0:
-                checkpoint_id = capture_state_checkpoint_sync(
-                    cur, chunk_id=chunk_id, label="interval"
-                )
+                with conn.cursor() as checkpoint_cur:
+                    checkpoint_id = capture_state_checkpoint_sync(
+                        checkpoint_cur, chunk_id=chunk_id, label="interval"
+                    )
                 if checkpoint_id is not None:
                     logger.info(
                         "State checkpoint %s taken at chunk %s",
