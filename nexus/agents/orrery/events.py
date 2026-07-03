@@ -2994,7 +2994,10 @@ async def _emit_world_event_async(
                 event_type, tick_chunk_id, actor_entity_id, target_entity_id,
                 location_id, world_layer, source, changed_fields, magnitude,
                 resolution_id, payload
-            ) VALUES ($1, $2, $3, $4, $5, $6, 'resolver', $7, $8, $9, $10::jsonb)
+            ) VALUES (
+                $1, $2, $3, $4, $5, $6::world_layer_type, 'resolver',
+                $7::text[], $8, $9, $10::jsonb
+            )
             """,
             draft.signal_event_type,
             tick_chunk_id,

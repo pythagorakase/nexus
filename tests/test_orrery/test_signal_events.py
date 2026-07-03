@@ -202,3 +202,74 @@ def test_committed_signal_feeds_consumer_gates_live() -> None:
     finally:
         conn.rollback()
         conn.close()
+
+
+@pytest.mark.requires_postgres
+def test_async_commit_emits_signal_rows_live() -> None:
+    """The asyncpg twin needs explicit ::world_layer_type / ::text[] casts
+    (review finding on #429) — and had no live coverage anywhere before
+    this test. Real commit_orrery_tick_async, rolled-back transaction."""
+
+    import asyncio
+
+    import asyncpg
+
+    async def _run() -> None:
+        conn = await asyncpg.connect(
+            host=os.environ.get("PGHOST", "localhost"),
+            database=f"save_{WRITE_SLOT:02d}",
+            user=os.environ.get("PGUSER", "pythagor"),
+        )
+        tx = conn.transaction()
+        await tx.start()
+        try:
+            anchor = await conn.fetchval("SELECT max(id) FROM narrative_chunks")
+            rows = await conn.fetch(
+                """
+                SELECT entity_id FROM characters
+                WHERE entity_id IS NOT NULL ORDER BY entity_id LIMIT 2
+                """
+            )
+            avenger, target = rows[0][0], rows[1][0]
+            draft = OrreryResolutionDraft(
+                template_id="extract_vengeance",
+                priority=60,
+                binding_hash=f"async-signal-{uuid.uuid4().hex}",
+                bindings={"actor": avenger, "target": target},
+                branch_label="show the hand",
+                narrative_stub="{actor} lets {target} feel the pressure.",
+                event_type="retaliation_attempted",
+                signal_event_type="threat_issued",
+                magnitude=0.5,
+            )
+            from nexus.agents.orrery.events import commit_orrery_tick_async
+
+            result = await commit_orrery_tick_async(
+                conn,
+                OrreryTickProposal(
+                    anchor_chunk_id=anchor, actor_count=1, resolutions=(draft,)
+                ),
+                tick_chunk_id=anchor,
+                slot=WRITE_SLOT,
+            )
+            assert result.resolution_count == 1
+            kinds = {
+                row[0]
+                for row in await conn.fetch(
+                    """
+                    SELECT event_type FROM world_events
+                    WHERE tick_chunk_id = $1 AND target_entity_id = $2
+                      AND event_type IN (
+                        'retaliation_attempted', 'threat_issued'
+                      )
+                    """,
+                    anchor,
+                    target,
+                )
+            }
+            assert kinds == {"retaliation_attempted", "threat_issued"}
+        finally:
+            await tx.rollback()
+            await conn.close()
+
+    asyncio.run(_run())
