@@ -92,10 +92,14 @@ def apply_tag_bestowal(
             f"No Orrery tag categories registered for entity_kind={entity_kind!r}"
         )
 
-    if world_time is None and source_chunk_id is not None:
-        world_time = _chunk_world_time(cur, source_chunk_id)
     if world_time is None:
-        world_time = _load_world_time(cur)
+        if source_chunk_id is not None:
+            # Chunk-keyed rows take the bestowing chunk's clock or stay NULL —
+            # never the global-max fallback, which would stamp an "exact" row
+            # with a wrong world time when chunk metadata is missing.
+            world_time = _chunk_world_time(cur, source_chunk_id)
+        else:
+            world_time = _load_world_time(cur)
 
     tags_to_apply: list[_TagApplication] = []
     for tag_name in bestowal.applied_tags:
@@ -234,10 +238,12 @@ async def apply_tag_bestowal_async(
             f"No Orrery tag categories registered for entity_kind={entity_kind!r}"
         )
 
-    if world_time is None and source_chunk_id is not None:
-        world_time = await _chunk_world_time_async(conn, source_chunk_id)
     if world_time is None:
-        world_time = await _load_world_time_async(conn)
+        if source_chunk_id is not None:
+            # Same rule as the sync twin: chunk clock or NULL, never global max.
+            world_time = await _chunk_world_time_async(conn, source_chunk_id)
+        else:
+            world_time = await _load_world_time_async(conn)
 
     tags_to_apply: list[_TagApplication] = []
     for tag_name in bestowal.applied_tags:
@@ -344,10 +350,14 @@ def apply_exclusive_tag_bestowal(
     tag_id = _row_value(tag_row, "id", 0)
     reapplication_policy = _row_value(tag_row, "reapplication_policy", 3)
 
-    if world_time is None and source_chunk_id is not None:
-        world_time = _chunk_world_time(cur, source_chunk_id)
     if world_time is None:
-        world_time = _load_world_time(cur)
+        if source_chunk_id is not None:
+            # Chunk-keyed rows take the bestowing chunk's clock or stay NULL —
+            # never the global-max fallback, which would stamp an "exact" row
+            # with a wrong world time when chunk metadata is missing.
+            world_time = _chunk_world_time(cur, source_chunk_id)
+        else:
+            world_time = _load_world_time(cur)
 
     _clear_entity_tag_siblings(
         cur,
@@ -1042,10 +1052,14 @@ def apply_pair_tag_bestowal(
         object_kinds=object_kinds,
     )
 
-    if world_time is None and source_chunk_id is not None:
-        world_time = _chunk_world_time(cur, source_chunk_id)
     if world_time is None:
-        world_time = _load_world_time(cur)
+        if source_chunk_id is not None:
+            # Chunk-keyed rows take the bestowing chunk's clock or stay NULL —
+            # never the global-max fallback, which would stamp an "exact" row
+            # with a wrong world time when chunk metadata is missing.
+            world_time = _chunk_world_time(cur, source_chunk_id)
+        else:
+            world_time = _load_world_time(cur)
 
     return _insert_pair_tag_row(
         cur,
@@ -1161,10 +1175,14 @@ def apply_status_pair_tag_bestowal(
         subject_kinds=_row_value(row, "subject_kinds", 1),
         object_kinds=_row_value(row, "object_kinds", 2),
     )
-    if world_time is None and source_chunk_id is not None:
-        world_time = _chunk_world_time(cur, source_chunk_id)
     if world_time is None:
-        world_time = _load_world_time(cur)
+        if source_chunk_id is not None:
+            # Chunk-keyed rows take the bestowing chunk's clock or stay NULL —
+            # never the global-max fallback, which would stamp an "exact" row
+            # with a wrong world time when chunk metadata is missing.
+            world_time = _chunk_world_time(cur, source_chunk_id)
+        else:
+            world_time = _load_world_time(cur)
 
     _clear_pair_tags_by_name(
         cur,

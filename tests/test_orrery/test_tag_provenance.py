@@ -295,3 +295,48 @@ def test_entity_context_reports_exact_provenance_tier() -> None:
             session.rollback()
     finally:
         engine.dispose()
+
+
+def test_chunk_keyed_bestowal_without_metadata_leaves_world_time_null() -> None:
+    """A chunk-keyed row must never borrow the global-max clock (review
+    finding on #425): chunk clock or NULL, so the "exact" tier cannot carry
+    a fabricated world time."""
+
+    conn = _connect()
+    try:
+        with conn.cursor() as cur:
+            _, actor_id, _ = _anchor_and_actors(cur)
+            cur.execute(
+                """
+                INSERT INTO narrative_chunks (raw_text)
+                VALUES ('provenance probe: chunk without metadata')
+                RETURNING id
+                """
+            )
+            bare_chunk_id = cur.fetchone()[0]
+
+            counters = apply_tag_bestowal(
+                cur,
+                entity_id=actor_id,
+                entity_kind="character",
+                bestowal=OrreryTagBestowal(applied_tags=["off_grid"]),
+                source_chunk_id=bare_chunk_id,
+            )
+            assert counters["applied"] == 1
+            cur.execute(
+                """
+                SELECT et.source_chunk_id, et.applied_at_world_time
+                FROM entity_tags et
+                JOIN tags t ON t.id = et.tag_id
+                WHERE et.entity_id = %s AND t.tag = 'off_grid'
+                  AND et.cleared_at IS NULL
+                ORDER BY et.id DESC LIMIT 1
+                """,
+                (actor_id,),
+            )
+            source_chunk_id, world_time = cur.fetchone()
+            assert source_chunk_id == bare_chunk_id
+            assert world_time is None
+    finally:
+        conn.rollback()
+        conn.close()
