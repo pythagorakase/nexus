@@ -692,6 +692,32 @@ class LogonUtility:
                 if prompt_text:
                     sections.append(f"- {label}: {prompt_text}")
 
+        joint_beats = context.get("orrery_joint_beats") or []
+        if joint_beats:
+            sections.append("\n=== ORRERY JOINT BEATS ===")
+            sections.append(
+                "These proposal pairs have the same two characters acting "
+                "toward each other in this tick. Treat each pair as one "
+                "scene if you wish: 'reciprocal' means both chose the same "
+                "behavior (a meeting of intent); 'crossed' means their "
+                "behaviors differ (tension you may spring). Adjudicate the "
+                "underlying proposals by proposal_id as usual."
+            )
+            for beat in joint_beats[:max_rendered_proposals]:
+                if not isinstance(beat, dict):
+                    continue
+                names = beat.get("entity_names") or {}
+                pair = " & ".join(str(name) for name in names.values()) or (
+                    f"{beat.get('entity_a')} & {beat.get('entity_b')}"
+                )
+                sections.append(
+                    f"- [{beat.get('kind')}] {pair}: "
+                    f"{beat.get('forward_template_id')} <-> "
+                    f"{beat.get('reverse_template_id')} "
+                    f"({beat.get('forward_proposal_id')} / "
+                    f"{beat.get('reverse_proposal_id')})"
+                )
+
         bleed_menu = context.get("orrery_bleed_menu") or []
         if bleed_menu:
             sections.append("\n=== ORRERY AMBIENT PERIPHERALS ===")

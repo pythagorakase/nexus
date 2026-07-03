@@ -9,6 +9,11 @@ from typing import Any, Iterable, Mapping, Optional, Tuple
 
 from sqlalchemy import text
 
+from nexus.agents.orrery.reciprocal import (
+    OrreryJointBeat,
+    coerce_joint_beats,
+    detect_joint_beats,
+)
 from nexus.agents.orrery.substrate import (
     BranchSelection,
     coerce_branch_selection,
@@ -180,6 +185,7 @@ class OrreryTickProposal:
     actor_count: int
     resolutions: Tuple[OrreryResolutionDraft, ...]
     scene_pressures: Tuple[OrreryScenePressureDraft, ...] = ()
+    joint_beats: Tuple[OrreryJointBeat, ...] = ()
     generated_at: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
@@ -207,6 +213,7 @@ class OrreryTickProposal:
             "scene_pressures": [
                 pressure.to_dict() for pressure in self.scene_pressures
             ],
+            "joint_beats": [beat.to_dict() for beat in self.joint_beats],
         }
 
     @classmethod
@@ -225,6 +232,7 @@ class OrreryTickProposal:
                 OrreryScenePressureDraft.from_dict(item)
                 for item in data.get("scene_pressures", ())
             ),
+            joint_beats=coerce_joint_beats(data.get("joint_beats")),
         )
 
 
@@ -944,6 +952,7 @@ def resolve_dry_run(
         actor_count=len(unique_actors),
         resolutions=tuple(drafts),
         scene_pressures=scene_pressures,
+        joint_beats=detect_joint_beats(drafts, draft_entity_names),
     )
 
 
