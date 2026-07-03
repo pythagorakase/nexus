@@ -737,6 +737,11 @@ class TurnCycleManager:
                 for pressure in turn_context.orrery_proposal.scene_pressures
             ]
 
+        if proposal and getattr(proposal, "joint_beats", ()):
+            turn_context.context_payload["orrery_joint_beats"] = [
+                beat.to_dict() for beat in proposal.joint_beats
+            ]
+
         if turn_context.bleed_menu:
             turn_context.context_payload["orrery_bleed_menu"] = [
                 candidate.to_prompt_dict() for candidate in turn_context.bleed_menu

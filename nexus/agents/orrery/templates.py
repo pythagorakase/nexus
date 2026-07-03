@@ -718,6 +718,7 @@ EXTRACT_VENGEANCE = Template(
                 "entity_tags_target.remove": ["grudge_active"],
             },
             event_type="retaliation_executed",
+            signal_event_type="threat_issued",
             changed_fields=(
                 "character.current_activity",
                 "entity_tags",
@@ -747,6 +748,7 @@ EXTRACT_VENGEANCE = Template(
                 "entity_tags_target.add": ["reputation_compromised"],
             },
             event_type="retaliation_attempted",
+            signal_event_type="threat_issued",
             changed_fields=("character.current_activity", "entity_tags"),
             magnitude=0.58,
             scene_pressure_stub=(
@@ -964,6 +966,7 @@ SURVEIL = Template(
                 "character.current_activity": "intercepting target signals",
             },
             event_type="surveillance_performed",
+            signal_event_type="compliance_alert",
             changed_fields=("character.current_activity",),
             magnitude=0.48,
             scene_pressure_stub=(
@@ -1057,6 +1060,7 @@ SURVEIL = Template(
                 "character.current_activity": "following target public pattern",
             },
             event_type="surveillance_performed",
+            signal_event_type="compliance_alert",
             changed_fields=("character.current_activity",),
             magnitude=0.30,
             scene_pressure_stub=(
@@ -1194,6 +1198,7 @@ CULTIVATE_INFORMANT = Template(
                 "character.current_activity": "courting an informant remotely",
             },
             event_type="informant_contact",
+            signal_event_type="encoded_message",
             changed_fields=("character.current_activity",),
             magnitude=0.18,
             scene_pressure_stub=(

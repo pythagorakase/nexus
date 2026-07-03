@@ -695,13 +695,8 @@ def test_coverage_report_is_internally_consistent(
     for gap in payload["gap_actors"]:
         assert 0 < gap["gapped_anchors"] <= gap["seen_anchors"]
 
-    # The static lint re-derives exactly the four dead gate arms.
-    assert set(payload["dead_gate_arms"]) == {
-        "threat_issued",
-        "compliance_alert",
-        "faction_realignment",
-        "encoded_message",
-    }
+    # Post-signal-emissions, only faction_realignment lacks an emitter.
+    assert set(payload["dead_gate_arms"]) == {"faction_realignment"}
     assert set(payload["hydration_honesty"]) == {
         "rewound_to_anchor",
         "current_projection",
@@ -819,3 +814,32 @@ def test_adjudication_history_endpoint_over_http(client: TestClient) -> None:
     assert filtered.status_code == 200
     filtered_payload = filtered.json()
     assert set(filtered_payload["templates"]) <= {"surveil"}
+
+
+@pytest.mark.requires_postgres
+@pytest.mark.parametrize("slot", AUDIT_SLOTS)
+def test_joint_beats_parity_with_production(
+    client: TestClient,
+    production_proposals: dict[int, tuple[Optional[int], OrreryTickProposal]],
+    slot: int,
+) -> None:
+    """The audit payload's joint beats must match the production post-pass."""
+
+    anchor_chunk_id, proposal = production_proposals[slot]
+    response = client.post(
+        "/api/dev/orrery/resolve",
+        json={"slot": slot, "anchor_chunk_id": anchor_chunk_id},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    endpoint_beats = {
+        (beat["forward_proposal_id"], beat["reverse_proposal_id"])
+        for beat in payload["joint_beats"]
+    }
+    production_beats = {
+        (beat.forward_proposal_id, beat.reverse_proposal_id)
+        for beat in proposal.joint_beats
+    }
+    assert endpoint_beats == production_beats
+    for beat in payload["joint_beats"]:
+        assert beat["kind"] in {"reciprocal", "crossed"}

@@ -1667,6 +1667,11 @@ class Branch:
     changed_fields: Tuple[str, ...] = ()
     magnitude: float = 0.0
     scene_pressure_stub: Optional[str] = None
+    # A second, additive world-event emission: the signal an act gives off
+    # (threat_issued, compliance_alert, ...) alongside the deed's own
+    # event_type. Signals feed other packages' gates without disturbing the
+    # emitting package's cooldowns.
+    signal_event_type: Optional[str] = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1719,6 +1724,7 @@ class Resolution:
     changed_fields: Tuple[str, ...] = ()
     magnitude: float = 0.0
     scene_pressure_stub: Optional[str] = None
+    signal_event_type: Optional[str] = None
 
 
 def binding_hash(bindings: Bindings) -> str:
@@ -1885,6 +1891,7 @@ def evaluate(
             changed_fields=branch.changed_fields,
             magnitude=branch.magnitude,
             scene_pressure_stub=branch.scene_pressure_stub,
+            signal_event_type=branch.signal_event_type,
         )
 
     return Resolution(

@@ -123,6 +123,7 @@ class TemplateExplanation:
     branches: Tuple[BranchTrace, ...]
     magnitude: float
     event_type: Optional[str]
+    signal_event_type: Optional[str]
     narrative_stub: Optional[str]
     binding_hash: str
     state_delta: Mapping[str, Any] = field(default_factory=dict)
@@ -147,6 +148,7 @@ class TemplateExplanation:
             "branches": [branch.to_dict() for branch in self.branches],
             "magnitude": self.magnitude if self.fired else None,
             "event_type": self.event_type if self.fired else None,
+            "signal_event_type": self.signal_event_type if self.fired else None,
             "narrative_stub": self.narrative_stub,
             "binding_hash": self.binding_hash,
             "state_delta": dict(self.state_delta),
@@ -316,6 +318,7 @@ def explain_template(
         branches=tuple(branch_traces),
         magnitude=truth.magnitude,
         event_type=truth.event_type,
+        signal_event_type=truth.signal_event_type,
         narrative_stub=truth.narrative_stub,
         binding_hash=truth.binding_hash,
         state_delta=dict(truth.state_delta),

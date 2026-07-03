@@ -37,6 +37,7 @@ from typing import Any, Iterable, List, Mapping, Optional, Sequence, Tuple
 from sqlalchemy import text
 
 from nexus.agents.orrery.explain import StackExplanation, explain_stack
+from nexus.agents.orrery.reciprocal import OrreryJointBeat, detect_joint_beats
 from nexus.agents.orrery.overrides import (
     OverrideValidationError,
     WorldStateOverrides,
@@ -122,6 +123,7 @@ class ExplainedTickReport:
     locations: Mapping[int, Any]
     location_names: Mapping[int, str]
     activities: Mapping[int, str]
+    joint_beats: Tuple[OrreryJointBeat, ...] = ()
     mode: str = "current"
     overrides: Optional[Mapping[str, Any]] = None
     need_pressures_diff: Optional[Mapping[str, Any]] = None
@@ -143,6 +145,7 @@ class ExplainedTickReport:
             "overrides": dict(self.overrides) if self.overrides is not None else None,
             "generated_at": self.generated_at,
             "actors": [self._group_payload(group) for group in self.actors],
+            "joint_beats": [beat.to_dict() for beat in self.joint_beats],
             "need_pressures": [draft.to_dict() for draft in self.need_pressures],
             "need_pressures_diff": (
                 dict(self.need_pressures_diff)
@@ -637,6 +640,32 @@ def explain_dry_run(
     if what_if:
         need_pressures_diff = _need_pressure_diff(_pressures(baseline), need_pressures)
 
+    class _WinnerShim:
+        __slots__ = (
+            "template_id",
+            "binding_hash",
+            "bindings",
+            "magnitude",
+            "narrative_stub",
+        )
+
+        def __init__(self, stack: StackExplanation, item: Any) -> None:
+            self.template_id = item.template_id
+            self.binding_hash = item.binding_hash
+            self.bindings = dict(stack.bindings)
+            self.magnitude = item.magnitude
+            self.narrative_stub = item.narrative_stub
+
+    joint_beat_inputs = [
+        _WinnerShim(stack, item)
+        for stacks in active.two_party_stacks.values()
+        for stack in stacks
+        if stack.winner_id is not None
+        for item in stack.templates
+        if item.template_id == stack.winner_id
+    ]
+    joint_beats = detect_joint_beats(joint_beat_inputs, entity_names)
+
     not_applicable_markers = tuple(
         {
             "template_id": template.id,
@@ -699,6 +728,7 @@ def explain_dry_run(
         locations=dict(active_state.locations),
         location_names=location_names,
         activities=dict(active_state.activities),
+        joint_beats=joint_beats,
         mode="what_if" if what_if else "current",
         overrides=overrides.to_dict() if what_if and overrides is not None else None,
         need_pressures_diff=need_pressures_diff,
@@ -793,11 +823,14 @@ def build_catalog(
             branch_consumed |= _consumed_event_types(branch.conditions)
             if branch.event_type:
                 emitted.add(branch.event_type)
+            if branch.signal_event_type:
+                emitted.add(branch.signal_event_type)
             branch_payloads.append(
                 {
                     "label": branch.label,
                     "magnitude": branch.magnitude,
                     "event_type": branch.event_type,
+                    "signal_event_type": branch.signal_event_type,
                     "has_scene_pressure_stub": branch.scene_pressure_stub is not None,
                 }
             )
