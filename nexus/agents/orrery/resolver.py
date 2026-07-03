@@ -10,6 +10,8 @@ from typing import Any, Iterable, Mapping, Optional, Tuple
 from sqlalchemy import text
 
 from nexus.agents.orrery.substrate import (
+    BranchSelection,
+    coerce_branch_selection,
     Bindings,
     EventRecord,
     INTIMACY_SUPPRESSOR_TAGS,
@@ -796,10 +798,12 @@ def resolve_dry_run(
     window_chunks: int,
     sunhelm_settings: Optional[Any] = None,
     world_time_override: Optional[datetime] = None,
+    selection_settings: Optional[Any] = None,
 ) -> OrreryTickProposal:
     """Hydrate, bind, and evaluate Orrery packages without database writes."""
 
     need_tuning = coerce_need_tuning(sunhelm_settings)
+    selection = coerce_branch_selection(selection_settings)
     state = hydrate_world_state(
         session,
         anchor_chunk_id=anchor_chunk_id,
@@ -838,7 +842,7 @@ def resolve_dry_run(
         window_chunks=window_chunks,
     )
     for bindings in actor_bindings:
-        resolution = evaluate_stack(actor_only_templates, state, bindings)
+        resolution = evaluate_stack(actor_only_templates, state, bindings, selection)
         if resolution is not None and resolution.passes:
             drafts.append(_draft_from_resolution(resolution))
 
@@ -853,7 +857,9 @@ def resolve_dry_run(
             target_presence="offscreen",
         )
         for bindings in actor_target_bindings:
-            resolution = evaluate_stack(actor_target_templates, state, bindings)
+            resolution = evaluate_stack(
+                actor_target_templates, state, bindings, selection
+            )
             if resolution is not None and resolution.passes:
                 drafts.append(_draft_from_resolution(resolution))
 
@@ -872,7 +878,9 @@ def resolve_dry_run(
                 target_presence="present",
             )
             for bindings in present_target_bindings:
-                resolution = evaluate_stack(pressure_templates, state, bindings)
+                resolution = evaluate_stack(
+                    pressure_templates, state, bindings, selection
+                )
                 if resolution is not None and resolution.passes:
                     scene_pressure_results.append(resolution)
 

@@ -639,6 +639,7 @@ class TurnCycleManager:
                 anchor_chunk_id=anchor_chunk_id,
                 window_chunks=window_chunks,
                 sunhelm_settings=orrery_settings.get("sunhelm"),
+                selection_settings=orrery_settings.get("selection"),
             )
 
         turn_context.orrery_proposal = proposal

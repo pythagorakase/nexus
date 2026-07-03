@@ -206,6 +206,15 @@ enabled = true
 [orrery.binding]
 window_chunks = 30
 
+[orrery.selection]
+# Branch selection inside a fired package: "stochastic" softmax-samples all
+# passing branches by magnitude (PRNG seeded on per-resolution persisted
+# values -> reproducible; committed state_delta log stays the replay
+# authority); "authored_order" is the legacy deterministic rule.
+mode = "stochastic"
+temperature = 0.25
+seed_salt = ""
+
 [orrery.prompt]
 # Render caps for Orrery material in the storyteller prompt. The commit-time
 # prompt-exposure log records the same first-N slice, so these are also the

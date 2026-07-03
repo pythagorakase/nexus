@@ -642,6 +642,44 @@ class OrreryNeedPressureSettings(BaseModel):
     magnitude_cap: float = Field(default=0.85, ge=0.0, le=1.0)
 
 
+class OrrerySelectionSettings(BaseModel):
+    """Branch-selection policy for Orrery behavior packages.
+
+    ``stochastic`` samples all passing branches with a magnitude-softmax at
+    ``temperature`` (seeded on persisted per-resolution values, so the same
+    state always resolves the same way — reproducible dynamism, and replay
+    of the committed state_delta log remains the reconstruction authority).
+    ``authored_order`` is the legacy deterministic first-passing rule.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["authored_order", "stochastic"] = Field(
+        default="stochastic",
+        description=(
+            "Branch-selection rule: legacy authored-order short-circuit, or "
+            "seeded magnitude-softmax sampling over all passing branches."
+        ),
+    )
+    temperature: float = Field(
+        default=0.25,
+        ge=0.0,
+        description=(
+            "Softmax temperature for stochastic mode. 0 degenerates to "
+            "argmax-by-magnitude; higher values flatten toward uniform. "
+            "Builtin magnitudes differ by ~0.1-0.3, so 0.25 keeps salient "
+            "branches favored ~3:1 without silencing fallbacks."
+        ),
+    )
+    seed_salt: str = Field(
+        default="",
+        description=(
+            "Extra PRNG seed material. Change to reroll every stochastic "
+            "choice without touching state; keep stable for reproducibility."
+        ),
+    )
+
+
 class OrrerySunhelmSettings(BaseModel):
     """Timestamp-plus-debt tuning for Orrery basic needs."""
 
@@ -1065,6 +1103,7 @@ class OrrerySettings(BaseModel):
     bleed: OrreryBleedSettings = Field(default_factory=OrreryBleedSettings)
     promote: OrreryPromoteSettings = Field(default_factory=OrreryPromoteSettings)
     sunhelm: OrrerySunhelmSettings = Field(default_factory=OrrerySunhelmSettings)
+    selection: OrrerySelectionSettings = Field(default_factory=OrrerySelectionSettings)
     retrograde: OrreryRetrogradeSettings
     dashboard: OrreryDashboardSettings = Field(default_factory=OrreryDashboardSettings)
     prompt: OrreryPromptSettings = Field(default_factory=OrreryPromptSettings)

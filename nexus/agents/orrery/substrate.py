@@ -7,6 +7,8 @@ from datetime import datetime
 from enum import Enum
 from hashlib import sha256
 import json
+import math
+import random
 from typing import Any, Callable, Dict, Iterable, Literal, Mapping, Optional, Tuple
 
 from nexus.agents.orrery.needs import normalize_need_type
@@ -1734,7 +1736,126 @@ def binding_hash(bindings: Bindings) -> str:
     return sha256(encoded.encode("utf-8")).hexdigest()
 
 
-def evaluate(template: Template, state: WorldState, bindings: Bindings) -> Resolution:
+@dataclass(frozen=True, slots=True)
+class BranchSelection:
+    """Branch-selection policy, threaded from [orrery.selection] in nexus.toml.
+
+    ``authored_order`` is the legacy deterministic rule: first passing branch
+    in authored order wins (magnitude ladders are convention, not engine).
+    ``stochastic`` evaluates every branch and samples the passing set with a
+    magnitude-softmax at ``temperature``; the PRNG is keyed on values
+    persisted with every resolution (binding hash, tick, template id, plus
+    ``seed_salt``), so the same state always picks the same branch —
+    reproducible dynamism, and reconstruction stays owned by the committed
+    state_delta log, never a re-run of the sampler.
+    """
+
+    mode: str = "authored_order"
+    temperature: float = 0.0
+    seed_salt: str = ""
+
+    def __post_init__(self) -> None:
+        if self.mode not in ("authored_order", "stochastic"):
+            raise ValueError(
+                f"Unknown branch-selection mode {self.mode!r}; expected "
+                "'authored_order' or 'stochastic'"
+            )
+        if self.temperature < 0:
+            raise ValueError(
+                f"Branch-selection temperature must be >= 0, got {self.temperature}"
+            )
+
+
+def coerce_branch_selection(value: Any) -> Optional[BranchSelection]:
+    """Coerce [orrery.selection] config (mapping / model / None) to policy.
+
+    ``None`` means "no policy supplied" and preserves legacy authored-order
+    selection — callers that want configured behavior must pass the settings.
+    """
+
+    if value is None or isinstance(value, BranchSelection):
+        return value
+    if isinstance(value, Mapping):
+        return BranchSelection(
+            mode=str(value["mode"]),
+            temperature=float(value["temperature"]),
+            seed_salt=str(value.get("seed_salt", "")),
+        )
+    return BranchSelection(
+        mode=str(value.mode),
+        temperature=float(value.temperature),
+        seed_salt=str(getattr(value, "seed_salt", "")),
+    )
+
+
+def _selection_rng(
+    digest: str, tick: int, template_id: str, seed_salt: str
+) -> random.Random:
+    seed_material = f"{digest}:{tick}:{template_id}:{seed_salt}"
+    return random.Random(int(sha256(seed_material.encode("utf-8")).hexdigest(), 16))
+
+
+def select_branch(
+    template: Template,
+    state: WorldState,
+    bindings: Bindings,
+    *,
+    digest: str,
+    selection: Optional["BranchSelection"] = None,
+) -> Tuple[Optional[Branch], Tuple[bool, ...]]:
+    """The single branch-selection authority for one gated template.
+
+    Returns ``(chosen_branch_or_None, considered_flags)`` where
+    ``considered_flags[i]`` says whether ``branches[i]``'s conditions were
+    evaluated. Both :func:`evaluate` and the explain layer's
+    ``explain_template`` MUST route through this function — they cross-check
+    each other and raise on divergence, so a second selection implementation
+    is a correctness bug by construction.
+
+    ``authored_order`` (and a missing ``selection``) preserves the legacy
+    short-circuit exactly; ``stochastic`` evaluates all branches (the traces
+    become exhaustive) and softmax-samples the passing set by magnitude.
+    At ``temperature == 0`` stochastic degenerates to argmax by magnitude
+    (authored order breaking ties).
+    """
+
+    if selection is None or selection.mode == "authored_order":
+        considered = []
+        for branch in template.branches:
+            considered.append(True)
+            if branch.conditions(state, bindings):
+                considered.extend(False for _ in template.branches[len(considered) :])
+                return branch, tuple(considered)
+        return None, tuple(considered)
+
+    passing = [
+        branch for branch in template.branches if branch.conditions(state, bindings)
+    ]
+    considered_all = tuple(True for _ in template.branches)
+    if not passing:
+        return None, considered_all
+    if len(passing) == 1:
+        return passing[0], considered_all
+
+    if selection.temperature == 0:
+        return max(passing, key=lambda branch: branch.magnitude), considered_all
+
+    # Softmax over magnitude, shifted for numerical stability.
+    peak = max(branch.magnitude for branch in passing)
+    weights = [
+        math.exp((branch.magnitude - peak) / selection.temperature)
+        for branch in passing
+    ]
+    rng = _selection_rng(digest, state.current_tick, template.id, selection.seed_salt)
+    return rng.choices(passing, weights=weights, k=1)[0], considered_all
+
+
+def evaluate(
+    template: Template,
+    state: WorldState,
+    bindings: Bindings,
+    selection: Optional[BranchSelection] = None,
+) -> Resolution:
     """Evaluate one template and binding set against world state."""
 
     digest = binding_hash(bindings)
@@ -1747,22 +1868,24 @@ def evaluate(template: Template, state: WorldState, bindings: Bindings) -> Resol
             passes=False,
         )
 
-    for branch in template.branches:
-        if branch.conditions(state, bindings):
-            return Resolution(
-                template_id=template.id,
-                priority=template.priority,
-                binding_hash=digest,
-                bindings=bindings,
-                passes=True,
-                branch_label=branch.label,
-                narrative_stub=branch.narrative_stub,
-                state_delta=branch.state_delta,
-                event_type=branch.event_type,
-                changed_fields=branch.changed_fields,
-                magnitude=branch.magnitude,
-                scene_pressure_stub=branch.scene_pressure_stub,
-            )
+    branch, _considered = select_branch(
+        template, state, bindings, digest=digest, selection=selection
+    )
+    if branch is not None:
+        return Resolution(
+            template_id=template.id,
+            priority=template.priority,
+            binding_hash=digest,
+            bindings=bindings,
+            passes=True,
+            branch_label=branch.label,
+            narrative_stub=branch.narrative_stub,
+            state_delta=branch.state_delta,
+            event_type=branch.event_type,
+            changed_fields=branch.changed_fields,
+            magnitude=branch.magnitude,
+            scene_pressure_stub=branch.scene_pressure_stub,
+        )
 
     return Resolution(
         template_id=template.id,
@@ -1774,12 +1897,15 @@ def evaluate(template: Template, state: WorldState, bindings: Bindings) -> Resol
 
 
 def evaluate_stack(
-    templates: Iterable[Template], state: WorldState, bindings: Bindings
+    templates: Iterable[Template],
+    state: WorldState,
+    bindings: Bindings,
+    selection: Optional[BranchSelection] = None,
 ) -> Optional[Resolution]:
     """Evaluate templates in priority order and return the first firing branch."""
 
     for template in sorted(templates, key=lambda item: item.priority, reverse=True):
-        result = evaluate(template, state, bindings)
+        result = evaluate(template, state, bindings, selection)
         if result.passes:
             return result
     return None
