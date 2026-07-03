@@ -72,6 +72,7 @@ class RecordingCursor:
         self.location_class_destinations = list(location_class_destinations or [])
         self.place_zones = dict(place_zones or {})
         self.executed = []
+        self.clearance_log_rows = []
         self.rowcount = 1
         self._fetchone = None
         self._fetchall = []
@@ -115,8 +116,11 @@ class RecordingCursor:
             tag = params[0]
             if tag in self.known_tags:
                 self._fetchone = {"id": self.known_tags[tag]}
+        elif "INSERT INTO tag_clearance_log" in normalized:
+            self.clearance_log_rows.append(params)
+            self.rowcount = 1
         elif "INSERT INTO entity_tags" in normalized:
-            entity_id, tag_id, _template_id = params
+            entity_id, tag_id, _template_id, _world_time, _source_chunk_id = params
             tags_by_id = {value: key for key, value in self.known_tags.items()}
             tag = tags_by_id[tag_id]
             if (entity_id, tag) not in self.current_tags:
@@ -329,6 +333,11 @@ class RecordingCursor:
         elif "UPDATE characters SET current_location" in normalized:
             self.rowcount = 1
         elif "UPDATE entity_pair_tags ept SET cleared_at = now()" in normalized:
+            # RETURNING ept.id — one fake row id per "cleared" row.
+            self._fetchall = [
+                {"id": 900 + offset}
+                for offset in range(self.inbound_pair_tag_clear_count)
+            ]
             self.rowcount = self.inbound_pair_tag_clear_count
         elif "INSERT INTO world_events" in normalized:
             self._fetchone = {"id": 20}
@@ -2300,7 +2309,8 @@ def test_commit_orrery_tick_applies_need_fulfillment_delta() -> None:
     assert cursor.need_state[(1, "sleep")]["debt_score"] == 18
     assert "UPDATE character_need_states" in statements
     assert any(
-        "INSERT INTO entity_tags" in sql and params == (1, 101, "sleep")
+        "INSERT INTO entity_tags" in sql
+        and params == (1, 101, "sleep", world_time, 100)
         for sql, params in cursor.executed
     )
 

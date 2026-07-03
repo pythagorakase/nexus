@@ -20,6 +20,7 @@ scheduled-expiry column used by duration-bearing tags.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Literal, Optional, TypeAlias
@@ -51,6 +52,7 @@ def apply_tag_bestowal(
     source_kind: str = "skald_inline",
     world_time: Optional[datetime] = None,
     duration_override: Optional[timedelta] = None,
+    source_chunk_id: Optional[int] = None,
 ) -> dict[str, int]:
     """Apply a closed-vocabulary tag bestowal to the database.
 
@@ -91,7 +93,13 @@ def apply_tag_bestowal(
         )
 
     if world_time is None:
-        world_time = _load_world_time(cur)
+        if source_chunk_id is not None:
+            # Chunk-keyed rows take the bestowing chunk's clock or stay NULL —
+            # never the global-max fallback, which would stamp an "exact" row
+            # with a wrong world time when chunk metadata is missing.
+            world_time = _chunk_world_time(cur, source_chunk_id)
+        else:
+            world_time = _load_world_time(cur)
 
     tags_to_apply: list[_TagApplication] = []
     for tag_name in bestowal.applied_tags:
@@ -132,13 +140,21 @@ def apply_tag_bestowal(
             world_time=world_time,
             duration_override=duration_override,
             reapplication_policy=tag_application.reapplication_policy,
+            source_chunk_id=source_chunk_id,
         )
         if applied:
             counters["applied"] += 1
 
     # 2. clear tags that no longer apply (update contexts only)
     for tag_id in tags_to_clear:
-        if _clear_entity_tag(cur, entity_id=entity_id, tag_id=tag_id):
+        if _clear_entity_tag(
+            cur,
+            entity_id=entity_id,
+            tag_id=tag_id,
+            world_time=world_time,
+            source_chunk_id=source_chunk_id,
+            reason="bestowal.tags_to_clear",
+        ):
             counters["cleared"] += 1
 
     return counters
@@ -197,6 +213,7 @@ async def apply_tag_bestowal_async(
     source_kind: str = "skald_inline",
     world_time: Optional[datetime] = None,
     duration_override: Optional[timedelta] = None,
+    source_chunk_id: Optional[int] = None,
 ) -> dict[str, int]:
     """Asyncpg equivalent of apply_tag_bestowal for async commit paths."""
 
@@ -222,7 +239,11 @@ async def apply_tag_bestowal_async(
         )
 
     if world_time is None:
-        world_time = await _load_world_time_async(conn)
+        if source_chunk_id is not None:
+            # Same rule as the sync twin: chunk clock or NULL, never global max.
+            world_time = await _chunk_world_time_async(conn, source_chunk_id)
+        else:
+            world_time = await _load_world_time_async(conn)
 
     tags_to_apply: list[_TagApplication] = []
     for tag_name in bestowal.applied_tags:
@@ -262,12 +283,20 @@ async def apply_tag_bestowal_async(
             world_time=world_time,
             duration_override=duration_override,
             reapplication_policy=tag_application.reapplication_policy,
+            source_chunk_id=source_chunk_id,
         )
         if applied:
             counters["applied"] += 1
 
     for tag_id in tags_to_clear:
-        if await _clear_entity_tag_async(conn, entity_id=entity_id, tag_id=tag_id):
+        if await _clear_entity_tag_async(
+            conn,
+            entity_id=entity_id,
+            tag_id=tag_id,
+            world_time=world_time,
+            source_chunk_id=source_chunk_id,
+            reason="bestowal.tags_to_clear",
+        ):
             counters["cleared"] += 1
 
     return counters
@@ -281,6 +310,7 @@ def apply_exclusive_tag_bestowal(
     tag: str,
     source_kind: str = "skald_inline",
     world_time: Optional[datetime] = None,
+    source_chunk_id: Optional[int] = None,
     duration_override: Optional[timedelta] = None,
 ) -> bool:
     """Replace the active tag within a single-entity exclusive category.
@@ -321,12 +351,20 @@ def apply_exclusive_tag_bestowal(
     reapplication_policy = _row_value(tag_row, "reapplication_policy", 3)
 
     if world_time is None:
-        world_time = _load_world_time(cur)
+        if source_chunk_id is not None:
+            # Chunk-keyed rows take the bestowing chunk's clock or stay NULL —
+            # never the global-max fallback, which would stamp an "exact" row
+            # with a wrong world time when chunk metadata is missing.
+            world_time = _chunk_world_time(cur, source_chunk_id)
+        else:
+            world_time = _load_world_time(cur)
 
     _clear_entity_tag_siblings(
         cur,
         entity_id=entity_id,
         category=category,
+        world_time=world_time,
+        source_chunk_id=source_chunk_id,
         keep_tag_id=tag_id,
     )
     return _insert_entity_tag(
@@ -335,6 +373,7 @@ def apply_exclusive_tag_bestowal(
         tag_id=tag_id,
         source_kind=source_kind,
         world_time=world_time,
+        source_chunk_id=source_chunk_id,
         duration_override=duration_override,
         reapplication_policy=reapplication_policy,
     )
@@ -452,6 +491,100 @@ async def _load_world_time_async(conn: Any) -> Optional[datetime]:
     return _row_value(row, "world_time", 0)
 
 
+def _log_entity_tag_clearance(
+    cur: Any,
+    *,
+    entity_tag_id: int,
+    world_time: Optional[datetime],
+    source_chunk_id: Optional[int],
+    reason: str,
+) -> None:
+    """Record one single-entity tag clearance (mechanism 'authored').
+
+    Before migration 064 every tag_writer clear was silent; as-of
+    reconstruction needs the log row even when world_time/chunk id are
+    unknown (they stay NULL — honest, not fabricated).
+    """
+
+    cur.execute(
+        """
+        INSERT INTO tag_clearance_log (
+            entity_tag_id, mechanism, cleared_at_world_time,
+            justification, source_chunk_id
+        ) VALUES (%s, 'authored', %s, %s::jsonb, %s)
+        """,
+        (entity_tag_id, world_time, json.dumps({"reason": reason}), source_chunk_id),
+    )
+
+
+async def _log_entity_tag_clearance_async(
+    conn: Any,
+    *,
+    entity_tag_id: int,
+    world_time: Optional[datetime],
+    source_chunk_id: Optional[int],
+    reason: str,
+) -> None:
+    await conn.execute(
+        """
+        INSERT INTO tag_clearance_log (
+            entity_tag_id, mechanism, cleared_at_world_time,
+            justification, source_chunk_id
+        ) VALUES ($1, 'authored', $2, $3::jsonb, $4)
+        """,
+        entity_tag_id,
+        world_time,
+        json.dumps({"reason": reason}),
+        source_chunk_id,
+    )
+
+
+def _log_pair_tag_clearance(
+    cur: Any,
+    *,
+    entity_pair_tag_id: int,
+    world_time: Optional[datetime],
+    source_chunk_id: Optional[int],
+    reason: str,
+) -> None:
+    """Record one pair-tag clearance (loggable since migration 064)."""
+
+    cur.execute(
+        """
+        INSERT INTO tag_clearance_log (
+            entity_pair_tag_id, mechanism, cleared_at_world_time,
+            justification, source_chunk_id
+        ) VALUES (%s, 'authored', %s, %s::jsonb, %s)
+        """,
+        (
+            entity_pair_tag_id,
+            world_time,
+            json.dumps({"reason": reason}),
+            source_chunk_id,
+        ),
+    )
+
+
+def _chunk_world_time(cur: Any, source_chunk_id: int) -> Optional[datetime]:
+    """The bestowing chunk's in-world time, or None (never wall clock)."""
+
+    cur.execute(
+        "SELECT world_time FROM chunk_metadata WHERE chunk_id = %s",
+        (source_chunk_id,),
+    )
+    row = cur.fetchone()
+    return _row_value(row, "world_time", 0) if row else None
+
+
+async def _chunk_world_time_async(
+    conn: Any, source_chunk_id: int
+) -> Optional[datetime]:
+    return await conn.fetchval(
+        "SELECT world_time FROM chunk_metadata WHERE chunk_id = $1",
+        source_chunk_id,
+    )
+
+
 def _insert_entity_tag(
     cur: Any,
     *,
@@ -461,6 +594,7 @@ def _insert_entity_tag(
     world_time: Optional[datetime],
     duration_override: Optional[timedelta],
     reapplication_policy: Optional[ReapplicationPolicy],
+    source_chunk_id: Optional[int] = None,
 ) -> bool:
     reapplication_policy = reapplication_policy or "new_row"
     if reapplication_policy not in _REAPPLICATION_POLICIES:
@@ -482,18 +616,26 @@ def _insert_entity_tag(
             """
             INSERT INTO entity_tags (
                 entity_id, tag_id, applied_at_world_time,
-                expires_at_world_time, source_kind
+                expires_at_world_time, source_kind, source_chunk_id
             )
-            VALUES (%s, %s, %s, %s, %s::entity_tag_source_kind)
+            VALUES (%s, %s, %s, %s, %s::entity_tag_source_kind, %s)
             ON CONFLICT (entity_id, tag_id)
               WHERE cleared_at IS NULL
               DO UPDATE SET
                 applied_at = now(),
                 applied_at_world_time = EXCLUDED.applied_at_world_time,
                 expires_at_world_time = EXCLUDED.expires_at_world_time,
-                source_kind = EXCLUDED.source_kind
+                source_kind = EXCLUDED.source_kind,
+                source_chunk_id = EXCLUDED.source_chunk_id
             """,
-            (entity_id, tag_id, world_time, expires_at_world_time, source_kind),
+            (
+                entity_id,
+                tag_id,
+                world_time,
+                expires_at_world_time,
+                source_kind,
+                source_chunk_id,
+            ),
         )
         return bool(cur.rowcount)
 
@@ -502,9 +644,9 @@ def _insert_entity_tag(
             """
             INSERT INTO entity_tags (
                 entity_id, tag_id, applied_at_world_time,
-                expires_at_world_time, source_kind
+                expires_at_world_time, source_kind, source_chunk_id
             )
-            VALUES (%s, %s, %s, %s, %s::entity_tag_source_kind)
+            VALUES (%s, %s, %s, %s, %s::entity_tag_source_kind, %s)
             ON CONFLICT (entity_id, tag_id)
               WHERE cleared_at IS NULL
               DO UPDATE SET
@@ -517,7 +659,8 @@ def _insert_entity_tag(
                     ),
                     EXCLUDED.applied_at_world_time
                 ) + %s,
-                source_kind = EXCLUDED.source_kind
+                source_kind = EXCLUDED.source_kind,
+                source_chunk_id = EXCLUDED.source_chunk_id
             """,
             (
                 entity_id,
@@ -525,6 +668,7 @@ def _insert_entity_tag(
                 world_time,
                 expires_at_world_time,
                 source_kind,
+                source_chunk_id,
                 duration_override,
             ),
         )
@@ -536,14 +680,21 @@ def _insert_entity_tag(
         """
         INSERT INTO entity_tags (
             entity_id, tag_id, applied_at_world_time,
-            expires_at_world_time, source_kind
+            expires_at_world_time, source_kind, source_chunk_id
         )
-        VALUES (%s, %s, %s, %s, %s::entity_tag_source_kind)
+        VALUES (%s, %s, %s, %s, %s::entity_tag_source_kind, %s)
         ON CONFLICT (entity_id, tag_id)
           WHERE cleared_at IS NULL
           DO NOTHING
         """,
-        (entity_id, tag_id, world_time, expires_at_world_time, source_kind),
+        (
+            entity_id,
+            tag_id,
+            world_time,
+            expires_at_world_time,
+            source_kind,
+            source_chunk_id,
+        ),
     )
     return bool(cur.rowcount)
 
@@ -557,6 +708,7 @@ async def _insert_entity_tag_async(
     world_time: Optional[datetime],
     duration_override: Optional[timedelta],
     reapplication_policy: Optional[ReapplicationPolicy],
+    source_chunk_id: Optional[int] = None,
 ) -> bool:
     reapplication_policy = reapplication_policy or "new_row"
     if reapplication_policy not in _REAPPLICATION_POLICIES:
@@ -578,22 +730,24 @@ async def _insert_entity_tag_async(
             """
             INSERT INTO entity_tags (
                 entity_id, tag_id, applied_at_world_time,
-                expires_at_world_time, source_kind
+                expires_at_world_time, source_kind, source_chunk_id
             )
-            VALUES ($1, $2, $3, $4, $5::entity_tag_source_kind)
+            VALUES ($1, $2, $3, $4, $5::entity_tag_source_kind, $6)
             ON CONFLICT (entity_id, tag_id)
               WHERE cleared_at IS NULL
               DO UPDATE SET
                 applied_at = now(),
                 applied_at_world_time = EXCLUDED.applied_at_world_time,
                 expires_at_world_time = EXCLUDED.expires_at_world_time,
-                source_kind = EXCLUDED.source_kind
+                source_kind = EXCLUDED.source_kind,
+                source_chunk_id = EXCLUDED.source_chunk_id
             """,
             entity_id,
             tag_id,
             world_time,
             expires_at_world_time,
             source_kind,
+            source_chunk_id,
         )
         return _asyncpg_status_changed(result)
 
@@ -602,9 +756,9 @@ async def _insert_entity_tag_async(
             """
             INSERT INTO entity_tags (
                 entity_id, tag_id, applied_at_world_time,
-                expires_at_world_time, source_kind
+                expires_at_world_time, source_kind, source_chunk_id
             )
-            VALUES ($1, $2, $3, $4, $5::entity_tag_source_kind)
+            VALUES ($1, $2, $3, $4, $5::entity_tag_source_kind, $6)
             ON CONFLICT (entity_id, tag_id)
               WHERE cleared_at IS NULL
               DO UPDATE SET
@@ -616,14 +770,16 @@ async def _insert_entity_tag_async(
                         EXCLUDED.applied_at_world_time
                     ),
                     EXCLUDED.applied_at_world_time
-                ) + $6,
-                source_kind = EXCLUDED.source_kind
+                ) + $7,
+                source_kind = EXCLUDED.source_kind,
+                source_chunk_id = EXCLUDED.source_chunk_id
             """,
             entity_id,
             tag_id,
             world_time,
             expires_at_world_time,
             source_kind,
+            source_chunk_id,
             duration_override,
         )
         return _asyncpg_status_changed(result)
@@ -632,9 +788,9 @@ async def _insert_entity_tag_async(
         """
         INSERT INTO entity_tags (
             entity_id, tag_id, applied_at_world_time,
-            expires_at_world_time, source_kind
+            expires_at_world_time, source_kind, source_chunk_id
         )
-        VALUES ($1, $2, $3, $4, $5::entity_tag_source_kind)
+        VALUES ($1, $2, $3, $4, $5::entity_tag_source_kind, $6)
         ON CONFLICT (entity_id, tag_id)
           WHERE cleared_at IS NULL
           DO NOTHING
@@ -644,6 +800,7 @@ async def _insert_entity_tag_async(
         world_time,
         expires_at_world_time,
         source_kind,
+        source_chunk_id,
     )
     return _asyncpg_status_changed(result)
 
@@ -666,6 +823,8 @@ def _clear_entity_tag_siblings(
     entity_id: int,
     category: str,
     keep_tag_id: int,
+    world_time: Optional[datetime] = None,
+    source_chunk_id: Optional[int] = None,
 ) -> int:
     cur.execute(
         """
@@ -677,13 +836,30 @@ def _clear_entity_tag_siblings(
           AND t.category = %s
           AND t.id <> %s
           AND et.cleared_at IS NULL
+        RETURNING et.id
         """,
         (entity_id, category, keep_tag_id),
     )
-    return int(cur.rowcount)
+    cleared_ids = [_row_value(row, "id", 0) for row in cur.fetchall()]
+    for entity_tag_id in cleared_ids:
+        _log_entity_tag_clearance(
+            cur,
+            entity_tag_id=entity_tag_id,
+            world_time=world_time,
+            source_chunk_id=source_chunk_id,
+            reason="exclusive_ladder_replace",
+        )
+    return len(cleared_ids)
 
 
-def clear_entity_tag(cur: Any, *, entity_id: int, tag: str) -> bool:
+def clear_entity_tag(
+    cur: Any,
+    *,
+    entity_id: int,
+    tag: str,
+    world_time: Optional[datetime] = None,
+    source_chunk_id: Optional[int] = None,
+) -> bool:
     """Mark an active single-entity tag as cleared (UPDATE cleared_at = now()).
 
     Returns ``True`` if a row was cleared, ``False`` if no active row existed for
@@ -711,35 +887,80 @@ def clear_entity_tag(cur: Any, *, entity_id: int, tag: str) -> bool:
           AND NOT t.deprecated
           AND t.synonym_for IS NULL
           AND et.cleared_at IS NULL
+        RETURNING et.id
         """,
         (entity_id, canonical_name),
     )
-    return bool(cur.rowcount)
+    cleared_ids = [_row_value(row, "id", 0) for row in cur.fetchall()]
+    for entity_tag_id in cleared_ids:
+        _log_entity_tag_clearance(
+            cur,
+            entity_tag_id=entity_tag_id,
+            world_time=world_time,
+            source_chunk_id=source_chunk_id,
+            reason="clear_entity_tag",
+        )
+    return bool(cleared_ids)
 
 
-def _clear_entity_tag(cur: Any, *, entity_id: int, tag_id: int) -> bool:
+def _clear_entity_tag(
+    cur: Any,
+    *,
+    entity_id: int,
+    tag_id: int,
+    world_time: Optional[datetime] = None,
+    source_chunk_id: Optional[int] = None,
+    reason: str = "tag_writer.clear",
+) -> bool:
     cur.execute(
         """
         UPDATE entity_tags
         SET cleared_at = now()
         WHERE entity_id = %s AND tag_id = %s AND cleared_at IS NULL
+        RETURNING id
         """,
         (entity_id, tag_id),
     )
-    return bool(cur.rowcount)
+    cleared_ids = [_row_value(row, "id", 0) for row in cur.fetchall()]
+    for entity_tag_id in cleared_ids:
+        _log_entity_tag_clearance(
+            cur,
+            entity_tag_id=entity_tag_id,
+            world_time=world_time,
+            source_chunk_id=source_chunk_id,
+            reason=reason,
+        )
+    return bool(cleared_ids)
 
 
-async def _clear_entity_tag_async(conn: Any, *, entity_id: int, tag_id: int) -> bool:
-    result = await conn.execute(
+async def _clear_entity_tag_async(
+    conn: Any,
+    *,
+    entity_id: int,
+    tag_id: int,
+    world_time: Optional[datetime] = None,
+    source_chunk_id: Optional[int] = None,
+    reason: str = "tag_writer.clear",
+) -> bool:
+    rows = await conn.fetch(
         """
         UPDATE entity_tags
         SET cleared_at = now()
         WHERE entity_id = $1 AND tag_id = $2 AND cleared_at IS NULL
+        RETURNING id
         """,
         entity_id,
         tag_id,
     )
-    return _asyncpg_status_changed(result)
+    for row in rows:
+        await _log_entity_tag_clearance_async(
+            conn,
+            entity_tag_id=_row_value(row, "id", 0),
+            world_time=world_time,
+            source_chunk_id=source_chunk_id,
+            reason=reason,
+        )
+    return bool(rows)
 
 
 def _asyncpg_status_changed(status: str) -> bool:
@@ -782,6 +1003,7 @@ def apply_pair_tag_bestowal(
     tag: str,
     source_kind: str = "skald_inline",
     world_time: Optional[datetime] = None,
+    source_chunk_id: Optional[int] = None,
 ) -> bool:
     """Apply a directed multi-entity tag (relation) from subject to object.
 
@@ -831,7 +1053,13 @@ def apply_pair_tag_bestowal(
     )
 
     if world_time is None:
-        world_time = _load_world_time(cur)
+        if source_chunk_id is not None:
+            # Chunk-keyed rows take the bestowing chunk's clock or stay NULL —
+            # never the global-max fallback, which would stamp an "exact" row
+            # with a wrong world time when chunk metadata is missing.
+            world_time = _chunk_world_time(cur, source_chunk_id)
+        else:
+            world_time = _load_world_time(cur)
 
     return _insert_pair_tag_row(
         cur,
@@ -840,6 +1068,7 @@ def apply_pair_tag_bestowal(
         pair_tag_id=pair_tag_id,
         source_kind=source_kind,
         world_time=world_time,
+        source_chunk_id=source_chunk_id,
     )
 
 
@@ -886,19 +1115,27 @@ def _insert_pair_tag_row(
     pair_tag_id: int,
     source_kind: str,
     world_time: Optional[datetime],
+    source_chunk_id: Optional[int] = None,
 ) -> bool:
     cur.execute(
         """
         INSERT INTO entity_pair_tags (
             subject_entity_id, object_entity_id, pair_tag_id,
-            applied_at_world_time, source_kind
+            applied_at_world_time, source_kind, source_chunk_id
         )
-        VALUES (%s, %s, %s, %s, %s::entity_tag_source_kind)
+        VALUES (%s, %s, %s, %s, %s::entity_tag_source_kind, %s)
         ON CONFLICT (subject_entity_id, object_entity_id, pair_tag_id)
           WHERE cleared_at IS NULL
           DO NOTHING
         """,
-        (subject_entity_id, object_entity_id, pair_tag_id, world_time, source_kind),
+        (
+            subject_entity_id,
+            object_entity_id,
+            pair_tag_id,
+            world_time,
+            source_kind,
+            source_chunk_id,
+        ),
     )
     return bool(cur.rowcount)
 
@@ -912,6 +1149,7 @@ def apply_status_pair_tag_bestowal(
     level: str,
     source_kind: str = "skald_inline",
     world_time: Optional[datetime] = None,
+    source_chunk_id: Optional[int] = None,
 ) -> bool:
     """Replace the active ``status:*`` level for one subject→faction edge.
 
@@ -938,13 +1176,22 @@ def apply_status_pair_tag_bestowal(
         object_kinds=_row_value(row, "object_kinds", 2),
     )
     if world_time is None:
-        world_time = _load_world_time(cur)
+        if source_chunk_id is not None:
+            # Chunk-keyed rows take the bestowing chunk's clock or stay NULL —
+            # never the global-max fallback, which would stamp an "exact" row
+            # with a wrong world time when chunk metadata is missing.
+            world_time = _chunk_world_time(cur, source_chunk_id)
+        else:
+            world_time = _load_world_time(cur)
 
     _clear_pair_tags_by_name(
         cur,
         subject_entity_id=subject_entity_id,
         object_entity_id=scope_faction_entity_id,
         tags=STATUS_TAGS - {tag},
+        world_time=world_time,
+        source_chunk_id=source_chunk_id,
+        reason="status_ladder_replace",
     )
     return _insert_pair_tag_row(
         cur,
@@ -953,6 +1200,7 @@ def apply_status_pair_tag_bestowal(
         pair_tag_id=pair_tag_id,
         source_kind=source_kind,
         world_time=world_time,
+        source_chunk_id=source_chunk_id,
     )
 
 
@@ -962,6 +1210,8 @@ def clear_pair_tag(
     subject_entity_id: int,
     object_entity_id: int,
     tag: str,
+    world_time: Optional[datetime] = None,
+    source_chunk_id: Optional[int] = None,
 ) -> bool:
     """Mark an active multi-entity tag as cleared (UPDATE cleared_at = now()).
 
@@ -991,10 +1241,20 @@ def clear_pair_tag(
           AND ept.subject_entity_id = %s
           AND ept.object_entity_id = %s
           AND ept.cleared_at IS NULL
+        RETURNING ept.id
         """,
         (tag, subject_entity_id, object_entity_id),
     )
-    return bool(cur.rowcount)
+    cleared_ids = [_row_value(row, "id", 0) for row in cur.fetchall()]
+    for pair_tag_row_id in cleared_ids:
+        _log_pair_tag_clearance(
+            cur,
+            entity_pair_tag_id=pair_tag_row_id,
+            world_time=world_time,
+            source_chunk_id=source_chunk_id,
+            reason="clear_pair_tag",
+        )
+    return bool(cleared_ids)
 
 
 def _clear_pair_tags_by_name(
@@ -1003,6 +1263,9 @@ def _clear_pair_tags_by_name(
     subject_entity_id: int,
     object_entity_id: int,
     tags: set[str],
+    world_time: Optional[datetime] = None,
+    source_chunk_id: Optional[int] = None,
+    reason: str = "clear_pair_tags_by_name",
 ) -> int:
     if not tags:
         return 0
@@ -1016,7 +1279,17 @@ def _clear_pair_tags_by_name(
           AND ept.object_entity_id = %s
           AND pt.tag = ANY(%s)
           AND ept.cleared_at IS NULL
+        RETURNING ept.id
         """,
         (subject_entity_id, object_entity_id, sorted(tags)),
     )
-    return int(cur.rowcount)
+    cleared_ids = [_row_value(row, "id", 0) for row in cur.fetchall()]
+    for pair_tag_row_id in cleared_ids:
+        _log_pair_tag_clearance(
+            cur,
+            entity_pair_tag_id=pair_tag_row_id,
+            world_time=world_time,
+            source_chunk_id=source_chunk_id,
+            reason=reason,
+        )
+    return len(cleared_ids)

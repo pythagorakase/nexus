@@ -525,7 +525,7 @@ def commit_incubator_to_database_sync(
             # Step 8: Update entity states (if provided)
             if incubator.get("entity_updates"):
                 state_updates = StateUpdates(**incubator["entity_updates"])
-                apply_state_updates_sync(conn, state_updates)
+                apply_state_updates_sync(conn, state_updates, source_chunk_id=chunk_id)
 
             # Step 8.5: Commit Orrery proposal inside the accepted-chunk transaction
             orrery_result = commit_orrery_tick_sync(
@@ -615,7 +615,9 @@ def commit_incubator_to_database_sync(
     return chunk_id
 
 
-def apply_state_updates_sync(conn, state_updates: StateUpdates):
+def apply_state_updates_sync(
+    conn, state_updates: StateUpdates, source_chunk_id: Optional[int] = None
+):
     """Apply entity state updates synchronously"""
     with conn.cursor() as cur:
         # Update character states
@@ -652,6 +654,7 @@ def apply_state_updates_sync(conn, state_updates: StateUpdates):
                         subtype_table="characters",
                         subtype_id=char_update.character_id,
                         bestowal=bestowal,
+                        source_chunk_id=source_chunk_id,
                     )
 
         # Update place states. The schema field is current_conditions
@@ -673,6 +676,7 @@ def apply_state_updates_sync(conn, state_updates: StateUpdates):
                     subtype_table="places",
                     subtype_id=place_update.place_id,
                     bestowal=bestowal,
+                    source_chunk_id=source_chunk_id,
                 )
 
         # Update faction states
@@ -685,10 +689,19 @@ def apply_state_updates_sync(conn, state_updates: StateUpdates):
                     subtype_table="factions",
                     subtype_id=faction_update.faction_id,
                     bestowal=bestowal,
+                    source_chunk_id=source_chunk_id,
                 )
 
 
-def _apply_state_tags(cur, *, kind, subtype_table, subtype_id, bestowal) -> None:
+def _apply_state_tags(
+    cur,
+    *,
+    kind,
+    subtype_table,
+    subtype_id,
+    bestowal,
+    source_chunk_id: Optional[int] = None,
+) -> None:
     """Look up the entity_id for a subtype row and apply Skald-bestowed tags."""
     cur.execute(
         f"SELECT entity_id FROM {subtype_table} WHERE id = %s",
@@ -705,6 +718,7 @@ def _apply_state_tags(cur, *, kind, subtype_table, subtype_id, bestowal) -> None
         entity_kind=kind,
         bestowal=bestowal,
         source_kind="skald_inline",
+        source_chunk_id=source_chunk_id,
     )
     if any(counters.values()):
         logger.info(f"Tag bestowal {kind}/{subtype_id}: {counters}")

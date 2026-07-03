@@ -265,10 +265,19 @@ def test_entity_context_hover_payload(client: TestClient) -> None:
         assert entity["kind"] == "character"
         for bucket in ("durable", "ephemeral"):
             for tag_row in entity["tags"][bucket]:
-                assert tag_row["provenance"] in {"approximate", "unknowable"}
-                assert (tag_row["provenance"] == "approximate") == (
-                    tag_row["applied_at_world_time"] is not None
-                )
+                # Three-tier provenance since migration 064: exact rows carry
+                # the chunk bestowal key, approximate rows only a world time.
+                assert tag_row["provenance"] in {
+                    "exact",
+                    "approximate",
+                    "unknowable",
+                }
+                if tag_row["source_chunk_id"] is not None:
+                    assert tag_row["provenance"] == "exact"
+                else:
+                    assert (tag_row["provenance"] == "approximate") == (
+                        tag_row["applied_at_world_time"] is not None
+                    )
                 assert isinstance(tag_row["families"], list)
         for relationship in entity["relationships"]:
             assert relationship["versioned"] is False

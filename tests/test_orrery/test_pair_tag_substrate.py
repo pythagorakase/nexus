@@ -108,6 +108,21 @@ def test_entities(
     finally:
         with slot_connection:
             with slot_connection.cursor() as cur:
+                # tag_clearance_log references entity_pair_tags without
+                # ON DELETE CASCADE (migration 064), so purge log rows for
+                # the test entities' pair rows first; the entities DELETE
+                # then cascades to entity_pair_tags as before.
+                cur.execute(
+                    """
+                    DELETE FROM tag_clearance_log
+                    WHERE entity_pair_tag_id IN (
+                        SELECT id FROM entity_pair_tags
+                        WHERE subject_entity_id = ANY(%s)
+                           OR object_entity_id = ANY(%s)
+                    )
+                    """,
+                    (created_ids, created_ids),
+                )
                 cur.execute("DELETE FROM entities WHERE id = ANY(%s)", (created_ids,))
 
 

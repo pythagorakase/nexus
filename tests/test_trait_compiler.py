@@ -368,7 +368,14 @@ class TraitCompilerCursor:
             return
 
         if normalized.startswith("INSERT INTO ENTITY_PAIR_TAGS"):
-            subject_id, object_id, pair_tag_id, _world_time, source_kind = params
+            (
+                subject_id,
+                object_id,
+                pair_tag_id,
+                _world_time,
+                source_kind,
+                _source_chunk_id,
+            ) = params
             active = [
                 row
                 for row in self.entity_pair_tags
