@@ -31,13 +31,16 @@ from nexus.agents.orrery.catalog import _render_predicate_name
 from nexus.agents.orrery.evidence import resolve_evidence
 from nexus.agents.orrery.substrate import (
     Bindings,
+    BranchSelection,
     CompoundCondition,
     Condition,
     Resolution,
     Slot,
     Template,
     WorldState,
+    binding_hash,
     evaluate,
+    select_branch,
 )
 
 
@@ -232,9 +235,19 @@ def trace_condition(
 
 
 def explain_template(
-    template: Template, state: WorldState, bindings: Bindings
+    template: Template,
+    state: WorldState,
+    bindings: Bindings,
+    selection: Optional[BranchSelection] = None,
 ) -> TemplateExplanation:
-    """Produce a full audit record for one template against one binding set."""
+    """Produce a full audit record for one template against one binding set.
+
+    Branch selection routes through the same :func:`select_branch` authority
+    the production resolver uses, so stochastic sampling stays in lockstep
+    (the seed is derived from persisted values, making both sides
+    deterministic for a given state). In stochastic mode every branch is
+    considered, so the traces become exhaustive.
+    """
 
     gate_trace = trace_condition(template.package_gate, state, bindings)
     gate_passed = bool(template.package_gate(state, bindings))
@@ -242,9 +255,16 @@ def explain_template(
     branch_traces: List[BranchTrace] = []
     chosen_branch: Optional[str] = None
     if gate_passed:
-        decided = False
-        for branch in template.branches:
-            if decided:
+        chosen, considered_flags = select_branch(
+            template,
+            state,
+            bindings,
+            digest=binding_hash(bindings),
+            selection=selection,
+        )
+        chosen_branch = chosen.label if chosen is not None else None
+        for branch, considered in zip(template.branches, considered_flags):
+            if not considered:
                 branch_traces.append(
                     BranchTrace(
                         label=branch.label,
@@ -264,17 +284,14 @@ def explain_template(
                     magnitude=branch.magnitude,
                     considered=True,
                     result=passes,
-                    selected=passes,
+                    selected=chosen is not None and branch.label == chosen.label,
                     trace=branch_trace,
                 )
             )
-            if passes:
-                chosen_branch = branch.label
-                decided = True
 
     # Source-of-truth cross-check against the production resolver. Any mismatch
     # means a predicate is non-deterministic or side-effecting; surface it.
-    truth: Resolution = evaluate(template, state, bindings)
+    truth: Resolution = evaluate(template, state, bindings, selection)
     if (
         truth.passes != (chosen_branch is not None)
         or truth.branch_label != chosen_branch
@@ -308,7 +325,10 @@ def explain_template(
 
 
 def explain_stack(
-    templates: Iterable[Template], state: WorldState, bindings: Bindings
+    templates: Iterable[Template],
+    state: WorldState,
+    bindings: Bindings,
+    selection: Optional[BranchSelection] = None,
 ) -> StackExplanation:
     """Explain every template in priority order and flag the stack winner.
 
@@ -319,7 +339,7 @@ def explain_stack(
 
     ordered = sorted(templates, key=lambda item: item.priority, reverse=True)
     explanations = tuple(
-        explain_template(template, state, bindings) for template in ordered
+        explain_template(template, state, bindings, selection) for template in ordered
     )
     winner_id = next((item.template_id for item in explanations if item.fired), None)
     serialized_bindings = {

@@ -68,6 +68,7 @@ def _production_proposal(slot: int) -> tuple[Optional[int], OrreryTickProposal]:
                 anchor_chunk_id=anchor_chunk_id,
                 window_chunks=int(orrery["binding"]["window_chunks"]),
                 sunhelm_settings=orrery.get("sunhelm"),
+                selection_settings=orrery.get("selection"),
             )
     finally:
         engine.dispose()

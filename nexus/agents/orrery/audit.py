@@ -65,6 +65,7 @@ from nexus.agents.orrery.resolver import (
     hydrate_world_state,
 )
 from nexus.agents.orrery.substrate import (
+    coerce_branch_selection,
     CONSTRAINED_TAGS,
     DRAMATIC_CONTACT_TAGS,
     DRIVE_BAND_ORDER,
@@ -466,6 +467,7 @@ def explain_dry_run(
     sunhelm_settings: Optional[Any] = None,
     world_time_override: Optional[datetime] = None,
     overrides: Optional[WorldStateOverrides] = None,
+    selection_settings: Optional[Any] = None,
 ) -> ExplainedTickReport:
     """Hydrate, bind, and explain Orrery packages without database writes.
 
@@ -481,6 +483,7 @@ def explain_dry_run(
     """
 
     need_tuning = coerce_need_tuning(sunhelm_settings)
+    selection = coerce_branch_selection(selection_settings)
     state = hydrate_world_state(
         session,
         anchor_chunk_id=anchor_chunk_id,
@@ -552,17 +555,19 @@ def explain_dry_run(
         actor_stacks: dict[int, StackExplanation] = {}
         for bindings in actor_bindings:
             actor_stacks[bindings[Slot.ACTOR]] = explain_stack(
-                actor_only_templates, tick_state, bindings
+                actor_only_templates, tick_state, bindings, selection
             )
         two_party_stacks: dict[int, List[StackExplanation]] = {}
         for pair_bindings in offscreen_pair_bindings:
             two_party_stacks.setdefault(pair_bindings[Slot.ACTOR], []).append(
-                explain_stack(actor_target_templates, tick_state, pair_bindings)
+                explain_stack(
+                    actor_target_templates, tick_state, pair_bindings, selection
+                )
             )
         pressure_stacks: dict[int, List[StackExplanation]] = {}
         for pair_bindings in present_pair_bindings:
             pressure_stacks.setdefault(pair_bindings[Slot.ACTOR], []).append(
-                explain_stack(pressure_templates, tick_state, pair_bindings)
+                explain_stack(pressure_templates, tick_state, pair_bindings, selection)
             )
         need_pressure_specs = _present_need_pressure_specs(
             tick_state,
