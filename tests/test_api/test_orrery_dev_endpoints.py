@@ -695,13 +695,8 @@ def test_coverage_report_is_internally_consistent(
     for gap in payload["gap_actors"]:
         assert 0 < gap["gapped_anchors"] <= gap["seen_anchors"]
 
-    # The static lint re-derives exactly the four dead gate arms.
-    assert set(payload["dead_gate_arms"]) == {
-        "threat_issued",
-        "compliance_alert",
-        "faction_realignment",
-        "encoded_message",
-    }
+    # Post-signal-emissions, only faction_realignment lacks an emitter.
+    assert set(payload["dead_gate_arms"]) == {"faction_realignment"}
     assert set(payload["hydration_honesty"]) == {
         "rewound_to_anchor",
         "current_projection",

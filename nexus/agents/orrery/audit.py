@@ -823,11 +823,14 @@ def build_catalog(
             branch_consumed |= _consumed_event_types(branch.conditions)
             if branch.event_type:
                 emitted.add(branch.event_type)
+            if branch.signal_event_type:
+                emitted.add(branch.signal_event_type)
             branch_payloads.append(
                 {
                     "label": branch.label,
                     "magnitude": branch.magnitude,
                     "event_type": branch.event_type,
+                    "signal_event_type": branch.signal_event_type,
                     "has_scene_pressure_stub": branch.scene_pressure_stub is not None,
                 }
             )

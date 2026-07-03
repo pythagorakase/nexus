@@ -2839,6 +2839,8 @@ def _emit_world_event_sync(
         return None
 
     _ensure_event_type_sync(cur, draft.event_type)
+    if draft.signal_event_type:
+        _ensure_event_type_sync(cur, draft.signal_event_type)
     location_id = _actor_location_sync(cur, actor_entity_id)
     payload = {
         "proposal_id": draft.proposal_id,
@@ -2889,6 +2891,30 @@ def _emit_world_event_sync(
             """,
             (event_id, target_entity_id),
         )
+    if draft.signal_event_type:
+        # The act's signal: a second, additive emission with the same
+        # bindings so other packages' gates can hear it (spec idea 7).
+        cur.execute(
+            """
+            INSERT INTO world_events (
+                event_type, tick_chunk_id, actor_entity_id, target_entity_id,
+                location_id, world_layer, source, changed_fields, magnitude,
+                resolution_id, payload
+            ) VALUES (%s, %s, %s, %s, %s, %s, 'resolver', %s, %s, %s, %s::jsonb)
+            """,
+            (
+                draft.signal_event_type,
+                tick_chunk_id,
+                actor_entity_id,
+                target_entity_id,
+                location_id,
+                world_layer,
+                [],
+                draft.magnitude,
+                resolution_id,
+                json.dumps({**payload, "signal_of": draft.event_type}),
+            ),
+        )
     return event_id
 
 
@@ -2906,6 +2932,8 @@ async def _emit_world_event_async(
         return None
 
     await _ensure_event_type_async(conn, draft.event_type)
+    if draft.signal_event_type:
+        await _ensure_event_type_async(conn, draft.signal_event_type)
     location_id = await _actor_location_async(conn, actor_entity_id)
     payload = {
         "proposal_id": draft.proposal_id,
@@ -2957,6 +2985,27 @@ async def _emit_world_event_async(
             """,
             event_id,
             target_entity_id,
+        )
+    if draft.signal_event_type:
+        # Same additive signal emission as the sync twin.
+        await conn.execute(
+            """
+            INSERT INTO world_events (
+                event_type, tick_chunk_id, actor_entity_id, target_entity_id,
+                location_id, world_layer, source, changed_fields, magnitude,
+                resolution_id, payload
+            ) VALUES ($1, $2, $3, $4, $5, $6, 'resolver', $7, $8, $9, $10::jsonb)
+            """,
+            draft.signal_event_type,
+            tick_chunk_id,
+            actor_entity_id,
+            target_entity_id,
+            location_id,
+            world_layer,
+            [],
+            draft.magnitude,
+            resolution_id,
+            json.dumps({**payload, "signal_of": draft.event_type}),
         )
     return event_id
 

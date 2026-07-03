@@ -70,6 +70,7 @@ class OrreryResolutionDraft:
     narrative_stub: str
     state_delta: Mapping[str, Any] = field(default_factory=dict)
     event_type: Optional[str] = None
+    signal_event_type: Optional[str] = None
     changed_fields: Tuple[str, ...] = ()
     magnitude: float = 0.0
     # Slot name -> entity display name. Skald adjudicates these proposals;
@@ -97,6 +98,7 @@ class OrreryResolutionDraft:
             "narrative_stub": self.narrative_stub,
             "state_delta": dict(self.state_delta),
             "event_type": self.event_type,
+            "signal_event_type": self.signal_event_type,
             "changed_fields": list(self.changed_fields),
             "magnitude": self.magnitude,
         }
@@ -127,6 +129,7 @@ class OrreryResolutionDraft:
             narrative_stub=str(data["narrative_stub"]),
             state_delta=dict(data.get("state_delta") or {}),
             event_type=data.get("event_type"),
+            signal_event_type=data.get("signal_event_type"),
             changed_fields=tuple(data.get("changed_fields") or ()),
             magnitude=float(data.get("magnitude") or 0.0),
             binding_names=dict(data.get("binding_names") or {}),
@@ -1134,6 +1137,7 @@ def _draft_from_resolution(resolution: Resolution) -> OrreryResolutionDraft:
         narrative_stub=resolution.narrative_stub,
         state_delta=resolution.state_delta,
         event_type=resolution.event_type,
+        signal_event_type=resolution.signal_event_type,
         changed_fields=resolution.changed_fields,
         magnitude=resolution.magnitude,
     )

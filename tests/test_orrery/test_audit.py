@@ -77,7 +77,8 @@ def test_catalog_surfaces_priority_ties_in_tuple_order() -> None:
 
 
 def test_catalog_flags_exogenous_only_event_types() -> None:
-    """The four gate-consumed, never-emitted event types are dead gate arms."""
+    """Only faction_realignment remains a dead gate arm: the other three
+    former dead arms gained real signal emitters (live event chains)."""
 
     catalog = _catalog()
     exogenous = {
@@ -86,12 +87,15 @@ def test_catalog_flags_exogenous_only_event_types() -> None:
         if entry["exogenous_only"]
     }
 
-    assert {
-        "threat_issued",
-        "compliance_alert",
-        "faction_realignment",
-        "encoded_message",
-    } <= exogenous
+    assert "faction_realignment" in exogenous
+    assert (
+        not {
+            "threat_issued",
+            "compliance_alert",
+            "encoded_message",
+        }
+        & exogenous
+    )
     for event_type in exogenous:
         assert not catalog["event_map"][event_type]["emitted_by"]
 
