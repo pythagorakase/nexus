@@ -680,6 +680,23 @@ class OrrerySelectionSettings(BaseModel):
     )
 
 
+class OrreryReconstructionSettings(BaseModel):
+    """Reconstruction-sufficiency knobs (issue #426)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    checkpoint_interval_chunks: int = Field(
+        default=25,
+        ge=0,
+        description=(
+            "Take a JSONB state checkpoint every N accepted chunks inside "
+            "the commit transaction; 0 disables auto-checkpointing "
+            "(scripts/checkpoint_state.py remains available for manual and "
+            "genesis snapshots)."
+        ),
+    )
+
+
 class OrrerySunhelmSettings(BaseModel):
     """Timestamp-plus-debt tuning for Orrery basic needs."""
 
@@ -1106,6 +1123,9 @@ class OrrerySettings(BaseModel):
     selection: OrrerySelectionSettings = Field(default_factory=OrrerySelectionSettings)
     retrograde: OrreryRetrogradeSettings
     dashboard: OrreryDashboardSettings = Field(default_factory=OrreryDashboardSettings)
+    reconstruction: OrreryReconstructionSettings = Field(
+        default_factory=OrreryReconstructionSettings
+    )
     prompt: OrreryPromptSettings = Field(default_factory=OrreryPromptSettings)
 
 

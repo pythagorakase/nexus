@@ -215,6 +215,11 @@ mode = "stochastic"
 temperature = 0.25
 seed_salt = ""
 
+[orrery.reconstruction]
+# JSONB state checkpoint every N accepted chunks (0 disables); genesis and
+# manual snapshots via scripts/checkpoint_state.py.
+checkpoint_interval_chunks = 25
+
 [orrery.prompt]
 # Render caps for Orrery material in the storyteller prompt. The commit-time
 # prompt-exposure log records the same first-N slice, so these are also the

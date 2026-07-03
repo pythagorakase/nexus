@@ -19,6 +19,11 @@ from nexus.agents.logon.apex_schema import (
     StateUpdates,
 )
 from nexus.agents.orrery.events import commit_orrery_tick_async
+from nexus.agents.orrery.reconstruction import (
+    capture_state_checkpoint_async,
+    log_state_delta_async,
+    set_commit_chunk_attribution_async,
+)
 from nexus.agents.orrery.tag_writer import apply_tag_bestowal_async
 from nexus.api.db_converters import (
     chronology_to_db_values,
@@ -122,6 +127,9 @@ async def insert_narrative_chunk(
         choice_text,
     )
     logger.info(f"Created narrative chunk {chunk_id}")
+    # Attribute trigger-versioned writes in this transaction
+    # (relationship_versions) to the committing chunk.
+    await set_commit_chunk_attribution_async(conn, chunk_id)
     return chunk_id
 
 
@@ -251,20 +259,31 @@ async def apply_state_updates(
             params = []
             param_count = 1
 
+            written_fields = []
+
             if char_update.emotional_state:
                 updates.append(f"emotional_state = ${param_count}")
                 params.append(char_update.emotional_state)
                 param_count += 1
+                written_fields.append(
+                    ("characters.emotional_state", char_update.emotional_state)
+                )
 
             if char_update.current_activity:
                 updates.append(f"current_activity = ${param_count}")
                 params.append(char_update.current_activity)
                 param_count += 1
+                written_fields.append(
+                    ("characters.current_activity", char_update.current_activity)
+                )
 
             if char_update.current_location:
                 updates.append(f"current_location = ${param_count}")
                 params.append(char_update.current_location)
                 param_count += 1
+                written_fields.append(
+                    ("characters.current_location", char_update.current_location)
+                )
 
             if updates:
                 params.append(char_update.character_id)
@@ -277,6 +296,20 @@ async def apply_state_updates(
                     *params,
                 )
                 logger.info(f"Updated character {char_update.character_id}")
+                if source_chunk_id is not None:
+                    char_entity_id = await conn.fetchval(
+                        "SELECT entity_id FROM characters WHERE id = $1",
+                        char_update.character_id,
+                    )
+                    for field, value in written_fields:
+                        await log_state_delta_async(
+                            conn,
+                            source_chunk_id=source_chunk_id,
+                            writer="skald_state_update",
+                            entity_id=char_entity_id,
+                            field=field,
+                            new_value=value,
+                        )
 
             bestowal = getattr(char_update, "orrery_tags", None)
             if bestowal is not None:
@@ -304,6 +337,18 @@ async def apply_state_updates(
                 place_update.place_id,
             )
             logger.info(f"Updated place {place_update.place_id}")
+            if source_chunk_id is not None:
+                await log_state_delta_async(
+                    conn,
+                    source_chunk_id=source_chunk_id,
+                    writer="skald_state_update",
+                    entity_id=await conn.fetchval(
+                        "SELECT entity_id FROM places WHERE id = $1",
+                        place_update.place_id,
+                    ),
+                    field="places.current_status",
+                    new_value=place_update.current_conditions,
+                )
 
         bestowal = getattr(place_update, "orrery_tags", None)
         if place_update.place_id and bestowal is not None:
@@ -532,6 +577,19 @@ async def commit_incubator_to_database(
                     orrery_result.prompt_exposure_count,
                 )
 
+            # Step 8.55: interval state checkpoint (reconstruction bar 7c)
+            checkpoint_interval = _orrery_checkpoint_interval()
+            if checkpoint_interval and chunk_id % checkpoint_interval == 0:
+                checkpoint_id = await capture_state_checkpoint_async(
+                    conn, chunk_id=chunk_id, label="interval"
+                )
+                if checkpoint_id is not None:
+                    logger.info(
+                        "State checkpoint %s taken at chunk %s",
+                        checkpoint_id,
+                        chunk_id,
+                    )
+
             # Step 9: Clear incubator
             await clear_incubator(conn, session_id)
 
@@ -558,3 +616,13 @@ def _orrery_prompt_settings() -> Any:
     from nexus.config import load_settings_as_dict
 
     return (load_settings_as_dict().get("orrery") or {}).get("prompt")
+
+
+def _orrery_checkpoint_interval() -> int:
+    """[orrery.reconstruction] checkpoint cadence; 0 disables."""
+
+    from nexus.config import load_settings_as_dict
+
+    orrery = load_settings_as_dict().get("orrery") or {}
+    reconstruction = orrery.get("reconstruction") or {}
+    return int(reconstruction.get("checkpoint_interval_chunks", 0))
