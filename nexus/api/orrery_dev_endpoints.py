@@ -410,3 +410,71 @@ async def get_adjudication_history(
 
     with _slot_session(slot) as session:
         return adjudication_history(session, template_id=template_id)
+
+
+@router.get("/vocab")
+async def get_vocab(slot: Optional[int] = None) -> dict[str, Any]:
+    """Slot-scoped vocabularies for the what-if drawer's pickers.
+
+    Read-only: active tag and pair-tag vocab (with layer), event types, and
+    places. Entity choices come from the resolve payload's entity names.
+    """
+
+    with _slot_session(slot) as session:
+        tags = [
+            dict(row)
+            for row in session.execute(
+                text(
+                    """
+                    SELECT tag, category, is_ephemeral
+                    FROM tags
+                    WHERE NOT deprecated AND synonym_for IS NULL
+                    ORDER BY category, tag
+                    """
+                )
+            ).mappings()
+        ]
+        pair_tags = [
+            dict(row)
+            for row in session.execute(
+                text(
+                    """
+                    SELECT tag, subject_kinds, object_kinds
+                    FROM pair_tags
+                    WHERE NOT deprecated
+                    ORDER BY tag
+                    """
+                )
+            ).mappings()
+        ]
+        event_types = [
+            dict(row)
+            for row in session.execute(
+                text(
+                    """
+                    SELECT type, category
+                    FROM event_types
+                    WHERE NOT deprecated
+                    ORDER BY type
+                    """
+                )
+            ).mappings()
+        ]
+        places = [
+            dict(row)
+            for row in session.execute(
+                text(
+                    """
+                    SELECT id, name
+                    FROM places
+                    ORDER BY name
+                    """
+                )
+            ).mappings()
+        ]
+    return {
+        "tags": tags,
+        "pair_tags": pair_tags,
+        "event_types": event_types,
+        "places": places,
+    }

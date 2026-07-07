@@ -1,0 +1,1238 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="_ds/nexus-iris-9c704bc6-6c31-4387-82bf-2473a97893c8/fonts/fonts.css">
+  <link rel="stylesheet" href="_ds/nexus-iris-9c704bc6-6c31-4387-82bf-2473a97893c8/_ds_bundle.css">
+  <link rel="stylesheet" href="_ds/nexus-iris-9c704bc6-6c31-4387-82bf-2473a97893c8/styles.css">
+  <script src="_ds/nexus-iris-9c704bc6-6c31-4387-82bf-2473a97893c8/_ds_bundle.js"></script>
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; background: hsl(220 40% 6%); overflow: hidden; overscroll-behavior: none; }
+    body { overflow-x: auto; }
+    ::selection { background: hsl(320 55% 48% / 0.35); }
+    @keyframes orr-pulse { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
+    [data-radix-popper-content-wrapper], [data-radix-portal] { zoom: var(--orr-z, 1); }
+  </style>
+</helmet>
+<x-import component-from-global-scope="NexusIris.DesignThemeRoot" hint-size="100%,100%">
+<div style="margin:calc(-1.5rem * var(--orr-zi, 1));height:calc(100vh * var(--orr-zi, 1));zoom:var(--orr-z, 1);min-width:1080px;display:flex;flex-direction:column;overflow:hidden;position:relative" class="bg-background text-foreground font-sans">
+
+  <!-- ═══════════════ TICK BAR ═══════════════ -->
+  <div data-screen-label="Tick bar" style="height:46px;flex:none;display:flex;align-items:center;gap:14px;padding:0 14px;border-bottom:1px solid hsl(var(--border))" class="bg-sidebar">
+    <div style="display:flex;align-items:baseline;gap:8px;flex:none">
+      <span class="font-display" style="font-size:17px;letter-spacing:0.06em;color:hsl(var(--primary))">ORRERY</span>
+      <span class="font-mono" style="font-size:9px;letter-spacing:0.22em;color:hsl(var(--muted-foreground));text-transform:uppercase">Audit</span>
+    </div>
+    <div style="width:1px;height:20px;background:hsl(var(--border));flex:none"></div>
+    <x-import component-from-global-scope="NexusIris.Select" value="{{ slot }}" on-value-change="{{ onSlot }}" hint-size="120px,28px">
+      <x-import component-from-global-scope="NexusIris.SelectTrigger" style="{{ slotTriggerStyle }}" dc-props="{{ slotTriggerProps }}" hint-size="120px,28px">
+        <x-import component-from-global-scope="NexusIris.SelectValue" hint-size="60px,16px"></x-import>
+      </x-import>
+      <x-import component-from-global-scope="NexusIris.SelectContent" hint-size="120px,100px">
+        <x-import component-from-global-scope="NexusIris.SelectItem" value="save_01" hint-size="110px,28px">save_01</x-import>
+        <x-import component-from-global-scope="NexusIris.SelectItem" value="save_02" hint-size="110px,28px">save_02</x-import>
+        <x-import component-from-global-scope="NexusIris.SelectItem" value="save_05" hint-size="110px,28px">save_05</x-import>
+      </x-import>
+    </x-import>
+    <div style="display:flex;align-items:center;gap:6px;flex:none">
+      <button onClick="{{ onStepBack }}" title="Previous chunk" style="width:24px;height:24px;border:1px solid hsl(var(--border));border-radius:4px;background:transparent;color:hsl(var(--muted-foreground));cursor:pointer;font-size:12px;line-height:1" style-hover="border-color:hsl(var(--primary));color:hsl(var(--foreground))">−</button>
+      <span class="font-mono" style="font-size:12px;letter-spacing:0.08em;min-width:88px;text-align:center">chunk {{ chunkStr }}</span>
+      <button onClick="{{ onStepFwd }}" title="Next chunk" style="width:24px;height:24px;border:1px solid hsl(var(--border));border-radius:4px;background:transparent;color:hsl(var(--muted-foreground));cursor:pointer;font-size:12px;line-height:1" style-hover="border-color:hsl(var(--primary));color:hsl(var(--foreground))">+</button>
+    </div>
+    <span class="font-mono" style="font-size:10.5px;letter-spacing:0.08em;color:hsl(var(--muted-foreground));flex:none">{{ worldTimeStr }}</span>
+    <div style="flex:1"></div>
+    <sc-if value="{{ resolving }}" hint-placeholder-val="{{ false }}">
+      <span class="font-mono" style="font-size:9.5px;letter-spacing:0.18em;color:hsl(var(--accent));animation:orr-pulse 0.9s infinite;text-transform:uppercase">resolving</span>
+    </sc-if>
+    <div style="display:flex;align-items:center;gap:2px;border:1px solid hsl(var(--border));border-radius:6px;padding:2px;flex:none" data-screen-label="Mode chips">
+      <button onClick="{{ onModeCurrent }}" class="font-mono" style="{{ modeChipCurrentStyle }}">Current</button>
+      <button onClick="{{ onModeWhatif }}" class="font-mono" style="{{ modeChipWhatifStyle }}">What-if</button>
+      <x-import component-from-global-scope="NexusIris.Popover" open="{{ asofOpen }}" on-open-change="{{ onAsofOpenChange }}" hint-size="70px,26px">
+        <x-import component-from-global-scope="NexusIris.PopoverTrigger" on-click="{{ onModeAsof }}" class="font-mono" style="{{ modeChipAsofStyle }}" hint-size="60px,24px">As-of</x-import>
+        <x-import component-from-global-scope="NexusIris.PopoverContent" align="end" hint-size="290px,220px">
+          <div style="display:flex;flex-direction:column;gap:7px;min-width:250px">
+            <div class="font-mono" style="font-size:9.5px;letter-spacing:0.18em;text-transform:uppercase;color:hsl(var(--muted-foreground))">Per-axis honesty at chunk {{ chunkStr }}</div>
+            <sc-for list="{{ asofAxes }}" as="ax" hint-placeholder-count="7">
+              <div style="display:flex;align-items:baseline;gap:8px;font-size:12px">
+                <span style="width:14px;flex:none;text-align:center;color:{{ ax.color }}">{{ ax.glyph }}</span>
+                <span style="flex:1">{{ ax.axis }}</span>
+                <span class="font-mono" style="font-size:9.5px;color:hsl(var(--muted-foreground))">{{ ax.label }}</span>
+              </div>
+            </sc-for>
+            <div style="font-size:11px;color:hsl(var(--muted-foreground));border-top:1px solid hsl(var(--border));padding-top:6px;font-style:italic">Never a binary honest/chimera switch — provenance is per-row.</div>
+          </div>
+        </x-import>
+      </x-import>
+    </div>
+    <button onClick="{{ onReresolve }}" title="Re-resolve tick" style="width:28px;height:28px;border:1px solid hsl(var(--border));border-radius:6px;background:transparent;color:hsl(var(--primary));cursor:pointer;font-size:15px;flex:none" style-hover="border-color:hsl(var(--primary));background:hsl(var(--primary) / 0.12)">⟳</button>
+  </div>
+
+  <!-- override chips (pinned under tick bar) -->
+  <sc-if value="{{ hasOverrides }}" hint-placeholder-val="{{ false }}">
+    <div style="flex:none;display:flex;align-items:center;gap:8px;padding:6px 14px;border-bottom:1px dashed hsl(var(--accent) / 0.5);background:hsl(var(--accent) / 0.07)">
+      <span class="font-mono" style="font-size:9px;letter-spacing:0.2em;color:hsl(var(--accent));text-transform:uppercase;flex:none">Sandbox overrides</span>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        <sc-for list="{{ overrideChips }}" as="oc" hint-placeholder-count="1">
+          <span style="display:inline-flex;align-items:center;gap:6px;border:1px solid hsl(var(--accent) / 0.6);border-radius:99px;padding:2px 4px 2px 10px;font-size:11px;color:hsl(var(--accent-foreground));background:hsl(var(--accent) / 0.85)">
+            {{ oc.label }}
+            <button onClick="{{ oc.onRemove }}" style="border:none;background:hsl(var(--background) / 0.25);color:inherit;border-radius:99px;width:16px;height:16px;font-size:10px;cursor:pointer;line-height:1">✕</button>
+          </span>
+        </sc-for>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ═══════════════ THREE REGIONS ═══════════════ -->
+  <div style="flex:1;min-height:0">
+    <div data-orr-flexwrap="1" style="height:100%;display:flex">
+
+      <!-- ─────────── LEFT RAIL ─────────── -->
+      <div style="width:17%;min-width:200px;height:100%">
+        <div data-screen-label="Band rail" class="bg-sidebar" style="height:100%;display:flex;flex-direction:column;border-right:1px solid hsl(var(--sidebar-border));overflow-y:auto">
+          <div class="font-mono" style="font-size:9px;letter-spacing:0.22em;text-transform:uppercase;color:hsl(var(--muted-foreground));padding:12px 14px 6px">Drive bands</div>
+          <sc-for list="{{ railBands }}" as="rb" hint-placeholder-count="5">
+            <div style="display:flex;align-items:center;gap:9px;padding:7px 14px">
+              <span style="width:8px;height:8px;border-radius:99px;background:{{ rb.color }};flex:none;box-shadow:0 0 6px {{ rb.glow }}"></span>
+              <span class="font-mono" style="font-size:10.5px;letter-spacing:0.1em;flex:1;color:hsl(var(--sidebar-foreground))">{{ rb.name }}</span>
+              <span class="font-mono" style="font-size:10px;min-width:20px;text-align:center;border:1px solid {{ rb.badgeBorder }};color:{{ rb.badgeText }};border-radius:99px;padding:1px 6px">{{ rb.count }}</span>
+            </div>
+          </sc-for>
+          <div style="margin:10px 14px;border-top:1px solid hsl(var(--sidebar-border))"></div>
+          <div class="font-mono" style="font-size:9px;letter-spacing:0.22em;text-transform:uppercase;color:hsl(var(--muted-foreground));padding:0 14px 8px">Lenses</div>
+          <div style="display:flex;flex-direction:column;gap:9px;padding:0 14px 12px">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+              <span class="font-mono" style="font-size:10px;letter-spacing:0.08em">Two-party lane</span>
+              <x-import component-from-global-scope="NexusIris.Switch" checked="{{ fTwoParty }}" on-checked-change="{{ onFTwoParty }}" hint-size="36px,20px"></x-import>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:4px">
+              <span class="font-mono" style="font-size:10px;letter-spacing:0.08em">Tag family</span>
+              <x-import component-from-global-scope="NexusIris.Popover" open="{{ famOpen }}" on-open-change="{{ onFamOpenChange }}" hint-size="100%,30px">
+                <x-import component-from-global-scope="NexusIris.PopoverTrigger" class="font-mono" style="width:100%;height:28px" dc-props="{{ famTriggerProps }}" hint-size="100%,28px">{{ famLabel }}</x-import>
+                <x-import component-from-global-scope="NexusIris.PopoverContent" align="start" hint-size="260px,240px">
+                  <x-import component-from-global-scope="NexusIris.Command" hint-size="240px,220px" style="background:transparent">
+                    <x-import component-from-global-scope="NexusIris.CommandInput" placeholder="Filter families…" hint-size="100%,32px"></x-import>
+                    <x-import component-from-global-scope="NexusIris.CommandList" hint-size="100%,180px">
+                      <x-import component-from-global-scope="NexusIris.CommandEmpty" hint-size="100%,30px">No family found.</x-import>
+                      <sc-for list="{{ familyItems }}" as="fi" hint-placeholder-count="5">
+                        <x-import component-from-global-scope="NexusIris.CommandItem" value="{{ fi.id }}" on-select="{{ fi.onPick }}" hint-size="100%,30px">
+                          <span class="font-mono" style="font-size:10px;letter-spacing:0.06em">{{ fi.name }}</span>
+                          <span style="font-size:10px;color:hsl(var(--muted-foreground));margin-left:auto">{{ fi.n }}</span>
+                        </x-import>
+                      </sc-for>
+                    </x-import>
+                  </x-import>
+                </x-import>
+              </x-import>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:4px">
+              <span class="font-mono" style="font-size:10px;letter-spacing:0.08em">Event family</span>
+              <x-import component-from-global-scope="NexusIris.Select" value="{{ fEvent }}" on-value-change="{{ onFEvent }}" hint-size="100%,30px">
+                <x-import component-from-global-scope="NexusIris.SelectTrigger" style="height:28px;width:100%" dc-props="{{ smallTriggerProps }}" hint-size="100%,28px">
+                  <x-import component-from-global-scope="NexusIris.SelectValue" hint-size="60px,14px"></x-import>
+                </x-import>
+                <x-import component-from-global-scope="NexusIris.SelectContent" hint-size="200px,160px">
+                  <x-import component-from-global-scope="NexusIris.SelectItem" value="none" hint-size="100%,28px">— none —</x-import>
+                  <x-import component-from-global-scope="NexusIris.SelectItem" value="threat_issued" hint-size="100%,28px">threat_issued</x-import>
+                  <x-import component-from-global-scope="NexusIris.SelectItem" value="compliance_alert" hint-size="100%,28px">compliance_alert</x-import>
+                  <x-import component-from-global-scope="NexusIris.SelectItem" value="faction_realignment" hint-size="100%,28px">faction_realignment</x-import>
+                  <x-import component-from-global-scope="NexusIris.SelectItem" value="encoded_message" hint-size="100%,28px">encoded_message</x-import>
+                </x-import>
+              </x-import>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+              <span class="font-mono" style="font-size:10px;letter-spacing:0.08em">Show gate-failed</span>
+              <x-import component-from-global-scope="NexusIris.Switch" checked="{{ fFailed }}" on-checked-change="{{ onFFailed }}" hint-size="36px,20px"></x-import>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+              <span class="font-mono" style="font-size:10px;letter-spacing:0.08em">Show not-applicable</span>
+              <x-import component-from-global-scope="NexusIris.Switch" checked="{{ fNA }}" on-checked-change="{{ onFNA }}" hint-size="36px,20px"></x-import>
+            </div>
+          </div>
+          <div style="flex:1"></div>
+          <div class="font-mono" style="padding:10px 14px;font-size:9px;letter-spacing:0.14em;color:hsl(var(--muted-foreground));border-top:1px solid hsl(var(--sidebar-border))">{{ footerLine }}</div>
+        </div>
+      </div>
+
+      <!-- ─────────── CENTER: STREAM / GRAPH ─────────── -->
+      <div style="flex:1;min-width:0;height:100%">
+        <div style="height:100%;display:flex;flex-direction:column;min-width:0">
+          <div style="flex:none;display:flex;align-items:center;gap:4px;padding:8px 14px 0">
+            <button onClick="{{ onTabStream }}" class="font-mono" style="{{ tabStreamStyle }}">Actor stream</button>
+            <button onClick="{{ onTabGraph }}" class="font-mono" style="{{ tabGraphStyle }}">Interaction graph</button>
+            <div style="flex:1"></div>
+            <span class="font-mono" style="font-size:9.5px;letter-spacing:0.1em;color:hsl(var(--muted-foreground))">{{ streamSummary }}</span>
+          </div>
+
+          <sc-if value="{{ showEmptySlot }}" hint-placeholder-val="{{ false }}">
+            <div style="flex:1;display:flex;align-items:center;justify-content:center">
+              <div style="max-width:380px;text-align:center;display:flex;flex-direction:column;gap:10px;padding:24px;border:1px dashed hsl(var(--border));border-radius:8px">
+                <span class="font-mono" style="font-size:10px;letter-spacing:0.2em;text-transform:uppercase;color:hsl(var(--muted-foreground))">No Orrery data</span>
+                <span style="font-size:13px;color:hsl(var(--muted-foreground));font-style:italic">save_01 is the golden master — the retrograde pipeline never ran here. Switch to save_02 (dense backfill) or save_05 (live runtime).</span>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ showStream }}" hint-placeholder-val="{{ true }}">
+            <div id="orr-stream" data-screen-label="Actor stream" style="flex:1;min-height:0;overflow-y:auto;padding:10px 14px 24px;display:flex;flex-direction:column;gap:10px">
+              <sc-for list="{{ groups }}" as="g" hint-placeholder-count="6">
+                <div id="{{ g.domId }}" style="border:1px solid {{ g.borderColor }};border-radius:8px;background:hsl(var(--card) / 0.45)">
+                  <!-- group header -->
+                  <div onClick="{{ g.onToggle }}" style="display:flex;align-items:center;gap:10px;padding:8px 12px;cursor:pointer" style-hover="background:hsl(var(--muted) / 0.25)">
+                    <span style="font-size:9px;color:hsl(var(--muted-foreground));width:10px;flex:none">{{ g.chev }}</span>
+                    <span class="font-mono" style="width:30px;height:30px;border-radius:99px;border:1.5px solid {{ g.ringColor }};display:flex;align-items:center;justify-content:center;font-size:10px;color:hsl(var(--foreground) / 0.85);flex:none;background:hsl(var(--card))">{{ g.initials }}</span>
+                    <span data-orr-hover-anchor="header" style="font-size:14px;font-weight:600;color:hsl(var(--foreground));text-decoration:underline dotted hsl(var(--primary) / 0.5);text-underline-offset:3px;cursor:default" onMouseEnter="{{ g.onHoverIn }}" onMouseLeave="{{ onHoverOut }}">{{ g.name }}</span>
+                    <span class="font-mono" style="font-size:9.5px;letter-spacing:0.08em;color:hsl(var(--muted-foreground));border:1px solid hsl(var(--border));border-radius:99px;padding:1px 8px;flex:none">{{ g.placeName }}</span>
+                    <sc-if value="{{ g.diff }}" hint-placeholder-val="{{ false }}">
+                      <span title="Outcome changed vs pre-override tick" style="width:7px;height:7px;border-radius:99px;background:hsl(var(--accent));box-shadow:0 0 7px hsl(var(--accent));flex:none"></span>
+                    </sc-if>
+                    <div style="flex:1"></div>
+                    <sc-if value="{{ g.gap }}" hint-placeholder-val="{{ false }}">
+                      <span class="font-mono" style="font-size:9px;letter-spacing:0.14em;text-transform:uppercase;color:hsl(var(--destructive));border:1px solid hsl(var(--destructive) / 0.6);border-radius:99px;padding:2px 8px">coverage gap</span>
+                    </sc-if>
+                    <div style="display:flex;gap:4px;flex:none">
+                      <sc-for list="{{ g.bandDots }}" as="bd" hint-placeholder-count="2">
+                        <span title="{{ bd.title }}" style="width:7px;height:7px;border-radius:2px;background:{{ bd.color }}"></span>
+                      </sc-for>
+                    </div>
+                    <span class="font-mono" style="font-size:9.5px;color:hsl(var(--muted-foreground));flex:none">{{ g.activityLine }}</span>
+                  </div>
+                  <!-- group body -->
+                  <sc-if value="{{ g.open }}" hint-placeholder-val="{{ true }}">
+                    <div style="padding:2px 12px 12px 32px;display:flex;flex-direction:column;gap:8px">
+                      <sc-if value="{{ g.gap }}" hint-placeholder-val="{{ false }}">
+                        <div style="border:1px dashed hsl(var(--destructive) / 0.5);border-radius:6px;padding:9px 12px;font-size:12px;font-style:italic;color:hsl(var(--muted-foreground))">No package fires for this actor this tick — every gate refuses. {{ g.gapHint }}</div>
+                      </sc-if>
+                      <sc-for list="{{ g.cards }}" as="card" hint-placeholder-count="2">
+                        <dc-import name="ResolutionCard" card="{{ card }}" hint-size="100%,110px"></dc-import>
+                      </sc-for>
+                      <sc-if value="{{ g.hasPressures }}" hint-placeholder-val="{{ false }}">
+                        <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+                          <sc-for list="{{ g.pressures }}" as="pr" hint-placeholder-count="1">
+                            <button onClick="{{ pr.onSelect }}" style="{{ pr.style }}" class="font-mono" title="{{ pr.title }}">⇢ {{ pr.label }}</button>
+                          </sc-for>
+                        </div>
+                      </sc-if>
+                      <sc-if value="{{ g.hasGhosts }}" hint-placeholder-val="{{ false }}">
+                        <div style="display:flex;flex-direction:column;gap:2px;margin-top:2px">
+                          <sc-for list="{{ g.ghosts }}" as="gh" hint-placeholder-count="3">
+                            <div onClick="{{ gh.onSelect }}" style="{{ gh.style }}" style-hover="background:hsl(var(--muted) / 0.2)">
+                              <span style="width:14px;flex:none;text-align:center;font-size:9px">{{ gh.glyph }}</span>
+                              <span class="font-mono" style="font-size:9.5px;letter-spacing:0.08em;flex:none;min-width:150px">{{ gh.name }}</span>
+                              <span style="flex:1;font-size:11px;font-style:italic;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ gh.reason }}</span>
+                              <span class="font-mono" style="font-size:9.5px;flex:none">{{ gh.evidence }}</span>
+                            </div>
+                          </sc-for>
+                        </div>
+                      </sc-if>
+                    </div>
+                  </sc-if>
+                </div>
+              </sc-for>
+              <!-- on-screen scene row -->
+              <div style="border:1px dashed hsl(var(--border));border-radius:8px;padding:9px 12px;display:flex;align-items:center;gap:10px">
+                <span class="font-mono" style="font-size:9px;letter-spacing:0.2em;text-transform:uppercase;color:hsl(var(--muted-foreground));flex:none">On-screen</span>
+                <sc-for list="{{ onscreenChips }}" as="oc" hint-placeholder-count="3">
+                  <span data-orr-hover-anchor="onscreen" style="font-size:12.5px;font-weight:600;color:hsl(var(--foreground));text-decoration:underline dotted hsl(var(--primary) / 0.5);text-underline-offset:3px;cursor:default" onMouseEnter="{{ oc.onHoverIn }}" onMouseLeave="{{ onHoverOut }}">{{ oc.name }}</span>
+                </sc-for>
+                <span style="flex:1"></span>
+                <sc-for list="{{ needPressureChips }}" as="np" hint-placeholder-count="1">
+                  <span class="font-mono" title="{{ np.title }}" style="font-size:10px;letter-spacing:0.05em;border:1px dashed hsl(var(--chart-2) / 0.7);color:hsl(var(--chart-2));border-radius:99px;padding:2px 9px">⇢ {{ np.label }}</span>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ showGraph }}" hint-placeholder-val="{{ false }}">
+            <div data-screen-label="Interaction graph" style="flex:1;min-height:0;overflow:auto;padding:6px 14px 20px">
+              <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;padding:2px 4px 10px;max-width:1400px;margin:0 auto">
+                <span style="display:inline-flex;align-items:center;gap:6px;font-size:10.5px;color:hsl(var(--muted-foreground))"><span style="width:18px;height:0;border-top:2px solid hsl(var(--chart-4));display:inline-block"></span>fired package · band color</span>
+                <span style="display:inline-flex;align-items:center;gap:6px;font-size:10.5px;color:hsl(var(--muted-foreground))"><span style="width:18px;height:0;border-top:2px dashed hsl(var(--accent));display:inline-block"></span>scene pressure → on-screen</span>
+                <span style="display:inline-flex;align-items:center;gap:6px;font-size:10.5px;color:hsl(var(--muted-foreground))"><span style="width:8px;height:8px;border:1.4px solid hsl(var(--chart-4));transform:rotate(45deg);display:inline-block"></span>reciprocal joint beat</span>
+                <span class="font-mono" style="margin-left:auto;font-size:9px;letter-spacing:0.1em;color:hsl(var(--muted-foreground))">hover a node for its audit · click an edge to trace it</span>
+              </div>
+              <svg viewBox="0 0 920 540" style="width:100%;max-width:1400px;height:auto;display:block;margin:0 auto">
+                <defs>
+                  <marker id="arr1" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L8,4 L0,8 z" fill="hsl(var(--chart-1))"></path></marker>
+                  <marker id="arr4" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L8,4 L0,8 z" fill="hsl(var(--chart-4))"></path></marker>
+                  <marker id="arr5" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L8,4 L0,8 z" fill="hsl(var(--chart-5))"></path></marker>
+                  <marker id="arrA" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L8,4 L0,8 z" fill="hsl(var(--accent))"></path></marker>
+                </defs>
+                <text x="70" y="30" class="font-mono" style="font-size:10px;letter-spacing:0.2em;text-transform:uppercase" fill="hsl(var(--muted-foreground))">Off-screen actors</text>
+                <text x="700" y="30" class="font-mono" style="font-size:10px;letter-spacing:0.2em;text-transform:uppercase" fill="hsl(var(--muted-foreground))">On-screen</text>
+                <line x1="640" y1="40" x2="640" y2="440" stroke="hsl(var(--border))" stroke-dasharray="2 5"></line>
+                <sc-for list="{{ graphEdges }}" as="ge" hint-placeholder-count="8">
+                  <g style="cursor:pointer" onClick="{{ ge.onSelect }}" onMouseEnter="{{ ge.onEnter }}" onMouseLeave="{{ ge.onLeave }}">
+                    <path d="{{ ge.d }}" fill="none" stroke="transparent" stroke-width="16" pointer-events="stroke"></path>
+                    <path d="{{ ge.d }}" fill="none" stroke="{{ ge.color }}" stroke-width="{{ ge.w }}" stroke-dasharray="{{ ge.dash }}" marker-end="{{ ge.marker }}" opacity="{{ ge.op }}" pointer-events="none"></path>
+                    <sc-if value="{{ ge.joint }}" hint-placeholder-val="{{ false }}">
+                      <g>
+                        <rect x="{{ ge.jx }}" y="{{ ge.jy }}" width="9" height="9" transform="{{ ge.jrot }}" fill="hsl(var(--background))" stroke="{{ ge.color }}" stroke-width="1.4"></rect>
+                        <text x="{{ ge.lx }}" y="{{ ge.jly }}" class="font-mono" style="font-size:8px;letter-spacing:0.1em" fill="hsl(var(--muted-foreground))" text-anchor="middle">joint beat</text>
+                      </g>
+                    </sc-if>
+                  </g>
+                </sc-for>
+                <sc-for list="{{ graphNodes }}" as="gn" hint-placeholder-count="9">
+                  <g style="cursor:pointer" onClick="{{ gn.onClick }}" onMouseEnter="{{ gn.onEnter }}" onMouseLeave="{{ onHoverOut }}">
+                    <circle cx="{{ gn.x }}" cy="{{ gn.y }}" r="19" fill="hsl(var(--card))" stroke="{{ gn.stroke }}" stroke-width="{{ gn.strokeW }}" stroke-dasharray="{{ gn.dash }}"></circle>
+                  </g>
+                </sc-for>
+                <sc-if value="{{ potentialActive }}" hint-placeholder-val="{{ false }}">
+                  <g>
+                    <rect x="60" y="452" width="9" height="9" transform="rotate(45 64.5 456.5)" fill="none" stroke="hsl(var(--muted-foreground))" stroke-width="1.2"></rect>
+                    <text x="80" y="476" class="font-mono" style="font-size:8px;letter-spacing:0.08em" fill="hsl(var(--muted-foreground))">consumed by gates · emitted by no branch — potential, never realized</text>
+                    <sc-for list="{{ potentialConsumers }}" as="pc" hint-placeholder-count="3">
+                      <g>
+                        <path d="{{ pc.d }}" fill="none" stroke="hsl(var(--muted-foreground))" stroke-width="1" stroke-dasharray="1.5 4" opacity="0.65"></path>
+                      </g>
+                    </sc-for>
+                  </g>
+                </sc-if>
+                {{ graphLabelsEl }}
+              </svg>
+            </div>
+          </sc-if>
+
+          <!-- ─────────── HEALTH STRIP (bottom drawer) ─────────── -->
+          <div data-screen-label="Health strip" style="flex:none;border-top:1px solid hsl(var(--border))" class="bg-sidebar">
+            <div onClick="{{ onToggleHealth }}" style="display:flex;align-items:center;gap:10px;padding:7px 14px;cursor:pointer" style-hover="background:hsl(var(--muted) / 0.2)">
+              <span style="font-size:9px;color:hsl(var(--muted-foreground))">{{ healthChev }}</span>
+              <span class="font-mono" style="font-size:9.5px;letter-spacing:0.22em;text-transform:uppercase;color:hsl(var(--muted-foreground))">System health</span>
+              <span class="font-mono" style="font-size:9.5px;border:1px solid hsl(var(--destructive) / 0.55);color:hsl(var(--destructive));border-radius:99px;padding:0 7px">{{ healthWarnCount }}</span>
+              <div style="flex:1"></div>
+              <span class="font-mono" style="font-size:9px;letter-spacing:0.1em;color:hsl(var(--muted-foreground))">window {{ windowLabel }}</span>
+            </div>
+            <sc-if value="{{ healthOpen }}" hint-placeholder-val="{{ false }}">
+              <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));gap:10px;padding:0 14px 12px">
+                <div style="border:1px solid hsl(var(--border));border-radius:6px;padding:10px 12px;display:flex;flex-direction:column;gap:6px">
+                  <span class="font-mono" style="font-size:8.5px;letter-spacing:0.18em;text-transform:uppercase;color:hsl(var(--muted-foreground))">Winners by band — this tick</span>
+                  <sc-for list="{{ healthBands }}" as="hb" hint-placeholder-count="5">
+                    <div style="display:flex;align-items:center;gap:8px">
+                      <span class="font-mono" style="font-size:9px;letter-spacing:0.06em;width:86px;flex:none;color:hsl(var(--muted-foreground))">{{ hb.name }}</span>
+                      <div style="flex:1;height:6px;border-radius:3px;background:hsl(var(--muted) / 0.3);overflow:hidden"><div style="width:{{ hb.pct }};height:100%;background:{{ hb.color }}"></div></div>
+                      <span class="font-mono" style="font-size:10px;width:14px;text-align:right">{{ hb.count }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+                <div style="border:1px solid hsl(var(--border));border-radius:6px;padding:10px 12px;display:flex;flex-direction:column;gap:6px">
+                  <span class="font-mono" style="font-size:8.5px;letter-spacing:0.18em;text-transform:uppercase;color:hsl(var(--muted-foreground))">Coverage gaps — this tick</span>
+                  <sc-if value="{{ hasGaps }}" hint-placeholder-val="{{ true }}">
+                    <sc-for list="{{ healthGaps }}" as="hg" hint-placeholder-count="1">
+                      <button onClick="{{ hg.onJump }}" style="display:flex;align-items:center;gap:8px;background:transparent;border:none;cursor:pointer;padding:2px 0;color:hsl(var(--accent));font-size:12.5px;text-align:left" style-hover="text-decoration:underline">
+                        <span style="width:6px;height:6px;border-radius:99px;background:hsl(var(--destructive))"></span>{{ hg.name }}
+                        <span class="font-mono" style="font-size:9px;color:hsl(var(--muted-foreground))">{{ hg.why }}</span>
+                      </button>
+                    </sc-for>
+                  </sc-if>
+                  <sc-if value="{{ noGaps }}" hint-placeholder-val="{{ false }}">
+                    <span style="font-size:12px;font-style:italic;color:hsl(var(--muted-foreground))">Every candidate actor fired at least one package.</span>
+                  </sc-if>
+                </div>
+                <div style="border:1px solid hsl(var(--border));border-radius:6px;padding:10px 12px;display:flex;flex-direction:column;gap:5px">
+                  <span class="font-mono" style="font-size:8.5px;letter-spacing:0.18em;text-transform:uppercase;color:hsl(var(--muted-foreground))">Never / always win — window</span>
+                  <sc-for list="{{ healthDominant }}" as="hd" hint-placeholder-count="3">
+                    <div style="display:flex;align-items:center;gap:8px">
+                      <span class="font-mono" style="font-size:9px;width:96px;flex:none;letter-spacing:0.04em">{{ hd.id }}</span>
+                      <div style="flex:1;height:6px;border-radius:3px;background:hsl(var(--muted) / 0.3);overflow:hidden"><div style="width:{{ hd.pct }};height:100%;background:hsl(var(--chart-1) / 0.8)"></div></div>
+                      <span class="font-mono" style="font-size:9.5px;width:32px;text-align:right">{{ hd.share }}</span>
+                    </div>
+                  </sc-for>
+                  <div style="font-size:10.5px;color:hsl(var(--muted-foreground));display:flex;flex-wrap:wrap;gap:4px;margin-top:2px">
+                    <span class="font-mono" style="font-size:8.5px;letter-spacing:0.14em;text-transform:uppercase">never:</span>
+                    <sc-for list="{{ healthNever }}" as="hn" hint-placeholder-count="4">
+                      <span class="font-mono" style="font-size:9px;border:1px solid hsl(var(--border));border-radius:99px;padding:0 6px">{{ hn.id }}</span>
+                    </sc-for>
+                  </div>
+                </div>
+                <div style="border:1px solid hsl(var(--border));border-radius:6px;padding:10px 12px;display:flex;flex-direction:column;gap:5px;overflow-y:auto;max-height:170px">
+                  <span class="font-mono" style="font-size:8.5px;letter-spacing:0.18em;text-transform:uppercase;color:hsl(var(--muted-foreground))">Dead gate arms · data quality</span>
+                  <sc-for list="{{ healthDeadArms }}" as="da" hint-placeholder-count="4">
+                    <div style="display:flex;align-items:baseline;gap:6px;font-size:10.5px">
+                      <span class="font-mono" style="font-size:9px;color:hsl(var(--chart-5));flex:none">{{ da.event }}</span>
+                      <span style="color:hsl(var(--muted-foreground));overflow:hidden;text-overflow:ellipsis;white-space:nowrap">→ {{ da.consumers }} · never emitted</span>
+                    </div>
+                  </sc-for>
+                  <div style="border-top:1px solid hsl(var(--border));margin:3px 0"></div>
+                  <sc-for list="{{ healthDq }}" as="dq" hint-placeholder-count="4">
+                    <div style="display:flex;align-items:baseline;gap:7px;font-size:10.5px">
+                      <span style="width:6px;height:6px;border-radius:99px;background:{{ dq.color }};flex:none;position:relative;top:-1px"></span>
+                      <span style="color:hsl(var(--muted-foreground))">{{ dq.text }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-if>
+          </div>
+        </div>
+      </div>
+
+      <!-- ─────────── RIGHT: INSPECTOR ─────────── -->
+      <div style="width:30%;min-width:300px;height:100%">
+        <div data-screen-label="Inspector" style="height:100%;overflow-y:auto;border-left:1px solid hsl(var(--border));background:hsl(var(--card) / 0.3)">
+          <sc-if value="{{ noSelection }}" hint-placeholder-val="{{ true }}">
+            <div style="height:100%;display:flex;align-items:center;justify-content:center;padding:30px">
+              <div style="text-align:center;display:flex;flex-direction:column;gap:8px;max-width:240px">
+                <span style="font-size:22px;color:hsl(var(--muted-foreground) / 0.5)">◈</span>
+                <span class="font-mono" style="font-size:9.5px;letter-spacing:0.22em;text-transform:uppercase;color:hsl(var(--muted-foreground))">Inspector</span>
+                <span style="font-size:12px;font-style:italic;color:hsl(var(--muted-foreground))">Select any card, ghost row, or pressure chip to open its full gate trace and branch ladder.</span>
+              </div>
+            </div>
+          </sc-if>
+          <sc-if value="{{ hasSelection }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column">
+              <div style="padding:14px 16px 12px;border-bottom:1px solid hsl(var(--border));border-left:3px solid {{ insp.bandColor }}">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <span class="font-mono" style="font-size:13px;letter-spacing:0.12em">{{ insp.name }}</span>
+                  <span class="font-mono" style="font-size:9.5px;color:hsl(var(--muted-foreground))">pri {{ insp.priority }}</span>
+                  <sc-if value="{{ insp.tie }}" hint-placeholder-val="{{ false }}">
+                    <span title="{{ insp.tieTitle }}" class="font-mono" style="font-size:9px;letter-spacing:0.08em;border:1px solid hsl(var(--chart-5) / 0.7);color:hsl(var(--chart-5));border-radius:99px;padding:1px 7px;cursor:help">tie · tuple order</span>
+                  </sc-if>
+                  <div style="flex:1"></div>
+                  <span class="font-mono" style="{{ insp.statusStyle }}">{{ insp.statusLabel }}</span>
+                </div>
+                <div style="margin-top:6px;font-size:12px;color:hsl(var(--muted-foreground))">{{ insp.bindingLine }}</div>
+                <div style="margin-top:4px;font-size:12px;font-style:italic;color:hsl(var(--muted-foreground) / 0.85)">{{ insp.blurb }}</div>
+                <sc-if value="{{ insp.bandNote }}" hint-placeholder-val="{{ false }}">
+                  <div style="margin-top:5px;font-size:10.5px;color:hsl(var(--chart-5) / 0.9);font-style:italic">band rationale: {{ insp.bandNote }}</div>
+                </sc-if>
+              </div>
+
+              <sc-if value="{{ insp.isNA }}" hint-placeholder-val="{{ false }}">
+                <div style="padding:16px;display:flex;flex-direction:column;gap:8px">
+                  <span class="font-mono" style="font-size:9.5px;letter-spacing:0.2em;text-transform:uppercase;color:hsl(var(--muted-foreground))">Not applicable</span>
+                  <span style="font-size:12.5px;font-style:italic;color:hsl(var(--muted-foreground))">No TARGET is bound in this actor's stacks — this two-party template was never composed, so nothing was evaluated. Not applicable is not a refusal: no gate ran, no predicate failed.</span>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ insp.hasTrace }}" hint-placeholder-val="{{ true }}">
+                <div style="padding:12px 16px;display:flex;flex-direction:column;gap:3px">
+                  <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+                    <span class="font-mono" style="font-size:9.5px;letter-spacing:0.2em;text-transform:uppercase;color:hsl(var(--muted-foreground))">Gate</span>
+                    <span class="font-mono" style="{{ insp.gateBadgeStyle }}">{{ insp.gateBadge }}</span>
+                  </div>
+                  <sc-for list="{{ insp.gateRows }}" as="gr" hint-placeholder-count="8">
+                    <div style="{{ gr.style }}">
+                      <span style="width:15px;flex:none;text-align:center;font-size:{{ gr.glyphSize }};color:{{ gr.glyphColor }}">{{ gr.glyph }}</span>
+                      <span style="{{ gr.proseStyle }}">{{ gr.prose }}</span>
+                      <span class="font-mono" style="font-size:9.5px;color:{{ gr.evColor }};flex:none;text-align:right">{{ gr.evidence }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+
+                <div style="padding:4px 16px 12px;display:flex;flex-direction:column;gap:4px">
+                  <span class="font-mono" style="font-size:9.5px;letter-spacing:0.2em;text-transform:uppercase;color:hsl(var(--muted-foreground));margin-bottom:2px">Branch ladder — authored order</span>
+                  <sc-for list="{{ insp.branches }}" as="br" hint-placeholder-count="4">
+                    <div style="{{ br.style }}">
+                      <div style="display:flex;align-items:baseline;gap:8px">
+                        <span class="font-mono" style="font-size:9px;color:hsl(var(--muted-foreground));flex:none">{{ br.idx }}</span>
+                        <span style="font-size:12px;{{ br.labelStyle }};flex:1">{{ br.label }}</span>
+                        <span class="font-mono" style="font-size:10px;color:{{ br.magColor }};flex:none">{{ br.mag }}</span>
+                      </div>
+                      <sc-if value="{{ br.note }}" hint-placeholder-val="{{ false }}">
+                        <div style="margin:3px 0 0 17px;font-size:10.5px;color:hsl(var(--muted-foreground));display:flex;gap:6px;align-items:baseline">
+                          <span style="flex:none">{{ br.noteGlyph }}</span><span style="font-style:italic">{{ br.note }}</span>
+                        </div>
+                      </sc-if>
+                    </div>
+                  </sc-for>
+                </div>
+
+                <sc-if value="{{ insp.fired }}" hint-placeholder-val="{{ true }}">
+                  <div style="padding:4px 16px 20px;display:flex;flex-direction:column;gap:8px;border-top:1px solid hsl(var(--border))">
+                    <div style="display:flex;align-items:center;gap:8px;margin-top:10px">
+                      <span class="font-mono" style="font-size:9.5px;letter-spacing:0.2em;text-transform:uppercase;color:hsl(var(--muted-foreground))">Resolution</span>
+                      <sc-if value="{{ insp.event }}" hint-placeholder-val="{{ true }}">
+                        <span class="font-mono" style="font-size:9.5px;border:1px solid {{ insp.bandColor }};color:{{ insp.bandColor }};border-radius:99px;padding:1px 8px">{{ insp.event }}</span>
+                      </sc-if>
+                      <div style="flex:1"></div>
+                      <span class="font-mono" style="font-size:10px;color:hsl(var(--muted-foreground))">mag {{ insp.mag }}</span>
+                    </div>
+                    <sc-if value="{{ insp.isPressure }}" hint-placeholder-val="{{ false }}">
+                      <div style="border:1px dashed hsl(var(--accent) / 0.5);border-radius:6px;padding:8px 10px;display:flex;flex-direction:column;gap:4px">
+                        <span class="font-mono" style="font-size:8.5px;letter-spacing:0.18em;text-transform:uppercase;color:hsl(var(--accent))">Scene pressure — prompt-only, no state mutation</span>
+                        <span style="font-size:11.5px;font-style:italic;color:hsl(var(--muted-foreground))">{{ insp.pressureStub }}</span>
+                      </div>
+                    </sc-if>
+                    <div style="display:flex;flex-direction:column;gap:3px">
+                      <sc-for list="{{ insp.deltaRows }}" as="dr" hint-placeholder-count="2">
+                        <div style="display:flex;gap:10px;font-size:10.5px;align-items:baseline">
+                          <span class="font-mono" style="font-size:9px;color:hsl(var(--muted-foreground));flex:none;min-width:150px;text-align:right">{{ dr.k }}</span>
+                          <span class="font-mono" style="font-size:10px;color:hsl(var(--chart-5))">{{ dr.v }}</span>
+                        </div>
+                      </sc-for>
+                    </div>
+                    <div class="font-mono" style="font-size:8.5px;color:hsl(var(--muted-foreground) / 0.6);letter-spacing:0.04em">{{ insp.bindingHash }}</div>
+                  </div>
+                </sc-if>
+              </sc-if>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- what-if dashed sandbox frame -->
+  <sc-if value="{{ sandboxFrame }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;inset:0;pointer-events:none;border:2px dashed hsl(var(--accent) / 0.8);z-index:50">
+      <span class="font-mono" style="position:absolute;bottom:6px;right:12px;font-size:9px;letter-spacing:0.24em;text-transform:uppercase;color:hsl(var(--accent));background:hsl(var(--background) / 0.85);padding:2px 8px">Sandbox — not canon</span>
+    </div>
+  </sc-if>
+
+  <!-- floating hover-audit -->
+  <sc-if value="{{ hoverPanelOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="{{ hoverPanelStyle }}" onMouseEnter="{{ onHoverPanelEnter }}" onMouseLeave="{{ onHoverOut }}" data-screen-label="Hover audit">
+      <dc-import name="EntityAudit" ent="{{ hoverPanelEnt }}" hint-size="300px,360px"></dc-import>
+    </div>
+  </sc-if>
+
+  <!-- ═══════════════ WHAT-IF DRAWER ═══════════════ -->
+  <div data-screen-label="What-if drawer" style="{{ drawerStyle }}">
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <button onClick="{{ onCloseDrawer }}" title="Close" style="position:absolute;top:10px;right:12px;width:24px;height:24px;border:1px solid hsl(var(--border));border-radius:5px;background:transparent;color:hsl(var(--muted-foreground));cursor:pointer;font-size:11px;line-height:1" style-hover="border-color:hsl(var(--accent));color:hsl(var(--accent))">✕</button>
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <span class="font-mono" style="font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:hsl(var(--accent))">What-if sandbox</span>
+          <span style="font-size:11.5px;font-style:italic;color:hsl(var(--muted-foreground))">Overrides copy the frozen WorldState and re-resolve live. Nothing canonical is written.</span>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <span class="font-mono" style="font-size:9px;letter-spacing:0.2em;text-transform:uppercase;color:hsl(var(--muted-foreground))">Entity</span>
+          <x-import component-from-global-scope="NexusIris.Select" value="{{ wfEntity }}" on-value-change="{{ onWfEntity }}" hint-size="100%,32px">
+            <x-import component-from-global-scope="NexusIris.SelectTrigger" hint-size="100%,32px"><x-import component-from-global-scope="NexusIris.SelectValue" hint-size="60px,16px"></x-import></x-import>
+            <x-import component-from-global-scope="NexusIris.SelectContent" hint-size="200px,220px">
+              <sc-for list="{{ wfEntityItems }}" as="we" hint-placeholder-count="6">
+                <x-import component-from-global-scope="NexusIris.SelectItem" value="{{ we.id }}" hint-size="100%,28px">{{ we.name }}</x-import>
+              </sc-for>
+            </x-import>
+          </x-import>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <span class="font-mono" style="font-size:9px;letter-spacing:0.2em;text-transform:uppercase;color:hsl(var(--muted-foreground))">Toggle tag</span>
+          <x-import component-from-global-scope="NexusIris.Command" style="border:1px solid hsl(var(--border));border-radius:6px;background:transparent" hint-size="100%,190px">
+            <x-import component-from-global-scope="NexusIris.CommandInput" placeholder="Search tag vocabulary…" hint-size="100%,32px"></x-import>
+            <x-import component-from-global-scope="NexusIris.CommandList" style="max-height:150px" hint-size="100%,150px">
+              <x-import component-from-global-scope="NexusIris.CommandEmpty" hint-size="100%,30px">No tag found.</x-import>
+              <sc-for list="{{ wfTagItems }}" as="wt" hint-placeholder-count="6">
+                <x-import component-from-global-scope="NexusIris.CommandItem" value="{{ wt.value }}" on-select="{{ wt.onPick }}" hint-size="100%,28px">
+                  <span style="width:13px;flex:none;color:{{ wt.stateColor }};font-size:10px">{{ wt.stateGlyph }}</span>
+                  <span class="font-mono" style="font-size:10.5px;letter-spacing:0.04em">{{ wt.label }}</span>
+                  <span class="font-mono" style="font-size:8.5px;color:hsl(var(--muted-foreground));margin-left:auto">{{ wt.kind }}</span>
+                </x-import>
+              </sc-for>
+            </x-import>
+          </x-import>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <span class="font-mono" style="font-size:9px;letter-spacing:0.2em;text-transform:uppercase;color:hsl(var(--muted-foreground))">Set need — {{ wfNeedLabel }}</span>
+          <x-import component-from-global-scope="NexusIris.Select" value="{{ wfNeed }}" on-value-change="{{ onWfNeed }}" hint-size="100%,32px">
+            <x-import component-from-global-scope="NexusIris.SelectTrigger" hint-size="100%,30px"><x-import component-from-global-scope="NexusIris.SelectValue" hint-size="60px,16px"></x-import></x-import>
+            <x-import component-from-global-scope="NexusIris.SelectContent" hint-size="180px,190px">
+              <x-import component-from-global-scope="NexusIris.SelectItem" value="sleep" hint-size="100%,28px">sleep</x-import>
+              <x-import component-from-global-scope="NexusIris.SelectItem" value="hunger" hint-size="100%,28px">hunger</x-import>
+              <x-import component-from-global-scope="NexusIris.SelectItem" value="thirst" hint-size="100%,28px">thirst</x-import>
+              <x-import component-from-global-scope="NexusIris.SelectItem" value="socialize" hint-size="100%,28px">socialize</x-import>
+              <x-import component-from-global-scope="NexusIris.SelectItem" value="intimacy" hint-size="100%,28px">intimacy</x-import>
+            </x-import>
+          </x-import>
+          <div style="display:flex;align-items:center;gap:10px">
+            <x-import component-from-global-scope="NexusIris.Slider" value="{{ wfNeedValArr }}" min="{{ zero }}" max="{{ wfNeedMax }}" step="{{ one }}" on-value-change="{{ onWfNeedVal }}" style="flex:1" hint-size="100%,20px"></x-import>
+            <span class="font-mono" style="font-size:11px;min-width:34px;text-align:right">{{ wfNeedVal }}</span>
+            <button onClick="{{ onApplyNeed }}" class="font-mono" style="{{ wfApplyStyle }}">set</button>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <span class="font-mono" style="font-size:9px;letter-spacing:0.2em;text-transform:uppercase;color:hsl(var(--muted-foreground))">Move actor</span>
+          <div style="display:flex;gap:8px;align-items:center">
+            <x-import component-from-global-scope="NexusIris.Select" value="{{ wfPlace }}" on-value-change="{{ onWfPlace }}" style="flex:1" hint-size="100%,32px">
+              <x-import component-from-global-scope="NexusIris.SelectTrigger" hint-size="100%,30px"><x-import component-from-global-scope="NexusIris.SelectValue" hint-size="60px,16px"></x-import></x-import>
+              <x-import component-from-global-scope="NexusIris.SelectContent" hint-size="240px,200px">
+                <sc-for list="{{ wfPlaceItems }}" as="wp" hint-placeholder-count="5">
+                  <x-import component-from-global-scope="NexusIris.SelectItem" value="{{ wp.id }}" hint-size="100%,28px">{{ wp.name }}</x-import>
+                </sc-for>
+              </x-import>
+            </x-import>
+            <button onClick="{{ onApplyMove }}" class="font-mono" style="{{ wfApplyStyle }}">move</button>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <span class="font-mono" style="font-size:9px;letter-spacing:0.2em;text-transform:uppercase;color:hsl(var(--muted-foreground))">Inject recent event → {{ wfEntityName }}</span>
+          <div style="display:flex;gap:8px;align-items:center">
+            <x-import component-from-global-scope="NexusIris.Select" value="{{ wfEvent }}" on-value-change="{{ onWfEvent }}" style="flex:1" hint-size="100%,32px">
+              <x-import component-from-global-scope="NexusIris.SelectTrigger" hint-size="100%,30px"><x-import component-from-global-scope="NexusIris.SelectValue" hint-size="60px,16px"></x-import></x-import>
+              <x-import component-from-global-scope="NexusIris.SelectContent" hint-size="220px,180px">
+                <x-import component-from-global-scope="NexusIris.SelectItem" value="threat_issued" hint-size="100%,28px">threat_issued</x-import>
+                <x-import component-from-global-scope="NexusIris.SelectItem" value="compliance_alert" hint-size="100%,28px">compliance_alert</x-import>
+                <x-import component-from-global-scope="NexusIris.SelectItem" value="encoded_message" hint-size="100%,28px">encoded_message</x-import>
+                <x-import component-from-global-scope="NexusIris.SelectItem" value="faction_realignment" hint-size="100%,28px">faction_realignment</x-import>
+              </x-import>
+            </x-import>
+            <button onClick="{{ onApplyEvent }}" class="font-mono" style="{{ wfApplyStyle }}">inject</button>
+          </div>
+        </div>
+
+        <div style="border-top:1px solid hsl(var(--border));padding-top:10px;display:flex;flex-direction:column;gap:6px">
+          <span class="font-mono" style="font-size:9px;letter-spacing:0.2em;text-transform:uppercase;color:hsl(var(--muted-foreground))">Try the seeded questions</span>
+          <sc-for list="{{ wfPresets }}" as="wpr" hint-placeholder-count="3">
+            <button onClick="{{ wpr.onRun }}" style="text-align:left;border:1px dashed hsl(var(--accent) / 0.45);background:transparent;border-radius:6px;padding:7px 10px;font-size:11.5px;color:hsl(var(--foreground));cursor:pointer;font-style:italic" style-hover="background:hsl(var(--accent) / 0.1)">{{ wpr.label }}</button>
+          </sc-for>
+        </div>
+      </div>
+  </div>
+</div>
+</x-import>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 1440, &quot;height&quot;: 900}, &quot;density&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;comfortable&quot;, &quot;compact&quot;], &quot;default&quot;: &quot;comfortable&quot;, &quot;tsType&quot;: &quot;'comfortable' | 'compact'&quot;, &quot;section&quot;: &quot;Layout&quot;}, &quot;magnitudeStyle&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;dial&quot;, &quot;numeric&quot;], &quot;default&quot;: &quot;dial&quot;, &quot;tsType&quot;: &quot;'dial' | 'numeric'&quot;, &quot;section&quot;: &quot;Cards&quot;}, &quot;healthOpenByDefault&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;Layout&quot;}}">
+class Component extends DCLogic {
+  state = {
+    ready: false,
+    slot: 'save_02', anchor: 108, mode: 'current',
+    overrides: [], resolving: false,
+    selected: null, hoverTag: null, hoverEdge: null,
+    groupOpen: {}, shadowOpen: {},
+    fTwoParty: false, fFamily: null, fEvent: 'none', fFailed: false, fNA: false,
+    famOpen: false, asofOpen: false,
+    centerTab: 'stream', healthOpen: false, whatifOpen: false,
+    wfEntity: 'talon', wfNeed: 'sleep', wfNeedVal: 24, wfPlace: 'glow', wfEvent: 'encoded_message',
+  };
+
+  componentDidMount() {
+    document.body.classList.add('dark');
+    this._orrZoom = () => {
+      const vw = window.innerWidth || 1440;
+      const z = Math.min(1.5, Math.max(1, vw / 1680));
+      document.documentElement.style.setProperty('--orr-z', String(z));
+      document.documentElement.style.setProperty('--orr-zi', String(1 / z));
+    };
+    this._orrZoom();
+    window.addEventListener('resize', this._orrZoom);
+    import('./orrery-engine.js').then((eng) => {
+      this.eng = eng;
+      const errs = eng.selfTest();
+      if (errs.length) console.warn('[orrery selfTest]', errs);
+      this.setState({ ready: true, healthOpen: !!(this.props.healthOpenByDefault ?? false) });
+    }).catch((e) => { console.error('engine load failed', e); });
+  }
+
+  componentWillUnmount() {
+    window.removeEventListener('resize', this._orrZoom);
+    clearTimeout(this._ht);
+    clearTimeout(this._rt);
+  }
+
+  // ---- resolve caching ----
+  _resolve(overrides, anchor) {
+    const key = anchor + '|' + JSON.stringify(overrides);
+    this._cache = this._cache || {};
+    if (!this._cache[key]) {
+      const s = this.eng.applyOverrides(this.eng.baseWorldState(), overrides, anchor);
+      this._cache[key] = { state: s, r: this.eng.resolveTick(s) };
+    }
+    return this._cache[key];
+  }
+
+  _flash() {
+    this.setState({ resolving: true });
+    clearTimeout(this._rt);
+    this._rt = setTimeout(() => this.setState({ resolving: false }), 420);
+  }
+
+  _addOverride(ov) {
+    const overrides = [...this.state.overrides, ov];
+    this.setState({ overrides, mode: 'whatif' });
+    this._flash();
+  }
+
+  _sig(w) { return w ? w.id + '/' + (w.resolution ? w.resolution.branchLabel : '') : '∅'; }
+
+  renderVals() {
+    const st = this.state;
+    const P = this.props;
+    const density = P.density ?? 'comfortable';
+    const magStyle = P.magnitudeStyle ?? 'dial';
+    const pad = density === 'compact' ? 7 : 10;
+
+    // ---------- static chrome vals (paint before engine loads) ----------
+    const chip = (active, color) => `border:none;border-radius:4px;padding:3px 10px;font-size:9.5px;letter-spacing:0.16em;text-transform:uppercase;cursor:pointer;background:${active ? `hsl(var(--${color}) / 0.18)` : 'transparent'};color:${active ? `hsl(var(--${color}))` : 'hsl(var(--muted-foreground))'}`;
+    const tab = (active) => `border:none;border-bottom:2px solid ${active ? 'hsl(var(--primary))' : 'transparent'};background:transparent;padding:4px 12px 6px;font-size:10px;letter-spacing:0.16em;text-transform:uppercase;cursor:pointer;color:${active ? 'hsl(var(--foreground))' : 'hsl(var(--muted-foreground))'}`;
+
+    const base = {
+      hoverDelay: 150, zero: 0, one: 1,
+      sizeRail: 17, sizeRailMin: 13, sizeCenter: 53, sizeCenterMin: 36, sizeInspector: 30, sizeInspectorMin: 22,
+      slot: st.slot, onSlot: (v) => { this.setState({ slot: v, selected: null }); this._flash(); },
+      slotTriggerStyle: 'height:28px;width:118px',
+      slotTriggerProps: { style: { height: 28, width: 118, fontSize: 11 } },
+      smallTriggerProps: { style: { height: 28, width: '100%', fontSize: '10.5px', fontFamily: 'var(--font-mono)' } },
+      famTriggerProps: { style: { width: '100%', height: 28, border: '1px solid hsl(var(--input))', borderRadius: 6, background: 'transparent', color: 'hsl(var(--foreground))', fontSize: 10, letterSpacing: '0.06em', cursor: 'pointer', textAlign: 'left', padding: '0 10px' } },
+      chunkStr: String(st.anchor).padStart(4, '0'),
+      onStepBack: () => { this.setState({ anchor: Math.max(100, st.anchor - 1), selected: null }); this._flash(); },
+      onStepFwd: () => { this.setState({ anchor: Math.min(120, st.anchor + 1), selected: null }); this._flash(); },
+      resolving: st.resolving,
+      onReresolve: () => { this._cache = {}; this._flash(); this.forceUpdate(); },
+      modeChipCurrentStyle: chip(st.mode === 'current', 'primary'),
+      modeChipWhatifStyle: chip(st.mode === 'whatif', 'accent'),
+      modeChipAsofStyle: chip(st.mode === 'asof', 'chart-5'),
+      onModeCurrent: () => this.setState({ mode: 'current', whatifOpen: false }),
+      onModeWhatif: () => this.setState({ mode: 'whatif', whatifOpen: true }),
+      onModeAsof: () => this.setState({ mode: 'asof', asofOpen: true }),
+      asofOpen: st.asofOpen, onAsofOpenChange: (v) => this.setState({ asofOpen: v }),
+      asofAxes: [
+        { axis: 'Recent events · world time · roster', glyph: '✓', color: 'hsl(var(--chart-5))', label: 'honest' },
+        { axis: 'Single-entity tags', glyph: '≈', color: 'hsl(var(--chart-2))', label: 'approximate' },
+        { axis: 'Pair tags', glyph: '≈', color: 'hsl(var(--chart-2))', label: 'approx · no clear log' },
+        { axis: 'Relationships / trust', glyph: '∅', color: 'hsl(var(--muted-foreground))', label: 'frozen · unversioned' },
+        { axis: 'Position / activity', glyph: '∅', color: 'hsl(var(--muted-foreground))', label: 'frozen · uninstrumented' },
+        { axis: 'Need debt', glyph: '✓', color: 'hsl(var(--chart-5))', label: 'replayable' },
+        { axis: 'Travel · anchors · factions · weather', glyph: '∅', color: 'hsl(var(--muted-foreground))', label: 'frozen' },
+      ],
+      onTabStream: () => this.setState({ centerTab: 'stream' }),
+      onTabGraph: () => this.setState({ centerTab: 'graph' }),
+      tabStreamStyle: tab(st.centerTab === 'stream'),
+      tabGraphStyle: tab(st.centerTab === 'graph'),
+      fTwoParty: st.fTwoParty, onFTwoParty: (v) => this.setState({ fTwoParty: v }),
+      fFailed: st.fFailed, onFFailed: (v) => this.setState({ fFailed: v }),
+      fNA: st.fNA, onFNA: (v) => this.setState({ fNA: v }),
+      fEvent: st.fEvent, onFEvent: (v) => this.setState({ fEvent: v }),
+      famOpen: st.famOpen, onFamOpenChange: (v) => this.setState({ famOpen: v }),
+      famLabel: st.fFamily || '— none —',
+      onToggleHealth: () => this.setState({ healthOpen: !st.healthOpen }),
+      healthOpen: st.healthOpen, healthChev: st.healthOpen ? '▾' : '▴',
+      drawerStyle: `position:fixed;top:0;right:0;bottom:0;width:390px;z-index:60;background:hsl(var(--background));border-left:1px solid hsl(var(--accent) / 0.55);box-shadow:-14px 0 44px hsl(220 40% 2% / 0.65);transform:translateX(${st.whatifOpen ? '0' : '103%'});transition:transform 0.28s cubic-bezier(0.32,0.72,0,1);overflow-y:auto;padding:16px 18px 30px`,
+      onCloseDrawer: () => this.setState({ whatifOpen: false }),
+      onTagHover: (t) => this.setState({ hoverTag: t }),
+      onHoverOut: () => { clearTimeout(this._ht); this._ht = setTimeout(() => this.setState({ hoverEnt: null }), 200); },
+      hoverPanelOpen: !!st.hoverEnt, hoverPanelStyle: `position:fixed;left:${st.hoverX || 0}px;top:${st.hoverY || 0}px;z-index:80;background:hsl(var(--popover));border:1px solid hsl(var(--popover-border));border-radius:8px;padding:14px;box-shadow:0 8px 28px hsl(220 40% 2% / 0.7)`,
+      hoverPanelEnt: null,
+      onHoverPanelEnter: () => clearTimeout(this._ht),
+      windowLabel: '79 → 108',
+      noSelection: !st.selected, hasSelection: !!st.selected,
+      sandboxFrame: st.mode === 'whatif' && st.overrides.length > 0,
+      hasOverrides: st.overrides.length > 0,
+      showEmptySlot: st.slot === 'save_01',
+      showStream: st.slot !== 'save_01' && st.centerTab === 'stream',
+      showGraph: st.slot !== 'save_01' && st.centerTab === 'graph',
+      footerLine: st.slot === 'save_02' ? 'slot 2 · retrograde backfill · 24 templates + 5 pseudo' : st.slot === 'save_05' ? 'slot 5 · live runtime · NULL world-time pathology' : 'slot 1 · golden master',
+      groups: [], onscreenChips: [], needPressureChips: [], railBands: [], overrideChips: [],
+      graphNodes: [], graphEdges: [], potentialActive: false, potentialEvent: '', potentialConsumers: [], graphLabelsEl: null,
+      healthBands: [], healthGaps: [], hasGaps: false, noGaps: false, healthDominant: [], healthNever: [], healthDeadArms: [], healthDq: [],
+      healthWarnCount: '—', streamSummary: '', worldTimeStr: '…', insp: null,
+      wfEntity: st.wfEntity, wfNeed: st.wfNeed, wfNeedVal: st.wfNeedVal, wfNeedValArr: [st.wfNeedVal],
+      wfPlace: st.wfPlace, wfEvent: st.wfEvent, wfEntityItems: [], wfTagItems: [], wfPlaceItems: [], wfPresets: [],
+      wfEntityName: st.wfEntity, wfNeedLabel: st.wfNeed, wfNeedMax: 340,
+      onWfEntity: (v) => this.setState({ wfEntity: v }),
+      onWfNeed: (v) => this.setState({ wfNeed: v }),
+      onWfNeedVal: (arr) => this.setState({ wfNeedVal: arr[0] }),
+      onWfPlace: (v) => this.setState({ wfPlace: v }),
+      onWfEvent: (v) => this.setState({ wfEvent: v }),
+      onApplyNeed: () => this._addOverride({ kind: 'need', entity: st.wfEntity, need: st.wfNeed, value: st.wfNeedVal, label: `${st.wfEntity}: ${st.wfNeed} = ${st.wfNeedVal}` }),
+      onApplyMove: () => this._addOverride({ kind: 'move', entity: st.wfEntity, place: st.wfPlace, label: `move ${st.wfEntity} → ${st.wfPlace}` }),
+      onApplyEvent: () => this._addOverride({ kind: 'event', type: st.wfEvent, target: st.wfEntity, ago: 1, label: `inject ${st.wfEvent} → ${st.wfEntity}` }),
+      wfApplyStyle: 'height:28px;border:1px solid hsl(var(--accent) / 0.6);border-radius:6px;background:hsl(var(--accent) / 0.12);color:hsl(var(--accent));font-size:9px;letter-spacing:0.14em;text-transform:uppercase;padding:0 12px;cursor:pointer',
+      familyItems: [],
+    };
+    if (!this.eng || !st.ready) return base;
+
+    // ---------- engine-backed vals ----------
+    const eng = this.eng;
+    const BAND_CHART = { crisis: 1, embodied: 2, routine: 3, affil: 4, project: 5 };
+    const bandColor = (b) => `hsl(var(--chart-${BAND_CHART[b]}))`;
+    const cur = this._resolve(st.overrides, st.anchor);
+    const baseCur = st.overrides.length ? this._resolve([], st.anchor) : cur;
+    const R = cur.r, S = cur.state;
+    const wt = eng.worldTimeFor(S);
+    base.worldTimeStr = `${wt.iso} · ${R.tod} · ${R.weather}`;
+
+    const slotFilter = (gid) => st.slot === 'save_05' ? ['victor', 'celia', 'talon'].includes(gid) : true;
+    const groups = R.groups.filter((g) => slotFilter(g.actor));
+    const baseGroups = Object.fromEntries(baseCur.r.groups.map((g) => [g.actor, g]));
+
+    // ---------- hover payloads ----------
+    const hoverIn = (id) => (e) => {
+      clearTimeout(this._ht);
+      const z = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--orr-z')) || 1;
+      const r = e.currentTarget.getBoundingClientRect();
+      const x = Math.min(r.left, (window.innerWidth || 1440) - 340 * z) / z;
+      const y = Math.min(r.bottom + 6, (window.innerHeight || 900) - 440 * z) / z;
+      this._ht = setTimeout(() => this.setState({ hoverEnt: id, hoverX: x, hoverY: y }), 180);
+    };
+    const hoverFor = (id) => {
+      const e = S.entities[id];
+      const pl = eng.PLACES[e.place];
+      const needRows = eng.NEEDS.map((nd) => {
+        const imm = eng.NEED_IMMUNITY[nd].find((t) => [...e.tags, ...e.ephemerals].includes(t));
+        const th = eng.NEED_THRESHOLDS[nd];
+        const v = e.needs[nd];
+        let sev = null; for (const nm of ['critical', 'severe', 'moderate', 'mild']) if (v >= th[nm]) { sev = nm; break; }
+        const color = imm ? 'hsl(var(--muted-foreground) / 0.4)' : sev === 'critical' || sev === 'severe' ? 'hsl(var(--destructive))' : sev === 'moderate' ? 'hsl(var(--chart-2))' : sev === 'mild' ? 'hsl(var(--chart-3))' : 'hsl(var(--muted-foreground) / 0.6)';
+        return { nd, val: imm ? 'immune' : String(v), note: imm ? `(${imm})` : sev || '', pct: imm ? '0%' : Math.min(100, Math.round((v / th.critical) * 100)) + '%', color };
+      });
+      const mkTag = (t, isEph) => {
+        const fams = eng.familiesOf(t);
+        const prov = eng.provenanceFor(id, t);
+        return { name: t, fam: fams.length ? '◈' : '', famTitle: fams.join(', ') || 'no family', dot: prov.dot === 'solid' ? '●' : prov.dot === 'ring' ? '◍' : '○', dotTitle: `${prov.src} · ${prov.note}`, isEph,
+          onEnter: () => this.setState({ hoverTag: t }), onLeave: () => this.setState({ hoverTag: null }) };
+      };
+      const rels = S.relationships.filter((r) => r.a === id || r.b === id).map((r) => {
+        const other = r.a === id ? r.b : r.a;
+        const types = r.a === id ? r.typesAB : r.typesBA;
+        const trust = r.a === id ? r.trustAB : r.trustBA;
+        return { other: S.entities[other].name, types: types.join(', '), trust: (trust >= 0 ? '+' : '') + trust };
+      });
+      const evs = S.events.filter((ev) => ev.actor === id || ev.target === id || (ev.pair && ev.pair.includes(id))).sort((a, b) => b.tick - a.tick).slice(0, 3)
+        .map((ev) => ({ t: 't' + String(ev.tick).padStart(4, '0'), type: ev.type }));
+      return {
+        name: e.name, portraitId: 'portrait-' + id, place: pl.name, classes: pl.classes.join(' · '),
+        fameRes: `fame ${e.fame} · resources ${e.resources}${e.onScreen ? ' · on-screen' : ''}`,
+        needs: needRows,
+        durable: e.tags.map((t) => mkTag(t, false)),
+        ephemeral: e.ephemerals.map((t) => mkTag(t, true)),
+        hasEphemeral: e.ephemerals.length > 0,
+        rels, hasRels: rels.length > 0, events: evs, hasEvents: evs.length > 0,
+      };
+    };
+
+    // ---------- selection helpers ----------
+    const isSel = (sel) => st.selected && st.selected.key === sel;
+    const famMembers = st.fFamily ? eng.FAMILIES[st.fFamily] : null;
+    const rowReadsFamily = (row) => {
+      if (!famMembers) return false;
+      let hit = false;
+      const walk = (n) => { if (!n || hit) return; if (n.kind === 'leaf') { if ((n.reads || []).some((t) => famMembers.includes(t))) hit = true; } else (n.children || []).forEach(walk); };
+      walk(row.gate);
+      return hit;
+    };
+    const rowConsumesEvent = (row, evType) => {
+      let hit = false;
+      const walk = (n) => { if (!n || hit) return; if (n.kind === 'leaf') { if ((n.p === 'evRecent' || n.p === 'cooldown') && row && JSON.stringify(n).includes(evType)) hit = true; } else (n.children || []).forEach(walk); };
+      walk(row.gate);
+      return hit;
+    };
+
+    // ---------- cards ----------
+    const magChip = (mag, color) => magStyle === 'dial'
+      ? { dial: true, deg: Math.round(mag * 360), color, text: mag.toFixed(2) }
+      : { dial: false, color, text: mag.toFixed(2) };
+
+    const mkCard = (g, row, kind, target, diffSig) => {
+      const key = [kind, g.actor, target || '', row.id].join(':');
+      const col = bandColor(row.band);
+      const dim = row.status === 'shadowed';
+      const famHit = famMembers ? rowReadsFamily(row) : false;
+      const evHit = st.fEvent !== 'none' ? rowConsumesEvent(row, st.fEvent) : false;
+      return {
+        key, kind, tplName: row.id, priority: 'pri ' + row.priority,
+        bandColor: col, dim,
+        tie: !!row.tie, tieTitle: row.tie ? `priority tied with ${row.tie.join(', ')} — authored tuple order decided` : '',
+        isPair: kind === 'pair', targetName: target ? S.entities[target].name : null,
+        targetHover: target ? hoverFor(target) : null,
+        branchLabel: row.resolution ? row.resolution.branchLabel : '',
+        event: row.resolution ? row.resolution.eventType : null,
+        mag: row.resolution ? magChip(row.resolution.magnitude, col) : null,
+        selected: isSel(key), diff: diffSig || false,
+        highlight: famHit || evHit,
+        dimByLens: (famMembers && !famHit) || (st.fEvent !== 'none' && !evHit),
+        pad, density,
+        onSelect: () => this.setState({ selected: { key, actor: g.actor, target: target || null, tpl: row.id, kind } }),
+      };
+    };
+
+    // ---------- groups ----------
+    base.groups = groups.map((g) => {
+      const e = S.entities[g.actor];
+      const bg = baseGroups[g.actor];
+      const open = st.groupOpen[g.actor] !== false;
+      const soloRows = g.solo.rows;
+      const winner = g.solo.winner;
+      const soloDiff = st.overrides.length > 0 && bg && this._sig(winner) !== this._sig(bg.solo.winner);
+
+      const cards = [];
+      if (winner && !st.fTwoParty) {
+        const c = mkCard(g, winner, 'solo', null, soloDiff);
+        const shadowed = soloRows.filter((r) => r.status === 'shadowed');
+        c.shadowCount = shadowed.length;
+        c.hasShadow = shadowed.length > 0;
+        c.shadowOpen = !!st.shadowOpen['solo:' + g.actor];
+        c.onToggleShadow = () => this.setState({ shadowOpen: { ...st.shadowOpen, ['solo:' + g.actor]: !st.shadowOpen['solo:' + g.actor] } });
+        c.shadowed = shadowed.map((r) => mkCard(g, r, 'solo', null, false));
+        cards.push(c);
+      }
+      for (const p of g.pairs) {
+        if (!p.winner) continue;
+        const bp = bg && bg.pairs.find((x) => x.target === p.target);
+        const pDiff = st.overrides.length > 0 && this._sig(p.winner) !== this._sig(bp && bp.winner);
+        const c = mkCard(g, p.winner, 'pair', p.target, pDiff);
+        const shadowed = p.rows.filter((r) => r.status === 'shadowed');
+        c.shadowCount = shadowed.length; c.hasShadow = shadowed.length > 0;
+        const sk = 'pair:' + g.actor + ':' + p.target;
+        c.shadowOpen = !!st.shadowOpen[sk];
+        c.onToggleShadow = () => this.setState({ shadowOpen: { ...st.shadowOpen, [sk]: !st.shadowOpen[sk] } });
+        c.shadowed = shadowed.map((r) => mkCard(g, r, 'pair', p.target, false));
+        cards.push(c);
+      }
+
+      // pressures
+      const pressures = g.pressures.map((p) => {
+        const key = ['pressure', g.actor, p.target, p.winner.id].join(':');
+        const bp = bg && bg.pressures.find((x) => x.target === p.target);
+        const pDiff = st.overrides.length > 0 && this._sig(p.winner) !== this._sig(bp && bp.winner);
+        return {
+          key, label: `${p.winner.id} → ${S.entities[p.target].name} · ${p.winner.resolution.magnitude.toFixed(2)}`,
+          title: p.winner.resolution.pressureStub,
+          style: `border:1px solid ${isSel(key) ? 'hsl(var(--accent))' : 'hsl(var(--accent) / 0.55)'};background:${isSel(key) ? 'hsl(var(--accent) / 0.16)' : pDiff ? 'hsl(var(--accent) / 0.1)' : 'transparent'};color:hsl(var(--accent));border-radius:99px;padding:3px 11px;font-size:10px;letter-spacing:0.05em;cursor:pointer`,
+          onSelect: () => this.setState({ selected: { key, actor: g.actor, target: p.target, tpl: p.winner.id, kind: 'pressure' } }),
+        };
+      });
+
+      // ghosts
+      const ghosts = [];
+      const ghostStyle = (na) => `display:flex;align-items:center;gap:8px;padding:2px 8px;border-radius:4px;cursor:pointer;color:hsl(var(--muted-foreground) / ${na ? '0.5' : '0.62'});${na ? 'border-left:2px dotted hsl(var(--muted-foreground) / 0.4);' : ''}`;
+      if (st.fFailed && !st.fTwoParty) {
+        for (const r of soloRows.filter((x) => x.status === 'gate_failed')) {
+          const key = ['solo', g.actor, '', r.id].join(':');
+          ghosts.push({ key, name: r.id, glyph: '✗', status: 'gate_failed',
+            reason: r.failLeaf ? (r.failLeaf.negated ? 'blocked: ' : 'failed: ') + r.failLeaf.prose : 'gate refused',
+            evidence: r.failLeaf ? r.failLeaf.evidence : '', style: ghostStyle(false), selected: isSel(key),
+            onSelect: () => this.setState({ selected: { key, actor: g.actor, target: null, tpl: r.id, kind: 'solo' } }) });
+        }
+        for (const p of g.pairs) {
+          for (const r of p.rows.filter((x) => x.status === 'gate_failed')) {
+            const key = ['pair', g.actor, p.target, r.id].join(':');
+            ghosts.push({ key, name: r.id + ' → ' + S.entities[p.target].name, glyph: '✗', status: 'gate_failed',
+              reason: r.failLeaf ? (r.failLeaf.negated ? 'blocked: ' : 'failed: ') + r.failLeaf.prose : 'gate refused',
+              evidence: r.failLeaf ? r.failLeaf.evidence : '', style: ghostStyle(false), selected: isSel(key),
+              onSelect: () => this.setState({ selected: { key, actor: g.actor, target: p.target, tpl: r.id, kind: 'pair' } }) });
+          }
+        }
+      }
+      if (st.fNA) {
+        for (const r of g.notApplicable) {
+          const key = ['na', g.actor, '', r.id].join(':');
+          ghosts.push({ key, name: r.id, glyph: '⊘', status: 'not_applicable',
+            reason: 'not applicable — no TARGET bound in this stack', evidence: 'slots: ACTOR, TARGET',
+            style: ghostStyle(true), selected: isSel(key),
+            onSelect: () => this.setState({ selected: { key, actor: g.actor, target: null, tpl: r.id, kind: 'na' } }) });
+        }
+      }
+
+      const bandDots = cards.filter((c) => !c.dim).map((c) => ({ color: c.bandColor, title: c.tplName }));
+      const groupDiff = soloDiff || cards.some((c) => c.diff) || pressures.some((p, i) => false);
+      return {
+        id: g.actor, domId: 'group-' + g.actor, name: e.name,
+        initials: e.name.split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase(),
+        ringColor: g.gap ? 'hsl(var(--destructive) / 0.7)' : winner ? bandColor(winner.band) : 'hsl(var(--border))',
+        placeName: eng.PLACES[e.place].name.split(' — ')[0],
+        hover: hoverFor(g.actor),
+        open, chev: open ? '▾' : '▸',
+        onHoverIn: hoverIn(g.actor),
+        onToggle: () => this.setState({ groupOpen: { ...st.groupOpen, [g.actor]: !open } }),
+        gap: g.gap, gapHint: st.fFailed ? '' : 'Toggle “show gate-failed” to see every refusal.',
+        diff: st.overrides.length > 0 && (soloDiff || cards.some((c) => c.diff)),
+        borderColor: g.gap ? 'hsl(var(--destructive) / 0.45)' : isSel(st.selected && st.selected.actor) === g.actor ? 'hsl(var(--primary) / 0.5)' : 'hsl(var(--border))',
+        cards: st.fTwoParty ? cards.filter((c) => c.isPair) : cards,
+        pressures, hasPressures: pressures.length > 0,
+        ghosts, hasGhosts: ghosts.length > 0,
+        bandDots,
+        activityLine: winner && winner.resolution ? winner.resolution.delta['character.current_activity'] || '' : g.gap ? '—' : '',
+      };
+    });
+
+    base.onscreenChips = Object.values(S.entities).filter((e) => e.onScreen).map((e) => ({ name: e.name, onHoverIn: hoverIn(e.id) }));
+    base.hoverPanelEnt = st.hoverEnt ? hoverFor(st.hoverEnt) : null;
+    base.needPressureChips = R.needPressures.map((np) => ({
+      label: `${np.id} → ${S.entities[np.target].name} · ${np.severity} · ${np.magnitude.toFixed(2)}`,
+      title: `pseudo-template · priority ${np.priority} · ${np.need} debt ${np.debt} (${np.severity}, L${np.level}) — outside the catalog; included explicitly`,
+    }));
+
+    // ---------- rail ----------
+    const winnersByBand = { crisis: 0, embodied: 0, routine: 0, affil: 0, project: 0 };
+    for (const g of groups) {
+      if (g.solo.winner) winnersByBand[g.solo.winner.band]++;
+      for (const p of g.pairs) if (p.winner) winnersByBand[p.winner.band]++;
+      for (const p of g.pressures) winnersByBand[p.winner.band]++;
+    }
+    for (const np of R.needPressures) winnersByBand.embodied++;
+    base.railBands = eng.BANDS.map((b) => ({
+      name: b.name, color: bandColor(b.id), glow: `hsl(var(--chart-${b.chart}) / 0.5)`,
+      count: winnersByBand[b.id],
+      badgeBorder: winnersByBand[b.id] ? bandColor(b.id) : 'hsl(var(--border))',
+      badgeText: winnersByBand[b.id] ? bandColor(b.id) : 'hsl(var(--muted-foreground))',
+    }));
+    base.familyItems = Object.keys(eng.FAMILIES).map((f) => ({
+      id: f, name: f, n: eng.FAMILIES[f].length,
+      onPick: () => this.setState({ fFamily: st.fFamily === f ? null : f, famOpen: false }),
+    })).concat([{ id: 'none', name: '— clear —', n: '', onPick: () => this.setState({ fFamily: null, famOpen: false }) }]);
+
+    const totalWinners = Object.values(winnersByBand).reduce((a, b) => a + b, 0);
+    base.streamSummary = `${groups.length} actors · ${totalWinners} winners · ${R.needPressures.length + groups.reduce((a, g) => a + g.pressures.length, 0)} pressures`;
+
+    // ---------- override chips ----------
+    base.overrideChips = st.overrides.map((ov, i) => ({
+      label: ov.label,
+      onRemove: () => { const overrides = st.overrides.filter((_, j) => j !== i); this.setState({ overrides, mode: overrides.length ? 'whatif' : st.mode }); this._flash(); },
+    }));
+
+    // ---------- inspector ----------
+    if (st.selected) {
+      const sel = st.selected;
+      const g = R.groups.find((x) => x.actor === sel.actor);
+      let row = null;
+      if (sel.kind === 'na') row = { id: sel.tpl, band: eng.TEMPLATE_BY_ID[sel.tpl].band, priority: eng.TEMPLATE_BY_ID[sel.tpl].priority, status: 'not_applicable' };
+      else if (sel.kind === 'solo') row = g && g.solo.rows.find((r) => r.id === sel.tpl);
+      else if (sel.kind === 'pair') { const p = g && g.pairs.find((x) => x.target === sel.target); row = p && p.rows.find((r) => r.id === sel.tpl); }
+      else if (sel.kind === 'pressure') { const p = g && g.pressures.find((x) => x.target === sel.target); row = p && p.rows.find((r) => r.id === sel.tpl); }
+      if (!row) { base.noSelection = true; base.hasSelection = false; }
+      else {
+        const tpl = eng.TEMPLATE_BY_ID[row.id];
+        const col = bandColor(row.band);
+        const statusMap = {
+          winner: ['winner', `border:1px solid ${col};color:${col}`],
+          shadowed: ['shadowed — fired, outranked', 'border:1px solid hsl(var(--muted-foreground) / 0.5);color:hsl(var(--muted-foreground))'],
+          gate_failed: ['gate-failed — evaluated, refused', 'border:1px solid hsl(var(--destructive) / 0.6);color:hsl(var(--destructive))'],
+          not_applicable: ['not applicable — no target bound', 'border:1px solid hsl(var(--muted-foreground) / 0.4);color:hsl(var(--muted-foreground) / 0.7)'],
+        };
+        const stat = statusMap[row.status] || statusMap.winner;
+        const isNA = row.status === 'not_applicable';
+
+        // flatten gate tree
+        const gateRows = [];
+        const hover = st.hoverTag;
+        const walk = (n, depth, onFail) => {
+          if (!n) return;
+          if (n.kind === 'leaf') {
+            const hl = hover && (n.reads || []).includes(hover);
+            const failHere = onFail && !n.pass;
+            gateRows.push({
+              style: `display:flex;align-items:baseline;gap:7px;padding:2px 4px 2px ${4 + depth * 15}px;border-radius:4px;${hl ? 'background:hsl(var(--accent) / 0.14);outline:1px dotted hsl(var(--accent) / 0.7);' : ''}`,
+              glyph: n.pass ? '✓' : '✗', glyphSize: '10px',
+              glyphColor: n.pass ? 'hsl(var(--chart-5))' : 'hsl(var(--destructive))',
+              prose: n.prose,
+              proseStyle: `flex:1;font-size:12px;${failHere ? 'font-weight:700;color:hsl(var(--foreground));' : n.pass ? 'color:hsl(var(--foreground) / 0.85);' : 'color:hsl(var(--muted-foreground));'}`,
+              evidence: n.evidence, evColor: failHere ? 'hsl(var(--destructive))' : 'hsl(var(--muted-foreground))',
+            });
+          } else {
+            gateRows.push({
+              style: `display:flex;align-items:baseline;gap:7px;padding:3px 4px 1px ${4 + depth * 15}px`,
+              glyph: n.pass ? '✓' : '✗', glyphSize: '9px',
+              glyphColor: n.pass ? 'hsl(var(--chart-5) / 0.7)' : 'hsl(var(--destructive) / 0.8)',
+              prose: n.op, proseStyle: `flex:1;font-size:9.5px;letter-spacing:0.2em;${!n.pass && onFail ? 'font-weight:700;color:hsl(var(--foreground) / 0.9);' : 'color:hsl(var(--muted-foreground) / 0.75);'}`,
+              evidence: '', evColor: 'transparent',
+            });
+            const kids = n.children || [];
+            for (const k of kids) {
+              const kidOnFail = onFail && !n.pass && (n.op === 'NOT' ? true : !k.pass || (n.op === 'OR'));
+              walk(k, depth + 1, n.op === 'NOT' ? onFail && !n.pass : kidOnFail);
+            }
+          }
+        };
+        if (row.gate) walk(row.gate, 0, !row.gatePassed);
+
+        const branches = (row.branches || []).map((b, i) => {
+          let noteGlyph = '', note = '', labelStyle = '', magColor = 'hsl(var(--muted-foreground))';
+          let style = 'padding:5px 8px;border-radius:5px;border-left:2px solid transparent';
+          if (b.selected) { style = `padding:5px 8px;border-radius:5px;border-left:2px solid ${col};background:hsl(var(--muted) / 0.22)`; labelStyle = 'font-weight:650'; magColor = col; noteGlyph = '◆'; note = 'selected — first passing branch in authored order'; }
+          else if (b.considered && b.passed === false) { noteGlyph = '✗'; note = b.failLeaf ? `${b.failLeaf.prose} — ${b.failLeaf.evidence}` : 'condition failed'; labelStyle = 'color:hsl(var(--muted-foreground))'; }
+          else if (!b.considered) { style += ';opacity:0.42'; note = row.gatePassed ? 'unevaluated — a branch above already fired' : 'unevaluated — gate refused'; noteGlyph = '·'; labelStyle = 'color:hsl(var(--muted-foreground))'; }
+          return { idx: 'B' + (i + 1), label: b.label, mag: b.mag.toFixed(2), style, labelStyle, magColor, note, noteGlyph };
+        });
+
+        const res = row.resolution;
+        base.insp = {
+          name: row.id, priority: row.priority, bandColor: col,
+          tie: !!row.tie, tieTitle: row.tie ? `priority ${row.priority} tied with ${row.tie.join(', ')} — BUILTIN_TEMPLATES tuple order decided` : '',
+          statusLabel: stat[0], statusStyle: `font-size:8.5px;letter-spacing:0.14em;text-transform:uppercase;border-radius:99px;padding:2px 9px;${stat[1]}`,
+          bindingLine: `ACTOR ${S.entities[sel.actor].name}${sel.target ? '  ·  TARGET ' + S.entities[sel.target].name : ''}${sel.kind === 'pressure' ? '  ·  present-target pass' : ''}`,
+          blurb: tpl.blurb, bandNote: tpl.bandNote || false,
+          isNA, hasTrace: !isNA,
+          gateRows, branches,
+          gateBadge: row.gatePassed ? 'pass' : 'refused',
+          gateBadgeStyle: `font-size:8.5px;letter-spacing:0.16em;text-transform:uppercase;border-radius:99px;padding:1px 8px;border:1px solid ${row.gatePassed ? 'hsl(var(--chart-5) / 0.6)' : 'hsl(var(--destructive) / 0.6)'};color:${row.gatePassed ? 'hsl(var(--chart-5))' : 'hsl(var(--destructive))'}`,
+          fired: !!res, mag: res ? res.magnitude.toFixed(2) : '—',
+          event: res ? res.eventType : null,
+          isPressure: sel.kind === 'pressure' && res && res.pressureStub,
+          pressureStub: res ? res.pressureStub : '',
+          deltaRows: res ? Object.entries(res.delta).map(([k, v]) => ({ k, v: Array.isArray(v) ? v.join(', ') : v })) : [],
+          bindingHash: res ? res.bindingHash : '',
+        };
+      }
+    }
+
+    // ---------- graph ----------
+    const offIds = groups.map((g) => g.actor);
+    const onIds = Object.values(S.entities).filter((e) => e.onScreen).map((e) => e.id);
+    const pos = {};
+    offIds.forEach((id, i) => {
+      const t = i / Math.max(1, offIds.length - 1);
+      pos[id] = { x: 180 + Math.sin(t * Math.PI) * 130, y: 70 + t * 360 };
+    });
+    onIds.forEach((id, i) => { pos[id] = { x: 760, y: 120 + i * 110 }; });
+    const winnerBandOf = (gid) => { const g = groups.find((x) => x.actor === gid); return g && g.solo.winner ? g.solo.winner.band : null; };
+    const jumpToStream = (actor) => {
+      this.setState({ centerTab: 'stream', groupOpen: { ...st.groupOpen, [actor]: true } });
+      setTimeout(() => {
+        const elC = document.getElementById('orr-stream');
+        const elG = document.getElementById('group-' + actor);
+        if (elC && elG) elC.scrollTop = elG.offsetTop - elC.offsetTop - 8;
+      }, 60);
+    };
+    base.graphNodes = [...offIds, ...onIds].map((id) => {
+      const e = S.entities[id]; const p = pos[id];
+      const g = groups.find((x) => x.actor === id);
+      const band = winnerBandOf(id);
+      const w = g && g.solo.winner;
+      return { x: p.x, y: p.y, ty: p.y + 3.5, ly: p.y + 34, sy: p.y + 46,
+        initials: e.name.split(/\s+/).map((x) => x[0]).join('').slice(0, 2).toUpperCase(),
+        name: e.name, gap: !!(g && g.gap),
+        stroke: g && g.gap ? 'hsl(var(--destructive))' : band ? bandColor(band) : e.onScreen ? 'hsl(var(--primary) / 0.7)' : 'hsl(var(--border))',
+        strokeW: st.selected && st.selected.actor === id ? 2.8 : 1.6,
+        dash: g && g.gap ? '3 3' : '1 0',
+        labelColor: 'hsl(var(--foreground) / 0.9)',
+        sub: g ? (g.gap ? 'coverage gap' : w ? w.id.toLowerCase() : 'pairs only') : eng.PLACES[e.place].name.split(' — ')[0].toLowerCase(),
+        subColor: g && g.gap ? 'hsl(var(--destructive))' : w ? bandColor(w.band) : 'hsl(var(--muted-foreground))',
+        onEnter: hoverIn(id),
+        onClick: g ? (w ? () => this.setState({ selected: { key: ['solo', id, '', w.id].join(':'), actor: id, target: null, tpl: w.id, kind: 'solo' } }) : () => jumpToStream(id)) : () => {} };
+    });
+    const recip = eng.reciprocalPairs(R);
+    const isRecip = (a, b) => recip.some((r) => (r.a === a && r.b === b) || (r.a === b && r.b === a));
+    const edges = [];
+    const mkPath = (a, b, bend, shrink = 22) => {
+      const pa = pos[a], pb = pos[b];
+      const dx = pb.x - pa.x, dy = pb.y - pa.y, len = Math.hypot(dx, dy);
+      const ux = dx / len, uy = dy / len;
+      const sx = pa.x + ux * shrink, sy = pa.y + uy * shrink;
+      const ex = pb.x - ux * shrink, ey = pb.y - uy * shrink;
+      const mx = (sx + ex) / 2 - uy * bend, my = (sy + ey) / 2 + ux * bend;
+      return { d: `M ${sx.toFixed(1)} ${sy.toFixed(1)} Q ${mx.toFixed(1)} ${my.toFixed(1)} ${ex.toFixed(1)} ${ey.toFixed(1)}`, lx: mx, ly: my - 6, jx: mx - 4.5, jy: my - 4.5 };
+    };
+    const markerFor = (band) => band === 'crisis' ? 'url(#arr1)' : band === 'affil' ? 'url(#arr4)' : 'url(#arr5)';
+    for (const g of groups) {
+      for (const p of g.pairs) {
+        if (!p.winner || !pos[p.target]) continue;
+        const joint = isRecip(g.actor, p.target);
+        const key = ['pair', g.actor, p.target, p.winner.id].join(':');
+        const path = mkPath(g.actor, p.target, joint ? 16 : 12);
+        edges.push({ ...path, key, selected: isSel(key), color: bandColor(p.winner.band), w: 1.6, dash: '1 0', op: 0.95,
+          marker: markerFor(p.winner.band), label: p.winner.id.toLowerCase(),
+          title: `${p.winner.id} · ${S.entities[g.actor].name} → ${S.entities[p.target].name} · “${p.winner.resolution.branchLabel}” · mag ${p.winner.resolution.magnitude.toFixed(2)}`,
+          onSelect: () => this.setState({ selected: { key, actor: g.actor, target: p.target, tpl: p.winner.id, kind: 'pair' } }),
+          onEnter: () => this.setState({ hoverEdge: key }), onLeave: () => this.setState({ hoverEdge: null }),
+          joint: joint && g.actor < p.target, jrot: `rotate(45 ${path.jx + 4.5} ${path.jy + 4.5})`, jly: path.ly + 26 });
+      }
+      for (const p of g.pressures) {
+        if (!pos[p.target]) continue;
+        const key = ['pressure', g.actor, p.target, p.winner.id].join(':');
+        const path = mkPath(g.actor, p.target, 24);
+        edges.push({ ...path, key, selected: isSel(key), color: 'hsl(var(--accent))', w: 1.3, dash: '5 4', op: 0.8,
+          marker: 'url(#arrA)', label: p.winner.id.toLowerCase() + ' ⇢',
+          title: `${p.winner.id} pressure · ${S.entities[g.actor].name} ⇢ ${S.entities[p.target].name} · prompt-only, no state mutation · mag ${p.winner.resolution.magnitude.toFixed(2)}`,
+          onSelect: () => this.setState({ selected: { key, actor: g.actor, target: p.target, tpl: p.winner.id, kind: 'pressure' } }),
+          onEnter: () => this.setState({ hoverEdge: key }), onLeave: () => this.setState({ hoverEdge: null }),
+          joint: false, jrot: '', jly: 0 });
+      }
+    }
+    const selEdgeActive = edges.some((e) => e.selected);
+    base.graphEdges = edges.map((e) => ({ ...e,
+      w: e.selected ? 3 : st.hoverEdge === e.key ? 2.5 : e.w,
+      op: e.selected ? 1 : selEdgeActive ? 0.3 : st.hoverEdge && st.hoverEdge !== e.key ? 0.5 : e.op }));
+    if (st.fEvent !== 'none') {
+      base.potentialActive = true;
+      base.potentialEvent = st.fEvent;
+      const arm = eng.DEAD_GATE_ARMS.find((d) => d.event === st.fEvent);
+      base.potentialConsumers = (arm ? arm.consumers : []).map((c, i) => ({
+        name: c, x: 250 + i * 160, y: 508,
+        d: `M 74 456 Q ${150 + i * 140} 495 ${245 + i * 160} 503`,
+      }));
+    }
+    // SVG text via createElement — template text holes don't render inside <svg>
+    {
+      const RE = React.createElement;
+      const t = [];
+      for (const e of base.graphEdges) {
+        t.push(RE('text', { key: 'el:' + e.key, x: e.lx, y: e.ly, textAnchor: 'middle', className: 'font-mono', style: { fontSize: '8.5px', letterSpacing: '0.08em' }, fill: e.color, opacity: e.op }, e.label));
+        t.push(RE('title', { key: 'tt:' + e.key }, e.title));
+      }
+      base.graphNodes.forEach((n, i) => {
+        t.push(RE('text', { key: 'ni' + i, x: n.x, y: n.ty, textAnchor: 'middle', className: 'font-mono', style: { fontSize: '10.5px' }, fill: 'hsl(var(--foreground))' }, n.initials));
+        t.push(RE('text', { key: 'nn' + i, x: n.x, y: n.ly, textAnchor: 'middle', style: { fontSize: '11px', fontWeight: 600 }, fill: n.labelColor }, n.name));
+        t.push(RE('text', { key: 'ns' + i, x: n.x, y: n.sy, textAnchor: 'middle', className: 'font-mono', style: { fontSize: '7.5px', letterSpacing: '0.12em', textTransform: 'uppercase' }, fill: n.subColor }, n.sub));
+      });
+      if (base.potentialActive) {
+        t.push(RE('text', { key: 'pe', x: 80, y: 461, className: 'font-mono', style: { fontSize: '9.5px', letterSpacing: '0.1em' }, fill: 'hsl(var(--foreground))' }, base.potentialEvent));
+        base.potentialConsumers.forEach((pc, i) => t.push(RE('text', { key: 'pc' + i, x: pc.x, y: pc.y, className: 'font-mono', style: { fontSize: '8.5px', letterSpacing: '0.08em' }, fill: 'hsl(var(--muted-foreground))' }, pc.name)));
+      }
+      base.graphLabelsEl = RE('g', { pointerEvents: 'none' }, t);
+    }
+
+    // ---------- health ----------
+    base.healthBands = eng.BANDS.map((b) => ({
+      name: b.name.replace(' / Constraint', '').replace(' Maintenance', '').replace('Anchored ', '').replace(' / Identity', ''),
+      color: bandColor(b.id), count: winnersByBand[b.id],
+      pct: totalWinners ? Math.round((winnersByBand[b.id] / totalWinners) * 100) + '%' : '0%',
+    }));
+    const gaps = groups.filter((g) => g.gap);
+    base.hasGaps = gaps.length > 0; base.noGaps = gaps.length === 0;
+    base.healthGaps = gaps.map((g) => ({
+      name: S.entities[g.actor].name,
+      why: 'every gate refused',
+      onJump: () => {
+        this.setState({ centerTab: 'stream', groupOpen: { ...st.groupOpen, [g.actor]: true } });
+        setTimeout(() => {
+          const elC = document.getElementById('orr-stream');
+          const elG = document.getElementById('group-' + g.actor);
+          if (elC && elG) elC.scrollTop = elG.offsetTop - elC.offsetTop - 8;
+        }, 60);
+      },
+    }));
+    base.healthDominant = eng.WINDOW_STATS.dominant.map((d) => ({ id: d.id, share: Math.round(d.share * 100) + '%', pct: Math.round(d.share * 100) + '%' }));
+    base.healthNever = eng.WINDOW_STATS.neverWin.map((id) => ({ id }));
+    base.healthDeadArms = eng.DEAD_GATE_ARMS.map((d) => ({ event: d.event, consumers: d.consumers.join(', ') }));
+    const dqBase = eng.WINDOW_STATS.dataQuality.filter((d) => st.slot === 'save_05' ? true : d.kind !== 'null_world_time');
+    base.healthDq = dqBase.map((d) => ({ text: d.text, color: d.sev === 'error' ? 'hsl(var(--destructive))' : d.sev === 'warn' ? 'hsl(var(--chart-2))' : 'hsl(var(--muted-foreground))' }));
+    base.healthWarnCount = String(dqBase.length + eng.DEAD_GATE_ARMS.length + gaps.length);
+
+    // ---------- what-if drawer data ----------
+    base.wfEntityItems = Object.values(S.entities).map((e) => ({ id: e.id, name: e.name + (e.onScreen ? ' (on-screen)' : '') }));
+    base.wfEntityName = S.entities[st.wfEntity] ? S.entities[st.wfEntity].name : st.wfEntity;
+    base.wfNeedLabel = st.wfNeed + ' · ' + (S.entities[st.wfEntity] ? S.entities[st.wfEntity].needs[st.wfNeed] : '—') + ' now';
+    base.wfNeedMax = st.wfNeed === 'intimacy' ? 340 : st.wfNeed === 'socialize' ? 340 : 80;
+    const ent = S.entities[st.wfEntity];
+    const vocab = [
+      ...new Set([
+        'off_grid', 'seeking_identity', 'ghostprint_active', 'public_role', 'undercover', 'fugitive', 'paranoid', 'informant_handler', 'signal_operator', 'broker', 'hacker', 'combat_trained', 'medical_skill', 'first_aid_trained', 'magical_healing', 'devout', 'work_obligation', 'safehouse_operator', 'route_familiar', 'vendetta_holder', 'violent_history', 'travel_ready',
+      ]),
+    ].map((t) => ({ t, eph: false })).concat([
+      'grudge_active', 'grieving', 'wounded', 'cns_stimulated', 'debt_pulse_active', 'captive', 'unconscious', 'dying',
+    ].map((t) => ({ t, eph: true })));
+    base.wfTagItems = [
+      { value: 'pair:hunting', label: 'hunting — Victor Sato → Talon (pair)', kind: 'pair',
+        stateGlyph: S.pairTags.some((p) => p.tag === 'hunting' && p.to === 'talon') ? '●' : '○',
+        stateColor: 'hsl(var(--destructive))',
+        onPick: () => this._addOverride({ kind: 'pairTag', from: 'victor', to: 'talon', tag: 'hunting', on: !S.pairTags.some((p) => p.tag === 'hunting' && p.to === 'talon'), label: (S.pairTags.some((p) => p.tag === 'hunting' && p.to === 'talon') ? 'clear' : 'set') + ' hunting → Talon' }) },
+      ...vocab.map(({ t, eph }) => {
+        const on = ent ? (eph ? ent.ephemerals.includes(t) : ent.tags.includes(t)) : false;
+        return { value: t, label: t, kind: eph ? 'ephemeral' : 'durable',
+          stateGlyph: on ? '●' : '○', stateColor: on ? 'hsl(var(--chart-5))' : 'hsl(var(--muted-foreground) / 0.5)',
+          onPick: () => this._addOverride({ kind: 'tag', entity: st.wfEntity, tag: t, eph, on: !on, label: `${on ? '−' : '+'} ${t} @ ${st.wfEntity}` }) };
+      }),
+    ];
+    base.wfPlaceItems = Object.values(eng.PLACES).map((p) => ({ id: p.id, name: p.name }));
+    base.wfPresets = [
+      { label: '“What if Talon weren’t hunted?” — clear the hunting pair tag', onRun: () => this._addOverride({ kind: 'pairTag', from: 'victor', to: 'talon', tag: 'hunting', on: false, label: 'clear hunting → Talon' }) },
+      { label: '“What wakes HONOR_DEBT?” — inject encoded_message at Asmodeus', onRun: () => this._addOverride({ kind: 'event', type: 'encoded_message', target: 'asmodeus', ago: 1, label: 'inject encoded_message → Asmodeus' }) },
+      { label: '“Does Lansky ever socialize?” — push his socialize debt to 30', onRun: () => this._addOverride({ kind: 'need', entity: 'lansky', need: 'socialize', value: 30, label: 'lansky: socialize = 30' }) },
+    ];
+
+    return base;
+  }
+}
+</script>
+</body>
+</html>

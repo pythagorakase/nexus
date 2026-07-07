@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="_ds/nexus-iris-9c704bc6-6c31-4387-82bf-2473a97893c8/fonts/fonts.css">
+  <link rel="stylesheet" href="_ds/nexus-iris-9c704bc6-6c31-4387-82bf-2473a97893c8/_ds_bundle.css">
+  <link rel="stylesheet" href="_ds/nexus-iris-9c704bc6-6c31-4387-82bf-2473a97893c8/styles.css">
+  <script src="_ds/nexus-iris-9c704bc6-6c31-4387-82bf-2473a97893c8/_ds_bundle.js"></script>
+</helmet>
+<div style="display:flex;flex-direction:column;gap:9px;width:290px;font-family:var(--font-sans)">
+  <div style="display:flex;gap:10px;align-items:center">
+    <x-import component-from-global-scope="image-slot" from="./image-slot.js" id="{{ ent.portraitId }}" shape="circle" placeholder="+" style="width:46px;height:46px;flex:none;font-size:8px" hint-size="46px,46px"></x-import>
+    <div style="display:flex;flex-direction:column;gap:1px;min-width:0">
+      <span style="font-size:14.5px;font-weight:650;color:hsl(var(--foreground))">{{ ent.name }}</span>
+      <span style="font-size:11px;color:hsl(var(--muted-foreground))">{{ ent.place }}</span>
+      <span class="font-mono" style="font-size:8.5px;letter-spacing:0.1em;color:hsl(var(--muted-foreground) / 0.8)">{{ ent.classes }}</span>
+      <span class="font-mono" style="font-size:8.5px;letter-spacing:0.06em;color:hsl(var(--chart-5) / 0.9)">{{ ent.fameRes }}</span>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:3px">
+    <sc-for list="{{ ent.needs }}" as="nr" hint-placeholder-count="5">
+      <div style="display:flex;align-items:center;gap:7px">
+        <span class="font-mono" style="font-size:8.5px;letter-spacing:0.08em;width:56px;flex:none;color:hsl(var(--muted-foreground))">{{ nr.nd }}</span>
+        <div style="flex:1;height:3px;border-radius:2px;background:hsl(var(--muted) / 0.3);overflow:hidden"><div style="width:{{ nr.pct }};height:100%;background:{{ nr.color }}"></div></div>
+        <span class="font-mono" style="font-size:9px;width:52px;text-align:right;color:{{ nr.color }}">{{ nr.val }}</span>
+        <span class="font-mono" style="font-size:7.5px;width:52px;color:hsl(var(--muted-foreground) / 0.7)">{{ nr.note }}</span>
+      </div>
+    </sc-for>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:4px">
+    <span class="font-mono" style="font-size:8px;letter-spacing:0.2em;text-transform:uppercase;color:hsl(var(--muted-foreground))">Durable</span>
+    <div style="display:flex;flex-wrap:wrap;gap:4px">
+      <sc-for list="{{ ent.durable }}" as="tg" hint-placeholder-count="3">
+        <span onMouseEnter="{{ tg.onEnter }}" onMouseLeave="{{ tg.onLeave }}" title="{{ tg.famTitle }} · {{ tg.dotTitle }}" class="font-mono" style="display:inline-flex;align-items:center;gap:4px;font-size:9px;letter-spacing:0.04em;border:1px solid hsl(var(--border));border-radius:99px;padding:1px 7px;color:hsl(var(--foreground) / 0.85);cursor:default" style-hover="border-color:hsl(var(--accent))">
+          <span style="color:hsl(var(--chart-5));font-size:8px">{{ tg.fam }}</span>{{ tg.name }}<span style="color:hsl(var(--muted-foreground));font-size:8px">{{ tg.dot }}</span>
+        </span>
+      </sc-for>
+    </div>
+    <sc-if value="{{ ent.hasEphemeral }}" hint-placeholder-val="{{ true }}">
+      <span class="font-mono" style="font-size:8px;letter-spacing:0.2em;text-transform:uppercase;color:hsl(var(--muted-foreground));margin-top:2px">Ephemeral</span>
+      <div style="display:flex;flex-wrap:wrap;gap:4px">
+        <sc-for list="{{ ent.ephemeral }}" as="tg" hint-placeholder-count="3">
+          <span onMouseEnter="{{ tg.onEnter }}" onMouseLeave="{{ tg.onLeave }}" title="{{ tg.famTitle }} · {{ tg.dotTitle }}" class="font-mono" style="display:inline-flex;align-items:center;gap:4px;font-size:9px;letter-spacing:0.04em;border:1px dashed hsl(var(--chart-2) / 0.6);border-radius:99px;padding:1px 7px;color:hsl(var(--chart-2));cursor:default" style-hover="border-color:hsl(var(--accent))">
+            <span style="color:hsl(var(--chart-5));font-size:8px">{{ tg.fam }}</span>{{ tg.name }}<span style="opacity:0.7;font-size:8px">{{ tg.dot }}</span>
+          </span>
+        </sc-for>
+      </div>
+    </sc-if>
+  </div>
+  <sc-if value="{{ ent.hasRels }}" hint-placeholder-val="{{ true }}">
+    <div style="display:flex;flex-direction:column;gap:3px">
+      <div style="display:flex;align-items:baseline;gap:6px">
+        <span class="font-mono" style="font-size:8px;letter-spacing:0.2em;text-transform:uppercase;color:hsl(var(--muted-foreground))">Relationships</span>
+        <span class="font-mono" style="font-size:7.5px;letter-spacing:0.1em;color:hsl(var(--muted-foreground) / 0.55);font-style:italic">unversioned</span>
+      </div>
+      <sc-for list="{{ ent.rels }}" as="rl" hint-placeholder-count="2">
+        <div style="display:flex;align-items:baseline;gap:7px;font-size:11px">
+          <span class="font-mono" style="font-size:8.5px;color:hsl(var(--chart-4));flex:none;min-width:70px">{{ rl.types }}</span>
+          <span style="flex:1">{{ rl.other }}</span>
+          <span class="font-mono" style="font-size:9.5px;color:hsl(var(--muted-foreground))">trust {{ rl.trust }}</span>
+        </div>
+      </sc-for>
+    </div>
+  </sc-if>
+  <sc-if value="{{ ent.hasEvents }}" hint-placeholder-val="{{ true }}">
+    <div style="display:flex;flex-direction:column;gap:3px;border-top:1px solid hsl(var(--border));padding-top:6px">
+      <span class="font-mono" style="font-size:8px;letter-spacing:0.2em;text-transform:uppercase;color:hsl(var(--muted-foreground))">Recent events</span>
+      <sc-for list="{{ ent.events }}" as="ev" hint-placeholder-count="3">
+        <div style="display:flex;gap:9px;align-items:baseline">
+          <span class="font-mono" style="font-size:9px;color:hsl(var(--muted-foreground))">{{ ev.t }}</span>
+          <span class="font-mono" style="font-size:9.5px;letter-spacing:0.04em;color:hsl(var(--foreground) / 0.85)">{{ ev.type }}</span>
+        </div>
+      </sc-for>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 320, &quot;height&quot;: 380}, &quot;ent&quot;: {&quot;editor&quot;: null, &quot;tsType&quot;: &quot;EntityAuditVM&quot;}}"></script>
+</body>
+</html>

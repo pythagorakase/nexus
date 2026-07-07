@@ -19,6 +19,12 @@ const DevMarkdownPreview = import.meta.env.DEV
   ? lazy(() => import("@/pages/DevMarkdownPreview"))
   : null;
 
+// Dev-only Orrery audit dashboard: lazy + DEV-guarded so the module never
+// reaches the production bundle.
+const DevOrreryPage = import.meta.env.DEV
+  ? lazy(() => import("@/pages/dev-orrery"))
+  : null;
+
 function Router() {
   return (
     <Switch>
@@ -29,6 +35,13 @@ function Router() {
         <Route path="/dev/markdown">
           <Suspense fallback={null}>
             <DevMarkdownPreview />
+          </Suspense>
+        </Route>
+      )}
+      {DevOrreryPage && (
+        <Route path="/dev/orrery">
+          <Suspense fallback={null}>
+            <DevOrreryPage />
           </Suspense>
         </Route>
       )}

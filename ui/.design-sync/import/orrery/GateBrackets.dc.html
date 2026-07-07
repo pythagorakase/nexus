@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="_ds/nexus-iris-9c704bc6-6c31-4387-82bf-2473a97893c8/fonts/fonts.css">
+  <link rel="stylesheet" href="_ds/nexus-iris-9c704bc6-6c31-4387-82bf-2473a97893c8/_ds_bundle.css">
+  <link rel="stylesheet" href="_ds/nexus-iris-9c704bc6-6c31-4387-82bf-2473a97893c8/styles.css">
+  <script src="_ds/nexus-iris-9c704bc6-6c31-4387-82bf-2473a97893c8/_ds_bundle.js"></script>
+</helmet>
+<div style="display:flex;flex-direction:column">
+  <sc-for list="{{ rows }}" as="r" hint-placeholder-count="10">
+    <div style="display:flex;align-items:stretch;min-height:{{ r.minH }}px">
+      <sc-for list="{{ r.rails }}" as="rl" hint-placeholder-count="2">
+        <span style="width:16px;flex:none;position:relative;display:flex;justify-content:center">
+          <span style="width:2px;background:{{ rl.color }};position:absolute;top:{{ rl.top }};bottom:{{ rl.bottom }}"></span>
+          <sc-if value="{{ rl.barred }}" hint-placeholder-val="{{ false }}">
+            <span style="position:absolute;top:45%;width:10px;height:2px;background:{{ rl.color }};transform:rotate(-30deg)"></span>
+          </sc-if>
+        </span>
+      </sc-for>
+      <sc-if value="{{ r.isOp }}" hint-placeholder-val="{{ false }}">
+        <span class="font-mono" style="{{ r.opStyle }}">{{ r.op }}</span>
+      </sc-if>
+      <sc-if value="{{ r.isLeaf }}" hint-placeholder-val="{{ true }}">
+        <span style="display:flex;align-items:baseline;gap:7px;padding:2.5px 4px;flex:1;min-width:0">
+          <span style="width:13px;flex:none;text-align:center;font-size:10px;color:{{ r.glyphColor }}">{{ r.glyph }}</span>
+          <span style="{{ r.proseStyle }}">{{ r.prose }}</span>
+          <span class="font-mono" style="font-size:9px;color:{{ r.evColor }};flex:none">{{ r.evidence }}</span>
+        </span>
+      </sc-if>
+    </div>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 540, &quot;height&quot;: 320}, &quot;node&quot;: {&quot;editor&quot;: null, &quot;tsType&quot;: &quot;EvaluatedGateNode&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const node = this.props.node;
+    const rows = [];
+    if (!node) return { rows };
+    const railColor = (n) => (n.pass ? 'hsl(var(--chart-5) / 0.75)' : 'hsl(var(--destructive) / 0.85)');
+    const walk = (n, rails) => {
+      if (!n) return;
+      if (n.kind === 'leaf') {
+        rows.push({
+          minH: 20, rails: rails.map((r, i) => ({ ...r, top: '0', bottom: '0' })),
+          isOp: false, isLeaf: true,
+          glyph: n.pass ? '✓' : '✗',
+          glyphColor: n.pass ? 'hsl(var(--chart-5))' : 'hsl(var(--destructive))',
+          prose: n.prose,
+          proseStyle: `flex:1;font-size:11.5px;min-width:0;${n.pass ? 'color:hsl(var(--foreground) / 0.85);' : 'color:hsl(var(--foreground));font-weight:650;'}`,
+          evidence: n.evidence,
+          evColor: n.pass ? 'hsl(var(--muted-foreground))' : 'hsl(var(--destructive))',
+        });
+        return;
+      }
+      const color = railColor(n);
+      const barred = n.op === 'NOT';
+      rows.push({
+        minH: 18, rails: rails.map((r) => ({ ...r, top: '0', bottom: '0' })),
+        isOp: true, isLeaf: false,
+        op: n.op + (barred ? ' ⊘' : ''),
+        opStyle: `font-size:8.5px;letter-spacing:0.2em;padding:3px 4px 1px;color:${color};text-transform:uppercase`,
+      });
+      const childRails = [...rails, { color, barred, top: '0', bottom: '0' }];
+      for (const k of n.children || []) walk(k, childRails);
+    };
+    walk(node, []);
+    // trim rail ends: first/last row of each depth — cosmetic; keep simple full bars
+    return { rows };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link rel="stylesheet" href="_ds/nexus-iris-9c704bc6-6c31-4387-82bf-2473a97893c8/fonts/fonts.css">
+  <link rel="stylesheet" href="_ds/nexus-iris-9c704bc6-6c31-4387-82bf-2473a97893c8/_ds_bundle.css">
+  <link rel="stylesheet" href="_ds/nexus-iris-9c704bc6-6c31-4387-82bf-2473a97893c8/styles.css">
+  <script src="_ds/nexus-iris-9c704bc6-6c31-4387-82bf-2473a97893c8/_ds_bundle.js"></script>
+  <style>
+    html, body { margin: 0; padding: 0; background: hsl(220 40% 6%); }
+    ::selection { background: hsl(320 55% 48% / 0.35); }
+  </style>
+</helmet>
+<x-import component-from-global-scope="NexusIris.DesignThemeRoot" hint-size="100%,100%">
+<section style="margin:-1.5rem;padding:40px clamp(20px, 3vw, 44px) 80px;display:flex;flex-direction:column;gap:26px;min-width:0" class="bg-background text-foreground font-sans">
+
+  <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap">
+    <span class="font-mono" style="font-size:10px;letter-spacing:0.24em;text-transform:uppercase;color:hsl(var(--primary));border:1px solid hsl(var(--primary) / 0.5);border-radius:99px;padding:3px 12px">Turn 1</span>
+    <span class="font-display" style="font-size:26px;letter-spacing:0.04em">Anatomy explorations</span>
+    <span style="font-size:12.5px;color:hsl(var(--muted-foreground));font-style:italic">all data live from the seeded chunk-0108 resolver — same engine as the dashboard</span>
+  </div>
+
+  <!-- ══════ ROW 1 · RESOLUTION CARD ══════ -->
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <div style="display:flex;align-items:baseline;gap:10px;border-bottom:1px solid hsl(var(--border));padding-bottom:6px">
+      <span class="font-mono" style="font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:hsl(var(--foreground))">Resolution card</span>
+      <span style="font-size:12px;color:hsl(var(--muted-foreground))">one fired package · Victor Sato → Celia · CULTIVATE_INFORMANT</span>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(470px, 1fr));gap:22px;align-items:start">
+
+      <div id="1a" data-screen-label="1a — Dossier card" style="min-width:0;position:relative;display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <a href="#1a" style="text-decoration:none"><span class="font-mono" style="font-size:10px;letter-spacing:0.1em;background:hsl(var(--primary) / 0.15);color:hsl(var(--primary));border:1px solid hsl(var(--primary) / 0.5);border-radius:5px;padding:2px 8px">1a</span></a>
+          <span style="font-size:12.5px;font-weight:600">Dossier card</span>
+          <span class="font-mono" style="font-size:9px;color:hsl(var(--muted-foreground));letter-spacing:0.1em">— as built</span>
+        </div>
+        <dc-import name="ResolutionCard" card="{{ cardA }}" hint-size="560px,150px"></dc-import>
+        <sc-if value="{{ annotations }}" hint-placeholder-val="{{ true }}">
+          <span style="font-size:11.5px;color:hsl(var(--muted-foreground));font-style:italic;line-height:1.5">Band spine + conic magnitude dial. The authored branch label carries the row's meaning; full deltas stay in the inspector. The shape used in the faithful build.</span>
+        </sc-if>
+      </div>
+
+      <div id="1b" data-screen-label="1b — Ledger row" style="min-width:0;position:relative;display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <a href="#1b" style="text-decoration:none"><span class="font-mono" style="font-size:10px;letter-spacing:0.1em;background:hsl(var(--primary) / 0.15);color:hsl(var(--primary));border:1px solid hsl(var(--primary) / 0.5);border-radius:5px;padding:2px 8px">1b</span></a>
+          <span style="font-size:12.5px;font-weight:600">Ledger row</span>
+        </div>
+        <div style="border:1px solid hsl(var(--card-border));border-radius:6px;background:hsl(var(--card));overflow:hidden">
+          <div style="display:flex;align-items:center;gap:10px;padding:8px 12px">
+            <span style="width:3px;align-self:stretch;background:{{ lg.bandColor }};border-radius:2px;flex:none"></span>
+            <span class="font-mono" style="font-size:10.5px;letter-spacing:0.1em;flex:none">{{ lg.tpl }}</span>
+            <span style="font-size:11px;color:hsl(var(--muted-foreground));flex:none">→ {{ lg.target }}</span>
+            <span class="font-mono" style="font-size:8.5px;color:hsl(var(--muted-foreground));flex:none">pri {{ lg.pri }}</span>
+            <span style="flex:1;font-size:11px;color:hsl(var(--foreground) / 0.8);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ lg.branch }}</span>
+            <div style="width:64px;height:5px;border-radius:3px;background:hsl(var(--muted) / 0.3);overflow:hidden;flex:none"><div style="width:{{ lg.magPct }};height:100%;background:{{ lg.bandColor }}"></div></div>
+            <span class="font-mono" style="font-size:10px;color:{{ lg.bandColor }};flex:none;width:30px;text-align:right">{{ lg.mag }}</span>
+          </div>
+          <div style="display:flex;gap:6px;padding:0 12px 9px 25px;flex-wrap:wrap;align-items:center">
+            <span class="font-mono" style="font-size:8.5px;letter-spacing:0.06em;border:1px solid {{ lg.bandColor }};color:{{ lg.bandColor }};border-radius:99px;padding:1px 7px">{{ lg.event }}</span>
+            <sc-for list="{{ lg.deltas }}" as="d" hint-placeholder-count="2">
+              <span class="font-mono" style="font-size:8.5px;letter-spacing:0.04em;background:hsl(var(--muted) / 0.3);color:hsl(var(--muted-foreground));border-radius:4px;padding:1px 7px">{{ d.k }} · {{ d.v }}</span>
+            </sc-for>
+          </div>
+        </div>
+        <sc-if value="{{ annotations }}" hint-placeholder-val="{{ true }}">
+          <span style="font-size:11.5px;color:hsl(var(--muted-foreground));font-style:italic;line-height:1.5">Scan-first: one line per resolution, delta chips inline. Best when auditing dozens of rows per tick.</span>
+        </sc-if>
+      </div>
+
+      <div id="1c" data-screen-label="1c — Effect-first card" style="min-width:0;position:relative;display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <a href="#1c" style="text-decoration:none"><span class="font-mono" style="font-size:10px;letter-spacing:0.1em;background:hsl(var(--primary) / 0.15);color:hsl(var(--primary));border:1px solid hsl(var(--primary) / 0.5);border-radius:5px;padding:2px 8px">1c</span></a>
+          <span style="font-size:12.5px;font-weight:600">Effect-first</span>
+        </div>
+        <div style="border:1px solid hsl(var(--card-border));border-radius:6px;background:linear-gradient(135deg, {{ nf.washFrom }}, hsl(var(--card)) 55%);padding:14px 16px;display:flex;flex-direction:column;gap:9px">
+          <div style="display:flex;align-items:baseline;gap:8px">
+            <span class="font-mono" style="font-size:9px;letter-spacing:0.16em;text-transform:uppercase;color:{{ nf.bandColor }}">{{ nf.tpl }} → {{ nf.target }}</span>
+            <span style="flex:1"></span>
+            <span class="font-mono" style="font-size:8.5px;color:hsl(var(--muted-foreground))">{{ nf.branch }}</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:7px">
+            <div style="display:flex;align-items:baseline;gap:8px">
+              <span class="font-mono" style="font-size:9px;letter-spacing:0.14em;text-transform:uppercase;color:hsl(var(--muted-foreground));flex:none">activity →</span>
+              <span class="font-mono" style="font-size:14px;color:hsl(var(--foreground))">“{{ nf.activity }}”</span>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px">
+              <sc-for list="{{ nf.chips }}" as="dch" hint-placeholder-count="2">
+                <span class="font-mono" style="font-size:9px;letter-spacing:0.04em;border:1px solid hsl(var(--muted-foreground) / 0.35);color:hsl(var(--foreground) / 0.82);background:hsl(var(--muted) / 0.25);border-radius:4px;padding:2px 8px">{{ dch.label }}</span>
+              </sc-for>
+            </div>
+          </div>
+          <div style="display:flex;gap:14px;border-top:1px solid hsl(var(--border) / 0.6);padding-top:8px;align-items:baseline">
+            <span class="font-mono" style="font-size:9px;color:hsl(var(--muted-foreground))">pri {{ nf.pri }}</span>
+            <span class="font-mono" style="font-size:9px;color:{{ nf.bandColor }}">mag {{ nf.mag }}</span>
+            <span class="font-mono" style="font-size:9px;color:hsl(var(--muted-foreground))">{{ nf.event }}</span>
+            <span style="flex:1"></span>
+          </div>
+        </div>
+        <sc-if value="{{ annotations }}" hint-placeholder-val="{{ true }}">
+          <span style="font-size:11.5px;color:hsl(var(--muted-foreground));font-style:italic;line-height:1.5">Audit-native: the state delta is the hero — the activity written, tags touched, event emitted. Narrative incorporation is Skald's discretion, so no prose surfaces here at all.</span>
+        </sc-if>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════ ROW 2 · GATE TREE ══════ -->
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <div style="display:flex;align-items:baseline;gap:10px;border-bottom:1px solid hsl(var(--border));padding-bottom:6px">
+      <span class="font-mono" style="font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:hsl(var(--foreground))">Gate trace</span>
+      <span style="font-size:12px;color:hsl(var(--muted-foreground))">{{ gateSubjectLine }}</span>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(470px, 1fr));gap:22px;align-items:start">
+
+      <div id="1d" data-screen-label="1d — Indented checklist" style="min-width:0;position:relative;display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <a href="#1d" style="text-decoration:none"><span class="font-mono" style="font-size:10px;letter-spacing:0.1em;background:hsl(var(--primary) / 0.15);color:hsl(var(--primary));border:1px solid hsl(var(--primary) / 0.5);border-radius:5px;padding:2px 8px">1d</span></a>
+          <span style="font-size:12.5px;font-weight:600">Indented checklist</span>
+          <span class="font-mono" style="font-size:9px;color:hsl(var(--muted-foreground));letter-spacing:0.1em">— as built</span>
+        </div>
+        <div style="border:1px solid hsl(var(--card-border));border-radius:6px;background:hsl(var(--card));padding:12px 14px;display:flex;flex-direction:column;gap:2px">
+          <sc-for list="{{ gateRows }}" as="gr" hint-placeholder-count="8">
+            <div style="{{ gr.style }}">
+              <span style="width:15px;flex:none;text-align:center;font-size:{{ gr.glyphSize }};color:{{ gr.glyphColor }}">{{ gr.glyph }}</span>
+              <span style="{{ gr.proseStyle }}">{{ gr.prose }}</span>
+              <span class="font-mono" style="font-size:9.5px;color:{{ gr.evColor }};flex:none;text-align:right">{{ gr.evidence }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <sc-if value="{{ annotations }}" hint-placeholder-val="{{ true }}">
+          <span style="font-size:11.5px;color:hsl(var(--muted-foreground));font-style:italic;line-height:1.5">Depth = nesting, ✓/✗ per node, evidence in the right margin, failure path bolded. Reads top-to-bottom like the authored condition.</span>
+        </sc-if>
+      </div>
+
+      <div id="1e" data-screen-label="1e — Bracket circuit" style="min-width:0;position:relative;display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <a href="#1e" style="text-decoration:none"><span class="font-mono" style="font-size:10px;letter-spacing:0.1em;background:hsl(var(--primary) / 0.15);color:hsl(var(--primary));border:1px solid hsl(var(--primary) / 0.5);border-radius:5px;padding:2px 8px">1e</span></a>
+          <span style="font-size:12.5px;font-weight:600">Bracket circuit</span>
+        </div>
+        <div style="border:1px solid hsl(var(--card-border));border-radius:6px;background:hsl(var(--card));padding:12px 14px">
+          <dc-import name="GateBrackets" node="{{ gateTreeRaw }}" hint-size="100%,300px"></dc-import>
+        </div>
+        <sc-if value="{{ annotations }}" hint-placeholder-val="{{ true }}">
+          <span style="font-size:11.5px;color:hsl(var(--muted-foreground));font-style:italic;line-height:1.5">Operators become physical rails — a colored bracket wraps everything it governs, so AND/OR scope is spatial instead of typographic. Negation renders as a barred rail.</span>
+        </sc-if>
+      </div>
+
+      <div id="1f" data-screen-label="1f — Fail-path spotlight" style="min-width:0;position:relative;display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <a href="#1f" style="text-decoration:none"><span class="font-mono" style="font-size:10px;letter-spacing:0.1em;background:hsl(var(--primary) / 0.15);color:hsl(var(--primary));border:1px solid hsl(var(--primary) / 0.5);border-radius:5px;padding:2px 8px">1f</span></a>
+          <span style="font-size:12.5px;font-weight:600">Fail-path spotlight</span>
+        </div>
+        <div style="border:1px solid hsl(var(--card-border));border-radius:6px;background:hsl(var(--card));padding:14px 16px;display:flex;flex-direction:column;gap:12px">
+          <sc-if value="{{ spot.failed }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <sc-for list="{{ spot.crumbs }}" as="cb" hint-placeholder-count="3">
+                  <span class="font-mono" style="{{ cb.style }}">{{ cb.label }}</span>
+                  <sc-if value="{{ cb.arrow }}" hint-placeholder-val="{{ true }}">
+                    <span style="color:hsl(var(--muted-foreground));font-size:10px">→</span>
+                  </sc-if>
+                </sc-for>
+              </div>
+              <div style="border-left:3px solid hsl(var(--destructive));background:hsl(var(--destructive) / 0.08);border-radius:0 6px 6px 0;padding:10px 12px;display:flex;flex-direction:column;gap:4px">
+                <span style="font-size:13px;font-weight:650">{{ spot.failProse }}</span>
+                <span class="font-mono" style="font-size:10px;color:hsl(var(--destructive))">{{ spot.failEvidence }}</span>
+                <span style="font-size:11px;color:hsl(var(--muted-foreground));font-style:italic">{{ spot.failNote }}</span>
+              </div>
+            </div>
+          </sc-if>
+          <sc-if value="{{ spot.passed }}" hint-placeholder-val="{{ false }}">
+            <div style="border-left:3px solid hsl(var(--chart-5));background:hsl(var(--chart-5) / 0.07);border-radius:0 6px 6px 0;padding:10px 12px">
+              <span style="font-size:13px;font-weight:650;color:hsl(var(--chart-5))">Gate passes</span>
+              <span style="font-size:11.5px;color:hsl(var(--muted-foreground));font-style:italic;display:block;margin-top:3px">No refusal to explain — every clause below resolved true.</span>
+            </div>
+          </sc-if>
+          <div style="display:flex;flex-wrap:wrap;gap:6px">
+            <sc-for list="{{ spot.passedChips }}" as="pc" hint-placeholder-count="4">
+              <span class="font-mono" style="font-size:9px;letter-spacing:0.04em;border:1px solid hsl(var(--chart-5) / 0.45);color:hsl(var(--chart-5) / 0.9);border-radius:99px;padding:2px 9px">✓ {{ pc.label }}</span>
+            </sc-for>
+          </div>
+        </div>
+        <sc-if value="{{ annotations }}" hint-placeholder-val="{{ true }}">
+          <span style="font-size:11.5px;color:hsl(var(--muted-foreground));font-style:italic;line-height:1.5">Answers “why didn't it fire?” in one glance: breadcrumb to the decisive leaf, full evidence on it, everything that passed compressed to chips. Zero reading of green rows.</span>
+        </sc-if>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════ ROW 3 · INTERACTION GRAPH ══════ -->
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <div style="display:flex;align-items:baseline;gap:10px;border-bottom:1px solid hsl(var(--border));padding-bottom:6px">
+      <span class="font-mono" style="font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:hsl(var(--foreground))">Interaction graph</span>
+      <span style="font-size:12px;color:hsl(var(--muted-foreground))">who acts on whom this tick · solid = fired package · dashed = scene pressure · ⧫ = reciprocal joint beat</span>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(470px, 1fr));gap:22px;align-items:start">
+
+      <div id="1g" data-screen-label="1g — Column flow" style="min-width:0;position:relative;display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <a href="#1g" style="text-decoration:none"><span class="font-mono" style="font-size:10px;letter-spacing:0.1em;background:hsl(var(--primary) / 0.15);color:hsl(var(--primary));border:1px solid hsl(var(--primary) / 0.5);border-radius:5px;padding:2px 8px">1g</span></a>
+          <span style="font-size:12.5px;font-weight:600">Column flow</span>
+          <span class="font-mono" style="font-size:9px;color:hsl(var(--muted-foreground));letter-spacing:0.1em">— as built</span>
+        </div>
+        <div style="border:1px solid hsl(var(--card-border));border-radius:6px;background:hsl(var(--card))">
+          <svg viewBox="0 0 560 430" style="width:100%;display:block">
+            <text x="40" y="26" class="font-mono" style="font-size:9px;letter-spacing:0.18em;text-transform:uppercase" fill="hsl(var(--muted-foreground))">off-screen</text>
+            <text x="440" y="26" class="font-mono" style="font-size:9px;letter-spacing:0.18em;text-transform:uppercase" fill="hsl(var(--muted-foreground))">on-screen</text>
+            <line x1="392" y1="34" x2="392" y2="400" stroke="hsl(var(--border))" stroke-dasharray="2 5"></line>
+            <sc-for list="{{ colEdges }}" as="e" hint-placeholder-count="8">
+              <g>
+                <path d="{{ e.d }}" fill="none" stroke="{{ e.color }}" stroke-width="{{ e.w }}" stroke-dasharray="{{ e.dash }}" opacity="{{ e.op }}"></path>
+                <sc-if value="{{ e.joint }}" hint-placeholder-val="{{ false }}">
+                  <rect x="{{ e.jx }}" y="{{ e.jy }}" width="8" height="8" transform="{{ e.jrot }}" fill="hsl(var(--card))" stroke="{{ e.color }}" stroke-width="1.3"></rect>
+                </sc-if>
+              </g>
+            </sc-for>
+            <sc-for list="{{ colNodes }}" as="n" hint-placeholder-count="9">
+              <g>
+                <circle cx="{{ n.x }}" cy="{{ n.y }}" r="15" fill="hsl(var(--card))" stroke="{{ n.stroke }}" stroke-width="1.5" stroke-dasharray="{{ n.dash }}"></circle>
+              </g>
+            </sc-for>
+            {{ colLabelsEl }}
+          </svg>
+        </div>
+        <sc-if value="{{ annotations }}" hint-placeholder-val="{{ true }}">
+          <span style="font-size:11.5px;color:hsl(var(--muted-foreground));font-style:italic;line-height:1.5">Preserves the brief's core boundary — the dashed membrane between simulation and scene. Pressures visibly cross it; packages stay left of it.</span>
+        </sc-if>
+      </div>
+
+      <div id="1h" data-screen-label="1h — Arc chord" style="min-width:0;position:relative;display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <a href="#1h" style="text-decoration:none"><span class="font-mono" style="font-size:10px;letter-spacing:0.1em;background:hsl(var(--primary) / 0.15);color:hsl(var(--primary));border:1px solid hsl(var(--primary) / 0.5);border-radius:5px;padding:2px 8px">1h</span></a>
+          <span style="font-size:12.5px;font-weight:600">Arc chord</span>
+        </div>
+        <div style="border:1px solid hsl(var(--card-border));border-radius:6px;background:hsl(var(--card))">
+          <svg viewBox="0 0 620 400" style="width:100%;display:block">
+            <text x="24" y="30" class="font-mono" style="font-size:8.5px;letter-spacing:0.14em;text-transform:uppercase" fill="hsl(var(--muted-foreground))">packages ↑</text>
+            <text x="24" y="382" class="font-mono" style="font-size:8.5px;letter-spacing:0.14em;text-transform:uppercase" fill="hsl(var(--muted-foreground))">pressures ↓</text>
+            <line x1="30" y1="230" x2="590" y2="230" stroke="hsl(var(--border))"></line>
+            <sc-for list="{{ arcEdges }}" as="e" hint-placeholder-count="8">
+              <g>
+                <path d="{{ e.d }}" fill="none" stroke="{{ e.color }}" stroke-width="{{ e.w }}" stroke-dasharray="{{ e.dash }}" opacity="{{ e.op }}"></path>
+                <sc-if value="{{ e.joint }}" hint-placeholder-val="{{ false }}">
+                  <rect x="{{ e.jx }}" y="{{ e.jy }}" width="8" height="8" transform="{{ e.jrot }}" fill="hsl(var(--card))" stroke="{{ e.color }}" stroke-width="1.3"></rect>
+                </sc-if>
+              </g>
+            </sc-for>
+            <sc-for list="{{ arcNodes }}" as="n" hint-placeholder-count="9">
+              <g>
+                <circle cx="{{ n.x }}" cy="230" r="13" fill="hsl(var(--card))" stroke="{{ n.stroke }}" stroke-width="1.5" stroke-dasharray="{{ n.dash }}"></circle>
+              </g>
+            </sc-for>
+            {{ arcLabelsEl }}
+          </svg>
+        </div>
+        <sc-if value="{{ annotations }}" hint-placeholder-val="{{ true }}">
+          <span style="font-size:11.5px;color:hsl(var(--muted-foreground));font-style:italic;line-height:1.5">One baseline, no columns: package arcs arch above, pressures hang below, so “how busy is this tick” becomes silhouette. Scales past nine actors better than columns.</span>
+        </sc-if>
+      </div>
+
+      <div id="1i" data-screen-label="1i — Adjacency matrix" style="min-width:0;position:relative;display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <a href="#1i" style="text-decoration:none"><span class="font-mono" style="font-size:10px;letter-spacing:0.1em;background:hsl(var(--primary) / 0.15);color:hsl(var(--primary));border:1px solid hsl(var(--primary) / 0.5);border-radius:5px;padding:2px 8px">1i</span></a>
+          <span style="font-size:12.5px;font-weight:600">Adjacency matrix</span>
+        </div>
+        <div style="border:1px solid hsl(var(--card-border));border-radius:6px;background:hsl(var(--card));padding:16px 18px;display:flex;flex-direction:column;gap:10px">
+          <div style="display:grid;grid-template-columns:110px repeat({{ mx.cols }}, minmax(46px, 1fr));gap:3px;align-items:center">
+            <span></span>
+            <sc-for list="{{ mx.colHeads }}" as="ch" hint-placeholder-count="5">
+              <span class="font-mono" style="font-size:8px;letter-spacing:0.04em;color:{{ ch.color }};text-align:center;text-transform:uppercase">{{ ch.name }}</span>
+            </sc-for>
+            <sc-for list="{{ mx.cells }}" as="c" hint-placeholder-count="20">
+              <sc-if value="{{ c.isHead }}" hint-placeholder-val="{{ false }}">
+                <span class="font-mono" style="font-size:9px;letter-spacing:0.04em;color:hsl(var(--foreground) / 0.85);text-align:right;padding-right:6px">{{ c.name }}</span>
+              </sc-if>
+              <sc-if value="{{ c.isCell }}" hint-placeholder-val="{{ true }}">
+                <div title="{{ c.title }}" style="{{ c.style }}">
+                  <sc-if value="{{ c.recip }}" hint-placeholder-val="{{ false }}"><span style="font-size:9px;line-height:1">⧫</span></sc-if>
+                  <sc-if value="{{ c.hasMag }}" hint-placeholder-val="{{ false }}"><span class="font-mono" style="font-size:7.5px;line-height:1">{{ c.mag }}</span></sc-if>
+                </div>
+              </sc-if>
+            </sc-for>
+          </div>
+          <div style="display:flex;gap:12px;align-items:center;border-top:1px solid hsl(var(--border) / 0.6);padding-top:8px">
+            <span style="display:inline-flex;align-items:center;gap:5px;font-size:10px;color:hsl(var(--muted-foreground))"><span style="width:10px;height:10px;border-radius:2px;background:hsl(var(--chart-1) / 0.75)"></span>fired</span>
+            <span style="display:inline-flex;align-items:center;gap:5px;font-size:10px;color:hsl(var(--muted-foreground))"><span style="width:10px;height:10px;border-radius:2px;border:1.5px dashed hsl(var(--accent))"></span>pressure</span>
+            <span style="display:inline-flex;align-items:center;gap:5px;font-size:10px;color:hsl(var(--muted-foreground))">⧫ reciprocal</span>
+            <span class="font-mono" style="font-size:8.5px;color:hsl(var(--muted-foreground));margin-left:auto">opacity ∝ magnitude</span>
+          </div>
+        </div>
+        <sc-if value="{{ annotations }}" hint-placeholder-val="{{ true }}">
+          <span style="font-size:11.5px;color:hsl(var(--muted-foreground));font-style:italic;line-height:1.5">No layout ambiguity, ever: rows act, columns receive. Empty row = coverage gap; empty column = nobody touches that actor. The lint view of the tick.</span>
+        </sc-if>
+      </div>
+    </div>
+  </div>
+</section>
+</x-import>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 1920, &quot;height&quot;: 1400}, &quot;annotations&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;Presentation&quot;}, &quot;gateSubject&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;INTIMACY (blocked)&quot;, &quot;EVADE_PURSUERS (passing)&quot;], &quot;default&quot;: &quot;INTIMACY (blocked)&quot;, &quot;tsType&quot;: &quot;string&quot;, &quot;section&quot;: &quot;Gate variants&quot;}, &quot;graphPressures&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;Graph variants&quot;}}">
+class Component extends DCLogic {
+  state = { ready: false };
+  componentDidMount() {
+    document.body.classList.add('dark');
+    import('./orrery-engine.js').then((eng) => { this.eng = eng; this.setState({ ready: true }); })
+      .catch((e) => console.error('engine load failed', e));
+  }
+
+  renderVals() {
+    const P = this.props;
+    const annotations = P.annotations ?? true;
+    const showPressures = P.graphPressures ?? true;
+    const subject = P.gateSubject ?? 'INTIMACY (blocked)';
+    const base = {
+      annotations,
+      gateSubjectLine: '…',
+      cardA: null,
+      lg: { bandColor: 'transparent', tpl: '', target: '', pri: '', branch: '', magPct: '0%', mag: '', event: '', deltas: [] },
+      nf: { bandColor: 'transparent', washFrom: 'transparent', tpl: '', target: '', branch: '', activity: '', chips: [], pri: '', mag: '', event: '' },
+      gateRows: [], gateTreeRaw: null,
+      spot: { failed: false, passed: false, crumbs: [], passedChips: [], failProse: '', failEvidence: '', failNote: '' },
+      colEdges: [], colNodes: [], arcEdges: [], arcNodes: [], colLabelsEl: null, arcLabelsEl: null,
+      mx: { cols: 0, colHeads: [], cells: [] },
+    };
+    if (!this.eng || !this.state.ready) return base;
+    const eng = this.eng;
+    const BAND_CHART = { crisis: 1, embodied: 2, routine: 3, affil: 4, project: 5 };
+    const bandColor = (b) => `hsl(var(--chart-${BAND_CHART[b]}))`;
+    const S = eng.applyOverrides(eng.baseWorldState(), [], 108);
+    const R = eng.resolveTick(S);
+    const groups = Object.fromEntries(R.groups.map((g) => [g.actor, g]));
+
+    // ---------- card VMs (victor → celia CULTIVATE_INFORMANT) ----------
+    const vc = groups.victor.pairs.find((p) => p.target === 'celia');
+    const w = vc.winner;
+    const col = bandColor(w.band);
+    base.cardA = {
+      key: '1a', kind: 'pair', tplName: w.id, priority: 'pri ' + w.priority, bandColor: col, dim: false,
+      tie: false, tieTitle: '', isPair: true, targetName: 'Celia',
+      branchLabel: w.resolution.branchLabel, event: w.resolution.eventType,
+      mag: { dial: true, deg: Math.round(w.resolution.magnitude * 360), color: col, text: w.resolution.magnitude.toFixed(2) },
+      selected: false, diff: false, highlight: false, dimByLens: false, pad: 10, density: 'comfortable',
+      onSelect: () => {}, hasShadow: false, shadowCount: 0, shadowOpen: false, onToggleShadow: () => {}, shadowed: [],
+    };
+    const deltas = Object.entries(w.resolution.delta).map(([k, v]) => ({ k: k.replace('character.', ''), v: Array.isArray(v) ? v.join(', ') : v }));
+    base.lg = { bandColor: col, tpl: w.id, target: 'Celia', pri: w.priority, branch: w.resolution.branchLabel,
+      magPct: Math.round(w.resolution.magnitude * 100) + '%', mag: w.resolution.magnitude.toFixed(2),
+      event: w.resolution.eventType, deltas };
+    const fxChips = [];
+    for (const [k, v] of Object.entries(w.resolution.delta)) {
+      if (k === 'character.current_activity') continue;
+      for (const val of (Array.isArray(v) ? v : [v])) {
+        fxChips.push({ label: k === 'entity_tags.add' ? '+ ' + val : k === 'entity_tags.clear' ? '− ' + val : k === 'pair_tags.clear' ? '⊘ ' + val : k + ' · ' + val });
+      }
+    }
+    base.nf = { bandColor: col, washFrom: `hsl(var(--chart-${BAND_CHART[w.band]}) / 0.14)`, tpl: w.id, target: 'Celia',
+      branch: w.resolution.branchLabel, activity: w.resolution.delta['character.current_activity'] || '', pri: w.priority,
+      mag: w.resolution.magnitude.toFixed(2), event: w.resolution.eventType, chips: fxChips };
+
+    // ---------- gate VMs ----------
+    const useEvade = subject.startsWith('EVADE');
+    const gRow = useEvade
+      ? groups.talon.solo.rows.find((r) => r.id === 'EVADE_PURSUERS')
+      : groups.asmodeus.solo.rows.find((r) => r.id === 'INTIMACY');
+    base.gateSubjectLine = useEvade
+      ? 'Talon · EVADE_PURSUERS · gate passes — hunted, unconstrained, has a route'
+      : 'Asmodeus · INTIMACY · gate refused — intimacy debt is real, but a suppressor is present';
+    base.gateTreeRaw = gRow.gate;
+
+    const gateRows = [];
+    const walk = (n, depth, onFail) => {
+      if (!n) return;
+      if (n.kind === 'leaf') {
+        const failHere = onFail && !n.pass;
+        gateRows.push({
+          style: `display:flex;align-items:baseline;gap:7px;padding:2px 4px 2px ${4 + depth * 15}px;border-radius:4px`,
+          glyph: n.pass ? '✓' : '✗', glyphSize: '10px',
+          glyphColor: n.pass ? 'hsl(var(--chart-5))' : 'hsl(var(--destructive))',
+          prose: n.prose,
+          proseStyle: `flex:1;font-size:12px;${failHere ? 'font-weight:700;color:hsl(var(--foreground));' : n.pass ? 'color:hsl(var(--foreground) / 0.85);' : 'color:hsl(var(--muted-foreground));'}`,
+          evidence: n.evidence, evColor: failHere ? 'hsl(var(--destructive))' : 'hsl(var(--muted-foreground))',
+        });
+      } else {
+        gateRows.push({
+          style: `display:flex;align-items:baseline;gap:7px;padding:3px 4px 1px ${4 + depth * 15}px`,
+          glyph: n.pass ? '✓' : '✗', glyphSize: '9px',
+          glyphColor: n.pass ? 'hsl(var(--chart-5) / 0.7)' : 'hsl(var(--destructive) / 0.8)',
+          prose: n.op, proseStyle: `flex:1;font-size:9.5px;letter-spacing:0.2em;${!n.pass && onFail ? 'font-weight:700;color:hsl(var(--foreground) / 0.9);' : 'color:hsl(var(--muted-foreground) / 0.75);'}`,
+          evidence: '', evColor: 'transparent',
+        });
+        for (const k of n.children || []) walk(k, depth + 1, onFail && !n.pass);
+      }
+    };
+    walk(gRow.gate, 0, !gRow.gatePassed);
+    base.gateRows = gateRows;
+
+    // fail-path spotlight
+    const crumbStyle = (hot) => `font-size:9px;letter-spacing:0.16em;border:1px solid ${hot ? 'hsl(var(--destructive))' : 'hsl(var(--border))'};color:${hot ? 'hsl(var(--destructive))' : 'hsl(var(--muted-foreground))'};border-radius:99px;padding:2px 9px;text-transform:uppercase`;
+    const leafSummary = (n) => {
+      if (n.kind === 'leaf') return n.prose;
+      const c = countLeaves(n);
+      return n.op + ' · ' + c + ' conditions';
+    };
+    const countLeaves = (n) => n.kind === 'leaf' ? 1 : (n.children || []).reduce((a, k) => a + countLeaves(k), 0);
+    if (!gRow.gatePassed) {
+      const fl = eng.firstFailingLeaf(gRow.gate);
+      const crumbs = [];
+      let node = gRow.gate;
+      while (node && node.kind !== 'leaf') {
+        crumbs.push({ label: node.op, style: crumbStyle(false), arrow: true });
+        if (node.op === 'NOT') { node = node.children[0]; continue; }
+        const next = (node.children || []).find((k) => (node.op === 'AND' ? !k.pass : !k.pass));
+        node = next || (node.children || [])[0];
+      }
+      crumbs.push({ label: 'decisive leaf', style: crumbStyle(true), arrow: false });
+      base.spot = {
+        failed: true, passed: false, crumbs,
+        failProse: fl ? (fl.negated ? 'blocked: ' + fl.prose : fl.prose) : 'gate refused',
+        failEvidence: fl ? fl.evidence : '',
+        failNote: fl && fl.negated ? 'This leaf PASSED inside a NOT — its presence is what refuses the gate.' : 'First failing leaf on the refusal path, in authored order.',
+        passedChips: (gRow.gate.children || []).filter((c) => c.pass).map((c) => ({ label: leafSummary(c).slice(0, 46) })),
+      };
+    } else {
+      base.spot = {
+        failed: false, passed: true, crumbs: [],
+        failProse: '', failEvidence: '', failNote: '',
+        passedChips: (gRow.gate.children || []).map((c) => ({ label: leafSummary(c).slice(0, 46) })),
+      };
+    }
+
+    // ---------- graph data (shared) ----------
+    const offIds = R.groups.map((g) => g.actor);
+    const onIds = Object.values(S.entities).filter((e) => e.onScreen).map((e) => e.id);
+    const recip = eng.reciprocalPairs(R);
+    const isRecip = (a, b) => recip.some((r) => (r.a === a && r.b === b) || (r.a === b && r.b === a));
+    const edges = [];
+    for (const g of R.groups) {
+      for (const p of g.pairs) if (p.winner) edges.push({ from: g.actor, to: p.target, kind: 'pkg', band: p.winner.band, label: p.winner.id.toLowerCase(), mag: p.winner.resolution.magnitude, joint: isRecip(g.actor, p.target) });
+      if (showPressures) for (const p of g.pressures) edges.push({ from: g.actor, to: p.target, kind: 'press', band: p.winner.band, label: p.winner.id.toLowerCase(), mag: p.winner.resolution.magnitude, joint: false });
+    }
+    const winnerBandOf = (id) => { const g = groups[id]; return g && g.solo.winner ? g.solo.winner.band : null; };
+    const strokeOf = (id) => { const g = groups[id]; const b = winnerBandOf(id); return g && g.gap ? 'hsl(var(--destructive))' : b ? bandColor(b) : S.entities[id].onScreen ? 'hsl(var(--primary) / 0.7)' : 'hsl(var(--border))'; };
+    const dashOf = (id) => (groups[id] && groups[id].gap ? '3 3' : '1 0');
+    const initialsOf = (id) => S.entities[id].name.split(/\s+/).map((x) => x[0]).join('').slice(0, 2).toUpperCase();
+
+    // 1g column flow
+    const pos = {};
+    offIds.forEach((id, i) => { const t = i / Math.max(1, offIds.length - 1); pos[id] = { x: 120 + Math.sin(t * Math.PI) * 80, y: 62 + t * 320 }; });
+    onIds.forEach((id, i) => { pos[id] = { x: 480, y: 90 + i * 105 }; });
+    base.colNodes = [...offIds, ...onIds].map((id) => ({
+      x: pos[id].x, y: pos[id].y, ty: pos[id].y + 3,
+      lx: S.entities[id].onScreen ? pos[id].x + 22 : pos[id].x - 22,
+      lly: pos[id].y + 4, anchor: S.entities[id].onScreen ? 'start' : 'end',
+      initials: initialsOf(id), name: S.entities[id].name.split(' ')[0],
+      stroke: strokeOf(id), dash: dashOf(id),
+    }));
+    const mkCurve = (a, b, bend, shrink) => {
+      const pa = pos[a], pb = pos[b];
+      const dx = pb.x - pa.x, dy = pb.y - pa.y, len = Math.hypot(dx, dy) || 1;
+      const ux = dx / len, uy = dy / len;
+      const sx = pa.x + ux * shrink, sy = pa.y + uy * shrink, ex = pb.x - ux * shrink, ey = pb.y - uy * shrink;
+      const mx = (sx + ex) / 2 - uy * bend, my = (sy + ey) / 2 + ux * bend;
+      return { d: `M ${sx.toFixed(1)} ${sy.toFixed(1)} Q ${mx.toFixed(1)} ${my.toFixed(1)} ${ex.toFixed(1)} ${ey.toFixed(1)}`, lx: mx, ly: my - 5, jx: mx - 4, jy: my - 4 };
+    };
+    base.colEdges = edges.map((e) => {
+      const c = e.kind === 'press' ? 'hsl(var(--accent))' : bandColor(e.band);
+      const path = mkCurve(e.from, e.to, e.joint ? 14 : 10, 19);
+      return { ...path, color: c, w: e.kind === 'press' ? 1.2 : 1.5, dash: e.kind === 'press' ? '5 4' : '1 0',
+        op: e.kind === 'press' ? 0.75 : 0.95, label: e.label, joint: e.joint && e.from < e.to,
+        jrot: `rotate(45 ${path.jx + 4} ${path.jy + 4})` };
+    });
+
+    // 1h arc chord
+    const order = ['victor', 'celia', 'lansky', 'asmodeus', 'juno', 'talon', 'alex', 'pete', 'alina'];
+    const ax = {}; order.forEach((id, i) => { ax[id] = 52 + i * 64; });
+    base.arcNodes = order.map((id, i) => ({
+      x: ax[id], initials: initialsOf(id), short: S.entities[id].name.split(' ')[0].toLowerCase(),
+      ny: i % 2 === 0 ? 258 : 208, stroke: strokeOf(id), dash: dashOf(id),
+    }));
+    base.arcEdges = edges.map((e) => {
+      const x1 = ax[e.from], x2 = ax[e.to];
+      const up = e.kind === 'pkg';
+      const h = Math.min(170, Math.abs(x2 - x1) * 0.42 + 26);
+      const my = up ? 230 - h : 230 + h;
+      const mx = (x1 + x2) / 2;
+      return {
+        d: `M ${x1} ${up ? 217 : 243} Q ${mx} ${my} ${x2} ${up ? 217 : 243}`,
+        color: e.kind === 'press' ? 'hsl(var(--accent))' : bandColor(e.band),
+        w: e.kind === 'press' ? 1.2 : 1.5, dash: e.kind === 'press' ? '5 4' : '1 0', op: e.kind === 'press' ? 0.7 : 0.9,
+        joint: e.joint && e.from < e.to, jx: mx - 4, jy: (up ? 230 - h : 230 + h) - 4 + (up ? h * 0.24 : -h * 0.24),
+        jrot: `rotate(45 ${mx} ${(up ? 230 - h : 230 + h) + (up ? h * 0.24 : -h * 0.24)})`,
+      };
+    });
+
+    // SVG text via createElement — template text holes don't render inside <svg>
+    const RE = React.createElement;
+    base.colLabelsEl = RE('g', { pointerEvents: 'none' }, [
+      ...base.colEdges.map((e, i) => RE('text', { key: 'e' + i, x: e.lx, y: e.ly, textAnchor: 'middle', className: 'font-mono', style: { fontSize: '7.5px', letterSpacing: '0.06em' }, fill: e.color }, e.label)),
+      ...base.colNodes.flatMap((n, i) => [
+        RE('text', { key: 'i' + i, x: n.x, y: n.ty, textAnchor: 'middle', className: 'font-mono', style: { fontSize: '9px' }, fill: 'hsl(var(--foreground))' }, n.initials),
+        RE('text', { key: 'n' + i, x: n.lx, y: n.lly, textAnchor: n.anchor, style: { fontSize: '10px', fontWeight: 600 }, fill: 'hsl(var(--foreground) / 0.9)' }, n.name),
+      ]),
+    ]);
+    base.arcLabelsEl = RE('g', { pointerEvents: 'none' }, base.arcNodes.flatMap((n, i) => [
+      RE('text', { key: 'i' + i, x: n.x, y: 234, textAnchor: 'middle', className: 'font-mono', style: { fontSize: '8.5px' }, fill: 'hsl(var(--foreground))' }, n.initials),
+      RE('text', { key: 's' + i, x: n.x, y: n.ny, textAnchor: 'middle', className: 'font-mono', style: { fontSize: '8px', letterSpacing: '0.04em' }, fill: 'hsl(var(--muted-foreground))' }, n.short),
+    ]));
+
+    // 1i adjacency matrix
+    const froms = [...new Set(edges.map((e) => e.from))];
+    const tos = [...new Set(edges.map((e) => e.to))];
+    base.mx.cols = tos.length;
+    base.mx.colHeads = tos.map((id) => ({ name: S.entities[id].name.split(' ')[0], color: S.entities[id].onScreen ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))' }));
+    const cells = [];
+    for (const f of froms) {
+      cells.push({ isHead: true, isCell: false, name: S.entities[f].name.split(' ')[0] });
+      for (const t of tos) {
+        const hit = edges.find((e) => e.from === f && e.to === t);
+        if (!hit) { cells.push({ isHead: false, isCell: true, title: '—', style: 'width:100%;min-width:46px;height:34px;border-radius:4px;background:hsl(var(--muted) / 0.12)', recip: false, hasMag: false, mag: '' }); continue; }
+        const c = hit.kind === 'press' ? 'hsl(var(--accent))' : `hsl(var(--chart-${BAND_CHART[hit.band]})`;
+        const alpha = (0.25 + hit.mag * 0.75).toFixed(2);
+        const style = hit.kind === 'press'
+          ? `width:100%;min-width:46px;height:34px;border-radius:4px;border:1.5px dashed hsl(var(--accent));display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;color:hsl(var(--accent))`
+          : `width:100%;min-width:46px;height:34px;border-radius:4px;background:${c} / ${alpha});display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;color:hsl(var(--foreground))`;
+        cells.push({ isHead: false, isCell: true, title: `${hit.label} · mag ${hit.mag.toFixed(2)}${hit.joint ? ' · reciprocal' : ''}`,
+          style, recip: hit.joint, hasMag: true, mag: hit.mag.toFixed(2) });
+      }
+    }
+    base.mx.cells = cells;
+    return base;
+  }
+}
+</script>
+</body>
+</html>
