@@ -479,9 +479,13 @@ export function buildGroups(
       }
     }
 
+    // A pressure fire counts as coverage (prototype: `fires.length === 0 &&
+    // pressures.length === 0`) — actors whose only activity is scene
+    // pressure are not coverage gaps.
     const gap =
       !g.actor_stack.templates.some((t) => t.fired) &&
-      !g.two_party_stacks.some((s) => s.templates.some((t) => t.fired));
+      !g.two_party_stacks.some((s) => s.templates.some((t) => t.fired)) &&
+      !g.scene_pressure_stacks.some((s) => s.templates.some((t) => t.fired));
     const visibleCards = ctx.showTwoPartyOnly ? cards.filter((c) => c.isPair) : cards;
     const diff =
       cards.some((c) => c.diff) || pressures.some((p) => p.diff);
