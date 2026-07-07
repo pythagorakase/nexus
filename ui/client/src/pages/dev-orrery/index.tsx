@@ -1056,7 +1056,14 @@ export default function DevOrreryPage() {
   );
 
   // ---- queries ---------------------------------------------------------------
-  const overridesReq = useMemo(() => mergeOverrides(overrides), [overrides]);
+  // Overrides reach the resolver only in what-if mode: "Current" must always
+  // show canon, while staged chips persist in the drawer for the next sandbox
+  // run. Without the mode gate, flipping back to Current would keep serving
+  // what-if results under a canonical-looking frame.
+  const overridesReq = useMemo(
+    () => (mode === "whatif" ? mergeOverrides(overrides) : null),
+    [mode, overrides],
+  );
   const overridesJson = overridesReq ? JSON.stringify(overridesReq) : "";
 
   const resolveQ = useQuery<ResolvePayload, Error>({
@@ -1119,7 +1126,7 @@ export default function DevOrreryPage() {
   );
 
   const hoverCtxQ = useQuery<ContextPayload, Error>({
-    queryKey: ["orrery", "context", slot, hoverEnt],
+    queryKey: ["orrery", "context", slot, anchor, hoverEnt],
     queryFn: () =>
       fetchEntityContext({
         slot,
@@ -1150,7 +1157,7 @@ export default function DevOrreryPage() {
   }, [payload]);
   const drawerIdsKey = drawerEntities.map((e) => e.id).join(",");
   const drawerCtxQ = useQuery<ContextPayload, Error>({
-    queryKey: ["orrery", "context", slot, "drawer", drawerIdsKey],
+    queryKey: ["orrery", "context", slot, anchor, "drawer", drawerIdsKey],
     queryFn: () =>
       fetchEntityContext({
         slot,

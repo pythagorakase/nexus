@@ -596,10 +596,19 @@ export function buildInspector(
   const tie = opts.ties.get(t.template_id) ?? null;
 
   const gateRows: InspectorVM["gateRows"] = [];
-  const walk = (n: TraceNode, depth: number, onFail: boolean) => {
+  const walk = (
+    n: TraceNode,
+    depth: number,
+    onFail: boolean,
+    negated: boolean,
+  ) => {
+    // Effective failure is polarity-aware, mirroring firstFailingLeaf: under
+    // an odd number of enclosing NOTs, a *true* node is what blocks the gate.
+    // Glyphs stay raw (the leaf's own truth); only emphasis/muting flips.
+    const effFails = negated ? n.result : !n.result;
     if (!n.op) {
       const reads = evidenceReads(n.evidence);
-      const failHere = onFail && !n.result;
+      const failHere = onFail && effFails;
       gateRows.push({
         depth,
         isOp: false,
@@ -607,7 +616,7 @@ export function buildInspector(
         glyphColor: n.result ? "hsl(var(--chart-5))" : "hsl(var(--destructive))",
         prose: n.prose,
         emphasized: failHere,
-        muted: !n.result && !failHere,
+        muted: effFails && !failHere,
         evidence: evidenceText(n.evidence),
         evidenceHot: failHere,
         highlighted: !!opts.hoverTag && reads.includes(opts.hoverTag),
@@ -622,21 +631,25 @@ export function buildInspector(
         ? "hsl(var(--chart-5) / 0.7)"
         : "hsl(var(--destructive) / 0.8)",
       prose: n.op ?? "",
-      emphasized: !n.result && onFail,
-      muted: n.result,
+      emphasized: onFail && effFails,
+      muted: !effFails,
       evidence: "",
       evidenceHot: false,
       highlighted: false,
     });
+    // Under negation AND/OR swap culprit rules (De Morgan): a blocking
+    // effective-AND implicates only its effectively-failing children; a
+    // blocking effective-OR implicates all of them.
+    const effOr = negated ? n.op === "AND" : n.op === "OR";
     for (const k of n.children ?? []) {
+      const kidNegated = n.op === "NOT" ? !negated : negated;
+      const kidEffFails = kidNegated ? k.result : !k.result;
       const kidOnFail =
-        n.op === "NOT"
-          ? onFail && !n.result
-          : onFail && !n.result && (!k.result || n.op === "OR");
-      walk(k, depth + 1, kidOnFail);
+        onFail && effFails && (n.op === "NOT" || kidEffFails || effOr);
+      walk(k, depth + 1, kidOnFail, kidNegated);
     }
   };
-  walk(t.gate_trace, 0, !t.gate_passed);
+  walk(t.gate_trace, 0, !t.gate_passed, false);
 
   // The explain payload traces branches only when the gate passed; for
   // refused gates, show the authored ladder from the catalog, all
