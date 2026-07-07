@@ -635,6 +635,7 @@ def test_dashboard_flag_gates_router_registration(tmp_path: Path) -> None:
         "/api/dev/orrery/context/entities",
         "/api/dev/orrery/coverage",
         "/api/dev/orrery/history/adjudications",
+        "/api/dev/orrery/vocab",
     }
 
 
@@ -843,3 +844,21 @@ def test_joint_beats_parity_with_production(
     assert endpoint_beats == production_beats
     for beat in payload["joint_beats"]:
         assert beat["kind"] in {"reciprocal", "crossed"}
+
+
+@pytest.mark.requires_postgres
+def test_vocab_endpoint_serves_picker_vocabularies(client: TestClient) -> None:
+    """The what-if drawer's pickers read slot-scoped vocab from one call."""
+
+    response = client.get("/api/dev/orrery/vocab?slot=2")
+    assert response.status_code == 200
+    payload = response.json()
+    assert set(payload) == {"tags", "pair_tags", "event_types", "places"}
+    assert payload["tags"], "tag vocabulary must be non-empty"
+    tag_row = payload["tags"][0]
+    assert set(tag_row) == {"tag", "category", "is_ephemeral"}
+    assert {"hunting"} <= {row["tag"] for row in payload["pair_tags"]}
+    assert {"threat_issued", "compliance_alert"} <= {
+        row["type"] for row in payload["event_types"]
+    }
+    assert all(row["name"] for row in payload["places"])
