@@ -347,6 +347,19 @@ function attachShadow(
 // Groups
 // ---------------------------------------------------------------------------
 
+/**
+ * Whether anything fired for this actor across all three stack kinds. A
+ * pressure fire counts as coverage (prototype: `fires.length === 0 &&
+ * pressures.length === 0`) — actors whose only activity is scene pressure
+ * are not coverage gaps. Shared by the stream (gap notice, avatar ring)
+ * and InteractionGraph (dotted gap nodes) so the two can never disagree.
+ */
+export function actorHasFired(g: ActorGroupPayload): boolean {
+  return [g.actor_stack, ...g.two_party_stacks, ...g.scene_pressure_stacks].some(
+    (s) => s.templates.some((t) => t.fired),
+  );
+}
+
 export interface GroupBuildCtx extends CardBuildCtx {
   showTwoPartyOnly: boolean;
   showFailed: boolean;
@@ -479,13 +492,7 @@ export function buildGroups(
       }
     }
 
-    // A pressure fire counts as coverage (prototype: `fires.length === 0 &&
-    // pressures.length === 0`) — actors whose only activity is scene
-    // pressure are not coverage gaps.
-    const gap =
-      !g.actor_stack.templates.some((t) => t.fired) &&
-      !g.two_party_stacks.some((s) => s.templates.some((t) => t.fired)) &&
-      !g.scene_pressure_stacks.some((s) => s.templates.some((t) => t.fired));
+    const gap = !actorHasFired(g);
     const visibleCards = ctx.showTwoPartyOnly ? cards.filter((c) => c.isPair) : cards;
     const diff =
       cards.some((c) => c.diff) || pressures.some((p) => p.diff);

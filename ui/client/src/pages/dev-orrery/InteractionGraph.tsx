@@ -22,13 +22,12 @@
 
 import * as React from "react";
 import type {
-  ActorGroupPayload,
   ResolvePayload,
   SelectionRef,
   StackPayload,
   TemplatePayload,
 } from "./types";
-import { bandColor } from "./vm";
+import { actorHasFired, bandColor } from "./vm";
 
 export interface InteractionGraphProps {
   payload: ResolvePayload;
@@ -86,10 +85,6 @@ const initialsOf = (name: string): string =>
 
 const winnerOf = (stack: StackPayload): TemplatePayload | null =>
   stack.templates.find((t) => t.is_winner) ?? null;
-
-const groupHasFired = (g: ActorGroupPayload): boolean =>
-  g.actor_stack.templates.some((t) => t.fired) ||
-  g.two_party_stacks.some((s) => s.templates.some((t) => t.fired));
 
 const markerFor = (band: string): string =>
   band === "crisis_constraint"
@@ -166,7 +161,7 @@ export default function InteractionGraph(props: InteractionGraphProps) {
     const p = pos.get(g.actor_entity_id);
     if (!p) continue;
     const soloWinner = winnerOf(g.actor_stack);
-    const gap = !groupHasFired(g);
+    const gap = !actorHasFired(g);
     nodes.push({
       id: g.actor_entity_id,
       x: p.x,
