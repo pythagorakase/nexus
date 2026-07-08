@@ -312,12 +312,12 @@ priorities = { sleep = 25, thirst = 24, hunger = 22, socialize = 18, intimacy = 
 
 [orrery.sunhelm.min_accrual_hours_per_chunk]
 # Story-time accrual floor: each elapsed chunk counts as at least this many
-# world-hours for the named need. The narrative advances ~5 in-world minutes
-# per chunk, so hour-denominated social thresholds starve without a floor
-# (socialize mild = 24h ~ 288 chunks). Sparse: unlisted needs accrue on
-# world time alone — flooring biological needs risks prose dissonance.
-socialize = 0.5
-intimacy = 0.25
+# world-hours for the named need. DELIBERATELY EMPTY: the floor was tuned
+# against slot 2's retrofitted time_deltas over a pathologically paced
+# 4o-era story, and it masks the stagnation it compensates for. Diegetic
+# state belongs on the world clock; pacing is Skald's job (it now sees the
+# WORLD CLOCK in its prompt). Kept as a dial of last resort — removal is
+# tracked in the story-time issue.
 
 [orrery.sunhelm.severity_thresholds.sleep]
 mild = 16.0

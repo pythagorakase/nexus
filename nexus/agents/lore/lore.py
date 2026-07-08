@@ -375,6 +375,10 @@ class LORE:
             self.current_phase = TurnPhase.ORRERY_RESOLVE
             await self.turn_manager.resolve_orrery(self.turn_context)
 
+            # Phase 4.75: Runtime intertitle (headline state for Skald and,
+            # eventually, the user) — independent of Orrery enablement.
+            await self.turn_manager.stamp_intertitle(self.turn_context)
+
             # Phase 5: Payload Assembly
             self.current_phase = TurnPhase.PAYLOAD_ASSEMBLY
             await self.turn_manager.assemble_context_payload(self.turn_context)

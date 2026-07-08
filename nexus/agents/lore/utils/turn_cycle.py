@@ -25,7 +25,10 @@ try:
         StorytellerResponseStandard,
         extract_narrative_text,
     )
-    from nexus.agents.orrery.resolver import resolve_dry_run
+    from nexus.agents.orrery.resolver import (
+        _load_time_of_day,
+        resolve_dry_run,
+    )
     from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
     from nexus.agents.orrery.bleed import (
         record_bleed_offers,
@@ -47,7 +50,10 @@ except ImportError:
         StorytellerResponseStandard,
         extract_narrative_text,
     )
-    from nexus.agents.orrery.resolver import resolve_dry_run
+    from nexus.agents.orrery.resolver import (
+        _load_time_of_day,
+        resolve_dry_run,
+    )
     from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
     from nexus.agents.orrery.bleed import (
         record_bleed_offers,
@@ -666,6 +672,57 @@ class TurnCycleManager:
             proposal.pressure_count,
         )
 
+    @staticmethod
+    def _load_intertitle(
+        session: Any, *, anchor_chunk_id: Optional[int]
+    ) -> Optional[Dict[str, Any]]:
+        """Headline state at the anchor chunk: the runtime intertitle.
+
+        Season/episode/scene/layer and the world clock come from the
+        anchor's chunk_metadata; the location is the protagonist's current
+        place (characters.id = 1 — the new-story mapper creates the
+        protagonist first). Everything here is display-and-prompt state;
+        nothing is baked into narrative text.
+        """
+
+        if anchor_chunk_id is None:
+            return None
+        from sqlalchemy import text as _text
+
+        row = (
+            session.execute(
+                _text(
+                    """
+                    /* orrery:intertitle */
+                    SELECT cm.season, cm.episode, cm.scene, cm.world_layer,
+                           cm.world_time,
+                           c.name AS protagonist_name,
+                           p.name AS location_name
+                    FROM chunk_metadata cm
+                    LEFT JOIN characters c ON c.id = 1
+                    LEFT JOIN places p ON p.id = c.current_location
+                    WHERE cm.chunk_id = :anchor
+                    """
+                ),
+                {"anchor": anchor_chunk_id},
+            )
+            .mappings()
+            .first()
+        )
+        if row is None:
+            return None
+        world_time = row["world_time"]
+        return {
+            "season": row["season"],
+            "episode": row["episode"],
+            "scene": row["scene"],
+            "world_layer": row["world_layer"],
+            "world_time": world_time.isoformat() if world_time else None,
+            "time_of_day": (_load_time_of_day(world_time) if world_time else None),
+            "protagonist_name": row["protagonist_name"],
+            "location_name": row["location_name"],
+        }
+
     def _orrery_anchor_chunk_id(
         self, session: Any, turn_context: TurnContext
     ) -> Optional[int]:
@@ -693,6 +750,23 @@ class TurnCycleManager:
             .first()
         )
         return row["max_id"] if row and row["max_id"] is not None else None
+
+    async def stamp_intertitle(self, turn_context: TurnContext) -> None:
+        """Phase 4.75: load the runtime intertitle for the anchor chunk.
+
+        Deliberately independent of [orrery] enabled — Skald needs the
+        headline state (clock, season/episode/scene, layer, protagonist
+        location) on every turn, not only when the behavior engine runs.
+        Bootstrap turns (no chunks yet) simply have no intertitle.
+        """
+
+        if not self.lore.memnon:
+            raise RuntimeError("Intertitle stamping requires MEMNON database access")
+        with self.lore.memnon.Session() as session:
+            anchor_chunk_id = self._orrery_anchor_chunk_id(session, turn_context)
+            turn_context.intertitle = self._load_intertitle(
+                session, anchor_chunk_id=anchor_chunk_id
+            )
 
     async def assemble_context_payload(self, turn_context: TurnContext):
         """
@@ -726,6 +800,9 @@ class TurnCycleManager:
 
         if turn_context.note:
             turn_context.context_payload["note"] = turn_context.note
+
+        if turn_context.intertitle:
+            turn_context.context_payload["intertitle"] = turn_context.intertitle
 
         proposal: Any = turn_context.orrery_proposal
         if proposal and getattr(proposal, "resolution_count", 0):

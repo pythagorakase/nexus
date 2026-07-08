@@ -69,6 +69,7 @@ class FakeSession:
         travel_state_rows=None,
         routine_anchor_rows=None,
         win_history_rows=None,
+        intertitle_row=None,
         world_time=None,
         weather="",
         max_chunk_id=100,
@@ -100,6 +101,15 @@ class FakeSession:
         self.travel_state_rows = travel_state_rows or []
         self.routine_anchor_rows = routine_anchor_rows or []
         self.win_history_rows = win_history_rows or []
+        self.intertitle_row = intertitle_row or {
+            "season": 1,
+            "episode": 1,
+            "scene": 1,
+            "world_layer": "primary",
+            "world_time": self.world_time if hasattr(self, "world_time") else None,
+            "protagonist_name": "Mara",
+            "location_name": "The Commons",
+        }
         self.world_time = world_time or datetime(2073, 10, 31, 12, tzinfo=timezone.utc)
         self.weather = weather
         self.max_chunk_id = max_chunk_id
@@ -178,6 +188,12 @@ class FakeSession:
             return FakeResult(self.travel_state_rows)
         if "/* orrery:win_history */" in sql:
             return FakeResult(self.win_history_rows)
+        if "/* orrery:intertitle */" in sql:
+            row = dict(self.intertitle_row)
+            row.setdefault("world_time", self.world_time)
+            if row.get("world_time") is None:
+                row["world_time"] = self.world_time
+            return FakeResult([row])
         if "/* orrery:routine_anchors */" in sql:
             assert "JOIN entities e" in sql
             assert "e.is_active = true" in sql
@@ -1692,7 +1708,33 @@ async def test_resolve_orrery_attaches_proposal_when_enabled() -> None:
     assert context.orrery_proposal.anchor_chunk_id == 100
     # The default idle located actor receives the mundane-band floor.
     assert context.phase_states["orrery_resolve"]["resolution_count"] == 1
+    # Intertitle stamping is its own phase, independent of orrery.
+    await manager.stamp_intertitle(context)
+    assert context.intertitle is not None
+    assert context.intertitle["time_of_day"] == "afternoon"
+    assert context.intertitle["location_name"] == "The Commons"
     assert context.context_payload == {}
+
+
+@pytest.mark.asyncio
+async def test_intertitle_stamps_when_orrery_disabled() -> None:
+    """Headline state reaches Skald even without the behavior engine."""
+
+    manager = TurnCycleManager(FakeLore({"orrery": {"enabled": False}}))
+    context = TurnContext(
+        turn_id="t1",
+        user_input="continue",
+        start_time=0,
+        warm_slice=[{"id": 100}],
+    )
+
+    await manager.resolve_orrery(context)
+    assert context.orrery_proposal is None
+
+    await manager.stamp_intertitle(context)
+    assert context.intertitle is not None
+    assert context.intertitle["season"] == 1
+    assert context.intertitle["time_of_day"] == "afternoon"
 
 
 @pytest.mark.asyncio
