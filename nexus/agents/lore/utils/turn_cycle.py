@@ -25,10 +25,7 @@ try:
         StorytellerResponseStandard,
         extract_narrative_text,
     )
-    from nexus.agents.orrery.resolver import (
-        _load_time_of_day,
-        resolve_dry_run,
-    )
+    from nexus.agents.orrery.resolver import resolve_dry_run
     from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
     from nexus.agents.orrery.bleed import (
         record_bleed_offers,
@@ -50,10 +47,7 @@ except ImportError:
         StorytellerResponseStandard,
         extract_narrative_text,
     )
-    from nexus.agents.orrery.resolver import (
-        _load_time_of_day,
-        resolve_dry_run,
-    )
+    from nexus.agents.orrery.resolver import resolve_dry_run
     from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
     from nexus.agents.orrery.bleed import (
         record_bleed_offers,
@@ -679,10 +673,11 @@ class TurnCycleManager:
         """Headline state at the anchor chunk: the runtime intertitle.
 
         Season/episode/scene/layer and the world clock come from the
-        anchor's chunk_metadata; the location is the protagonist's current
-        place (characters.id = 1 — the new-story mapper creates the
-        protagonist first). Everything here is display-and-prompt state;
-        nothing is baked into narrative text.
+        anchor's chunk_metadata; the location is the user character's
+        (global_variables.user_character) current place, with its WGS84
+        geometry — Earth-shaped coordinates are the spatial-reasoning
+        offload the GIS layer exists for. Everything here is
+        display-and-prompt state; nothing is baked into narrative text.
         """
 
         if anchor_chunk_id is None:
@@ -696,10 +691,11 @@ class TurnCycleManager:
                     /* orrery:intertitle */
                     SELECT cm.season, cm.episode, cm.scene, cm.world_layer,
                            cm.world_time,
-                           c.name AS protagonist_name,
-                           p.name AS location_name
+                           p.name AS location_name,
+                           ST_AsEWKT(p.geom) AS location_geom
                     FROM chunk_metadata cm
-                    LEFT JOIN characters c ON c.id = 1
+                    LEFT JOIN global_variables gv ON gv.id = true
+                    LEFT JOIN characters c ON c.id = gv.user_character
                     LEFT JOIN places p ON p.id = c.current_location
                     WHERE cm.chunk_id = :anchor
                     """
@@ -718,9 +714,8 @@ class TurnCycleManager:
             "scene": row["scene"],
             "world_layer": row["world_layer"],
             "world_time": world_time.isoformat() if world_time else None,
-            "time_of_day": (_load_time_of_day(world_time) if world_time else None),
-            "protagonist_name": row["protagonist_name"],
             "location_name": row["location_name"],
+            "location_geom": row["location_geom"],
         }
 
     def _orrery_anchor_chunk_id(

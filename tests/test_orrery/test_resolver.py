@@ -107,8 +107,8 @@ class FakeSession:
             "scene": 1,
             "world_layer": "primary",
             "world_time": self.world_time if hasattr(self, "world_time") else None,
-            "protagonist_name": "Mara",
             "location_name": "The Commons",
+            "location_geom": "SRID=4326;POINT(-90.0725 29.9320 0 0)",
         }
         self.world_time = world_time or datetime(2073, 10, 31, 12, tzinfo=timezone.utc)
         self.weather = weather
@@ -1711,8 +1711,8 @@ async def test_resolve_orrery_attaches_proposal_when_enabled() -> None:
     # Intertitle stamping is its own phase, independent of orrery.
     await manager.stamp_intertitle(context)
     assert context.intertitle is not None
-    assert context.intertitle["time_of_day"] == "afternoon"
     assert context.intertitle["location_name"] == "The Commons"
+    assert context.intertitle["location_geom"].startswith("SRID=4326;POINT")
     assert context.context_payload == {}
 
 
@@ -1734,7 +1734,7 @@ async def test_intertitle_stamps_when_orrery_disabled() -> None:
     await manager.stamp_intertitle(context)
     assert context.intertitle is not None
     assert context.intertitle["season"] == 1
-    assert context.intertitle["time_of_day"] == "afternoon"
+    assert context.intertitle["world_time"] is not None
 
 
 @pytest.mark.asyncio

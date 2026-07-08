@@ -481,9 +481,12 @@ class LogonUtility:
         # The intertitle anchors Skald's declared time deltas and episode
         # transitions to visible state: without it the model reasons about
         # elapsed time and story position blind, and pacing drifts.
+        # Deliberately unlabeled and gloss-free — position (first lines of
+        # the prompt) and form carry it; a frontier model needs no
+        # "In-world time:" caption on an ISO timestamp, and the WGS84
+        # point is the spatial-reasoning offload, not decoration.
         intertitle = context.get("intertitle") or {}
         if intertitle:
-            sections.append("=== INTERTITLE ===")
             position_bits = []
             if intertitle.get("season") is not None:
                 position_bits.append(
@@ -498,14 +501,11 @@ class LogonUtility:
             if position_bits:
                 sections.append(" - ".join(position_bits))
             if intertitle.get("world_time"):
-                clock_line = f"In-world time: {intertitle['world_time']}"
-                if intertitle.get("time_of_day"):
-                    clock_line += f" ({intertitle['time_of_day']})"
-                sections.append(clock_line)
+                sections.append(str(intertitle["world_time"]))
             if intertitle.get("location_name"):
-                location_line = f"Location: {intertitle['location_name']}"
-                if intertitle.get("protagonist_name"):
-                    location_line += f" ({intertitle['protagonist_name']})"
+                location_line = str(intertitle["location_name"])
+                if intertitle.get("location_geom"):
+                    location_line += f" — {intertitle['location_geom']}"
                 sections.append(location_line)
             sections.append("")
 
