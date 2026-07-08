@@ -47,7 +47,9 @@ class TurnContext:
     note: Optional[str] = None
     orrery_proposal: Optional["OrreryTickProposal"] = None
     bleed_menu: List[Any] = field(default_factory=list)
-    # Current in-world clock at the anchor chunk ({"world_time": iso str,
-    # "time_of_day": str}); rendered into the storyteller prompt so declared
-    # time deltas are anchored to a visible clock instead of guessed blind.
-    world_clock: Optional[Dict[str, Any]] = None
+    # Headline state at the anchor chunk (world time, time of day, season/
+    # episode/scene, world layer, protagonist location) — the runtime
+    # intertitle. Rendered into the storyteller prompt so Skald declares
+    # time deltas and episode transitions against visible state instead of
+    # guessing blind; also the source for the user-facing intertitle.
+    intertitle: Optional[Dict[str, Any]] = None

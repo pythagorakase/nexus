@@ -478,15 +478,35 @@ class LogonUtility:
         """Format context payload into a prompt for the Apex AI"""
         sections = []
 
-        # The in-world clock anchors Skald's declared time deltas: without
-        # it the model reasons about elapsed time blind and pacing drifts.
-        world_clock = context.get("world_clock") or {}
-        if world_clock.get("world_time"):
-            sections.append("=== WORLD CLOCK ===")
-            clock_line = f"In-world time: {world_clock['world_time']}"
-            if world_clock.get("time_of_day"):
-                clock_line += f" ({world_clock['time_of_day']})"
-            sections.append(clock_line)
+        # The intertitle anchors Skald's declared time deltas and episode
+        # transitions to visible state: without it the model reasons about
+        # elapsed time and story position blind, and pacing drifts.
+        intertitle = context.get("intertitle") or {}
+        if intertitle:
+            sections.append("=== INTERTITLE ===")
+            position_bits = []
+            if intertitle.get("season") is not None:
+                position_bits.append(
+                    f"S{int(intertitle['season']):02d}"
+                    f"E{int(intertitle.get('episode') or 0):02d}"
+                )
+            if intertitle.get("scene") is not None:
+                position_bits.append(f"Scene {intertitle['scene']}")
+            layer = intertitle.get("world_layer")
+            if layer and layer != "primary":
+                position_bits.append(f"{layer} layer")
+            if position_bits:
+                sections.append(" - ".join(position_bits))
+            if intertitle.get("world_time"):
+                clock_line = f"In-world time: {intertitle['world_time']}"
+                if intertitle.get("time_of_day"):
+                    clock_line += f" ({intertitle['time_of_day']})"
+                sections.append(clock_line)
+            if intertitle.get("location_name"):
+                location_line = f"Location: {intertitle['location_name']}"
+                if intertitle.get("protagonist_name"):
+                    location_line += f" ({intertitle['protagonist_name']})"
+                sections.append(location_line)
             sections.append("")
 
         # Add warm slice

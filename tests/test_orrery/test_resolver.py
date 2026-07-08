@@ -69,6 +69,7 @@ class FakeSession:
         travel_state_rows=None,
         routine_anchor_rows=None,
         win_history_rows=None,
+        intertitle_row=None,
         world_time=None,
         weather="",
         max_chunk_id=100,
@@ -100,6 +101,15 @@ class FakeSession:
         self.travel_state_rows = travel_state_rows or []
         self.routine_anchor_rows = routine_anchor_rows or []
         self.win_history_rows = win_history_rows or []
+        self.intertitle_row = intertitle_row or {
+            "season": 1,
+            "episode": 1,
+            "scene": 1,
+            "world_layer": "primary",
+            "world_time": self.world_time if hasattr(self, "world_time") else None,
+            "protagonist_name": "Mara",
+            "location_name": "The Commons",
+        }
         self.world_time = world_time or datetime(2073, 10, 31, 12, tzinfo=timezone.utc)
         self.weather = weather
         self.max_chunk_id = max_chunk_id
@@ -178,6 +188,12 @@ class FakeSession:
             return FakeResult(self.travel_state_rows)
         if "/* orrery:win_history */" in sql:
             return FakeResult(self.win_history_rows)
+        if "/* orrery:intertitle */" in sql:
+            row = dict(self.intertitle_row)
+            row.setdefault("world_time", self.world_time)
+            if row.get("world_time") is None:
+                row["world_time"] = self.world_time
+            return FakeResult([row])
         if "/* orrery:routine_anchors */" in sql:
             assert "JOIN entities e" in sql
             assert "e.is_active = true" in sql
@@ -1692,9 +1708,10 @@ async def test_resolve_orrery_attaches_proposal_when_enabled() -> None:
     assert context.orrery_proposal.anchor_chunk_id == 100
     # The default idle located actor receives the mundane-band floor.
     assert context.phase_states["orrery_resolve"]["resolution_count"] == 1
-    # The resolve session also stamps the in-world clock for the prompt.
-    assert context.world_clock is not None
-    assert context.world_clock["time_of_day"] == "afternoon"
+    # The resolve session also stamps the intertitle for the prompt.
+    assert context.intertitle is not None
+    assert context.intertitle["time_of_day"] == "afternoon"
+    assert context.intertitle["location_name"] == "The Commons"
     assert context.context_payload == {}
 
 

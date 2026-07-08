@@ -27,7 +27,6 @@ try:
     )
     from nexus.agents.orrery.resolver import (
         _load_time_of_day,
-        _load_world_time,
         resolve_dry_run,
     )
     from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
@@ -53,7 +52,6 @@ except ImportError:
     )
     from nexus.agents.orrery.resolver import (
         _load_time_of_day,
-        _load_world_time,
         resolve_dry_run,
     )
     from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
@@ -651,12 +649,9 @@ class TurnCycleManager:
                 habituation_settings=orrery_settings.get("habituation"),
                 fanout_settings=orrery_settings.get("fanout"),
             )
-            world_time = _load_world_time(session, anchor_chunk_id=anchor_chunk_id)
-            if world_time is not None:
-                turn_context.world_clock = {
-                    "world_time": world_time.isoformat(),
-                    "time_of_day": _load_time_of_day(world_time),
-                }
+            turn_context.intertitle = self._load_intertitle(
+                session, anchor_chunk_id=anchor_chunk_id
+            )
 
         turn_context.orrery_proposal = proposal
         turn_context.phase_states["orrery_resolve"] = {
@@ -679,6 +674,57 @@ class TurnCycleManager:
             proposal.resolution_count,
             proposal.pressure_count,
         )
+
+    @staticmethod
+    def _load_intertitle(
+        session: Any, *, anchor_chunk_id: Optional[int]
+    ) -> Optional[Dict[str, Any]]:
+        """Headline state at the anchor chunk: the runtime intertitle.
+
+        Season/episode/scene/layer and the world clock come from the
+        anchor's chunk_metadata; the location is the protagonist's current
+        place (characters.id = 1 — the new-story mapper creates the
+        protagonist first). Everything here is display-and-prompt state;
+        nothing is baked into narrative text.
+        """
+
+        if anchor_chunk_id is None:
+            return None
+        from sqlalchemy import text as _text
+
+        row = (
+            session.execute(
+                _text(
+                    """
+                    /* orrery:intertitle */
+                    SELECT cm.season, cm.episode, cm.scene, cm.world_layer,
+                           cm.world_time,
+                           c.name AS protagonist_name,
+                           p.name AS location_name
+                    FROM chunk_metadata cm
+                    LEFT JOIN characters c ON c.id = 1
+                    LEFT JOIN places p ON p.id = c.current_location
+                    WHERE cm.chunk_id = :anchor
+                    """
+                ),
+                {"anchor": anchor_chunk_id},
+            )
+            .mappings()
+            .first()
+        )
+        if row is None:
+            return None
+        world_time = row["world_time"]
+        return {
+            "season": row["season"],
+            "episode": row["episode"],
+            "scene": row["scene"],
+            "world_layer": row["world_layer"],
+            "world_time": world_time.isoformat() if world_time else None,
+            "time_of_day": (_load_time_of_day(world_time) if world_time else None),
+            "protagonist_name": row["protagonist_name"],
+            "location_name": row["location_name"],
+        }
 
     def _orrery_anchor_chunk_id(
         self, session: Any, turn_context: TurnContext
@@ -741,8 +787,8 @@ class TurnCycleManager:
         if turn_context.note:
             turn_context.context_payload["note"] = turn_context.note
 
-        if turn_context.world_clock:
-            turn_context.context_payload["world_clock"] = turn_context.world_clock
+        if turn_context.intertitle:
+            turn_context.context_payload["intertitle"] = turn_context.intertitle
 
         proposal: Any = turn_context.orrery_proposal
         if proposal and getattr(proposal, "resolution_count", 0):

@@ -344,28 +344,51 @@ class _Cursor:
         return ({"title": "Test Setting", "content": "Setting body."},)
 
 
-def test_context_prompt_renders_world_clock() -> None:
-    """The in-world clock anchors Skald's declared time deltas."""
+def test_context_prompt_renders_intertitle() -> None:
+    """Headline state anchors Skald's declared deltas and transitions."""
 
     prompt = LogonUtility({})._format_context_prompt(
         {
             "user_input": "Continue.",
-            "world_clock": {
+            "intertitle": {
+                "season": 5,
+                "episode": 6,
+                "scene": 13,
+                "world_layer": "primary",
                 "world_time": "2073-10-31T14:37:00-04:00",
                 "time_of_day": "afternoon",
+                "protagonist_name": "Alex",
+                "location_name": "The Land Rig",
             },
         }
     )
 
-    assert "=== WORLD CLOCK ===" in prompt
+    assert "=== INTERTITLE ===" in prompt
+    assert "S05E06 - Scene 13" in prompt
+    # Primary layer is the default register; only deviations are announced.
+    assert "primary layer" not in prompt
     assert "In-world time: 2073-10-31T14:37:00-04:00 (afternoon)" in prompt
-    # The clock frames everything after it.
-    assert prompt.index("WORLD CLOCK") < prompt.index("USER INPUT")
+    assert "Location: The Land Rig (Alex)" in prompt
+    # The intertitle frames everything after it.
+    assert prompt.index("INTERTITLE") < prompt.index("USER INPUT")
 
 
-def test_context_prompt_omits_world_clock_when_unknown() -> None:
-    """No clock section when world time is unavailable (e.g. bootstrap)."""
+def test_context_prompt_announces_non_primary_layer() -> None:
+    """Flashback/dream layers are called out in the intertitle."""
+
+    prompt = LogonUtility({})._format_context_prompt(
+        {
+            "user_input": "Continue.",
+            "intertitle": {"season": 2, "episode": 1, "world_layer": "flashback"},
+        }
+    )
+
+    assert "flashback layer" in prompt
+
+
+def test_context_prompt_omits_intertitle_when_unknown() -> None:
+    """No intertitle section when anchor state is unavailable (bootstrap)."""
 
     prompt = LogonUtility({})._format_context_prompt({"user_input": "Continue."})
 
-    assert "WORLD CLOCK" not in prompt
+    assert "INTERTITLE" not in prompt
