@@ -35,6 +35,7 @@ from nexus.agents.orrery.substrate import (
     has_symmetric_relationship_of_type,
     has_tag,
     has_travel_destination,
+    count_recent_events_at_least,
     has_routine_anchor,
     in_location_class,
     is_constrained,
@@ -458,15 +459,15 @@ HONOR_DEBT = Template(
 )
 
 
-PURSUE_GHOST_LEAD = Template(
-    id="pursue_ghost_lead",
+UNCOVER_PAST = Template(
+    id="uncover_past",
     priority=60,
     drive_band=DriveBand.PROJECT_IDENTITY,
     priority_override_rationale=(
-        "Ghost-lead pursuit is a long-arc motive with explicit clue pressure, "
-        "so it can outrank routine maintenance."
+        "Digging into one's own buried past is a long-arc motive with "
+        "explicit clue pressure, so it can outrank routine maintenance."
     ),
-    blurb="The fragments of a buried identity tug at the actor.",
+    blurb="Fragments of the actor's own buried past demand investigation.",
     required_slots=(Slot.ACTOR,),
     package_gate=AND(
         has_tag("seeking_identity"),
@@ -475,37 +476,52 @@ PURSUE_GHOST_LEAD = Template(
     ),
     branches=(
         Branch(
-            label="Recon a hideout their body remembers",
+            label="Revisit a place their body remembers",
             conditions=ROOTS_TRANSIT_PLACE,
             narrative_stub=(
-                "{actor} picks through maintenance corridors to a place their "
-                "body recognizes before memory can explain why."
+                "{actor} works their way back to a place their body "
+                "recognizes before memory can explain why — a doorway, a "
+                "stairwell, a smell — and stands in it, waiting for the "
+                "past to blink first."
             ),
-            state_delta={"character.current_activity": "reconning remembered terrain"},
+            state_delta={"character.current_activity": "revisiting remembered ground"},
             event_type="pursue_identity_lead",
             changed_fields=("character.current_activity",),
             magnitude=0.64,
         ),
         Branch(
-            label="Probe the data fog with the Key",
-            conditions=has_tag("ghostprint_active"),
-            narrative_stub=(
-                "{actor} brushes against a mid-tier operator, ducks into a "
-                "kiosk, and lets the Key scrape fragments from the ledger noise."
+            label="Search the records for their own name",
+            conditions=has_any_tag(
+                "scholar",
+                "researcher",
+                "academic",
+                "loremaster",
+                "hacker",
+                "investigator",
             ),
-            state_delta={"character.current_activity": "probing identity records"},
+            narrative_stub=(
+                "{actor} takes their questions to the records — whatever "
+                "form this world keeps them in — and hunts for the entry "
+                "that proves the person they used to be existed."
+            ),
+            state_delta={
+                "character.current_activity": "searching records for their past"
+            },
             event_type="pursue_identity_lead",
             changed_fields=("character.current_activity",),
             magnitude=0.57,
         ),
         Branch(
-            label="Query the broker network",
+            label="Ask someone who trades in answers",
             conditions=ALWAYS,
             narrative_stub=(
-                "{actor} visits a broker who owes them a favor and leaves with "
-                "one new question and one dangerous name."
+                "{actor} finds someone who deals in other people's "
+                "histories and leaves the exchange with one new question "
+                "and one dangerous name."
             ),
-            state_delta={"character.current_activity": "querying the broker network"},
+            state_delta={
+                "character.current_activity": "buying answers about their past"
+            },
             event_type="pursue_identity_lead",
             changed_fields=("character.current_activity",),
             magnitude=0.44,
@@ -712,10 +728,11 @@ EXTRACT_VENGEANCE = Template(
                 "no warning, no negotiation, the years of waiting compressed "
                 "into the time it takes to close a few meters of distance."
             ),
+            # The ACTOR's grudge_active (the tag this gate reads) is
+            # digested by tag clearance: clear_on -> retaliation_executed.
             state_delta={
                 "character.current_activity": "executing retaliation",
                 "entity_tags.add": ["recently_violent"],
-                "entity_tags_target.remove": ["grudge_active"],
             },
             event_type="retaliation_executed",
             signal_event_type="threat_issued",
@@ -1377,12 +1394,42 @@ MOURN_LOSS = Template(
     ),
     blurb="A loss settles into the body across many quiet days.",
     required_slots=(Slot.ACTOR,),
+    # The mourning_completed cooldown paces back-to-back griefs: completion
+    # clears `grieving`, so a fresh loss landing immediately afterward
+    # should not be laid down again within the same handful of ticks.
     package_gate=AND(
         has_ephemeral("grieving"),
         since_last_event_at_least("mourning_act", minimum_ticks=3),
+        since_last_event_at_least("mourning_completed", minimum_ticks=8),
         NOT(has_inbound_pair_tag("hunting")),
     ),
     branches=(
+        # Terminal branch first (authored-order selection short-circuits):
+        # enough mourning acts inside the hydration window means the grief
+        # has been worked, and the completion event lets the tag-clearance
+        # machinery digest `grieving` (clear_on -> mourning_completed).
+        # Without this branch nothing ever emits mourning_completed and
+        # grief is an absorbing state that suppresses the actor's entire
+        # routine/social band indefinitely.
+        Branch(
+            label="Lay the grief down",
+            conditions=count_recent_events_at_least(
+                "mourning_act", within_ticks=30, min_count=4
+            ),
+            narrative_stub=(
+                "{actor} reaches for the grief out of habit and finds it "
+                "has changed shape — still there, but carried now rather "
+                "than carrying them. Whatever small act marks an ending in "
+                "this world, {actor} performs it, and lets the day be an "
+                "ordinary day."
+            ),
+            state_delta={
+                "character.current_activity": "laying a long grief down",
+            },
+            event_type="mourning_completed",
+            changed_fields=("character.current_activity",),
+            magnitude=0.34,
+        ),
         Branch(
             label="Visit the place of remembrance",
             conditions=REMEMBRANCE_PLACE,
@@ -2500,25 +2547,31 @@ CHECK_ON_DEPENDENT = Template(
 )
 
 
-REACH_OUT_TO_KIN = Template(
-    id="reach_out_to_kin",
+REACH_OUT = Template(
+    id="reach_out",
     priority=40,
     drive_band=DriveBand.AFFILIATION,
     priority_override_rationale=(
-        "Kin maintenance is allowed to beat everyday self-maintenance when "
-        "the relationship has gone quiet long enough."
+        "Relationship maintenance is allowed to beat everyday "
+        "self-maintenance when the bond has gone quiet long enough."
     ),
     blurb="A small thread of contact between people who hold each other.",
     required_slots=(Slot.ACTOR, Slot.TARGET),
     # Cooldown: gate must check BOTH events any branch can emit
     # (kin_visit from the face-to-face branch, contact_made from the
     # remote branch). See CHECK_ON_DEPENDENT for the same pattern.
+    #
+    # The bond OR spans kin AND chosen social ties (friend, companion);
+    # the warmth/asymmetry OR below is what keeps casual edges from
+    # firing hollow contact beats.
     package_gate=AND(
         OR(
             has_symmetric_relationship_of_type("family"),
             has_symmetric_relationship_of_type("romantic"),
             has_symmetric_relationship_of_type("chosen_kin"),
             has_symmetric_relationship_of_type("comrade"),
+            has_symmetric_relationship_of_type("friend"),
+            has_symmetric_relationship_of_type("companion"),
         ),
         OR(
             relationship_is_mutual_warm(),
@@ -2555,7 +2608,9 @@ REACH_OUT_TO_KIN = Template(
                 "are the kind of present together that distance erodes."
             ),
             state_delta={
-                "character.current_activity": "spending real time with kin",
+                "character.current_activity": (
+                    "spending real time with someone held dear"
+                ),
             },
             event_type="kin_visit",
             changed_fields=("character.current_activity",),
@@ -2580,7 +2635,7 @@ REACH_OUT_TO_KIN = Template(
                 "and the thread between them stays warm for another while."
             ),
             state_delta={
-                "character.current_activity": "keeping kin contact warm",
+                "character.current_activity": "keeping a close bond warm",
             },
             event_type="contact_made",
             changed_fields=("character.current_activity",),
@@ -2600,7 +2655,7 @@ REACH_OUT_TO_KIN = Template(
                 "so is the cost of turning it into contact."
             ),
             state_delta={
-                "character.current_activity": "drafting unsent kin contact",
+                "character.current_activity": "drafting unsent contact",
             },
             event_type="contact_deferred",
             changed_fields=("character.current_activity",),
@@ -2620,7 +2675,7 @@ REACH_OUT_TO_KIN = Template(
                 "the wrong kind of contact today."
             ),
             state_delta={
-                "character.current_activity": "deferring kin contact",
+                "character.current_activity": "deferring contact",
             },
             event_type="contact_deferred",
             changed_fields=("character.current_activity",),
@@ -2654,9 +2709,14 @@ CONSULT_RIVAL = Template(
     # (rival_consulted from the meaningful branches, contact_made from the
     # ALWAYS fallback). Without the rival_consulted cooldown the high-
     # magnitude branches could refire next tick — caught by Codex on PR #223.
+    # The fraught-tie OR deliberately spans rivalry, open enmity, and
+    # `complex` history — the blurb's contract is "people who do not
+    # trust each other," not the narrow rival label.
     package_gate=AND(
         OR(
             has_relationship_of_type("rival"),
+            has_symmetric_relationship_of_type("enemy"),
+            has_relationship_of_type("complex"),
             trust_below(0),
         ),
         OR(
@@ -3600,11 +3660,11 @@ BUILTIN_TEMPLATES = (
     HONOR_DEBT,
     WARN_ALLY,
     SURVEIL,
-    PURSUE_GHOST_LEAD,
+    UNCOVER_PAST,
     CHECK_ON_DEPENDENT,
     CULTIVATE_INFORMANT,
     KEEP_VIGIL,
-    REACH_OUT_TO_KIN,
+    REACH_OUT,
     CONSULT_RIVAL,
     MOURN_LOSS,
     ROUTINE_COMMUTE,

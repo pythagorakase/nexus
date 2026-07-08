@@ -1590,6 +1590,55 @@ def since_last_event_at_least(
     )
 
 
+def count_recent_events_at_least(
+    event_type: str,
+    *,
+    within_ticks: int,
+    min_count: int,
+    actor_slot: Slot = Slot.ACTOR,
+    target_slot: Optional[Slot] = None,
+) -> Condition:
+    """Return whether at least ``min_count`` matching events landed in the window.
+
+    Counting is bounded by the recent-event hydration window
+    (``[orrery.binding] window_chunks``), so ``within_ticks`` larger than
+    that window only ever sees hydrated history. Use for
+    accumulate-then-act thresholds (grief completing after enough
+    mourning acts, acting on piled-up surveillance) rather than simple
+    cooldowns, which belong to :func:`since_last_event_at_least`.
+    """
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        actor_id = _slot_entity(bindings, actor_slot)
+        if actor_id is None:
+            return False
+        target_id = _slot_entity(bindings, target_slot) if target_slot else None
+        if target_slot is not None and target_id is None:
+            return False
+        cutoff = state.current_tick - within_ticks
+        count = 0
+        for event in state.recent_events:
+            if event.tick < cutoff:
+                continue
+            if event.event_type != event_type:
+                continue
+            if event.actor_entity_id != actor_id:
+                continue
+            if target_id is not None and event.target_entity_id != target_id:
+                continue
+            count += 1
+            if count >= min_count:
+                return True
+        return False
+
+    suffix = f",target={target_slot.value}" if target_slot else ""
+    return _named(
+        _condition,
+        f"count_recent_events_at_least({event_type},>={min_count},<={within_ticks}"
+        f"@{actor_slot.value}{suffix})",
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class CompoundCondition:
     """Self-describing AND / OR / NOT composition.

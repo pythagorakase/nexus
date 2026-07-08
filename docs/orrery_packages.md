@@ -208,7 +208,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
   - **NOT:** 2+ other entities co-located with target
   - actor has any of [`vendetta_holder`, `violent_history`]
 
-**Does:** activity → "executing retaliation"; adds `recently_violent` to actor; removes `grudge_active` from target
+**Does:** activity → "executing retaliation"; adds `recently_violent` to actor
 **Event:** `retaliation_executed`
 
 > {actor} moves on {target} in the moment the corridor clears — no warning, no negotiation, the years of waiting compressed into the time it takes to close a few meters of distance.
@@ -566,11 +566,11 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 ---
 
-## PURSUE_GHOST_LEAD — priority 60
+## UNCOVER_PAST — priority 60
 
-> The fragments of a buried identity tug at the actor.
+> Fragments of the actor's own buried past demand investigation.
 
-**Drive band:** project identity — Ghost-lead pursuit is a long-arc motive with explicit clue pressure, so it can outrank routine maintenance.
+**Drive band:** project identity — Digging into one's own buried past is a long-arc motive with explicit clue pressure, so it can outrank routine maintenance.
 **Slots:** ACTOR
 
 **Gate:**
@@ -580,7 +580,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
   - time of day is one of [evening, night]
   - **NOT:** actor has inbound `hunting` pair tag
 
-### Branch 1 — Recon a hideout their body remembers  *(mag 0.64)*
+### Branch 1 — Revisit a place their body remembers  *(mag 0.64)*
 
 **When:**
 
@@ -588,28 +588,28 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
   - actor is in `subterranean` place class
   - actor is in `transit` place class
 
-**Does:** activity → "reconning remembered terrain"
+**Does:** activity → "revisiting remembered ground"
 **Event:** `pursue_identity_lead`
 
-> {actor} picks through maintenance corridors to a place their body recognizes before memory can explain why.
+> {actor} works their way back to a place their body recognizes before memory can explain why — a doorway, a stairwell, a smell — and stands in it, waiting for the past to blink first.
 
-### Branch 2 — Probe the data fog with the Key  *(mag 0.57)*
+### Branch 2 — Search the records for their own name  *(mag 0.57)*
 
-**When:** actor has `ghostprint_active` tag
+**When:** actor has any of [`scholar`, `researcher`, `academic`, `loremaster`, `hacker`, `investigator`]
 
-**Does:** activity → "probing identity records"
+**Does:** activity → "searching records for their past"
 **Event:** `pursue_identity_lead`
 
-> {actor} brushes against a mid-tier operator, ducks into a kiosk, and lets the Key scrape fragments from the ledger noise.
+> {actor} takes their questions to the records — whatever form this world keeps them in — and hunts for the entry that proves the person they used to be existed.
 
-### Branch 3 — Query the broker network  *(mag 0.44)*
+### Branch 3 — Ask someone who trades in answers  *(mag 0.44)*
 
 **When:** *(always)*
 
-**Does:** activity → "querying the broker network"
+**Does:** activity → "buying answers about their past"
 **Event:** `pursue_identity_lead`
 
-> {actor} visits a broker who owes them a favor and leaves with one new question and one dangerous name.
+> {actor} finds someone who deals in other people's histories and leaves the exchange with one new question and one dangerous name.
 
 ---
 
@@ -922,11 +922,11 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 ---
 
-## REACH_OUT_TO_KIN — priority 40
+## REACH_OUT — priority 40
 
 > A small thread of contact between people who hold each other.
 
-**Drive band:** affiliation — Kin maintenance is allowed to beat everyday self-maintenance when the relationship has gone quiet long enough.
+**Drive band:** affiliation — Relationship maintenance is allowed to beat everyday self-maintenance when the bond has gone quiet long enough.
 **Slots:** ACTOR, TARGET
 **Present-target policy:** may target an on-screen entity — but only as a prompt-only scene-pressure draft routed through storyteller LLM review (no direct state mutation, no canonical event)
 
@@ -938,6 +938,8 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
     - actor and target share `romantic` relationship (either direction)
     - actor and target share `chosen_kin` relationship (either direction)
     - actor and target share `comrade` relationship (either direction)
+    - actor and target share `friend` relationship (either direction)
+    - actor and target share `companion` relationship (either direction)
   - **OR:**
     - actor and target have mutual warm trust
     - directional trust actor↔target differs by 3+ or is loaded
@@ -958,7 +960,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
   - **NOT:** direct contact actor→target is dramatic
   - ≥ 5 ticks since last `kin_visit` event for (actor, target) pair
 
-**Does:** activity → "spending real time with kin"
+**Does:** activity → "spending real time with someone held dear"
 **Event:** `kin_visit`
 
 > {actor} makes the small effort that finding-time-for-someone requires — clearing a half hour, choosing a place, showing up — and {target} arrives, and for a while they are the kind of present together that distance erodes.
@@ -975,7 +977,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
   - actor and target have mutual warm trust
   - **NOT:** direct contact actor→target is dramatic
 
-**Does:** activity → "keeping kin contact warm"
+**Does:** activity → "keeping a close bond warm"
 **Event:** `contact_made`
 
 > {actor} sends {target} the small message that means more than the words it contains — a check-in, a shared joke, a question that doesn't really need answering — and the thread between them stays warm for another while.
@@ -992,7 +994,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
   - directional trust actor↔target differs by 3+ or is loaded
   - direct contact actor→target is dramatic
 
-**Does:** activity → "drafting unsent kin contact"
+**Does:** activity → "drafting unsent contact"
 **Event:** `contact_deferred`
 
 > {actor} writes the message anyway, or composes the call in their head, and then does not send it. The wanting is real; so is the cost of turning it into contact.
@@ -1005,7 +1007,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 **When:** *(always)*
 
-**Does:** activity → "deferring kin contact"
+**Does:** activity → "deferring contact"
 **Event:** `contact_deferred`
 
 > {actor} lets the thread remain unpulled. Whatever exists between them and {target}, it is not made warmer by forcing the wrong kind of contact today.
@@ -1029,6 +1031,8 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 - **AND:**
   - **OR:**
     - actor has `rival` relationship to target
+    - actor and target share `enemy` relationship (either direction)
+    - actor has `complex` relationship to target
     - trust actor→target < 0
   - **OR:**
     - recent `compliance_alert` event in last 10 ticks
@@ -1166,9 +1170,19 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 - **AND:**
   - actor has `grieving` ephemeral
   - ≥ 3 ticks since last `mourning_act` event for actor
+  - ≥ 8 ticks since last `mourning_completed` event for actor
   - **NOT:** actor has inbound `hunting` pair tag
 
-### Branch 1 — Visit the place of remembrance  *(mag 0.42)*
+### Branch 1 — Lay the grief down  *(mag 0.34)*
+
+**When:** ≥ 4 `mourning_act` events within 30 ticks for actor
+
+**Does:** activity → "laying a long grief down"
+**Event:** `mourning_completed`
+
+> {actor} reaches for the grief out of habit and finds it has changed shape — still there, but carried now rather than carrying them. Whatever small act marks an ending in this world, {actor} performs it, and lets the day be an ordinary day.
+
+### Branch 2 — Visit the place of remembrance  *(mag 0.42)*
 
 **When:**
 
@@ -1181,7 +1195,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} returns to the place where the dead are kept — stone, name, photograph, marker, whatever this world has made for the purpose — and stands long enough to be still and remember, before going back to the work of being alive.
 
-### Branch 2 — Sit with others who carry the same loss  *(mag 0.38)*
+### Branch 3 — Sit with others who carry the same loss  *(mag 0.38)*
 
 **When:** 1+ other entities with `grieving` ephemeral co-located with actor
 
@@ -1190,7 +1204,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} finds the others who knew the dead and sits with them — wordlessly, mostly. The presence of someone else who is also not over it makes the grief feel less like evidence of personal failure.
 
-### Branch 3 — Pour the loss into the day's work  *(mag 0.28)*
+### Branch 4 — Pour the loss into the day's work  *(mag 0.28)*
 
 **When:** actor has any of [`musician`, `writer`, `artisan`, `scholar`, `arcane_caster`, `soldier`, `keeps_shop`, `domestic_role`]
 
@@ -1199,7 +1213,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} returns to their work — the thing the loss hasn't taken — and does it with the dead person sitting somewhere just behind them, watching the work with the particular silence the dead have.
 
-### Branch 4 — Carry the weight in private  *(mag 0.14)*
+### Branch 5 — Carry the weight in private  *(mag 0.14)*
 
 **When:** *(always)*
 
@@ -2154,6 +2168,7 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `migrations/057_orrery_need_bodyform_applicability.py`
 - `migrations/059_orrery_social_travel_event.py`
 - `migrations/063_orrery_adjudication_history.sql`
+- `migrations/067_rename_orrery_templates.sql`
 
 ### Tags queried as durable (via `has_tag` / `lacks_tag` / `has_any_tag`)
 
@@ -2181,6 +2196,7 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `hunter`
 - `informant_handler`
 - `innkeeper`
+- `investigator`
 - `keeps_shop`
 - `loremaster`
 - `magical_healing`
@@ -2304,6 +2320,7 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `kin_visit`
 - `maintain_cover`
 - `mourning_act`
+- `mourning_completed`
 - `protective_intervention`
 - `pursue_identity_lead`
 - `retaliation_attempted`
@@ -2356,9 +2373,12 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `asset`
 - `captor`
 - `chosen_kin`
+- `companion`
+- `complex`
 - `comrade`
 - `enemy`
 - `family`
+- `friend`
 - `guardian`
 - `handler`
 - `mentor`

@@ -333,8 +333,8 @@ def test_resolve_dry_run_excludes_anchor_present_characters() -> None:
                 ],
                 world_time=datetime(2073, 10, 31, 18, tzinfo=timezone.utc),
             ),
-            "pursue_ghost_lead",
-            "Recon a hideout their body remembers",
+            "uncover_past",
+            "Revisit a place their body remembers",
         ),
     ],
 )
@@ -585,11 +585,7 @@ def test_asymmetric_kin_defers_contact_instead_of_affectionate_message() -> None
         window_chunks=30,
     )
 
-    kin = [
-        draft
-        for draft in proposal.resolutions
-        if draft.template_id == "reach_out_to_kin"
-    ]
+    kin = [draft for draft in proposal.resolutions if draft.template_id == "reach_out"]
     assert len(kin) == 1
     assert kin[0].branch_label == "Draft the message and leave it unsent"
     assert kin[0].event_type == "contact_deferred"
