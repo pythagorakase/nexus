@@ -26,6 +26,26 @@ REMEMBRANCE_PLACE_ID = 104
 NEUTRAL_PLACE_ID = 105
 
 
+def _mundane_cooldown_events(actor_id: int, tick: int) -> tuple:
+    """Recent mundane-band events for presets that pin another package.
+
+    The mundane band (train/errands/stroll/upkeep/recreate) is a universal
+    ambient floor; presets exercising a specific quieter package suppress it
+    through the band's own cooldowns rather than by mutating gates.
+    """
+
+    return tuple(
+        EventRecord(event_type=event_type, tick=tick - 1, actor_entity_id=actor_id)
+        for event_type in (
+            "training_performed",
+            "errands_run",
+            "stroll_taken",
+            "upkeep_done",
+            "recreation_taken",
+        )
+    )
+
+
 def build_presets() -> Dict[str, WorldState]:
     """Return deterministic demo states that mirror the original JSX simulator."""
 
@@ -104,6 +124,7 @@ def build_presets() -> Dict[str, WorldState]:
             location_classes=semantic_location_classes,
             time_of_day="midday",
             weather="clear",
+            recent_events=_mundane_cooldown_events(ACTOR_ID, 100),
             current_tick=100,
         ),
         "hiding": WorldState(
@@ -113,6 +134,7 @@ def build_presets() -> Dict[str, WorldState]:
             location_classes=semantic_location_classes,
             time_of_day="night",
             weather="clear",
+            recent_events=_mundane_cooldown_events(ACTOR_ID, 100),
             current_tick=100,
         ),
         # Round-2 solo presets
@@ -132,6 +154,7 @@ def build_presets() -> Dict[str, WorldState]:
             location_classes=semantic_location_classes,
             time_of_day="evening",
             weather="clear",
+            recent_events=_mundane_cooldown_events(ACTOR_ID, 100),
             current_tick=100,
         ),
     }

@@ -207,11 +207,39 @@ class FakeLore:
         self.memnon = FakeMemnon(session)
 
 
+MUNDANE_BAND_IDS = frozenset({"train", "run_errands", "stroll", "upkeep", "recreate"})
+
+
+def _mundane_cooldown_event_rows(entity_id: int, anchor_chunk_id: int) -> list:
+    """Recent mundane-band events: tests that pin another package's behavior
+    suppress the universal ambient floor through its own cooldowns."""
+
+    return [
+        {
+            "event_type": event_type,
+            "tick_chunk_id": anchor_chunk_id - 1,
+            "actor_entity_id": entity_id,
+            "target_entity_id": None,
+            "location_id": None,
+            "changed_fields": [],
+            "world_layer": "primary",
+            "payload": {},
+        }
+        for event_type in (
+            "training_performed",
+            "errands_run",
+            "stroll_taken",
+            "upkeep_done",
+            "recreation_taken",
+        )
+    ]
+
+
 def test_resolve_dry_run_allows_null_resolution() -> None:
     """Dry-run resolution can skip under-specified actors without fallback noise."""
 
     proposal = resolve_dry_run(
-        FakeSession(),
+        FakeSession(event_rows=_mundane_cooldown_event_rows(1, 100)),
         BUILTIN_TEMPLATES,
         anchor_chunk_id=100,
         window_chunks=30,
@@ -221,6 +249,20 @@ def test_resolve_dry_run_allows_null_resolution() -> None:
     assert proposal.actor_count == 1
     assert proposal.resolution_count == 0
     assert proposal.pressure_count == 0
+
+
+def test_resolve_dry_run_idle_actor_gets_mundane_floor() -> None:
+    """A located, idle actor with no other pressure fires the mundane band."""
+
+    proposal = resolve_dry_run(
+        FakeSession(),
+        BUILTIN_TEMPLATES,
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert proposal.resolution_count == 1
+    assert proposal.resolutions[0].template_id in MUNDANE_BAND_IDS
 
 
 def test_resolve_dry_run_excludes_anchor_present_characters() -> None:
@@ -365,6 +407,7 @@ def test_maintain_cover_requires_positive_cover_context() -> None:
                 {"id": 10, "location_class": "fixed_location", "is_primary": True},
                 {"id": 10, "location_class": "place_open", "is_primary": False},
             ],
+            event_rows=_mundane_cooldown_event_rows(1, 100),
         ),
         BUILTIN_TEMPLATES,
         anchor_chunk_id=100,
@@ -651,6 +694,7 @@ def test_resolve_dry_run_filters_inapplicable_need_rows(
                     ),
                 }
             ],
+            event_rows=_mundane_cooldown_event_rows(1, 100),
         ),
         BUILTIN_TEMPLATES,
         anchor_chunk_id=100,
@@ -659,6 +703,26 @@ def test_resolve_dry_run_filters_inapplicable_need_rows(
 
     assert proposal.resolution_count == 0
     assert proposal.pressure_count == 0
+
+
+def test_mundane_band_physical_packages_refuse_non_corporeal_minds() -> None:
+    """A virtual mind does not stroll, train, run errands, or tidy quarters."""
+
+    proposal = resolve_dry_run(
+        FakeSession(
+            tag_rows=[{"entity_id": 1, "tag": "virtual", "is_ephemeral": False}],
+        ),
+        BUILTIN_TEMPLATES,
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    physical = {"train", "run_errands", "stroll", "upkeep"}
+    assert not [
+        draft
+        for draft in proposal.resolutions
+        if draft.template_id in physical
+    ]
 
 
 def test_resolve_dry_run_keeps_socialize_for_virtual_characters() -> None:
@@ -779,6 +843,7 @@ def test_resolve_dry_run_fires_intimacy_need_template_without_pairing() -> None:
                     ),
                 }
             ],
+            event_rows=_mundane_cooldown_event_rows(1, 100),
         ),
         BUILTIN_TEMPLATES,
         anchor_chunk_id=100,
@@ -927,6 +992,7 @@ def test_intimacy_partner_branch_requires_partner_relationship() -> None:
                     ),
                 }
             ],
+            event_rows=_mundane_cooldown_event_rows(1, 100),
         ),
         BUILTIN_TEMPLATES,
         anchor_chunk_id=100,
@@ -966,6 +1032,7 @@ def test_intimacy_suppressor_blocks_intimacy_template() -> None:
                     ),
                 }
             ],
+            event_rows=_mundane_cooldown_event_rows(1, 100),
         ),
         BUILTIN_TEMPLATES,
         anchor_chunk_id=100,
@@ -1352,6 +1419,7 @@ def test_work_does_not_fire_from_workplace_place_class_alone() -> None:
                     "is_primary": True,
                 },
             ],
+            event_rows=_mundane_cooldown_event_rows(1, 100),
         ),
         BUILTIN_TEMPLATES,
         anchor_chunk_id=100,
@@ -1520,7 +1588,8 @@ def test_work_template_uses_one_global_work_cooldown() -> None:
                     "world_layer": "primary",
                     "payload": {},
                 }
-            ],
+            ]
+            + _mundane_cooldown_event_rows(1, 100),
         ),
         BUILTIN_TEMPLATES,
         anchor_chunk_id=100,
@@ -1619,7 +1688,8 @@ async def test_resolve_orrery_attaches_proposal_when_enabled() -> None:
 
     assert context.orrery_proposal is not None
     assert context.orrery_proposal.anchor_chunk_id == 100
-    assert context.phase_states["orrery_resolve"]["resolution_count"] == 0
+    # The default idle located actor receives the mundane-band floor.
+    assert context.phase_states["orrery_resolve"]["resolution_count"] == 1
     assert context.context_payload == {}
 
 

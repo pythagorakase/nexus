@@ -88,6 +88,11 @@ WORKPLACE_PLACE = _place_any(
     "administration", "craft", "military", "place_medical", "production"
 )
 WORKSITE_PLACE = _place_any("craft", "military", "production")
+
+# Non-corporeal minds have no body to walk, train, provision, or tidy with.
+# Mirrors NEED_IMMUNITY_TAGS in needs.py: embodied-inorganic forms (androids,
+# constructs) keep full access to the physical mundane packages.
+NON_CORPOREAL_TAGS = ("virtual", "digital_mind", "bodyform:non_corporeal")
 ADMINISTRATION_PLACE = _place_any("administration")
 PUBLIC_MEETING_PLACE = _place_any("meeting", "commerce", "place_open")
 DWELLING_PLACE = _place_any("dwelling")
@@ -3654,6 +3659,507 @@ INTIMACY = Template(
 )
 
 
+# ----------------------------------------------------------------------------
+# Section — The mundane band
+#
+# Genre-neutral things people do in the absence of more pressing concerns.
+# Deliberately universal: unlike TEND_CRAFT's tag-restricted entry, these
+# gates admit any hydrated actor (TRAIN excepted — training is identity-
+# conditional), because the measured famine was actors with NO reachable
+# package, not actors with too many. Displacing MAINTAIN_COVER (priority 0)
+# for ordinary life is the intent.
+#
+# Anti-monoculture comes from cooldown staggering: every package carries a
+# different since_last cooldown (5-9 ticks), so an unpressured actor cycles
+# through varied mundane verbs — errands (13), stroll (12), upkeep (11),
+# training (10), recreation (9) — rather than repeating one. The whole
+# ladder sits strictly below WORK (14) and every need package: mundane
+# texture never outranks an actionable pressure. Magnitudes stay below the
+# [orrery.promote] floor: this band is ambient texture and event-ecology
+# fuel, not storyteller-prompt pressure.
+# ----------------------------------------------------------------------------
+
+
+TRAIN = Template(
+    id="train",
+    priority=10,
+    drive_band=DriveBand.ANCHORED_ROUTINE,
+    blurb="Keeping the body and the trained skill from dulling.",
+    required_slots=(Slot.ACTOR,),
+    # Identity-conditional like TEND_CRAFT: training is upkeep of a
+    # discipline the actor actually has. The wide tag OR is the entry;
+    # branches pick which discipline gets the hour.
+    package_gate=AND(
+        has_minimal_context(),
+        has_any_tag(
+            # body
+            "combat_trained",
+            "soldier",
+            "warrior",
+            "fighter",
+            "martial_artist",
+            "athlete",
+            "monk",
+            "scout",
+            "ranger",
+            "hunter",
+            "dancer",
+            # skill
+            "hacker",
+            "arcane_caster",
+            "medical_skill",
+            "surgical_training",
+            "first_aid_trained",
+            "musician",
+            "performer",
+            "surveillance_capable",
+        ),
+        time_of_day_in("morning", "midday", "afternoon", "evening"),
+        since_last_event_at_least("training_performed", minimum_ticks=8),
+        NOT(is_constrained()),
+        NOT(has_any_tag(*NON_CORPOREAL_TAGS)),
+        NOT(is_in_transit()),
+        NOT(has_inbound_pair_tag("hunting")),
+        NOT(has_ephemeral("wounded")),
+    ),
+    branches=(
+        Branch(
+            label="Drill the fighting forms",
+            conditions=has_any_tag(
+                "combat_trained",
+                "soldier",
+                "warrior",
+                "fighter",
+                "martial_artist",
+                "monk",
+            ),
+            narrative_stub=(
+                "{actor} runs the forms until the body stops asking why — "
+                "footwork, repetition, the unglamorous maintenance that "
+                "keeps a fighter's skill from becoming a fighter's memory."
+            ),
+            state_delta={
+                "character.current_activity": "drilling fighting forms",
+            },
+            event_type="training_performed",
+            changed_fields=("character.current_activity",),
+            magnitude=0.22,
+        ),
+        Branch(
+            label="Condition the body",
+            conditions=has_any_tag("athlete", "dancer", "scout", "ranger", "hunter"),
+            narrative_stub=(
+                "{actor} puts the body through its paces — distance, "
+                "climbing, stretch and strain — paying the quiet daily tax "
+                "that keeps it answering when called."
+            ),
+            state_delta={
+                "character.current_activity": "conditioning the body",
+            },
+            event_type="training_performed",
+            changed_fields=("character.current_activity",),
+            magnitude=0.18,
+        ),
+        Branch(
+            label="Sharpen the finer skill",
+            conditions=has_any_tag(
+                "hacker",
+                "arcane_caster",
+                "medical_skill",
+                "surgical_training",
+                "first_aid_trained",
+                "musician",
+                "performer",
+                "surveillance_capable",
+            ),
+            narrative_stub=(
+                "{actor} practices the exacting part of what they do — "
+                "scales, sutures, sigils, whatever their craft calls its "
+                "fundamentals — because the difference between good and "
+                "trusted is repetition nobody sees."
+            ),
+            state_delta={
+                "character.current_activity": "sharpening a trained skill",
+            },
+            event_type="training_performed",
+            changed_fields=("character.current_activity",),
+            magnitude=0.18,
+        ),
+        Branch(
+            label="Keep the edge from dulling",
+            conditions=ALWAYS,
+            narrative_stub=(
+                "{actor} gives an hour to basic upkeep of their discipline "
+                "— nothing ambitious, just enough that tomorrow's version "
+                "of them inherits a tool that still works."
+            ),
+            state_delta={
+                "character.current_activity": "maintaining their training",
+            },
+            event_type="training_performed",
+            changed_fields=("character.current_activity",),
+            magnitude=0.12,
+        ),
+    ),
+)
+
+
+RUN_ERRANDS = Template(
+    id="run_errands",
+    priority=13,
+    drive_band=DriveBand.ANCHORED_ROUTINE,
+    blurb="The small acquisitions and obligations that keep a life stocked.",
+    required_slots=(Slot.ACTOR,),
+    package_gate=AND(
+        has_minimal_context(),
+        time_of_day_in("morning", "midday", "afternoon"),
+        since_last_event_at_least("errands_run", minimum_ticks=9),
+        NOT(is_constrained()),
+        NOT(has_any_tag(*NON_CORPOREAL_TAGS)),
+        NOT(is_in_transit()),
+        NOT(is_hidden()),
+        NOT(has_inbound_pair_tag("hunting")),
+        NOT(has_ephemeral("wounded")),
+    ),
+    branches=(
+        Branch(
+            label="Make the market run",
+            conditions=in_location_class("commerce"),
+            narrative_stub=(
+                "{actor} works through the stalls and counters with a "
+                "mental list — provisions, replacements, the one thing "
+                "that ran out at the worst moment — trading small money "
+                "for the continued smooth running of a life."
+            ),
+            state_delta={
+                "character.current_activity": "making a market run",
+            },
+            event_type="errands_run",
+            changed_fields=("character.current_activity",),
+            magnitude=0.18,
+        ),
+        Branch(
+            label="Scrounge for what the day needs",
+            conditions=resources_below("poor"),
+            narrative_stub=(
+                "{actor} does the poor person's version of errands: "
+                "finding, borrowing, bartering, stretching — acquiring by "
+                "ingenuity what others acquire by purse."
+            ),
+            state_delta={
+                "character.current_activity": "scrounging necessities",
+            },
+            event_type="errands_run",
+            changed_fields=("character.current_activity",),
+            magnitude=0.16,
+        ),
+        Branch(
+            label="Provision the household",
+            conditions=has_any_tag(
+                "domestic_role", "cares_for_household", "matriarch", "patriarch"
+            ),
+            narrative_stub=(
+                "{actor} runs the rounds a household quietly depends on — "
+                "food in, worn things out, the standing orders renewed — "
+                "the invisible supply chain of ordinary life."
+            ),
+            state_delta={
+                "character.current_activity": "provisioning the household",
+            },
+            event_type="errands_run",
+            changed_fields=("character.current_activity",),
+            magnitude=0.16,
+        ),
+        Branch(
+            label="Knock out the small obligations",
+            conditions=ALWAYS,
+            narrative_stub=(
+                "{actor} spends the hour on the small errands that "
+                "accumulate at the edges of any life — a thing to return, "
+                "a message to leave, a small debt of logistics repaid."
+            ),
+            state_delta={
+                "character.current_activity": "running small errands",
+            },
+            event_type="errands_run",
+            changed_fields=("character.current_activity",),
+            magnitude=0.10,
+        ),
+    ),
+)
+
+
+STROLL = Template(
+    id="stroll",
+    priority=12,
+    drive_band=DriveBand.ANCHORED_ROUTINE,
+    blurb="Taking air: an unhurried walk with no destination that matters.",
+    required_slots=(Slot.ACTOR,),
+    package_gate=AND(
+        has_minimal_context(),
+        since_last_event_at_least("stroll_taken", minimum_ticks=5),
+        NOT(is_constrained()),
+        NOT(has_any_tag(*NON_CORPOREAL_TAGS)),
+        NOT(is_in_transit()),
+        NOT(is_hidden()),
+        NOT(has_inbound_pair_tag("hunting")),
+        NOT(has_ephemeral("wounded")),
+    ),
+    branches=(
+        Branch(
+            label="Walk under open sky",
+            conditions=AND(
+                weather_is("clear", "warm"),
+                NOT(in_location_class("subterranean")),
+            ),
+            narrative_stub=(
+                "{actor} walks for the sake of walking, under weather good "
+                "enough to notice — the pace of someone whose next hour "
+                "has, for once, no owner."
+            ),
+            state_delta={
+                "character.current_activity": "walking under open sky",
+            },
+            event_type="stroll_taken",
+            changed_fields=("character.current_activity",),
+            magnitude=0.16,
+        ),
+        Branch(
+            label="Walk the familiar streets",
+            conditions=URBAN_PUBLIC_FLOW_PLACE,
+            narrative_stub=(
+                "{actor} takes the long way through streets they know by "
+                "wear rather than by name, registering the small changes — "
+                "a new face at a stall, a repaired door — that a "
+                "neighborhood shows only to its regulars."
+            ),
+            state_delta={
+                "character.current_activity": "walking the neighborhood",
+            },
+            event_type="stroll_taken",
+            changed_fields=("character.current_activity",),
+            magnitude=0.14,
+        ),
+        Branch(
+            label="Take the night air",
+            conditions=time_of_day_in("evening", "night"),
+            narrative_stub=(
+                "{actor} steps out into the dark hours, when the world "
+                "runs quieter and thoughts get room to finish themselves."
+            ),
+            state_delta={
+                "character.current_activity": "taking the night air",
+            },
+            event_type="stroll_taken",
+            changed_fields=("character.current_activity",),
+            magnitude=0.12,
+        ),
+        Branch(
+            label="Pace the near ground",
+            conditions=ALWAYS,
+            narrative_stub=(
+                "{actor} moves through whatever ground is nearest — "
+                "corridors, courtyard, the length of a deck or a lane — "
+                "walking off the restlessness that sitting still breeds."
+            ),
+            state_delta={
+                "character.current_activity": "pacing the near ground",
+            },
+            event_type="stroll_taken",
+            changed_fields=("character.current_activity",),
+            magnitude=0.08,
+        ),
+    ),
+)
+
+
+UPKEEP = Template(
+    id="upkeep",
+    priority=11,
+    drive_band=DriveBand.ANCHORED_ROUTINE,
+    blurb="Tending one's own space, kit, and tools before they fail.",
+    required_slots=(Slot.ACTOR,),
+    # Distinct from WORK's household branch: that is labor performed as a
+    # role obligation (domestic_role and kin); this is any actor tending
+    # what is theirs — quarters, gear, tools.
+    package_gate=AND(
+        has_minimal_context(),
+        since_last_event_at_least("upkeep_done", minimum_ticks=7),
+        NOT(is_constrained()),
+        NOT(has_any_tag(*NON_CORPOREAL_TAGS)),
+        NOT(is_in_transit()),
+        NOT(has_inbound_pair_tag("hunting")),
+    ),
+    branches=(
+        Branch(
+            label="Maintain the working tools",
+            conditions=has_any_tag(
+                "engineer",
+                "mechanic",
+                "tinkerer",
+                "artificer",
+                "artisan",
+                "keeps_shop",
+                "merchant",
+                "hacker",
+                "musician",
+            ),
+            narrative_stub=(
+                "{actor} goes over the tools of their trade — cleaning, "
+                "adjusting, replacing the part that was about to become a "
+                "story — because the work is only ever as good as the kit."
+            ),
+            state_delta={
+                "character.current_activity": "maintaining their tools",
+            },
+            event_type="upkeep_done",
+            changed_fields=("character.current_activity",),
+            magnitude=0.16,
+        ),
+        Branch(
+            label="Mend and ready the kit",
+            conditions=has_any_tag(
+                "soldier",
+                "scout",
+                "ranger",
+                "hunter",
+                "combat_trained",
+                "travel_ready",
+            ),
+            narrative_stub=(
+                "{actor} strips, checks, and rights their gear with the "
+                "economy of habit — edges, straps, seals, charges — so "
+                "that when it matters, nothing surprises them."
+            ),
+            state_delta={
+                "character.current_activity": "readying their kit",
+            },
+            event_type="upkeep_done",
+            changed_fields=("character.current_activity",),
+            magnitude=0.15,
+        ),
+        Branch(
+            label="Set the home in order",
+            conditions=at_routine_anchor("home"),
+            narrative_stub=(
+                "{actor} puts their own place back in order — the small "
+                "repairs and resets that make a room somewhere to return "
+                "to instead of somewhere to pass through."
+            ),
+            state_delta={
+                "character.current_activity": "setting their home in order",
+            },
+            event_type="upkeep_done",
+            changed_fields=("character.current_activity",),
+            magnitude=0.14,
+        ),
+        Branch(
+            label="Tidy what is theirs",
+            conditions=ALWAYS,
+            narrative_stub=(
+                "{actor} tends whatever corner of the world is currently "
+                "theirs — folding, sorting, wiping down, the small "
+                "housekeeping that keeps a life from silting up."
+            ),
+            state_delta={
+                "character.current_activity": "tidying their own space",
+            },
+            event_type="upkeep_done",
+            changed_fields=("character.current_activity",),
+            magnitude=0.08,
+        ),
+    ),
+)
+
+
+RECREATE = Template(
+    id="recreate",
+    priority=9,
+    drive_band=DriveBand.ANCHORED_ROUTINE,
+    blurb="Unproductive time taken on purpose: play, spectacle, small pleasure.",
+    required_slots=(Slot.ACTOR,),
+    package_gate=AND(
+        has_minimal_context(),
+        time_of_day_in("afternoon", "evening", "night"),
+        since_last_event_at_least("recreation_taken", minimum_ticks=6),
+        NOT(is_constrained()),
+        NOT(is_in_transit()),
+        NOT(has_inbound_pair_tag("hunting")),
+        NOT(has_ephemeral("grieving")),
+    ),
+    branches=(
+        Branch(
+            label="Find games and company",
+            conditions=AND(PUBLIC_MEETING_PLACE, NOT(is_hidden())),
+            narrative_stub=(
+                "{actor} joins whatever the room is playing at — dice, "
+                "cards, darts, argument — for stakes small enough to laugh "
+                "about and company good enough to stay for."
+            ),
+            state_delta={
+                "character.current_activity": "at games in company",
+            },
+            event_type="recreation_taken",
+            changed_fields=("character.current_activity",),
+            magnitude=0.15,
+        ),
+        Branch(
+            label="Lose an hour to the loved thing",
+            conditions=has_any_tag(
+                "musician",
+                "artist",
+                "writer",
+                "scholar",
+                "dancer",
+                "performer",
+                "loremaster",
+            ),
+            narrative_stub=(
+                "{actor} returns to the thing they love with no audience "
+                "and no deadline — playing, sketching, reading — the "
+                "version of their craft that belongs to no one else."
+            ),
+            state_delta={
+                "character.current_activity": "lost in a loved pastime",
+            },
+            event_type="recreation_taken",
+            changed_fields=("character.current_activity",),
+            magnitude=0.14,
+        ),
+        Branch(
+            label="Watch the world go by",
+            conditions=time_of_day_in("evening", "night"),
+            narrative_stub=(
+                "{actor} claims a seat with a view of other people's "
+                "evenings and lets the spectacle of ordinary life be the "
+                "entertainment."
+            ),
+            state_delta={
+                "character.current_activity": "watching the world go by",
+            },
+            event_type="recreation_taken",
+            changed_fields=("character.current_activity",),
+            magnitude=0.10,
+        ),
+        Branch(
+            label="Take a small private pleasure",
+            conditions=ALWAYS,
+            narrative_stub=(
+                "{actor} gives themselves a modest hour — a familiar "
+                "comfort, an idle game, a stretch of doing nothing in "
+                "particular — and does not apologize for it."
+            ),
+            state_delta={
+                "character.current_activity": "taking a small pleasure",
+            },
+            event_type="recreation_taken",
+            changed_fields=("character.current_activity",),
+            magnitude=0.08,
+        ),
+    ),
+)
+
+
 BUILTIN_TEMPLATES = (
     EVADE_PURSUERS,
     PROTECT_KIN,
@@ -3674,11 +4180,16 @@ BUILTIN_TEMPLATES = (
     TRAVEL,
     WORK,
     TEND_CRAFT,
+    TRAIN,
     SLEEP,
     DRINK,
     EAT,
     SOCIALIZE,
     INTIMACY,
+    RUN_ERRANDS,
+    STROLL,
+    UPKEEP,
+    RECREATE,
     MAINTAIN_COVER,
 )
 
