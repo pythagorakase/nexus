@@ -1260,10 +1260,11 @@ CULTIVATE_INFORMANT = Template(
 #
 #   * `grieving` / `dying` / `unconscious` ephemerals are seeded with
 #     event-based clearance pointing at `mourning_completed` / `death_recorded`
-#     / `regained_consciousness`. These events are authored externally
-#     (CommitOrreryTick or future world-state systems); MOURN_LOSS and
-#     KEEP_VIGIL never emit them. The framework will need to honor the
-#     clearance predicates when those events eventually fire.
+#     / `regained_consciousness`. MOURN_LOSS emits `mourning_completed`
+#     itself via its preemptive "Lay the grief down" branch — grief is a
+#     resolver-owned lifecycle. `death_recorded` and `regained_consciousness`
+#     remain externally authored (CommitOrreryTick or future world-state
+#     systems); KEEP_VIGIL never emits them.
 # ----------------------------------------------------------------------------
 
 
