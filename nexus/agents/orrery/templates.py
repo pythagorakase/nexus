@@ -30,7 +30,6 @@ from nexus.agents.orrery.substrate import (
     has_location_class_destination,
     has_minimal_context,
     has_need_debt_at_or_above,
-    has_pair_tag,
     has_pair_tag_to_current_location,
     has_relationship_of_type,
     has_symmetric_relationship_of_type,
@@ -719,43 +718,9 @@ EXTRACT_VENGEANCE = Template(
         ),
         since_last_event_at_least("retaliation_attempted", minimum_ticks=8),
         since_last_event_at_least("retaliation_executed", minimum_ticks=8),
-        since_last_event_at_least("hunt_declared", minimum_ticks=8),
-        since_last_event_at_least("hunt_called_off", minimum_ticks=8),
         NOT(has_inbound_pair_tag("hunting")),
     ),
     branches=(
-        # Lifecycle terminal: a hunt that has produced nothing for a long
-        # stretch goes cold, and the outbound `hunting` edge is released so
-        # the quarry's suppressed social/routine bands can reopen. Without
-        # an off-ramp, hunting is an absorbing state from the prey's side.
-        Branch(
-            label="Let the hunt go cold",
-            conditions=AND(
-                has_pair_tag("hunting"),
-                since_last_event_at_least(
-                    "hunt_declared", minimum_ticks=18, target_slot=Slot.TARGET
-                ),
-            ),
-            narrative_stub=(
-                "{actor} stops feeding the hunt for {target} — the watchers "
-                "wander off, the standing questions expire — not forgiveness, "
-                "just the quiet arithmetic of effort against a target who "
-                "will not surface."
-            ),
-            state_delta={
-                "character.current_activity": "letting a hunt go cold",
-                "entity_pair_tags_target.clear_inbound": ["hunting"],
-            },
-            event_type="hunt_called_off",
-            changed_fields=("character.current_activity", "entity_pair_tags"),
-            magnitude=0.30,
-            preemptive=True,
-            scene_pressure_stub=(
-                "{actor} has quietly stopped hunting {target}. If the scene "
-                "touches it, show the pressure lifting — a tail that is no "
-                "longer there — rather than an announcement."
-            ),
-        ),
         Branch(
             label="Strike directly when opportunity opens",
             conditions=AND(
@@ -813,43 +778,6 @@ EXTRACT_VENGEANCE = Template(
                 "off-screen channels. If useful, let the current scene show a "
                 "rumor, message, social consequence, or pressure wave instead "
                 "of a direct state change."
-            ),
-        ),
-        # The only writer of the `hunting` pair tag: vengeance without
-        # access escalates into an open hunt, which arms the entire
-        # predator/prey machinery (EVADE_PURSUERS, HIDE, WARN_ALLY,
-        # PROTECT_KIN all consume the inbound edge). The off-ramp branch
-        # above and PROTECT_KIN's protective clear are the release valves.
-        Branch(
-            label="Declare the hunt",
-            conditions=AND(
-                NOT(co_located(Slot.ACTOR, Slot.TARGET)),
-                has_any_tag("vendetta_holder", "violent_history"),
-                NOT(has_pair_tag("hunting")),
-            ),
-            narrative_stub=(
-                "{actor} stops waiting for {target} to wander into reach and "
-                "starts hunting in earnest — questions placed with the right "
-                "people, routes watched, a price quietly attached to a "
-                "location. The grudge acquires infrastructure."
-            ),
-            state_delta={
-                "character.current_activity": "hunting a grudge target",
-                "entity_pair_tags.add_outbound": ["hunting"],
-            },
-            event_type="hunt_declared",
-            signal_event_type="threat_issued",
-            changed_fields=(
-                "character.current_activity",
-                "entity_pair_tags",
-                "world_events",
-            ),
-            magnitude=0.66,
-            scene_pressure_stub=(
-                "{actor} has begun actively hunting {target}. The scene may "
-                "surface this as watchers, questions asked about {target}, "
-                "or a warning reaching them — the hunt exists off-screen "
-                "either way."
             ),
         ),
         Branch(
@@ -1181,104 +1109,6 @@ SURVEIL = Template(
                 "{actor} is watching around {target} but has not made contact. "
                 "The Storyteller may adapt, delay, ignore, or incorporate that "
                 "pressure without letting Orrery decide what {target} does."
-            ),
-        ),
-    ),
-    present_target_policy=PresentTargetPolicy.STORYTELLER_PRESSURE,
-)
-
-
-ACT_ON_INTEL = Template(
-    id="act_on_intel",
-    priority=52,
-    drive_band=DriveBand.PROJECT_IDENTITY,
-    priority_override_rationale=(
-        "Spending accumulated surveillance is a deliberate project move that "
-        "outranks continuing to watch (SURVEIL, 48): intel hoarded forever "
-        "is the dominance pathology this package exists to break."
-    ),
-    blurb="Watching turns into acting: accumulated intel gets spent.",
-    required_slots=(Slot.ACTOR, Slot.TARGET),
-    # Entry demands a real stockpile: three surveillance passes on this
-    # specific target inside the hydration window. The long per-target
-    # cooldown makes acting rare relative to watching — watch, watch,
-    # watch, act.
-    package_gate=AND(
-        count_recent_events_at_least(
-            "surveillance_performed",
-            within_ticks=25,
-            min_count=3,
-            target_slot=Slot.TARGET,
-        ),
-        since_last_event_at_least(
-            "intel_acted_on", minimum_ticks=12, target_slot=Slot.TARGET
-        ),
-        NOT(has_inbound_pair_tag("hunting")),
-        NOT(is_constrained()),
-    ),
-    branches=(
-        Branch(
-            label="Sell the dossier",
-            conditions=OR(has_contact_of_kind("social"), URBAN_BROKERAGE_PLACE),
-            narrative_stub=(
-                "{actor} packages what watching {target} has taught them — "
-                "patterns, contacts, weaknesses — and trades it to someone "
-                "who pays in favors or coin. The knowledge stops being "
-                "private the moment it changes hands."
-            ),
-            state_delta={
-                "character.current_activity": "selling gathered intelligence",
-            },
-            event_type="intel_acted_on",
-            signal_event_type="compliance_alert",
-            changed_fields=("character.current_activity", "world_events"),
-            magnitude=0.62,
-            scene_pressure_stub=(
-                "{actor} has sold intelligence about {target}. The scene may "
-                "surface this as {target} noticing new attention, a contact "
-                "warning them, or consequences arriving from a third party."
-            ),
-        ),
-        Branch(
-            label="Confront the subject with what they know",
-            conditions=co_located(Slot.ACTOR, Slot.TARGET),
-            narrative_stub=(
-                "{actor} stops pretending not to watch and puts what they "
-                "know in front of {target} — names, times, patterns — to "
-                "see what the knowledge is worth when spent face to face."
-            ),
-            state_delta={
-                "character.current_activity": "confronting a surveilled subject",
-            },
-            event_type="intel_acted_on",
-            signal_event_type="threat_issued",
-            changed_fields=("character.current_activity", "world_events"),
-            magnitude=0.58,
-            scene_pressure_stub=(
-                "{actor} is confronting {target} with gathered intelligence. "
-                "Treat as charged pressure the scene can play as threat, "
-                "negotiation, or revelation."
-            ),
-        ),
-        Branch(
-            label="File it and keep the watch alive",
-            conditions=ALWAYS,
-            narrative_stub=(
-                "{actor} consolidates what watching {target} has produced — "
-                "cross-checking, indexing, pruning dead leads — turning "
-                "scattered observation into something that could be used "
-                "on short notice."
-            ),
-            state_delta={
-                "character.current_activity": "consolidating intelligence",
-            },
-            event_type="intel_acted_on",
-            changed_fields=("character.current_activity",),
-            magnitude=0.30,
-            scene_pressure_stub=(
-                "{actor} is quietly consolidating what they know about "
-                "{target}. Background pressure only; nothing reaches "
-                "{target} this tick."
             ),
         ),
     ),
@@ -4339,7 +4169,6 @@ BUILTIN_TEMPLATES = (
     HONOR_DEBT,
     WARN_ALLY,
     SURVEIL,
-    ACT_ON_INTEL,
     UNCOVER_PAST,
     CHECK_ON_DEPENDENT,
     CULTIVATE_INFORMANT,

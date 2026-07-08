@@ -549,7 +549,6 @@ async def commit_incubator_to_database(
                 adjudications=incubator.get("orrery_adjudications"),
                 storyteller_state_updates=incubator.get("entity_updates"),
                 prompt_settings=_orrery_prompt_settings(),
-                ecology_settings=_orrery_ecology_settings(),
             )
             if (
                 orrery_result.resolution_count
@@ -608,14 +607,6 @@ async def commit_incubator_to_database(
 
     logger.info("Successfully committed chunk %s from session %s", chunk_id, session_id)
     return chunk_id
-
-
-def _orrery_ecology_settings() -> Any:
-    """[orrery.ecology] signal-detection policy for branch signal emissions."""
-
-    from nexus.config import load_settings_as_dict
-
-    return (load_settings_as_dict().get("orrery") or {}).get("ecology")
 
 
 def _orrery_prompt_settings() -> Any:
