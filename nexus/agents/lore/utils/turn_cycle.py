@@ -649,9 +649,6 @@ class TurnCycleManager:
                 habituation_settings=orrery_settings.get("habituation"),
                 fanout_settings=orrery_settings.get("fanout"),
             )
-            turn_context.intertitle = self._load_intertitle(
-                session, anchor_chunk_id=anchor_chunk_id
-            )
 
         turn_context.orrery_proposal = proposal
         turn_context.phase_states["orrery_resolve"] = {
@@ -753,6 +750,23 @@ class TurnCycleManager:
             .first()
         )
         return row["max_id"] if row and row["max_id"] is not None else None
+
+    async def stamp_intertitle(self, turn_context: TurnContext) -> None:
+        """Phase 4.75: load the runtime intertitle for the anchor chunk.
+
+        Deliberately independent of [orrery] enabled — Skald needs the
+        headline state (clock, season/episode/scene, layer, protagonist
+        location) on every turn, not only when the behavior engine runs.
+        Bootstrap turns (no chunks yet) simply have no intertitle.
+        """
+
+        if not self.lore.memnon:
+            raise RuntimeError("Intertitle stamping requires MEMNON database access")
+        with self.lore.memnon.Session() as session:
+            anchor_chunk_id = self._orrery_anchor_chunk_id(session, turn_context)
+            turn_context.intertitle = self._load_intertitle(
+                session, anchor_chunk_id=anchor_chunk_id
+            )
 
     async def assemble_context_payload(self, turn_context: TurnContext):
         """

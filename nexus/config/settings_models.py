@@ -714,10 +714,11 @@ class OrrerySunhelmSettings(BaseModel):
         default_factory=dict,
         description=(
             "Story-time accrual floor: each elapsed chunk counts as at "
-            "least this many world-hours for the named need. Sparse — "
-            "needs not listed accrue on world time alone. Meant for "
-            "story-paced needs (socialize, intimacy); flooring biological "
-            "needs risks prose dissonance."
+            "least this many world-hours for the named need. DELIBERATELY "
+            "EMPTY by default — a dial of last resort, superseded by the "
+            "runtime intertitle that lets Skald pace world time itself; "
+            "removal is tracked in issue #437. Diegetic state belongs on "
+            "the world clock."
         ),
     )
 

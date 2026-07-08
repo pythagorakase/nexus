@@ -1708,11 +1708,33 @@ async def test_resolve_orrery_attaches_proposal_when_enabled() -> None:
     assert context.orrery_proposal.anchor_chunk_id == 100
     # The default idle located actor receives the mundane-band floor.
     assert context.phase_states["orrery_resolve"]["resolution_count"] == 1
-    # The resolve session also stamps the intertitle for the prompt.
+    # Intertitle stamping is its own phase, independent of orrery.
+    await manager.stamp_intertitle(context)
     assert context.intertitle is not None
     assert context.intertitle["time_of_day"] == "afternoon"
     assert context.intertitle["location_name"] == "The Commons"
     assert context.context_payload == {}
+
+
+@pytest.mark.asyncio
+async def test_intertitle_stamps_when_orrery_disabled() -> None:
+    """Headline state reaches Skald even without the behavior engine."""
+
+    manager = TurnCycleManager(FakeLore({"orrery": {"enabled": False}}))
+    context = TurnContext(
+        turn_id="t1",
+        user_input="continue",
+        start_time=0,
+        warm_slice=[{"id": 100}],
+    )
+
+    await manager.resolve_orrery(context)
+    assert context.orrery_proposal is None
+
+    await manager.stamp_intertitle(context)
+    assert context.intertitle is not None
+    assert context.intertitle["season"] == 1
+    assert context.intertitle["time_of_day"] == "afternoon"
 
 
 @pytest.mark.asyncio
