@@ -730,8 +730,13 @@ EXTRACT_VENGEANCE = Template(
         # an off-ramp, hunting is an absorbing state from the prey's side.
         Branch(
             label="Let the hunt go cold",
+            # NOT co_located: a hunter who finally has access strikes (the
+            # branch below), they do not shrug at the finish line. The
+            # clear is subject-scoped: abandoning one's own hunt must not
+            # release another hunter's live edge into the same target.
             conditions=AND(
                 has_pair_tag("hunting"),
+                NOT(co_located(Slot.ACTOR, Slot.TARGET)),
                 since_last_event_at_least(
                     "hunt_declared", minimum_ticks=18, target_slot=Slot.TARGET
                 ),
@@ -744,7 +749,7 @@ EXTRACT_VENGEANCE = Template(
             ),
             state_delta={
                 "character.current_activity": "letting a hunt go cold",
-                "entity_pair_tags_target.clear_inbound": ["hunting"],
+                "entity_pair_tags.clear_outbound": ["hunting"],
             },
             event_type="hunt_called_off",
             changed_fields=("character.current_activity", "entity_pair_tags"),

@@ -207,9 +207,10 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 - **AND:**
   - actor has `hunting` pair tag to target
+  - **NOT:** actor and target are co-located
   - ≥ 18 ticks since last `hunt_declared` event for (actor, target) pair
 
-**Does:** activity → "letting a hunt go cold"; clears inbound `hunting` pair tags from target
+**Does:** activity → "letting a hunt go cold"; `entity_pair_tags.clear_outbound` = `['hunting']`
 **Event:** `hunt_called_off`
 
 > {actor} stops feeding the hunt for {target} — the watchers wander off, the standing questions expire — not forgiveness, just the quiet arithmetic of effort against a target who will not surface.

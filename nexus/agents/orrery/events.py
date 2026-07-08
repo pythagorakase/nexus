@@ -44,6 +44,7 @@ SUPPORTED_STATE_DELTA_KEYS = frozenset(
         "entity_tags_target.add",
         "entity_tags_target.remove",
         "entity_pair_tags.add_outbound",
+        "entity_pair_tags.clear_outbound",
         "entity_pair_tags_target.clear_inbound",
         "need.fulfill",
         "travel.start",
@@ -61,6 +62,7 @@ REPLACEMENT_STATE_DELTA_ALIASES = {
     "entity_tags_target_add": "entity_tags_target.add",
     "entity_tags_target_remove": "entity_tags_target.remove",
     "entity_pair_tags_add_outbound": "entity_pair_tags.add_outbound",
+    "entity_pair_tags_clear_outbound": "entity_pair_tags.clear_outbound",
     "entity_pair_tags_target_clear_inbound": ("entity_pair_tags_target.clear_inbound"),
 }
 
@@ -1499,6 +1501,24 @@ def _apply_state_delta_sync(
                 source_chunk_id=source_chunk_id,
             ):
                 tag_mutations += 1
+    outbound_pair_tag_clears = (
+        draft.state_delta.get("entity_pair_tags.clear_outbound", ()) or ()
+    )
+    if outbound_pair_tag_clears:
+        if target_entity_id is None:
+            raise ValueError(
+                f"Orrery draft {draft.template_id} clears an outbound pair "
+                "tag but has no target binding"
+            )
+        for tag in outbound_pair_tag_clears:
+            tag_mutations += _clear_outbound_pair_tag_sync(
+                cur,
+                subject_entity_id=actor_entity_id,
+                object_entity_id=target_entity_id,
+                tag=str(tag),
+                template_id=draft.template_id,
+                source_chunk_id=source_chunk_id,
+            )
     if "need.fulfill" in draft.state_delta:
         tag_mutations += _apply_need_fulfillment_sync(
             cur,
@@ -1642,6 +1662,24 @@ async def _apply_state_delta_async(
                 source_chunk_id=source_chunk_id,
             ):
                 tag_mutations += 1
+    outbound_pair_tag_clears = (
+        draft.state_delta.get("entity_pair_tags.clear_outbound", ()) or ()
+    )
+    if outbound_pair_tag_clears:
+        if target_entity_id is None:
+            raise ValueError(
+                f"Orrery draft {draft.template_id} clears an outbound pair "
+                "tag but has no target binding"
+            )
+        for tag in outbound_pair_tag_clears:
+            tag_mutations += await _clear_outbound_pair_tag_async(
+                conn,
+                subject_entity_id=actor_entity_id,
+                object_entity_id=target_entity_id,
+                tag=str(tag),
+                template_id=draft.template_id,
+                source_chunk_id=source_chunk_id,
+            )
     if "need.fulfill" in draft.state_delta:
         tag_mutations += await _apply_need_fulfillment_async(
             conn,
@@ -2889,6 +2927,62 @@ def _add_outbound_pair_tag_sync(
     return cur.fetchone() is not None
 
 
+def _clear_outbound_pair_tag_sync(
+    cur: Any,
+    *,
+    subject_entity_id: int,
+    object_entity_id: int,
+    tag: str,
+    template_id: str,
+    source_chunk_id: int,
+) -> int:
+    """Clear one directed edge (actor -> target) only.
+
+    The target-wide variant (_clear_inbound_pair_tags_sync) releases every
+    subject's edge at once — right for a protective intervention, wrong for
+    one hunter abandoning their own hunt while another's is still live.
+    """
+
+    cur.execute(
+        """
+        UPDATE entity_pair_tags ept
+        SET cleared_at = now()
+        FROM pair_tags pt
+        WHERE ept.pair_tag_id = pt.id
+          AND ept.subject_entity_id = %s
+          AND ept.object_entity_id = %s
+          AND pt.tag = %s
+          AND ept.cleared_at IS NULL
+        RETURNING ept.id
+        """,
+        (subject_entity_id, object_entity_id, tag),
+    )
+    cleared_ids = [_row_get(row, "id", 0) for row in cur.fetchall()]
+    world_time = _chunk_world_time_sync(cur, source_chunk_id)
+    for pair_tag_row_id in cleared_ids:
+        cur.execute(
+            """
+            INSERT INTO tag_clearance_log (
+                entity_pair_tag_id, mechanism, cleared_at_world_time,
+                justification, source_chunk_id
+            ) VALUES (%s, 'authored', %s, %s::jsonb, %s)
+            """,
+            (
+                pair_tag_row_id,
+                world_time,
+                json.dumps(
+                    {
+                        "template_id": template_id,
+                        "state_delta": "entity_pair_tags.clear_outbound",
+                        "tag": tag,
+                    }
+                ),
+                source_chunk_id,
+            ),
+        )
+    return len(cleared_ids)
+
+
 async def _remove_entity_tag_async(
     conn: Any,
     entity_id: int,
@@ -3013,6 +3107,57 @@ async def _add_outbound_pair_tag_async(
         source_chunk_id,
     )
     return row is not None
+
+
+async def _clear_outbound_pair_tag_async(
+    conn: Any,
+    *,
+    subject_entity_id: int,
+    object_entity_id: int,
+    tag: str,
+    template_id: str,
+    source_chunk_id: int,
+) -> int:
+    """Async twin of _clear_outbound_pair_tag_sync."""
+
+    rows = await conn.fetch(
+        """
+        UPDATE entity_pair_tags ept
+        SET cleared_at = now()
+        FROM pair_tags pt
+        WHERE ept.pair_tag_id = pt.id
+          AND ept.subject_entity_id = $1
+          AND ept.object_entity_id = $2
+          AND pt.tag = $3
+          AND ept.cleared_at IS NULL
+        RETURNING ept.id
+        """,
+        subject_entity_id,
+        object_entity_id,
+        tag,
+    )
+    cleared_ids = [_row_get(row, "id", 0) for row in rows]
+    world_time = await _chunk_world_time_async(conn, source_chunk_id)
+    for pair_tag_row_id in cleared_ids:
+        await conn.execute(
+            """
+            INSERT INTO tag_clearance_log (
+                entity_pair_tag_id, mechanism, cleared_at_world_time,
+                justification, source_chunk_id
+            ) VALUES ($1, 'authored', $2, $3::jsonb, $4)
+            """,
+            pair_tag_row_id,
+            world_time,
+            json.dumps(
+                {
+                    "template_id": template_id,
+                    "state_delta": "entity_pair_tags.clear_outbound",
+                    "tag": tag,
+                }
+            ),
+            source_chunk_id,
+        )
+    return len(cleared_ids)
 
 
 def _emit_world_event_sync(

@@ -224,6 +224,87 @@ def test_outbound_pair_tag_and_detection_gate_live() -> None:
                 ]
                 assert events[0]["payload"]["signal_detection"]["detected"] is True
                 assert events[1]["payload"]["signal_of"] == "hunt_declared"
+
+        # Phase 3: the off-ramp's subject-scoped clear releases only the
+        # actor's own edge — a rival hunter's edge into the same target
+        # survives.
+        with conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    """
+                    SELECT c.entity_id FROM characters c
+                    WHERE c.entity_id NOT IN (%s, %s)
+                    ORDER BY c.entity_id LIMIT 1
+                    """,
+                    (actor_id, target_id),
+                )
+                rival_id = int(cur.fetchone()["entity_id"])
+                cur.execute(
+                    """
+                    INSERT INTO entity_pair_tags (
+                        subject_entity_id, object_entity_id, pair_tag_id,
+                        source_kind, template_id
+                    )
+                    SELECT %s, %s, pt.id, 'template', 'extract_vengeance'
+                    FROM pair_tags pt WHERE pt.tag = 'hunting'
+                    RETURNING id
+                    """,
+                    (rival_id, target_id),
+                )
+                rival_edge_id = int(cur.fetchone()["id"])
+                pair_tag_ids.append(rival_edge_id)
+
+        cold_draft = OrreryResolutionDraft(
+            template_id="extract_vengeance",
+            priority=90,
+            binding_hash=f"ecology-live-{uuid.uuid4().hex}",
+            bindings={"actor": actor_id, "target": target_id},
+            branch_label="Let the hunt go cold",
+            narrative_stub="{actor} lets the hunt for {target} go cold.",
+            state_delta={
+                "character.current_activity": "letting a hunt go cold",
+                "entity_pair_tags.clear_outbound": ["hunting"],
+            },
+            event_type="hunt_called_off",
+            changed_fields=("character.current_activity", "entity_pair_tags"),
+            magnitude=0.30,
+        )
+        with conn:
+            result = commit_orrery_tick_sync(
+                conn,
+                OrreryTickProposal(
+                    anchor_chunk_id=anchor,
+                    actor_count=1,
+                    resolutions=(cold_draft,),
+                ),
+                tick_chunk_id=anchor,
+                slot=LIVE_SLOT,
+            )
+        assert result.resolution_count == 1
+        with conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    """
+                    SELECT id FROM orrery_resolutions
+                    WHERE tick_chunk_id = %s ORDER BY id DESC LIMIT 1
+                    """,
+                    (anchor,),
+                )
+                resolution_ids.append(int(cur.fetchone()["id"]))
+                cur.execute(
+                    """
+                    SELECT ept.subject_entity_id, ept.cleared_at IS NULL AS live
+                    FROM entity_pair_tags ept
+                    JOIN pair_tags pt ON pt.id = ept.pair_tag_id
+                    WHERE ept.object_entity_id = %s AND pt.tag = 'hunting'
+                      AND ept.id = ANY(%s)
+                    ORDER BY ept.subject_entity_id
+                    """,
+                    (target_id, pair_tag_ids),
+                )
+                edges = {r["subject_entity_id"]: r["live"] for r in cur.fetchall()}
+                assert edges[actor_id] is False, "actor's own hunt must clear"
+                assert edges[rival_id] is True, "rival's hunt must survive"
     finally:
         if conn is not None:
             with conn:
