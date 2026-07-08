@@ -57,6 +57,11 @@ class AnchorProposal:
 
 UNPROVISIONED = "unprovisioned"
 
+# Zone 0 is the "vehicles" zone: a character currently aboard a conveyance
+# has no home-zone evidence there (though it may mean they are nomadic —
+# a retrofit-review question, not a backfill guess).
+VEHICLES_ZONE_ID = 0
+
 
 def collect_proposals(conn) -> list[AnchorProposal]:
     rows = conn.execute(
@@ -67,7 +72,7 @@ def collect_proposals(conn) -> list[AnchorProposal]:
                 c.name,
                 resides.place_id AS resides_place_id,
                 cur.id AS current_place_id,
-                NULLIF(cur.zone, 0) AS current_zone_id
+                cur.zone AS current_zone_id
             FROM characters c
             LEFT JOIN character_routine_anchors cra
                 ON cra.character_entity_id = c.entity_id
@@ -103,6 +108,23 @@ def collect_proposals(conn) -> list[AnchorProposal]:
                     zone_id=None,
                     evidence=f"resides_at -> place {row['resides_place_id']}",
                     confidence="high",
+                )
+            )
+        elif row["current_zone_id"] == VEHICLES_ZONE_ID:
+            proposals.append(
+                AnchorProposal(
+                    character_entity_id=row["entity_id"],
+                    character_name=row["name"],
+                    anchor_type="home",
+                    mobility_policy=UNPROVISIONED,
+                    place_id=None,
+                    zone_id=None,
+                    evidence=(
+                        f"current location place {row['current_place_id']} is "
+                        "in the vehicles zone — aboard a conveyance, not home "
+                        "evidence (possibly nomadic; review)"
+                    ),
+                    confidence="none",
                 )
             )
         elif row["current_zone_id"] is not None:
