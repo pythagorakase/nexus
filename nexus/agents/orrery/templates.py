@@ -3671,8 +3671,10 @@ INTIMACY = Template(
 #
 # Anti-monoculture comes from cooldown staggering: every package carries a
 # different since_last cooldown (5-9 ticks), so an unpressured actor cycles
-# through varied mundane verbs — stroll, errands, upkeep, recreation,
-# training — rather than repeating one. Magnitudes stay below the
+# through varied mundane verbs — errands (13), stroll (12), upkeep (11),
+# training (10), recreation (9) — rather than repeating one. The whole
+# ladder sits strictly below WORK (14) and every need package: mundane
+# texture never outranks an actionable pressure. Magnitudes stay below the
 # [orrery.promote] floor: this band is ambient texture and event-ecology
 # fuel, not storyteller-prompt pressure.
 # ----------------------------------------------------------------------------
@@ -3680,7 +3682,7 @@ INTIMACY = Template(
 
 TRAIN = Template(
     id="train",
-    priority=16,
+    priority=10,
     drive_band=DriveBand.ANCHORED_ROUTINE,
     blurb="Keeping the body and the trained skill from dulling.",
     required_slots=(Slot.ACTOR,),

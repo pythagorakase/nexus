@@ -1727,64 +1727,6 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 ---
 
-## TRAIN — priority 16
-
-> Keeping the body and the trained skill from dulling.
-
-**Drive band:** anchored routine
-**Slots:** ACTOR
-
-**Gate:**
-
-- **AND:**
-  - actor has enough hydrated context
-  - actor has any of [`combat_trained`, `soldier`, `warrior`, `fighter`, `martial_artist`, `athlete`, `monk`, `scout`, `ranger`, `hunter`, `dancer`, `hacker`, `arcane_caster`, `medical_skill`, `surgical_training`, `first_aid_trained`, `musician`, `performer`, `surveillance_capable`]
-  - time of day is one of [morning, midday, afternoon, evening]
-  - ≥ 8 ticks since last `training_performed` event for actor
-  - **NOT:** actor is constrained or immobilized
-  - **NOT:** actor has any of [`virtual`, `digital_mind`, `bodyform:non_corporeal`]
-  - **NOT:** actor is in transit
-  - **NOT:** actor has inbound `hunting` pair tag
-  - **NOT:** actor has `wounded` ephemeral
-
-### Branch 1 — Drill the fighting forms  *(mag 0.22)*
-
-**When:** actor has any of [`combat_trained`, `soldier`, `warrior`, `fighter`, `martial_artist`, `monk`]
-
-**Does:** activity → "drilling fighting forms"
-**Event:** `training_performed`
-
-> {actor} runs the forms until the body stops asking why — footwork, repetition, the unglamorous maintenance that keeps a fighter's skill from becoming a fighter's memory.
-
-### Branch 2 — Condition the body  *(mag 0.18)*
-
-**When:** actor has any of [`athlete`, `dancer`, `scout`, `ranger`, `hunter`]
-
-**Does:** activity → "conditioning the body"
-**Event:** `training_performed`
-
-> {actor} puts the body through its paces — distance, climbing, stretch and strain — paying the quiet daily tax that keeps it answering when called.
-
-### Branch 3 — Sharpen the finer skill  *(mag 0.18)*
-
-**When:** actor has any of [`hacker`, `arcane_caster`, `medical_skill`, `surgical_training`, `first_aid_trained`, `musician`, `performer`, `surveillance_capable`]
-
-**Does:** activity → "sharpening a trained skill"
-**Event:** `training_performed`
-
-> {actor} practices the exacting part of what they do — scales, sutures, sigils, whatever their craft calls its fundamentals — because the difference between good and trusted is repetition nobody sees.
-
-### Branch 4 — Keep the edge from dulling  *(mag 0.12)*
-
-**When:** *(always)*
-
-**Does:** activity → "maintaining their training"
-**Event:** `training_performed`
-
-> {actor} gives an hour to basic upkeep of their discipline — nothing ambitious, just enough that tomorrow's version of them inherits a tool that still works.
-
----
-
 ## INTIMACY — priority 16
 
 > The body asks for the kind of connection that is not conversation.
@@ -2276,6 +2218,64 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 **Event:** `upkeep_done`
 
 > {actor} tends whatever corner of the world is currently theirs — folding, sorting, wiping down, the small housekeeping that keeps a life from silting up.
+
+---
+
+## TRAIN — priority 10
+
+> Keeping the body and the trained skill from dulling.
+
+**Drive band:** anchored routine
+**Slots:** ACTOR
+
+**Gate:**
+
+- **AND:**
+  - actor has enough hydrated context
+  - actor has any of [`combat_trained`, `soldier`, `warrior`, `fighter`, `martial_artist`, `athlete`, `monk`, `scout`, `ranger`, `hunter`, `dancer`, `hacker`, `arcane_caster`, `medical_skill`, `surgical_training`, `first_aid_trained`, `musician`, `performer`, `surveillance_capable`]
+  - time of day is one of [morning, midday, afternoon, evening]
+  - ≥ 8 ticks since last `training_performed` event for actor
+  - **NOT:** actor is constrained or immobilized
+  - **NOT:** actor has any of [`virtual`, `digital_mind`, `bodyform:non_corporeal`]
+  - **NOT:** actor is in transit
+  - **NOT:** actor has inbound `hunting` pair tag
+  - **NOT:** actor has `wounded` ephemeral
+
+### Branch 1 — Drill the fighting forms  *(mag 0.22)*
+
+**When:** actor has any of [`combat_trained`, `soldier`, `warrior`, `fighter`, `martial_artist`, `monk`]
+
+**Does:** activity → "drilling fighting forms"
+**Event:** `training_performed`
+
+> {actor} runs the forms until the body stops asking why — footwork, repetition, the unglamorous maintenance that keeps a fighter's skill from becoming a fighter's memory.
+
+### Branch 2 — Condition the body  *(mag 0.18)*
+
+**When:** actor has any of [`athlete`, `dancer`, `scout`, `ranger`, `hunter`]
+
+**Does:** activity → "conditioning the body"
+**Event:** `training_performed`
+
+> {actor} puts the body through its paces — distance, climbing, stretch and strain — paying the quiet daily tax that keeps it answering when called.
+
+### Branch 3 — Sharpen the finer skill  *(mag 0.18)*
+
+**When:** actor has any of [`hacker`, `arcane_caster`, `medical_skill`, `surgical_training`, `first_aid_trained`, `musician`, `performer`, `surveillance_capable`]
+
+**Does:** activity → "sharpening a trained skill"
+**Event:** `training_performed`
+
+> {actor} practices the exacting part of what they do — scales, sutures, sigils, whatever their craft calls its fundamentals — because the difference between good and trusted is repetition nobody sees.
+
+### Branch 4 — Keep the edge from dulling  *(mag 0.12)*
+
+**When:** *(always)*
+
+**Does:** activity → "maintaining their training"
+**Event:** `training_performed`
+
+> {actor} gives an hour to basic upkeep of their discipline — nothing ambitious, just enough that tomorrow's version of them inherits a tool that still works.
 
 ---
 

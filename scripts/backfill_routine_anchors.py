@@ -18,13 +18,16 @@ Work anchors are NOT derived: profession evidence is currently too
 sparse to guess workplaces deterministically; the report lists them so
 the retrofit pass can fill them with human review.
 
-Default is a dry-run that writes a review CSV. Re-run with ``--apply``
-after review to insert rows (source='compiler_backfill').
+Default is a dry-run that writes a review CSV. ``--apply`` takes the
+REVIEWED CSV back as its input and inserts exactly the rows it still
+contains (source='compiler_backfill') — delete or edit rows during
+review and the deletions/edits are honored; the database is never
+re-derived behind the reviewer's back.
 
 Usage:
-    python scripts/backfill_routine_anchors.py --slot 2
     python scripts/backfill_routine_anchors.py --slot 2 --out review.csv
-    python scripts/backfill_routine_anchors.py --slot 2 --apply
+    # ... review/edit review.csv ...
+    python scripts/backfill_routine_anchors.py --slot 2 --apply review.csv
 """
 
 from __future__ import annotations
@@ -163,6 +166,40 @@ def write_csv(proposals: list[AnchorProposal], out) -> None:
         )
 
 
+def read_reviewed_csv(path: str) -> list[AnchorProposal]:
+    """Load reviewed proposals; the CSV is the authority after review."""
+
+    proposals: list[AnchorProposal] = []
+    with open(path, newline="") as handle:
+        reader = csv.DictReader(handle)
+        required = {
+            "character_entity_id",
+            "anchor_type",
+            "mobility_policy",
+            "place_id",
+            "zone_id",
+        }
+        missing = required - set(reader.fieldnames or [])
+        if missing:
+            raise ValueError(
+                f"{path}: reviewed CSV is missing columns {sorted(missing)}"
+            )
+        for row in reader:
+            proposals.append(
+                AnchorProposal(
+                    character_entity_id=int(row["character_entity_id"]),
+                    character_name=row.get("character_name", ""),
+                    anchor_type=row["anchor_type"],
+                    mobility_policy=row["mobility_policy"],
+                    place_id=int(row["place_id"]) if row["place_id"] else None,
+                    zone_id=int(row["zone_id"]) if row["zone_id"] else None,
+                    evidence=row.get("evidence", ""),
+                    confidence=row.get("confidence", ""),
+                )
+            )
+    return proposals
+
+
 def apply_proposals(conn, proposals: list[AnchorProposal]) -> int:
     applied = 0
     for p in proposals:
@@ -204,39 +241,44 @@ def main() -> None:
     )
     parser.add_argument(
         "--apply",
-        action="store_true",
-        help="Write derivable anchors to the database (after CSV review)",
+        type=str,
+        default=None,
+        metavar="REVIEWED_CSV",
+        help="Insert exactly the rows in this reviewed CSV (the review is "
+        "the authority; the database is not re-derived)",
     )
     args = parser.parse_args()
 
     engine = create_engine(get_slot_db_url(slot=args.slot))
     with engine.begin() as conn:
+        if args.apply:
+            reviewed = read_reviewed_csv(args.apply)
+            applied = apply_proposals(conn, reviewed)
+            skipped = len(reviewed) - applied
+            print(
+                f"slot {args.slot}: applied {applied} anchors from "
+                f"{args.apply}; skipped {skipped} unprovisioned rows"
+            )
+            return
+
         proposals = collect_proposals(conn)
         derivable = [p for p in proposals if p.mobility_policy != UNPROVISIONED]
         missing = [p for p in proposals if p.mobility_policy == UNPROVISIONED]
 
-        if args.apply:
-            applied = apply_proposals(conn, proposals)
-            print(
-                f"slot {args.slot}: applied {applied} home anchors; "
-                f"{len(missing)} characters remain unprovisioned "
-                "(no derivable evidence — retrofit pass required)"
-            )
-        else:
-            out = open(args.out, "w", newline="") if args.out else sys.stdout
-            try:
-                write_csv(proposals, out)
-            finally:
-                if args.out:
-                    out.close()
-            print(
-                f"\nslot {args.slot}: {len(derivable)} derivable "
-                f"({sum(1 for p in derivable if p.confidence == 'high')} high, "
-                f"{sum(1 for p in derivable if p.confidence == 'medium')} medium), "
-                f"{len(missing)} unprovisioned. Dry run — re-run with --apply "
-                "after review.",
-                file=sys.stderr,
-            )
+        out = open(args.out, "w", newline="") if args.out else sys.stdout
+        try:
+            write_csv(proposals, out)
+        finally:
+            if args.out:
+                out.close()
+        print(
+            f"\nslot {args.slot}: {len(derivable)} derivable "
+            f"({sum(1 for p in derivable if p.confidence == 'high')} high, "
+            f"{sum(1 for p in derivable if p.confidence == 'medium')} medium), "
+            f"{len(missing)} unprovisioned. Dry run — review the CSV, then "
+            "re-run with --apply <reviewed.csv>.",
+            file=sys.stderr,
+        )
 
 
 if __name__ == "__main__":
