@@ -1102,6 +1102,35 @@ class OrreryPromptSettings(BaseModel):
     )
 
 
+class OrreryEcologySettings(BaseModel):
+    """Event-ecology tuning: cross-package chains and their throttles."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    signal_detection_default: int = Field(
+        default=100,
+        ge=0,
+        le=100,
+        description=(
+            "Percent chance an emitted branch signal (signal_event_type) is "
+            "actually detected and lands as a world_events row, for event "
+            "types without an explicit rate below. 100 = always detected. "
+            "The roll is a deterministic hash of (template, actor, target, "
+            "tick, event type), so replays reconstruct identical outcomes."
+        ),
+    )
+    signal_detection: dict[str, int] = Field(
+        default_factory=dict,
+        description=(
+            "Per-event-type detection percents overriding the default — "
+            "e.g. compliance_alert = 35 means most surveillance goes "
+            "unnoticed by its subject. Undetected signals are recorded in "
+            "the primary event's payload for the audit layer, but feed no "
+            "gates."
+        ),
+    )
+
+
 class OrrerySettings(BaseModel):
     """Orrery off-screen behavior settings.
 
@@ -1127,6 +1156,7 @@ class OrrerySettings(BaseModel):
         default_factory=OrreryReconstructionSettings
     )
     prompt: OrreryPromptSettings = Field(default_factory=OrreryPromptSettings)
+    ecology: OrreryEcologySettings = Field(default_factory=OrreryEcologySettings)
 
 
 # =============================================================================
