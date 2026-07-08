@@ -68,6 +68,7 @@ class FakeSession:
         need_debt_rows=None,
         travel_state_rows=None,
         routine_anchor_rows=None,
+        win_history_rows=None,
         world_time=None,
         weather="",
         max_chunk_id=100,
@@ -98,6 +99,7 @@ class FakeSession:
         self.need_debt_rows = need_debt_rows or []
         self.travel_state_rows = travel_state_rows or []
         self.routine_anchor_rows = routine_anchor_rows or []
+        self.win_history_rows = win_history_rows or []
         self.world_time = world_time or datetime(2073, 10, 31, 12, tzinfo=timezone.utc)
         self.weather = weather
         self.max_chunk_id = max_chunk_id
@@ -174,6 +176,8 @@ class FakeSession:
             assert "JOIN entities e" in sql
             assert "e.is_active = true" in sql
             return FakeResult(self.travel_state_rows)
+        if "/* orrery:win_history */" in sql:
+            return FakeResult(self.win_history_rows)
         if "/* orrery:routine_anchors */" in sql:
             assert "JOIN entities e" in sql
             assert "e.is_active = true" in sql
@@ -719,9 +723,7 @@ def test_mundane_band_physical_packages_refuse_non_corporeal_minds() -> None:
 
     physical = {"train", "run_errands", "stroll", "upkeep"}
     assert not [
-        draft
-        for draft in proposal.resolutions
-        if draft.template_id in physical
+        draft for draft in proposal.resolutions if draft.template_id in physical
     ]
 
 
@@ -2225,3 +2227,153 @@ def test_resolution_drafts_carry_binding_names_for_skald() -> None:
     assert data["binding_names"] == {"actor": "Brother Edran Vell"}
     rehydrated = OrreryResolutionDraft.from_dict(data)
     assert rehydrated.binding_names == {"actor": "Brother Edran Vell"}
+
+
+def test_habituation_dampens_repeat_winner_and_respects_exemptions() -> None:
+    """Committed wins reorder the stack; crisis packages never dampen."""
+
+    from nexus.agents.orrery.substrate import (
+        HabituationPolicy,
+        WorldState,
+        evaluate_stack,
+        stack_order,
+    )
+
+    high = Template(
+        id="surveil",  # real ids keep prose/catalog lookups valid
+        priority=48,
+        drive_band=DriveBand.PROJECT_IDENTITY,
+        blurb="synthetic",
+        required_slots=(Slot.ACTOR,),
+        package_gate=ALWAYS,
+        branches=(Branch("watch", ALWAYS, "{actor} watches."),),
+    )
+    low = Template(
+        id="reach_out",
+        priority=40,
+        drive_band=DriveBand.AFFILIATION,
+        blurb="synthetic",
+        required_slots=(Slot.ACTOR,),
+        package_gate=ALWAYS,
+        branches=(Branch("reach", ALWAYS, "{actor} reaches out."),),
+    )
+    crisis = Template(
+        id="evade_pursuers",
+        priority=48,
+        drive_band=DriveBand.CRISIS_CONSTRAINT,
+        blurb="synthetic",
+        required_slots=(Slot.ACTOR,),
+        package_gate=ALWAYS,
+        branches=(Branch("evade", ALWAYS, "{actor} evades."),),
+    )
+    policy = HabituationPolicy(
+        enabled=True, penalty_per_win=3.0, max_penalty=10.0, window_ticks=40
+    )
+    bindings = {Slot.ACTOR: 1}
+
+    fresh = WorldState()
+    assert evaluate_stack((low, high), fresh, bindings, None, policy).template_id == (
+        "surveil"
+    )
+
+    # Three committed wins drop surveil's effective priority to 39 < 40.
+    worn = WorldState(win_history={(1, "surveil"): 3})
+    assert evaluate_stack((low, high), worn, bindings, None, policy).template_id == (
+        "reach_out"
+    )
+    # The cap bounds the debit: ten wins is still only -10.
+    capped = WorldState(win_history={(1, "surveil"): 10})
+    ordered = stack_order((low, high), capped, bindings, policy)
+    assert [t.id for t in ordered] == ["reach_out", "surveil"]
+
+    # Crisis-band packages never dampen, whatever their history.
+    crisis_worn = WorldState(win_history={(1, "evade_pursuers"): 10})
+    ordered = stack_order((low, crisis), crisis_worn, bindings, policy)
+    assert [t.id for t in ordered] == ["evade_pursuers", "reach_out"]
+
+    # Disabled policy is inert.
+    assert evaluate_stack((low, high), worn, bindings, None, None).template_id == (
+        "surveil"
+    )
+
+
+def test_explain_stack_orders_like_evaluate_under_habituation() -> None:
+    """The audit layer's winner must match production under dampening."""
+
+    from nexus.agents.orrery.explain import explain_stack
+    from nexus.agents.orrery.substrate import (
+        HabituationPolicy,
+        WorldState,
+        evaluate_stack,
+    )
+    from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
+
+    policy = HabituationPolicy(
+        enabled=True, penalty_per_win=3.0, max_penalty=10.0, window_ticks=40
+    )
+    state = WorldState(
+        tags={1: frozenset({"seeking_identity"})},
+        locations={1: 10},
+        activities={1: "idle"},
+        time_of_day="evening",
+        current_tick=100,
+        win_history={(1, "uncover_past"): 5},
+    )
+    bindings = {Slot.ACTOR: 1}
+    solo = [t for t in BUILTIN_TEMPLATES if t.required_slots == (Slot.ACTOR,)]
+
+    truth = evaluate_stack(solo, state, bindings, None, policy)
+    explained = explain_stack(solo, state, bindings, None, policy)
+    assert truth is not None
+    assert explained.winner_id == truth.template_id
+
+
+def test_pair_fanout_quota_prefers_template_diversity() -> None:
+    """The quota keeps the first draft of each template before any repeat."""
+
+    from nexus.agents.orrery.resolver import _apply_pair_fanout_quota
+    from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
+
+    def pair_draft(template_id: str, target: int, magnitude: float):
+        return OrreryResolutionDraft(
+            template_id=template_id,
+            priority=48,
+            binding_hash=f"hash-{template_id}-{target}",
+            bindings={"actor": 1, "target": target},
+            branch_label="x",
+            narrative_stub="{actor} acts on {target}.",
+            magnitude=magnitude,
+        )
+
+    solo = OrreryResolutionDraft(
+        template_id="stroll",
+        priority=12,
+        binding_hash="hash-solo",
+        bindings={"actor": 1},
+        branch_label="x",
+        narrative_stub="{actor} strolls.",
+        magnitude=0.1,
+    )
+    crisis = pair_draft("evade_pursuers", 9, 0.2)
+    drafts = [
+        solo,
+        pair_draft("surveil", 2, 0.5),
+        pair_draft("surveil", 3, 0.9),
+        pair_draft("surveil", 4, 0.7),
+        pair_draft("reach_out", 5, 0.2),
+        crisis,
+    ]
+    trimmed = _apply_pair_fanout_quota(
+        drafts,
+        list(BUILTIN_TEMPLATES),
+        max_pair_drafts_per_actor=2,
+        exempt_bands=frozenset({"crisis_constraint"}),
+    )
+    kept = [(d.template_id, d.bindings.get("target")) for d in trimmed]
+    # Solo drafts and crisis-band pair drafts are untouched; of the four
+    # non-crisis pair drafts, diversity wins: best surveil + the reach_out.
+    assert ("stroll", None) in kept
+    assert ("evade_pursuers", 9) in kept
+    assert ("surveil", 3) in kept
+    assert ("reach_out", 5) in kept
+    assert len(kept) == 4

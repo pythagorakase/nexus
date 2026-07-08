@@ -51,6 +51,8 @@ from nexus.agents.orrery.needs import (
 from nexus.agents.orrery.resolver import (
     _LOCATION_CLASS_CATEGORY_SQL,
     OrreryScenePressureDraft,
+    _apply_pair_fanout_quota,
+    _coerce_fanout,
     _entity_label,
     _load_entity_names,
     _load_need_debt_scores,
@@ -67,6 +69,7 @@ from nexus.agents.orrery.resolver import (
 )
 from nexus.agents.orrery.substrate import (
     coerce_branch_selection,
+    coerce_habituation,
     CONSTRAINED_TAGS,
     DRAMATIC_CONTACT_TAGS,
     DRIVE_BAND_ORDER,
@@ -124,6 +127,7 @@ class ExplainedTickReport:
     location_names: Mapping[int, str]
     activities: Mapping[int, str]
     joint_beats: Tuple[OrreryJointBeat, ...] = ()
+    fanout_trimmed: Tuple[Mapping[str, Any], ...] = ()
     mode: str = "current"
     overrides: Optional[Mapping[str, Any]] = None
     need_pressures_diff: Optional[Mapping[str, Any]] = None
@@ -146,6 +150,7 @@ class ExplainedTickReport:
             "generated_at": self.generated_at,
             "actors": [self._group_payload(group) for group in self.actors],
             "joint_beats": [beat.to_dict() for beat in self.joint_beats],
+            "fanout_trimmed": [dict(item) for item in self.fanout_trimmed],
             "need_pressures": [draft.to_dict() for draft in self.need_pressures],
             "need_pressures_diff": (
                 dict(self.need_pressures_diff)
@@ -471,6 +476,8 @@ def explain_dry_run(
     world_time_override: Optional[datetime] = None,
     overrides: Optional[WorldStateOverrides] = None,
     selection_settings: Optional[Any] = None,
+    habituation_settings: Optional[Any] = None,
+    fanout_settings: Optional[Any] = None,
 ) -> ExplainedTickReport:
     """Hydrate, bind, and explain Orrery packages without database writes.
 
@@ -487,12 +494,14 @@ def explain_dry_run(
 
     need_tuning = coerce_need_tuning(sunhelm_settings)
     selection = coerce_branch_selection(selection_settings)
+    habituation = coerce_habituation(habituation_settings)
     state = hydrate_world_state(
         session,
         anchor_chunk_id=anchor_chunk_id,
         window_chunks=window_chunks,
         need_tuning=need_tuning,
         world_time_override=world_time_override,
+        win_history_window=habituation.window_ticks if habituation.enabled else 0,
     )
 
     templates_list = list(templates)
@@ -558,19 +567,29 @@ def explain_dry_run(
         actor_stacks: dict[int, StackExplanation] = {}
         for bindings in actor_bindings:
             actor_stacks[bindings[Slot.ACTOR]] = explain_stack(
-                actor_only_templates, tick_state, bindings, selection
+                actor_only_templates, tick_state, bindings, selection, habituation
             )
         two_party_stacks: dict[int, List[StackExplanation]] = {}
         for pair_bindings in offscreen_pair_bindings:
             two_party_stacks.setdefault(pair_bindings[Slot.ACTOR], []).append(
                 explain_stack(
-                    actor_target_templates, tick_state, pair_bindings, selection
+                    actor_target_templates,
+                    tick_state,
+                    pair_bindings,
+                    selection,
+                    habituation,
                 )
             )
         pressure_stacks: dict[int, List[StackExplanation]] = {}
         for pair_bindings in present_pair_bindings:
             pressure_stacks.setdefault(pair_bindings[Slot.ACTOR], []).append(
-                explain_stack(pressure_templates, tick_state, pair_bindings, selection)
+                explain_stack(
+                    pressure_templates,
+                    tick_state,
+                    pair_bindings,
+                    selection,
+                    habituation,
+                )
             )
         need_pressure_specs = _present_need_pressure_specs(
             tick_state,
@@ -664,7 +683,28 @@ def explain_dry_run(
         for item in stack.templates
         if item.template_id == stack.winner_id
     ]
-    joint_beats = detect_joint_beats(joint_beat_inputs, entity_names)
+    # Production applies the fan-out quota to the draft list BEFORE joint
+    # beats; the audit path mirrors the trim for parity and reports what
+    # was dropped instead of silently hiding it.
+    fanout = _coerce_fanout(fanout_settings)
+    kept_inputs = _apply_pair_fanout_quota(
+        joint_beat_inputs,
+        templates_list,
+        max_pair_drafts_per_actor=fanout.max_pair_drafts_per_actor,
+        exempt_bands=fanout.exempt_bands,
+    )
+    kept_ids = {id(shim) for shim in kept_inputs}
+    fanout_trimmed = tuple(
+        {
+            "actor_entity_id": shim.bindings.get("actor"),
+            "target_entity_id": shim.bindings.get("target"),
+            "template_id": shim.template_id,
+            "magnitude": shim.magnitude,
+        }
+        for shim in joint_beat_inputs
+        if id(shim) not in kept_ids
+    )
+    joint_beats = detect_joint_beats(kept_inputs, entity_names)
 
     not_applicable_markers = tuple(
         {
@@ -729,6 +769,7 @@ def explain_dry_run(
         location_names=location_names,
         activities=dict(active_state.activities),
         joint_beats=joint_beats,
+        fanout_trimmed=fanout_trimmed,
         mode="what_if" if what_if else "current",
         overrides=overrides.to_dict() if what_if and overrides is not None else None,
         need_pressures_diff=need_pressures_diff,

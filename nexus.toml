@@ -227,6 +227,24 @@ checkpoint_interval_chunks = 25
 max_rendered_proposals = 5
 max_rendered_pressures = 5
 
+[orrery.habituation]
+# Repetition dampening: each committed win inside window_ticks debits the
+# template's effective priority for that actor (capped), so a repeat winner
+# (surveil at 56% dominance) eventually yields to the packages it shadows.
+# Deterministic — counts come from committed orrery_resolutions rows.
+# Crisis-band packages never dampen.
+enabled = true
+window_ticks = 40
+penalty_per_win = 3.0
+max_penalty = 10.0
+exempt_bands = ["crisis_constraint"]
+
+[orrery.fanout]
+# Per-actor cap on two-party drafts per tick. Kept drafts prefer template
+# diversity, then magnitude; crisis-band drafts are never trimmed.
+max_pair_drafts_per_actor = 2
+exempt_bands = ["crisis_constraint"]
+
 [orrery.ecology]
 # Detection percent for emitted branch signals (signal_event_type) whose
 # event type has no explicit rate in [orrery.ecology.signal_detection].

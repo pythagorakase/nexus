@@ -41,6 +41,8 @@ from nexus.agents.orrery.substrate import (
     binding_hash,
     evaluate,
     select_branch,
+    HabituationPolicy,
+    stack_order,
 )
 
 
@@ -332,15 +334,19 @@ def explain_stack(
     state: WorldState,
     bindings: Bindings,
     selection: Optional[BranchSelection] = None,
+    habituation: Optional[HabituationPolicy] = None,
 ) -> StackExplanation:
-    """Explain every template in priority order and flag the stack winner.
+    """Explain every template in effective-priority order; flag the winner.
 
-    Mirrors :func:`evaluate_stack` selection (highest priority firing template
-    wins) while retaining the full audit record for every template, so the
-    dashboard can render the winner alongside the shadowed packages.
+    Mirrors :func:`evaluate_stack` selection (highest effective priority
+    firing template wins) while retaining the full audit record for every
+    template, so the dashboard can render the winner alongside the shadowed
+    packages. Ordering routes through the shared :func:`stack_order`
+    authority — habituation dampening shows up here exactly as it does in
+    production.
     """
 
-    ordered = sorted(templates, key=lambda item: item.priority, reverse=True)
+    ordered = stack_order(templates, state, bindings, habituation)
     explanations = tuple(
         explain_template(template, state, bindings, selection) for template in ordered
     )
