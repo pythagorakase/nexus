@@ -1727,6 +1727,64 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 ---
 
+## TRAIN — priority 16
+
+> Keeping the body and the trained skill from dulling.
+
+**Drive band:** anchored routine
+**Slots:** ACTOR
+
+**Gate:**
+
+- **AND:**
+  - actor has enough hydrated context
+  - actor has any of [`combat_trained`, `soldier`, `warrior`, `fighter`, `martial_artist`, `athlete`, `monk`, `scout`, `ranger`, `hunter`, `dancer`, `hacker`, `arcane_caster`, `medical_skill`, `surgical_training`, `first_aid_trained`, `musician`, `performer`, `surveillance_capable`]
+  - time of day is one of [morning, midday, afternoon, evening]
+  - ≥ 8 ticks since last `training_performed` event for actor
+  - **NOT:** actor is constrained or immobilized
+  - **NOT:** actor has any of [`virtual`, `digital_mind`, `bodyform:non_corporeal`]
+  - **NOT:** actor is in transit
+  - **NOT:** actor has inbound `hunting` pair tag
+  - **NOT:** actor has `wounded` ephemeral
+
+### Branch 1 — Drill the fighting forms  *(mag 0.22)*
+
+**When:** actor has any of [`combat_trained`, `soldier`, `warrior`, `fighter`, `martial_artist`, `monk`]
+
+**Does:** activity → "drilling fighting forms"
+**Event:** `training_performed`
+
+> {actor} runs the forms until the body stops asking why — footwork, repetition, the unglamorous maintenance that keeps a fighter's skill from becoming a fighter's memory.
+
+### Branch 2 — Condition the body  *(mag 0.18)*
+
+**When:** actor has any of [`athlete`, `dancer`, `scout`, `ranger`, `hunter`]
+
+**Does:** activity → "conditioning the body"
+**Event:** `training_performed`
+
+> {actor} puts the body through its paces — distance, climbing, stretch and strain — paying the quiet daily tax that keeps it answering when called.
+
+### Branch 3 — Sharpen the finer skill  *(mag 0.18)*
+
+**When:** actor has any of [`hacker`, `arcane_caster`, `medical_skill`, `surgical_training`, `first_aid_trained`, `musician`, `performer`, `surveillance_capable`]
+
+**Does:** activity → "sharpening a trained skill"
+**Event:** `training_performed`
+
+> {actor} practices the exacting part of what they do — scales, sutures, sigils, whatever their craft calls its fundamentals — because the difference between good and trusted is repetition nobody sees.
+
+### Branch 4 — Keep the edge from dulling  *(mag 0.12)*
+
+**When:** *(always)*
+
+**Does:** activity → "maintaining their training"
+**Event:** `training_performed`
+
+> {actor} gives an hour to basic upkeep of their discipline — nothing ambitious, just enough that tomorrow's version of them inherits a tool that still works.
+
+---
+
 ## INTIMACY — priority 16
 
 > The body asks for the kind of connection that is not conversation.
@@ -2040,6 +2098,250 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 ---
 
+## RUN_ERRANDS — priority 13
+
+> The small acquisitions and obligations that keep a life stocked.
+
+**Drive band:** anchored routine
+**Slots:** ACTOR
+
+**Gate:**
+
+- **AND:**
+  - actor has enough hydrated context
+  - time of day is one of [morning, midday, afternoon]
+  - ≥ 9 ticks since last `errands_run` event for actor
+  - **NOT:** actor is constrained or immobilized
+  - **NOT:** actor has any of [`virtual`, `digital_mind`, `bodyform:non_corporeal`]
+  - **NOT:** actor is in transit
+  - **NOT:** actor is hidden or off-grid
+  - **NOT:** actor has inbound `hunting` pair tag
+  - **NOT:** actor has `wounded` ephemeral
+
+### Branch 1 — Make the market run  *(mag 0.18)*
+
+**When:** actor is in `commerce` place class
+
+**Does:** activity → "making a market run"
+**Event:** `errands_run`
+
+> {actor} works through the stalls and counters with a mental list — provisions, replacements, the one thing that ran out at the worst moment — trading small money for the continued smooth running of a life.
+
+### Branch 2 — Scrounge for what the day needs  *(mag 0.16)*
+
+**When:** actor's own resources are below `poor`
+
+**Does:** activity → "scrounging necessities"
+**Event:** `errands_run`
+
+> {actor} does the poor person's version of errands: finding, borrowing, bartering, stretching — acquiring by ingenuity what others acquire by purse.
+
+### Branch 3 — Provision the household  *(mag 0.16)*
+
+**When:** actor has any of [`domestic_role`, `cares_for_household`, `matriarch`, `patriarch`]
+
+**Does:** activity → "provisioning the household"
+**Event:** `errands_run`
+
+> {actor} runs the rounds a household quietly depends on — food in, worn things out, the standing orders renewed — the invisible supply chain of ordinary life.
+
+### Branch 4 — Knock out the small obligations  *(mag 0.1)*
+
+**When:** *(always)*
+
+**Does:** activity → "running small errands"
+**Event:** `errands_run`
+
+> {actor} spends the hour on the small errands that accumulate at the edges of any life — a thing to return, a message to leave, a small debt of logistics repaid.
+
+---
+
+## STROLL — priority 12
+
+> Taking air: an unhurried walk with no destination that matters.
+
+**Drive band:** anchored routine
+**Slots:** ACTOR
+
+**Gate:**
+
+- **AND:**
+  - actor has enough hydrated context
+  - ≥ 5 ticks since last `stroll_taken` event for actor
+  - **NOT:** actor is constrained or immobilized
+  - **NOT:** actor has any of [`virtual`, `digital_mind`, `bodyform:non_corporeal`]
+  - **NOT:** actor is in transit
+  - **NOT:** actor is hidden or off-grid
+  - **NOT:** actor has inbound `hunting` pair tag
+  - **NOT:** actor has `wounded` ephemeral
+
+### Branch 1 — Walk under open sky  *(mag 0.16)*
+
+**When:**
+
+- **AND:**
+  - weather is one of [clear, warm]
+  - **NOT:** actor is in `subterranean` place class
+
+**Does:** activity → "walking under open sky"
+**Event:** `stroll_taken`
+
+> {actor} walks for the sake of walking, under weather good enough to notice — the pace of someone whose next hour has, for once, no owner.
+
+### Branch 2 — Walk the familiar streets  *(mag 0.14)*
+
+**When:**
+
+- **OR:**
+  - actor is in `urban_dense` place class
+  - actor is in `place_open` place class
+  - actor is in `transit` place class
+  - actor is in `commerce` place class
+  - actor is in `meeting` place class
+
+**Does:** activity → "walking the neighborhood"
+**Event:** `stroll_taken`
+
+> {actor} takes the long way through streets they know by wear rather than by name, registering the small changes — a new face at a stall, a repaired door — that a neighborhood shows only to its regulars.
+
+### Branch 3 — Take the night air  *(mag 0.12)*
+
+**When:** time of day is one of [evening, night]
+
+**Does:** activity → "taking the night air"
+**Event:** `stroll_taken`
+
+> {actor} steps out into the dark hours, when the world runs quieter and thoughts get room to finish themselves.
+
+### Branch 4 — Pace the near ground  *(mag 0.08)*
+
+**When:** *(always)*
+
+**Does:** activity → "pacing the near ground"
+**Event:** `stroll_taken`
+
+> {actor} moves through whatever ground is nearest — corridors, courtyard, the length of a deck or a lane — walking off the restlessness that sitting still breeds.
+
+---
+
+## UPKEEP — priority 11
+
+> Tending one's own space, kit, and tools before they fail.
+
+**Drive band:** anchored routine
+**Slots:** ACTOR
+
+**Gate:**
+
+- **AND:**
+  - actor has enough hydrated context
+  - ≥ 7 ticks since last `upkeep_done` event for actor
+  - **NOT:** actor is constrained or immobilized
+  - **NOT:** actor has any of [`virtual`, `digital_mind`, `bodyform:non_corporeal`]
+  - **NOT:** actor is in transit
+  - **NOT:** actor has inbound `hunting` pair tag
+
+### Branch 1 — Maintain the working tools  *(mag 0.16)*
+
+**When:** actor has any of [`engineer`, `mechanic`, `tinkerer`, `artificer`, `artisan`, `keeps_shop`, `merchant`, `hacker`, `musician`]
+
+**Does:** activity → "maintaining their tools"
+**Event:** `upkeep_done`
+
+> {actor} goes over the tools of their trade — cleaning, adjusting, replacing the part that was about to become a story — because the work is only ever as good as the kit.
+
+### Branch 2 — Mend and ready the kit  *(mag 0.15)*
+
+**When:** actor has any of [`soldier`, `scout`, `ranger`, `hunter`, `combat_trained`, `travel_ready`]
+
+**Does:** activity → "readying their kit"
+**Event:** `upkeep_done`
+
+> {actor} strips, checks, and rights their gear with the economy of habit — edges, straps, seals, charges — so that when it matters, nothing surprises them.
+
+### Branch 3 — Set the home in order  *(mag 0.14)*
+
+**When:** actor is at `home` anchor
+
+**Does:** activity → "setting their home in order"
+**Event:** `upkeep_done`
+
+> {actor} puts their own place back in order — the small repairs and resets that make a room somewhere to return to instead of somewhere to pass through.
+
+### Branch 4 — Tidy what is theirs  *(mag 0.08)*
+
+**When:** *(always)*
+
+**Does:** activity → "tidying their own space"
+**Event:** `upkeep_done`
+
+> {actor} tends whatever corner of the world is currently theirs — folding, sorting, wiping down, the small housekeeping that keeps a life from silting up.
+
+---
+
+## RECREATE — priority 9
+
+> Unproductive time taken on purpose: play, spectacle, small pleasure.
+
+**Drive band:** anchored routine
+**Slots:** ACTOR
+
+**Gate:**
+
+- **AND:**
+  - actor has enough hydrated context
+  - time of day is one of [afternoon, evening, night]
+  - ≥ 6 ticks since last `recreation_taken` event for actor
+  - **NOT:** actor is constrained or immobilized
+  - **NOT:** actor is in transit
+  - **NOT:** actor has inbound `hunting` pair tag
+  - **NOT:** actor has `grieving` ephemeral
+
+### Branch 1 — Find games and company  *(mag 0.15)*
+
+**When:**
+
+- **AND:**
+  - **OR:**
+    - actor is in `meeting` place class
+    - actor is in `commerce` place class
+    - actor is in `place_open` place class
+  - **NOT:** actor is hidden or off-grid
+
+**Does:** activity → "at games in company"
+**Event:** `recreation_taken`
+
+> {actor} joins whatever the room is playing at — dice, cards, darts, argument — for stakes small enough to laugh about and company good enough to stay for.
+
+### Branch 2 — Lose an hour to the loved thing  *(mag 0.14)*
+
+**When:** actor has any of [`musician`, `artist`, `writer`, `scholar`, `dancer`, `performer`, `loremaster`]
+
+**Does:** activity → "lost in a loved pastime"
+**Event:** `recreation_taken`
+
+> {actor} returns to the thing they love with no audience and no deadline — playing, sketching, reading — the version of their craft that belongs to no one else.
+
+### Branch 3 — Watch the world go by  *(mag 0.1)*
+
+**When:** time of day is one of [evening, night]
+
+**Does:** activity → "watching the world go by"
+**Event:** `recreation_taken`
+
+> {actor} claims a seat with a view of other people's evenings and lets the spectacle of ordinary life be the entertainment.
+
+### Branch 4 — Take a small private pleasure  *(mag 0.08)*
+
+**When:** *(always)*
+
+**Does:** activity → "taking a small pleasure"
+**Event:** `recreation_taken`
+
+> {actor} gives themselves a modest hour — a familiar comfort, an idle game, a stretch of doing nothing in particular — and does not apologize for it.
+
+---
+
 ## MAINTAIN_COVER — priority 0
 
 > Specific public-cover maintenance, not a universal fallback.
@@ -2178,11 +2480,13 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `artisan`
 - `artist`
 - `athlete`
+- `bodyform:non_corporeal`
 - `cares_for_household`
 - `combat_trained`
 - `contemplative`
 - `dancer`
 - `devout`
+- `digital_mind`
 - `domestic_role`
 - `engineer`
 - `ethically_opposed_to_contracted_intimacy`
@@ -2224,6 +2528,7 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `soldier`
 - `solitary`
 - `surgical_training`
+- `surveillance_capable`
 - `survivalist`
 - `tinkerer`
 - `trader`
@@ -2231,6 +2536,7 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `travel_ready`
 - `vendetta_holder`
 - `violent_history`
+- `virtual`
 - `vow_of_celibacy`
 - `warrior`
 - `work_obligation`
@@ -2305,6 +2611,7 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `craft_tended`
 - `drank`
 - `encoded_message`
+- `errands_run`
 - `evade_pursuit`
 - `faction_realignment`
 - `hideout_maintained`
@@ -2323,6 +2630,7 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `mourning_completed`
 - `protective_intervention`
 - `pursue_identity_lead`
+- `recreation_taken`
 - `retaliation_attempted`
 - `retaliation_executed`
 - `rival_consulted`
@@ -2331,14 +2639,17 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `social_travel_departed`
 - `socialized`
 - `socialized_alone`
+- `stroll_taken`
 - `surveillance_performed`
 - `tended_wound`
 - `threat_issued`
+- `training_performed`
 - `travel_arrived`
 - `travel_delayed`
 - `travel_departed`
 - `travel_prepared`
 - `travel_progressed`
+- `upkeep_done`
 - `vigil_held`
 - `warning_delivered`
 - `welfare_check`
