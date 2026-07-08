@@ -297,6 +297,7 @@ def analyze_coverage(
     sunhelm_settings: Optional[Any] = None,
     epoch_min_world_times: int,
     selection_settings: Optional[Any] = None,
+    habituation_settings: Optional[Any] = None,
 ) -> dict[str, Any]:
     """Aggregate explained resolution coverage across historical anchors.
 
@@ -336,6 +337,7 @@ def analyze_coverage(
             window_chunks=window_chunks,
             sunhelm_settings=sunhelm_settings,
             selection_settings=selection_settings,
+            habituation_settings=habituation_settings,
         )
         anchors.append(_tally_report(report, tallies, gap_counts))
         entity_names.update(report.entity_names)

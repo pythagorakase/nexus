@@ -245,6 +245,10 @@ class WorldState:
 
     tags: Mapping[int, frozenset[str]] = field(default_factory=dict)
     ephemeral_tags: Mapping[int, frozenset[str]] = field(default_factory=dict)
+    # Committed wins per (actor_entity_id, template_id) inside the
+    # habituation window — hydrated from orrery_resolutions, so replay
+    # reconstructs identical dampening. Empty when habituation is off.
+    win_history: Mapping[Tuple[int, str], int] = field(default_factory=dict)
     locations: Mapping[int, int] = field(default_factory=dict)
     activities: Mapping[int, str] = field(default_factory=dict)
     trust: Mapping[Tuple[int, int], int] = field(default_factory=dict)
@@ -1974,15 +1978,97 @@ def evaluate(
     )
 
 
+@dataclass(frozen=True)
+class HabituationPolicy:
+    """Repetition dampening for stack ordering ([orrery.habituation]).
+
+    A template's effective priority drops by ``penalty_per_win`` for each
+    committed win by the same actor inside the trailing window (capped at
+    ``max_penalty``), so a package that keeps winning eventually yields the
+    stack to the shadowed packages beneath it. Bands in ``exempt_bands``
+    (crisis by default) never dampen — an actively hunted actor must not
+    tire of evading. Deterministic: win counts come from committed
+    orrery_resolutions rows hydrated into WorldState.
+    """
+
+    enabled: bool = False
+    penalty_per_win: float = 0.0
+    max_penalty: float = 0.0
+    window_ticks: int = 0
+    exempt_bands: frozenset[str] = frozenset({"crisis_constraint"})
+
+    def effective_priority(
+        self, template: Template, state: WorldState, bindings: Bindings
+    ) -> float:
+        base = float(template.priority)
+        if not self.enabled or template.drive_band.value in self.exempt_bands:
+            return base
+        actor = bindings.get(Slot.ACTOR)
+        if not isinstance(actor, int):
+            return base
+        wins = state.win_history.get((actor, template.id), 0)
+        if not wins:
+            return base
+        return base - min(self.penalty_per_win * wins, self.max_penalty)
+
+
+def coerce_habituation(raw: Any) -> HabituationPolicy:
+    """[orrery.habituation] settings payload -> HabituationPolicy."""
+
+    if raw is None:
+        return HabituationPolicy()
+    if hasattr(raw, "penalty_per_win"):
+        return HabituationPolicy(
+            enabled=bool(raw.enabled),
+            penalty_per_win=float(raw.penalty_per_win),
+            max_penalty=float(raw.max_penalty),
+            window_ticks=int(raw.window_ticks),
+            exempt_bands=frozenset(raw.exempt_bands),
+        )
+    if isinstance(raw, Mapping):
+        return HabituationPolicy(
+            enabled=bool(raw.get("enabled", False)),
+            penalty_per_win=float(raw.get("penalty_per_win", 0.0)),
+            max_penalty=float(raw.get("max_penalty", 0.0)),
+            window_ticks=int(raw.get("window_ticks", 0)),
+            exempt_bands=frozenset(raw.get("exempt_bands", ("crisis_constraint",))),
+        )
+    raise ValueError(f"Unsupported habituation settings: {type(raw)!r}")
+
+
+def stack_order(
+    templates: Iterable[Template],
+    state: WorldState,
+    bindings: Bindings,
+    habituation: Optional[HabituationPolicy] = None,
+) -> list[Template]:
+    """The single stack-ordering authority.
+
+    Both :func:`evaluate_stack` and the explain layer's ``explain_stack``
+    MUST route through this function — a second ordering implementation
+    would let the audit dashboard's winner silently diverge from
+    production. Sort is stable: equal effective priorities keep authored
+    registry order.
+    """
+
+    policy = habituation or HabituationPolicy()
+    return sorted(
+        templates,
+        key=lambda item: policy.effective_priority(item, state, bindings),
+        reverse=True,
+    )
+
+
 def evaluate_stack(
     templates: Iterable[Template],
     state: WorldState,
     bindings: Bindings,
     selection: Optional[BranchSelection] = None,
+    habituation: Optional[HabituationPolicy] = None,
 ) -> Optional[Resolution]:
-    """Evaluate templates in priority order and return the first firing branch."""
+    """Evaluate templates in effective-priority order; first firing branch wins."""
 
-    for template in sorted(templates, key=lambda item: item.priority, reverse=True):
+    for template in stack_order(templates, state, bindings, habituation):
         result = evaluate(template, state, bindings, selection)
         if result.passes:
             return result

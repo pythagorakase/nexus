@@ -1102,6 +1102,70 @@ class OrreryPromptSettings(BaseModel):
     )
 
 
+class OrreryHabituationSettings(BaseModel):
+    """Repetition dampening for stack selection ([orrery.habituation])."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = Field(
+        default=False,
+        description=(
+            "Dampen a template's effective priority by penalty_per_win for "
+            "each committed win by the same actor inside window_ticks, so a "
+            "repeat winner eventually yields the stack to the packages it "
+            "shadows. Deterministic: counts come from orrery_resolutions."
+        ),
+    )
+    window_ticks: int = Field(
+        default=40,
+        ge=1,
+        description="Trailing tick window for counting committed wins.",
+    )
+    penalty_per_win: float = Field(
+        default=3.0,
+        ge=0.0,
+        description="Effective-priority debit per committed win.",
+    )
+    max_penalty: float = Field(
+        default=10.0,
+        ge=0.0,
+        description=(
+            "Cap on the total debit; keep small enough that dampening "
+            "reorders within neighboring priorities without collapsing "
+            "high-stakes packages into the mundane band."
+        ),
+    )
+    exempt_bands: list[str] = Field(
+        default_factory=lambda: ["crisis_constraint"],
+        description=(
+            "Drive bands never dampened — an actively hunted actor must "
+            "not tire of evading."
+        ),
+    )
+
+
+class OrreryFanoutSettings(BaseModel):
+    """Per-actor cap on two-party drafts ([orrery.fanout])."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    max_pair_drafts_per_actor: int = Field(
+        default=2,
+        ge=0,
+        description=(
+            "Maximum two-party drafts one actor contributes per tick "
+            "(0 disables trimming). Kept drafts prefer template diversity, "
+            "then magnitude; crisis-band drafts are exempt. Bounds the "
+            "near-duplicate flood that crowds the storyteller prompt's "
+            "first-N slice."
+        ),
+    )
+    exempt_bands: list[str] = Field(
+        default_factory=lambda: ["crisis_constraint"],
+        description="Drive bands whose pair drafts are never trimmed.",
+    )
+
+
 class OrreryEcologySettings(BaseModel):
     """Event-ecology tuning: cross-package chains and their throttles."""
 
@@ -1157,6 +1221,10 @@ class OrrerySettings(BaseModel):
     )
     prompt: OrreryPromptSettings = Field(default_factory=OrreryPromptSettings)
     ecology: OrreryEcologySettings = Field(default_factory=OrreryEcologySettings)
+    habituation: OrreryHabituationSettings = Field(
+        default_factory=OrreryHabituationSettings
+    )
+    fanout: OrreryFanoutSettings = Field(default_factory=OrreryFanoutSettings)
 
 
 # =============================================================================

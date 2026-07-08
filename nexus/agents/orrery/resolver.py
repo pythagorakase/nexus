@@ -17,6 +17,7 @@ from nexus.agents.orrery.reciprocal import (
 from nexus.agents.orrery.substrate import (
     BranchSelection,
     coerce_branch_selection,
+    coerce_habituation,
     Bindings,
     EventRecord,
     INTIMACY_SUPPRESSOR_TAGS,
@@ -256,8 +257,14 @@ def hydrate_world_state(
     window_chunks: int,
     need_tuning: Optional[NeedTuning] = None,
     world_time_override: Optional[datetime] = None,
+    win_history_window: int = 0,
 ) -> WorldState:
-    """Hydrate the read-side Orrery state snapshot from database tables."""
+    """Hydrate the read-side Orrery state snapshot from database tables.
+
+    ``win_history_window`` > 0 additionally hydrates committed win counts
+    per (actor, template) over that many trailing ticks for habituation
+    dampening; 0 skips the query (habituation off).
+    """
 
     need_tuning = coerce_need_tuning(need_tuning)
 
@@ -433,6 +440,11 @@ def hydrate_world_state(
     )
     travel_states = _load_travel_states(session)
     routine_anchors = _load_routine_anchors(session)
+    win_history = _load_win_history(
+        session,
+        anchor_chunk_id=anchor_chunk_id,
+        win_history_window=win_history_window,
+    )
 
     return WorldState(
         tags={entity_id: frozenset(values) for entity_id, values in tags.items()},
@@ -463,11 +475,43 @@ def hydrate_world_state(
         travel_states=travel_states,
         routine_anchors=routine_anchors,
         recent_events=recent_events,
+        win_history=win_history,
         time_of_day=time_of_day,
         world_time=world_time,
         weather=weather,
         current_tick=anchor_chunk_id or 0,
     )
+
+
+def _load_win_history(
+    session: Any,
+    *,
+    anchor_chunk_id: Optional[int],
+    win_history_window: int,
+) -> dict[tuple[int, str], int]:
+    """Committed wins per (actor, template) inside the habituation window."""
+
+    if win_history_window <= 0 or anchor_chunk_id is None:
+        return {}
+    cutoff = anchor_chunk_id - win_history_window
+    rows = session.execute(
+        text(
+            """
+            /* orrery:win_history */
+            SELECT actor_entity_id, template_id, COUNT(*) AS wins
+            FROM orrery_resolutions
+            WHERE tick_chunk_id > :cutoff
+              AND tick_chunk_id <= :anchor
+              AND actor_entity_id IS NOT NULL
+            GROUP BY actor_entity_id, template_id
+            """
+        ),
+        {"cutoff": cutoff, "anchor": anchor_chunk_id},
+    ).mappings()
+    return {
+        (int(row["actor_entity_id"]), str(row["template_id"])): int(row["wins"])
+        for row in rows
+    }
 
 
 def _load_routine_anchors(session: Any) -> dict[tuple[int, str], RoutineAnchor]:
@@ -801,6 +845,81 @@ _ACTOR_ONLY_SLOTS: Tuple[Slot, ...] = (Slot.ACTOR,)
 _ACTOR_TARGET_SLOTS: Tuple[Slot, ...] = (Slot.ACTOR, Slot.TARGET)
 
 
+@dataclass(frozen=True)
+class FanoutPolicy:
+    """Per-actor cap on two-party drafts ([orrery.fanout]).
+
+    One actor with several eligible targets can otherwise flood the tick
+    with near-duplicate pair drafts and crowd everything else out of the
+    storyteller prompt's first-N slice. Kept drafts prefer template
+    diversity (first draft of each template before any second of one),
+    then magnitude, then binding hash — a pure function of the draft set,
+    so replays trim identically. Crisis-band drafts are exempt: dropping
+    a protection or evasion beat is behavior loss, not noise reduction.
+    """
+
+    max_pair_drafts_per_actor: int = 0
+    exempt_bands: frozenset[str] = frozenset({"crisis_constraint"})
+
+
+def _coerce_fanout(raw: Any) -> FanoutPolicy:
+    if raw is None:
+        return FanoutPolicy()
+    if hasattr(raw, "max_pair_drafts_per_actor"):
+        return FanoutPolicy(
+            max_pair_drafts_per_actor=int(raw.max_pair_drafts_per_actor),
+            exempt_bands=frozenset(raw.exempt_bands),
+        )
+    if isinstance(raw, Mapping):
+        return FanoutPolicy(
+            max_pair_drafts_per_actor=int(raw.get("max_pair_drafts_per_actor", 0)),
+            exempt_bands=frozenset(raw.get("exempt_bands", ("crisis_constraint",))),
+        )
+    raise ValueError(f"Unsupported fanout settings: {type(raw)!r}")
+
+
+def _apply_pair_fanout_quota(
+    drafts: list[OrreryResolutionDraft],
+    templates_list: list[Template],
+    *,
+    max_pair_drafts_per_actor: int,
+    exempt_bands: frozenset[str],
+) -> list[OrreryResolutionDraft]:
+    if max_pair_drafts_per_actor <= 0:
+        return drafts
+    band_by_template = {t.id: t.drive_band.value for t in templates_list}
+
+    def is_pair(draft: OrreryResolutionDraft) -> bool:
+        return "target" in draft.bindings
+
+    kept: list[OrreryResolutionDraft] = []
+    per_actor: dict[Any, list[OrreryResolutionDraft]] = {}
+    for draft in drafts:
+        if (
+            not is_pair(draft)
+            or band_by_template.get(draft.template_id) in exempt_bands
+        ):
+            kept.append(draft)
+            continue
+        per_actor.setdefault(draft.bindings.get("actor"), []).append(draft)
+
+    for actor, pair_drafts in per_actor.items():
+        seen_templates: set[str] = set()
+        first_of_template: list[OrreryResolutionDraft] = []
+        repeats: list[OrreryResolutionDraft] = []
+        for draft in sorted(pair_drafts, key=lambda d: (-d.magnitude, d.binding_hash)):
+            if draft.template_id in seen_templates:
+                repeats.append(draft)
+            else:
+                seen_templates.add(draft.template_id)
+                first_of_template.append(draft)
+        kept.extend((first_of_template + repeats)[:max_pair_drafts_per_actor])
+
+    # Preserve the original draft ordering for everything that survived.
+    surviving = {id(d) for d in kept}
+    return [draft for draft in drafts if id(draft) in surviving]
+
+
 def resolve_dry_run(
     session: Any,
     templates: Iterable[Template],
@@ -810,17 +929,22 @@ def resolve_dry_run(
     sunhelm_settings: Optional[Any] = None,
     world_time_override: Optional[datetime] = None,
     selection_settings: Optional[Any] = None,
+    habituation_settings: Optional[Any] = None,
+    fanout_settings: Optional[Any] = None,
 ) -> OrreryTickProposal:
     """Hydrate, bind, and evaluate Orrery packages without database writes."""
 
     need_tuning = coerce_need_tuning(sunhelm_settings)
     selection = coerce_branch_selection(selection_settings)
+    habituation = coerce_habituation(habituation_settings)
+    fanout = _coerce_fanout(fanout_settings)
     state = hydrate_world_state(
         session,
         anchor_chunk_id=anchor_chunk_id,
         window_chunks=window_chunks,
         need_tuning=need_tuning,
         world_time_override=world_time_override,
+        win_history_window=habituation.window_ticks if habituation.enabled else 0,
     )
 
     templates_list = list(templates)
@@ -853,7 +977,9 @@ def resolve_dry_run(
         window_chunks=window_chunks,
     )
     for bindings in actor_bindings:
-        resolution = evaluate_stack(actor_only_templates, state, bindings, selection)
+        resolution = evaluate_stack(
+            actor_only_templates, state, bindings, selection, habituation
+        )
         if resolution is not None and resolution.passes:
             drafts.append(_draft_from_resolution(resolution))
 
@@ -869,7 +995,7 @@ def resolve_dry_run(
         )
         for bindings in actor_target_bindings:
             resolution = evaluate_stack(
-                actor_target_templates, state, bindings, selection
+                actor_target_templates, state, bindings, selection, habituation
             )
             if resolution is not None and resolution.passes:
                 drafts.append(_draft_from_resolution(resolution))
@@ -890,10 +1016,17 @@ def resolve_dry_run(
             )
             for bindings in present_target_bindings:
                 resolution = evaluate_stack(
-                    pressure_templates, state, bindings, selection
+                    pressure_templates, state, bindings, selection, habituation
                 )
                 if resolution is not None and resolution.passes:
                     scene_pressure_results.append(resolution)
+
+    drafts = _apply_pair_fanout_quota(
+        drafts,
+        templates_list,
+        max_pair_drafts_per_actor=fanout.max_pair_drafts_per_actor,
+        exempt_bands=fanout.exempt_bands,
+    )
 
     # Resolve binding entity names so Skald's adjudication payload says WHO
     # each off-screen proposal is about; bare entity ids invite misattribution
