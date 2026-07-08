@@ -197,9 +197,29 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
     - trust actor→target < -2
   - ≥ 8 ticks since last `retaliation_attempted` event for actor
   - ≥ 8 ticks since last `retaliation_executed` event for actor
+  - ≥ 8 ticks since last `hunt_declared` event for actor
+  - ≥ 8 ticks since last `hunt_called_off` event for actor
   - **NOT:** actor has inbound `hunting` pair tag
 
-### Branch 1 — Strike directly when opportunity opens  *(mag 0.85)*
+### Branch 1 — Let the hunt go cold  *(mag 0.3)* · **preemptive**
+
+**When:**
+
+- **AND:**
+  - actor has `hunting` pair tag to target
+  - **NOT:** actor and target are co-located
+  - ≥ 18 ticks since last `hunt_declared` event for (actor, target) pair
+
+**Does:** activity → "letting a hunt go cold"; clears own outbound `hunting` pair tag to target
+**Event:** `hunt_called_off`
+
+> {actor} stops feeding the hunt for {target} — the watchers wander off, the standing questions expire — not forgiveness, just the quiet arithmetic of effort against a target who will not surface.
+
+**Scene-pressure prompt** (storyteller-LLM-only; no state mutation):
+
+> {actor} has quietly stopped hunting {target}. If the scene touches it, show the pressure lifting — a tail that is no longer there — rather than an announcement.
+
+### Branch 2 — Strike directly when opportunity opens  *(mag 0.85)*
 
 **When:**
 
@@ -217,7 +237,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor}'s grudge is close enough to {target}'s current scene to become immediate pressure. Treat it as a possible threat, interruption, warning sign, or delayed consequence rather than an automatic attack.
 
-### Branch 2 — Surface a reputation attack in the right channels  *(mag 0.58)*
+### Branch 3 — Surface a reputation attack in the right channels  *(mag 0.58)*
 
 **When:**
 
@@ -237,7 +257,25 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} is trying to compromise {target}'s reputation through off-screen channels. If useful, let the current scene show a rumor, message, social consequence, or pressure wave instead of a direct state change.
 
-### Branch 3 — Watch and document, waiting for a better window  *(mag 0.34)*
+### Branch 4 — Declare the hunt  *(mag 0.66)*
+
+**When:**
+
+- **AND:**
+  - **NOT:** actor and target are co-located
+  - actor has any of [`vendetta_holder`, `violent_history`]
+  - **NOT:** actor has `hunting` pair tag to target
+
+**Does:** activity → "hunting a grudge target"; adds outbound `hunting` pair tag to target
+**Event:** `hunt_declared`
+
+> {actor} stops waiting for {target} to wander into reach and starts hunting in earnest — questions placed with the right people, routes watched, a price quietly attached to a location. The grudge acquires infrastructure.
+
+**Scene-pressure prompt** (storyteller-LLM-only; no state mutation):
+
+> {actor} has begun actively hunting {target}. The scene may surface this as watchers, questions asked about {target}, or a warning reaching them — the hunt exists off-screen either way.
+
+### Branch 5 — Watch and document, waiting for a better window  *(mag 0.34)*
 
 **When:** *(always)*
 
@@ -664,6 +702,70 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 **Scene-pressure prompt** (storyteller-LLM-only; no state mutation):
 
 > {actor} has sent {target} a routine welfare-check message. The scene may use this as an unread notification, an answered exchange, or texture for {target}'s decisions.
+
+---
+
+## ACT_ON_INTEL — priority 52
+
+> Watching turns into acting: accumulated intel gets spent.
+
+**Drive band:** project identity — Spending accumulated surveillance is a deliberate project move that outranks continuing to watch (SURVEIL, 48): intel hoarded forever is the dominance pathology this package exists to break.
+**Slots:** ACTOR, TARGET
+**Present-target policy:** may target an on-screen entity — but only as a prompt-only scene-pressure draft routed through storyteller LLM review (no direct state mutation, no canonical event)
+
+**Gate:**
+
+- **AND:**
+  - ≥ 3 `surveillance_performed` events within 25 ticks for (actor, target) pair
+  - ≥ 12 ticks since last `intel_acted_on` event for (actor, target) pair
+  - **NOT:** actor has inbound `hunting` pair tag
+  - **NOT:** actor is constrained or immobilized
+
+### Branch 1 — Sell the dossier  *(mag 0.62)*
+
+**When:**
+
+- **OR:**
+  - actor has outbound `contact:social` pair tag
+  - **OR:**
+    - actor is in `urban_dense` place class
+    - actor is in `commerce` place class
+    - actor is in `meeting` place class
+
+**Does:** activity → "selling gathered intelligence"
+**Event:** `intel_acted_on`
+
+> {actor} packages what watching {target} has taught them — patterns, contacts, weaknesses — and trades it to someone who pays in favors or coin. The knowledge stops being private the moment it changes hands.
+
+**Scene-pressure prompt** (storyteller-LLM-only; no state mutation):
+
+> {actor} has sold intelligence about {target}. The scene may surface this as {target} noticing new attention, a contact warning them, or consequences arriving from a third party.
+
+### Branch 2 — Confront the subject with what they know  *(mag 0.58)*
+
+**When:** actor and target are co-located
+
+**Does:** activity → "confronting a surveilled subject"
+**Event:** `intel_acted_on`
+
+> {actor} stops pretending not to watch and puts what they know in front of {target} — names, times, patterns — to see what the knowledge is worth when spent face to face.
+
+**Scene-pressure prompt** (storyteller-LLM-only; no state mutation):
+
+> {actor} is confronting {target} with gathered intelligence. Treat as charged pressure the scene can play as threat, negotiation, or revelation.
+
+### Branch 3 — File it and keep the watch alive  *(mag 0.3)*
+
+**When:** *(always)*
+
+**Does:** activity → "consolidating intelligence"
+**Event:** `intel_acted_on`
+
+> {actor} consolidates what watching {target} has produced — cross-checking, indexing, pruning dead leads — turning scattered observation into something that could be used on short notice.
+
+**Scene-pressure prompt** (storyteller-LLM-only; no state mutation):
+
+> {actor} is quietly consolidating what they know about {target}. Background pressure only; nothing reaches {target} this tick.
 
 ---
 
@@ -2617,8 +2719,11 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `hideout_maintained`
 - `honor_debt`
 - `household_work_performed`
+- `hunt_called_off`
+- `hunt_declared`
 - `informant_contact`
 - `intel_acquired`
+- `intel_acted_on`
 - `intel_reviewed`
 - `intimacy_deferred`
 - `intimacy_fulfilled`

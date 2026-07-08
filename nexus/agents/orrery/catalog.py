@@ -508,6 +508,14 @@ def _render_state_delta(delta: Mapping[str, Any]) -> str:
             tags = ", ".join(f"`{t}`" for t in value)
             parts.append(f"clears inbound {tags} pair tags from target")
             continue
+        if key == "entity_pair_tags.add_outbound":
+            tags = ", ".join(f"`{t}`" for t in value)
+            parts.append(f"adds outbound {tags} pair tag to target")
+            continue
+        if key == "entity_pair_tags.clear_outbound":
+            tags = ", ".join(f"`{t}`" for t in value)
+            parts.append(f"clears own outbound {tags} pair tag to target")
+            continue
         if key == "need.fulfill":
             if isinstance(value, Mapping):
                 need = value.get("type") or value.get("need")
@@ -758,7 +766,11 @@ def _collect_vocabulary(
             if branch.event_type:
                 events.add(branch.event_type)
             for key, value in branch.state_delta.items():
-                if key == "entity_pair_tags_target.clear_inbound":
+                if key in (
+                    "entity_pair_tags_target.clear_inbound",
+                    "entity_pair_tags.add_outbound",
+                    "entity_pair_tags.clear_outbound",
+                ):
                     if isinstance(value, list):
                         for tag in value:
                             pair_tags.add(str(tag))

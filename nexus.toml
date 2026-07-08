@@ -227,6 +227,21 @@ checkpoint_interval_chunks = 25
 max_rendered_proposals = 5
 max_rendered_pressures = 5
 
+[orrery.ecology]
+# Detection percent for emitted branch signals (signal_event_type) whose
+# event type has no explicit rate in [orrery.ecology.signal_detection].
+# The roll is a deterministic hash of (template, actor, target, tick,
+# event type): same state -> same outcome on replay.
+signal_detection_default = 100
+
+[orrery.ecology.signal_detection]
+# Most surveillance goes unnoticed by its subject; overt acts are hard to
+# miss. Undetected signals are recorded in the primary event's payload for
+# the audit layer but feed no gates.
+compliance_alert = 35
+threat_issued = 80
+encoded_message = 95
+
 [orrery.dashboard]
 # Registers the read-only /api/dev/orrery/* audit router on the gateway.
 # Server-side gate (import.meta.env.DEV only hides the client bundle): the

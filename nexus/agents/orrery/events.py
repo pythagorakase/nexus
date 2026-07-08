@@ -7,7 +7,8 @@ only place that materializes those proposals into canonical Orrery tables.
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
+from hashlib import sha256
 from datetime import timedelta
 import json
 from typing import Any, Mapping, Optional
@@ -42,6 +43,8 @@ SUPPORTED_STATE_DELTA_KEYS = frozenset(
         "entity_tags.remove",
         "entity_tags_target.add",
         "entity_tags_target.remove",
+        "entity_pair_tags.add_outbound",
+        "entity_pair_tags.clear_outbound",
         "entity_pair_tags_target.clear_inbound",
         "need.fulfill",
         "travel.start",
@@ -58,8 +61,66 @@ REPLACEMENT_STATE_DELTA_ALIASES = {
     "entity_tags_remove": "entity_tags.remove",
     "entity_tags_target_add": "entity_tags_target.add",
     "entity_tags_target_remove": "entity_tags_target.remove",
+    "entity_pair_tags_add_outbound": "entity_pair_tags.add_outbound",
+    "entity_pair_tags_clear_outbound": "entity_pair_tags.clear_outbound",
     "entity_pair_tags_target_clear_inbound": ("entity_pair_tags_target.clear_inbound"),
 }
+
+
+@dataclass(frozen=True)
+class SignalDetection:
+    """Deterministic detection policy for branch signal emissions.
+
+    A branch's signal_event_type only lands as a world_events row (and so
+    only feeds other packages' gates) when a hash roll over (template,
+    actor, target, tick, event type) clears the configured percent. The
+    default policy detects everything — filtering is opt-in via
+    [orrery.ecology] in nexus.toml.
+    """
+
+    default_pct: int = 100
+    rates: Mapping[str, int] = field(default_factory=dict)
+
+    def outcome(
+        self,
+        *,
+        template_id: str,
+        actor_entity_id: Optional[int],
+        target_entity_id: Optional[int],
+        tick_chunk_id: int,
+        event_type: str,
+    ) -> dict[str, Any]:
+        threshold = int(self.rates.get(event_type, self.default_pct))
+        material = (
+            f"{template_id}:{actor_entity_id}:{target_entity_id}"
+            f":{tick_chunk_id}:{event_type}"
+        )
+        roll = int(sha256(material.encode("utf-8")).hexdigest(), 16) % 100
+        return {
+            "event_type": event_type,
+            "roll": roll,
+            "threshold": threshold,
+            "detected": roll < threshold,
+        }
+
+
+def coerce_signal_detection(raw: Any) -> SignalDetection:
+    """[orrery.ecology] settings payload -> SignalDetection policy."""
+
+    if raw is None:
+        return SignalDetection()
+    if hasattr(raw, "signal_detection_default"):
+        return SignalDetection(
+            default_pct=int(raw.signal_detection_default),
+            rates=dict(raw.signal_detection),
+        )
+    if isinstance(raw, Mapping):
+        return SignalDetection(
+            default_pct=int(raw.get("signal_detection_default", 100)),
+            rates=dict(raw.get("signal_detection") or {}),
+        )
+    raise ValueError(f"Unsupported orrery ecology settings: {type(raw)!r}")
+
 
 TRAVEL_MODE_DETOUR_FACTOR = {
     "walking": 1.35,
@@ -264,9 +325,11 @@ def commit_orrery_tick_sync(
     adjudications: Any = None,
     storyteller_state_updates: Any = None,
     prompt_settings: Optional[Any] = None,
+    ecology_settings: Optional[Any] = None,
 ) -> CommitOrreryTickResult:
     """Materialize a preview proposal inside the accepted-chunk transaction."""
 
+    signal_detection = coerce_signal_detection(ecology_settings)
     coerced = coerce_proposal(proposal)
     has_resolutions = coerced is not None and bool(coerced.resolutions)
     if has_resolutions:
@@ -433,6 +496,7 @@ def commit_orrery_tick_sync(
                 actor_entity_id=actor_entity_id,
                 target_entity_id=target_entity_id,
                 world_layer=world_layer,
+                signal_detection=signal_detection,
             )
             if event_id is not None:
                 event_count += 1
@@ -472,9 +536,11 @@ async def commit_orrery_tick_async(
     adjudications: Any = None,
     storyteller_state_updates: Any = None,
     prompt_settings: Optional[Any] = None,
+    ecology_settings: Optional[Any] = None,
 ) -> CommitOrreryTickResult:
     """Async parity wrapper for tests and non-production commit callers."""
 
+    signal_detection = coerce_signal_detection(ecology_settings)
     coerced = coerce_proposal(proposal)
     has_resolutions = coerced is not None and bool(coerced.resolutions)
     if has_resolutions:
@@ -640,6 +706,7 @@ async def commit_orrery_tick_async(
             actor_entity_id=actor_entity_id,
             target_entity_id=target_entity_id,
             world_layer=world_layer,
+            signal_detection=signal_detection,
         )
         if event_id is not None:
             event_count += 1
@@ -1415,6 +1482,43 @@ def _apply_state_delta_sync(
                 template_id=draft.template_id,
                 source_chunk_id=source_chunk_id,
             )
+    outbound_pair_tag_adds = (
+        draft.state_delta.get("entity_pair_tags.add_outbound", ()) or ()
+    )
+    if outbound_pair_tag_adds:
+        if target_entity_id is None:
+            raise ValueError(
+                f"Orrery draft {draft.template_id} adds an outbound pair tag "
+                "but has no target binding"
+            )
+        for tag in outbound_pair_tag_adds:
+            if _add_outbound_pair_tag_sync(
+                cur,
+                subject_entity_id=actor_entity_id,
+                object_entity_id=target_entity_id,
+                tag=str(tag),
+                template_id=draft.template_id,
+                source_chunk_id=source_chunk_id,
+            ):
+                tag_mutations += 1
+    outbound_pair_tag_clears = (
+        draft.state_delta.get("entity_pair_tags.clear_outbound", ()) or ()
+    )
+    if outbound_pair_tag_clears:
+        if target_entity_id is None:
+            raise ValueError(
+                f"Orrery draft {draft.template_id} clears an outbound pair "
+                "tag but has no target binding"
+            )
+        for tag in outbound_pair_tag_clears:
+            tag_mutations += _clear_outbound_pair_tag_sync(
+                cur,
+                subject_entity_id=actor_entity_id,
+                object_entity_id=target_entity_id,
+                tag=str(tag),
+                template_id=draft.template_id,
+                source_chunk_id=source_chunk_id,
+            )
     if "need.fulfill" in draft.state_delta:
         tag_mutations += _apply_need_fulfillment_sync(
             cur,
@@ -1534,6 +1638,43 @@ async def _apply_state_delta_async(
         for tag in target_pair_tag_clears:
             tag_mutations += await _clear_inbound_pair_tags_async(
                 conn,
+                object_entity_id=target_entity_id,
+                tag=str(tag),
+                template_id=draft.template_id,
+                source_chunk_id=source_chunk_id,
+            )
+    outbound_pair_tag_adds = (
+        draft.state_delta.get("entity_pair_tags.add_outbound", ()) or ()
+    )
+    if outbound_pair_tag_adds:
+        if target_entity_id is None:
+            raise ValueError(
+                f"Orrery draft {draft.template_id} adds an outbound pair tag "
+                "but has no target binding"
+            )
+        for tag in outbound_pair_tag_adds:
+            if await _add_outbound_pair_tag_async(
+                conn,
+                subject_entity_id=actor_entity_id,
+                object_entity_id=target_entity_id,
+                tag=str(tag),
+                template_id=draft.template_id,
+                source_chunk_id=source_chunk_id,
+            ):
+                tag_mutations += 1
+    outbound_pair_tag_clears = (
+        draft.state_delta.get("entity_pair_tags.clear_outbound", ()) or ()
+    )
+    if outbound_pair_tag_clears:
+        if target_entity_id is None:
+            raise ValueError(
+                f"Orrery draft {draft.template_id} clears an outbound pair "
+                "tag but has no target binding"
+            )
+        for tag in outbound_pair_tag_clears:
+            tag_mutations += await _clear_outbound_pair_tag_async(
+                conn,
+                subject_entity_id=actor_entity_id,
                 object_entity_id=target_entity_id,
                 tag=str(tag),
                 template_id=draft.template_id,
@@ -2739,6 +2880,109 @@ def _clear_inbound_pair_tags_sync(
     return len(cleared_ids)
 
 
+def _registered_pair_tag_id_sync(cur: Any, tag: str) -> int:
+    cur.execute("SELECT id FROM pair_tags WHERE tag = %s AND NOT deprecated", (tag,))
+    row = cur.fetchone()
+    if not row:
+        raise ValueError(f"Orrery pair tag {tag!r} is not registered")
+    return _row_get(row, "id", 0)
+
+
+def _add_outbound_pair_tag_sync(
+    cur: Any,
+    *,
+    subject_entity_id: int,
+    object_entity_id: int,
+    tag: str,
+    template_id: str,
+    source_chunk_id: int,
+) -> bool:
+    """Create a directed pair tag (actor -> target) from a branch outcome.
+
+    The write mirrors _add_entity_tag_sync: template provenance, world-time
+    stamp, and ON CONFLICT DO NOTHING against the unique current-row index
+    so re-fires while the edge is live are no-ops.
+    """
+
+    pair_tag_id = _registered_pair_tag_id_sync(cur, tag)
+    cur.execute(
+        """
+        INSERT INTO entity_pair_tags (
+            subject_entity_id, object_entity_id, pair_tag_id,
+            source_kind, applied_at_world_time, template_id, source_chunk_id
+        )
+        VALUES (%s, %s, %s, 'template', %s, %s, %s)
+        ON CONFLICT DO NOTHING
+        RETURNING id
+        """,
+        (
+            subject_entity_id,
+            object_entity_id,
+            pair_tag_id,
+            _chunk_world_time_sync(cur, source_chunk_id),
+            template_id,
+            source_chunk_id,
+        ),
+    )
+    return cur.fetchone() is not None
+
+
+def _clear_outbound_pair_tag_sync(
+    cur: Any,
+    *,
+    subject_entity_id: int,
+    object_entity_id: int,
+    tag: str,
+    template_id: str,
+    source_chunk_id: int,
+) -> int:
+    """Clear one directed edge (actor -> target) only.
+
+    The target-wide variant (_clear_inbound_pair_tags_sync) releases every
+    subject's edge at once — right for a protective intervention, wrong for
+    one hunter abandoning their own hunt while another's is still live.
+    """
+
+    cur.execute(
+        """
+        UPDATE entity_pair_tags ept
+        SET cleared_at = now()
+        FROM pair_tags pt
+        WHERE ept.pair_tag_id = pt.id
+          AND ept.subject_entity_id = %s
+          AND ept.object_entity_id = %s
+          AND pt.tag = %s
+          AND ept.cleared_at IS NULL
+        RETURNING ept.id
+        """,
+        (subject_entity_id, object_entity_id, tag),
+    )
+    cleared_ids = [_row_get(row, "id", 0) for row in cur.fetchall()]
+    world_time = _chunk_world_time_sync(cur, source_chunk_id)
+    for pair_tag_row_id in cleared_ids:
+        cur.execute(
+            """
+            INSERT INTO tag_clearance_log (
+                entity_pair_tag_id, mechanism, cleared_at_world_time,
+                justification, source_chunk_id
+            ) VALUES (%s, 'authored', %s, %s::jsonb, %s)
+            """,
+            (
+                pair_tag_row_id,
+                world_time,
+                json.dumps(
+                    {
+                        "template_id": template_id,
+                        "state_delta": "entity_pair_tags.clear_outbound",
+                        "tag": tag,
+                    }
+                ),
+                source_chunk_id,
+            ),
+        )
+    return len(cleared_ids)
+
+
 async def _remove_entity_tag_async(
     conn: Any,
     entity_id: int,
@@ -2825,6 +3069,99 @@ async def _clear_inbound_pair_tags_async(
     return len(cleared_ids)
 
 
+async def _registered_pair_tag_id_async(conn: Any, tag: str) -> int:
+    row = await conn.fetchrow(
+        "SELECT id FROM pair_tags WHERE tag = $1 AND NOT deprecated", tag
+    )
+    if not row:
+        raise ValueError(f"Orrery pair tag {tag!r} is not registered")
+    return _row_get(row, "id", 0)
+
+
+async def _add_outbound_pair_tag_async(
+    conn: Any,
+    *,
+    subject_entity_id: int,
+    object_entity_id: int,
+    tag: str,
+    template_id: str,
+    source_chunk_id: int,
+) -> bool:
+    """Async twin of _add_outbound_pair_tag_sync."""
+
+    pair_tag_id = await _registered_pair_tag_id_async(conn, tag)
+    world_time = await _chunk_world_time_async(conn, source_chunk_id)
+    row = await conn.fetchrow(
+        """
+        INSERT INTO entity_pair_tags (
+            subject_entity_id, object_entity_id, pair_tag_id,
+            source_kind, applied_at_world_time, template_id, source_chunk_id
+        )
+        VALUES ($1, $2, $3, 'template', $4, $5, $6)
+        ON CONFLICT DO NOTHING
+        RETURNING id
+        """,
+        subject_entity_id,
+        object_entity_id,
+        pair_tag_id,
+        world_time,
+        template_id,
+        source_chunk_id,
+    )
+    return row is not None
+
+
+async def _clear_outbound_pair_tag_async(
+    conn: Any,
+    *,
+    subject_entity_id: int,
+    object_entity_id: int,
+    tag: str,
+    template_id: str,
+    source_chunk_id: int,
+) -> int:
+    """Async twin of _clear_outbound_pair_tag_sync."""
+
+    rows = await conn.fetch(
+        """
+        UPDATE entity_pair_tags ept
+        SET cleared_at = now()
+        FROM pair_tags pt
+        WHERE ept.pair_tag_id = pt.id
+          AND ept.subject_entity_id = $1
+          AND ept.object_entity_id = $2
+          AND pt.tag = $3
+          AND ept.cleared_at IS NULL
+        RETURNING ept.id
+        """,
+        subject_entity_id,
+        object_entity_id,
+        tag,
+    )
+    cleared_ids = [_row_get(row, "id", 0) for row in rows]
+    world_time = await _chunk_world_time_async(conn, source_chunk_id)
+    for pair_tag_row_id in cleared_ids:
+        await conn.execute(
+            """
+            INSERT INTO tag_clearance_log (
+                entity_pair_tag_id, mechanism, cleared_at_world_time,
+                justification, source_chunk_id
+            ) VALUES ($1, 'authored', $2, $3::jsonb, $4)
+            """,
+            pair_tag_row_id,
+            world_time,
+            json.dumps(
+                {
+                    "template_id": template_id,
+                    "state_delta": "entity_pair_tags.clear_outbound",
+                    "tag": tag,
+                }
+            ),
+            source_chunk_id,
+        )
+    return len(cleared_ids)
+
+
 def _emit_world_event_sync(
     cur: Any,
     draft: OrreryResolutionDraft,
@@ -2834,13 +3171,22 @@ def _emit_world_event_sync(
     actor_entity_id: Optional[int],
     target_entity_id: Optional[int],
     world_layer: Optional[str],
+    signal_detection: SignalDetection,
 ) -> Optional[int]:
     if not draft.event_type:
         return None
 
     _ensure_event_type_sync(cur, draft.event_type)
+    detection_outcome: Optional[dict[str, Any]] = None
     if draft.signal_event_type:
         _ensure_event_type_sync(cur, draft.signal_event_type)
+        detection_outcome = signal_detection.outcome(
+            template_id=draft.template_id,
+            actor_entity_id=actor_entity_id,
+            target_entity_id=target_entity_id,
+            tick_chunk_id=tick_chunk_id,
+            event_type=draft.signal_event_type,
+        )
     location_id = _actor_location_sync(cur, actor_entity_id)
     payload = {
         "proposal_id": draft.proposal_id,
@@ -2850,6 +3196,10 @@ def _emit_world_event_sync(
         "branch_label": draft.branch_label,
         "narrative_stub": draft.narrative_stub,
     }
+    if detection_outcome is not None:
+        # Recorded on the primary event either way so the audit layer can
+        # show "signal went out, undetected" without a phantom event row.
+        payload["signal_detection"] = detection_outcome
     cur.execute(
         """
         INSERT INTO world_events (
@@ -2891,7 +3241,7 @@ def _emit_world_event_sync(
             """,
             (event_id, target_entity_id),
         )
-    if draft.signal_event_type:
+    if draft.signal_event_type and detection_outcome and detection_outcome["detected"]:
         # The act's signal: a second, additive emission with the same
         # bindings so other packages' gates can hear it (spec idea 7).
         cur.execute(
@@ -2927,13 +3277,22 @@ async def _emit_world_event_async(
     actor_entity_id: Optional[int],
     target_entity_id: Optional[int],
     world_layer: Optional[str],
+    signal_detection: SignalDetection,
 ) -> Optional[int]:
     if not draft.event_type:
         return None
 
     await _ensure_event_type_async(conn, draft.event_type)
+    detection_outcome: Optional[dict[str, Any]] = None
     if draft.signal_event_type:
         await _ensure_event_type_async(conn, draft.signal_event_type)
+        detection_outcome = signal_detection.outcome(
+            template_id=draft.template_id,
+            actor_entity_id=actor_entity_id,
+            target_entity_id=target_entity_id,
+            tick_chunk_id=tick_chunk_id,
+            event_type=draft.signal_event_type,
+        )
     location_id = await _actor_location_async(conn, actor_entity_id)
     payload = {
         "proposal_id": draft.proposal_id,
@@ -2943,6 +3302,8 @@ async def _emit_world_event_async(
         "branch_label": draft.branch_label,
         "narrative_stub": draft.narrative_stub,
     }
+    if detection_outcome is not None:
+        payload["signal_detection"] = detection_outcome
     event_id = await conn.fetchval(
         """
         INSERT INTO world_events (
@@ -2986,7 +3347,7 @@ async def _emit_world_event_async(
             event_id,
             target_entity_id,
         )
-    if draft.signal_event_type:
+    if draft.signal_event_type and detection_outcome and detection_outcome["detected"]:
         # Same additive signal emission as the sync twin.
         await conn.execute(
             """
