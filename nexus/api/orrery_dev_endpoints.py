@@ -311,6 +311,7 @@ async def post_resolve(request: OrreryResolveRequest) -> dict[str, Any]:
                 overrides=overrides,
                 selection_settings=orrery.get("selection"),
                 habituation_settings=orrery.get("habituation"),
+                fanout_settings=orrery.get("fanout"),
             )
         except OverrideValidationError as exc:
             # Override validation (unknown vocab, no-op toggles) is caller
@@ -396,6 +397,7 @@ async def post_coverage(request: OrreryCoverageRequest) -> dict[str, Any]:
             epoch_min_world_times=epoch_min,
             selection_settings=orrery.get("selection"),
             habituation_settings=orrery.get("habituation"),
+            fanout_settings=orrery.get("fanout"),
         )
 
 
