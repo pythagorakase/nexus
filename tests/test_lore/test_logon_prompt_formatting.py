@@ -345,7 +345,12 @@ class _Cursor:
 
 
 def test_context_prompt_renders_intertitle() -> None:
-    """Headline state anchors Skald's declared deltas and transitions."""
+    """Headline state anchors Skald's declared deltas and transitions.
+
+    Deliberately unlabeled and gloss-free: no section header, no
+    "In-world time:" caption, no time-of-day gloss, no protagonist
+    reminder — position and form carry it.
+    """
 
     prompt = LogonUtility({})._format_context_prompt(
         {
@@ -356,21 +361,22 @@ def test_context_prompt_renders_intertitle() -> None:
                 "scene": 13,
                 "world_layer": "primary",
                 "world_time": "2073-10-31T14:37:00-04:00",
-                "time_of_day": "afternoon",
-                "protagonist_name": "Alex",
                 "location_name": "The Land Rig",
+                "location_geom": ("SRID=4326;POINT(-90.0725 29.9320 0 0)"),
             },
         }
     )
 
-    assert "=== INTERTITLE ===" in prompt
-    assert "S05E06 - Scene 13" in prompt
+    assert prompt.startswith("S05E06 - Scene 13\n")
+    assert "\n2073-10-31T14:37:00-04:00\n" in prompt
+    assert "The Land Rig — SRID=4326;POINT(-90.0725 29.9320 0 0)" in prompt
     # Primary layer is the default register; only deviations are announced.
     assert "primary layer" not in prompt
-    assert "In-world time: 2073-10-31T14:37:00-04:00 (afternoon)" in prompt
-    assert "Location: The Land Rig (Alex)" in prompt
-    # The intertitle frames everything after it.
-    assert prompt.index("INTERTITLE") < prompt.index("USER INPUT")
+    # No labels, no glosses.
+    assert "INTERTITLE" not in prompt
+    assert "In-world time" not in prompt
+    assert "afternoon" not in prompt
+    assert "Location:" not in prompt
 
 
 def test_context_prompt_announces_non_primary_layer() -> None:
@@ -383,7 +389,7 @@ def test_context_prompt_announces_non_primary_layer() -> None:
         }
     )
 
-    assert "flashback layer" in prompt
+    assert "S02E01 - flashback layer" in prompt
 
 
 def test_context_prompt_omits_intertitle_when_unknown() -> None:
@@ -391,4 +397,4 @@ def test_context_prompt_omits_intertitle_when_unknown() -> None:
 
     prompt = LogonUtility({})._format_context_prompt({"user_input": "Continue."})
 
-    assert "INTERTITLE" not in prompt
+    assert prompt.startswith("\n=== USER INPUT ===") or prompt.startswith("=== ")
