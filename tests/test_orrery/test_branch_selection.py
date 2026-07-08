@@ -172,6 +172,57 @@ def test_explain_stack_parity_on_presets_under_stochastic_policy() -> None:
         assert winner.chosen_branch == truth.branch_label
 
 
+def test_preemptive_branch_wins_under_every_selection_mode() -> None:
+    """Lifecycle-terminal branches bypass sampling the tick they turn eligible.
+
+    MOURN_LOSS's completion branch is the motivating case: under stochastic
+    selection a flavor branch must not be sampled past the threshold, or the
+    grieving tag's clearance event may never be emitted.
+    """
+
+    lifecycle = Template(
+        id="mourn_loss",  # real id so catalog/prose lookups stay valid
+        priority=10,
+        drive_band=DriveBand.AFFILIATION,
+        blurb="Synthetic lifecycle surface for preemption tests.",
+        required_slots=(Slot.ACTOR,),
+        package_gate=ALWAYS,
+        branches=(
+            Branch(
+                label="flavor",
+                conditions=ALWAYS,
+                narrative_stub="{actor} mourns.",
+                magnitude=0.9,
+            ),
+            Branch(
+                label="complete",
+                conditions=ALWAYS,
+                narrative_stub="{actor} lays the grief down.",
+                magnitude=0.2,
+                preemptive=True,
+            ),
+        ),
+    )
+
+    for tick in range(40):
+        branch, considered = select_branch(
+            lifecycle,
+            _state(tick),
+            BINDINGS,
+            digest="digest",
+            selection=STOCHASTIC,
+        )
+        assert branch is not None and branch.label == "complete"
+        # The preemptive win short-circuits: the flavor branch is never
+        # evaluated, and considered flags must say so.
+        assert considered == (False, True)
+
+    authored, _ = select_branch(
+        lifecycle, _state(1), BINDINGS, digest="digest", selection=None
+    )
+    assert authored is not None and authored.label == "complete"
+
+
 def test_select_branch_reports_considered_flags() -> None:
     state = _state(7)
     _, legacy_flags = select_branch(VARIED, state, BINDINGS, digest="d", selection=None)

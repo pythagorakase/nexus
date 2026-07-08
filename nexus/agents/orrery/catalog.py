@@ -571,7 +571,11 @@ def _render_narrative_stub(stub: str) -> List[str]:
 
 
 def _render_branch(idx: int, branch: Branch) -> List[str]:
-    lines = [f"### Branch {idx} — {branch.label}  *(mag {branch.magnitude})*", ""]
+    marker = " · **preemptive**" if branch.preemptive else ""
+    lines = [
+        f"### Branch {idx} — {branch.label}  *(mag {branch.magnitude})*{marker}",
+        "",
+    ]
     if isinstance(branch.conditions, CompoundCondition):
         lines.extend(["**When:**", ""])
         lines.extend(_render_condition_lines(branch.conditions))

@@ -1404,13 +1404,14 @@ MOURN_LOSS = Template(
         NOT(has_inbound_pair_tag("hunting")),
     ),
     branches=(
-        # Terminal branch first (authored-order selection short-circuits):
-        # enough mourning acts inside the hydration window means the grief
-        # has been worked, and the completion event lets the tag-clearance
-        # machinery digest `grieving` (clear_on -> mourning_completed).
-        # Without this branch nothing ever emits mourning_completed and
-        # grief is an absorbing state that suppresses the actor's entire
-        # routine/social band indefinitely.
+        # Lifecycle terminal: enough mourning acts inside the hydration
+        # window means the grief has been worked, and the completion event
+        # lets the tag-clearance machinery digest `grieving`
+        # (clear_on -> mourning_completed). Without this branch nothing
+        # ever emits mourning_completed and grief is an absorbing state
+        # that suppresses the actor's entire routine/social band
+        # indefinitely. Preemptive so stochastic branch sampling cannot
+        # keep re-selecting a flavor branch past the threshold.
         Branch(
             label="Lay the grief down",
             conditions=count_recent_events_at_least(
@@ -1429,6 +1430,7 @@ MOURN_LOSS = Template(
             event_type="mourning_completed",
             changed_fields=("character.current_activity",),
             magnitude=0.34,
+            preemptive=True,
         ),
         Branch(
             label="Visit the place of remembrance",

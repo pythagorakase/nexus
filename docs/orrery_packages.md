@@ -1173,7 +1173,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
   - ≥ 8 ticks since last `mourning_completed` event for actor
   - **NOT:** actor has inbound `hunting` pair tag
 
-### Branch 1 — Lay the grief down  *(mag 0.34)*
+### Branch 1 — Lay the grief down  *(mag 0.34)* · **preemptive**
 
 **When:** ≥ 4 `mourning_act` events within 30 ticks for actor
 
