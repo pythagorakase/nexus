@@ -692,7 +692,7 @@ class TurnCycleManager:
                     SELECT cm.season, cm.episode, cm.scene, cm.world_layer,
                            cm.world_time,
                            p.name AS location_name,
-                           ST_AsEWKT(p.geom) AS location_geom
+                           ST_AsEWKT(p.coordinates::geometry) AS location_geom
                     FROM chunk_metadata cm
                     LEFT JOIN global_variables gv ON gv.id = true
                     LEFT JOIN characters c ON c.id = gv.user_character
