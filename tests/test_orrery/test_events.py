@@ -144,9 +144,15 @@ class RecordingCursor:
             entity_id, need_type = params
             self._fetchone = self.need_state.get((entity_id, need_type))
         elif "UPDATE character_need_states" in normalized:
-            debt_score, world_time, _fulfilled_at, _metadata, entity_id, need_type = (
-                params
-            )
+            (
+                debt_score,
+                world_time,
+                _evaluated_chunk_id,
+                _fulfilled_at,
+                _metadata,
+                entity_id,
+                need_type,
+            ) = params
             self.need_state[(entity_id, need_type)] = {
                 "debt_score": debt_score,
                 "last_evaluated_at": world_time,

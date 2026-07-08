@@ -710,6 +710,16 @@ class OrrerySunhelmSettings(BaseModel):
     pressure: OrreryNeedPressureSettings = Field(
         default_factory=OrreryNeedPressureSettings
     )
+    min_accrual_hours_per_chunk: Dict[str, float] = Field(
+        default_factory=dict,
+        description=(
+            "Story-time accrual floor: each elapsed chunk counts as at "
+            "least this many world-hours for the named need. Sparse — "
+            "needs not listed accrue on world time alone. Meant for "
+            "story-paced needs (socialize, intimacy); flooring biological "
+            "needs risks prose dissonance."
+        ),
+    )
 
     @model_validator(mode="after")
     def _validate_need_keys(self) -> "OrrerySunhelmSettings":

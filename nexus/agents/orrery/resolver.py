@@ -437,6 +437,7 @@ def hydrate_world_state(
         tags_by_entity={
             entity_id: frozenset(values) for entity_id, values in tags.items()
         },
+        anchor_chunk_id=anchor_chunk_id,
     )
     travel_states = _load_travel_states(session)
     routine_anchors = _load_routine_anchors(session)
@@ -1182,6 +1183,7 @@ def _load_need_debt_scores(
     current_world_time: Optional[datetime],
     need_tuning: NeedTuning,
     tags_by_entity: Mapping[int, frozenset[str]],
+    anchor_chunk_id: Optional[int] = None,
 ) -> dict[tuple[int, str], float]:
     """Load effective need debt scores without mutating canonical state."""
 
@@ -1193,7 +1195,8 @@ def _load_need_debt_scores(
             SELECT character_entity_id,
                    need_type::text AS need_type,
                    debt_score,
-                   last_evaluated_at
+                   last_evaluated_at,
+                   last_evaluated_chunk_id
             FROM character_need_states cns
             JOIN entities e
               ON e.id = cns.character_entity_id
@@ -1214,6 +1217,8 @@ def _load_need_debt_scores(
             last_evaluated_at=row["last_evaluated_at"],
             current_world_time=current_world_time,
             tuning=need_tuning,
+            last_evaluated_chunk_id=row.get("last_evaluated_chunk_id"),
+            current_chunk_id=anchor_chunk_id,
         )
     return scores
 

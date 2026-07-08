@@ -68,6 +68,13 @@ NEED_IMMUNITY_TAGS: Mapping[str, frozenset[str]] = {
         }
     ),
 }
+DEFAULT_MIN_ACCRUAL_HOURS_PER_CHUNK: Mapping[str, float] = {
+    NeedType.SLEEP.value: 0.0,
+    NeedType.HUNGER.value: 0.0,
+    NeedType.THIRST.value: 0.0,
+    NeedType.SOCIALIZE.value: 0.0,
+    NeedType.INTIMACY.value: 0.0,
+}
 NEED_SEVERITY_LEVELS: tuple[tuple[int, str], ...] = (
     (4, "critical"),
     (3, "severe"),
@@ -161,6 +168,20 @@ class NeedTuning:
     severity_thresholds: Mapping[str, Mapping[str, float]]
     priorities: Mapping[str, int]
     pressure: NeedPressureTuning
+    # Story-time accrual floor: each elapsed chunk counts as at least this
+    # many world-hours per need. 0.0 = pure world-clock accrual. Meant for
+    # story-paced needs (socialize, intimacy) whose hour thresholds starve
+    # at ~5 in-world minutes per chunk; flooring biological needs risks
+    # prose dissonance (starving hours after a meal).
+    min_accrual_hours_per_chunk: Mapping[str, float] = None  # type: ignore[assignment]
+
+    def __post_init__(self) -> None:
+        if self.min_accrual_hours_per_chunk is None:
+            object.__setattr__(
+                self,
+                "min_accrual_hours_per_chunk",
+                dict(DEFAULT_MIN_ACCRUAL_HOURS_PER_CHUNK),
+            )
 
     @classmethod
     def default(cls) -> "NeedTuning":
@@ -174,6 +195,7 @@ class NeedTuning:
             },
             priorities=dict(DEFAULT_NEED_PRIORITIES),
             pressure=NeedPressureTuning(),
+            min_accrual_hours_per_chunk=dict(DEFAULT_MIN_ACCRUAL_HOURS_PER_CHUNK),
         )
 
     @classmethod
@@ -208,6 +230,11 @@ class NeedTuning:
             severity_thresholds=severity_thresholds,
             priorities=priorities,
             pressure=NeedPressureTuning.from_mapping(raw.get("pressure")),
+            min_accrual_hours_per_chunk=_coerce_need_mapping(
+                raw.get("min_accrual_hours_per_chunk"),
+                defaults=DEFAULT_MIN_ACCRUAL_HOURS_PER_CHUNK,
+                cast=float,
+            ),
         )
 
 
@@ -278,20 +305,42 @@ def effective_debt_score(
     last_evaluated_at: Optional[datetime],
     current_world_time: Optional[datetime],
     tuning: Optional[NeedTuning] = None,
+    last_evaluated_chunk_id: Optional[int] = None,
+    current_chunk_id: Optional[int] = None,
 ) -> float:
-    """Return debt after accruing elapsed world time without mutating state."""
+    """Return debt after accruing elapsed time without mutating state.
+
+    Accrual runs on world time, floored in story time: when both chunk ids
+    are known, each elapsed chunk counts as at least the need's
+    ``min_accrual_hours_per_chunk``. The floor rescues needs whose
+    hour-denominated thresholds starve at the narrative's ~minutes-per-
+    chunk pace; a 0.0 floor (the default) reproduces pure world-clock
+    accrual exactly.
+    """
 
     tuning = tuning or load_need_tuning()
     normalized = normalize_need_type(need_type)
-    if last_evaluated_at is None or current_world_time is None:
-        return max(0.0, float(debt_score))
 
-    elapsed_seconds = (current_world_time - last_evaluated_at).total_seconds()
-    if elapsed_seconds <= 0:
-        return max(0.0, float(debt_score))
+    elapsed_hours = 0.0
+    if last_evaluated_at is not None and current_world_time is not None:
+        elapsed_seconds = (current_world_time - last_evaluated_at).total_seconds()
+        if elapsed_seconds > 0:
+            elapsed_hours = elapsed_seconds / 3600.0
 
-    elapsed_hours = elapsed_seconds / 3600.0
-    accrued = elapsed_hours * tuning.accrual_rates[normalized]
+    floor_hours = 0.0
+    floor_per_chunk = tuning.min_accrual_hours_per_chunk[normalized]
+    if (
+        floor_per_chunk > 0
+        and last_evaluated_chunk_id is not None
+        and current_chunk_id is not None
+        and current_chunk_id > last_evaluated_chunk_id
+    ):
+        floor_hours = (current_chunk_id - last_evaluated_chunk_id) * floor_per_chunk
+
+    effective_hours = max(elapsed_hours, floor_hours)
+    if effective_hours <= 0:
+        return max(0.0, float(debt_score))
+    accrued = effective_hours * tuning.accrual_rates[normalized]
     return max(0.0, float(debt_score) + accrued)
 
 

@@ -1774,6 +1774,7 @@ def _apply_need_fulfillment_sync(
         UPDATE character_need_states
         SET debt_score = %s,
             last_evaluated_at = %s,
+            last_evaluated_chunk_id = %s,
             last_fulfilled_at = %s,
             updated_at = now(),
             metadata = COALESCE(metadata, '{}'::jsonb) || %s::jsonb
@@ -1783,6 +1784,7 @@ def _apply_need_fulfillment_sync(
         (
             new_debt,
             world_time,
+            source_chunk_id,
             world_time,
             json.dumps({"last_fulfillment": payload}),
             actor_entity_id,
@@ -1830,14 +1832,16 @@ async def _apply_need_fulfillment_async(
         UPDATE character_need_states
         SET debt_score = $1,
             last_evaluated_at = $2,
-            last_fulfilled_at = $3,
+            last_evaluated_chunk_id = $3,
+            last_fulfilled_at = $4,
             updated_at = now(),
-            metadata = COALESCE(metadata, '{}'::jsonb) || $4::jsonb
-        WHERE character_entity_id = $5
-          AND need_type = $6::character_need_type
+            metadata = COALESCE(metadata, '{}'::jsonb) || $5::jsonb
+        WHERE character_entity_id = $6
+          AND need_type = $7::character_need_type
         """,
         new_debt,
         world_time,
+        source_chunk_id,
         world_time,
         json.dumps({"last_fulfillment": payload}),
         actor_entity_id,
