@@ -1223,6 +1223,7 @@ def entity_context(
         tags_by_entity={
             entity_id: frozenset(values) for entity_id, values in tag_sets.items()
         },
+        anchor_chunk_id=anchor_chunk_id,
     )
     needs_by_entity: dict[int, list[dict[str, Any]]] = {}
     for (entity_id, need_type), score in sorted(need_scores.items()):

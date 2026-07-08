@@ -16,6 +16,7 @@ from typing import Any, Mapping, Optional
 from nexus.agents.orrery.needs import (
     NeedTuning,
     coerce_need_tuning,
+    effective_debt_score,
     need_applies_to_tags,
     normalize_need_type,
     severity_tag_for_debt,
@@ -1767,6 +1768,7 @@ def _apply_need_fulfillment_sync(
         need_type=need_type,
         world_time=world_time,
         need_tuning=need_tuning,
+        source_chunk_id=source_chunk_id,
     )
     new_debt = max(0.0, current_debt - float(payload["discharge_debt"]))
     cur.execute(
@@ -1774,6 +1776,7 @@ def _apply_need_fulfillment_sync(
         UPDATE character_need_states
         SET debt_score = %s,
             last_evaluated_at = %s,
+            last_evaluated_chunk_id = %s,
             last_fulfilled_at = %s,
             updated_at = now(),
             metadata = COALESCE(metadata, '{}'::jsonb) || %s::jsonb
@@ -1783,6 +1786,7 @@ def _apply_need_fulfillment_sync(
         (
             new_debt,
             world_time,
+            source_chunk_id,
             world_time,
             json.dumps({"last_fulfillment": payload}),
             actor_entity_id,
@@ -1823,6 +1827,7 @@ async def _apply_need_fulfillment_async(
         need_type=need_type,
         world_time=world_time,
         need_tuning=need_tuning,
+        source_chunk_id=source_chunk_id,
     )
     new_debt = max(0.0, current_debt - float(payload["discharge_debt"]))
     await conn.execute(
@@ -1830,14 +1835,16 @@ async def _apply_need_fulfillment_async(
         UPDATE character_need_states
         SET debt_score = $1,
             last_evaluated_at = $2,
-            last_fulfilled_at = $3,
+            last_evaluated_chunk_id = $3,
+            last_fulfilled_at = $4,
             updated_at = now(),
-            metadata = COALESCE(metadata, '{}'::jsonb) || $4::jsonb
-        WHERE character_entity_id = $5
-          AND need_type = $6::character_need_type
+            metadata = COALESCE(metadata, '{}'::jsonb) || $5::jsonb
+        WHERE character_entity_id = $6
+          AND need_type = $7::character_need_type
         """,
         new_debt,
         world_time,
+        source_chunk_id,
         world_time,
         json.dumps({"last_fulfillment": payload}),
         actor_entity_id,
@@ -2435,6 +2442,7 @@ def _load_or_create_need_debt_sync(
     need_type: str,
     world_time: Any,
     need_tuning: NeedTuning,
+    source_chunk_id: Optional[int] = None,
 ) -> float:
     if not _need_applies_to_entity_sync(
         cur,
@@ -2458,7 +2466,7 @@ def _load_or_create_need_debt_sync(
     )
     cur.execute(
         """
-        SELECT debt_score, last_evaluated_at
+        SELECT debt_score, last_evaluated_at, last_evaluated_chunk_id
         FROM character_need_states
         WHERE character_entity_id = %s
           AND need_type = %s::character_need_type
@@ -2470,12 +2478,19 @@ def _load_or_create_need_debt_sync(
         raise ValueError(
             f"Orrery need state missing for actor {actor_entity_id} {need_type}"
         )
-    debt_score = float(_row_get(row, "debt_score", 0) or 0.0)
-    last_evaluated_at = _row_get(row, "last_evaluated_at", 1)
-    elapsed = (world_time - last_evaluated_at).total_seconds() / 3600.0
-    if elapsed <= 0:
-        return max(0.0, debt_score)
-    return max(0.0, debt_score + elapsed * need_tuning.accrual_rates[need_type])
+    # Route through the same accrual authority the resolver reads with —
+    # a fulfillment must discharge against floor-adjusted debt, or the
+    # story-time floor between stamps is silently discarded at the moment
+    # it matters most.
+    return effective_debt_score(
+        need_type,
+        float(_row_get(row, "debt_score", 0) or 0.0),
+        last_evaluated_at=_row_get(row, "last_evaluated_at", 1),
+        current_world_time=world_time,
+        tuning=need_tuning,
+        last_evaluated_chunk_id=_row_get(row, "last_evaluated_chunk_id", 2),
+        current_chunk_id=source_chunk_id,
+    )
 
 
 async def _load_or_create_need_debt_async(
@@ -2485,6 +2500,7 @@ async def _load_or_create_need_debt_async(
     need_type: str,
     world_time: Any,
     need_tuning: NeedTuning,
+    source_chunk_id: Optional[int] = None,
 ) -> float:
     if not await _need_applies_to_entity_async(
         conn,
@@ -2510,7 +2526,7 @@ async def _load_or_create_need_debt_async(
     )
     row = await conn.fetchrow(
         """
-        SELECT debt_score, last_evaluated_at
+        SELECT debt_score, last_evaluated_at, last_evaluated_chunk_id
         FROM character_need_states
         WHERE character_entity_id = $1
           AND need_type = $2::character_need_type
@@ -2522,12 +2538,15 @@ async def _load_or_create_need_debt_async(
         raise ValueError(
             f"Orrery need state missing for actor {actor_entity_id} {need_type}"
         )
-    debt_score = float(_row_get(row, "debt_score", 0) or 0.0)
-    last_evaluated_at = _row_get(row, "last_evaluated_at", 1)
-    elapsed = (world_time - last_evaluated_at).total_seconds() / 3600.0
-    if elapsed <= 0:
-        return max(0.0, debt_score)
-    return max(0.0, debt_score + elapsed * need_tuning.accrual_rates[need_type])
+    return effective_debt_score(
+        need_type,
+        float(_row_get(row, "debt_score", 0) or 0.0),
+        last_evaluated_at=_row_get(row, "last_evaluated_at", 1),
+        current_world_time=world_time,
+        tuning=need_tuning,
+        last_evaluated_chunk_id=_row_get(row, "last_evaluated_chunk_id", 2),
+        current_chunk_id=source_chunk_id,
+    )
 
 
 def _need_applies_to_entity_sync(
