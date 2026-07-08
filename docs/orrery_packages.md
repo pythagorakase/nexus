@@ -210,7 +210,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
   - **NOT:** actor and target are co-located
   - ≥ 18 ticks since last `hunt_declared` event for (actor, target) pair
 
-**Does:** activity → "letting a hunt go cold"; `entity_pair_tags.clear_outbound` = `['hunting']`
+**Does:** activity → "letting a hunt go cold"; clears own outbound `hunting` pair tag to target
 **Event:** `hunt_called_off`
 
 > {actor} stops feeding the hunt for {target} — the watchers wander off, the standing questions expire — not forgiveness, just the quiet arithmetic of effort against a target who will not surface.
@@ -266,7 +266,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
   - actor has any of [`vendetta_holder`, `violent_history`]
   - **NOT:** actor has `hunting` pair tag to target
 
-**Does:** activity → "hunting a grudge target"; `entity_pair_tags.add_outbound` = `['hunting']`
+**Does:** activity → "hunting a grudge target"; adds outbound `hunting` pair tag to target
 **Event:** `hunt_declared`
 
 > {actor} stops waiting for {target} to wander into reach and starts hunting in earnest — questions placed with the right people, routes watched, a price quietly attached to a location. The grudge acquires infrastructure.

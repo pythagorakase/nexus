@@ -2881,7 +2881,7 @@ def _clear_inbound_pair_tags_sync(
 
 
 def _registered_pair_tag_id_sync(cur: Any, tag: str) -> int:
-    cur.execute("SELECT id FROM pair_tags WHERE tag = %s", (tag,))
+    cur.execute("SELECT id FROM pair_tags WHERE tag = %s AND NOT deprecated", (tag,))
     row = cur.fetchone()
     if not row:
         raise ValueError(f"Orrery pair tag {tag!r} is not registered")
@@ -3070,7 +3070,9 @@ async def _clear_inbound_pair_tags_async(
 
 
 async def _registered_pair_tag_id_async(conn: Any, tag: str) -> int:
-    row = await conn.fetchrow("SELECT id FROM pair_tags WHERE tag = $1", tag)
+    row = await conn.fetchrow(
+        "SELECT id FROM pair_tags WHERE tag = $1 AND NOT deprecated", tag
+    )
     if not row:
         raise ValueError(f"Orrery pair tag {tag!r} is not registered")
     return _row_get(row, "id", 0)
