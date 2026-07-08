@@ -106,8 +106,9 @@ def test_resolver_loader_threads_chunk_stamp() -> None:
     """The hydration path applies the floor from stored chunk stamps."""
 
     import sys
+    from pathlib import Path
 
-    sys.path.insert(0, "tests/test_orrery")
+    sys.path.insert(0, str(Path(__file__).parent))
     from test_resolver import FakeSession
 
     from nexus.agents.orrery.resolver import _load_need_debt_scores

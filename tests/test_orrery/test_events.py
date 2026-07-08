@@ -135,11 +135,15 @@ class RecordingCursor:
             entity_id, need_type, world_time = params
             self.need_state.setdefault(
                 (entity_id, need_type),
-                {"debt_score": 0, "last_evaluated_at": world_time},
+                {
+                    "debt_score": 0,
+                    "last_evaluated_at": world_time,
+                    "last_evaluated_chunk_id": None,
+                },
             )
         elif (
-            "SELECT debt_score, last_evaluated_at FROM character_need_states"
-            in normalized
+            "SELECT debt_score, last_evaluated_at, last_evaluated_chunk_id"
+            " FROM character_need_states" in normalized
         ):
             entity_id, need_type = params
             self._fetchone = self.need_state.get((entity_id, need_type))
@@ -156,6 +160,7 @@ class RecordingCursor:
             self.need_state[(entity_id, need_type)] = {
                 "debt_score": debt_score,
                 "last_evaluated_at": world_time,
+                "last_evaluated_chunk_id": _evaluated_chunk_id,
             }
         elif "SELECT etc.tag FROM entity_tags_current etc" in normalized:
             entity_id = params[0]
@@ -2295,6 +2300,7 @@ def test_commit_orrery_tick_applies_need_fulfillment_delta() -> None:
             (1, "sleep"): {
                 "debt_score": 20,
                 "last_evaluated_at": world_time - timedelta(hours=2),
+                "last_evaluated_chunk_id": None,
             }
         },
     )
