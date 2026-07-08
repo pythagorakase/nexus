@@ -24,6 +24,7 @@ from nexus.agents.orrery.substrate import (
     can_move_publicly,
     co_located,
     count_co_located,
+    count_recent_events_at_least,
     contact_pair_tag_for_kind,
     direct_contact_is_dramatic,
     evaluate_stack,
@@ -153,7 +154,7 @@ def test_storyteller_pressure_templates_require_pressure_stubs() -> None:
     ("preset", "template_id", "branch_label"),
     [
         ("hunted", "evade_pursuers", "Go to ground in flooded tunnels"),
-        ("fragment", "pursue_ghost_lead", "Recon a hideout their body remembers"),
+        ("fragment", "uncover_past", "Revisit a place their body remembers"),
         ("debt", "honor_debt", "Fulfill obligation through a dead-drop"),
         ("quiet", "maintain_cover", "Run a low-level courier job"),
         ("hiding", "hide", "Go dark and reduce signal exposure"),
@@ -210,7 +211,7 @@ def test_storyteller_pressure_templates_require_pressure_stubs() -> None:
         ),
         (
             "kin_visit",
-            "reach_out_to_kin",
+            "reach_out",
             "Find the moment for a real face-to-face conversation",
         ),
         (
@@ -870,6 +871,83 @@ def test_binding_hash_handles_runtime_non_slot_keys() -> None:
     assert binding_hash({Slot.ACTOR: 1, "custom": 2}) == binding_hash(
         {"custom": 2, Slot.ACTOR: 1}
     )
+
+
+def test_count_recent_events_at_least_thresholds_and_scope() -> None:
+    """The counting predicate honors min_count, window, actor role, and target scope."""
+
+    from nexus.agents.orrery.substrate import EventRecord
+
+    def act(tick: int, target: int = 2) -> EventRecord:
+        return EventRecord(
+            event_type="mourning_act",
+            tick=tick,
+            actor_entity_id=1,
+            target_entity_id=target,
+        )
+
+    state = WorldState(
+        recent_events=(act(4), act(7), act(10, target=3), act(13)),
+        current_tick=15,
+    )
+
+    assert count_recent_events_at_least("mourning_act", within_ticks=15, min_count=4)(
+        state, {Slot.ACTOR: 1}
+    )
+    assert not count_recent_events_at_least(
+        "mourning_act", within_ticks=15, min_count=5
+    )(state, {Slot.ACTOR: 1})
+    # Window cutoff drops the tick-4 event.
+    assert not count_recent_events_at_least(
+        "mourning_act", within_ticks=10, min_count=4
+    )(state, {Slot.ACTOR: 1})
+    # Actor role is strict: entity 2 was only ever a target.
+    assert not count_recent_events_at_least(
+        "mourning_act", within_ticks=15, min_count=1
+    )(state, {Slot.ACTOR: 2})
+    # Target scoping counts only the pair's events.
+    assert count_recent_events_at_least(
+        "mourning_act", within_ticks=15, min_count=3, target_slot=Slot.TARGET
+    )(state, {Slot.ACTOR: 1, Slot.TARGET: 2})
+    assert not count_recent_events_at_least(
+        "mourning_act", within_ticks=15, min_count=4, target_slot=Slot.TARGET
+    )(state, {Slot.ACTOR: 1, Slot.TARGET: 2})
+
+
+def test_mourn_loss_completes_after_sustained_mourning() -> None:
+    """Enough mourning acts trigger the terminal branch that clears grief.
+
+    The terminal branch emits mourning_completed — the event the `grieving`
+    tag's clear_on rule digests. Without it grief is an absorbing state.
+    """
+
+    from nexus.agents.orrery.substrate import EventRecord, evaluate
+    from nexus.agents.orrery.templates import MOURN_LOSS
+
+    def acts(*ticks: int) -> tuple[EventRecord, ...]:
+        return tuple(
+            EventRecord(event_type="mourning_act", tick=t, actor_entity_id=1)
+            for t in ticks
+        )
+
+    fresh_grief = WorldState(
+        ephemeral_tags={1: frozenset({"grieving"})},
+        recent_events=acts(20),
+        current_tick=25,
+    )
+    ongoing = evaluate(MOURN_LOSS, fresh_grief, {Slot.ACTOR: 1})
+    assert ongoing.passes is True
+    assert ongoing.event_type == "mourning_act"
+
+    worked_grief = WorldState(
+        ephemeral_tags={1: frozenset({"grieving"})},
+        recent_events=acts(8, 12, 16, 20),
+        current_tick=25,
+    )
+    completed = evaluate(MOURN_LOSS, worked_grief, {Slot.ACTOR: 1})
+    assert completed.passes is True
+    assert completed.branch_label == "Lay the grief down"
+    assert completed.event_type == "mourning_completed"
 
 
 def test_evaluate_stack_returns_none_when_no_template_passes() -> None:

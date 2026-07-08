@@ -1473,6 +1473,54 @@ def _since_last_event_at_least(
     )
 
 
+@_resolver("count_recent_events_at_least")
+def _count_recent_events_at_least(
+    match: re.Match, state: WorldState, bindings: Bindings
+) -> dict:
+    event_type = match["event"]
+    min_count = int(match["count"])
+    within_ticks = int(match["n"])
+    actor_slot = match["actor"]
+    target_slot = match["target"]
+    actor_id = _entity(bindings, actor_slot)
+    target_id = _entity(bindings, target_slot) if target_slot else None
+    slot_unbound = actor_id is None or (target_slot is not None and target_id is None)
+    cutoff = state.current_tick - within_ticks
+    matched: list[dict[str, Any]] = []
+    if not slot_unbound:
+        for event in state.recent_events:
+            if event.tick < cutoff:
+                continue
+            if event.event_type != event_type:
+                continue
+            if event.actor_entity_id != actor_id:
+                continue
+            if target_id is not None and event.target_entity_id != target_id:
+                continue
+            matched.append(_event_payload(event))
+    entities: dict[str, Optional[int]] = {actor_slot: actor_id}
+    if target_slot:
+        entities[target_slot] = target_id
+    return _evidence(
+        "count_recent_events_at_least",
+        params={
+            "event_type": event_type,
+            "min_count": min_count,
+            "within_ticks": within_ticks,
+            "actor_slot": actor_slot,
+            "target_slot": target_slot,
+        },
+        entities=entities,
+        observed={
+            "current_tick": state.current_tick,
+            "cutoff_tick": cutoff,
+            "matched_count": len(matched),
+        },
+        matched=matched,
+        result=False if slot_unbound else len(matched) >= min_count,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------

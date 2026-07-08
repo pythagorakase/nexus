@@ -42,6 +42,7 @@ from nexus.agents.orrery.substrate import (
     can_move_publicly,
     co_located,
     count_co_located,
+    count_recent_events_at_least,
     direct_contact_is_dramatic,
     faction_member,
     fame_at_or_above,
@@ -213,6 +214,13 @@ FACTORY_SWEEP = [
     recent_event(within_ticks=3),
     since_last_event_at_least("contact_made", 3),
     since_last_event_at_least("contact_made", 3, target_slot=Slot.TARGET),
+    count_recent_events_at_least("mourning_act", within_ticks=30, min_count=4),
+    count_recent_events_at_least(
+        "surveillance_performed",
+        within_ticks=12,
+        min_count=3,
+        target_slot=Slot.TARGET,
+    ),
 ]
 
 

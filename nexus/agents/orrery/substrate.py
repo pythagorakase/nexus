@@ -1590,6 +1590,55 @@ def since_last_event_at_least(
     )
 
 
+def count_recent_events_at_least(
+    event_type: str,
+    *,
+    within_ticks: int,
+    min_count: int,
+    actor_slot: Slot = Slot.ACTOR,
+    target_slot: Optional[Slot] = None,
+) -> Condition:
+    """Return whether at least ``min_count`` matching events landed in the window.
+
+    Counting is bounded by the recent-event hydration window
+    (``[orrery.binding] window_chunks``), so ``within_ticks`` larger than
+    that window only ever sees hydrated history. Use for
+    accumulate-then-act thresholds (grief completing after enough
+    mourning acts, acting on piled-up surveillance) rather than simple
+    cooldowns, which belong to :func:`since_last_event_at_least`.
+    """
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        actor_id = _slot_entity(bindings, actor_slot)
+        if actor_id is None:
+            return False
+        target_id = _slot_entity(bindings, target_slot) if target_slot else None
+        if target_slot is not None and target_id is None:
+            return False
+        cutoff = state.current_tick - within_ticks
+        count = 0
+        for event in state.recent_events:
+            if event.tick < cutoff:
+                continue
+            if event.event_type != event_type:
+                continue
+            if event.actor_entity_id != actor_id:
+                continue
+            if target_id is not None and event.target_entity_id != target_id:
+                continue
+            count += 1
+            if count >= min_count:
+                return True
+        return False
+
+    suffix = f",target={target_slot.value}" if target_slot else ""
+    return _named(
+        _condition,
+        f"count_recent_events_at_least({event_type},>={min_count},<={within_ticks}"
+        f"@{actor_slot.value}{suffix})",
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class CompoundCondition:
     """Self-describing AND / OR / NOT composition.
@@ -1672,6 +1721,12 @@ class Branch:
     # event_type. Signals feed other packages' gates without disturbing the
     # emitting package's cooldowns.
     signal_event_type: Optional[str] = None
+    # Lifecycle-terminal branches (a state transition like grief completing)
+    # must fire the tick they become eligible in EVERY selection mode;
+    # stochastic sampling is for flavor variety among peer branches, not
+    # state machines. Preemptive branches are checked first, in authored
+    # order, before any mode-specific selection runs.
+    preemptive: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -1818,33 +1873,49 @@ def select_branch(
     each other and raise on divergence, so a second selection implementation
     is a correctness bug by construction.
 
-    ``authored_order`` (and a missing ``selection``) preserves the legacy
-    short-circuit exactly; ``stochastic`` evaluates all branches (the traces
-    become exhaustive) and softmax-samples the passing set by magnitude.
-    At ``temperature == 0`` stochastic degenerates to argmax by magnitude
-    (authored order breaking ties).
+    Preemptive branches are checked first in authored order under every
+    mode — a passing lifecycle-terminal branch wins outright and the
+    remaining branches are not evaluated. Otherwise ``authored_order``
+    (and a missing ``selection``) preserves the legacy short-circuit
+    exactly; ``stochastic`` evaluates all non-preemptive branches (those
+    traces become exhaustive) and softmax-samples the passing set by
+    magnitude. At ``temperature == 0`` stochastic degenerates to argmax
+    by magnitude (authored order breaking ties).
     """
 
-    if selection is None or selection.mode == "authored_order":
-        considered = []
-        for branch in template.branches:
-            considered.append(True)
-            if branch.conditions(state, bindings):
-                considered.extend(False for _ in template.branches[len(considered) :])
-                return branch, tuple(considered)
-        return None, tuple(considered)
+    considered_flags = [False] * len(template.branches)
 
-    passing = [
-        branch for branch in template.branches if branch.conditions(state, bindings)
-    ]
-    considered_all = tuple(True for _ in template.branches)
+    for index, branch in enumerate(template.branches):
+        if not branch.preemptive:
+            continue
+        considered_flags[index] = True
+        if branch.conditions(state, bindings):
+            return branch, tuple(considered_flags)
+
+    if selection is None or selection.mode == "authored_order":
+        for index, branch in enumerate(template.branches):
+            if branch.preemptive:
+                continue
+            considered_flags[index] = True
+            if branch.conditions(state, bindings):
+                return branch, tuple(considered_flags)
+        return None, tuple(considered_flags)
+
+    passing = []
+    for index, branch in enumerate(template.branches):
+        if branch.preemptive:
+            continue
+        considered_flags[index] = True
+        if branch.conditions(state, bindings):
+            passing.append(branch)
+    considered = tuple(considered_flags)
     if not passing:
-        return None, considered_all
+        return None, considered
     if len(passing) == 1:
-        return passing[0], considered_all
+        return passing[0], considered
 
     if selection.temperature == 0:
-        return max(passing, key=lambda branch: branch.magnitude), considered_all
+        return max(passing, key=lambda branch: branch.magnitude), considered
 
     # Softmax over magnitude, shifted for numerical stability.
     peak = max(branch.magnitude for branch in passing)
@@ -1853,7 +1924,7 @@ def select_branch(
         for branch in passing
     ]
     rng = _selection_rng(digest, state.current_tick, template.id, selection.seed_salt)
-    return rng.choices(passing, weights=weights, k=1)[0], considered_all
+    return rng.choices(passing, weights=weights, k=1)[0], considered
 
 
 def evaluate(

@@ -411,6 +411,27 @@ _register(
 )
 
 
+def _render_count_recent_events(m: re.Match) -> str:
+    event = m.group("event")
+    count = m.group("count")
+    n = m.group("n")
+    actor = m.group("actor")
+    target = m.group("target")
+    if target:
+        scope = f"({_slot(actor)}, {_slot(target)}) pair"
+    else:
+        scope = _slot(actor)
+    return f"≥ {count} `{event}` events within {n} ticks for {scope}"
+
+
+_register(
+    r"count_recent_events_at_least\("
+    r"(?P<event>[^,()]+),>=(?P<count>\d+),<=(?P<n>\d+)@(?P<actor>\w+)"
+    r"(?:,target=(?P<target>\w+))?\)",
+    _render_count_recent_events,
+)
+
+
 def _render_predicate_name(name: str) -> str:
     """Convert a substrate ``__name__`` into prose-friendly text."""
 
@@ -550,7 +571,11 @@ def _render_narrative_stub(stub: str) -> List[str]:
 
 
 def _render_branch(idx: int, branch: Branch) -> List[str]:
-    lines = [f"### Branch {idx} — {branch.label}  *(mag {branch.magnitude})*", ""]
+    marker = " · **preemptive**" if branch.preemptive else ""
+    lines = [
+        f"### Branch {idx} — {branch.label}  *(mag {branch.magnitude})*{marker}",
+        "",
+    ]
     if isinstance(branch.conditions, CompoundCondition):
         lines.extend(["**When:**", ""])
         lines.extend(_render_condition_lines(branch.conditions))

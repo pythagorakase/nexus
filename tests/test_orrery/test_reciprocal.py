@@ -43,8 +43,8 @@ NAMES = {1: "Alex", 2: "Emilia", 3: "Pete"}
 def test_reciprocal_pair_composes_one_beat() -> None:
     beats = detect_joint_beats(
         [
-            _draft("reach_out_to_kin", 1, 2, magnitude=0.3),
-            _draft("reach_out_to_kin", 2, 1, magnitude=0.5),
+            _draft("reach_out", 1, 2, magnitude=0.3),
+            _draft("reach_out", 2, 1, magnitude=0.5),
             _draft("sleep", 3, None),
         ],
         NAMES,
@@ -55,7 +55,7 @@ def test_reciprocal_pair_composes_one_beat() -> None:
     assert (beat.entity_a, beat.entity_b) == (1, 2)
     assert beat.magnitude == 0.5
     assert beat.entity_names == {"1": "Alex", "2": "Emilia"}
-    assert beat.forward_proposal_id.startswith("reach_out_to_kin:")
+    assert beat.forward_proposal_id.startswith("reach_out:")
     assert beat.forward_proposal_id != beat.reverse_proposal_id
 
 
@@ -108,13 +108,13 @@ def test_proposal_serialization_round_trips_joint_beats() -> None:
         anchor_chunk_id=100,
         actor_count=2,
         resolutions=(
-            _draft("reach_out_to_kin", 1, 2),
-            _draft("reach_out_to_kin", 2, 1),
+            _draft("reach_out", 1, 2),
+            _draft("reach_out", 2, 1),
         ),
         joint_beats=detect_joint_beats(
             [
-                _draft("reach_out_to_kin", 1, 2),
-                _draft("reach_out_to_kin", 2, 1),
+                _draft("reach_out", 1, 2),
+                _draft("reach_out", 2, 1),
             ],
             NAMES,
         ),
