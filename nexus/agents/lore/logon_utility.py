@@ -478,6 +478,17 @@ class LogonUtility:
         """Format context payload into a prompt for the Apex AI"""
         sections = []
 
+        # The in-world clock anchors Skald's declared time deltas: without
+        # it the model reasons about elapsed time blind and pacing drifts.
+        world_clock = context.get("world_clock") or {}
+        if world_clock.get("world_time"):
+            sections.append("=== WORLD CLOCK ===")
+            clock_line = f"In-world time: {world_clock['world_time']}"
+            if world_clock.get("time_of_day"):
+                clock_line += f" ({world_clock['time_of_day']})"
+            sections.append(clock_line)
+            sections.append("")
+
         # Add warm slice
         if context.get("warm_slice"):
             sections.append("=== RECENT NARRATIVE ===")

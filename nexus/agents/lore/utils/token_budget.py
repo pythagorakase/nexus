@@ -13,7 +13,7 @@ logger = logging.getLogger("nexus.lore.token_budget")
 
 class TokenBudgetManager:
     """Manages token budget allocation for context assembly"""
-    
+
     def __init__(self, settings: Dict[str, Any]):
         """Initialize with LORE settings"""
         self.settings = settings
@@ -23,15 +23,17 @@ class TokenBudgetManager:
         if not allocation:
             allocation = lore_settings.get("payload_percent_budget", {})
         self.allocation_config = allocation or {}
-    
-    def calculate_budget(self, user_input: str, apex_model: str = None) -> Dict[str, int]:
+
+    def calculate_budget(
+        self, user_input: str, apex_model: str = None
+    ) -> Dict[str, int]:
         """
         Calculate dynamic token budget for current turn.
-        
+
         Args:
             user_input: The user's input text
             apex_model: Optional model name to check for reasoning models
-            
+
         Returns:
             Dictionary with token allocations
         """
@@ -45,34 +47,46 @@ class TokenBudgetManager:
         logger.debug(f"Using apex_context_window: {apex_window} tokens")
 
         system_prompt = self.token_budget_config.get("system_prompt_tokens", 5000)
-        
+
         # Calculate user input tokens using tiktoken
         user_input_tokens = calculate_chunk_tokens(user_input)
-        
+
         # Check if we're using a reasoning model
         if not apex_model:
             apex_settings = self.settings.get("API Settings", {}).get("apex", {})
             apex_model = apex_settings.get("model", "gpt-4o")
-        
-        using_reasoning_model = apex_model.startswith("o") or "gpt-5" in apex_model  # pin: family-prefix feature detection
-        
+
+        using_reasoning_model = (
+            apex_model.startswith("o") or "gpt-5" in apex_model
+        )  # pin: family-prefix feature detection
+
         # Reserve tokens for reasoning if needed (up to 30k for high-effort reasoning)
         reasoning_reserve = 30000 if using_reasoning_model else 0
         response_reserve = 4000
-        
+
         # Calculate available context
-        available_context = apex_window - system_prompt - user_input_tokens - reasoning_reserve - response_reserve
-        
+        available_context = (
+            apex_window
+            - system_prompt
+            - user_input_tokens
+            - reasoning_reserve
+            - response_reserve
+        )
+
         # Calculate component allocations using minimum percentages initially
         warm_slice_min = self.allocation_config.get("warm_slice", {}).get("min", 40)
-        structured_min = self.allocation_config.get("structured_summaries", {}).get("min", 10)
-        augmentation_min = self.allocation_config.get("contextual_augmentation", {}).get("min", 25)
-        
+        structured_min = self.allocation_config.get("structured_summaries", {}).get(
+            "min", 10
+        )
+        augmentation_min = self.allocation_config.get(
+            "contextual_augmentation", {}
+        ).get("min", 25)
+
         # Start with minimum allocations
         warm_slice_tokens = int(available_context * warm_slice_min / 100)
         structured_tokens = int(available_context * structured_min / 100)
         augmentation_tokens = int(available_context * augmentation_min / 100)
-        
+
         budget = {
             "total_available": available_context,
             "user_input": user_input_tokens,
@@ -83,132 +97,148 @@ class TokenBudgetManager:
             "response_reserve": response_reserve,
             "using_reasoning_model": using_reasoning_model,
             "apex_window": apex_window,
-            "system_prompt": system_prompt
+            "system_prompt": system_prompt,
         }
-        
+
         logger.debug(f"Token budget calculated: {budget}")
         return budget
-    
+
     def calculate_utilization(self, token_counts: Dict[str, int]) -> float:
         """
         Calculate the utilization percentage of the token budget.
-        
+
         Args:
             token_counts: Dictionary with actual token usage
-            
+
         Returns:
             Utilization percentage (0-100)
         """
-        total_used = sum([
-            token_counts.get("user_input", 0),
-            token_counts.get("warm_slice", 0),
-            token_counts.get("structured", 0),
-            token_counts.get("augmentation", 0)
-        ])
-        
+        total_used = sum(
+            [
+                token_counts.get("user_input", 0),
+                token_counts.get("warm_slice", 0),
+                token_counts.get("structured", 0),
+                token_counts.get("augmentation", 0),
+            ]
+        )
+
         total_available = token_counts.get("total_available", 1)
         utilization = (total_used / total_available) * 100 if total_available > 0 else 0
-        
+
         return utilization
-    
-    def optimize_allocation(self, 
-                           current_counts: Dict[str, int],
-                           available_content: Dict[str, int]) -> Dict[str, int]:
+
+    def optimize_allocation(
+        self, current_counts: Dict[str, int], available_content: Dict[str, int]
+    ) -> Dict[str, int]:
         """
         Optimize token allocation to reach target utilization.
-        
+
         Args:
             current_counts: Current token usage
             available_content: Available content that could be added
-            
+
         Returns:
             Optimized token allocation
         """
         current_utilization = self.calculate_utilization(current_counts)
-        target_utilization = self.token_budget_config.get("utilization", {}).get("target", 95)
-        
+        target_utilization = self.token_budget_config.get("utilization", {}).get(
+            "target", 95
+        )
+
         if current_utilization >= target_utilization:
             return current_counts
-        
+
         # Calculate remaining tokens
         total_available = current_counts.get("total_available", 0)
-        current_used = sum([
-            current_counts.get("user_input", 0),
-            current_counts.get("warm_slice", 0),
-            current_counts.get("structured", 0),
-            current_counts.get("augmentation", 0)
-        ])
-        
+        current_used = sum(
+            [
+                current_counts.get("user_input", 0),
+                current_counts.get("warm_slice", 0),
+                current_counts.get("structured", 0),
+                current_counts.get("augmentation", 0),
+            ]
+        )
+
         remaining = total_available - current_used
-        target_additional = int((target_utilization / 100) * total_available - current_used)
-        
+        target_additional = int(
+            (target_utilization / 100) * total_available - current_used
+        )
+
         # Get max allocation percentages
         warm_slice_max = self.allocation_config.get("warm_slice", {}).get("max", 70)
-        structured_max = self.allocation_config.get("structured_summaries", {}).get("max", 25)
-        augmentation_max = self.allocation_config.get("contextual_augmentation", {}).get("max", 40)
-        
+        structured_max = self.allocation_config.get("structured_summaries", {}).get(
+            "max", 25
+        )
+        augmentation_max = self.allocation_config.get(
+            "contextual_augmentation", {}
+        ).get("max", 40)
+
         # Calculate max tokens for each component
         max_warm = int(total_available * warm_slice_max / 100)
         max_structured = int(total_available * structured_max / 100)
         max_augmentation = int(total_available * augmentation_max / 100)
-        
+
         # Distribute remaining tokens proportionally
         optimized = current_counts.copy()
-        
+
         # Priority order: warm slice, augmentation, structured
         if available_content.get("warm_slice", 0) > 0:
             additional_warm = min(
                 target_additional // 2,
                 max_warm - current_counts.get("warm_slice", 0),
-                available_content.get("warm_slice", 0)
+                available_content.get("warm_slice", 0),
             )
             optimized["warm_slice"] += additional_warm
             target_additional -= additional_warm
-        
+
         if available_content.get("augmentation", 0) > 0 and target_additional > 0:
             additional_aug = min(
                 target_additional,
                 max_augmentation - current_counts.get("augmentation", 0),
-                available_content.get("augmentation", 0)
+                available_content.get("augmentation", 0),
             )
             optimized["augmentation"] += additional_aug
             target_additional -= additional_aug
-        
+
         if available_content.get("structured", 0) > 0 and target_additional > 0:
             additional_struct = min(
                 target_additional,
                 max_structured - current_counts.get("structured", 0),
-                available_content.get("structured", 0)
+                available_content.get("structured", 0),
             )
             optimized["structured"] += additional_struct
-        
-        logger.debug(f"Optimized allocation from {current_utilization:.1f}% to {self.calculate_utilization(optimized):.1f}%")
+
+        logger.debug(
+            f"Optimized allocation from {current_utilization:.1f}% to {self.calculate_utilization(optimized):.1f}%"
+        )
         return optimized
-    
-    def calculate_token_budget(self, tpm: int, system_tokens: int, user_tokens: int) -> int:
+
+    def calculate_token_budget(
+        self, tpm: int, system_tokens: int, user_tokens: int
+    ) -> int:
         """
         Simple arithmetic: Calculate available tokens for context.
         NO LLM NEEDED - just subtraction!
-        
+
         Args:
             tpm: Total tokens per message (model context window)
             system_tokens: Tokens used by system prompt
             user_tokens: Tokens used by user input
-            
+
         Returns:
             Available tokens for context
         """
         return tpm - system_tokens - user_tokens
-    
+
     def allocate_percentages(self, narrative_state: str, budget: int) -> Dict[str, int]:
         """
         Programmatic percentage allocation based on narrative state.
         NO LLM NEEDED - just a lookup table!
-        
+
         Args:
             narrative_state: Type of narrative moment (dialogue_heavy, action_sequence, etc.)
             budget: Total token budget available
-            
+
         Returns:
             Token allocations for each component
         """
@@ -226,68 +256,88 @@ class TokenBudgetManager:
             "planning": {"warm": 50, "augment": 30, "structured": 20},
             "investigation": {"warm": 40, "augment": 45, "structured": 15},
             "combat": {"warm": 75, "augment": 15, "structured": 10},
-            "default": {"warm": 50, "augment": 30, "structured": 20}
+            "default": {"warm": 50, "augment": 30, "structured": 20},
         }
-        
+
         # Get percentages for the narrative state (with fallback to default)
         percentages = allocations.get(narrative_state.lower(), allocations["default"])
-        
+
         # Calculate actual token amounts
         result = {
             "warm_slice": int(budget * percentages["warm"] / 100),
             "contextual_augmentation": int(budget * percentages["augment"] / 100),
-            "structured_data": int(budget * percentages["structured"] / 100)
+            "structured_data": int(budget * percentages["structured"] / 100),
         }
-        
+
         # Log the allocation for debugging
-        logger.debug(f"Allocated tokens for '{narrative_state}' state: warm={result['warm_slice']}, augment={result['contextual_augmentation']}, structured={result['structured_data']}")
-        
+        logger.debug(
+            f"Allocated tokens for '{narrative_state}' state: warm={result['warm_slice']}, augment={result['contextual_augmentation']}, structured={result['structured_data']}"
+        )
+
         return result
-    
-    def validate_budget_constraints(self, allocations: Dict[str, int], constraints: Optional[Dict[str, Dict[str, int]]] = None) -> bool:
+
+    def validate_budget_constraints(
+        self,
+        allocations: Dict[str, int],
+        constraints: Optional[Dict[str, Dict[str, int]]] = None,
+    ) -> bool:
         """
         Validate that allocations meet min/max constraints.
         NO LLM NEEDED - just comparison operators!
-        
+
         Args:
             allocations: Proposed token allocations
             constraints: Optional override constraints (defaults to config)
-            
+
         Returns:
             True if allocations are valid, False otherwise
         """
         if not constraints:
             constraints = self.allocation_config
-        
+
         total = sum(allocations.values())
-        
+
         # Check warm slice constraints
         warm_tokens = allocations.get("warm_slice", 0)
         warm_min = int(total * constraints.get("warm_slice", {}).get("min", 40) / 100)
         warm_max = int(total * constraints.get("warm_slice", {}).get("max", 70) / 100)
-        
+
         if not (warm_min <= warm_tokens <= warm_max):
-            logger.warning(f"Warm slice allocation {warm_tokens} outside bounds [{warm_min}, {warm_max}]")
+            logger.warning(
+                f"Warm slice allocation {warm_tokens} outside bounds [{warm_min}, {warm_max}]"
+            )
             return False
-        
+
         # Check structured data constraints
         structured_tokens = allocations.get("structured_data", 0)
-        structured_min = int(total * constraints.get("structured_summaries", {}).get("min", 10) / 100)
-        structured_max = int(total * constraints.get("structured_summaries", {}).get("max", 25) / 100)
-        
+        structured_min = int(
+            total * constraints.get("structured_summaries", {}).get("min", 10) / 100
+        )
+        structured_max = int(
+            total * constraints.get("structured_summaries", {}).get("max", 25) / 100
+        )
+
         if not (structured_min <= structured_tokens <= structured_max):
-            logger.warning(f"Structured data allocation {structured_tokens} outside bounds [{structured_min}, {structured_max}]")
+            logger.warning(
+                f"Structured data allocation {structured_tokens} outside bounds [{structured_min}, {structured_max}]"
+            )
             return False
-        
-        # Check augmentation constraints  
+
+        # Check augmentation constraints
         augment_tokens = allocations.get("contextual_augmentation", 0)
-        augment_min = int(total * constraints.get("contextual_augmentation", {}).get("min", 25) / 100)
-        augment_max = int(total * constraints.get("contextual_augmentation", {}).get("max", 40) / 100)
-        
+        augment_min = int(
+            total * constraints.get("contextual_augmentation", {}).get("min", 25) / 100
+        )
+        augment_max = int(
+            total * constraints.get("contextual_augmentation", {}).get("max", 40) / 100
+        )
+
         if not (augment_min <= augment_tokens <= augment_max):
-            logger.warning(f"Augmentation allocation {augment_tokens} outside bounds [{augment_min}, {augment_max}]")
+            logger.warning(
+                f"Augmentation allocation {augment_tokens} outside bounds [{augment_min}, {augment_max}]"
+            )
             return False
-        
+
         return True
 
     def estimate_entity_tokens(self, entity: Dict[str, Any]) -> int:
@@ -306,7 +356,15 @@ class TokenBudgetManager:
 
         # Collect all text content from entity
         text_candidates = []
-        for key in ("summary", "details", "text", "content", "description", "background", "personality"):
+        for key in (
+            "summary",
+            "details",
+            "text",
+            "content",
+            "description",
+            "background",
+            "personality",
+        ):
             value = entity.get(key)
             if isinstance(value, str) and value.strip():
                 text_candidates.append(value)
@@ -322,8 +380,7 @@ class TokenBudgetManager:
         return tokens
 
     def calculate_structured_tokens_by_tier(
-        self,
-        entity_data: Dict[str, Any]
+        self, entity_data: Dict[str, Any]
     ) -> Tuple[int, int]:
         """
         Calculate token counts separately for baseline and featured entities.
@@ -362,13 +419,13 @@ class TokenBudgetManager:
         for threat in entity_data.get("threats", []):
             featured_tokens += self.estimate_entity_tokens(threat)
 
-        logger.debug(f"Structured tokens: {baseline_tokens} baseline (protected), {featured_tokens} featured (trimmable)")
+        logger.debug(
+            f"Structured tokens: {baseline_tokens} baseline (protected), {featured_tokens} featured (trimmable)"
+        )
         return baseline_tokens, featured_tokens
 
     def trim_structured_with_baseline_protection(
-        self,
-        entity_data: Dict[str, Any],
-        max_tokens: int
+        self, entity_data: Dict[str, Any], max_tokens: int
     ) -> Dict[str, Any]:
         """
         Trim structured entity data to fit budget while PROTECTING baseline entities.
@@ -392,7 +449,9 @@ class TokenBudgetManager:
         Returns:
             Trimmed entity data
         """
-        baseline_tokens, featured_tokens = self.calculate_structured_tokens_by_tier(entity_data)
+        baseline_tokens, featured_tokens = self.calculate_structured_tokens_by_tier(
+            entity_data
+        )
         total_tokens = baseline_tokens + featured_tokens
 
         if total_tokens <= max_tokens:
@@ -417,24 +476,26 @@ class TokenBudgetManager:
             trimmed_data = {
                 "characters": {
                     "baseline": entity_data.get("characters", {}).get("baseline", []),
-                    "featured": []
+                    "featured": [],
                 },
                 "locations": {
                     "baseline": entity_data.get("locations", {}).get("baseline", []),
-                    "featured": []
+                    "featured": [],
                 },
                 "factions": {
                     "baseline": entity_data.get("factions", {}).get("baseline", []),
-                    "featured": []
+                    "featured": [],
                 },
                 "relationships": [],
                 "events": [],
-                "threats": []
+                "threats": [],
             }
             return trimmed_data
 
         # Collect all trimmable items with priorities
-        trimmable_items: List[Tuple[str, str, Any, int, int]] = []  # (category, type, entity, tokens, priority)
+        trimmable_items: List[Tuple[str, str, Any, int, int]] = (
+            []
+        )  # (category, type, entity, tokens, priority)
 
         # Characters
         for char in entity_data.get("characters", {}).get("featured", []):
@@ -481,7 +542,7 @@ class TokenBudgetManager:
             "factions": [],
             "relationships": [],
             "events": [],
-            "threats": []
+            "threats": [],
         }
 
         for category, item_type, entity, tokens, priority in trimmable_items:
@@ -493,22 +554,24 @@ class TokenBudgetManager:
         trimmed_data = {
             "characters": {
                 "baseline": entity_data.get("characters", {}).get("baseline", []),
-                "featured": kept_items["characters"]
+                "featured": kept_items["characters"],
             },
             "locations": {
                 "baseline": entity_data.get("locations", {}).get("baseline", []),
-                "featured": kept_items["locations"]
+                "featured": kept_items["locations"],
             },
             "factions": {
                 "baseline": entity_data.get("factions", {}).get("baseline", []),
-                "featured": kept_items["factions"]
+                "featured": kept_items["factions"],
             },
             "relationships": kept_items["relationships"],
             "events": kept_items["events"],
-            "threats": kept_items["threats"]
+            "threats": kept_items["threats"],
         }
 
-        trimmed_count = len(trimmable_items) - sum(len(items) for items in kept_items.values())
+        trimmed_count = len(trimmable_items) - sum(
+            len(items) for items in kept_items.values()
+        )
         trimmed_tokens = featured_tokens - current_tokens
         logger.info(
             f"Trimmed {trimmed_count} featured items ({trimmed_tokens} tokens). "

@@ -25,7 +25,11 @@ try:
         StorytellerResponseStandard,
         extract_narrative_text,
     )
-    from nexus.agents.orrery.resolver import resolve_dry_run
+    from nexus.agents.orrery.resolver import (
+        _load_time_of_day,
+        _load_world_time,
+        resolve_dry_run,
+    )
     from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
     from nexus.agents.orrery.bleed import (
         record_bleed_offers,
@@ -47,7 +51,11 @@ except ImportError:
         StorytellerResponseStandard,
         extract_narrative_text,
     )
-    from nexus.agents.orrery.resolver import resolve_dry_run
+    from nexus.agents.orrery.resolver import (
+        _load_time_of_day,
+        _load_world_time,
+        resolve_dry_run,
+    )
     from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
     from nexus.agents.orrery.bleed import (
         record_bleed_offers,
@@ -643,6 +651,12 @@ class TurnCycleManager:
                 habituation_settings=orrery_settings.get("habituation"),
                 fanout_settings=orrery_settings.get("fanout"),
             )
+            world_time = _load_world_time(session, anchor_chunk_id=anchor_chunk_id)
+            if world_time is not None:
+                turn_context.world_clock = {
+                    "world_time": world_time.isoformat(),
+                    "time_of_day": _load_time_of_day(world_time),
+                }
 
         turn_context.orrery_proposal = proposal
         turn_context.phase_states["orrery_resolve"] = {
@@ -726,6 +740,9 @@ class TurnCycleManager:
 
         if turn_context.note:
             turn_context.context_payload["note"] = turn_context.note
+
+        if turn_context.world_clock:
+            turn_context.context_payload["world_clock"] = turn_context.world_clock
 
         proposal: Any = turn_context.orrery_proposal
         if proposal and getattr(proposal, "resolution_count", 0):

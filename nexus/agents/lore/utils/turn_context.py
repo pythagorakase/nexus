@@ -47,3 +47,7 @@ class TurnContext:
     note: Optional[str] = None
     orrery_proposal: Optional["OrreryTickProposal"] = None
     bleed_menu: List[Any] = field(default_factory=list)
+    # Current in-world clock at the anchor chunk ({"world_time": iso str,
+    # "time_of_day": str}); rendered into the storyteller prompt so declared
+    # time deltas are anchored to a visible clock instead of guessed blind.
+    world_clock: Optional[Dict[str, Any]] = None

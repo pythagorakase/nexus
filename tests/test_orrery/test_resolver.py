@@ -1692,6 +1692,9 @@ async def test_resolve_orrery_attaches_proposal_when_enabled() -> None:
     assert context.orrery_proposal.anchor_chunk_id == 100
     # The default idle located actor receives the mundane-band floor.
     assert context.phase_states["orrery_resolve"]["resolution_count"] == 1
+    # The resolve session also stamps the in-world clock for the prompt.
+    assert context.world_clock is not None
+    assert context.world_clock["time_of_day"] == "afternoon"
     assert context.context_payload == {}
 
 

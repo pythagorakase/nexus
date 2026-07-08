@@ -342,3 +342,30 @@ class _Cursor:
 
     def fetchone(self):
         return ({"title": "Test Setting", "content": "Setting body."},)
+
+
+def test_context_prompt_renders_world_clock() -> None:
+    """The in-world clock anchors Skald's declared time deltas."""
+
+    prompt = LogonUtility({})._format_context_prompt(
+        {
+            "user_input": "Continue.",
+            "world_clock": {
+                "world_time": "2073-10-31T14:37:00-04:00",
+                "time_of_day": "afternoon",
+            },
+        }
+    )
+
+    assert "=== WORLD CLOCK ===" in prompt
+    assert "In-world time: 2073-10-31T14:37:00-04:00 (afternoon)" in prompt
+    # The clock frames everything after it.
+    assert prompt.index("WORLD CLOCK") < prompt.index("USER INPUT")
+
+
+def test_context_prompt_omits_world_clock_when_unknown() -> None:
+    """No clock section when world time is unavailable (e.g. bootstrap)."""
+
+    prompt = LogonUtility({})._format_context_prompt({"user_input": "Continue."})
+
+    assert "WORLD CLOCK" not in prompt
