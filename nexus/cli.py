@@ -324,6 +324,7 @@ def _print_retrograde_expansion(payload: Dict[str, Any]) -> None:
     tags = response.get("entity_tag_plan") or []
     pair_tags = response.get("pair_tag_plan") or []
     relationships = response.get("relationship_plan") or []
+    deaths = response.get("death_plan") or []
     threads = response.get("thread_plan") or []
     readiness = response.get("commit_readiness") or {}
 
@@ -335,6 +336,7 @@ def _print_retrograde_expansion(payload: Dict[str, Any]) -> None:
     print(f"  entity_tags: {len(tags)}")
     print(f"  pair_tags: {len(pair_tags)}")
     print(f"  relationships: {len(relationships)}")
+    print(f"  deaths: {len(deaths)}")
     print(f"  threads: {len(threads)}")
     print(f"  writes: {readiness.get('writes')}")
     if readiness.get("blocked_by"):
@@ -376,6 +378,10 @@ def _print_retrograde_persistence(payload: Dict[str, Any]) -> None:
         "pair_tags_already_present",
         "pair_tags_blocked",
         "relationships_planned_only",
+        "deaths_would_deactivate",
+        "deaths_deactivated",
+        "deaths_already_inactive",
+        "deaths_blocked",
         "summary_chunks_would_insert",
         "summary_chunks_inserted",
         "summary_chunks_already_present",

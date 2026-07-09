@@ -327,6 +327,13 @@ def test_namespace_expansion_event_refs_rewrites_consistently() -> None:
         "relationship_plan": [
             {"relationship_type": "rival", "source_event_ref": "EV2"}
         ],
+        "death_plan": [
+            {
+                "entity_ref": "Vale",
+                "entity_kind": "character",
+                "cause_event_ref": "EV1",
+            }
+        ],
     }
     rewritten = namespace_expansion_event_refs(payload, prefix="maturation_job_42")
     assert rewritten["event_plan"][0]["event_ref"] == "maturation_job_42_EV1"
@@ -341,6 +348,7 @@ def test_namespace_expansion_event_refs_rewrites_consistently() -> None:
     assert (
         rewritten["relationship_plan"][0]["source_event_ref"] == "maturation_job_42_EV2"
     )
+    assert rewritten["death_plan"][0]["cause_event_ref"] == "maturation_job_42_EV1"
     # Original payload untouched.
     assert payload["event_plan"][0]["event_ref"] == "EV1"
 

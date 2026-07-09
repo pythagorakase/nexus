@@ -9,6 +9,7 @@ import json
 from typing import Any, Mapping, Optional, Sequence
 
 from nexus.agents.orrery.retrograde_expansion import (
+    RetrogradeExpansionDeathPlan,
     RetrogradeExpansionEventPlan,
     RetrogradeExpansionParticipant,
     RetrogradeExpansionPlanResponse,
@@ -263,6 +264,22 @@ def _build_plan(
         reference_issues.extend(planned.pop("_reference_issues"))
         relationship_issues.extend(planned.pop("_relationship_issues"))
 
+    # Deaths plan after events so cause_world_event_id can link to freshly
+    # inserted world_events rows on execute.
+    death_rows = []
+    for death in expansion.death_plan:
+        planned = _plan_death_row(
+            cur,
+            death=death,
+            dry_run=dry_run,
+            entity_index=entity_index,
+            event_ref_to_id=event_ref_to_id,
+            creatable_refs=creatable_refs,
+        )
+        death_rows.append(planned)
+        counters[f"deaths_{planned['status']}"] += 1
+        reference_issues.extend(planned.pop("_reference_issues"))
+
     summary_chunk_rows: list[dict[str, Any]] = []
     if summary_chunks_enabled:
         summary_chunk_rows = plan_retrograde_summary_chunks(
@@ -306,6 +323,10 @@ def _build_plan(
         "entity_stubs_inserted",
         "entity_stubs_already_present",
         "entity_stubs_ambiguous_existing",
+        "deaths_would_deactivate",
+        "deaths_deactivated",
+        "deaths_already_inactive",
+        "deaths_blocked",
         "summary_chunks_would_insert",
         "summary_chunks_inserted",
         "summary_chunks_already_present",
@@ -335,6 +356,7 @@ def _build_plan(
         "entity_tag_rows": entity_tag_rows,
         "pair_tag_rows": pair_tag_rows,
         "relationship_rows": relationship_rows,
+        "death_rows": death_rows,
         "summary_chunk_rows": summary_chunk_rows,
         "retrieval": {
             "summary_chunks_enabled": summary_chunks_enabled,
@@ -778,6 +800,87 @@ def _plan_relationship_row(
         character2_id=int(object_character_id),
     )
     return {**base, "status": "inserted"}
+
+
+def _plan_death_row(
+    cur: Any,
+    *,
+    death: RetrogradeExpansionDeathPlan,
+    dry_run: bool,
+    entity_index: Mapping[tuple[str, str], Sequence[_EntityRecord]],
+    event_ref_to_id: Mapping[str, int],
+    creatable_refs: frozenset[tuple[str, str]],
+) -> dict[str, Any]:
+    """Plan or execute one entities.is_active=false flip for an asserted death.
+
+    Deactivation is the complete Orrery kill switch: actor discovery and
+    hydration filter on is_active everywhere, so a dead entity stops being
+    animated the moment this row executes. The flip is idempotent —
+    re-running a plan against an already-dead entity reports
+    ``already_inactive`` instead of writing.
+    """
+
+    reference_issues: list[dict[str, Any]] = []
+    entity = _resolve_entity(
+        death.entity_ref,
+        death.entity_kind,
+        entity_index,
+        role="death",
+        creatable_refs=creatable_refs,
+    )
+    if entity["resolution"] not in {"resolved", "stub_pending"}:
+        reference_issues.append(entity)
+    base = {
+        **death.model_dump(mode="json"),
+        "entity": entity,
+        "entity_id": entity.get("entity_id"),
+        "cause_world_event_id": (
+            event_ref_to_id.get(death.cause_event_ref)
+            if death.cause_event_ref
+            else None
+        ),
+        "_reference_issues": reference_issues,
+    }
+    if reference_issues:
+        return {**base, "status": "blocked"}
+    if entity["resolution"] == "stub_pending":
+        if dry_run:
+            return {**base, "status": "would_deactivate"}
+        raise AssertionError("stub_pending must be resolved before execute writes")
+
+    entity_id = int(entity["entity_id"])
+    if not _entity_is_active(cur, entity_id):
+        return {**base, "status": "already_inactive"}
+    if dry_run:
+        return {**base, "status": "would_deactivate"}
+    _deactivate_entity(cur, entity_id)
+    return {**base, "status": "deactivated"}
+
+
+def _entity_is_active(cur: Any, entity_id: int) -> bool:
+    cur.execute(
+        """
+        /* orrery:retrograde:entity_is_active */
+        SELECT is_active FROM entities WHERE id = %s
+        """,
+        (entity_id,),
+    )
+    row = cur.fetchone()
+    if row is None:
+        raise ValueError(
+            f"entities row {entity_id} resolved during planning but is missing"
+        )
+    return bool(_row_value(row, "is_active", 0))
+
+
+def _deactivate_entity(cur: Any, entity_id: int) -> None:
+    cur.execute(
+        """
+        /* orrery:retrograde:deactivate_entity */
+        UPDATE entities SET is_active = false WHERE id = %s
+        """,
+        (entity_id,),
+    )
 
 
 def plan_retrograde_summary_chunks(
@@ -1562,6 +1665,17 @@ def _collect_expansion_entity_refs(
                 "plan": "relationship_plan",
                 "relationship_type": relationship.relationship_type,
                 "role": "object",
+            },
+        )
+
+    for death in expansion.death_plan:
+        add_ref(
+            death.entity_ref,
+            death.entity_kind,
+            source={
+                "plan": "death_plan",
+                "cause_event_ref": death.cause_event_ref,
+                "role": "deceased",
             },
         )
 

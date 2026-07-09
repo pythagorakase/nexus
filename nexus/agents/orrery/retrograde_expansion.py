@@ -200,6 +200,25 @@ class RetrogradeExpansionRelationshipPlan(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
 
+class RetrogradeExpansionDeathPlan(BaseModel):
+    """One entity dead, destroyed, or dissolved as of story start.
+
+    A death asserted only in event-summary prose is invisible to the engine:
+    the entity stays ``is_active`` and the Orrery keeps animating it. This
+    row is the machine-readable assertion that flips the kill switch.
+    """
+
+    entity_ref: EntityRef
+    entity_kind: str = Field(min_length=1)
+    cause_event_ref: Optional[str] = Field(
+        default=None,
+        description=("Required: event_plan.event_ref documenting the death as a fact."),
+    )
+    rationale: Optional[str] = Field(default=None, max_length=500)
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+
 class RetrogradeExpansionThreadPlan(BaseModel):
     """Accounting for one selected seed after R6 weaving."""
 
@@ -265,7 +284,7 @@ class RetrogradeExpansionWireEventPlan(BaseModel):
 class RetrogradeExpansionWireMechanicPlan(BaseModel):
     """Provider-facing generic mechanics row expanded by runtime."""
 
-    plan: Literal["entity_tag", "pair_tag", "relationship"]
+    plan: Literal["entity_tag", "pair_tag", "relationship", "death"]
     subject_ref: EntityRef
     subject_kind: str = Field(min_length=1)
     tag: str = Field(
@@ -336,6 +355,7 @@ class RetrogradeExpansionPlanResponse(BaseModel):
     relationship_plan: list[RetrogradeExpansionRelationshipPlan] = Field(
         default_factory=list
     )
+    death_plan: list[RetrogradeExpansionDeathPlan] = Field(default_factory=list)
     thread_plan: list[RetrogradeExpansionThreadPlan] = Field(default_factory=list)
     coverage_notes: list[str] = Field(default_factory=list)
     commit_readiness: RetrogradeExpansionCommitReadiness = Field(
@@ -362,6 +382,16 @@ class RetrogradeExpansionPlanResponse(BaseModel):
         if duplicate_threads:
             raise ValueError(
                 f"Duplicate thread_plan seed_id values: {duplicate_threads}"
+            )
+        duplicate_deaths = _duplicates(
+            [
+                f"{death.entity_kind}:{normalize_entity_ref(death.entity_ref)}"
+                for death in self.death_plan
+            ]
+        )
+        if duplicate_deaths:
+            raise ValueError(
+                f"Duplicate death_plan entities: {sorted(duplicate_deaths)}"
             )
         return self
 
@@ -415,6 +445,7 @@ def _expand_wire_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
     entity_tag_plan = []
     pair_tag_plan = []
     relationship_plan = []
+    death_plan = []
     for mechanic in data.get("mechanical_plan") or []:
         plan = str(mechanic.get("plan"))
         source_event_ref = _none_if_empty(mechanic.get("source_event_ref"))
@@ -453,6 +484,15 @@ def _expand_wire_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
                     "rationale": rationale,
                 }
             )
+        elif plan == "death":
+            death_plan.append(
+                {
+                    "entity_ref": mechanic.get("subject_ref"),
+                    "entity_kind": mechanic.get("subject_kind"),
+                    "cause_event_ref": source_event_ref,
+                    "rationale": rationale,
+                }
+            )
 
     thread_plan = []
     for thread in data.get("thread_plan") or []:
@@ -465,6 +505,7 @@ def _expand_wire_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
         "entity_tag_plan": entity_tag_plan,
         "pair_tag_plan": pair_tag_plan,
         "relationship_plan": relationship_plan,
+        "death_plan": death_plan,
         "thread_plan": thread_plan,
         "coverage_notes": data.get("coverage_notes") or [],
     }
@@ -522,6 +563,11 @@ def render_expansion_prompt(
         "These summaries surface later as retrieved documents, not story.\n"
         "Every selected seed must be accounted for as woven, deferred, or "
         "rejected. Every woven thread must terminate in a present leaf anchor.\n"
+        "If the woven history means an entity is dead, destroyed, or "
+        "dissolved before the story opens, declare it as a mechanical_plan "
+        "row with plan='death' citing the causing event; a death asserted "
+        "only in summary prose leaves the entity alive to the engine and is "
+        "invalid.\n"
         "If a mechanical plan cannot satisfy the hard validation rules, omit "
         "that mechanical item or reject/defer the seed.\n"
         "Return JSON only.\n\n"
@@ -723,6 +769,16 @@ def _expansion_contract_issues(
             )
         )
 
+    events_by_ref = {event.event_ref: event for event in response.event_plan}
+    for death in response.death_plan:
+        issues.extend(
+            _death_plan_issues(
+                death=death,
+                entity_kinds=entity_kinds,
+                events_by_ref=events_by_ref,
+            )
+        )
+
     issues.extend(
         _thread_plan_issues(
             thread_plan=response.thread_plan,
@@ -788,6 +844,8 @@ def _collect_plan_entity_keys(
         keys.add(
             (relationship.object_kind, normalize_entity_ref(relationship.object_ref))
         )
+    for death in response.death_plan:
+        keys.add((death.entity_kind, normalize_entity_ref(death.entity_ref)))
     return keys
 
 
@@ -981,6 +1039,41 @@ def _relationship_plan_issues(
     return issues
 
 
+def _death_plan_issues(
+    *,
+    death: RetrogradeExpansionDeathPlan,
+    entity_kinds: set[str],
+    events_by_ref: Mapping[str, RetrogradeExpansionEventPlan],
+) -> list[str]:
+    issues: list[str] = []
+    prefix = f"death {death.entity_kind}:{death.entity_ref}"
+    if death.entity_kind not in entity_kinds:
+        issues.append(f"{prefix} uses unknown entity_kind {death.entity_kind!r}")
+    if not death.cause_event_ref:
+        issues.append(
+            f"{prefix} is missing cause_event_ref; a death asserted only in "
+            "summary prose is invalid — plan the causing event and cite it"
+        )
+        return issues
+    cause = events_by_ref.get(death.cause_event_ref)
+    if cause is None:
+        issues.append(
+            f"{prefix} cites unknown cause_event_ref {death.cause_event_ref!r}"
+        )
+        return issues
+    death_key = (death.entity_kind, normalize_entity_ref(death.entity_ref))
+    participant_keys = {
+        (participant.entity_kind, normalize_entity_ref(participant.entity_ref))
+        for participant in cause.participants
+    }
+    if death_key not in participant_keys:
+        issues.append(
+            f"{prefix}: cause event {death.cause_event_ref!r} must list the "
+            "dying entity as a participant"
+        )
+    return issues
+
+
 def _thread_plan_issues(
     *,
     thread_plan: list[RetrogradeExpansionThreadPlan],
@@ -1028,9 +1121,14 @@ def _hard_validation_rules() -> list[str]:
         "Every selected seed must appear once in thread_plan.",
         "Woven threads must reference planned event_ref values.",
         (
-            "mechanical_plan rows use plan='entity_tag', 'pair_tag', or "
-            "'relationship'. Leave fields irrelevant to that plan as empty "
-            "strings."
+            "mechanical_plan rows use plan='entity_tag', 'pair_tag', "
+            "'relationship', or 'death'. Leave fields irrelevant to that "
+            "plan as empty strings."
+        ),
+        (
+            "death mechanics require source_event_ref naming the causing "
+            "event, and that event must list the dying entity as a "
+            "participant."
         ),
         (
             "Event-anchored entity_tag mechanics require source_event_ref that "
@@ -1071,6 +1169,7 @@ def _prompt_response_contract() -> dict[str, Any]:
             "entity_tag": ["tag"],
             "pair_tag": ["tag", "object_ref", "object_kind"],
             "relationship": ["relationship_type", "object_ref", "object_kind"],
+            "death": [],
             "unused_fields": "Use empty strings for fields irrelevant to the plan.",
         },
         "deterministic_fields_filled_by_runtime": [

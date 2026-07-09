@@ -497,7 +497,7 @@ def test_retrograde_seed_candidates_reads_packet_and_writes_response(
 
     monkeypatch.setattr(
         retrograde_seed_candidates,
-        "generate_seed_candidates_with_skald",
+        "run_seed_stage",
         fake_generate,
     )
 
