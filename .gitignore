@@ -29,6 +29,7 @@
 /.claude/skills/*
 !/.claude/skills/extract-vector-grid/
 /.claude/skills/extract-vector-grid/.venv/
+!/.claude/skills/codex-first/
 
 # Ignore logs and temporary files
 /temp*.*
