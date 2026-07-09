@@ -393,6 +393,25 @@ def _seed_request(vocabulary: SeedEligibleVocabulary) -> dict[str, Any]:
     )
 
 
+def _first_edge_claims(vocabulary: SeedEligibleVocabulary) -> list[dict[str, Any]]:
+    """Claim the deterministic graph's first dangling edge.
+
+    The R3 graph is seeded on the intentional core, so every request built
+    by _seed_request over the same vocabulary yields identical edges — a
+    fixture can claim edge one without seeing the request instance.
+    """
+
+    request = _seed_request(vocabulary)
+    edge = request["candidate_graph"]["dangling_edges"][0]
+    return [
+        {
+            "edge_id": edge["edge_id"],
+            "open_endpoint_name": "The Salt Ledger",
+            "open_endpoint_kind": edge["open_endpoint_kind"],
+        }
+    ]
+
+
 def _valid_response_payload(vocabulary: SeedEligibleVocabulary) -> dict[str, Any]:
     event_type = vocabulary["event_types"][0]
     relationship_type = vocabulary["relationship_types"][0]
@@ -455,6 +474,7 @@ def _valid_response_payload(vocabulary: SeedEligibleVocabulary) -> dict[str, Any
                 "defer_or_reject_if": [
                     "Reject if the handler would need to appear on-screen first."
                 ],
+                "claimed_edges": _first_edge_claims(vocabulary),
             }
         ],
         "selected_seed_ids": ["seed_001"],

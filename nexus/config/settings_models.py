@@ -935,6 +935,56 @@ class OrreryRetrogradeWizardSettings(BaseModel):
     )
 
 
+class OrreryRetrogradeGraphSettings(BaseModel):
+    """R3 candidate-graph sampling calibration ([orrery.retrograde.graph])."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    edges_per_candidate: float = Field(
+        default=1.5,
+        gt=0,
+        description=(
+            "Dangling edges sampled per candidate seed; edges beyond claim "
+            "capacity keep the menu wider than the funnel."
+        ),
+    )
+    max_sample_retries: int = Field(
+        default=12,
+        ge=1,
+        description="Resample attempts per edge slot before under-building.",
+    )
+    edge_kind_weights: Dict[str, float] = Field(
+        default_factory=lambda: {
+            "relationship": 0.4,
+            "pair_tag": 0.3,
+            "event": 0.3,
+        },
+        description=(
+            "Sampling mix across edge kinds; relationships weighted up "
+            "because the affiliation gates consume that surface."
+        ),
+    )
+    anchor_role_weights: Dict[str, float] = Field(
+        default_factory=lambda: {
+            "protagonist": 3.0,
+            "starting_location": 2.0,
+            "default": 1.0,
+        },
+        description=(
+            "Anchor-node preference by scaffold role; 'default' applies to "
+            "roles not listed."
+        ),
+    )
+    event_open_endpoint_weights: Dict[str, float] = Field(
+        default_factory=lambda: {
+            "character": 0.6,
+            "faction": 0.25,
+            "place": 0.15,
+        },
+        description="Open-endpoint kind mix for event edges.",
+    )
+
+
 class OrreryRetrogradeMaturationSettings(BaseModel):
     """Runtime stub-maturation settings (spec decisions 9/10/12, M8)."""
 
@@ -1047,6 +1097,9 @@ class OrreryRetrogradeSettings(BaseModel):
     )
     wizard: OrreryRetrogradeWizardSettings = Field(
         default_factory=OrreryRetrogradeWizardSettings
+    )
+    graph: OrreryRetrogradeGraphSettings = Field(
+        default_factory=OrreryRetrogradeGraphSettings
     )
     maturation: OrreryRetrogradeMaturationSettings = Field(
         default_factory=OrreryRetrogradeMaturationSettings

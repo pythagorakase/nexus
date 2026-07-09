@@ -77,11 +77,12 @@ def test_generate_retrograde_history_composes_stage_outputs(
         lambda **kwargs: packet,
     )
     monkeypatch.setattr(
-        "nexus.agents.orrery.retrograde_seed_candidates."
-        "generate_seed_candidates_with_skald",
+        "nexus.agents.orrery.retrograde_seed_candidates.run_seed_stage",
         lambda **kwargs: {
             "model": "test-model",
+            "selection_model": "test-model",
             "prompt_chars": 100,
+            "selection_prompt_chars": 50,
             "seed_candidate_response": seed_response,
         },
     )

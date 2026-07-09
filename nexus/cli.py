@@ -1696,9 +1696,7 @@ def run_retrograde_packet(args: argparse.Namespace) -> Dict[str, Any]:
 def run_retrograde_seed_candidates(args: argparse.Namespace) -> Dict[str, Any]:
     """Call Skald for non-mutating Retrograde seed candidates."""
 
-    from nexus.agents.orrery.retrograde_seed_candidates import (
-        generate_seed_candidates_with_skald,
-    )
+    from nexus.agents.orrery.retrograde_seed_candidates import run_seed_stage
 
     packet_input = None
     packet_output = None
@@ -1722,7 +1720,7 @@ def run_retrograde_seed_candidates(args: argparse.Namespace) -> Dict[str, Any]:
         packet = packet_result["retrograde_packet"]
         packet_output = packet_result.get("packet_output")
 
-    generation = generate_seed_candidates_with_skald(
+    generation = run_seed_stage(
         packet=packet,
         model_name=args.model,
         max_tokens=args.max_tokens,

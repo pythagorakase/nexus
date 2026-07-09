@@ -156,9 +156,7 @@ def generate_retrograde_history(
 
     from nexus.agents.orrery.retrograde_expansion import generate_expansion_with_skald
     from nexus.agents.orrery.retrograde_packet import build_retrograde_dry_run_packet
-    from nexus.agents.orrery.retrograde_seed_candidates import (
-        generate_seed_candidates_with_skald,
-    )
+    from nexus.agents.orrery.retrograde_seed_candidates import run_seed_stage
     from nexus.agents.orrery.retrograde_vocabulary import (
         enumerate_seed_eligible_vocabulary,
     )
@@ -183,7 +181,7 @@ def generate_retrograde_history(
 
     _emit(progress, "seed_candidates", {"weird": packet["weird"]["level"]})
     started = time.monotonic()
-    seed_generation = generate_seed_candidates_with_skald(
+    seed_generation = run_seed_stage(
         packet=packet,
         model_name=model_name,
         max_tokens=max_tokens,
