@@ -364,10 +364,7 @@ class StoryComponentGenerator:
             setup_duration = int(duration.total_seconds() / 60)
 
         # Create transition data
-        # Use the seed's atomized timestamp if available, otherwise fall back to now()
-        base_timestamp = (
-            seed.get_base_datetime() if seed else datetime.now(timezone.utc)
-        )
+        base_timestamp = seed.get_base_datetime()
         transition = TransitionData(
             setting=setting,
             character=character,

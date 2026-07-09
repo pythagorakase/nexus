@@ -155,8 +155,6 @@ def test_wizard_transition_cold_starts_retrograde_history() -> None:
 def _install_fixture_world() -> Any:
     """Reset slot 5 and stage the canned wizard cache; return TransitionData."""
 
-    from datetime import datetime, timezone
-
     from nexus.api.db_pool import close_pool
     from nexus.api.new_story_cache import write_cache
     from nexus.api.new_story_schemas import (
@@ -182,6 +180,7 @@ def _install_fixture_world() -> Any:
     upsert_slot(SLOT, model=_live_run_model(), dbname=SAVE_05_DBNAME)
 
     cache = load_cache()
+    seed = StorySeed(**cache["selected_seed"])
     write_cache(
         thread_id="thread_retrograde_wizard_live",
         setting_draft=cache["setting_draft"],
@@ -190,6 +189,7 @@ def _install_fixture_world() -> Any:
         layer_draft=cache["layer_draft"],
         zone_draft=cache["zone_draft"],
         initial_location=cache["initial_location"],
+        base_timestamp=cache["base_timestamp"],
         target_slot=SLOT,
         dbname=SAVE_05_DBNAME,
     )
@@ -198,11 +198,11 @@ def _install_fixture_world() -> Any:
     return TransitionData(
         setting=SettingCard(**cache["setting_draft"]),
         character=CharacterSheet(**state.to_character_sheet().model_dump()),
-        seed=StorySeed(**cache["selected_seed"]),
+        seed=seed,
         layer=LayerDefinition(**cache["layer_draft"]),
         zone=ZoneDefinition(**cache["zone_draft"]),
         location=PlaceProfile(**cache["initial_location"]),
-        base_timestamp=datetime.now(timezone.utc),
+        base_timestamp=seed.get_base_datetime(),
         thread_id="thread_retrograde_wizard_live",
         setup_duration_minutes=None,
         ready_for_transition=True,

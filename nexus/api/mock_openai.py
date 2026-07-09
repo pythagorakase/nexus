@@ -29,6 +29,13 @@ from pydantic import BaseModel
 logger = logging.getLogger("nexus.api.mock_openai")
 
 MOCK_DB = "mock"
+MOCK_STORY_BASE_TIMESTAMP = {
+    "year": 2087,
+    "month": 11,
+    "day": 3,
+    "hour": 22,
+    "minute": 47,
+}
 
 
 def _parse_pg_array(value: Any) -> List[str]:
@@ -276,6 +283,7 @@ def get_cached_phase_response(
                     "immediate_goal": cache.get("seed_immediate_goal"),
                     "stakes": cache.get("seed_stakes"),
                     "tension_source": cache.get("seed_tension_source"),
+                    "base_timestamp": MOCK_STORY_BASE_TIMESTAMP,
                     "weather": cache.get("seed_weather"),
                     "key_npcs": _parse_pg_array(cache.get("seed_key_npcs")),
                     "secrets": cache.get("seed_secrets"),

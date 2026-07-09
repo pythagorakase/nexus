@@ -707,7 +707,14 @@ class StorySeed(BaseModel):
     # Setting details
     base_timestamp: StoryTimestamp = Field(
         ...,
-        description="When the story begins - provide year, month, day, hour, minute",
+        description=(
+            "The DIEGETIC date and time when the story begins. For secondary-world "
+            "settings such as high fantasy or invented worlds, choose an arbitrary "
+            "anchor year from 1-9999 that gives the world its own texture; never "
+            "default to the current real-world date. For Earth-based historical, "
+            "contemporary, or near-future settings, choose a date that fits the "
+            "setting card. Choose the hour and minute to serve the opening scene."
+        ),
     )
     weather: Optional[str] = Field(None, description="Weather conditions if relevant")
 

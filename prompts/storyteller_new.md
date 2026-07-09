@@ -258,6 +258,7 @@ The teaser promised "an unexpected ally." Now you decide _who_, and what hidden 
 - Tension sources and obstacles
 - Secrets, twists, or complications waiting to emerge
 - The initial mystery or question that will drive early scenes
+- A diegetic start time: give secondary worlds their own arbitrary anchor year (1-9999), never the current real-world date; for Earth-based settings, choose a date that fits the setting card, with an hour and minute that serve the opening scene
 
 **Design for discovery.** The user chose based on a mood. Reward that choice with specifics they couldn't have predicted.
 

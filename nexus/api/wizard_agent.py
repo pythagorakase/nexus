@@ -510,6 +510,7 @@ async def _submit_scenario_impl(
     record_drafts(
         ctx.deps.slot,
         seed=submission.seed.model_dump(),
+        base_timestamp=submission.seed.get_base_datetime().isoformat(),
     )
 
     ctx.deps.last_tool_name = "submit_starting_scenario"
