@@ -17,7 +17,7 @@ import json
 import logging
 import re
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import psycopg2
@@ -29,13 +29,6 @@ from pydantic import BaseModel
 logger = logging.getLogger("nexus.api.mock_openai")
 
 MOCK_DB = "mock"
-MOCK_STORY_BASE_TIMESTAMP = {
-    "year": 2087,
-    "month": 11,
-    "day": 3,
-    "hour": 22,
-    "minute": 47,
-}
 
 
 def _parse_pg_array(value: Any) -> List[str]:
@@ -96,6 +89,7 @@ def query_wizard_cache() -> Dict[str, Any]:
                     seed_immediate_goal, seed_stakes, seed_tension_source,
                     seed_weather, seed_key_npcs,
                     seed_secrets,
+                    base_timestamp,
                     -- Layer/Zone/Location
                     layer_name, layer_type, layer_description,
                     zone_name, zone_summary,
@@ -255,6 +249,24 @@ def get_cached_phase_response(
 
     elif phase == "seed":
         location = cache.get("initial_location") or {}
+        base_timestamp = cache.get("base_timestamp")
+        if not base_timestamp:
+            raise ValueError(
+                "Mock wizard cache is missing the persisted diegetic base_timestamp"
+            )
+        if not isinstance(base_timestamp, datetime) or base_timestamp.tzinfo is None:
+            raise ValueError(
+                "Mock wizard cache base_timestamp must be a timezone-aware "
+                "PostgreSQL datetime"
+            )
+        base_timestamp = base_timestamp.astimezone(timezone.utc)
+        base_timestamp_dict = {
+            "year": base_timestamp.year,
+            "month": base_timestamp.month,
+            "day": base_timestamp.day,
+            "hour": base_timestamp.hour,
+            "minute": base_timestamp.minute,
+        }
         # Two-phase seed generation: Return StorySeedSubmission format
         # Phase 1: seed + location_sketch (creative content)
         # Phase 2: set designer generates layer/zone/location (handled in wizard_chat.py)
@@ -283,7 +295,7 @@ def get_cached_phase_response(
                     "immediate_goal": cache.get("seed_immediate_goal"),
                     "stakes": cache.get("seed_stakes"),
                     "tension_source": cache.get("seed_tension_source"),
-                    "base_timestamp": MOCK_STORY_BASE_TIMESTAMP,
+                    "base_timestamp": base_timestamp_dict,
                     "weather": cache.get("seed_weather"),
                     "key_npcs": _parse_pg_array(cache.get("seed_key_npcs")),
                     "secrets": cache.get("seed_secrets"),
