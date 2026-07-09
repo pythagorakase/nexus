@@ -52,7 +52,7 @@ command codex exec --yolo -C <repo> \
 - parallel independent tasks OK: separate repos/dirs, and mint a distinct `$O` per task — a shared fixed path silently clobbers one run's result with another's
 - outside a git repo add `--skip-git-repo-check`
 
-Follow-up fixes — cheaper than fresh runs, keeps context. `resume` has no `-C`/`--yolo`: run from the repo dir, spell the long flag:
+Follow-up fixes — cheaper than fresh runs, keeps context. `resume` has no `-C`/`--yolo`: run from the repo dir, spell the long flag. The `cd` is load-bearing, not stylistic — `resume --last` matches sessions by cwd, so launching from the wrong directory silently resumes an unrelated session (possibly a human's) and operates on the wrong tree:
 
 ```bash
 (cd <repo> && command codex exec resume --last \
@@ -82,5 +82,6 @@ Local deltas from the upstream skill (steipete/agent-scripts `codex-first`, impo
 - **Model** comes from `~/.codex/config.toml` (`model = "gpt-5.5"` as of import; flip to `gpt-5.6` when live — the alias routes to `gpt-5.6-sol`). Don't pin `-m` in delegation runs; the config line is the single switch.
 - **Reasoning effort**: config default is `xhigh`; the invocation template's `-c model_reasoning_effort="high"` deliberately overrides per-run (work orders rarely need `xhigh`). GPT-5.6 widens the ladder to `none`…`max`; OpenAI migration guidance is keep the current baseline, then trial one level lower.
 - **`--yolo`** is a hidden alias for `--dangerously-bypass-approvals-and-sandbox` in codex-cli ≥0.143 (absent from `--help`, verified working).
+- **Brew lags releases**: if the API rejects the configured model with "requires a newer version of Codex" and `brew upgrade codex` says up to date, the desktop app's auto-updated bundled binary at `/Applications/Codex.app/Contents/Resources/codex` works immediately — substitute it for `command codex` until the formula catches up (this is how gpt-5.6-sol day-one runs worked, 2026-07-09).
 - **Repo conventions ride along free**: Codex reads `AGENTS.md` at the repo root automatically, so specs need only task-specific constraints — but NEXUS user directives that shape a spec's *acceptance criteria* still belong in the prompt when relevant: live tests over mocks, tunables in `nexus.toml` not hardcoded, loud errors over fallbacks, prompts under `prompts/` never in Python.
 - Upstream references to `$maintainer-orchestrator` (multi-repo portfolio work) and `$autoreview` (his closeout) don't exist here; NEXUS is single-repo and closeout is `docs/agent_workflow.md`.
