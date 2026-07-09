@@ -193,7 +193,8 @@ def test_runtime_maturation_packet_sizes_graph_from_its_own_budget() -> None:
     )
     from nexus.config import load_settings
 
-    cfg = load_settings().orrery.retrograde.maturation
+    settings = load_settings()
+    cfg = settings.orrery.retrograde.maturation
     packet = build_runtime_maturation_packet(
         vocabulary=VOCABULARY,
         row={
@@ -210,11 +211,22 @@ def test_runtime_maturation_packet_sizes_graph_from_its_own_budget() -> None:
         },
         cfg=cfg,
         dbname="save_05",
+        setting={"genre": "fantasy"},
     )
     request = packet["seed_generation_request"]
     assert request["budget"]["generate_candidates"] == cfg.generate_candidates
     edges = request["candidate_graph"]["dangling_edges"]
     expected_max = max(2, ceil(cfg.generate_candidates * 1.5))
     assert len(edges) <= expected_max
+
+    # entropy(cold_start) > entropy(maturation): the roll happens inside
+    # the genre band contracted by weird_band_fraction from its floor.
+    band = getattr(
+        settings.orrery.retrograde.weird.bands_by_genre["fantasy"],
+        cfg.weird_level,
+    )
     roll = request["candidate_graph"]["weird_roll"]
-    assert roll["raw_min"] == roll["raw_max"] == roll["raw"]
+    expected_max_raw = band.min + (band.max - band.min) * cfg.weird_band_fraction
+    assert roll["raw_min"] == pytest.approx(band.min)
+    assert roll["raw_max"] == pytest.approx(expected_max_raw)
+    assert roll["raw_min"] <= roll["raw"] <= roll["raw_max"]

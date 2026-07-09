@@ -1043,6 +1043,18 @@ class OrreryRetrogradeMaturationSettings(BaseModel):
         default="medium",
         description="Coarse weirdness level for runtime maturation seeds.",
     )
+    weird_band_fraction: float = Field(
+        default=0.6,
+        gt=0.0,
+        le=1.0,
+        description=(
+            "Fraction of the genre weird band (measured from its floor) "
+            "available to runtime maturation rolls. Cold-start wizard "
+            "history rolls the full band; mid-story backstory retrofits "
+            "around an entity's on-screen introduction, so its entropy "
+            "ceiling stays lower. 1.0 reproduces the full cold-start band."
+        ),
+    )
     model_ref: Optional[str] = Field(
         default=None,
         description=(
