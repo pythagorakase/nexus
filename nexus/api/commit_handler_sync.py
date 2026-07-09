@@ -508,6 +508,7 @@ def commit_incubator_to_database_sync(
                             """
                             INSERT INTO chunk_character_references (chunk_id, character_id, reference)
                             VALUES (%s, %s, %s)
+                            ON CONFLICT (chunk_id, character_id) DO NOTHING
                         """,
                             (chunk_id, ref["character_id"], ref["reference"]),
                         )
@@ -523,6 +524,7 @@ def commit_incubator_to_database_sync(
                             """
                             INSERT INTO chunk_faction_references (chunk_id, faction_id)
                             VALUES (%s, %s)
+                            ON CONFLICT (chunk_id, faction_id) DO NOTHING
                         """,
                             (chunk_id, ref["faction_id"]),
                         )
