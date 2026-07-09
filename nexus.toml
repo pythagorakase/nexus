@@ -384,6 +384,16 @@ transition_timeout_seconds = 900
 # process-local registry. Run the API single-worker, or accept that status
 # polls answered by a non-writing worker report stage "idle" mid-transition.
 
+[orrery.retrograde.graph]
+# R3 candidate-graph sampling calibration (issue #442). The graph rolls
+# dangling-edge ingredients the seed model must reconcile; these knobs set
+# menu width, the edge-kind mix, anchor bias, and event endpoint mix.
+edges_per_candidate = 1.5
+max_sample_retries = 12
+edge_kind_weights = { relationship = 0.4, pair_tag = 0.3, event = 0.3 }
+anchor_role_weights = { protagonist = 3.0, starting_location = 2.0, default = 1.0 }
+event_open_endpoint_weights = { character = 0.6, faction = 0.25, place = 0.15 }
+
 [orrery.retrograde.maturation]
 # Runtime stub maturation (spec decisions 9/10/12, M8). When Skald declares a
 # new entity via the new_entities structured-output field and the entity

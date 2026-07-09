@@ -1318,6 +1318,12 @@ def render_seed_selection_prompt(
         "attachment_contract": (
             seed_generation_request.get("candidate_graph", {}) or {}
         ).get("attachment_contract", {}),
+        # Full edge definitions (edge_type, anchor, orthogonality,
+        # guidance): without them the judge cannot tell an honored claim
+        # from lip service.
+        "dangling_edges": (
+            seed_generation_request.get("candidate_graph", {}) or {}
+        ).get("dangling_edges", []),
         "candidates": candidates_payload.get("candidates", []),
     }
     return (

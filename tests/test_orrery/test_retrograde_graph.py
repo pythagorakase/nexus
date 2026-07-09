@@ -46,6 +46,22 @@ VOCABULARY = {
         },
     ],
     "event_types": ["threat_issued", "contact_made", "mourning_act"],
+    # Keys the request builder touches beyond the edge pools.
+    "entity_kinds": ["character", "place", "faction"],
+    "slots": ["actor", "target"],
+    "single_entity_tag_anchors": [],
+    "registered_single_entity_tags": [],
+    "registered_tag_categories": [],
+    "registered_tags_by_category": {},
+    "registered_tags_by_entity_kind": {},
+    "registered_category_seed_policies": [],
+    "registered_tags_by_seed_policy": {},
+    "multi_entity_tag_families": ["obligation", "resides_at"],
+    "place_classes": [],
+    "durable_tags": [],
+    "ephemeral_tags": [],
+    "current_tags": [],
+    "applied_tags": [],
 }
 
 WEIRD = {"level": "medium", "raw_min": 0.28, "raw_max": 0.55}
@@ -147,3 +163,58 @@ def test_empty_vocabulary_raises_loudly() -> None:
             generate_candidates=4,
             rng_seed_material="test:novocab",
         )
+
+
+def test_graph_settings_are_configurable() -> None:
+    """Calibration comes from [orrery.retrograde.graph], not module constants."""
+
+    graph = build_candidate_graph(
+        candidate_scaffolds=SCAFFOLDS,
+        vocabulary=VOCABULARY,
+        weird=WEIRD,
+        generate_candidates=4,
+        rng_seed_material="test:config",
+        graph_settings={
+            "edges_per_candidate": 3.0,
+            "edge_kind_weights": {"event": 1.0},
+        },
+    )
+    assert len(graph["dangling_edges"]) <= 12
+    assert all(edge["kind"] == "event" for edge in graph["dangling_edges"])
+
+
+def test_runtime_maturation_packet_sizes_graph_from_its_own_budget() -> None:
+    """The maturation graph is sized for 4 candidates, not the wizard 9."""
+
+    from math import ceil
+
+    from nexus.agents.orrery.retrograde_maturation import (
+        build_runtime_maturation_packet,
+    )
+    from nexus.config import load_settings
+
+    cfg = load_settings().orrery.retrograde.maturation
+    packet = build_runtime_maturation_packet(
+        vocabulary=VOCABULARY,
+        row={
+            "entity_kind": "character",
+            "entity_name": "Test Subject",
+            "entity_id": 999,
+            "requesting_chunk_id": 1,
+            "declaration": {"summary": "A test entity."},
+        },
+        context={
+            "entity_summary": "A test entity.",
+            "scene_entities": SCAFFOLDS["core_entities"],
+            "chunk_excerpt": "The subject appeared.",
+        },
+        cfg=cfg,
+        dbname="save_05",
+    )
+    request = packet["seed_generation_request"]
+    assert request["budget"]["generate_candidates"] == cfg.generate_candidates
+    edges = request["candidate_graph"]["dangling_edges"]
+    expected_max = max(2, ceil(cfg.generate_candidates * 1.5))
+    assert len(edges) <= expected_max
+    roll = request["candidate_graph"]["weird_roll"]
+    assert roll["raw_min"] == roll["raw_max"] == roll["raw"]

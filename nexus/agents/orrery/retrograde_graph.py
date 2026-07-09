@@ -27,37 +27,19 @@ from nexus.agents.orrery.retrograde_vocabulary import SeedEligibleVocabulary
 
 GRAPH_SCHEMA_VERSION = 1
 
-# One seed must claim at least one edge; some claim two. Edges beyond the
-# candidate count keep the menu wider than the funnel — unclaimed edges
-# are discarded free of charge, exactly like rejected seeds.
-EDGES_PER_CANDIDATE = 1.5
 
-# Edge-kind mix: relationships bind people, pair tags bind directed state,
-# events bind history. Weighted toward relationships because the
-# character_relationships surface is what the forward Orrery's affiliation
-# gates actually consume.
-_EDGE_KIND_WEIGHTS: tuple[tuple[str, float], ...] = (
-    ("relationship", 0.4),
-    ("pair_tag", 0.3),
-    ("event", 0.3),
-)
+def _coerce_graph_settings(raw: Any) -> "OrreryRetrogradeGraphSettings":
+    """[orrery.retrograde.graph] payload -> validated calibration settings."""
 
-# Anchor preference: history should mostly touch the protagonist and the
-# opening stage, but not exclusively — secondary anchors are where the
-# world grows past the premise.
-_ANCHOR_ROLE_WEIGHTS: Mapping[str, float] = {
-    "protagonist": 3.0,
-    "starting_location": 2.0,
-}
-_DEFAULT_ANCHOR_WEIGHT = 1.0
+    from nexus.config.settings_models import OrreryRetrogradeGraphSettings
 
-_EVENT_OPEN_ENDPOINT_KINDS: tuple[tuple[str, float], ...] = (
-    ("character", 0.6),
-    ("faction", 0.25),
-    ("place", 0.15),
-)
-
-_MAX_SAMPLE_RETRIES = 12
+    if raw is None:
+        return OrreryRetrogradeGraphSettings()
+    if isinstance(raw, OrreryRetrogradeGraphSettings):
+        return raw
+    if isinstance(raw, Mapping):
+        return OrreryRetrogradeGraphSettings.model_validate(dict(raw))
+    raise ValueError(f"Unsupported retrograde graph settings: {type(raw)!r}")
 
 
 class DanglingEdge(TypedDict):
@@ -96,6 +78,7 @@ def build_candidate_graph(
     weird: Mapping[str, Any],
     generate_candidates: int,
     rng_seed_material: str,
+    graph_settings: Any = None,
 ) -> dict[str, Any]:
     """Build the R3 candidate graph: core nodes plus sampled dangling edges.
 
@@ -105,6 +88,11 @@ def build_candidate_graph(
     to the premise may be indirect, generational, or mythic. ``adjacent``
     edges ask for direct, recent connections.
     """
+
+    cfg = _coerce_graph_settings(graph_settings)
+    edge_kind_weights = tuple(cfg.edge_kind_weights.items())
+    event_endpoint_weights = tuple(cfg.event_open_endpoint_weights.items())
+    default_anchor_weight = cfg.anchor_role_weights.get("default", 1.0)
 
     rng = _graph_rng(rng_seed_material)
 
@@ -144,7 +132,7 @@ def build_candidate_graph(
             "edge pools (relationships, pair tags, events) are empty"
         )
 
-    edge_count = max(2, ceil(generate_candidates * EDGES_PER_CANDIDATE))
+    edge_count = max(2, ceil(generate_candidates * cfg.edges_per_candidate))
     edges: list[DanglingEdge] = []
     used_edge_types: set[tuple[str, str]] = set()
 
@@ -157,15 +145,15 @@ def build_candidate_graph(
         if not pool:
             return None
         weights = [
-            _ANCHOR_ROLE_WEIGHTS.get(str(node.get("role")), _DEFAULT_ANCHOR_WEIGHT)
+            cfg.anchor_role_weights.get(str(node.get("role")), default_anchor_weight)
             for node in pool
         ]
         return rng.choices(pool, weights=weights, k=1)[0]
 
     for index in range(edge_count):
         edge: Optional[DanglingEdge] = None
-        for _attempt in range(_MAX_SAMPLE_RETRIES):
-            kind = _weighted_choice(rng, _EDGE_KIND_WEIGHTS)
+        for _attempt in range(cfg.max_sample_retries):
+            kind = _weighted_choice(rng, edge_kind_weights)
 
             if kind == "relationship":
                 # Persistence accepts character-character rows only
@@ -212,7 +200,7 @@ def build_candidate_graph(
                 if anchor is None:
                     continue
                 edge_type = rng.choice(event_types)
-                open_kind = _weighted_choice(rng, _EVENT_OPEN_ENDPOINT_KINDS)
+                open_kind = _weighted_choice(rng, event_endpoint_weights)
                 anchor_role = "participant"
 
             if (kind, edge_type) in used_edge_types:
@@ -236,8 +224,10 @@ def build_candidate_graph(
             }
             break
         if edge is None:
-            # Vocabulary too small to keep deduping; reuse is preferable
-            # to under-building the menu, so retry once without dedupe.
+            # Vocabulary too small to keep deduping within the retry
+            # budget: under-build the menu rather than emit duplicate
+            # ingredient types. Edge capacity already exceeds what
+            # candidates can claim, so a short menu costs little.
             continue
         used_edge_types.add((edge["kind"], edge["edge_type"]))
         edges.append(edge)

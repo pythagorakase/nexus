@@ -107,6 +107,7 @@ def build_retrograde_dry_run_packet(
         vocabulary=vocabulary,
         weird=weird,
         max_new_entity_stubs=settings.orrery.retrograde.wizard.max_new_entity_stubs,
+        graph_settings=settings.orrery.retrograde.graph,
     )
 
     return {
@@ -155,11 +156,21 @@ def build_seed_generation_request(
     weird: Mapping[str, Any],
     max_new_entity_stubs: Optional[int] = None,
     rng_seed_material: Optional[str] = None,
+    budget_override: Optional[Mapping[str, int]] = None,
+    graph_settings: Any = None,
 ) -> dict[str, Any]:
-    """Build the non-mutating R4/R5 request contract for Skald-as-weaver."""
+    """Build the non-mutating R4/R5 request contract for Skald-as-weaver.
+
+    ``budget_override`` replaces the level-derived generate/select counts —
+    the runtime maturation path passes its tighter budget here so the R3
+    candidate graph is sized for the budget that will actually run, not
+    the wizard default.
+    """
 
     level = str(weird.get("level") or "medium")
     budget = dict(SEED_BUDGETS.get(level, SEED_BUDGETS["medium"]))
+    if budget_override is not None:
+        budget.update({key: int(value) for key, value in budget_override.items()})
     # This is a coarse review hint, not an extra tuning knob; the explicit
     # generate/select counts carry the meaningful level-specific budget.
     budget["overgenerate_multiplier"] = max(
@@ -188,6 +199,7 @@ def build_seed_generation_request(
         weird=weird,
         generate_candidates=int(budget["generate_candidates"]),
         rng_seed_material=rng_seed_material,
+        graph_settings=graph_settings,
     )
 
     return {
