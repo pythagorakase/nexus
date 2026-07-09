@@ -7,7 +7,11 @@ from typing import Iterable, Literal, TypedDict
 from nexus.agents.orrery.catalog import collect_template_vocabulary
 from nexus.agents.orrery.pair_tag_registry import PAIR_TAG_SEED
 from nexus.agents.orrery.substrate import EntityKind, Slot
-from nexus.agents.orrery.tag_library import read_event_types, read_tag_library
+from nexus.agents.orrery.tag_library import (
+    read_event_type_categories,
+    read_event_types,
+    read_tag_library,
+)
 from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
 
 
@@ -76,6 +80,7 @@ class SeedEligibleVocabulary(TypedDict):
     multi_entity_tag_families: list[str]
     multi_entity_tag_definitions: list[PairTagPrimitive]
     event_types: list[str]
+    event_type_categories: dict[str, str]
     place_classes: list[str]
     relationship_types: list[str]
 
@@ -154,6 +159,13 @@ def enumerate_seed_eligible_vocabulary(
         if dbname is not None
         else _sorted_strings(template_vocab["event_types"])
     )
+    # Registry-backed, like the registered_* sections: complete on the slot
+    # path, empty for template-only introspection (templates reference event
+    # types by name and carry no category data). Only categorized types can
+    # match the R3 excluded_event_categories filter.
+    event_type_categories = (
+        read_event_type_categories(dbname) if dbname is not None else {}
+    )
     single_entity_tags = sorted(
         set(template_vocab["durable_tags"])
         | set(template_vocab["ephemeral_tags"])
@@ -188,6 +200,7 @@ def enumerate_seed_eligible_vocabulary(
         "multi_entity_tag_families": [item["tag"] for item in pair_tag_definitions],
         "multi_entity_tag_definitions": pair_tag_definitions,
         "event_types": event_types,
+        "event_type_categories": event_type_categories,
         "place_classes": _sorted_strings(template_vocab["place_classes"]),
         "relationship_types": _sorted_strings(template_vocab["relationship_types"]),
     }

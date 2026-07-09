@@ -28,6 +28,9 @@ def test_seed_eligible_vocabulary_includes_template_primitives() -> None:
     assert "wilderness" in vocabulary["place_classes"]
     assert vocabulary["registered_single_entity_tags"] == []
     assert vocabulary["registered_tags_by_category"] == {}
+    # Registry-backed like the registered_* sections: templates reference
+    # event types by name only, so the template path carries no categories.
+    assert vocabulary["event_type_categories"] == {}
     assert "family" in vocabulary["relationship_types"]
     assert "handler" in vocabulary["relationship_types"]
 
@@ -49,6 +52,8 @@ def test_seed_eligible_vocabulary_can_include_live_tag_registry() -> None:
     )
     assert "grieving" in vocabulary["registered_tags_by_entity_kind"]["character"]
     assert "commerce" in vocabulary["registered_tags_by_entity_kind"]["place"]
+    assert vocabulary["event_type_categories"]["upkeep_done"] == "routine"
+    assert vocabulary["event_type_categories"]["slept"] == "physiological"
     policies = {
         item["category"]: item["policy"]
         for item in vocabulary["registered_category_seed_policies"]
@@ -127,6 +132,11 @@ def test_seed_eligible_vocabulary_classifies_registered_categories(
         "read_event_types",
         lambda _dbname: ["live_warning"],
     )
+    monkeypatch.setattr(
+        retrograde_vocabulary,
+        "read_event_type_categories",
+        lambda _dbname: {"live_warning": "interpersonal"},
+    )
 
     vocabulary = enumerate_seed_eligible_vocabulary(dbname="save_05")
     policies = {
@@ -147,6 +157,7 @@ def test_seed_eligible_vocabulary_classifies_registered_categories(
         "untested_signal"
     ]
     assert vocabulary["event_types"] == ["live_warning"]
+    assert vocabulary["event_type_categories"] == {"live_warning": "interpersonal"}
 
 
 def test_category_seed_policy_returns_complete_struct() -> None:

@@ -128,7 +128,25 @@ def build_candidate_graph(
 
     relationship_types = list(vocabulary.get("relationship_types", ()))
     pair_tag_definitions = list(vocabulary.get("multi_entity_tag_definitions", ()))
-    event_types = list(vocabulary.get("event_types", ()))
+    # Mundane-event filter (issue #442): tick-loop bookkeeping categories
+    # (needs, upkeep, package resolution) make weak backstory dice, so they
+    # never enter the event edge pool. Only the dice are filtered — R6
+    # expansion validation still accepts every registered event type. Types
+    # without a registered category (template-only vocabulary) cannot match.
+    registered_event_types = list(vocabulary.get("event_types", ()))
+    event_type_categories = vocabulary.get("event_type_categories") or {}
+    excluded_categories = set(cfg.excluded_event_categories)
+    event_types = [
+        event_type
+        for event_type in registered_event_types
+        if event_type_categories.get(event_type) not in excluded_categories
+    ]
+    if registered_event_types and not event_types:
+        raise ValueError(
+            "excluded_event_categories removed every registered event type "
+            "from the R3 event pool; loosen [orrery.retrograde.graph]."
+            f"excluded_event_categories (currently {sorted(excluded_categories)})"
+        )
     if not (relationship_types or pair_tag_definitions or event_types):
         raise ValueError(
             "Retrograde graph requires seed-eligible vocabulary; all three "
@@ -251,6 +269,11 @@ def build_candidate_graph(
             "raw": weird_roll,
             "raw_min": raw_min,
             "raw_max": raw_max,
+        },
+        "event_pool": {
+            "registered": len(registered_event_types),
+            "eligible": len(event_types),
+            "excluded_categories": sorted(excluded_categories),
         },
         "nodes": nodes,
         "dangling_edges": list(edges),

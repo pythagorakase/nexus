@@ -103,6 +103,25 @@ def read_event_types(dbname: Optional[str] = None) -> list[str]:
         conn.close()
 
 
+def read_event_type_categories(dbname: Optional[str] = None) -> dict[str, str]:
+    """Read the registry category of every active world event type."""
+
+    conn = _connect(dbname)
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT type, category
+                FROM event_types
+                WHERE deprecated = FALSE
+                ORDER BY type
+                """
+            )
+            return {str(row["type"]): str(row["category"]) for row in cur.fetchall()}
+    finally:
+        conn.close()
+
+
 def read_pair_tag_library(dbname: Optional[str] = None) -> list[str]:
     """Read active Orrery pair-tag names from the target slot database."""
 

@@ -88,7 +88,7 @@ Six stages, labeled **R1–R6** to disambiguate from the forward Orrery pipeline
 
 - **R2. Stub generator.** From wizard choices (setting, genre, starting characters, selected traits), emit entity stubs and a sparse relationship graph — the *intentional core*. This is deterministic-ish scaffolding, low entropy, fully implied by wizard input.
 
-- **R3. Graph builder.** Expand the sparse core into a candidate relationship/event graph with open attachment points (dangling edges where history could connect).
+- **R3. Graph builder.** Expand the sparse core into a candidate relationship/event graph with open attachment points (dangling edges where history could connect). The event edge pool excludes tick-loop bookkeeping categories (`[orrery.retrograde.graph].excluded_event_categories`, default `routine`/`physiological`/`orrery_resolution`) — those event types remain valid for R6 expansion validation but are never rolled as backstory dice.
 
 - **R4. Seed generation (high-entropy, high-friction).** Over-generate candidate seeds — events, grudges, debts, secrets, vanished parties — that are *directionally connected* to the graph but NOT implied by it. This is where surprise is injected. Generate more than will be kept. The current implementation renders a Skald prompt from the dry-run packet, makes the Skald call when invoked via `nexus retrograde-seed-candidates`, and requires JSON matching the seed-candidate response schema; no generated seed is persisted at this stage.
 
