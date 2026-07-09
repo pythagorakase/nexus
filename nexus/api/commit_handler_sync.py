@@ -508,7 +508,12 @@ def commit_incubator_to_database_sync(
                             """
                             INSERT INTO chunk_character_references (chunk_id, character_id, reference)
                             VALUES (%s, %s, %s)
-                            ON CONFLICT (chunk_id, character_id) DO NOTHING
+                            ON CONFLICT (chunk_id, character_id) DO UPDATE
+                            SET reference = 'present'
+                            WHERE 'present' IN (
+                                chunk_character_references.reference,
+                                EXCLUDED.reference
+                            )
                         """,
                             (chunk_id, ref["character_id"], ref["reference"]),
                         )
