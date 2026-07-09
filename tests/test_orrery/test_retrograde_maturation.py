@@ -23,6 +23,8 @@ from nexus.agents.logon.apex_schema import (
 from nexus.agents.orrery.retrograde_maturation import (
     MaturationEnqueueResult,
     RetrogradeMaturationVocabularyError,
+    _load_story_setting,
+    _resolve_maturation_weird,
     _slot_label,
     enqueue_declared_entity_maturations,
     namespace_expansion_event_refs,
@@ -363,6 +365,61 @@ def test_namespace_leaves_unknown_source_refs_for_validation() -> None:
     }
     rewritten = namespace_expansion_event_refs(payload, prefix="maturation_job_7")
     assert rewritten["entity_tag_plan"][0]["source_event_ref"] == "EV9"
+
+
+# ============================================================================
+# Genre-Banded Maturation Weird (#442)
+# ============================================================================
+
+
+def test_resolve_maturation_weird_contracts_the_genre_band() -> None:
+    """entropy(cold_start) > entropy(maturation): same floor, lower ceiling."""
+
+    from nexus.agents.orrery.retrograde_packet import resolve_weird_profile
+    from nexus.config import load_settings
+
+    settings = load_settings()
+    cfg = settings.orrery.retrograde.maturation
+    setting = {"genre": "fantasy", "secondary_genres": ["mystery"]}
+
+    cold = resolve_weird_profile(
+        settings=settings,
+        setting=setting,
+        weird_level=cfg.weird_level,
+    )
+    maturation = _resolve_maturation_weird(
+        settings=settings,
+        setting=setting,
+        cfg=cfg,
+    )
+
+    assert maturation["source"] == "maturation_band"
+    assert maturation["genre"] == cold["genre"]
+    assert maturation["raw_min"] == cold["raw_min"]
+    expected_max = cold["raw_min"] + (cold["raw_max"] - cold["raw_min"]) * float(
+        cfg.weird_band_fraction
+    )
+    assert maturation["raw_max"] == pytest.approx(expected_max)
+    # The configured default must actually contract; 1.0 would silently
+    # erase the cold-start/maturation entropy distinction.
+    assert cfg.weird_band_fraction < 1.0
+    assert maturation["raw_max"] < cold["raw_max"]
+    # No raw override: the R3 graph builder rolls within the band.
+    assert "raw" not in maturation
+
+
+def test_load_story_setting_raises_on_missing_payload() -> None:
+    """A slot without a persisted wizard setting fails loudly, not silently."""
+
+    class _EmptySettingCursor:
+        def execute(self, sql: str, params: Any = None) -> None:
+            assert "global_variables" in sql
+
+        def fetchone(self) -> Any:
+            return {"setting": None}
+
+    with pytest.raises(ValueError, match="global_variables.setting"):
+        _load_story_setting(_EmptySettingCursor())
 
 
 # ============================================================================

@@ -525,6 +525,7 @@ def _mature_one(
                 )
                 return manifest
             context = _load_job_context(cur, row=row, cfg=cfg)
+            story_setting = _load_story_setting(cur)
 
     from nexus.agents.orrery.retrograde_vocabulary import (
         enumerate_seed_eligible_vocabulary,
@@ -537,6 +538,7 @@ def _mature_one(
         context=context,
         cfg=cfg,
         dbname=dbname,
+        setting=story_setting,
     )
 
     from nexus.agents.orrery.retrograde_seed_candidates import run_seed_stage
@@ -737,12 +739,15 @@ def build_runtime_maturation_packet(
     context: Mapping[str, Any],
     cfg: OrreryRetrogradeMaturationSettings,
     dbname: str,
+    setting: Mapping[str, Any],
 ) -> dict[str, Any]:
     """Build a scoped single-entity packet for the runtime maturation pass.
 
     Reuses the wizard-time request builder and prompt renderer so the R4/R5
-    validator sees an identical contract; only the scaffolds, budget, and an
-    explicit maturation directive differ.
+    validator sees an identical contract; only the scaffolds, budget, weird
+    band, and an explicit maturation directive differ. ``setting`` is the
+    persisted ``global_variables.setting`` payload whose genre selects the
+    weird band.
     """
 
     from nexus.agents.orrery.retrograde_packet import build_seed_generation_request
@@ -788,25 +793,16 @@ def build_runtime_maturation_packet(
         },
     }
 
-    # Runtime maturation has no wizard genre context to resolve a banded
-    # roll, so the calibration float comes from [orrery.retrograde.weird.dev]
-    # explicitly; genre-banded runtime resolution is a follow-up (#442).
     from nexus.config import load_settings
 
     _settings = load_settings()
     if _settings.orrery is None:
         raise ValueError("settings.orrery is required for maturation weirdness")
-    _raw_default = float(_settings.orrery.retrograde.weird.dev.default)
-    weird = {
-        "source": "maturation_default",
-        "level": cfg.weird_level,
-        # raw_min == raw_max == raw: the raw-override invariant
-        # resolve_weird_profile establishes, so weird_roll metadata stays
-        # internally consistent.
-        "raw": _raw_default,
-        "raw_min": _raw_default,
-        "raw_max": _raw_default,
-    }
+    weird = _resolve_maturation_weird(
+        settings=_settings,
+        setting=setting,
+        cfg=cfg,
+    )
     request = build_seed_generation_request(
         candidate_scaffolds=scaffolds,
         vocabulary=vocabulary,
@@ -926,6 +922,60 @@ def load_maturation_status_sync(cur: Any) -> dict[str, int]:
 # ============================================================================
 # Internal Helpers
 # ============================================================================
+
+
+def _resolve_maturation_weird(
+    *,
+    settings: Any,
+    setting: Mapping[str, Any],
+    cfg: OrreryRetrogradeMaturationSettings,
+) -> dict[str, Any]:
+    """Resolve the genre weird band, contracted for runtime maturation.
+
+    entropy(cold_start) > entropy(maturation): the wizard rolls the full
+    genre band because cold-start history *becomes* the baseline, while a
+    mid-story entity's backstory retrofits around its on-screen
+    introduction. ``weird_band_fraction`` keeps the band floor and lowers
+    the ceiling; the R3 graph builder then rolls within the contracted
+    band from its own seeded RNG.
+    """
+
+    from nexus.agents.orrery.retrograde_packet import resolve_weird_profile
+
+    profile = resolve_weird_profile(
+        settings=settings,
+        setting=setting,
+        weird_level=cfg.weird_level,
+    )
+    raw_min = float(profile["raw_min"])
+    width = float(profile["raw_max"]) - raw_min
+    raw_max = raw_min + width * float(cfg.weird_band_fraction)
+    return {
+        **profile,
+        "source": "maturation_band",
+        "band_fraction": float(cfg.weird_band_fraction),
+        "raw_max": raw_max,
+        "raw_midpoint": (raw_min + raw_max) / 2.0,
+    }
+
+
+def _load_story_setting(cur: Any) -> dict[str, Any]:
+    """Load the persisted wizard setting payload for weird-band resolution."""
+
+    cur.execute(
+        """
+        /* orrery:maturation:story_setting */
+        SELECT setting FROM global_variables
+        """
+    )
+    row = cur.fetchone()
+    setting = _row_value(row, "setting", 0) if row is not None else None
+    if not isinstance(setting, Mapping) or not setting:
+        raise ValueError(
+            "global_variables.setting is missing or empty; runtime maturation "
+            "needs the wizard setting payload to resolve its genre weird band"
+        )
+    return dict(setting)
 
 
 def _load_job_context(

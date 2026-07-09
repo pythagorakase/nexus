@@ -414,6 +414,11 @@ generate_candidates = 4
 select_target = 2
 deferred_secret_cap = 1
 weird_level = "medium"
+# entropy(cold_start) > entropy(maturation): runtime backstory rolls within
+# the lower fraction of the story's genre weird band, measured from its
+# floor. Cold-start wizard history keeps the full band; a mid-story entity's
+# backstory retrofits around its on-screen introduction. 1.0 = full band.
+weird_band_fraction = 0.6
 # Frontier model for the R4/R6 maturation calls.
 model_ref = "@openai.default"
 # Maturation responses are larger than ordinary wizard chat turns.
