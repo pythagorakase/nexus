@@ -983,6 +983,15 @@ class OrreryRetrogradeGraphSettings(BaseModel):
         },
         description="Open-endpoint kind mix for event edges.",
     )
+    excluded_event_categories: List[str] = Field(
+        default_factory=lambda: ["orrery_resolution", "physiological", "routine"],
+        description=(
+            "Event-type registry categories barred from the R3 event edge "
+            "pool. Tick-loop bookkeeping (needs, upkeep, package resolution) "
+            "makes weak backstory dice; expansion validation still accepts "
+            "every registered type."
+        ),
+    )
 
 
 class OrreryRetrogradeMaturationSettings(BaseModel):

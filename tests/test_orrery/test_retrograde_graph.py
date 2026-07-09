@@ -45,7 +45,22 @@ VOCABULARY = {
             "is_ephemeral": False,
         },
     ],
-    "event_types": ["threat_issued", "contact_made", "mourning_act"],
+    "event_types": [
+        "threat_issued",
+        "contact_made",
+        "mourning_act",
+        "upkeep_done",
+        "slept",
+    ],
+    # Registry categories: bookkeeping categories (routine, physiological,
+    # orrery_resolution by default) are barred from the event edge pool.
+    "event_type_categories": {
+        "threat_issued": "interpersonal",
+        "contact_made": "interpersonal",
+        "mourning_act": "emotional",
+        "upkeep_done": "routine",
+        "slept": "physiological",
+    },
     # Keys the request builder touches beyond the edge pools.
     "entity_kinds": ["character", "place", "faction"],
     "slots": ["actor", "target"],
@@ -181,6 +196,83 @@ def test_graph_settings_are_configurable() -> None:
     )
     assert len(graph["dangling_edges"]) <= 12
     assert all(edge["kind"] == "event" for edge in graph["dangling_edges"])
+
+
+def test_mundane_event_categories_never_enter_the_event_pool() -> None:
+    """Bookkeeping events are excluded from the backstory dice (issue #442)."""
+
+    graph = build_candidate_graph(
+        candidate_scaffolds=SCAFFOLDS,
+        vocabulary=VOCABULARY,
+        weird=WEIRD,
+        generate_candidates=8,
+        rng_seed_material="test:mundane",
+        graph_settings={
+            "edge_kind_weights": {"event": 1.0},
+            "edges_per_candidate": 3.0,
+        },
+    )
+    rolled = {edge["edge_type"] for edge in graph["dangling_edges"]}
+    assert rolled <= {"threat_issued", "contact_made", "mourning_act"}
+    assert graph["event_pool"] == {
+        "registered": 5,
+        "eligible": 3,
+        "excluded_categories": ["orrery_resolution", "physiological", "routine"],
+    }
+
+
+def test_uncategorized_event_types_cannot_be_excluded() -> None:
+    """Template-only vocabulary carries no categories; the filter is a no-op."""
+
+    vocabulary = {**VOCABULARY, "event_type_categories": {}}
+    graph = build_candidate_graph(
+        candidate_scaffolds=SCAFFOLDS,
+        vocabulary=vocabulary,
+        weird=WEIRD,
+        generate_candidates=8,
+        rng_seed_material="test:uncategorized",
+        graph_settings={
+            "edge_kind_weights": {"event": 1.0},
+            "edges_per_candidate": 3.0,
+        },
+    )
+    rolled = {edge["edge_type"] for edge in graph["dangling_edges"]}
+    assert rolled == set(VOCABULARY["event_types"])
+    assert graph["event_pool"]["eligible"] == 5
+
+
+def test_exclusion_that_empties_the_event_pool_raises_loudly() -> None:
+    """Excluding every registered category is a misconfiguration, not a state."""
+
+    with pytest.raises(ValueError, match="excluded_event_categories"):
+        build_candidate_graph(
+            candidate_scaffolds=SCAFFOLDS,
+            vocabulary=VOCABULARY,
+            weird=WEIRD,
+            generate_candidates=4,
+            rng_seed_material="test:allmundane",
+            graph_settings={
+                "excluded_event_categories": [
+                    "interpersonal",
+                    "emotional",
+                    "physiological",
+                    "routine",
+                ],
+            },
+        )
+
+
+def test_excluded_event_categories_come_from_settings() -> None:
+    """nexus.toml owns the exclusion list, not module constants."""
+
+    from nexus.config import load_settings
+
+    cfg = load_settings().orrery.retrograde.graph
+    assert cfg.excluded_event_categories == [
+        "orrery_resolution",
+        "physiological",
+        "routine",
+    ]
 
 
 def test_runtime_maturation_packet_sizes_graph_from_its_own_budget() -> None:
