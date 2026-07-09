@@ -79,7 +79,7 @@ Win = generation + exploration tokens moved to Codex; Claude spends only on spec
 
 Local deltas from the upstream skill (steipete/agent-scripts `codex-first`, imported 2026-07-09):
 
-- **Model** comes from `~/.codex/config.toml` (`model = "gpt-5.5"` as of import; flip to `gpt-5.6` when live — the alias routes to `gpt-5.6-sol`). Don't pin `-m` in delegation runs; the config line is the single switch.
+- **Model** comes from `~/.codex/config.toml` (`model = "gpt-5.6-sol"` since 2026-07-09 — the desktop app auto-migrated it on release day; `gpt-5.6` is an alias routing to the same). Don't pin `-m` in delegation runs; the config line is the single switch.
 - **Reasoning effort**: config default is `xhigh`; the invocation template's `-c model_reasoning_effort="high"` deliberately overrides per-run (work orders rarely need `xhigh`). GPT-5.6 widens the ladder to `none`…`max`; OpenAI migration guidance is keep the current baseline, then trial one level lower.
 - **`--yolo`** is a hidden alias for `--dangerously-bypass-approvals-and-sandbox` in codex-cli ≥0.143 (absent from `--help`, verified working).
 - **Brew lags releases**: if the API rejects the configured model with "requires a newer version of Codex" and `brew upgrade codex` says up to date, the desktop app's auto-updated bundled binary at `/Applications/Codex.app/Contents/Resources/codex` works immediately — substitute it for `command codex` until the formula catches up (this is how gpt-5.6-sol day-one runs worked, 2026-07-09).
