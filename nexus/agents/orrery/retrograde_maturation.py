@@ -965,7 +965,7 @@ def _load_story_setting(cur: Any) -> dict[str, Any]:
     cur.execute(
         """
         /* orrery:maturation:story_setting */
-        SELECT setting FROM global_variables
+        SELECT setting FROM global_variables WHERE id = true
         """
     )
     row = cur.fetchone()
