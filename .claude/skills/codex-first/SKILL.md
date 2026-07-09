@@ -1,7 +1,7 @@
 ---
 name: codex-first
 description: "Route implementation work to Codex CLI; Claude specs, reviews, verifies. Use when a task is a buildable work order: implementation from a frozen spec, refactors, mechanical migrations, bug fixes with known repro, test writing, bulk exploration."
-allowed-tools: Bash, Read, Grep, Glob
+allowed-tools: Bash, Read, Edit, Write, Grep, Glob
 ---
 
 # Codex First
@@ -36,20 +36,20 @@ Heuristic: prompt reads as a work order → delegate; writing it forces decision
 Prompt via temp file, never inline quoting:
 
 ```bash
-P=$(mktemp); cat >"$P" <<'EOF'
+P=$(mktemp); O=$(mktemp); cat >"$P" <<'EOF'
 <goal, repo + key paths, constraints ("don't touch X"), non-goals, proof expected, output shape>
 EOF
 command codex exec --yolo -C <repo> \
   -c model_reasoning_effort="high" \
-  -o /tmp/codex-last.md - <"$P" 2>/dev/null
+  -o "$O" - <"$P" 2>/dev/null
 ```
 
 - `--yolo` is the house default; Codex may run commands/tests freely. Keep prompts scoped to the target repo.
 - `command codex` bypasses any interactive shell wrapper (binary: `/opt/homebrew/bin/codex`)
 - stderr suppressed (thinking noise bloats context); drop `2>/dev/null` only to debug a failing run
-- read `-o` file for the result; don't parse the JSONL stream
-- long runs: Bash run_in_background, read `-o` file on exit; don't kill quiet runs <30 min
-- parallel independent tasks OK: separate repos/dirs, separate `-o` files
+- read the `-o` file (`$O`) for the result; don't parse the JSONL stream
+- long runs: Bash run_in_background, read the `-o` file on exit; don't kill quiet runs <30 min
+- parallel independent tasks OK: separate repos/dirs, and mint a distinct `$O` per task — a shared fixed path silently clobbers one run's result with another's
 - outside a git repo add `--skip-git-repo-check`
 
 Follow-up fixes — cheaper than fresh runs, keeps context. `resume` has no `-C`/`--yolo`: run from the repo dir, spell the long flag:
@@ -57,7 +57,7 @@ Follow-up fixes — cheaper than fresh runs, keeps context. `resume` has no `-C`
 ```bash
 (cd <repo> && command codex exec resume --last \
   --dangerously-bypass-approvals-and-sandbox \
-  -o /tmp/codex-last.md - <"$P2" 2>/dev/null)
+  -o "$O2" - <"$P2" 2>/dev/null)
 ```
 
 ## Prompt Contract
