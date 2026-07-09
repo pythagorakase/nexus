@@ -9,6 +9,7 @@ from nexus.agents.orrery.retrograde_seed_candidates import (
     render_seed_generation_prompt,
     seed_candidate_response_schema,
 )
+from nexus.agents.orrery.retrograde_graph import build_candidate_graph
 from nexus.agents.orrery.retrograde_vocabulary import SeedEligibleVocabulary
 from nexus.config.settings_models import Settings
 
@@ -153,6 +154,7 @@ def build_seed_generation_request(
     vocabulary: SeedEligibleVocabulary,
     weird: Mapping[str, Any],
     max_new_entity_stubs: Optional[int] = None,
+    rng_seed_material: Optional[str] = None,
 ) -> dict[str, Any]:
     """Build the non-mutating R4/R5 request contract for Skald-as-weaver."""
 
@@ -170,6 +172,24 @@ def build_seed_generation_request(
         # as minimum-viable stubs.
         budget["max_new_entity_stubs"] = int(max_new_entity_stubs)
 
+    # R3: the procedural candidate graph. The seed material defaults to a
+    # stable identity derived from the intentional core, so a re-run of the
+    # same wizard artifacts rebuilds the identical graph (dry-run == live).
+    if rng_seed_material is None:
+        core_names = ",".join(
+            str(card.get("name"))
+            for card in candidate_scaffolds.get("core_entities", ())
+            if card.get("name")
+        )
+        rng_seed_material = f"retrograde_graph_v1:{core_names}"
+    candidate_graph = build_candidate_graph(
+        candidate_scaffolds=candidate_scaffolds,
+        vocabulary=vocabulary,
+        weird=weird,
+        generate_candidates=int(budget["generate_candidates"]),
+        rng_seed_material=rng_seed_material,
+    )
+
     return {
         "schema_version": SEED_REQUEST_SCHEMA_VERSION,
         "stage": "R4/R5 seed generation and selection input",
@@ -182,6 +202,7 @@ def build_seed_generation_request(
         "weird_policy": _weird_generation_policy(weird),
         "mechanical_tag_policy": _mechanical_tag_policy(vocabulary),
         "coverage_functions": list(RETROGRADE_COVERAGE_FUNCTIONS),
+        "candidate_graph": candidate_graph,
         "selection_rubric": _selection_rubric(level),
         "prompt_sections": _seed_prompt_sections(candidate_scaffolds),
         "candidate_response_schema": seed_candidate_response_schema(),

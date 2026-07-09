@@ -539,12 +539,10 @@ def _mature_one(
         dbname=dbname,
     )
 
-    from nexus.agents.orrery.retrograde_seed_candidates import (
-        generate_seed_candidates_with_skald,
-    )
+    from nexus.agents.orrery.retrograde_seed_candidates import run_seed_stage
 
     seed_started = time.monotonic()
-    seed_result = generate_seed_candidates_with_skald(
+    seed_result = run_seed_stage(
         packet=packet,
         model_name=cfg.model_ref,
         max_tokens=cfg.max_tokens,
@@ -790,10 +788,18 @@ def build_runtime_maturation_packet(
         },
     }
 
+    # Runtime maturation has no wizard genre context to resolve a banded
+    # roll, so the calibration float comes from [orrery.retrograde.weird.dev]
+    # explicitly; genre-banded runtime resolution is a follow-up (#442).
+    from nexus.config import load_settings
+
+    _settings = load_settings()
+    if _settings.orrery is None:
+        raise ValueError("settings.orrery is required for maturation weirdness")
     weird = {
         "source": "maturation_default",
         "level": cfg.weird_level,
-        "raw": None,
+        "raw": float(_settings.orrery.retrograde.weird.dev.default),
     }
     request = build_seed_generation_request(
         candidate_scaffolds=scaffolds,

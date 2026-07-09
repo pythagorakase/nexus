@@ -457,7 +457,27 @@ def _packet(vocabulary: SeedEligibleVocabulary) -> dict[str, Any]:
     }
 
 
+def _first_edge_claims(vocabulary: SeedEligibleVocabulary) -> list[dict[str, Any]]:
+    request = _packet(vocabulary)["seed_generation_request"]
+    edge = request["candidate_graph"]["dangling_edges"][0]
+    return [
+        {
+            "edge_id": edge["edge_id"],
+            "open_endpoint_name": "The Salt Ledger",
+            "open_endpoint_kind": edge["open_endpoint_kind"],
+        }
+    ]
+
+
 def _seed_response(vocabulary: SeedEligibleVocabulary) -> dict[str, Any]:
+    response = _seed_response_base(vocabulary)
+    claims = _first_edge_claims(vocabulary)
+    for candidate in response.get("candidates", []):
+        candidate.setdefault("claimed_edges", claims)
+    return response
+
+
+def _seed_response_base(vocabulary: SeedEligibleVocabulary) -> dict[str, Any]:
     return {
         "schema_version": SEED_CANDIDATE_RESPONSE_SCHEMA_VERSION,
         "candidates": [

@@ -191,6 +191,16 @@ class RetrogradeWireMechanicalHints(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
 
+class RetrogradeWireClaimedEdge(BaseModel):
+    """Provider-facing claimed dangling edge (issue #442)."""
+
+    edge_id: str = Field(min_length=1)
+    open_endpoint_name: str = Field(min_length=1, max_length=120)
+    open_endpoint_kind: str = Field(min_length=1)
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+
 class RetrogradeWireSeedCandidate(BaseModel):
     """Provider-facing seed candidate with compact mechanical refs."""
 
@@ -203,6 +213,7 @@ class RetrogradeWireSeedCandidate(BaseModel):
         default_factory=RetrogradeWireMechanicalHints
     )
     defer_or_reject_if: list[str] = Field(default_factory=list)
+    claimed_edges: list[RetrogradeWireClaimedEdge] = Field(default_factory=list)
 
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
@@ -215,6 +226,28 @@ class RetrogradeWireSeedCandidateResponse(BaseModel):
     selected_seed_ids: list[str] = Field(default_factory=list)
     rejected_seed_ids: list[str] = Field(default_factory=list)
     selection_notes: str = Field(default="")
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+
+class RetrogradeClaimedEdge(BaseModel):
+    """A dangling graph edge this seed claims and resolves (issue #442).
+
+    The R3 candidate graph rolls edge ingredients the model did not
+    choose; a claim binds the seed to one of them and names the edge's
+    open endpoint. The seed's story must make the claimed edge_type true.
+    """
+
+    edge_id: str = Field(min_length=1, description="Dangling edge id claimed.")
+    open_endpoint_name: str = Field(
+        min_length=1,
+        max_length=120,
+        description="Name for the edge's unknown endpoint (new or existing).",
+    )
+    open_endpoint_kind: str = Field(
+        min_length=1,
+        description="Entity kind of the named endpoint; must match the edge.",
+    )
 
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
@@ -249,6 +282,13 @@ class RetrogradeSeedCandidate(BaseModel):
     defer_or_reject_if: list[str] = Field(
         default_factory=list,
         description="Conditions under which Skald should discard the seed.",
+    )
+    claimed_edges: list[RetrogradeClaimedEdge] = Field(
+        default_factory=list,
+        description=(
+            "One or two dangling edges from the request's candidate_graph "
+            "that this seed claims and resolves."
+        ),
     )
 
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
@@ -373,6 +413,31 @@ def seed_candidate_wire_response_model(
         relationships=(list[relationship_model], Field(default_factory=list)),
     )
     coverage_type = _literal_or_str(_coverage_function_ids(seed_generation_request))
+    graph = seed_generation_request.get("candidate_graph") or {}
+    edge_ids = [
+        str(edge.get("edge_id"))
+        for edge in graph.get("dangling_edges", [])
+        if isinstance(edge, Mapping) and edge.get("edge_id")
+    ]
+    endpoint_kinds = sorted(
+        {
+            str(edge.get("open_endpoint_kind"))
+            for edge in graph.get("dangling_edges", [])
+            if isinstance(edge, Mapping) and edge.get("open_endpoint_kind")
+        }
+    )
+    claimed_edge_model = create_model(
+        "RetrogradeWireClaimedEdgeRuntime",
+        __base__=RetrogradeWireClaimedEdge,
+        edge_id=(
+            _literal_or_str(edge_ids),
+            Field(description="Dangling edge id from candidate_graph."),
+        ),
+        open_endpoint_kind=(
+            _literal_or_str(endpoint_kinds),
+            Field(description="Entity kind matching the claimed edge."),
+        ),
+    )
     candidate_model = create_model(
         "RetrogradeWireSeedCandidateRuntime",
         __base__=RetrogradeWireSeedCandidate,
@@ -381,6 +446,7 @@ def seed_candidate_wire_response_model(
             mechanical_hints_model,
             Field(default_factory=mechanical_hints_model),
         ),
+        claimed_edges=(list[claimed_edge_model], Field(default_factory=list)),
     )
     return create_model(
         "RetrogradeWireSeedCandidateResponseRuntime",
@@ -420,14 +486,21 @@ def render_seed_generation_prompt(
         "hard_validation_rules": _hard_validation_rules(),
         "allowed_vocabulary": _prompt_vocabulary(vocabulary),
         "coverage_functions": seed_generation_request.get("coverage_functions", []),
+        "candidate_graph": seed_generation_request.get("candidate_graph", {}),
         "selection_rubric": seed_generation_request.get("selection_rubric", {}),
         "prompt_sections": seed_generation_request.get("prompt_sections", []),
         "response_contract": _prompt_response_contract(),
     }
     return (
         "You are Skald-as-weaver for a Retrograde seed-generation pass.\n"
-        "Generate surprising candidate history seeds, select the strongest "
-        "subset, and leave all persistence to a later reviewed expansion pass.\n"
+        "Generate surprising candidate history seeds and leave all "
+        "persistence to a later reviewed expansion pass. Do NOT select in "
+        "this pass: return selected_seed_ids and rejected_seed_ids as empty "
+        "lists — selection happens in a separate, decoupled call.\n"
+        "candidate_graph.dangling_edges are rolled ingredients you did not "
+        "choose: every candidate must claim 1-2 edge_ids via claimed_edges, "
+        "name each claimed edge's open endpoint, and make the edge_type "
+        "true in the seed's story. Reconcile the roll; do not ignore it.\n"
         "Keep summaries, rationales, and rejection conditions compact.\n"
         "If a mechanical hint cannot satisfy the hard validation rules, omit it.\n"
         "Return JSON only. Unknown mechanical primitives are invalid.\n\n"
@@ -495,8 +568,9 @@ def generate_seed_candidates_with_skald(
         max_tokens=max_tokens or get_wizard_max_tokens(),
         system_prompt=(
             "You are Skald-as-weaver for a NEXUS Retrograde seed pass. "
-            "Generate candidate history seeds, select a subset, and do not "
-            "claim any canonical write has occurred."
+            "Generate candidate history seeds only — selection happens in a "
+            "separate call — and do not claim any canonical write has "
+            "occurred."
         ),
         structured_output_retries=get_wizard_retry_budget(),
     )
@@ -750,6 +824,16 @@ def _response_contract_issues(
         for kind, tags in vocabulary.get("registered_tags_by_entity_kind", {}).items()
     }
 
+    graph = _mapping(seed_generation_request.get("candidate_graph"))
+    graph_edges = {
+        str(edge.get("edge_id")): edge
+        for edge in graph.get("dangling_edges", [])
+        if isinstance(edge, Mapping) and edge.get("edge_id")
+    }
+    contract = _mapping(graph.get("attachment_contract"))
+    claims_min = _optional_positive_int(contract.get("claims_per_seed_min")) or 1
+    claims_max = _optional_positive_int(contract.get("claims_per_seed_max")) or 2
+
     for candidate in response.candidates:
         issues.extend(
             _candidate_contract_issues(
@@ -764,7 +848,65 @@ def _response_contract_issues(
                 tags_by_entity_kind=tags_by_entity_kind,
             )
         )
+        if graph_edges:
+            issues.extend(
+                _claimed_edge_issues(
+                    candidate=candidate,
+                    graph_edges=graph_edges,
+                    claims_min=claims_min,
+                    claims_max=claims_max,
+                )
+            )
 
+    return issues
+
+
+def _claimed_edge_issues(
+    *,
+    candidate: RetrogradeSeedCandidate,
+    graph_edges: Mapping[str, Mapping[str, Any]],
+    claims_min: int,
+    claims_max: int,
+) -> list[str]:
+    """Enforce the R3 attachment contract: rolled ingredients must be used.
+
+    A candidate that ignores the dice is the failure mode issue #442
+    exists to prevent — the model quietly reverting to its own priors.
+    """
+
+    issues: list[str] = []
+    prefix = f"candidate {candidate.seed_id!r}"
+    claims = candidate.claimed_edges
+
+    if len(claims) < claims_min:
+        issues.append(
+            f"{prefix} claims {len(claims)} dangling edges; the attachment "
+            f"contract requires at least {claims_min}"
+        )
+    if len(claims) > claims_max:
+        issues.append(
+            f"{prefix} claims {len(claims)} dangling edges, exceeding the "
+            f"contract maximum {claims_max}"
+        )
+    duplicate_ids = _duplicates([claim.edge_id for claim in claims])
+    if duplicate_ids:
+        issues.append(f"{prefix} claims duplicate edges {sorted(duplicate_ids)}")
+
+    for claim in claims:
+        edge = graph_edges.get(claim.edge_id)
+        if edge is None:
+            issues.append(
+                f"{prefix} claims unknown edge {claim.edge_id!r}; valid ids "
+                f"are {sorted(graph_edges)}"
+            )
+            continue
+        expected_kind = str(edge.get("open_endpoint_kind"))
+        if claim.open_endpoint_kind != expected_kind:
+            issues.append(
+                f"{prefix} resolves edge {claim.edge_id!r} with endpoint "
+                f"kind {claim.open_endpoint_kind!r}; the edge requires "
+                f"{expected_kind!r}"
+            )
     return issues
 
 
@@ -1139,3 +1281,224 @@ def _seed_vocabulary(value: Any) -> SeedEligibleVocabulary:
             "packet.seed_eligible_vocabulary is missing required keys " f"{missing}"
         )
     return cast(SeedEligibleVocabulary, vocabulary)
+
+
+class RetrogradeSeedSelectionResponse(BaseModel):
+    """Structured response from the decoupled R5 selection pass."""
+
+    selected_seed_ids: list[str] = Field(default_factory=list)
+    rejected_seed_ids: list[str] = Field(default_factory=list)
+    selection_notes: str = Field(default="")
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+
+def render_seed_selection_prompt(
+    *,
+    seed_generation_request: Mapping[str, Any],
+    candidates_payload: Mapping[str, Any],
+) -> str:
+    """Render the R5 selection prompt: a menu decoupled from generation.
+
+    Selection in the same call as generation collapses into
+    self-selection (the model anchors on its own output); the spec's
+    "semi-constrained selection" gets its own context instead
+    (issue #442).
+    """
+
+    prompt_payload = {
+        "task": (
+            "Select the strongest subset of the candidate seeds below. "
+            "You did not write these; judge them on the rubric alone. "
+            "Return JSON only."
+        ),
+        "budget": seed_generation_request.get("budget", {}),
+        "selection_rubric": seed_generation_request.get("selection_rubric", {}),
+        "weird_policy": seed_generation_request.get("weird_policy", {}),
+        "attachment_contract": (
+            seed_generation_request.get("candidate_graph", {}) or {}
+        ).get("attachment_contract", {}),
+        "candidates": candidates_payload.get("candidates", []),
+    }
+    return (
+        "You are the Retrograde selection judge for a NEXUS seed pass.\n"
+        "Choose up to budget.select_target seeds. Prefer seeds that serve "
+        "coverage functions, honor their claimed dangling edges with "
+        "conviction rather than lip service, and would take real creative "
+        "work to weave into the story — merge-difficulty is value, not "
+        "risk. Reject seeds that ignore their claimed edges.\n"
+        "Every non-selected candidate must appear in rejected_seed_ids.\n\n"
+        "RETROGRADE_SEED_SELECTION_REQUEST:\n"
+        f"{json.dumps(prompt_payload, indent=2, sort_keys=True)}"
+    )
+
+
+def select_seed_candidates_with_skald(
+    *,
+    packet: Mapping[str, Any],
+    candidates_payload: Mapping[str, Any],
+    model_name: Optional[str] = None,
+    max_tokens: Optional[int] = None,
+) -> dict[str, Any]:
+    """Make the decoupled R5 selection call over generated candidates."""
+
+    from pydantic_ai import ModelRetry
+
+    from nexus.api.config_utils import (
+        get_new_story_model,
+        get_wizard_max_tokens,
+        get_wizard_retry_budget,
+    )
+    from nexus.api.native_structured_output import build_native_structured_provider
+
+    seed_generation_request = _required_mapping(
+        packet.get("seed_generation_request"),
+        "packet.seed_generation_request",
+    )
+    candidate_ids = [
+        str(candidate.get("seed_id"))
+        for candidate in candidates_payload.get("candidates", [])
+        if isinstance(candidate, Mapping) and candidate.get("seed_id")
+    ]
+    if not candidate_ids:
+        raise ValueError("Seed selection requires at least one candidate")
+
+    budget = _mapping(seed_generation_request.get("budget"))
+    select_limit = _optional_positive_int(budget.get("select_target"))
+
+    prompt = render_seed_selection_prompt(
+        seed_generation_request=seed_generation_request,
+        candidates_payload=candidates_payload,
+    )
+    selection_model = create_model(
+        "RetrogradeSeedSelectionResponseRuntime",
+        __base__=RetrogradeSeedSelectionResponse,
+        selected_seed_ids=(
+            list[_literal_or_str(candidate_ids)],
+            Field(default_factory=list),
+        ),
+        rejected_seed_ids=(
+            list[_literal_or_str(candidate_ids)],
+            Field(default_factory=list),
+        ),
+    )
+
+    selected_model = model_name or get_new_story_model()
+    provider = build_native_structured_provider(
+        model=selected_model,
+        max_tokens=max_tokens or get_wizard_max_tokens(),
+        system_prompt=(
+            "You are the Retrograde selection judge for a NEXUS seed pass. "
+            "Judge the provided candidates on the rubric; you did not write "
+            "them. No canonical writes occur at this stage."
+        ),
+        structured_output_retries=get_wizard_retry_budget(),
+    )
+
+    async def _validate_output(
+        _ctx: Any,
+        output: BaseModel,
+    ) -> RetrogradeSeedSelectionResponse:
+        selection = RetrogradeSeedSelectionResponse.model_validate(
+            output.model_dump(mode="json")
+        )
+        issues: list[str] = []
+        known = set(candidate_ids)
+        unknown = sorted(
+            (set(selection.selected_seed_ids) | set(selection.rejected_seed_ids))
+            - known
+        )
+        if unknown:
+            issues.append(f"selection references unknown seed ids {unknown}")
+        if not selection.selected_seed_ids:
+            issues.append("selection must select at least one seed")
+        if select_limit is not None and len(selection.selected_seed_ids) > select_limit:
+            issues.append(
+                f"selected {len(selection.selected_seed_ids)} seeds, "
+                f"exceeding select_target {select_limit}"
+            )
+        overlap = sorted(
+            set(selection.selected_seed_ids) & set(selection.rejected_seed_ids)
+        )
+        if overlap:
+            issues.append(f"seed ids both selected and rejected: {overlap}")
+        unaccounted = sorted(
+            known - set(selection.selected_seed_ids) - set(selection.rejected_seed_ids)
+        )
+        if unaccounted:
+            issues.append(
+                f"every candidate must be selected or rejected; missing "
+                f"{unaccounted}"
+            )
+        if issues:
+            raise ModelRetry(
+                "Retrograde seed selection failed validation:\n"
+                + "\n".join(f"- {issue}" for issue in issues)
+            )
+        return selection
+
+    provider.output_validator = _validate_output
+    selection, _llm_response = provider.get_structured_completion(
+        prompt,
+        selection_model,
+    )
+    if not isinstance(selection, RetrogradeSeedSelectionResponse):
+        raise TypeError(
+            "Skald seed selection call returned "
+            f"{type(selection).__name__}, expected RetrogradeSeedSelectionResponse"
+        )
+    return {
+        "model": selected_model,
+        "prompt_chars": len(prompt),
+        "selection": selection.model_dump(mode="json"),
+    }
+
+
+def run_seed_stage(
+    *,
+    packet: Mapping[str, Any],
+    model_name: Optional[str] = None,
+    max_tokens: Optional[int] = None,
+) -> dict[str, Any]:
+    """Run R4 generation and R5 selection as decoupled calls, merged.
+
+    Returns the same shape generate_seed_candidates_with_skald returned
+    when it selected inline, so R6 expansion and persistence are
+    untouched downstream.
+    """
+
+    generation = generate_seed_candidates_with_skald(
+        packet=packet,
+        model_name=model_name,
+        max_tokens=max_tokens,
+    )
+    candidates_payload = dict(generation["seed_candidate_response"])
+    selection_result = select_seed_candidates_with_skald(
+        packet=packet,
+        candidates_payload=candidates_payload,
+        model_name=model_name,
+        max_tokens=max_tokens,
+    )
+    selection = selection_result["selection"]
+    candidates_payload["selected_seed_ids"] = list(selection["selected_seed_ids"])
+    candidates_payload["rejected_seed_ids"] = list(selection["rejected_seed_ids"])
+    if selection.get("selection_notes"):
+        candidates_payload["selection_notes"] = selection["selection_notes"]
+
+    seed_generation_request = _required_mapping(
+        packet.get("seed_generation_request"),
+        "packet.seed_generation_request",
+    )
+    vocabulary = _seed_vocabulary(packet.get("seed_eligible_vocabulary"))
+    merged = validate_seed_candidate_response(
+        payload=candidates_payload,
+        seed_generation_request=seed_generation_request,
+        vocabulary=vocabulary,
+    )
+    return {
+        "model": generation["model"],
+        "selection_model": selection_result["model"],
+        "prompt_chars": generation["prompt_chars"],
+        "selection_prompt_chars": selection_result["prompt_chars"],
+        "seed_candidate_response": merged.model_dump(mode="json"),
+    }
