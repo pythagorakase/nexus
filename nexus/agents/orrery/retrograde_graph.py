@@ -21,9 +21,12 @@ from __future__ import annotations
 import random
 from hashlib import sha256
 from math import ceil
-from typing import Any, Mapping, Optional, TypedDict
+from typing import TYPE_CHECKING, Any, Mapping, Optional, TypedDict
 
 from nexus.agents.orrery.retrograde_vocabulary import SeedEligibleVocabulary
+
+if TYPE_CHECKING:
+    from nexus.config.settings_models import OrreryRetrogradeGraphSettings
 
 GRAPH_SCHEMA_VERSION = 1
 

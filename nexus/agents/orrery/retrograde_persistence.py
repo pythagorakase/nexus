@@ -984,7 +984,7 @@ def _insert_summary_metadata(cur: Any, *, chunk_id: int, scene: int) -> None:
             generation_date
         )
         VALUES (
-            %s, 0, 0, %s, 'primary'::world_layer_type,
+            %s, 0, 0, %s, 'retrograde'::world_layer_type,
             interval '0 seconds', now()
         )
         """,
@@ -1208,7 +1208,7 @@ def _ensure_prologue_metadata(cur: Any, *, prologue_chunk_id: int) -> None:
             generation_date
         )
         VALUES (
-            %s, 0, 0, 0, 'primary'::world_layer_type,
+            %s, 0, 0, 0, 'retrograde'::world_layer_type,
             interval '0 seconds', now()
         )
         """,

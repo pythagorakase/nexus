@@ -4,6 +4,7 @@ Turn Cycle Phase Implementations for LORE
 Handles the execution of individual turn cycle phases.
 """
 
+import json
 import logging
 import time
 from typing import Dict, List, Any, Optional, Union, Iterable
@@ -739,8 +740,33 @@ class TurnCycleManager:
 
         from sqlalchemy import text
 
+        from nexus.agents.orrery.retrograde_markers import (
+            RETROGRADE_PROLOGUE_MARKER,
+            RETROGRADE_SUMMARY_MARKER,
+        )
+
+        # Retrograde/maturation chunks interleave by id with live narrative;
+        # anchoring on one would hand the intertitle (and the resolve) the
+        # season-zero backstory frame instead of the story's present.
         row = (
-            session.execute(text("SELECT max(id) AS max_id FROM narrative_chunks"))
+            session.execute(
+                text(
+                    """
+                    SELECT max(id) AS max_id
+                    FROM narrative_chunks
+                    WHERE NOT (
+                        COALESCE(authorial_directives, '[]'::jsonb)
+                            @> CAST(:prologue_marker AS jsonb)
+                        OR COALESCE(authorial_directives, '[]'::jsonb)
+                            @> CAST(:summary_marker AS jsonb)
+                    )
+                    """
+                ),
+                {
+                    "prologue_marker": json.dumps([RETROGRADE_PROLOGUE_MARKER]),
+                    "summary_marker": json.dumps([RETROGRADE_SUMMARY_MARKER]),
+                },
+            )
             .mappings()
             .first()
         )

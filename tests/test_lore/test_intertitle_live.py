@@ -37,3 +37,36 @@ def test_load_intertitle_executes_against_live_slot() -> None:
     # The user character's place carries Earth-shaped WGS84 coordinates.
     if intertitle["location_geom"] is not None:
         assert intertitle["location_geom"].startswith("SRID=4326;POINT(")
+
+
+def test_anchor_fallback_skips_retrograde_chunks() -> None:
+    """A maturation chunk at head must not become the resolve/intertitle anchor."""
+
+    import json as _json
+
+    from sqlalchemy import text
+
+    from nexus.agents.lore.utils.turn_context import TurnContext
+    from nexus.agents.orrery.retrograde_markers import RETROGRADE_SUMMARY_MARKER
+
+    engine = create_engine(get_slot_db_url(slot=LIVE_SLOT))
+    with sessionmaker(engine)() as session:
+        session.execute(
+            text(
+                """
+                INSERT INTO narrative_chunks (raw_text, authorial_directives)
+                VALUES ('synthetic maturation summary', CAST(:markers AS jsonb))
+                """
+            ),
+            {"markers": _json.dumps([RETROGRADE_SUMMARY_MARKER])},
+        )
+        inserted = session.execute(
+            text("SELECT max(id) FROM narrative_chunks")
+        ).scalar()
+
+        mgr = TurnCycleManager.__new__(TurnCycleManager)
+        ctx = TurnContext(turn_id="t", user_input="x", start_time=0)
+        anchor = TurnCycleManager._orrery_anchor_chunk_id(mgr, session, ctx)
+
+        assert anchor is not None and anchor < inserted
+        session.rollback()
