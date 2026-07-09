@@ -14,7 +14,7 @@ import json
 import logging
 import os
 from dataclasses import dataclass, field, asdict
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from nexus.api.db_pool import get_connection
@@ -307,13 +307,16 @@ class WizardCache:
         """Reconstruct selected_seed dict from normalized columns.
 
         Note: base_timestamp is included from cache-level storage since
-        StorySeed schema expects it as part of seed data. Defaults to
-        current UTC time if not set.
+        StorySeed schema expects it as part of seed data.
         """
         if not self.seed_complete():
             return None
+        if self.base_timestamp is None:
+            raise ValueError(
+                "Seed is complete but no diegetic base timestamp was persisted"
+            )
         # Build base_timestamp dict for StoryTimestamp schema
-        ts = self.base_timestamp or datetime.now(timezone.utc)
+        ts = self.base_timestamp
         base_timestamp_dict = {
             "year": ts.year,
             "month": ts.month,

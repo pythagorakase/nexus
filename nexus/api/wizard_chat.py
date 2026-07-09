@@ -11,7 +11,6 @@ story creation, including:
 import asyncio
 import json
 import logging
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -921,6 +920,11 @@ async def transition_to_narrative_endpoint(request: TransitionRequest):
         raise HTTPException(
             status_code=422, detail="Incomplete setup data. Missing: seed"
         )
+    if cache.base_timestamp is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Incomplete setup data. Missing: base_timestamp",
+        )
     if not cache.get_layer_dict():
         raise HTTPException(
             status_code=422, detail="Incomplete setup data. Missing: layer"
@@ -936,9 +940,6 @@ async def transition_to_narrative_endpoint(request: TransitionRequest):
 
     # Build TransitionData from cache
     try:
-        # Get base_timestamp from cache
-        base_timestamp = cache.base_timestamp or datetime.now(timezone.utc)
-
         # Get character dict and assemble CharacterSheet from CharacterCreationState
         char_draft = cache.get_character_dict()
         state = CharacterCreationState(**char_draft)
@@ -951,7 +952,7 @@ async def transition_to_narrative_endpoint(request: TransitionRequest):
             layer=LayerDefinition(**cache.get_layer_dict()),
             zone=ZoneDefinition(**cache.get_zone_dict()),
             location=PlaceProfile(**cache.get_initial_location()),
-            base_timestamp=base_timestamp,
+            base_timestamp=cache.base_timestamp,
             thread_id=cache.thread_id or "",
         )
     except ValidationError as e:

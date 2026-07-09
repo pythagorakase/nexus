@@ -93,7 +93,7 @@
   "stakes": "If Brena refuses or fails, Odile\u2019s protection may collapse, exposing Brena, Pim, and Nan to guild debt collectors and Council inquiry. If she succeeds blindly, she may help bury\u2014or awaken\u2014something tied to the old order\u2019s watch beyond the breakwater.",
   "tension_source": "Brena owes Odile trust but has every reason to suspect she is being used. The archive is physically unsafe at the predawn flood, politically dangerous because rival Council hands are already moving, and supernaturally wrong because Brena\u2019s tide-sense recognizes a current where no water should be flowing.",
   "base_timestamp": {
-   "year": 2026,
+   "year": 1347,
    "month": 6,
    "day": 11,
    "hour": 3,
@@ -176,6 +176,6 @@
   "orrery_tags": null,
   "current_status": "Before dawn, cold fog and harbor drizzle press against the building as the rising tide forces black water up through floor drains. Magistra Odile Sorrenwick has summoned Brena Tideloft to retrieve a sealed bell-casket, but the archive doors stand opened from within and wet footprints lead toward the forbidden lower stacks."
  },
- "base_timestamp": null,
+ "base_timestamp": "1347-06-11T03:21:00+00:00",
  "target_slot": 5
 }

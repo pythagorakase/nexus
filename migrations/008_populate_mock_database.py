@@ -12,7 +12,6 @@ Usage:
 
 import json
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 import psycopg2
@@ -23,6 +22,17 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 MOCK_DB = "mock"
 CACHE_FILE = Path(__file__).parent.parent / "tests" / "fixtures" / "test_cache_wizard.json"
+
+
+def _require_fixture_base_timestamp(cache: dict) -> str:
+    """Return the fixture's diegetic timestamp or fail before mutating the DB."""
+    base_timestamp = cache.get("base_timestamp")
+    if not isinstance(base_timestamp, str) or not base_timestamp.strip():
+        raise ValueError(
+            "Wizard TEST fixture is missing the required top-level diegetic "
+            "base_timestamp"
+        )
+    return base_timestamp
 
 
 def load_wizard_cache() -> dict:
@@ -45,6 +55,7 @@ def load_wizard_cache() -> dict:
 
 def populate_wizard_cache(conn, cache: dict):
     """Populate assets.new_story_creator with wizard phase data."""
+    base_timestamp = _require_fixture_base_timestamp(cache)
     setting = cache.get("setting_draft", {})
     character = cache.get("character_draft", {})
     seed = cache.get("selected_seed", {})
@@ -57,11 +68,41 @@ def populate_wizard_cache(conn, cache: dict):
     trait_selection = character.get("trait_selection", {})
     wildcard = character.get("wildcard", {})
     selected_traits = trait_selection.get("selected_traits", [])
+    trait_rationales = trait_selection.get("trait_rationales", {})
 
     with conn.cursor() as cur:
         # Clear existing data
         cur.execute("DELETE FROM assets.new_story_creator WHERE id = TRUE")
-        cur.execute("DELETE FROM assets.suggested_traits")
+
+        # Traits moved from new_story_creator columns to assets.traits in
+        # migration 010. Reset and repopulate the normalized rows.
+        cur.execute(
+            "UPDATE assets.traits SET is_selected = FALSE, rationale = NULL"
+        )
+        for trait_name in selected_traits:
+            cur.execute(
+                """
+                UPDATE assets.traits
+                SET is_selected = TRUE, rationale = %s
+                WHERE name = %s AND id <= 10
+                """,
+                (trait_rationales.get(trait_name), trait_name),
+            )
+            if cur.rowcount != 1:
+                raise ValueError(
+                    f"Wizard TEST fixture selected unknown trait {trait_name!r}"
+                )
+        cur.execute(
+            """
+            UPDATE assets.traits
+            SET name = %s, rationale = %s, is_selected = TRUE
+            WHERE id = 11
+            """,
+            (
+                wildcard.get("wildcard_name"),
+                wildcard.get("wildcard_description"),
+            ),
+        )
 
         # Insert wizard cache row
         # Note: Array columns need explicit casting to enum types
@@ -77,8 +118,7 @@ def populate_wizard_cache(conn, cache: dict):
                 setting_geographic_scope, setting_diegetic_artifact,
                 -- Character phase
                 character_name, character_archetype, character_background,
-                character_appearance, character_trait1, character_trait2,
-                character_trait3, wildcard_name, wildcard_description,
+                character_appearance, traits_confirmed,
                 -- Seed phase
                 seed_type, seed_title, seed_situation, seed_hook,
                 seed_immediate_goal, seed_stakes, seed_tension_source,
@@ -97,8 +137,8 @@ def populate_wizard_cache(conn, cache: dict):
                 TRUE, %s, %s,
                 -- Setting (with casts for enum arrays)
                 %s::genre, %s::genre[], %s, %s, %s::tech_level, %s, %s, %s, %s, %s::tone, %s, %s, %s, %s::geographic_scope, %s,
-                -- Character (with casts for trait enums)
-                %s, %s, %s, %s, %s::trait, %s::trait, %s::trait, %s, %s,
+                -- Character
+                %s, %s, %s, %s, TRUE,
                 -- Seed (with cast for seed_type enum)
                 %s::seed_type, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                 -- Layer/Zone (with cast for layer_type)
@@ -132,11 +172,6 @@ def populate_wizard_cache(conn, cache: dict):
             concept.get("archetype"),
             concept.get("background"),
             concept.get("appearance"),
-            selected_traits[0] if len(selected_traits) > 0 else None,
-            selected_traits[1] if len(selected_traits) > 1 else None,
-            selected_traits[2] if len(selected_traits) > 2 else None,
-            wildcard.get("wildcard_name"),
-            wildcard.get("wildcard_description"),
             # Seed
             seed.get("seed_type"),
             seed.get("title"),
@@ -163,7 +198,7 @@ def populate_wizard_cache(conn, cache: dict):
             # Location
             Json(location) if location else None,
             # Temporal
-            cache.get("base_timestamp") or datetime.now(timezone.utc),
+            base_timestamp,
         ))
 
     print("✓ Populated assets.new_story_creator")
@@ -171,6 +206,7 @@ def populate_wizard_cache(conn, cache: dict):
 
 def populate_post_transition_data(conn, cache: dict):
     """Populate post-transition tables: characters, layers, zones, places, global_variables."""
+    base_timestamp = _require_fixture_base_timestamp(cache)
     setting = cache.get("setting_draft", {})
     character = cache.get("character_draft", {})
     seed = cache.get("selected_seed", {})
@@ -253,7 +289,7 @@ def populate_post_transition_data(conn, cache: dict):
                 "content": setting.get("diegetic_artifact"),
                 "title": f"Welcome to {setting.get('world_name', 'the World')}",
             }),
-            cache.get("base_timestamp") or datetime.now(timezone.utc),
+            base_timestamp,
         ))
 
     print("✓ Populated layers, zones, places, characters, global_variables")
@@ -331,14 +367,16 @@ Rain hammers against the hull above. Somewhere in the distance, the city's heart
 
 
 def populate_save_slot(conn):
-    """Set the mock database model to TEST in global_variables."""
+    """Set the mock database model to TEST in its legacy slot registry."""
     with conn.cursor() as cur:
-        # Ensure global_variables row exists and set model to TEST
-        cur.execute("""
-            INSERT INTO global_variables (id, model, new_story)
-            VALUES (TRUE, 'TEST', FALSE)
-            ON CONFLICT (id) DO UPDATE SET model = 'TEST'
-        """)
+        cur.execute("UPDATE global_variables SET new_story = FALSE WHERE id = TRUE")
+        cur.execute(
+            """
+            INSERT INTO assets.save_slots (slot_number, model)
+            VALUES (0, 'TEST')
+            ON CONFLICT (slot_number) DO UPDATE SET model = 'TEST'
+            """
+        )
     print("✓ Configured mock slot model (TEST)")
 
 

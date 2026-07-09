@@ -3,12 +3,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
+from fastapi import HTTPException
 from pydantic_ai import CallDeferred, ModelRetry
 
+from nexus.api import new_story_flow
 from nexus.api import wizard_agent as wizard_module
+from nexus.api import wizard_chat
+from nexus.api.narrative_schemas import TransitionRequest
+from nexus.api.new_story_cache import WizardCache, _row_to_cache
 from nexus.api.new_story_schemas import (
     CharacterConceptSubmission,
     CharacterCreationState,
@@ -157,7 +164,7 @@ def sample_seed_submission() -> StorySeedSubmission:
         immediate_goal="Reach the regent's hidden sanctum before the coup begins.",
         stakes="Civil war will erupt if the regent's plans remain lost.",
         tension_source="Assassins are already hunting the regent's confidants.",
-        base_timestamp=StoryTimestamp(year=1382, month=10, day=3, hour=18, minute=15),
+        base_timestamp=StoryTimestamp(year=1347, month=10, day=3, hour=18, minute=15),
         weather="Cold rain and distant thunder",
         key_npcs=["Captain Orrin", "Archivist Lysa"],
         secrets=(
@@ -294,18 +301,132 @@ async def test_submit_wildcard_trait_completes_character(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_submit_starting_scenario_sets_tool_result(monkeypatch):
-    monkeypatch.setattr(wizard_module, "record_drafts", lambda *args, **kwargs: None)
+    recorded: dict[str, Any] = {}
+
+    def capture_record_drafts(*args: Any, **kwargs: Any) -> None:
+        recorded.update(kwargs)
+
+    monkeypatch.setattr(wizard_module, "record_drafts", capture_record_drafts)
 
     ctx = DummyRunContext(make_context(phase="seed"))
     with pytest.raises(CallDeferred):
         await submit_starting_scenario(ctx, sample_seed_submission())
 
+    assert recorded["base_timestamp"] == "1347-10-03T18:15:00+00:00"
     result = ctx.deps.last_tool_result
     assert result["artifact_type"] == "submit_starting_scenario"
     # phase_complete is now False until set designer runs
     assert result["phase_complete"] is False
     assert result["requires_set_design"] is True
     assert "location_sketch" in result
+
+
+def test_seed_timestamp_round_trips_through_record_drafts(monkeypatch) -> None:
+    """The declared diegetic year should survive normalized cache persistence."""
+
+    stored_cache: WizardCache | None = None
+
+    def persist_cache(**kwargs: Any) -> None:
+        nonlocal stored_cache
+        seed = kwargs["selected_seed"]
+        layer = kwargs["layer_draft"]
+        zone = kwargs["zone_draft"]
+        stored_cache = _row_to_cache(
+            {
+                "seed_type": seed["seed_type"],
+                "seed_title": seed["title"],
+                "seed_situation": seed["situation"],
+                "seed_hook": seed["hook"],
+                "seed_immediate_goal": seed["immediate_goal"],
+                "seed_stakes": seed["stakes"],
+                "seed_tension_source": seed["tension_source"],
+                "seed_weather": seed["weather"],
+                "seed_key_npcs": seed["key_npcs"],
+                "seed_secrets": seed["secrets"],
+                "layer_name": layer["name"],
+                "layer_type": layer["type"],
+                "layer_description": layer["description"],
+                "zone_name": zone["name"],
+                "zone_summary": zone["summary"],
+                "initial_location": kwargs["initial_location"],
+                "base_timestamp": datetime.fromisoformat(kwargs["base_timestamp"]),
+            }
+        )
+
+    monkeypatch.setattr(new_story_flow, "slot_dbname", lambda _slot: "save_01")
+    monkeypatch.setattr(new_story_flow, "read_cache", lambda _dbname: None)
+    monkeypatch.setattr(new_story_flow, "write_cache", persist_cache)
+
+    submission = sample_seed_submission()
+    new_story_flow.record_drafts(
+        1,
+        seed=submission.seed.model_dump(),
+        layer={"name": "Aethermoor", "type": "planet", "description": "Realm"},
+        zone={"name": "Westmarch", "summary": "The western frontier"},
+        location={"name": "Stormwatch"},
+        base_timestamp=submission.seed.get_base_datetime().isoformat(),
+    )
+
+    assert stored_cache is not None
+    assert stored_cache.get_seed_dict()["base_timestamp"]["year"] == 1347
+
+
+def test_get_seed_dict_rejects_missing_diegetic_timestamp() -> None:
+    """A complete normalized seed must not acquire the wall-clock date."""
+
+    cache = _row_to_cache(
+        {
+            "seed_type": "crisis",
+            "layer_name": "Aethermoor",
+            "zone_name": "Westmarch",
+            "initial_location": {"name": "Stormwatch"},
+        }
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Seed is complete but no diegetic base timestamp was persisted",
+    ):
+        cache.get_seed_dict()
+
+
+@pytest.mark.asyncio
+async def test_transition_rejects_missing_diegetic_timestamp(monkeypatch) -> None:
+    """Transition should report a missing persisted timestamp as incomplete setup."""
+
+    class CompleteCacheWithoutTimestamp:
+        base_timestamp = None
+
+        def setting_complete(self) -> bool:
+            return True
+
+        def character_complete(self) -> bool:
+            return True
+
+        def seed_complete(self) -> bool:
+            return True
+
+        def get_layer_dict(self) -> dict[str, str]:
+            return {"name": "Aethermoor"}
+
+        def get_zone_dict(self) -> dict[str, str]:
+            return {"name": "Westmarch"}
+
+        def get_initial_location(self) -> dict[str, str]:
+            return {"name": "Stormwatch"}
+
+    monkeypatch.setattr(wizard_chat, "slot_dbname", lambda _slot: "save_01")
+    monkeypatch.setattr(
+        wizard_chat,
+        "read_cache",
+        lambda _dbname: CompleteCacheWithoutTimestamp(),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await wizard_chat.transition_to_narrative_endpoint(TransitionRequest(slot=1))
+
+    assert exc_info.value.status_code == 422
+    assert exc_info.value.detail == "Incomplete setup data. Missing: base_timestamp"
 
 
 # =============================================================================

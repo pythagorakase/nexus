@@ -187,6 +187,7 @@ def _stage_reset_slot() -> None:
         layer_draft=cache["layer_draft"],
         zone_draft=cache["zone_draft"],
         initial_location=cache["initial_location"],
+        base_timestamp=cache["base_timestamp"],
         target_slot=SLOT,
         dbname=DBNAME,
     )
