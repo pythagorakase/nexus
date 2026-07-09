@@ -9,6 +9,7 @@ import json
 from typing import Any, Mapping, Optional, Sequence
 
 from nexus.agents.orrery.retrograde_expansion import (
+    RetrogradeExpansionDeathPlan,
     RetrogradeExpansionEventPlan,
     RetrogradeExpansionParticipant,
     RetrogradeExpansionPlanResponse,
@@ -263,6 +264,25 @@ def _build_plan(
         reference_issues.extend(planned.pop("_reference_issues"))
         relationship_issues.extend(planned.pop("_relationship_issues"))
 
+    # Deaths plan after events so cause_world_event_id can link to freshly
+    # inserted world_events rows on execute.
+    death_rows = []
+    death_issues: list[dict[str, Any]] = []
+    for death in expansion.death_plan:
+        planned = _plan_death_row(
+            cur,
+            death=death,
+            dry_run=dry_run,
+            entity_index=entity_index,
+            event_ref_to_id=event_ref_to_id,
+            creatable_refs=creatable_refs,
+            inserted_stub_keys=inserted_stub_keys,
+        )
+        death_rows.append(planned)
+        counters[f"deaths_{planned['status']}"] += 1
+        reference_issues.extend(planned.pop("_reference_issues"))
+        death_issues.extend(planned.pop("_death_issues"))
+
     summary_chunk_rows: list[dict[str, Any]] = []
     if summary_chunks_enabled:
         summary_chunk_rows = plan_retrograde_summary_chunks(
@@ -284,6 +304,7 @@ def _build_plan(
     _append_reference_blockers(execute_blockers, reference_issues)
     _append_vocabulary_blockers(execute_blockers, vocabulary_issues)
     _append_relationship_blockers(execute_blockers, relationship_issues)
+    _append_death_blockers(execute_blockers, death_issues)
 
     for key in (
         "events_would_insert",
@@ -306,6 +327,10 @@ def _build_plan(
         "entity_stubs_inserted",
         "entity_stubs_already_present",
         "entity_stubs_ambiguous_existing",
+        "deaths_would_deactivate",
+        "deaths_deactivated",
+        "deaths_already_inactive",
+        "deaths_blocked",
         "summary_chunks_would_insert",
         "summary_chunks_inserted",
         "summary_chunks_already_present",
@@ -330,11 +355,13 @@ def _build_plan(
         "reference_issues": reference_issues,
         "vocabulary_issues": vocabulary_issues,
         "relationship_issues": relationship_issues,
+        "death_issues": death_issues,
         "entity_stub_rows": entity_stub_rows,
         "event_rows": event_rows,
         "entity_tag_rows": entity_tag_rows,
         "pair_tag_rows": pair_tag_rows,
         "relationship_rows": relationship_rows,
+        "death_rows": death_rows,
         "summary_chunk_rows": summary_chunk_rows,
         "retrieval": {
             "summary_chunks_enabled": summary_chunks_enabled,
@@ -778,6 +805,109 @@ def _plan_relationship_row(
         character2_id=int(object_character_id),
     )
     return {**base, "status": "inserted"}
+
+
+def _plan_death_row(
+    cur: Any,
+    *,
+    death: RetrogradeExpansionDeathPlan,
+    dry_run: bool,
+    entity_index: Mapping[tuple[str, str], Sequence[_EntityRecord]],
+    event_ref_to_id: Mapping[str, int],
+    creatable_refs: frozenset[tuple[str, str]],
+    inserted_stub_keys: frozenset[tuple[str, str]],
+) -> dict[str, Any]:
+    """Plan or execute one entities.is_active=false flip for an asserted death.
+
+    Deactivation is the complete Orrery kill switch: actor discovery and
+    hydration filter on is_active everywhere, so a dead entity stops being
+    animated the moment this row executes.
+
+    Deaths may only target backstory figures this plan itself stages as
+    stubs (``creatable_refs`` on dry-run, ``inserted_stub_keys`` on
+    execute). A death naming a pre-existing active entity is blocked: a
+    runtime maturation pass must never deactivate an entity that is live
+    in the story. The flip is idempotent — re-running a plan against an
+    already-dead entity reports ``already_inactive`` instead of writing.
+    """
+
+    reference_issues: list[dict[str, Any]] = []
+    death_issues: list[dict[str, Any]] = []
+    entity = _resolve_entity(
+        death.entity_ref,
+        death.entity_kind,
+        entity_index,
+        role="death",
+        creatable_refs=creatable_refs,
+    )
+    if entity["resolution"] not in {"resolved", "stub_pending"}:
+        reference_issues.append(entity)
+    base = {
+        **death.model_dump(mode="json"),
+        "entity": entity,
+        "entity_id": entity.get("entity_id"),
+        "cause_world_event_id": (
+            event_ref_to_id.get(death.cause_event_ref)
+            if death.cause_event_ref
+            else None
+        ),
+        "_reference_issues": reference_issues,
+        "_death_issues": death_issues,
+    }
+    if reference_issues:
+        return {**base, "status": "blocked"}
+    if entity["resolution"] == "stub_pending":
+        if dry_run:
+            return {**base, "status": "would_deactivate"}
+        raise AssertionError("stub_pending must be resolved before execute writes")
+
+    entity_id = int(entity["entity_id"])
+    if not _entity_is_active(cur, entity_id):
+        return {**base, "status": "already_inactive"}
+    death_key = (death.entity_kind, normalize_entity_ref(death.entity_ref))
+    if death_key not in inserted_stub_keys:
+        death_issues.append(
+            {
+                "entity_ref": death.entity_ref,
+                "entity_kind": death.entity_kind,
+                "entity_id": entity_id,
+                "reason": (
+                    "death targets a pre-existing active entity; deaths may "
+                    "only target backstory stubs staged by this same plan"
+                ),
+            }
+        )
+        return {**base, "status": "blocked"}
+    if dry_run:
+        return {**base, "status": "would_deactivate"}
+    _deactivate_entity(cur, entity_id)
+    return {**base, "status": "deactivated"}
+
+
+def _entity_is_active(cur: Any, entity_id: int) -> bool:
+    cur.execute(
+        """
+        /* orrery:retrograde:entity_is_active */
+        SELECT is_active FROM entities WHERE id = %s
+        """,
+        (entity_id,),
+    )
+    row = cur.fetchone()
+    if row is None:
+        raise ValueError(
+            f"entities row {entity_id} resolved during planning but is missing"
+        )
+    return bool(_row_value(row, "is_active", 0))
+
+
+def _deactivate_entity(cur: Any, entity_id: int) -> None:
+    cur.execute(
+        """
+        /* orrery:retrograde:deactivate_entity */
+        UPDATE entities SET is_active = false WHERE id = %s
+        """,
+        (entity_id,),
+    )
 
 
 def plan_retrograde_summary_chunks(
@@ -1565,6 +1695,17 @@ def _collect_expansion_entity_refs(
             },
         )
 
+    for death in expansion.death_plan:
+        add_ref(
+            death.entity_ref,
+            death.entity_kind,
+            source={
+                "plan": "death_plan",
+                "cause_event_ref": death.cause_event_ref,
+                "role": "deceased",
+            },
+        )
+
     return refs
 
 
@@ -1905,6 +2046,30 @@ def _append_reference_blockers(
                 ),
             }
         )
+
+
+def _append_death_blockers(
+    execute_blockers: list[dict[str, str]],
+    death_issues: Sequence[Mapping[str, Any]],
+) -> None:
+    if not death_issues:
+        return
+    details = _blocker_details(
+        [
+            f"{issue.get('entity_kind')}:{issue.get('entity_ref')}"
+            for issue in death_issues
+        ]
+    )
+    execute_blockers.append(
+        {
+            "id": "death_targets_preexisting_entity",
+            "reason": (
+                f"{len(death_issues)} death plans target pre-existing active "
+                f"entities; deaths may only target backstory stubs staged by "
+                f"this same plan: {details}"
+            ),
+        }
+    )
 
 
 def _append_vocabulary_blockers(

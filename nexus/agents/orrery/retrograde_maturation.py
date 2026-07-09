@@ -900,6 +900,10 @@ def namespace_expansion_event_refs(
             source_ref = plan_row.get("source_event_ref")
             if source_ref is not None:
                 plan_row["source_event_ref"] = mapping.get(str(source_ref), source_ref)
+    for death_row in payload.get("death_plan", []):
+        cause_ref = death_row.get("cause_event_ref")
+        if cause_ref is not None:
+            death_row["cause_event_ref"] = mapping.get(str(cause_ref), cause_ref)
     return payload
 
 

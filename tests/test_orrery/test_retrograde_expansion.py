@@ -414,6 +414,202 @@ def test_expansion_prompt_surfaces_budget() -> None:
     assert '"max_new_entity_stubs": 3' in prompt
 
 
+def test_expansion_plan_accepts_death_with_participating_cause_event() -> None:
+    """A death row is valid when its cause event lists the dying entity."""
+
+    vocabulary = _expansion_test_vocabulary()
+    payload = _valid_expansion(vocabulary)
+    payload["event_plan"][0]["participants"].append(
+        {"entity_ref": "Vale", "entity_kind": "character", "role": "target"}
+    )
+    payload["death_plan"] = [
+        {
+            "entity_ref": "Vale",
+            "entity_kind": "character",
+            "cause_event_ref": "retro_event_001",
+            "rationale": "The handler's death opens the inherited debt.",
+        }
+    ]
+
+    response = validate_expansion_plan(
+        payload=payload,
+        packet=_packet(vocabulary),
+        seed_candidate_response=_seed_response(vocabulary),
+    )
+
+    assert response.death_plan[0].entity_ref == "Vale"
+    assert response.death_plan[0].cause_event_ref == "retro_event_001"
+
+
+def test_expansion_plan_rejects_death_without_cause_event() -> None:
+    """A death asserted without a causing event is prose-only and invalid."""
+
+    vocabulary = _expansion_test_vocabulary()
+    payload = _valid_expansion(vocabulary)
+    payload["death_plan"] = [{"entity_ref": "Vale", "entity_kind": "character"}]
+
+    with pytest.raises(
+        RetrogradeExpansionValidationError,
+        match="missing cause_event_ref",
+    ):
+        validate_expansion_plan(
+            payload=payload,
+            packet=_packet(vocabulary),
+            seed_candidate_response=_seed_response(vocabulary),
+        )
+
+
+def test_expansion_plan_rejects_death_with_unknown_cause_event() -> None:
+    vocabulary = _expansion_test_vocabulary()
+    payload = _valid_expansion(vocabulary)
+    payload["death_plan"] = [
+        {
+            "entity_ref": "Vale",
+            "entity_kind": "character",
+            "cause_event_ref": "retro_event_999",
+        }
+    ]
+
+    with pytest.raises(
+        RetrogradeExpansionValidationError,
+        match="unknown cause_event_ref",
+    ):
+        validate_expansion_plan(
+            payload=payload,
+            packet=_packet(vocabulary),
+            seed_candidate_response=_seed_response(vocabulary),
+        )
+
+
+def test_expansion_plan_requires_dying_entity_as_cause_participant() -> None:
+    """The cause event must document the death as a fact about the entity."""
+
+    vocabulary = _expansion_test_vocabulary()
+    payload = _valid_expansion(vocabulary)
+    # retro_event_001 lists only Mara; Vale's death cannot cite it.
+    payload["death_plan"] = [
+        {
+            "entity_ref": "Vale",
+            "entity_kind": "character",
+            "cause_event_ref": "retro_event_001",
+        }
+    ]
+
+    with pytest.raises(
+        RetrogradeExpansionValidationError,
+        match="must list the dying entity as a participant",
+    ):
+        validate_expansion_plan(
+            payload=payload,
+            packet=_packet(vocabulary),
+            seed_candidate_response=_seed_response(vocabulary),
+        )
+
+
+def test_expansion_plan_rejects_death_of_first_class_entity() -> None:
+    """Deaths may only target backstory figures the expansion introduces."""
+
+    vocabulary = _expansion_test_vocabulary()
+    payload = _valid_expansion(vocabulary)
+    payload["death_plan"] = [
+        {
+            "entity_ref": "Mara",
+            "entity_kind": "character",
+            "cause_event_ref": "retro_event_001",
+        }
+    ]
+
+    with pytest.raises(
+        RetrogradeExpansionValidationError,
+        match="targets a first-class starting entity",
+    ):
+        validate_expansion_plan(
+            payload=payload,
+            packet=_packet(vocabulary),
+            seed_candidate_response=_seed_response(vocabulary),
+        )
+
+
+def test_expansion_plan_rejects_duplicate_deaths() -> None:
+    vocabulary = _expansion_test_vocabulary()
+    payload = _valid_expansion(vocabulary)
+    death = {
+        "entity_ref": "Vale",
+        "entity_kind": "character",
+        "cause_event_ref": "retro_event_001",
+    }
+    payload["death_plan"] = [death, {**death, "entity_ref": "vale"}]
+
+    with pytest.raises(ValidationError, match="Duplicate death_plan entities"):
+        validate_expansion_plan(
+            payload=payload,
+            packet=_packet(vocabulary),
+            seed_candidate_response=_seed_response(vocabulary),
+        )
+
+
+def test_wire_death_mechanic_expands_to_death_plan() -> None:
+    """plan='death' mechanics land in death_plan with the cause ref mapped."""
+
+    vocabulary = _expansion_test_vocabulary()
+    payload = _valid_expansion(vocabulary)
+    wire_payload = {
+        "event_plan": [
+            {
+                **payload["event_plan"][0],
+                "participants": [
+                    *payload["event_plan"][0]["participants"],
+                    {"entity_ref": "Vale", "entity_kind": "character"},
+                ],
+                "location_ref": "",
+                "magnitude": "",
+                "payload": [],
+            }
+        ],
+        "mechanical_plan": [
+            {
+                "plan": "death",
+                "subject_ref": "Vale",
+                "subject_kind": "character",
+                "tag": "",
+                "object_ref": "",
+                "object_kind": "",
+                "relationship_type": "",
+                "source_event_ref": "retro_event_001",
+                "rationale": "Died before the story opens.",
+            }
+        ],
+        "thread_plan": [
+            {
+                **payload["thread_plan"][0],
+                "note": "",
+            }
+        ],
+        "coverage_notes": [],
+    }
+
+    response = coerce_expansion_response_payload(
+        wire_payload,
+        selected_seed_ids=["seed_001"],
+    )
+
+    assert len(response.death_plan) == 1
+    assert response.death_plan[0].entity_ref == "Vale"
+    assert response.death_plan[0].cause_event_ref == "retro_event_001"
+    assert response.death_plan[0].rationale == "Died before the story opens."
+
+
+def test_expansion_prompt_states_death_contract() -> None:
+    vocabulary = _expansion_test_vocabulary()
+    prompt = render_expansion_prompt(
+        packet=_packet(vocabulary),
+        seed_candidate_response=_seed_response(vocabulary),
+    )
+
+    assert "plan='death'" in prompt
+    assert "must list the dying entity as a" in prompt
+
+
 def _expansion_test_vocabulary() -> SeedEligibleVocabulary:
     vocabulary = enumerate_seed_eligible_vocabulary()
     vocabulary["registered_single_entity_tags"] = [

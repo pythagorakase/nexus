@@ -160,6 +160,7 @@ This is the most iteration-prone component. Budget for it.
 - **MEMNON:** retrieves generated history identically to play-generated. No special-casing; the storyteller cannot and need not distinguish setup-authored from play-accumulated history.
 - **Dehydrated-entity pattern:** generate for first-class starting entities and their pairwise relationships only. Implied others (spouses, children, vanished parties) stay tags/stubs until narrative attention promotes them. Retrograde must NOT recursively generate full histories for implied entities — that reopens the "it never ends" hole. **[OPEN]** exact promotion trigger reuse from the live dehydration mechanism.
 - **Reuse over rebuild:** stages R4–R6 are conceptually a short backward-Orrery pass with variance turned up. Prefer adapting existing resolver/event-writer machinery to building a parallel system.
+- **Death-state contract:** an entity dead, destroyed, or dissolved as of story start must be declared as a `plan='death'` mechanic citing a planned cause event that lists the dying entity as a participant; persistence flips `entities.is_active = false` (the complete Orrery kill switch — actor discovery and hydration filter on it everywhere). A death asserted only in summary prose is validation-invalid: prose is invisible to the engine and leaves a ghost the resolver keeps animating.
 
 ---
 
