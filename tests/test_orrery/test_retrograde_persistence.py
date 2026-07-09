@@ -396,8 +396,12 @@ def test_persistence_execute_rejects_cross_kind_relationship_plan() -> None:
     assert not any("insert_prologue_chunk" in sql for sql in cur.statements)
 
 
-def test_persistence_dry_run_reports_death_rows() -> None:
-    """Dry-run reports would_deactivate without touching entities.is_active."""
+def test_persistence_death_of_preexisting_entity_blocks() -> None:
+    """A death naming a live pre-existing entity is a blocker, never a write.
+
+    Runtime maturation persists with dry_run=False; without this gate a
+    Skald-emitted death could deactivate an entity currently on stage.
+    """
 
     vocabulary = _persistence_test_vocabulary()
     cur = FakeRetrogradePersistenceCursor(vocabulary)
@@ -412,17 +416,25 @@ def test_persistence_dry_run_reports_death_rows() -> None:
         dry_run=True,
     )
 
-    assert plan["counters"]["deaths_would_deactivate"] == 1
-    death_row = plan["death_rows"][0]
-    assert death_row["status"] == "would_deactivate"
-    assert death_row["entity_id"] == 102
-    assert death_row["cause_event_ref"] == "retro_event_001"
+    assert plan["counters"]["deaths_blocked"] == 1
+    assert plan["death_rows"][0]["status"] == "blocked"
+    assert "death_targets_preexisting_entity" in _blocker_ids(plan)
+
+    with pytest.raises(ValueError, match="not safe to execute"):
+        build_retrograde_persistence_plan(
+            cur,
+            packet=_packet(vocabulary),
+            seed_candidate_response=_seed_response(vocabulary),
+            expansion_plan_payload=_expansion_with_death(vocabulary),
+            slot=5,
+            dbname="save_05",
+            dry_run=False,
+        )
     assert cur.deactivated_entity_ids == []
-    assert _blocker_ids(plan) == set()
 
 
-def test_persistence_execute_deactivates_dead_entities() -> None:
-    """Execute mode flips entities.is_active and links the cause event id."""
+def test_persistence_execute_deactivates_staged_stub() -> None:
+    """Execute stages the backstory figure's stub, then flips it inactive."""
 
     vocabulary = _persistence_test_vocabulary()
     cur = FakeRetrogradePersistenceCursor(vocabulary)
@@ -431,17 +443,19 @@ def test_persistence_execute_deactivates_dead_entities() -> None:
         cur,
         packet=_packet(vocabulary),
         seed_candidate_response=_seed_response(vocabulary),
-        expansion_plan_payload=_expansion_with_death(vocabulary),
+        expansion_plan_payload=_expansion_with_death(vocabulary, dead_ref="Old Kessa"),
         slot=5,
         dbname="save_05",
         dry_run=False,
+        create_missing_entities=True,
     )
 
+    assert cur.inserted_character_stubs == ["Old Kessa"]
     assert plan["counters"]["deaths_deactivated"] == 1
     death_row = plan["death_rows"][0]
     assert death_row["status"] == "deactivated"
     assert death_row["cause_world_event_id"] == 901
-    assert cur.deactivated_entity_ids == [102]
+    assert cur.deactivated_entity_ids == [300]
 
 
 def test_persistence_death_already_inactive_is_idempotent() -> None:
@@ -551,6 +565,7 @@ class FakeRetrogradePersistenceCursor:
         self.persisted_retrograde_events = persisted_retrograde_events or []
         self.inactive_entity_ids = set(inactive_entity_ids or set())
         self.deactivated_entity_ids: list[int] = []
+        self.inserted_character_stubs: list[str] = []
         self.statements: list[str] = []
         self.params: list[Any] = []
         self._result: list[dict[str, Any]] = []
@@ -589,6 +604,17 @@ class FakeRetrogradePersistenceCursor:
                         "character_id": None,
                         "faction_id": None,
                         "place_id": 2011,
+                    }
+                )
+            for offset, name in enumerate(self.inserted_character_stubs):
+                rows.append(
+                    {
+                        "entity_id": 300 + offset,
+                        "entity_kind": "character",
+                        "name": name,
+                        "character_id": 30 + offset,
+                        "faction_id": None,
+                        "place_id": None,
                     }
                 )
             self._result = rows
@@ -663,6 +689,10 @@ class FakeRetrogradePersistenceCursor:
             self._result = []
         elif "orrery:retrograde:persisted_retrograde_events" in sql:
             self._result = list(self.persisted_retrograde_events)
+        elif "orrery:retrograde:insert_character_stub" in sql:
+            assert params is not None
+            self.inserted_character_stubs.append(str(params[0]))
+            self._result = []
         elif "orrery:retrograde:entity_is_active" in sql:
             assert params is not None
             entity_id = int(params[0])

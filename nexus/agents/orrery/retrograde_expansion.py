@@ -776,6 +776,7 @@ def _expansion_contract_issues(
                 death=death,
                 entity_kinds=entity_kinds,
                 events_by_ref=events_by_ref,
+                known_entity_keys=known_entity_keys or set(),
             )
         )
 
@@ -1044,11 +1045,19 @@ def _death_plan_issues(
     death: RetrogradeExpansionDeathPlan,
     entity_kinds: set[str],
     events_by_ref: Mapping[str, RetrogradeExpansionEventPlan],
+    known_entity_keys: set[tuple[str, str]],
 ) -> list[str]:
     issues: list[str] = []
     prefix = f"death {death.entity_kind}:{death.entity_ref}"
     if death.entity_kind not in entity_kinds:
         issues.append(f"{prefix} uses unknown entity_kind {death.entity_kind!r}")
+    death_key = (death.entity_kind, normalize_entity_ref(death.entity_ref))
+    if death_key in known_entity_keys:
+        issues.append(
+            f"{prefix} targets a first-class starting entity; deaths may only "
+            "target backstory figures this expansion itself introduces — drop "
+            "the death or invent a new named figure for it"
+        )
     if not death.cause_event_ref:
         issues.append(
             f"{prefix} is missing cause_event_ref; a death asserted only in "
@@ -1061,7 +1070,6 @@ def _death_plan_issues(
             f"{prefix} cites unknown cause_event_ref {death.cause_event_ref!r}"
         )
         return issues
-    death_key = (death.entity_kind, normalize_entity_ref(death.entity_ref))
     participant_keys = {
         (participant.entity_kind, normalize_entity_ref(participant.entity_ref))
         for participant in cause.participants
@@ -1129,6 +1137,11 @@ def _hard_validation_rules() -> list[str]:
             "death mechanics require source_event_ref naming the causing "
             "event, and that event must list the dying entity as a "
             "participant."
+        ),
+        (
+            "death mechanics may only target new backstory figures this "
+            "plan itself introduces — never first-class starting entities "
+            "or entities already live in the story."
         ),
         (
             "Event-anchored entity_tag mechanics require source_event_ref that "

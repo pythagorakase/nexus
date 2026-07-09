@@ -506,6 +506,30 @@ def test_expansion_plan_requires_dying_entity_as_cause_participant() -> None:
         )
 
 
+def test_expansion_plan_rejects_death_of_first_class_entity() -> None:
+    """Deaths may only target backstory figures the expansion introduces."""
+
+    vocabulary = _expansion_test_vocabulary()
+    payload = _valid_expansion(vocabulary)
+    payload["death_plan"] = [
+        {
+            "entity_ref": "Mara",
+            "entity_kind": "character",
+            "cause_event_ref": "retro_event_001",
+        }
+    ]
+
+    with pytest.raises(
+        RetrogradeExpansionValidationError,
+        match="targets a first-class starting entity",
+    ):
+        validate_expansion_plan(
+            payload=payload,
+            packet=_packet(vocabulary),
+            seed_candidate_response=_seed_response(vocabulary),
+        )
+
+
 def test_expansion_plan_rejects_duplicate_deaths() -> None:
     vocabulary = _expansion_test_vocabulary()
     payload = _valid_expansion(vocabulary)
