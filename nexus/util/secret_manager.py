@@ -248,7 +248,12 @@ def set_secret(provider: str, key: str) -> None:
     invalidate all cached reads so the new value is visible in this process.
     """
     account = provider.lower()
-    if not key.strip():
+    # Persist the trimmed value, not just validate it: pasted keys routinely
+    # carry a trailing newline/space (terminal copy, .env line, provider
+    # reveal UIs). macOS reads strip incidentally, but the keyring backend
+    # does not, so an untrimmed store corrupts the key on non-Darwin.
+    key = key.strip()
+    if not key:
         raise ValueError("API key must not be empty or whitespace.")
     if os.environ.get("NEXUS_KEYRING_DISABLE") == "1":
         raise RuntimeError(

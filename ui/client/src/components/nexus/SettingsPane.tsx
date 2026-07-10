@@ -357,8 +357,8 @@ function KeysSection() {
   };
 
   const commit = async (provider: string) => {
-    const key = drafts[provider] ?? "";
-    if (!key.trim()) return;
+    const key = (drafts[provider] ?? "").trim();
+    if (!key) return;
     markBusy(provider, true);
     try {
       await setSecret(provider, key);

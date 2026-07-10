@@ -51,6 +51,34 @@ def test_set_secret_round_trip_and_overwrite_clear_cached_value(
         _delete_test_account()
 
 
+def test_set_secret_persists_trimmed_value(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A pasted key with surrounding whitespace is stored trimmed.
+
+    Platform-independent: captures the value handed to BOTH write backends,
+    so it fails on the keyring path (Linux/Windows) that has no read-side
+    strip to mask an untrimmed store.
+    """
+    from nexus.util import secret_manager
+
+    monkeypatch.delenv("NEXUS_KEYRING_DISABLE", raising=False)
+    captured: dict[str, str] = {}
+    monkeypatch.setattr(
+        secret_manager,
+        "_write_macos_keychain",
+        lambda account, key: captured.update(value=key),
+    )
+    monkeypatch.setattr(
+        secret_manager,
+        "_write_keyring_library",
+        lambda account, key: captured.update(value=key),
+    )
+
+    set_secret(TEST_ACCOUNT, "  sk-padded-key-value\n")
+    assert captured["value"] == "sk-padded-key-value"
+
+
 def test_set_secret_rejects_blank_values() -> None:
     with pytest.raises(ValueError, match="must not be empty"):
         set_secret(TEST_ACCOUNT, "   ")
