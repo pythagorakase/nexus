@@ -1,10 +1,11 @@
 /**
  * SettingsPane - the operator's settings console (NEXUS IRIS, U5).
  *
- * Seven sections: Theme, Typography, Test Mode, Model, Context Length,
- * Typewriter, App Icon. Every dial writes back to PATCH /api/settings
+ * Eight sections: Theme, Typography, Test Mode, Model, API Keys, Context
+ * Length, Typewriter, App Icon. Settings dials write back to PATCH /api/settings
  * (FastAPI -> nexus.config.loader.save_settings -> nexus.toml) with
- * optimistic cache updates and server confirmation - no local draft state.
+ * optimistic cache updates and server confirmation. API key plaintext stays
+ * only in local draft state until its direct secret-store write completes.
  * Theme and font writes flow through ThemeContext/FontContext, which share
  * the same settings query + mutation.
  *
@@ -13,10 +14,22 @@
  * chrome, no internal module names in UI copy.
  */
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, Circle, CircleDot, RefreshCw, Save } from "lucide-react";
+import {
+  AlertTriangle,
+  Circle,
+  CircleDot,
+  RefreshCw,
+  Save,
+  ShieldCheck,
+} from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
 import { KEEPERS, useFonts } from "@/contexts/FontContext";
 import { useSettingsMutation, useSettingsQuery } from "@/hooks/useSettings";
+import {
+  useSecretsQuery,
+  useSetSecret,
+  useVerifySecret,
+} from "@/hooks/useSecrets";
 import { themeIconPath } from "@/lib/themeIcons";
 import { FONT_CATALOG } from "./fontCatalog";
 import type {
@@ -35,6 +48,7 @@ const SECTION_INDEX = [
   { id: "type", label: "Typography" },
   { id: "narrative", label: "Test Mode" },
   { id: "model", label: "Model" },
+  { id: "keys", label: "API Keys" },
   { id: "lore", label: "Context Length" },
   { id: "reveal", label: "Typewriter" },
   { id: "pwa", label: "App Icon" },
@@ -317,7 +331,133 @@ function ModelSection({
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// 5. Context Length
+// 5. API keys - masked status only; plaintext lives in local draft state and
+// goes directly to the writer, never through React Query state.
+// ──────────────────────────────────────────────────────────────────────────
+
+function KeysSection() {
+  const { data: providers, error } = useSecretsQuery();
+  const setSecret = useSetSecret();
+  const verifySecret = useVerifySecret();
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState<Set<string>>(new Set());
+  const [verified, setVerified] = useState<Set<string>>(new Set());
+  const [actionError, setActionError] = useState<Error | null>(null);
+
+  if (error) throw error;
+  if (actionError) throw actionError;
+
+  const markBusy = (provider: string, value: boolean) => {
+    setBusy((current) => {
+      const next = new Set(current);
+      if (value) next.add(provider);
+      else next.delete(provider);
+      return next;
+    });
+  };
+
+  const commit = async (provider: string) => {
+    const key = (drafts[provider] ?? "").trim();
+    if (!key) return;
+    markBusy(provider, true);
+    try {
+      await setSecret(provider, key);
+      setDrafts((current) => ({ ...current, [provider]: "" }));
+      setVerified((current) => {
+        const next = new Set(current);
+        next.delete(provider);
+        return next;
+      });
+    } catch (caught) {
+      setActionError(caught instanceof Error ? caught : new Error("Secret write failed"));
+    } finally {
+      markBusy(provider, false);
+    }
+  };
+
+  const verify = async (provider: string) => {
+    markBusy(provider, true);
+    try {
+      const result = await verifySecret(provider);
+      setVerified((current) => {
+        const next = new Set(current);
+        if (result.verified) next.add(provider);
+        else next.delete(provider);
+        return next;
+      });
+    } catch (caught) {
+      setActionError(caught instanceof Error ? caught : new Error("Secret verify failed"));
+    } finally {
+      markBusy(provider, false);
+    }
+  };
+
+  return (
+    <SettingsCard id="keys" label="API KEYS">
+      <ul className="key-list">
+        {(providers ?? []).map((row) => {
+          const draft = drafts[row.provider] ?? "";
+          const isBusy = busy.has(row.provider);
+          const isVerified = verified.has(row.provider);
+          const status = isVerified ? "verified" : row.present ? "present" : "absent";
+
+          return (
+            <li className="key-row" key={row.provider}>
+              <span className="key-provider-name">{row.provider}</span>
+              <span className={`key-status ${status}`} data-testid={`key-status-${row.provider}`}>
+                {row.present || isVerified ? (
+                  <CircleDot size={12} />
+                ) : (
+                  <Circle size={12} />
+                )}
+              </span>
+              <input
+                className="key-input"
+                type="password"
+                value={draft}
+                placeholder={row.present && row.last4 ? `••••••••${row.last4}` : ""}
+                onChange={(event) =>
+                  setDrafts((current) => ({
+                    ...current,
+                    [row.provider]: event.target.value,
+                  }))
+                }
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") void commit(row.provider);
+                }}
+                autoComplete="new-password"
+                spellCheck={false}
+                aria-label={`${row.provider} API key`}
+                data-testid={`key-input-${row.provider}`}
+              />
+              <button
+                className="btn-soft"
+                disabled={!draft.trim() || isBusy}
+                onClick={() => void commit(row.provider)}
+                aria-label={`Save ${row.provider} API key`}
+                data-testid={`key-commit-${row.provider}`}
+              >
+                <Save size={12} /> COMMIT
+              </button>
+              <button
+                className="btn-soft"
+                disabled={!row.present || isBusy}
+                onClick={() => void verify(row.provider)}
+                aria-label={`Verify ${row.provider} API key`}
+                data-testid={`key-verify-${row.provider}`}
+              >
+                <ShieldCheck size={12} /> VERIFY
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </SettingsCard>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// 6. Context Length
 // ──────────────────────────────────────────────────────────────────────────
 
 function ContextLengthSection({
@@ -412,7 +552,7 @@ function ContextLengthSection({
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// 6. Typewriter
+// 7. Typewriter
 // ──────────────────────────────────────────────────────────────────────────
 
 function TypewriterSection({
@@ -487,7 +627,7 @@ function TypewriterSection({
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// 7. App Icon (Per-Theme, Locked)
+// 8. App Icon (Per-Theme, Locked)
 // ──────────────────────────────────────────────────────────────────────────
 
 function PwaSection() {
@@ -625,6 +765,7 @@ function SettingsConsole({ settings }: { settings: SettingsPayload }) {
             mutation.mutate({ apex_model_ref: ref, wizard_model_ref: ref })
           }
         />
+        <KeysSection />
         <ContextLengthSection
           settings={settings}
           onCommit={(value) => mutation.mutate({ apex_context_window: value })}

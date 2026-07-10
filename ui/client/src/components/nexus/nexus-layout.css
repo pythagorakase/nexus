@@ -1540,7 +1540,65 @@
 .model-row .model-radio { color: var(--brass); display: inline-flex; }
 .model-name { flex: 1; }
 
-/* ─── 5. Context length + typewriter readouts ─── */
+/* ─── 5. API keys ─── */
+.key-list {
+  list-style: none; padding: 0; margin: 0;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.key-row {
+  display: grid;
+  grid-template-columns: minmax(90px, .5fr) 16px minmax(180px, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 8px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.key-provider-name {
+  font-family: var(--font-body);
+  font-size: 15px;
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.key-status { display: inline-flex; color: var(--fg-dim); }
+.key-status.present { color: var(--fg-muted); }
+.key-status.verified {
+  color: var(--brass);
+  filter: drop-shadow(0 0 5px var(--brass));
+}
+.key-input {
+  width: 100%;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border-strong);
+  border-radius: 0;
+  outline: none;
+  box-shadow: none;
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 8px 4px;
+  caret-color: var(--brass);
+}
+.key-input:focus,
+.key-input:focus-visible {
+  outline: none;
+  border-bottom-color: var(--brass);
+  box-shadow: 0 5px 8px -7px var(--brass);
+}
+.key-input::placeholder {
+  color: var(--fg-dim);
+  opacity: .85;
+  letter-spacing: .08em;
+}
+
+/* ─── 6. Context length + typewriter readouts ─── */
 .lore-readout {
   display: flex; align-items: baseline; gap: 18px;
   padding: 18px 22px;
@@ -1653,7 +1711,7 @@
 
 .settings-pane-v2 .caption.warning { color: var(--warning); }
 
-/* ─── 7. App icon (per-theme, locked) ─── */
+/* ─── 8. App icon (per-theme, locked) ─── */
 .pwa-icon-row {
   display: flex;
   gap: 18px;

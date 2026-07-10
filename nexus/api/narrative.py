@@ -16,11 +16,14 @@ from pathlib import Path
 from fastapi import (
     FastAPI,
     HTTPException,
+    Request,
     WebSocket,
     WebSocketDisconnect,
     BackgroundTasks,
 )
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -64,6 +67,7 @@ from nexus.api.narrative_generation import (
 from nexus.api.config_utils import get_max_choice_text_length
 from nexus.api.asset_endpoints import router as asset_router
 from nexus.api.reader_endpoints import router as reader_router
+from nexus.api.secrets_endpoints import router as secrets_router
 from nexus.api.settings_endpoints import router as settings_router
 from nexus.api.slot_endpoints import router as slot_router
 from nexus.api.setup_endpoints import router as setup_router
@@ -85,8 +89,29 @@ app.add_middleware(
 )
 
 
+@app.exception_handler(RequestValidationError)
+async def _validation_error_without_echoed_input(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
+    """Return validation errors without echoing the submitted value.
+
+    FastAPI's default handler serializes the offending ``input`` (and any
+    ``ctx``) back into the 422 body. For a body that carries a secret — e.g.
+    a mistyped field on PUT /api/secrets/{provider} — that reflects the
+    plaintext key straight into the HTTP response, shell scrollback, and
+    client logs. Strip both keys from every error entry so no submitted value
+    is ever mirrored back, on any endpoint.
+    """
+    sanitized = [
+        {key: value for key, value in error.items() if key not in ("input", "ctx")}
+        for error in exc.errors()
+    ]
+    return JSONResponse(status_code=422, content={"detail": sanitized})
+
+
 # Include modular routers
 app.include_router(settings_router)
+app.include_router(secrets_router)
 app.include_router(slot_router)
 app.include_router(setup_router)
 app.include_router(wizard_chat_router)

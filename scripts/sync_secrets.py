@@ -1,8 +1,8 @@
-"""Bootstrap macOS Keychain from 1Password for NEXUS API key access.
+"""Deprecated migration shim for copying 1Password keys into NEXUS storage.
 
-This is the ONLY place in the codebase that touches 1Password at runtime.
-Runtime callers use ``nexus.util.secret_manager.get_secret()``, which reads
-from Keychain.
+The settings-pane API KEYS card is the supported set and rotation path. This
+personal migration shim remains only for owners with legacy 1Password entries;
+1Password is not a NEXUS runtime or canonical-storage dependency.
 
 Reads provider -> 1Password-reference mappings from ``nexus.toml``'s
 ``[secrets.providers]`` table. Each entry uses one of two schemes:
@@ -14,9 +14,10 @@ Usage::
 
     python scripts/sync_secrets.py                    # sync all providers
     python scripts/sync_secrets.py --provider openai  # sync a single provider
-    python scripts/sync_secrets.py --verify           # read back from Keychain
+    python scripts/sync_secrets.py --verify           # read back from secret store
     python scripts/sync_secrets.py --dry-run          # show what would happen
 """
+
 from __future__ import annotations
 
 import argparse
@@ -25,7 +26,7 @@ import sys
 import tomllib
 from pathlib import Path
 
-from nexus.util.secret_manager import SERVICE_NAME, get_secret
+from nexus.util.secret_manager import get_secret, set_secret
 
 NEXUS_ROOT = Path(__file__).resolve().parent.parent
 NEXUS_TOML = NEXUS_ROOT / "nexus.toml"
@@ -80,70 +81,18 @@ def fetch_from_1password(reference: str, provider: str) -> str:
 
 
 def write_to_keychain(provider: str, key: str) -> None:
-    """Write a generic password to the login keychain.
-
-    Uses **delete-then-add** rather than ``-U`` (update-in-place). Updating
-    an existing item triggers a macOS "enter login keychain password" GUI
-    prompt that blocks unattended runs, because the modify-protected-item
-    check is separate from the per-app ACL. A fresh-create write has no
-    prior ACL to consult, so it completes silently. Both ``delete`` and
-    ``add`` are silent because the Apple-signed ``security`` binary is
-    unconditionally trusted by Keychain Services.
-
-    Uses ``-A`` (allow any application) on the add, so subsequent reads
-    from any user-level process are silent. This is appropriate on a
-    single-user macOS workstation; for stricter ACLs, replace ``-A`` with
-    explicit ``-T <trusted-app>`` flags.
-
-    On failure, re-raises a sanitized ``RuntimeError`` with ``from None``
-    so the original ``CalledProcessError`` -- which embeds the secret
-    value in its ``args`` list -- never appears in tracebacks or logs.
-    """
-    # Silent if entry exists; silent (with non-zero exit, ignored) if not.
-    subprocess.run(
-        [
-            "security",
-            "delete-generic-password",
-            "-s",
-            SERVICE_NAME,
-            "-a",
-            provider,
-        ],
-        capture_output=True,
-    )
-    try:
-        subprocess.run(
-            [
-                "security",
-                "add-generic-password",
-                "-A",  # allow access by any application (no ACL prompt)
-                "-s",
-                SERVICE_NAME,
-                "-a",
-                provider,
-                "-w",
-                key,
-            ],
-            check=True,
-            capture_output=True,
-        )
-    except subprocess.CalledProcessError as exc:
-        stderr = exc.stderr.decode("utf-8", errors="replace").strip() if exc.stderr else ""
-        raise RuntimeError(
-            f"security add-generic-password failed for '{provider}' "
-            f"(exit {exc.returncode}). stderr: {stderr}"
-        ) from None
+    """Deprecated compatibility wrapper around the canonical writer."""
+    set_secret(provider, key)
 
 
 def verify(provider: str) -> bool:
-    """Print a masked summary of the stored key. Returns True on success."""
+    """Print credential presence without key material. Return success."""
     try:
-        value = get_secret(provider)
+        get_secret(provider)
     except Exception as exc:  # noqa: BLE001 - diagnostic only
         print(f"  [FAIL] {provider}: {exc}")
         return False
-    masked = f"{value[:7]}...{value[-4:]}" if len(value) > 11 else "<too short>"
-    print(f"  [ OK ] {provider}: {masked} (len={len(value)})")
+    print(f"  [ OK ] {provider}: present")
     return True
 
 
@@ -153,7 +102,7 @@ def main() -> int:
     parser.add_argument(
         "--verify",
         action="store_true",
-        help="read back from Keychain (does not call 1Password)",
+        help="read back from the secret store (does not call 1Password)",
     )
     parser.add_argument(
         "--dry-run",
@@ -173,18 +122,18 @@ def main() -> int:
     targets = {args.provider: refs[args.provider]} if args.provider else refs
 
     if args.verify:
-        print("Verifying Keychain entries:")
+        print("Verifying secret-store entries:")
         results = [verify(provider) for provider in targets]
         return 0 if all(results) else 1
 
     for provider, reference in targets.items():
-        print(f"Syncing {provider} from {reference} ...")
+        print(f"Syncing {provider} from the legacy migration source ...")
         if args.dry_run:
-            print(f"  [dry-run] would invoke op + security for '{provider}'")
+            print(f"  [dry-run] would invoke op + the secret writer for '{provider}'")
             continue
         key = fetch_from_1password(reference, provider)
         write_to_keychain(provider, key)
-        print(f"  stored {provider} in Keychain ({len(key)} chars)")
+        print(f"  stored {provider} in the platform secret store")
 
     if args.dry_run:
         return 0

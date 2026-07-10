@@ -175,16 +175,18 @@ hosts. Consequences for deployment:
 
 - **Local (macOS):** API keys live in the macOS Keychain (service
   `nexus-api`), read by `nexus.util.secret_manager.get_secret()` via the
-  system `security` CLI — silent, no prompts in unattended runs. 1Password
-  is the rotation source of truth (`scripts/sync_secrets.py`).
-- **Non-Mac hosts (Linux/Windows/CI):** set `NEXUS_KEYRING_DISABLE=1` and
-  provide `<PROVIDER>_API_KEY` environment variables. This is the supported
-  seam, not a workaround — a hosted runtime injects env vars through its
-  platform's secret store.
-- **Clients never handle provider keys.** Model calls happen runtime-side;
-  the only credential a client holds is its `X-Nexus-Auth` value.
+  system `security` CLI — silent, no prompts in unattended runs. The API KEYS
+  settings card is the supported write and rotation path.
+- **Non-Mac hosts (Linux/Windows):** the canonical store is the platform's
+  Python `keyring` backend. CI and hosted runtimes may set
+  `NEXUS_KEYRING_DISABLE=1` and inject `<PROVIDER>_API_KEY` environment
+  variables as a read-only escape hatch.
+- **Clients never receive provider keys.** The settings pane sends a draft
+  directly to `PUT /api/secrets/{provider}` and retains it only until that
+  request completes; status responses contain at most the last four
+  characters. Model calls remain runtime-side.
 - Keyless local model servers (mock, Ollama) need no secret; a base_url
-  provider that does need one names a Keychain account via
+  provider that does need one names its secret-store account via
   `api_key_secret`.
 
 ## Development Workflows (unchanged)
