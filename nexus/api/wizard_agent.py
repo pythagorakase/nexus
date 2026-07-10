@@ -600,7 +600,9 @@ _setting_agent = Agent(
     model_settings=_wizard_model_settings,
     retries=_wizard_retries,
 )
-_setting_agent.tool(retries=_wizard_retries)(_submit_world_impl)
+_setting_agent.tool(name="submit_world_document", retries=_wizard_retries)(
+    _submit_world_impl
+)
 
 # Config 2: Setting phase, accept_fate (forces submit_world_document)
 _setting_accept_agent = Agent(
@@ -610,7 +612,9 @@ _setting_accept_agent = Agent(
     model_settings=_wizard_model_settings,
     retries=_wizard_retries,
 )
-_setting_accept_agent.tool(retries=_wizard_retries)(_submit_world_impl)
+_setting_accept_agent.tool(name="submit_world_document", retries=_wizard_retries)(
+    _submit_world_impl
+)
 _setting_accept_agent.output_validator(
     _make_accept_fate_validator("submit_world_document")
 )
@@ -627,7 +631,9 @@ _concept_agent = Agent(
     model_settings=_wizard_model_settings,
     retries=_wizard_retries,
 )
-_concept_agent.tool(retries=_wizard_retries)(_submit_concept_impl)
+_concept_agent.tool(name="submit_character_concept", retries=_wizard_retries)(
+    _submit_concept_impl
+)
 
 # Config 4: Character/concept, accept_fate (forces submit_character_concept)
 _concept_accept_agent = Agent(
@@ -637,7 +643,9 @@ _concept_accept_agent = Agent(
     model_settings=_wizard_model_settings,
     retries=_wizard_retries,
 )
-_concept_accept_agent.tool(retries=_wizard_retries)(_submit_concept_impl)
+_concept_accept_agent.tool(name="submit_character_concept", retries=_wizard_retries)(
+    _submit_concept_impl
+)
 _concept_accept_agent.output_validator(
     _make_accept_fate_validator("submit_character_concept")
 )
@@ -655,7 +663,9 @@ _traits_agent = Agent(
     model_settings=_wizard_model_settings,
     retries=_wizard_retries,
 )
-_traits_agent.tool(retries=_wizard_retries)(_submit_traits_impl)
+_traits_agent.tool(name="submit_trait_selection", retries=_wizard_retries)(
+    _submit_traits_impl
+)
 
 # -----------------------------------------------------------------------------
 # Character Phase - Wildcard Subphase Agents
@@ -669,7 +679,9 @@ _wildcard_agent = Agent(
     model_settings=_wizard_model_settings,
     retries=_wizard_retries,
 )
-_wildcard_agent.tool(retries=_wizard_retries)(_submit_wildcard_impl)
+_wildcard_agent.tool(name="submit_wildcard_trait", retries=_wizard_retries)(
+    _submit_wildcard_impl
+)
 
 # Config 8: Character/wildcard, accept_fate (forces submit_wildcard_trait)
 _wildcard_accept_agent = Agent(
@@ -679,7 +691,9 @@ _wildcard_accept_agent = Agent(
     model_settings=_wizard_model_settings,
     retries=_wizard_retries,
 )
-_wildcard_accept_agent.tool(retries=_wizard_retries)(_submit_wildcard_impl)
+_wildcard_accept_agent.tool(name="submit_wildcard_trait", retries=_wizard_retries)(
+    _submit_wildcard_impl
+)
 _wildcard_accept_agent.output_validator(
     _make_accept_fate_validator("submit_wildcard_trait")
 )
@@ -696,7 +710,9 @@ _seed_agent = Agent(
     model_settings=_wizard_model_settings,
     retries=_wizard_retries,
 )
-_seed_agent.tool(retries=_wizard_retries)(_submit_scenario_impl)
+_seed_agent.tool(name="submit_starting_scenario", retries=_wizard_retries)(
+    _submit_scenario_impl
+)
 
 # Config 10: Seed phase, accept_fate (forces submit_starting_scenario)
 _seed_accept_agent = Agent(
@@ -706,7 +722,9 @@ _seed_accept_agent = Agent(
     model_settings=_wizard_model_settings,
     retries=_wizard_retries,
 )
-_seed_accept_agent.tool(retries=_wizard_retries)(_submit_scenario_impl)
+_seed_accept_agent.tool(name="submit_starting_scenario", retries=_wizard_retries)(
+    _submit_scenario_impl
+)
 _seed_accept_agent.output_validator(
     _make_accept_fate_validator("submit_starting_scenario")
 )
