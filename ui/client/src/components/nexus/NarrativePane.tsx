@@ -33,6 +33,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { DecoDivider } from "@/components/deco";
 import { Textarea } from "@/components/ui/textarea";
+import { Intertitle } from "./Intertitle";
 import { InlineMarkdown, ProseMarkdown } from "./ProseMarkdown";
 import { TypewriterText } from "./TypewriterText";
 import {
@@ -64,6 +65,32 @@ interface NarrativePaneProps {
   readingChunkId: number | null;
   /** Navigate the reading position (null returns to the live frontier). */
   onNavigate: (chunkId: number | null) => void;
+}
+
+interface SceneGrounding {
+  season: number;
+  episode: number;
+  scene: number;
+  worldLayer: string | null;
+  worldTime: string | null;
+}
+
+function sceneGrounding(chunk: ChunkWithMetadata): SceneGrounding | null {
+  const metadata = chunk.metadata;
+  if (
+    metadata?.season == null ||
+    metadata.episode == null ||
+    metadata.scene == null
+  ) {
+    return null;
+  }
+  return {
+    season: metadata.season,
+    episode: metadata.episode,
+    scene: metadata.scene,
+    worldLayer: metadata.worldLayer,
+    worldTime: metadata.worldTime,
+  };
 }
 
 /** "<" / ">" pagination pair (plus "»" back to the frontier while reading
@@ -207,9 +234,19 @@ export function NarrativePane({
   // a memo keeps render pure (no mutation during JSX evaluation).
   const { chunkRenders, pendingDivider } = useMemo(() => {
     let previousVoice: "st" | "you" | null = null;
-    const renders = chunks.map((chunk) => {
+    let previousSceneKey: string | null | undefined;
+    const renders = chunks.map((chunk, index) => {
       const parts: Array<{ voice: "st" | "you"; text: string; divider: boolean }> =
         [];
+      const grounding = sceneGrounding(chunk);
+      const sceneKey = grounding
+        ? `${grounding.season}:${grounding.episode}:${grounding.scene}`
+        : null;
+      const showIntertitle =
+        grounding !== null &&
+        !chunk.hasInlineSceneMarkup &&
+        (index === 0 || sceneKey !== previousSceneKey);
+      previousSceneKey = sceneKey;
       const storyteller = chunk.storytellerText ?? chunk.rawText;
       if (storyteller) {
         parts.push({
@@ -227,7 +264,12 @@ export function NarrativePane({
         });
         previousVoice = "you";
       }
-      return { id: chunk.id, isCurrent: chunk.id === currentChunkId, parts };
+      return {
+        id: chunk.id,
+        isCurrent: chunk.id === currentChunkId,
+        intertitle: showIntertitle ? grounding : null,
+        parts,
+      };
     });
     return {
       chunkRenders: renders,
@@ -255,6 +297,14 @@ export function NarrativePane({
     }
     return parts;
   }, [historicalChunk]);
+
+  const historicalGrounding = historicalChunk
+    ? sceneGrounding(historicalChunk)
+    : null;
+  const historicalIntertitle =
+    historicalGrounding && !historicalChunk?.hasInlineSceneMarkup
+      ? historicalGrounding
+      : null;
 
   const canSubmit = !isGenerating && !!slotState && !slotState.is_wizard_mode;
 
@@ -394,21 +444,26 @@ export function NarrativePane({
 
             <section className="chunk-stream">
               {historicalChunk && (
-                <div
-                  className="chunk-block archival"
-                  data-testid={`chunk-${historicalChunk.id}`}
-                >
-                  <div className="prose-block">
-                    {historicalParts.map((part, i) => (
-                      <Fragment key={i}>
-                        {part.divider && <hr className="voice-divider" />}
-                        <div className={`md-part ${part.voice}`}>
-                          <ProseMarkdown text={part.text} />
-                        </div>
-                      </Fragment>
-                    ))}
+                <>
+                  {historicalIntertitle && (
+                    <Intertitle {...historicalIntertitle} />
+                  )}
+                  <div
+                    className="chunk-block archival"
+                    data-testid={`chunk-${historicalChunk.id}`}
+                  >
+                    <div className="prose-block">
+                      {historicalParts.map((part, i) => (
+                        <Fragment key={i}>
+                          {part.divider && <hr className="voice-divider" />}
+                          <div className={`md-part ${part.voice}`}>
+                            <ProseMarkdown text={part.text} />
+                          </div>
+                        </Fragment>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                </>
               )}
             </section>
 
@@ -443,22 +498,24 @@ export function NarrativePane({
 
           <section className="chunk-stream">
             {chunkRenders.map((chunk) => (
-              <div
-                key={chunk.id}
-                className={`chunk-block ${chunk.isCurrent ? "current" : ""}`}
-                data-testid={`chunk-${chunk.id}`}
-              >
-                <div className="prose-block">
-                  {chunk.parts.map((part) => (
-                    <Fragment key={part.voice}>
-                      {part.divider && <hr className="voice-divider" />}
-                      <div className={`md-part ${part.voice}`}>
-                        <ProseMarkdown text={part.text} />
-                      </div>
-                    </Fragment>
-                  ))}
+              <Fragment key={chunk.id}>
+                {chunk.intertitle && <Intertitle {...chunk.intertitle} />}
+                <div
+                  className={`chunk-block ${chunk.isCurrent ? "current" : ""}`}
+                  data-testid={`chunk-${chunk.id}`}
+                >
+                  <div className="prose-block">
+                    {chunk.parts.map((part) => (
+                      <Fragment key={part.voice}>
+                        {part.divider && <hr className="voice-divider" />}
+                        <div className={`md-part ${part.voice}`}>
+                          <ProseMarkdown text={part.text} />
+                        </div>
+                      </Fragment>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              </Fragment>
             ))}
 
             {pendingText && (

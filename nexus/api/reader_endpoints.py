@@ -20,6 +20,7 @@ table dropped most of the columns Drizzle still declared).
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException
@@ -30,6 +31,12 @@ from nexus.api.slot_utils import require_slot_dbname
 logger = logging.getLogger("nexus.api.reader_endpoints")
 
 router = APIRouter(tags=["reader"])
+
+# Issue #448 double-display policy: this anchored marker matched all 1,425
+# legacy chunks in save_01/save_02 and zero clean chunks in save_01/save_02/save_05.
+_INLINE_SCENE_MARKUP_RE = re.compile(
+    r"^<!-- SCENE BREAK: S\d{2}E\d{2}_\d{3} " r"\((?:storyteller|episode) heading\) -->"
+)
 
 
 def resolve_dbname(slot: Optional[int]) -> str:
@@ -67,6 +74,7 @@ _CHUNK_SELECT = """
         cm.episode,
         cm.scene,
         cm.world_layer::text AS world_layer,
+        cm.world_time,
         cm.time_delta::text AS time_delta,
         cm.generation_date,
         cm.slug
@@ -86,6 +94,7 @@ def _chunk_payload(row: Dict[str, Any]) -> Dict[str, Any]:
         "choiceObject": row["choice_object"],
         "choiceText": row["choice_text"],
         "createdAt": row["created_at"],
+        "hasInlineSceneMarkup": bool(_INLINE_SCENE_MARKUP_RE.match(row["raw_text"])),
     }
     if row["chunk_id"] is not None:
         payload["metadata"] = {
@@ -95,6 +104,9 @@ def _chunk_payload(row: Dict[str, Any]) -> Dict[str, Any]:
             "episode": row["episode"],
             "scene": row["scene"],
             "worldLayer": row["world_layer"],
+            "worldTime": (
+                row["world_time"].isoformat() if row["world_time"] is not None else None
+            ),
             "timeDelta": row["time_delta"],
             "generationDate": row["generation_date"],
             "slug": row["slug"],

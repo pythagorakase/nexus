@@ -9,7 +9,8 @@ import type { NarrativeChunk, ChunkMetadata } from "@shared/schema";
 /** A committed chunk joined with its metadata row (gateway read routes). */
 export type ChunkWithMetadata = Omit<NarrativeChunk, "choiceObject"> & {
   choiceObject?: ChoiceObject | null;
-  metadata?: ChunkMetadata;
+  hasInlineSceneMarkup?: boolean;
+  metadata?: ChunkMetadata & { worldTime: string | null };
 };
 
 /**
