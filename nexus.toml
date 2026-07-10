@@ -30,7 +30,10 @@ models = [
 
 [global.model.api_models.anthropic]
 roles = { default = "claude-opus-4-8", deep = "claude-fable-5", fast = "claude-sonnet-4-6" }
-# Issue #454: Opus 4.8 native structured output was live-verified in PR #410.
+# Issue #454: native_structured_output overrides pydantic-ai's stale model
+# allowlist. Live-verified in PR #457 (tests/test_wizard_live.py -k anthropic:
+# 4/4 wizard phases on opus-4-8, plus a fable-5 setting-phase probe); the
+# schema strip set it relies on was proven on the legacy path in PR #410.
 models = [
     { id = "claude-sonnet-4-6", label = "Sonnet 4.6", native_structured_output = true },
     { id = "claude-opus-4-8", label = "Opus 4.8", unsupported_params = ["temperature", "top_p", "top_k"], native_structured_output = true },
