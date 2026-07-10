@@ -15,7 +15,7 @@ from pydantic_ai.messages import (
 )
 from pydantic_ai.models import Model
 from pydantic_ai.models.anthropic import AnthropicModel
-from pydantic_ai.models.openai import OpenAIResponsesModel
+from pydantic_ai.models.openai import OpenAIChatModel, OpenAIResponsesModel
 from pydantic_ai.profiles.anthropic import anthropic_model_profile
 from pydantic_ai.providers.anthropic import (
     AnthropicProvider as PydanticAnthropicProvider,
@@ -69,6 +69,8 @@ def build_pydantic_ai_model(model: str) -> Model:
     pyd_provider = PydanticOpenAIProvider(
         api_key=endpoint["api_key"], base_url=endpoint["base_url"]
     )
+    if endpoint["structured_transport"] == "chat_completions":
+        return OpenAIChatModel(model_name=model, provider=pyd_provider)
     return OpenAIResponsesModel(model_name=model, provider=pyd_provider)
 
 

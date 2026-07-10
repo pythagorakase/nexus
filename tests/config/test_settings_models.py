@@ -151,6 +151,37 @@ def test_non_native_provider_requires_base_url():
         Settings(**raw)
 
 
+def test_structured_transport_defaults_to_responses():
+    """Providers keep the Responses structured-output surface by default."""
+    provider = ProviderModels()
+
+    assert provider.structured_transport == "responses"
+
+
+def test_chat_completions_structured_transport_requires_base_url():
+    """A native provider cannot opt into the local-server transport."""
+    raw = _nexus_toml_dict()
+    raw["global"]["model"]["api_models"]["anthropic"][
+        "structured_transport"
+    ] = "chat_completions"
+
+    with pytest.raises(
+        ValidationError,
+        match="structured_transport='chat_completions' requires a base_url",
+    ):
+        Settings(**raw)
+
+
+def test_chat_completions_structured_transport_accepts_base_url():
+    """An OpenAI-compatible base_url provider may use Chat Completions."""
+    provider = ProviderModels(
+        base_url="http://127.0.0.1:1234/v1",
+        structured_transport="chat_completions",
+    )
+
+    assert provider.structured_transport == "chat_completions"
+
+
 def test_native_provider_rejects_base_url():
     """Native SDK providers use their own endpoints; base_url is a config error."""
     raw = _nexus_toml_dict()
@@ -206,6 +237,7 @@ def test_get_openai_compatible_endpoint_routing():
     assert endpoint == {
         "base_url": settings.global_.model.api_models["test"].base_url,
         "api_key": "nexus-local-no-key",
+        "structured_transport": "responses",
     }
     assert get_openai_compatible_endpoint("gpt-5.5") is None
     assert get_openai_compatible_endpoint("claude-opus-4-8") is None
@@ -281,6 +313,7 @@ def test_default_load_honors_runtime_config_env(tmp_path, monkeypatch):
     assert get_openai_compatible_endpoint("TEMPTEST") == {
         "base_url": "http://127.0.0.1:5999/v1",
         "api_key": "nexus-local-no-key",
+        "structured_transport": "responses",
     }
     assert (
         load_settings("nexus.toml")

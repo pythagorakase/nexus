@@ -271,6 +271,9 @@ class LogonUtility:
         endpoint = get_openai_compatible_endpoint(model)
         base_url = endpoint["base_url"] if endpoint else None
         api_key = endpoint["api_key"] if endpoint else None
+        structured_transport = (
+            endpoint["structured_transport"] if endpoint else "responses"
+        )
         if base_url:
             logger.info(f"Model {model}: routing to base_url {base_url}")
 
@@ -323,6 +326,7 @@ class LogonUtility:
                 system_prompt=system_prompt,
                 base_url=base_url,
                 api_key=api_key,
+                structured_transport=structured_transport,
                 structured_output_retries=structured_output_retries,
                 output_validator=output_validator,
             )

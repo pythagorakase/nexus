@@ -2,10 +2,12 @@
 
 import pytest
 from pydantic_ai.models.anthropic import AnthropicModel
+from pydantic_ai.models.openai import OpenAIChatModel, OpenAIResponsesModel
 from pydantic_ai.profiles.anthropic import anthropic_model_profile
 
 from nexus.api import pydantic_ai_utils
 from nexus.api.native_structured_output import AnthropicJsonSchemaTransformer
+from nexus.config import resolve_model_ref
 
 
 class _LegacyAnthropicProviderStub:
@@ -73,3 +75,21 @@ def test_build_anthropic_model_without_override_omits_profile(monkeypatch):
     pydantic_ai_utils.build_pydantic_ai_model("registry-anthropic-model")
 
     assert set(captured) == {"model_name", "provider"}
+
+
+def test_build_pydantic_ai_model_uses_chat_model_for_lmstudio():
+    """Chat-transport endpoints use pydantic-ai's Chat Completions model."""
+    model = pydantic_ai_utils.build_pydantic_ai_model(
+        resolve_model_ref("@lmstudio.default")
+    )
+
+    assert isinstance(model, OpenAIChatModel)
+
+
+def test_build_pydantic_ai_model_keeps_test_on_responses():
+    """The TEST mock retains the default pydantic-ai Responses model."""
+    model = pydantic_ai_utils.build_pydantic_ai_model(
+        resolve_model_ref("@test.default")
+    )
+
+    assert isinstance(model, OpenAIResponsesModel)
