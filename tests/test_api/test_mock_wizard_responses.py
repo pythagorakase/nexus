@@ -201,48 +201,79 @@ def mock_rows(monkeypatch) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
     return cache_row, trait_rows
 
 
-def test_responses_wizard_artifact_returns_submission_function_call(mock_rows) -> None:
+@pytest.mark.parametrize(
+    ("tool_name", "schema"),
+    [
+        ("submit_world_document", SettingCard),
+        ("submit_character_concept", CharacterConceptSubmission),
+        ("submit_trait_selection", TraitSelection),
+        ("submit_wildcard_trait", WildcardTrait),
+        ("submit_starting_scenario", StorySeedSubmission),
+    ],
+)
+def test_responses_wizard_artifact_returns_submission_function_call(
+    mock_rows, tool_name: str, schema: type
+) -> None:
     """A normal wizard turn invokes the phase's flattened submission tool."""
 
     response = TestClient(mock_openai.app).post(
         "/v1/responses",
         json={
             "model": "TEST",
-            "tools": [_responses_tool("submit_world_document", SettingCard)],
-            "input": [
-                {
-                    "role": "user",
-                    "content": [{"type": "input_text", "text": "Accept fate."}],
-                }
-            ],
+            "tools": [_responses_tool(tool_name, schema)],
+            "input": [{"role": "user", "content": "Accept fate."}],
         },
     )
 
     assert response.status_code == 200
     tool_call = response.json()["output"][0]
     assert tool_call["type"] == "function_call"
-    assert tool_call["name"] == "submit_world_document"
-    SettingCard.model_validate(json.loads(tool_call["arguments"]))
+    assert tool_call["name"] == tool_name
+    schema.model_validate(json.loads(tool_call["arguments"]))
 
 
-def test_responses_wizard_transition_returns_native_intro(mock_rows) -> None:
+@pytest.mark.parametrize(
+    ("tool_name", "schema", "transition_message", "expected_copy"),
+    [
+        (
+            "submit_character_concept",
+            CharacterConceptSubmission,
+            "[SYSTEM] Phase setting complete. Proceeding to character.",
+            "character creation",
+        ),
+        (
+            "submit_wildcard_trait",
+            WildcardTrait,
+            "[SYSTEM] Phase traits complete. Proceeding to wildcard.",
+            "wildcard",
+        ),
+        (
+            "submit_starting_scenario",
+            StorySeedSubmission,
+            "[SYSTEM] Phase character complete. Proceeding to seed.",
+            "opening scene",
+        ),
+    ],
+)
+def test_responses_wizard_transition_returns_phase_specific_intro(
+    mock_rows,
+    tool_name: str,
+    schema: type,
+    transition_message: str,
+    expected_copy: str,
+) -> None:
     """A phase-transition turn returns WizardResponse JSON as output text."""
 
     response = TestClient(mock_openai.app).post(
         "/v1/responses",
         json={
             "model": "TEST",
-            "tools": [
-                _responses_tool("submit_character_concept", CharacterConceptSubmission)
-            ],
+            "tools": [_responses_tool(tool_name, schema)],
             "input": [
                 {"role": "assistant", "content": "Prior wizard message."},
                 {
                     "role": "user",
-                    "content": (
-                        "[SYSTEM] Phase setting complete. Proceeding to character. "
-                        "Please introduce the next phase."
-                    ),
+                    "content": transition_message,
                 },
             ],
         },
@@ -251,7 +282,8 @@ def test_responses_wizard_transition_returns_native_intro(mock_rows) -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["output"][0]["type"] == "message"
-    WizardResponse.model_validate_json(payload["output_text"])
+    wizard_response = WizardResponse.model_validate_json(payload["output_text"])
+    assert expected_copy in wizard_response.message.lower()
 
 
 def test_responses_non_wizard_extended_storyteller_route_is_unchanged(
