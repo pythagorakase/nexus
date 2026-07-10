@@ -70,6 +70,7 @@ class TestNarrativeReads:
             "choiceObject",
             "choiceText",
             "createdAt",
+            "hasInlineSceneMarkup",
             "metadata",
         }
         meta = chunk["metadata"]
@@ -81,6 +82,7 @@ class TestNarrativeReads:
             "episode",
             "scene",
             "worldLayer",
+            "worldTime",
             "timeDelta",
             "generationDate",
             "slug",

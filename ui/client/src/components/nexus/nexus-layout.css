@@ -333,6 +333,21 @@
   flex-direction: column;
   gap: 8px;
 }
+.intertitle {
+  width: min(100%, 42ch);
+  margin: 20px auto 12px;
+  text-align: center;
+  font-family: var(--font-menu);
+  font-size: 11px;
+  line-height: 1.55;
+  letter-spacing: var(--track-wider);
+  color: var(--fg-muted);
+}
+.intertitle-divider {
+  padding: 0 0 8px;
+  opacity: .55;
+}
+.intertitle-copy { display: grid; gap: 1px; }
 .chunk-block {
   position: relative;
   border-left: 3px solid transparent;
