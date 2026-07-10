@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any, Dict, List, Optional, Sequence
 
 from pydantic_ai.messages import (
@@ -15,13 +16,18 @@ from pydantic_ai.messages import (
 from pydantic_ai.models import Model
 from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.models.openai import OpenAIResponsesModel
+from pydantic_ai.profiles.anthropic import anthropic_model_profile
 from pydantic_ai.providers.anthropic import (
     AnthropicProvider as PydanticAnthropicProvider,
 )
 from pydantic_ai.providers.openai import OpenAIProvider as PydanticOpenAIProvider
 
+from nexus.api.native_structured_output import AnthropicJsonSchemaTransformer
 from nexus.config import get_openai_compatible_endpoint
-from nexus.config.loader import get_provider_for_model
+from nexus.config.loader import (
+    get_native_structured_output_override,
+    get_provider_for_model,
+)
 from scripts.api_anthropic import AnthropicProvider as LegacyAnthropicProvider
 from scripts.api_openai import OpenAIProvider as LegacyOpenAIProvider
 
@@ -44,6 +50,16 @@ def build_pydantic_ai_model(model: str) -> Model:
     if provider == "anthropic":
         legacy_provider = LegacyAnthropicProvider(model=model)
         pyd_provider = PydanticAnthropicProvider(api_key=legacy_provider.api_key)
+        override = get_native_structured_output_override(model)
+        if override is not None:
+            profile = replace(
+                anthropic_model_profile(model),
+                json_schema_transformer=AnthropicJsonSchemaTransformer,
+                supports_json_schema_output=override,
+            )
+            return AnthropicModel(
+                model_name=model, provider=pyd_provider, profile=profile
+            )
         return AnthropicModel(model_name=model, provider=pyd_provider)
     # Any other provider is an OpenAI-compatible server registered via
     # base_url in [global.model.api_models] (mock TEST server, Ollama, vLLM).

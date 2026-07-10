@@ -6,7 +6,11 @@ import pytest
 import tomlkit
 from pydantic import ValidationError
 
-from nexus.config import load_settings, resolve_model_ref
+from nexus.config import (
+    get_native_structured_output_override,
+    load_settings,
+    resolve_model_ref,
+)
 from nexus.config.settings_models import (
     APIModelEntry,
     ModelConfig,
@@ -208,6 +212,51 @@ def test_get_openai_compatible_endpoint_routing():
     assert get_openai_compatible_endpoint("unregistered-model") is None
 
 
+def test_native_structured_output_override_parses_and_resolves(tmp_path, monkeypatch):
+    """Registry entries expose explicit true/false and default to None."""
+    assert (
+        APIModelEntry(
+            id="forced-on", label="Forced on", native_structured_output=True
+        ).native_structured_output
+        is True
+    )
+    assert (
+        APIModelEntry(id="upstream", label="Upstream").native_structured_output is None
+    )
+
+    raw = _nexus_toml_dict()
+    models = raw["global"]["model"]["api_models"]["anthropic"]["models"]
+    models[0]["native_structured_output"] = True
+    models[1]["native_structured_output"] = False
+    models[2].pop("native_structured_output", None)
+    config = tmp_path / "runtime.toml"
+    config.write_text(tomlkit.dumps(raw))
+    monkeypatch.setenv("NEXUS_RUNTIME_CONFIG", str(config))
+
+    assert get_native_structured_output_override(models[0]["id"]) is True
+    assert get_native_structured_output_override(models[1]["id"]) is False
+    assert get_native_structured_output_override(models[2]["id"]) is None
+    assert get_native_structured_output_override("unregistered-model") is None
+
+
+def test_shipped_anthropic_models_decide_native_structured_output_support():
+    """Every shipped Anthropic model carries an explicit #454 decision."""
+    entries = load_settings("nexus.toml").global_.model.api_models["anthropic"].models
+    expected_ids = {
+        "claude-sonnet-4-6",
+        "claude-opus-4-8",
+        "claude-fable-5",
+    }
+
+    assert expected_ids <= {entry.id for entry in entries}
+    assert all(entry.native_structured_output is not None for entry in entries)
+    assert all(
+        entry.native_structured_output is True
+        for entry in entries
+        if entry.id in expected_ids
+    )
+
+
 def test_default_load_honors_runtime_config_env(tmp_path, monkeypatch):
     """Managed services use the config path exported by the supervisor."""
     from nexus.config import get_openai_compatible_endpoint
@@ -226,9 +275,7 @@ def test_default_load_honors_runtime_config_env(tmp_path, monkeypatch):
 
     monkeypatch.setenv("NEXUS_RUNTIME_CONFIG", str(config))
 
-    assert (
-        load_settings().global_.model.api_models["test"].models[0].id == "TEMPTEST"
-    )
+    assert load_settings().global_.model.api_models["test"].models[0].id == "TEMPTEST"
     assert get_provider_for_model("TEMPTEST") == "test"
     assert get_openai_compatible_endpoint("TEMPTEST") == {
         "base_url": "http://127.0.0.1:5999/v1",

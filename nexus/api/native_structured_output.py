@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import inspect
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Optional, Type
+from typing import Any, Callable, Dict, Optional, Type, cast
 
 from pydantic import BaseModel
+from pydantic_ai import JsonSchemaTransformer
 
 
 ANTHROPIC_UNSUPPORTED_SCHEMA_KEYS = {
@@ -87,6 +88,25 @@ def _strip_anthropic_unsupported_schema_keys(value: Any) -> Any:
         for key, item in value.items()
         if key not in ANTHROPIC_UNSUPPORTED_SCHEMA_KEYS
     }
+
+
+class AnthropicJsonSchemaTransformer(JsonSchemaTransformer):
+    """Close object schemas and strip unsupported Anthropic constraints.
+
+    Pydantic-ai still parses and validates the returned object against the
+    original Pydantic model, including retries after validation failures.
+    These changes are therefore limited to grammar-level enforcement, the same
+    tradeoff made by the legacy Anthropic storyteller path.
+    """
+
+    def transform(self, schema: Dict[str, Any]) -> Dict[str, Any]:
+        """Remove unsupported keys and forbid extras on each object schema."""
+        transformed = cast(
+            Dict[str, Any], _strip_anthropic_unsupported_schema_keys(schema)
+        )
+        if transformed.get("type") == "object":
+            transformed["additionalProperties"] = False
+        return transformed
 
 
 def anthropic_json_schema(schema_model: Type[BaseModel]) -> Dict[str, Any]:

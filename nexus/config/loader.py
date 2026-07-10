@@ -200,6 +200,20 @@ def get_provider_for_model(model_id: str) -> Optional[str]:
     return None
 
 
+def get_native_structured_output_override(model_id: str) -> Optional[bool]:
+    """Return the registry's native structured-output override for a model.
+
+    ``None`` means either the model has no override or is absent from the
+    registry, so callers defer to pydantic-ai's model-profile detection.
+    """
+    settings = load_settings()
+    for provider in settings.global_.model.api_models.values():
+        for entry in provider.models:
+            if entry.id == model_id:
+                return entry.native_structured_output
+    return None
+
+
 def get_openai_compatible_endpoint(model_id: str) -> Optional[Dict[str, str]]:
     """
     Resolve the OpenAI-compatible endpoint for a registry model, if any.
