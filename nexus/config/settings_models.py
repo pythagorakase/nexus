@@ -121,6 +121,32 @@ class ProviderModels(BaseModel):
             "key is sent because OpenAI clients require a non-empty key."
         ),
     )
+    structured_transport: Literal["responses", "chat_completions"] = Field(
+        default="responses",
+        description=(
+            "OpenAI-compatible surface used for structured output. Use "
+            "'chat_completions' for local servers such as LM Studio, Ollama, "
+            "or vLLM whose /v1/responses endpoint is missing or silently "
+            "ignores text.format."
+        ),
+    )
+    request_timeout_seconds: Optional[float] = Field(
+        default=None,
+        description=(
+            "Override the OpenAI SDK's 600-second request timeout for slow "
+            "local servers. None defers to the SDK default."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _validate_structured_transport(self) -> "ProviderModels":
+        """Chat Completions structured output requires a base_url provider."""
+        if self.structured_transport == "chat_completions" and not self.base_url:
+            raise ValueError(
+                "structured_transport='chat_completions' requires a base_url; "
+                "native SDK providers must use structured_transport='responses'"
+            )
+        return self
 
     @model_validator(mode="after")
     def _validate_roles_reference_known_models(self) -> "ProviderModels":

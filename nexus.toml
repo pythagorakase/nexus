@@ -53,6 +53,18 @@ models = [
     { id = "TEST", label = "TEST", description = "Mock server with cached data (dev)" },
 ]
 
+# The first structured request after loading a model pays a one-time JSON-schema
+# grammar compile cost. Hermes 4 70B Extended measured about 17 min; cached after.
+[global.model.api_models.lmstudio]
+base_url = "http://127.0.0.1:1234/v1"
+structured_transport = "chat_completions"
+# Local 70B on a full Skald prompt can take many minutes; the SDK's 600s default is too tight.
+request_timeout_seconds = 1800
+roles = { default = "nousresearch/hermes-4-70b" }
+models = [
+    { id = "nousresearch/hermes-4-70b", label = "Hermes 4 70B (Local)", description = "Local LM Studio inference (MLX)" },
+]
+
 # =============================================================================
 # Secrets (API Keys)
 # =============================================================================

@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock
+
+import pytest
 
 from nexus.agents.logon.apex_schema import (
     StorytellerResponseBootstrap,
@@ -15,9 +18,12 @@ from nexus.api.native_structured_output import (
     anthropic_output_config,
     anthropic_output_format,
     anthropic_strict_tool,
+    build_native_structured_provider,
     openai_response_text_format,
     strict_json_schema,
 )
+from nexus.config import resolve_model_ref
+from scripts import api_openai
 from scripts.api_anthropic import AnthropicProvider
 from scripts.api_openai import OpenAIProvider
 
@@ -190,6 +196,39 @@ def test_anthropic_strict_tool_helper_sets_strict_true() -> None:
     assert tool["input_schema"]["additionalProperties"] is False
 
 
+@pytest.mark.parametrize(
+    ("request_timeout", "expected_timeout"),
+    [(1800.0, 1800.0), (None, None)],
+)
+def test_openai_provider_forwards_only_configured_request_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+    request_timeout: float | None,
+    expected_timeout: float | None,
+) -> None:
+    """Client construction overrides timeout only when explicitly configured."""
+    captured: dict[str, object] = {}
+    fake_client = SimpleNamespace()
+
+    def fake_openai(**kwargs: object) -> SimpleNamespace:
+        captured.update(kwargs)
+        return fake_client
+
+    monkeypatch.setattr(api_openai.openai, "OpenAI", fake_openai)
+
+    provider = OpenAIProvider(
+        model="local-test-model",
+        api_key="test-key",
+        base_url="http://127.0.0.1:1234/v1",
+        request_timeout=request_timeout,
+    )
+
+    assert provider.client is fake_client
+    if expected_timeout is None:
+        assert "timeout" not in captured
+    else:
+        assert captured["timeout"] == expected_timeout
+
+
 def test_openai_provider_uses_responses_parse_text_format() -> None:
     """OpenAI provider should call native parse with the Pydantic model."""
 
@@ -326,6 +365,67 @@ def test_openai_base_url_falls_back_to_chat_response_format() -> None:
             "strict": True,
         },
     }
+
+
+def test_openai_chat_transport_dispatches_without_responses_attempt() -> None:
+    """Configured Chat transport bypasses Responses at method dispatch."""
+    expected = (_bootstrap_response(), Mock())
+    provider = build_native_structured_provider(
+        model=resolve_model_ref("@lmstudio.default"),
+        max_tokens=600,
+        system_prompt="System prompt",
+        structured_output_retries=0,
+    )
+    assert isinstance(provider, OpenAIProvider)
+    assert provider.structured_transport == "chat_completions"
+    provider._get_structured_completion_chat_completions_sync = Mock(
+        return_value=expected
+    )
+    provider.client.responses.parse = Mock(
+        side_effect=AssertionError("Responses must not be called")
+    )
+
+    result = provider._get_structured_completion_native_sync(
+        "Prompt", StorytellerResponseBootstrap
+    )
+
+    assert result == expected
+    provider._get_structured_completion_chat_completions_sync.assert_called_once_with(
+        "Prompt", StorytellerResponseBootstrap, text_format=None
+    )
+    provider.client.responses.parse.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_openai_chat_transport_dispatches_async_without_responses_attempt() -> (
+    None
+):
+    """Configured Chat transport also bypasses Responses on the async path."""
+    expected = (_bootstrap_response(), Mock())
+    provider = build_native_structured_provider(
+        model=resolve_model_ref("@lmstudio.default"),
+        max_tokens=600,
+        system_prompt="System prompt",
+        structured_output_retries=0,
+    )
+    assert isinstance(provider, OpenAIProvider)
+    assert provider.structured_transport == "chat_completions"
+    provider._get_structured_completion_chat_completions_async = AsyncMock(
+        return_value=expected
+    )
+    provider.client.responses.parse = Mock(
+        side_effect=AssertionError("Responses must not be called")
+    )
+
+    result = await provider._get_structured_completion_native_async(
+        "Prompt", StorytellerResponseBootstrap
+    )
+
+    assert result == expected
+    provider._get_structured_completion_chat_completions_async.assert_awaited_once_with(
+        "Prompt", StorytellerResponseBootstrap, text_format=None
+    )
+    provider.client.responses.parse.assert_not_called()
 
 
 def test_anthropic_provider_uses_native_output_format() -> None:

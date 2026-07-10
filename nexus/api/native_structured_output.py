@@ -184,6 +184,10 @@ def build_native_structured_provider(
             system_prompt=system_prompt,
             base_url=endpoint["base_url"] if endpoint else None,
             api_key=endpoint["api_key"] if endpoint else None,
+            structured_transport=(
+                endpoint["structured_transport"] if endpoint else "responses"
+            ),
+            request_timeout=(endpoint["request_timeout_seconds"] if endpoint else None),
             structured_output_retries=structured_output_retries,
             output_validator=output_validator,
         )

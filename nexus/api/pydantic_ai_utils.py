@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any, Dict, List, Optional, Sequence
 
+from openai import AsyncOpenAI
 from pydantic_ai.messages import (
     ModelMessage,
     ModelRequest,
@@ -15,7 +16,7 @@ from pydantic_ai.messages import (
 )
 from pydantic_ai.models import Model
 from pydantic_ai.models.anthropic import AnthropicModel
-from pydantic_ai.models.openai import OpenAIResponsesModel
+from pydantic_ai.models.openai import OpenAIChatModel, OpenAIResponsesModel
 from pydantic_ai.profiles.anthropic import anthropic_model_profile
 from pydantic_ai.providers.anthropic import (
     AnthropicProvider as PydanticAnthropicProvider,
@@ -66,9 +67,24 @@ def build_pydantic_ai_model(model: str) -> Model:
     endpoint = get_openai_compatible_endpoint(model)
     if endpoint is None:
         raise ValueError(f"No base_url registry entry for model {model!r}")
-    pyd_provider = PydanticOpenAIProvider(
-        api_key=endpoint["api_key"], base_url=endpoint["base_url"]
-    )
+    timeout = endpoint["request_timeout_seconds"]
+    if timeout is not None:
+        # Slow local servers (LM Studio grammar compile) blow past the OpenAI
+        # SDK's 600s default. Mirror the legacy provider call sites: hand the
+        # pydantic-ai provider a client that carries the registry timeout.
+        pyd_provider = PydanticOpenAIProvider(
+            openai_client=AsyncOpenAI(
+                api_key=endpoint["api_key"],
+                base_url=endpoint["base_url"],
+                timeout=timeout,
+            )
+        )
+    else:
+        pyd_provider = PydanticOpenAIProvider(
+            api_key=endpoint["api_key"], base_url=endpoint["base_url"]
+        )
+    if endpoint["structured_transport"] == "chat_completions":
+        return OpenAIChatModel(model_name=model, provider=pyd_provider)
     return OpenAIResponsesModel(model_name=model, provider=pyd_provider)
 
 

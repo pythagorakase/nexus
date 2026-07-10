@@ -42,7 +42,18 @@ import json
 import time
 import signal
 import threading
-from typing import List, Dict, Any, Tuple, Optional, Union, Protocol, Type, TypeVar
+from typing import (
+    List,
+    Dict,
+    Any,
+    Tuple,
+    Optional,
+    Union,
+    Protocol,
+    Type,
+    TypeVar,
+    Literal,
+)
 from datetime import datetime, timedelta
 
 # Try to import keyboard module for abort functionality
@@ -280,6 +291,8 @@ class OpenAIProvider(LLMProvider):
         system_prompt: Optional[str] = None,
         reasoning_effort: Optional[str] = None,
         base_url: Optional[str] = None,
+        structured_transport: Literal["responses", "chat_completions"] = "responses",
+        request_timeout: Optional[float] = None,
         structured_output_retries: Optional[int] = None,
         output_validator: Optional[Any] = None,
     ):
@@ -297,6 +310,10 @@ class OpenAIProvider(LLMProvider):
                 - GPT-5: 'minimal', 'medium', 'high'
                 - o3: 'low', 'medium', 'high'
             base_url: Optional base URL for API (e.g., for mock servers)
+            structured_transport: OpenAI-compatible surface used for strict
+                structured output
+            request_timeout: Optional request timeout in seconds. None uses the
+                OpenAI SDK default.
             structured_output_retries: Validation retry budget for structured
                 output agents (apex.structured_output_retries in nexus.toml)
             output_validator: Optional async pydantic_ai output validator
@@ -305,6 +322,16 @@ class OpenAIProvider(LLMProvider):
         self.reasoning_effort = reasoning_effort
         self.max_output_tokens = max_output_tokens or max_tokens
         self.base_url = base_url
+        self.request_timeout = request_timeout
+        if structured_transport not in {"responses", "chat_completions"}:
+            raise ValueError(
+                "structured_transport must be 'responses' or 'chat_completions'"
+            )
+        if structured_transport == "chat_completions" and not base_url:
+            raise ValueError(
+                "structured_transport='chat_completions' requires a base_url"
+            )
+        self.structured_transport = structured_transport
         self.structured_output_retries = (
             structured_output_retries
             if structured_output_retries is not None
@@ -351,10 +378,12 @@ class OpenAIProvider(LLMProvider):
         self.supports_temperature = not self.is_reasoning_model
 
         # Create client with optional base_url for mock servers
-        client_kwargs = {"api_key": self.api_key}
+        client_kwargs: Dict[str, Any] = {"api_key": self.api_key}
         if self.base_url:
             client_kwargs["base_url"] = self.base_url
             logger.info(f"Using custom base URL: {self.base_url}")
+        if self.request_timeout is not None:
+            client_kwargs["timeout"] = self.request_timeout
         self.client = openai.OpenAI(**client_kwargs)
 
         # Log the model type
@@ -431,11 +460,8 @@ class OpenAIProvider(LLMProvider):
         text_format: Optional[Dict[str, Any]] = None,
     ) -> Tuple[Any, LLMResponse]:
         """Get a structured completion without blocking an existing event loop."""
-        return await asyncio.to_thread(
-            self._get_structured_completion_native_sync,
-            prompt,
-            schema_model,
-            text_format=text_format,
+        return await self._get_structured_completion_native_async(
+            prompt, schema_model, text_format=text_format
         )
 
     def _raise_if_running_loop(self, method_name: str, async_method_name: str) -> None:
@@ -458,6 +484,11 @@ class OpenAIProvider(LLMProvider):
         text_format: Optional[Dict[str, Any]] = None,
     ) -> Tuple[Any, LLMResponse]:
         """Run a native strict-schema Responses request with bounded repair."""
+
+        if self.structured_transport == "chat_completions":
+            return self._get_structured_completion_chat_completions_sync(
+                prompt, schema_model, text_format=text_format
+            )
 
         from pydantic_ai import ModelRetry
 
@@ -505,6 +536,26 @@ class OpenAIProvider(LLMProvider):
                 active_prompt = retry_prompt(prompt, str(exc))
 
         raise RuntimeError("Structured completion failed") from last_error
+
+    async def _get_structured_completion_native_async(
+        self,
+        prompt: str,
+        schema_model: Type,
+        *,
+        text_format: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[Any, LLMResponse]:
+        """Dispatch structured output without blocking an existing event loop."""
+
+        if self.structured_transport == "chat_completions":
+            return await self._get_structured_completion_chat_completions_async(
+                prompt, schema_model, text_format=text_format
+            )
+        return await asyncio.to_thread(
+            self._get_structured_completion_native_sync,
+            prompt,
+            schema_model,
+            text_format=text_format,
+        )
 
     def _should_fallback_to_chat_completions(self, exc: BaseException) -> bool:
         """Return True when a local OpenAI-compatible server needs Chat format."""
@@ -569,6 +620,22 @@ class OpenAIProvider(LLMProvider):
                 active_prompt = retry_prompt(prompt, str(exc))
 
         raise RuntimeError("Structured chat completion failed") from last_error
+
+    async def _get_structured_completion_chat_completions_async(
+        self,
+        prompt: str,
+        schema_model: Type,
+        *,
+        text_format: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[Any, LLMResponse]:
+        """Run Chat Completions structured output off the event-loop thread."""
+
+        return await asyncio.to_thread(
+            self._get_structured_completion_chat_completions_sync,
+            prompt,
+            schema_model,
+            text_format=text_format,
+        )
 
     def _build_native_structured_request_params(
         self,
