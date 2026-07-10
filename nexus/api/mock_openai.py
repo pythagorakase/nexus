@@ -130,6 +130,161 @@ def query_bootstrap_narrative() -> Dict[str, Any]:
             return cur.fetchone() or {}
 
 
+def build_setting_arguments(cache: Dict[str, Any]) -> Dict[str, Any]:
+    """Build ``SettingCard`` tool arguments from a wizard cache row."""
+
+    return {
+        "tone": cache.get("setting_tone"),
+        "genre": cache.get("setting_genre"),
+        "themes": _parse_pg_array(cache.get("setting_themes")),
+        "tech_level": cache.get("setting_tech_level"),
+        "world_name": cache.get("setting_world_name"),
+        "time_period": cache.get("setting_time_period"),
+        "magic_exists": cache.get("setting_magic_exists", False),
+        "magic_description": cache.get("setting_magic_description"),
+        "cultural_notes": cache.get("setting_cultural_notes"),
+        "language_notes": cache.get("setting_language_notes"),
+        "major_conflict": cache.get("setting_major_conflict"),
+        "geographic_scope": cache.get("setting_geographic_scope"),
+        "secondary_genres": _parse_pg_array(cache.get("setting_secondary_genres")),
+        "political_structure": cache.get("setting_political_structure"),
+        "diegetic_artifact": cache.get("setting_diegetic_artifact"),
+    }
+
+
+def _selected_trait_rows(traits: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Return the three complete selected standard-trait rows or fail loudly."""
+
+    selected = [
+        trait
+        for trait in traits
+        if trait.get("is_selected")
+        and isinstance(trait.get("id"), int)
+        and trait["id"] <= 10
+    ]
+    if len(selected) != 3:
+        raise ValueError(
+            "Mock traits must contain exactly 3 selected rows with id <= 10; "
+            f"found {len(selected)}"
+        )
+
+    for trait in selected:
+        name = trait.get("name")
+        rationale = trait.get("rationale")
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("Each selected mock trait must have a non-empty name")
+        if not isinstance(rationale, str) or not rationale.strip():
+            raise ValueError(
+                f"Selected mock trait {name!r} must have a non-empty rationale"
+            )
+    return selected
+
+
+def build_character_concept_arguments(
+    cache: Dict[str, Any], traits: List[Dict[str, Any]]
+) -> Dict[str, Any]:
+    """Build ``CharacterConceptSubmission`` arguments from mock rows."""
+
+    selected = _selected_trait_rows(traits)
+    return {
+        "name": cache.get("character_name"),
+        "archetype": cache.get("character_archetype"),
+        "background": cache.get("character_background"),
+        "appearance": cache.get("character_appearance"),
+        "suggested_traits": [
+            {"name": trait["name"], "rationale": trait["rationale"]}
+            for trait in selected
+        ],
+    }
+
+
+def build_trait_selection_arguments(
+    traits: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Build ``TraitSelection`` arguments from mock trait rows."""
+
+    selected = _selected_trait_rows(traits)
+    names = [trait["name"] for trait in selected]
+    return {
+        "selected_traits": names,
+        "trait_rationales": {trait["name"]: trait["rationale"] for trait in selected},
+        "suggested_by_llm": names,
+    }
+
+
+def build_wildcard_trait_arguments(
+    traits: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Build ``WildcardTrait`` arguments from the id-11 mock trait row."""
+
+    wildcard = next((trait for trait in traits if trait.get("id") == 11), None)
+    if wildcard is None:
+        raise ValueError("Mock traits are missing the required wildcard row with id 11")
+
+    name = wildcard.get("name")
+    rationale = wildcard.get("rationale")
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError("Mock wildcard trait id 11 must have a non-empty name")
+    if not isinstance(rationale, str) or len(rationale.strip()) < 20:
+        raise ValueError(
+            "Mock wildcard trait id 11 rationale must be at least 20 characters"
+        )
+    return {
+        "wildcard_name": name,
+        "wildcard_description": rationale,
+    }
+
+
+def build_story_seed_arguments(cache: Dict[str, Any]) -> Dict[str, Any]:
+    """Build ``StorySeedSubmission`` arguments from a wizard cache row."""
+
+    location = cache.get("initial_location") or {}
+    base_timestamp = cache.get("base_timestamp")
+    if not base_timestamp:
+        raise ValueError(
+            "Mock wizard cache is missing the persisted diegetic base_timestamp"
+        )
+    if not isinstance(base_timestamp, datetime) or base_timestamp.tzinfo is None:
+        raise ValueError(
+            "Mock wizard cache base_timestamp must be a timezone-aware "
+            "PostgreSQL datetime"
+        )
+    base_timestamp = base_timestamp.astimezone(timezone.utc)
+    base_timestamp_dict = {
+        "year": base_timestamp.year,
+        "month": base_timestamp.month,
+        "day": base_timestamp.day,
+        "hour": base_timestamp.hour,
+        "minute": base_timestamp.minute,
+    }
+
+    location_name = location.get("name", "unknown location")
+    location_summary = location.get("summary", "")
+    zone_name = cache.get("zone_name", "")
+    layer_name = cache.get("layer_name", "")
+    location_sketch = (
+        f"A place called {location_name} in the {zone_name} region of {layer_name}. "
+        f"{location_summary}"
+    )
+
+    return {
+        "seed": {
+            "seed_type": cache.get("seed_type"),
+            "title": cache.get("seed_title"),
+            "situation": cache.get("seed_situation"),
+            "hook": cache.get("seed_hook"),
+            "immediate_goal": cache.get("seed_immediate_goal"),
+            "stakes": cache.get("seed_stakes"),
+            "tension_source": cache.get("seed_tension_source"),
+            "base_timestamp": base_timestamp_dict,
+            "weather": cache.get("seed_weather"),
+            "key_npcs": _parse_pg_array(cache.get("seed_key_npcs")),
+            "secrets": cache.get("seed_secrets"),
+        },
+        "location_sketch": location_sketch,
+    }
+
+
 def get_cached_phase_response(
     phase: str, subphase: Optional[str] = None
 ) -> Dict[str, Any]:
@@ -144,164 +299,61 @@ def get_cached_phase_response(
         return {
             "phase_complete": True,
             "artifact_type": "submit_world_document",
-            "data": {
-                "tone": cache.get("setting_tone"),
-                "genre": cache.get("setting_genre"),
-                "themes": _parse_pg_array(cache.get("setting_themes")),
-                "tech_level": cache.get("setting_tech_level"),
-                "world_name": cache.get("setting_world_name"),
-                "time_period": cache.get("setting_time_period"),
-                "magic_exists": cache.get("setting_magic_exists", False),
-                "magic_description": cache.get("setting_magic_description"),
-                "cultural_notes": cache.get("setting_cultural_notes"),
-                "language_notes": cache.get("setting_language_notes"),
-                "major_conflict": cache.get("setting_major_conflict"),
-                "geographic_scope": cache.get("setting_geographic_scope"),
-                "secondary_genres": _parse_pg_array(
-                    cache.get("setting_secondary_genres")
-                ),
-                "political_structure": cache.get("setting_political_structure"),
-                "diegetic_artifact": cache.get("setting_diegetic_artifact"),
-            },
+            "data": build_setting_arguments(cache),
             "message": "[TEST MODE] World setting loaded from mock database.",
         }
 
     elif phase == "character":
-        # Query traits from assets.traits table
         traits = query_traits()
-        selected_traits = [
-            t for t in traits if t.get("is_selected") and t.get("id") <= 10
-        ]
-        wildcard = next((t for t in traits if t.get("id") == 11), None)
-
-        # Build trait names and rationales from selected traits
-        selected_names = [t.get("name") for t in selected_traits]
-        trait_rationales = {
-            t.get("name"): t.get("rationale")
-            for t in selected_traits
-            if t.get("rationale")
-        }
-
         if subphase == "concept":
-            # For concept submission, suggest 3 traits if none are selected yet
-            if not selected_names:
-                # Default suggestions based on typical character archetypes
-                suggested_names = ["status", "reputation", "obligations"]
-                suggested_rationales = {
-                    "status": "Given the character's background, their status in the world creates tension.",
-                    "reputation": "The character's reputation precedes them, opening some doors while slamming others.",
-                    "obligations": "Obligations pull the character into situations against their better judgment.",
-                }
-            else:
-                suggested_names = selected_names
-                suggested_rationales = trait_rationales
-
             return {
                 "phase_complete": False,
                 "artifact_type": "submit_character_concept",
-                "data": {
-                    "name": cache.get("character_name"),
-                    "archetype": cache.get("character_archetype"),
-                    "background": cache.get("character_background"),
-                    "appearance": cache.get("character_appearance"),
-                    "suggested_traits": suggested_names,
-                    "trait_rationales": suggested_rationales,
-                },
+                "data": build_character_concept_arguments(cache, traits),
                 "message": "[TEST MODE] Character concept loaded from mock database.",
             }
         elif subphase == "traits":
             return {
                 "phase_complete": False,
                 "artifact_type": "submit_trait_selection",
-                "data": {
-                    "selected_traits": selected_names,
-                    "trait_rationales": trait_rationales,
-                },
+                "data": build_trait_selection_arguments(traits),
                 "message": "[TEST MODE] Traits loaded from mock database.",
             }
         elif subphase == "wildcard":
             return {
                 "phase_complete": True,
                 "artifact_type": "submit_wildcard_trait",
+                "data": build_wildcard_trait_arguments(traits),
+                "message": "[TEST MODE] Wildcard loaded from mock database.",
+            }
+        elif subphase == "sheet":
+            concept = build_character_concept_arguments(cache, traits)
+            selection = build_trait_selection_arguments(traits)
+            wildcard = build_wildcard_trait_arguments(traits)
+            return {
+                "phase_complete": True,
+                "artifact_type": "submit_character_sheet",
                 "data": {
                     "character_state": {
                         "concept": {
-                            "name": cache.get("character_name"),
-                            "archetype": cache.get("character_archetype"),
-                            "background": cache.get("character_background"),
-                            "appearance": cache.get("character_appearance"),
+                            key: concept[key]
+                            for key in ("name", "archetype", "background", "appearance")
                         },
                         "trait_selection": {
-                            "selected_traits": selected_names,
+                            "selected_traits": selection["selected_traits"],
                         },
-                        "wildcard": {
-                            "wildcard_name": (
-                                wildcard.get("name") if wildcard else "wildcard"
-                            ),
-                            "wildcard_description": (
-                                wildcard.get("rationale") if wildcard else None
-                            ),
-                        },
+                        "wildcard": wildcard,
                     },
                 },
-                "message": "[TEST MODE] Wildcard loaded from mock database.",
+                "message": "[TEST MODE] Character sheet loaded from mock database.",
             }
 
     elif phase == "seed":
-        location = cache.get("initial_location") or {}
-        base_timestamp = cache.get("base_timestamp")
-        if not base_timestamp:
-            raise ValueError(
-                "Mock wizard cache is missing the persisted diegetic base_timestamp"
-            )
-        if not isinstance(base_timestamp, datetime) or base_timestamp.tzinfo is None:
-            raise ValueError(
-                "Mock wizard cache base_timestamp must be a timezone-aware "
-                "PostgreSQL datetime"
-            )
-        base_timestamp = base_timestamp.astimezone(timezone.utc)
-        base_timestamp_dict = {
-            "year": base_timestamp.year,
-            "month": base_timestamp.month,
-            "day": base_timestamp.day,
-            "hour": base_timestamp.hour,
-            "minute": base_timestamp.minute,
-        }
-        # Two-phase seed generation: Return StorySeedSubmission format
-        # Phase 1: seed + location_sketch (creative content)
-        # Phase 2: set designer generates layer/zone/location (handled in wizard_chat.py)
-
-        # Generate location_sketch from existing location data for backward compatibility
-        location_name = location.get("name", "unknown location")
-        location_summary = location.get("summary", "")
-        zone_name = cache.get("zone_name", "")
-        layer_name = cache.get("layer_name", "")
-
-        location_sketch = (
-            f"A place called {location_name} in the {zone_name} region of {layer_name}. "
-            f"{location_summary}"
-        )
-
         return {
             "phase_complete": False,  # Not complete until set designer runs
             "requires_set_design": True,
             "artifact_type": "submit_starting_scenario",
-            "data": {
-                "seed": {
-                    "seed_type": cache.get("seed_type"),
-                    "title": cache.get("seed_title"),
-                    "situation": cache.get("seed_situation"),
-                    "hook": cache.get("seed_hook"),
-                    "immediate_goal": cache.get("seed_immediate_goal"),
-                    "stakes": cache.get("seed_stakes"),
-                    "tension_source": cache.get("seed_tension_source"),
-                    "base_timestamp": base_timestamp_dict,
-                    "weather": cache.get("seed_weather"),
-                    "key_npcs": _parse_pg_array(cache.get("seed_key_npcs")),
-                    "secrets": cache.get("seed_secrets"),
-                },
-                "location_sketch": location_sketch,
-            },
+            "data": build_story_seed_arguments(cache),
             # Include pre-computed location data for TEST mode bypass
             # wizard_chat.py can use this instead of calling set designer
             "_mock_location_data": {
@@ -314,7 +366,7 @@ def get_cached_phase_response(
                     "name": cache.get("zone_name"),
                     "summary": cache.get("zone_summary"),
                 },
-                "location": location,
+                "location": cache.get("initial_location") or {},
             },
             "message": "[TEST MODE] Seed loaded from mock database.",
         }
@@ -450,35 +502,119 @@ def build_artifact_response(artifact_type: str, data: Dict[str, Any]) -> Dict[st
 
 def build_archetype_intro() -> Dict[str, Any]:
     """Build character phase introduction with archetype choices."""
-    message = "[TEST MODE] Welcome to character creation. Based on the world of Neon Palimpsest, which archetypal path speaks to you?"
-    choices = [
-        "The Amnesiac Courier - Someone who wakes with no memory but dangerous skills, hunted by forces they don't remember crossing.",
-        "The Double Agent - A figure walking the line between corporate authority and underground resistance, trusted by neither.",
-        "The Memory Architect - A technician who can edit, erase, or fabricate identities, now running from their own creations.",
-    ]
-    return build_respond_with_choices(message, choices)
+    intro = build_archetype_intro_data()
+    return build_respond_with_choices(intro["message"], intro["choices"])
+
+
+def build_archetype_intro_data() -> Dict[str, Any]:
+    """Build a ``WizardResponse``-shaped character introduction."""
+
+    return {
+        "message": (
+            "[TEST MODE] Welcome to character creation. Based on the world of "
+            "Neon Palimpsest, which archetypal path speaks to you?"
+        ),
+        "choices": [
+            "The Amnesiac Courier - Someone who wakes with no memory but dangerous "
+            "skills, hunted by forces they don't remember crossing.",
+            "The Double Agent - A figure walking the line between corporate authority "
+            "and underground resistance, trusted by neither.",
+            "The Memory Architect - A technician who can edit, erase, or fabricate "
+            "identities, now running from their own creations.",
+        ],
+    }
 
 
 def build_wildcard_intro() -> Dict[str, Any]:
     """Build wildcard selection introduction."""
-    message = "[TEST MODE] Your character's core is taking shape. Now add a wildcard element that sets them apart. Which resonates with your vision?"
-    choices = [
-        "Ghostprint Key - A pre-Council identity root hidden under their skin that can briefly assume anyone's credentials, but draws dangerous attention with each use.",
-        "Neural Echo - Fragmented memories of their erased past that surface unpredictably, sometimes revealing crucial information, sometimes triggering buried protocols.",
-        "Dead Man's Archive - A cached data-store of secrets they gathered before their memory was wiped, accessible only through specific emotional triggers.",
-    ]
-    return build_respond_with_choices(message, choices)
+    intro = build_wildcard_intro_data()
+    return build_respond_with_choices(intro["message"], intro["choices"])
+
+
+def build_wildcard_intro_data() -> Dict[str, Any]:
+    """Build a ``WizardResponse``-shaped wildcard introduction."""
+
+    return {
+        "message": (
+            "[TEST MODE] Your character's core is taking shape. Now add a wildcard "
+            "element that sets them apart. Which resonates with your vision?"
+        ),
+        "choices": [
+            "Ghostprint Key - A pre-Council identity root hidden under their skin that "
+            "can briefly assume anyone's credentials, but draws dangerous attention "
+            "with each use.",
+            "Neural Echo - Fragmented memories of their erased past that surface "
+            "unpredictably, sometimes revealing crucial information, sometimes "
+            "triggering buried protocols.",
+            "Dead Man's Archive - A cached data-store of secrets they gathered before "
+            "their memory was wiped, accessible only through specific emotional "
+            "triggers.",
+        ],
+    }
 
 
 def build_seed_intro() -> Dict[str, Any]:
     """Build seed phase introduction with scenario choices."""
-    message = "[TEST MODE] Your character is ready. Now let's craft the opening scene. Which draws you in?"
-    choices = [
-        "The Job You Already Took - Kade wakes on a rattling tram, a courier's satchel handcuffed to their wrist and no memory of accepting the job. The city's ledgers insist the delivery is already in breach.",
-        "The Message That Found You - A ghost-frequency ping activates in Kade's burned neural mesh—coordinates and a single word: 'Remember.' Someone from their erased past wants to make contact.",
-        "The Face You Used to Wear - Kade spots their own face on a wanted feed, but the name and crimes belong to someone they don't remember being. The bounty is high enough to turn every stranger into a threat.",
-    ]
-    return build_respond_with_choices(message, choices)
+    intro = build_seed_intro_data()
+    return build_respond_with_choices(intro["message"], intro["choices"])
+
+
+def build_seed_intro_data() -> Dict[str, Any]:
+    """Build a ``WizardResponse``-shaped seed introduction."""
+
+    return {
+        "message": (
+            "[TEST MODE] Your character is ready. Now let's craft the opening scene. "
+            "Which draws you in?"
+        ),
+        "choices": [
+            "The Job You Already Took - Kade wakes on a rattling tram, a courier's "
+            "satchel handcuffed to their wrist and no memory of accepting the job. "
+            "The city's ledgers insist the delivery is already in breach.",
+            "The Message That Found You - A ghost-frequency ping activates in Kade's "
+            "burned neural mesh—coordinates and a single word: 'Remember.' Someone "
+            "from their erased past wants to make contact.",
+            "The Face You Used to Wear - Kade spots their own face on a wanted feed, "
+            "but the name and crimes belong to someone they don't remember being. "
+            "The bounty is high enough to turn every stranger into a threat.",
+        ],
+    }
+
+
+def build_wizard_intro_data(
+    phase: str, subphase: Optional[str] = None
+) -> Dict[str, Any]:
+    """Build a valid wizard introduction for any wizard phase."""
+
+    if phase == "character" and subphase == "concept":
+        return build_archetype_intro_data()
+    if phase == "character" and subphase == "wildcard":
+        return build_wildcard_intro_data()
+    if phase == "seed":
+        return build_seed_intro_data()
+    if phase == "character" and subphase == "traits":
+        return {
+            "message": (
+                "[TEST MODE] Choose the three traits that should carry the most "
+                "narrative weight for this character."
+            ),
+            "choices": [
+                "Use the suggested three traits.",
+                "Review the trait menu before deciding.",
+                "Choose a different combination.",
+            ],
+        }
+    return {
+        "message": (
+            "[TEST MODE] Let's establish the world that will shape this story. "
+            "Choose how you would like to begin."
+        ),
+        "choices": [
+            "Use the prepared test setting.",
+            "Review the world's central conflict.",
+            "Explore the setting's tone and themes.",
+        ],
+    }
 
 
 @app.get("/health")
@@ -556,20 +692,15 @@ async def chat_completions(request: ChatCompletionRequest):
             else:
                 # Any input (choice selection, accept_fate, or freeform) → advance
                 cached = get_cached_phase_response("character", "wildcard")
-                wildcard_data = (
-                    cached.get("data", {})
-                    .get("character_state", {})
-                    .get("wildcard", {})
-                )
                 message = build_artifact_response(
-                    "submit_wildcard_trait", wildcard_data
+                    "submit_wildcard_trait", cached.get("data", {})
                 )
                 logger.info("[MOCK] Returning wildcard trait artifact")
 
         # Subphase: Character Sheet (all subphases complete)
         elif subphase == "sheet":
             # Return the final character sheet
-            cached = get_cached_phase_response("character", "wildcard")
+            cached = get_cached_phase_response("character", "sheet")
             message = build_artifact_response(
                 "submit_character_sheet", cached.get("data", {})
             )
@@ -713,6 +844,45 @@ def _collect_text(value: Any) -> str:
     return ""
 
 
+RESPONSES_WIZARD_TOOLS: Dict[str, tuple[str, Optional[str]]] = {
+    "submit_world_document": ("setting", None),
+    "submit_character_concept": ("character", "concept"),
+    "submit_trait_selection": ("character", "traits"),
+    "submit_wildcard_trait": ("character", "wildcard"),
+    "submit_starting_scenario": ("seed", None),
+}
+
+
+def detect_responses_wizard_tool(
+    tools: Optional[List[Dict[str, Any]]],
+) -> Optional[tuple[str, str, Optional[str]]]:
+    """Find a Responses-format wizard tool and its phase mapping."""
+
+    tool_names = {
+        tool.get("name")
+        for tool in tools or []
+        if isinstance(tool, dict) and isinstance(tool.get("name"), str)
+    }
+    for tool_name, (phase, subphase) in RESPONSES_WIZARD_TOOLS.items():
+        if tool_name in tool_names:
+            return tool_name, phase, subphase
+    return None
+
+
+def get_latest_responses_user_message(input_data: Any) -> str:
+    """Extract the last user-authored text from Responses API input."""
+
+    if isinstance(input_data, str):
+        return input_data
+    if isinstance(input_data, list):
+        for item in reversed(input_data):
+            if isinstance(item, dict) and item.get("role") == "user":
+                return _collect_text(item.get("content"))
+    if isinstance(input_data, dict) and input_data.get("role") == "user":
+        return _collect_text(input_data.get("content"))
+    return ""
+
+
 def _extract_orrery_proposal_ids(prompt: str) -> List[str]:
     """Extract proposal IDs from LogonUtility's prompt-facing Orrery list.
 
@@ -819,7 +989,10 @@ def _mock_storyteller_response(prompt: str) -> Dict[str, Any]:
 
 
 def _responses_payload(
-    output_data: Dict[str, Any], *, final_result_tool: bool = False
+    output_data: Dict[str, Any],
+    *,
+    final_result_tool: bool = False,
+    tool_name: str = "final_result",
 ) -> Dict[str, Any]:
     """Format structured JSON as an OpenAI Responses-compatible payload."""
 
@@ -830,7 +1003,7 @@ def _responses_payload(
                 "type": "function_call",
                 "id": f"fc-mock-{uuid.uuid4().hex[:8]}",
                 "call_id": f"call-mock-{uuid.uuid4().hex[:8]}",
-                "name": "final_result",
+                "name": tool_name,
                 "arguments": output_json,
                 "status": "completed",
             }
@@ -905,6 +1078,28 @@ async def responses_create(request: ResponsesRequest):
     the OpenAI responses API with structured output.
     """
     logger.info(f"[MOCK] Responses request for model: {request.model}")
+
+    wizard_tool = detect_responses_wizard_tool(request.tools)
+    if wizard_tool is not None:
+        tool_name, phase, subphase = wizard_tool
+        last_user_message = get_latest_responses_user_message(request.input)
+        logger.info(
+            "[MOCK] Responses wizard request: tool=%s phase=%s subphase=%s",
+            tool_name,
+            phase,
+            subphase,
+        )
+        if is_phase_transition(last_user_message):
+            logger.info("[MOCK] Returning Responses wizard phase introduction")
+            return _responses_payload(build_wizard_intro_data(phase, subphase))
+
+        cached = get_cached_phase_response(phase, subphase)
+        logger.info("[MOCK] Returning Responses wizard artifact: %s", tool_name)
+        return _responses_payload(
+            cached.get("data", {}),
+            final_result_tool=True,
+            tool_name=tool_name,
+        )
 
     input_text = _collect_text(request.input)
     proposal_ids = _extract_orrery_proposal_ids(input_text)

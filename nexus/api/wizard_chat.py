@@ -593,8 +593,9 @@ async def new_story_chat_endpoint(request: ChatRequest):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("Error in chat endpoint: %s", e)
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Error in chat endpoint: %s", e)
+        detail = f"{e} (cause: {e.__cause__})" if e.__cause__ is not None else str(e)
+        raise HTTPException(status_code=500, detail=detail)
 
 
 @router.post("/chat/stream")
