@@ -8,11 +8,15 @@ from nexus.agents.logon.apex_schema import (
     StorytellerResponseBootstrap,
     StorytellerResponseExtended,
 )
+from nexus.api.new_story_schemas import SettingCard, StorySeedSubmission, WizardResponse
 from nexus.api.native_structured_output import (
+    ANTHROPIC_UNSUPPORTED_SCHEMA_KEYS,
+    AnthropicJsonSchemaTransformer,
     anthropic_output_config,
     anthropic_output_format,
     anthropic_strict_tool,
     openai_response_text_format,
+    strict_json_schema,
 )
 from scripts.api_anthropic import AnthropicProvider
 from scripts.api_openai import OpenAIProvider
@@ -31,6 +35,17 @@ def _contains_key(value: object, key: str) -> bool:
     if isinstance(value, list):
         return any(_contains_key(item, key) for item in value)
     return False
+
+
+def _assert_object_schemas_closed(value: object) -> None:
+    if isinstance(value, dict):
+        if value.get("type") == "object":
+            assert value.get("additionalProperties") is False
+        for item in value.values():
+            _assert_object_schemas_closed(item)
+    elif isinstance(value, list):
+        for item in value:
+            _assert_object_schemas_closed(item)
 
 
 def test_openai_response_text_format_is_native_strict_json_schema() -> None:
@@ -60,6 +75,100 @@ def test_anthropic_output_format_uses_native_json_schema_shape() -> None:
     assert "state_updates" in schema["required"]
     assert not _contains_key(schema, "minLength")
     assert not _contains_key(schema, "maximum")
+
+
+def test_anthropic_json_schema_transformer_strips_constraints_recursively() -> None:
+    """Constraints are stripped and objects closed through every nested shape."""
+    schema = {
+        "type": "object",
+        "description": "Root survives",
+        "properties": {
+            "metadata": {
+                "type": "object",
+                "description": "Object property survives",
+                "properties": {"enabled": {"type": "boolean"}},
+            },
+            "codes": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 5,
+                "description": "Array survives",
+                "items": {
+                    "type": "object",
+                    "description": "Item object survives",
+                    "properties": {
+                        "code": {
+                            "type": "string",
+                            "pattern": "^[A-Z]+$",
+                        }
+                    },
+                },
+            },
+        },
+        "$defs": {
+            "Nested": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "minLength": 3,
+                        "pattern": "^[a-z]+$",
+                        "description": "Definition survives",
+                    }
+                },
+            }
+        },
+    }
+
+    transformed = AnthropicJsonSchemaTransformer(schema, strict=True).walk()
+
+    assert all(
+        not _contains_key(transformed, key) for key in ANTHROPIC_UNSUPPORTED_SCHEMA_KEYS
+    )
+    _assert_object_schemas_closed(transformed)
+    assert transformed["description"] == "Root survives"
+    assert (
+        transformed["properties"]["metadata"]["description"]
+        == "Object property survives"
+    )
+    assert transformed["properties"]["codes"]["description"] == "Array survives"
+    assert (
+        transformed["properties"]["codes"]["items"]["description"]
+        == "Item object survives"
+    )
+    assert (
+        transformed["$defs"]["Nested"]["properties"]["name"]["description"]
+        == "Definition survives"
+    )
+
+
+def test_anthropic_json_schema_transformer_accepts_wizard_response_schema() -> None:
+    """WizardResponse's strict schema is reduced to Anthropic's supported subset."""
+    schema = strict_json_schema(WizardResponse)
+    assert _contains_key(schema, "minItems")
+    assert _contains_key(schema, "maxItems")
+
+    transformed = AnthropicJsonSchemaTransformer(schema, strict=True).walk()
+
+    assert all(
+        not _contains_key(transformed, key) for key in ANTHROPIC_UNSUPPORTED_SCHEMA_KEYS
+    )
+    assert transformed["properties"]["choices"]["type"] == "array"
+    assert transformed["properties"]["message"]["type"] == "string"
+
+
+def test_anthropic_json_schema_transformer_closes_wizard_tool_schemas() -> None:
+    """Setting and seed tool schemas meet Anthropic strict object requirements."""
+    for schema_model in (SettingCard, StorySeedSubmission):
+        transformed = AnthropicJsonSchemaTransformer(
+            strict_json_schema(schema_model), strict=True
+        ).walk()
+
+        assert all(
+            not _contains_key(transformed, key)
+            for key in ANTHROPIC_UNSUPPORTED_SCHEMA_KEYS
+        )
+        _assert_object_schemas_closed(transformed)
 
 
 def test_anthropic_output_config_wraps_native_schema_format() -> None:

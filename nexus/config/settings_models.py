@@ -62,6 +62,15 @@ class APIModelEntry(BaseModel):
             "never reach the provider."
         ),
     )
+    native_structured_output: Optional[bool] = Field(
+        default=None,
+        description=(
+            "Override pydantic-ai's model-profile capability detection for "
+            "native (grammar-level) structured output. True forces support ON "
+            "for models the pinned pydantic-ai's allowlist predates (issue "
+            "#454); False forces it OFF; None defers to pydantic-ai."
+        ),
+    )
 
 
 class ProviderModels(BaseModel):
