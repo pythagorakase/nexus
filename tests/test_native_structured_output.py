@@ -23,6 +23,7 @@ from nexus.api.native_structured_output import (
     strict_json_schema,
 )
 from nexus.config import resolve_model_ref
+from scripts import api_openai
 from scripts.api_anthropic import AnthropicProvider
 from scripts.api_openai import OpenAIProvider
 
@@ -193,6 +194,39 @@ def test_anthropic_strict_tool_helper_sets_strict_true() -> None:
     assert tool["name"] == "submit_structured_response"
     assert tool["strict"] is True
     assert tool["input_schema"]["additionalProperties"] is False
+
+
+@pytest.mark.parametrize(
+    ("request_timeout", "expected_timeout"),
+    [(1800.0, 1800.0), (None, None)],
+)
+def test_openai_provider_forwards_only_configured_request_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+    request_timeout: float | None,
+    expected_timeout: float | None,
+) -> None:
+    """Client construction overrides timeout only when explicitly configured."""
+    captured: dict[str, object] = {}
+    fake_client = SimpleNamespace()
+
+    def fake_openai(**kwargs: object) -> SimpleNamespace:
+        captured.update(kwargs)
+        return fake_client
+
+    monkeypatch.setattr(api_openai.openai, "OpenAI", fake_openai)
+
+    provider = OpenAIProvider(
+        model="local-test-model",
+        api_key="test-key",
+        base_url="http://127.0.0.1:1234/v1",
+        request_timeout=request_timeout,
+    )
+
+    assert provider.client is fake_client
+    if expected_timeout is None:
+        assert "timeout" not in captured
+    else:
+        assert captured["timeout"] == expected_timeout
 
 
 def test_openai_provider_uses_responses_parse_text_format() -> None:

@@ -130,6 +130,13 @@ class ProviderModels(BaseModel):
             "ignores text.format."
         ),
     )
+    request_timeout_seconds: Optional[float] = Field(
+        default=None,
+        description=(
+            "Override the OpenAI SDK's 600-second request timeout for slow "
+            "local servers. None defers to the SDK default."
+        ),
+    )
 
     @model_validator(mode="after")
     def _validate_structured_transport(self) -> "ProviderModels":

@@ -187,6 +187,7 @@ def build_native_structured_provider(
             structured_transport=(
                 endpoint["structured_transport"] if endpoint else "responses"
             ),
+            request_timeout=(endpoint["request_timeout_seconds"] if endpoint else None),
             structured_output_retries=structured_output_retries,
             output_validator=output_validator,
         )

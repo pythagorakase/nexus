@@ -292,6 +292,7 @@ class OpenAIProvider(LLMProvider):
         reasoning_effort: Optional[str] = None,
         base_url: Optional[str] = None,
         structured_transport: Literal["responses", "chat_completions"] = "responses",
+        request_timeout: Optional[float] = None,
         structured_output_retries: Optional[int] = None,
         output_validator: Optional[Any] = None,
     ):
@@ -311,6 +312,8 @@ class OpenAIProvider(LLMProvider):
             base_url: Optional base URL for API (e.g., for mock servers)
             structured_transport: OpenAI-compatible surface used for strict
                 structured output
+            request_timeout: Optional request timeout in seconds. None uses the
+                OpenAI SDK default.
             structured_output_retries: Validation retry budget for structured
                 output agents (apex.structured_output_retries in nexus.toml)
             output_validator: Optional async pydantic_ai output validator
@@ -319,6 +322,7 @@ class OpenAIProvider(LLMProvider):
         self.reasoning_effort = reasoning_effort
         self.max_output_tokens = max_output_tokens or max_tokens
         self.base_url = base_url
+        self.request_timeout = request_timeout
         if structured_transport not in {"responses", "chat_completions"}:
             raise ValueError(
                 "structured_transport must be 'responses' or 'chat_completions'"
@@ -374,10 +378,12 @@ class OpenAIProvider(LLMProvider):
         self.supports_temperature = not self.is_reasoning_model
 
         # Create client with optional base_url for mock servers
-        client_kwargs = {"api_key": self.api_key}
+        client_kwargs: Dict[str, Any] = {"api_key": self.api_key}
         if self.base_url:
             client_kwargs["base_url"] = self.base_url
             logger.info(f"Using custom base URL: {self.base_url}")
+        if self.request_timeout is not None:
+            client_kwargs["timeout"] = self.request_timeout
         self.client = openai.OpenAI(**client_kwargs)
 
         # Log the model type

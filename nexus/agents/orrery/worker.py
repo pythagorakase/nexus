@@ -677,6 +677,7 @@ def _narration_provider(settings: Mapping[str, Any]) -> Any:
             base_url=endpoint["base_url"],
             api_key=endpoint["api_key"],
             structured_transport=endpoint["structured_transport"],
+            request_timeout=endpoint["request_timeout_seconds"],
         )
     raise ValueError(f"Unsupported Orrery narration provider: {provider_name}")
 

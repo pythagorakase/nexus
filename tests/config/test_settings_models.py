@@ -158,6 +158,18 @@ def test_structured_transport_defaults_to_responses():
     assert provider.structured_transport == "responses"
 
 
+def test_request_timeout_parses_and_defaults_to_none():
+    """Base URL providers may override the SDK request timeout."""
+    assert ProviderModels().request_timeout_seconds is None
+
+    provider = ProviderModels(
+        base_url="http://127.0.0.1:1234/v1",
+        request_timeout_seconds=1800,
+    )
+
+    assert provider.request_timeout_seconds == 1800
+
+
 def test_chat_completions_structured_transport_requires_base_url():
     """A native provider cannot opt into the local-server transport."""
     raw = _nexus_toml_dict()
@@ -238,6 +250,14 @@ def test_get_openai_compatible_endpoint_routing():
         "base_url": settings.global_.model.api_models["test"].base_url,
         "api_key": "nexus-local-no-key",
         "structured_transport": "responses",
+        "request_timeout_seconds": None,
+    }
+    lmstudio = settings.global_.model.api_models["lmstudio"]
+    assert get_openai_compatible_endpoint(lmstudio.roles["default"]) == {
+        "base_url": lmstudio.base_url,
+        "api_key": "nexus-local-no-key",
+        "structured_transport": "chat_completions",
+        "request_timeout_seconds": 1800,
     }
     assert get_openai_compatible_endpoint("gpt-5.5") is None
     assert get_openai_compatible_endpoint("claude-opus-4-8") is None
@@ -314,6 +334,7 @@ def test_default_load_honors_runtime_config_env(tmp_path, monkeypatch):
         "base_url": "http://127.0.0.1:5999/v1",
         "api_key": "nexus-local-no-key",
         "structured_transport": "responses",
+        "request_timeout_seconds": None,
     }
     assert (
         load_settings("nexus.toml")

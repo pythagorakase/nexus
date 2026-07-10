@@ -274,6 +274,7 @@ class LogonUtility:
         structured_transport = (
             endpoint["structured_transport"] if endpoint else "responses"
         )
+        request_timeout = endpoint["request_timeout_seconds"] if endpoint else None
         if base_url:
             logger.info(f"Model {model}: routing to base_url {base_url}")
 
@@ -327,6 +328,7 @@ class LogonUtility:
                 base_url=base_url,
                 api_key=api_key,
                 structured_transport=structured_transport,
+                request_timeout=request_timeout,
                 structured_output_retries=structured_output_retries,
                 output_validator=output_validator,
             )

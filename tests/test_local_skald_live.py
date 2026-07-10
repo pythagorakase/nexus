@@ -42,6 +42,7 @@ def test_lmstudio_bootstrap_structured_completion_live() -> None:
         base_url=endpoint["base_url"],
         api_key=endpoint["api_key"],
         structured_transport=endpoint["structured_transport"],
+        request_timeout=endpoint["request_timeout_seconds"],
         max_output_tokens=600,
         temperature=0.1,
     )

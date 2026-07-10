@@ -222,7 +222,7 @@ def get_native_structured_output_override(model_id: str) -> Optional[bool]:
     return None
 
 
-def get_openai_compatible_endpoint(model_id: str) -> Optional[Dict[str, str]]:
+def get_openai_compatible_endpoint(model_id: str) -> Optional[Dict[str, Any]]:
     """
     Resolve the OpenAI-compatible endpoint for a registry model, if any.
 
@@ -236,12 +236,13 @@ def get_openai_compatible_endpoint(model_id: str) -> Optional[Dict[str, str]]:
         model_id: Concrete model ID from the api_models registry
 
     Returns:
-        ``{"base_url": ..., "api_key": ..., "structured_transport": ...}``
-        for base_url providers, or None for native providers and for models
-        absent from the registry (callers that accept ad-hoc model overrides
-        treat those as native-SDK models). ``api_key`` is read from Keychain
-        when the provider declares ``api_key_secret``; otherwise a placeholder
-        is returned because OpenAI clients require a non-empty key.
+        ``{"base_url": ..., "api_key": ..., "structured_transport": ...,
+        "request_timeout_seconds": ...}`` for base_url providers, or None for
+        native providers and for models absent from the registry (callers that
+        accept ad-hoc model overrides treat those as native-SDK models).
+        ``api_key`` is read from Keychain when the provider declares
+        ``api_key_secret``; otherwise a placeholder is returned because OpenAI
+        clients require a non-empty key.
     """
     from nexus.config.settings_models import NATIVE_API_PROVIDERS
 
@@ -261,6 +262,7 @@ def get_openai_compatible_endpoint(model_id: str) -> Optional[Dict[str, str]]:
         "base_url": entry.base_url,
         "api_key": api_key,
         "structured_transport": entry.structured_transport,
+        "request_timeout_seconds": entry.request_timeout_seconds,
     }
 
 
