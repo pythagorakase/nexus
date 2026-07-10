@@ -7,6 +7,7 @@ import tomlkit
 from pydantic import ValidationError
 
 from nexus.config import (
+    get_gateway_cors_allowed_origins,
     get_native_structured_output_override,
     load_settings,
     resolve_model_ref,
@@ -286,3 +287,28 @@ def test_default_load_honors_runtime_config_env(tmp_path, monkeypatch):
         .global_.model.api_models["test"]
         .base_url.endswith(":5102/v1")
     )
+
+
+def test_gateway_cors_origins_parse_and_accessor_returns_default() -> None:
+    """The shipped gateway allowlist is typed and exposed by its accessor."""
+    expected = [
+        "http://localhost:8002",
+        "http://127.0.0.1:8002",
+        "https://nexus.pythagora.net",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
+
+    settings = load_settings("nexus.toml")
+    assert settings.runtime is not None
+    assert settings.runtime.gateway.cors_allowed_origins == expected
+    assert get_gateway_cors_allowed_origins() == expected
+
+
+def test_gateway_cors_origins_reject_wildcard() -> None:
+    """Credentialed CORS configuration fails loudly for a wildcard origin."""
+    raw = _nexus_toml_dict()
+    raw["runtime"]["gateway"]["cors_allowed_origins"] = ["*"]
+
+    with pytest.raises(ValidationError, match="exact HTTP\\(S\\) origins"):
+        Settings(**raw)
