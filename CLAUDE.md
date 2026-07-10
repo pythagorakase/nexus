@@ -142,17 +142,18 @@ The NEXUS database schema is self-describing via Postgres table and column comme
 
 ## API Key Management
 
-**Runtime API key storage is macOS Keychain.** 1Password remains the canonical source of truth used for rotation and audit; `scripts/sync_secrets.py` copies keys from 1Password into Keychain on bootstrap or rotation, and that script is the only place in the codebase that touches `op`.
+**The platform secret store is canonical.** NEXUS uses macOS Keychain on Darwin and the Python `keyring` backend elsewhere. Set and rotate credentials through the settings pane's API KEYS card; the card reads only masked status from `GET /api/secrets/status`, writes through `PUT /api/secrets/{provider}`, and verifies with a real provider call through `POST /api/secrets/{provider}/verify`.
 
-All runtime code retrieves keys via `nexus.util.secret_manager.get_secret(<provider>)`. The helper subprocesses to the system `security` CLI (Apple-signed, silent) rather than invoking 1Password — so agentic / unattended workflows are not interrupted by biometric or session-expiry prompts.
+All runtime reads go through `nexus.util.secret_manager.get_secret(<account>)`, and all writes go through `set_secret(<account>, <key>)`. On macOS the helpers subprocess to Apple's signed `security` CLI for silent unattended access; other platforms use `keyring`. Native providers use their provider name as the account. Visible non-native registry providers participate only when `[global.model.api_models.<provider>].api_key_secret` declares their account; keyless and UI-hidden providers never appear in the card.
 
-**Storage rules:**
+**Storage Rules:**
 - Never commit keys to source.
 - Never export keys in long-lived shell rc files.
-- `NEXUS_KEYRING_DISABLE=1` is the supported CI/debug escape hatch — when set, `get_secret` reads from `<PROVIDER>_API_KEY` env vars instead of Keychain.
-- Keys live in Keychain under service `nexus-api`, account `<provider>` (e.g., `openai`, `anthropic`, `openrouter`). Inspect with `security find-generic-password -s nexus-api -a <provider> -w`.
+- `NEXUS_KEYRING_DISABLE=1` is the supported CI/debug escape hatch — when set, `get_secret` reads from `<ACCOUNT>_API_KEY` env vars instead of the platform store.
+- Stored keys use service `nexus-api`; inspect status through the API KEYS card rather than printing credential values.
+- 1Password is not a NEXUS dependency or source of truth. `scripts/sync_secrets.py` is a deprecated personal migration shim for legacy entries only.
 
-For detailed key management workflows including rotation, see the `manage-api-keys` skill in `.claude/skills/`.
+For detailed set, rotation, verification, and migration workflows, see the `manage-api-keys` skill in `.claude/skills/`.
 
 ## User Directives
 - **Formatting**: The user has a strong preference for Chicago title case in headings.
@@ -199,7 +200,7 @@ For detailed, task-specific workflows and guides, see the Claude Code skills in 
 - **git-feature-workflow**: Complete feature development workflow including branch creation, PR submission, GPT-5-Codex review handling, merging, and cleanup
 - **audit-settings**: Validate agent configuration (`nexus.toml`) for errors, constraint violations, and cross-agent consistency
 - **inspect-chunk-context**: Query NEXUS database for chunk details, metadata, entity references, and temporal relationships
-- **manage-api-keys**: Manage NEXUS API keys via macOS Keychain (runtime) and 1Password (canonical source), bootstrap fresh checkouts, rotate keys, and troubleshoot silent retrieval
+- **manage-api-keys**: Set, rotate, inspect, and verify NEXUS API keys through the canonical platform secret store and API KEYS card
 - **openai-structured-output**: Implement OpenAI structured outputs with Pydantic models or JSON schemas
 
 These skills contain detailed commands, workflows, troubleshooting guides, and best practices extracted from development experience.

@@ -57,9 +57,9 @@ models = [
 # Secrets (API Keys)
 # =============================================================================
 
-# Provider -> 1Password reference mapping. Used ONLY by
-# scripts/sync_secrets.py to bootstrap macOS Keychain. Runtime callers go
-# through nexus.util.secret_manager.get_secret() which reads from Keychain.
+# Deprecated personal migration mapping for scripts/sync_secrets.py. The
+# platform secret store is canonical; use the settings-pane API KEYS card for
+# supported writes and rotations. This table remains for legacy owner entries.
 #
 # Reference syntax:
 #   "op-item:<item-id>:<field-name>"   -> uses `op item get`

@@ -1,9 +1,9 @@
-"""Centralized API key retrieval for NEXUS.
+"""Centralized API key storage for NEXUS.
 
-All runtime API key access funnels through :func:`get_secret`. On macOS, keys
-live in the login Keychain and are read via the system ``security`` CLI.
-1Password remains the canonical source of truth and is consulted only by
-``scripts/sync_secrets.py`` during bootstrap or rotation.
+All runtime API key access funnels through :func:`get_secret`, and all writes
+funnel through :func:`set_secret`. The platform secret store is the canonical
+source of truth: macOS uses the login Keychain through the system ``security``
+CLI, while other platforms use the ``keyring`` library.
 
 Lookup order in :func:`get_secret`:
 
@@ -25,14 +25,12 @@ any item's partition-list grant -- so the same read triggers a GUI prompt
 that blocks unattended runs. Subprocessing to ``security`` is the
 documented workaround.
 
-The result of a successful lookup is cached for the lifetime of the
-process (``functools.lru_cache``). Rotation is an offline operation
-(``scripts/sync_secrets.py`` runs in a fresh process), so process-scoped
-caching is safe and avoids redundant ``security`` subprocess invocations on
-busy code paths (e.g., the cloud backend probes for key availability and
-then later resolves it). Tests that want a fresh read can call
-``get_secret.cache_clear()``.
+The result of a successful lookup is cached for the lifetime of the process
+(``functools.lru_cache``). :func:`set_secret` clears that cache after every
+successful write so rotations are visible immediately. Tests that need an
+unconditional fresh read can also call ``get_secret.cache_clear()``.
 """
+
 from __future__ import annotations
 
 import functools
@@ -128,6 +126,81 @@ def _read_keyring_library(account: str) -> str | None:
         return None
 
 
+def _write_macos_keychain(account: str, key: str) -> None:
+    """Replace a login Keychain item without exposing ``key`` on failure.
+
+    Delete-then-add intentionally avoids ``security ... -U``: updating an
+    existing item can trigger a GUI ACL prompt, while a fresh item created by
+    Apple's signed ``security`` binary completes silently. ``-A`` preserves
+    silent reads from unattended NEXUS processes.
+    """
+    try:
+        # A missing item returns non-zero and is expected on the first write.
+        subprocess.run(
+            [
+                "security",
+                "delete-generic-password",
+                "-s",
+                SERVICE_NAME,
+                "-a",
+                account,
+            ],
+            capture_output=True,
+            timeout=_SECURITY_CALL_TIMEOUT_SEC,
+        )
+        subprocess.run(
+            [
+                "security",
+                "add-generic-password",
+                "-A",
+                "-s",
+                SERVICE_NAME,
+                "-a",
+                account,
+                "-w",
+                key,
+            ],
+            capture_output=True,
+            check=True,
+            timeout=_SECURITY_CALL_TIMEOUT_SEC,
+        )
+    except subprocess.TimeoutExpired:
+        # TimeoutExpired retains the full argv (including the key), so sever
+        # the exception chain and emit only sanitized context.
+        raise RuntimeError(
+            f"Keychain write timed out for account '{account}' after "
+            f"{_SECURITY_CALL_TIMEOUT_SEC}s."
+        ) from None
+    except subprocess.CalledProcessError as exc:
+        # CalledProcessError also retains argv. Never include stderr: a secret
+        # store's diagnostics are not a safe response or logging surface.
+        raise RuntimeError(
+            f"Keychain write failed for account '{account}' "
+            f"(security exit {exc.returncode})."
+        ) from None
+    except OSError:
+        raise RuntimeError(
+            f"Keychain write could not start for account '{account}'."
+        ) from None
+
+
+def _write_keyring_library(account: str, key: str) -> None:
+    """Replace a non-Darwin keyring item, failing loudly and safely."""
+    try:
+        import keyring  # type: ignore[import-not-found]
+    except ImportError:
+        raise RuntimeError(
+            "The keyring package is required to store API keys on this platform."
+        ) from None
+
+    try:
+        keyring.set_password(SERVICE_NAME, account, key)
+    except Exception as exc:  # noqa: BLE001 - sanitize backend-specific failures
+        raise RuntimeError(
+            f"Keyring write failed for account '{account}' " f"({type(exc).__name__})."
+        ) from None
+
+
 @functools.lru_cache(maxsize=None)
 def get_secret(provider: str) -> str:
     """Retrieve the API key for ``provider`` (e.g. ``"openai"``).
@@ -163,7 +236,29 @@ def get_secret(provider: str) -> str:
 
     raise MissingSecretError(
         f"No API key found for provider '{provider}'. "
-        f"Run `python scripts/sync_secrets.py --provider {provider}` to "
-        f"populate Keychain from 1Password, or export {env_var} for a "
-        f"one-off run."
+        "Set it in the settings pane's API KEYS card, or "
+        f"export {env_var} for a one-off run."
     )
+
+
+def set_secret(provider: str, key: str) -> None:
+    """Store ``key`` for ``provider`` in the platform's canonical secret store.
+
+    Environment-only mode deliberately has no write path. Successful writes
+    invalidate all cached reads so the new value is visible in this process.
+    """
+    account = provider.lower()
+    if not key.strip():
+        raise ValueError("API key must not be empty or whitespace.")
+    if os.environ.get("NEXUS_KEYRING_DISABLE") == "1":
+        raise RuntimeError(
+            "NEXUS_KEYRING_DISABLE=1 disables writable secret storage. "
+            "Unset it before storing an API key."
+        )
+
+    if platform.system() == "Darwin":
+        _write_macos_keychain(account, key)
+    else:
+        _write_keyring_library(account, key)
+
+    get_secret.cache_clear()
