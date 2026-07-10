@@ -86,6 +86,24 @@ def test_build_pydantic_ai_model_uses_chat_model_for_lmstudio():
     assert isinstance(model, OpenAIChatModel)
 
 
+def test_build_pydantic_ai_model_applies_registry_timeout_for_lmstudio():
+    """The registry request_timeout_seconds reaches the pydantic-ai client.
+
+    The wizard chat flow builds its model here; without this, picking the
+    local model for the wizard would inherit the OpenAI SDK's 600s default
+    and time out on the ~17-min local grammar compile.
+    """
+    model = pydantic_ai_utils.build_pydantic_ai_model(
+        resolve_model_ref("@lmstudio.default")
+    )
+
+    expected = pydantic_ai_utils.get_openai_compatible_endpoint(
+        resolve_model_ref("@lmstudio.default")
+    )["request_timeout_seconds"]
+    assert expected is not None
+    assert model.client.timeout == expected
+
+
 def test_build_pydantic_ai_model_keeps_test_on_responses():
     """The TEST mock retains the default pydantic-ai Responses model."""
     model = pydantic_ai_utils.build_pydantic_ai_model(
