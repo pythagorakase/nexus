@@ -74,15 +74,16 @@ from nexus.api.setup_endpoints import router as setup_router
 from nexus.api.runtime_status import register_runtime_status
 from nexus.api.static_ui import mount_ui
 from nexus.api.wizard_chat import router as wizard_chat_router
+from nexus.config import get_gateway_cors_allowed_origins
 
 logger = logging.getLogger("nexus.api.narrative")
 
 app = FastAPI(title="NEXUS Narrative API", version="1.0.0")
 
-# Configure CORS
+# Configure credentialed CORS from the validated gateway allowlist.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify actual origins
+    allow_origins=get_gateway_cors_allowed_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -1250,6 +1251,9 @@ if __name__ == "__main__":
 
     # NARRATIVE_API_PORT lets parallel checkouts (agent worktrees, the
     # golden-path gate) boot the gateway without contending for 8002.
+    # #415/#458: loopback keeps the Cloudflare tunnel the sole default ingress.
     uvicorn.run(
-        app, host="0.0.0.0", port=int(os.environ.get("NARRATIVE_API_PORT", "8002"))
+        app,
+        host=os.environ.get("NARRATIVE_API_HOST", "127.0.0.1"),
+        port=int(os.environ.get("NARRATIVE_API_PORT", "8002")),
     )

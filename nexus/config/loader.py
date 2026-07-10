@@ -144,6 +144,14 @@ def get_available_api_models() -> List[str]:
     return [m["id"] for m in get_all_api_models()]
 
 
+def get_gateway_cors_allowed_origins() -> List[str]:
+    """Return the gateway's validated credentialed-CORS origin allowlist."""
+    runtime = load_settings().runtime
+    if runtime is None:
+        raise ValueError("[runtime.gateway] is required to configure gateway CORS")
+    return runtime.gateway.cors_allowed_origins
+
+
 def get_api_models_by_provider(ui_only: bool = False) -> Dict[str, List[dict]]:
     """
     Get API models grouped by provider, sourced from nexus.toml.

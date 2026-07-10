@@ -858,6 +858,17 @@ profile = "local"
 state_dir = ".nexus/runtime"  # relative paths resolve against the repo root
 default_slot = 1              # NEXUS_SLOT for spawned services (--slot/env override)
 
+[runtime.gateway]
+# Same-origin app origins plus the Vite dev server. `*` was retired in #458:
+# with credentials it let any site ride the Cloudflare Access cookie.
+cors_allowed_origins = [
+    "http://localhost:8002",
+    "http://127.0.0.1:8002",
+    "https://nexus.pythagora.net",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
+
 [runtime.health]
 timeout_seconds = 2.0            # per HTTP health probe
 startup_deadline_seconds = 30.0  # nexus up waits this long per service

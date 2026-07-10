@@ -333,6 +333,50 @@ class RuntimeRemoteSettings(BaseModel):
     )
 
 
+class RuntimeGatewaySettings(BaseModel):
+    """Gateway-wide network policy settings."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    cors_allowed_origins: List[str] = Field(
+        ...,
+        min_length=1,
+        description="Exact HTTP origins allowed to make credentialed CORS requests",
+    )
+
+    @model_validator(mode="after")
+    def _validate_cors_allowed_origins(self) -> "RuntimeGatewaySettings":
+        """Require exact HTTP(S) origins rather than wildcard or URL patterns."""
+        from urllib.parse import urlsplit
+
+        if len(self.cors_allowed_origins) != len(set(self.cors_allowed_origins)):
+            raise ValueError("cors_allowed_origins must not contain duplicates")
+
+        for origin in self.cors_allowed_origins:
+            parsed = urlsplit(origin)
+            if (
+                origin == "*"
+                or parsed.scheme not in {"http", "https"}
+                or not parsed.hostname
+                or parsed.username is not None
+                or parsed.password is not None
+                or parsed.path
+                or parsed.query
+                or parsed.fragment
+            ):
+                raise ValueError(
+                    "cors_allowed_origins entries must be exact HTTP(S) origins "
+                    f"without credentials, paths, queries, or fragments: {origin!r}"
+                )
+            try:
+                parsed.port
+            except ValueError as exc:
+                raise ValueError(
+                    f"cors_allowed_origins entry has an invalid port: {origin!r}"
+                ) from exc
+        return self
+
+
 class RuntimeSettings(BaseModel):
     """Managed runtime configuration (nexus up / down / status / logs)."""
 
@@ -366,6 +410,7 @@ class RuntimeSettings(BaseModel):
         default_factory=dict,
         description="Supervised services for the local profile, by name",
     )
+    gateway: RuntimeGatewaySettings
     health: RuntimeHealthSettings = Field(default_factory=RuntimeHealthSettings)
     logs: RuntimeLogsSettings = Field(default_factory=RuntimeLogsSettings)
     external: Optional[RuntimeExternalSettings] = None
