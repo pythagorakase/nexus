@@ -508,7 +508,16 @@ def start_download(
     with _download_lock:
         settings = load_settings()
         existing = _read_download_record(settings)
-        if existing is not None and _pid_alive(existing["pid"]):
+        if (
+            existing is not None
+            and _pid_alive(existing["pid"])
+            # PID-reuse guard (mirrors download_status/cancel_download): a
+            # stale record whose PID was recycled by an unrelated process must
+            # not block downloads until that stranger exits.
+            and _download_process_is_ours(
+                settings, existing["pid"], existing["repo_id"]
+            )
+        ):
             raise LocalInferenceError("A local-model download is already in progress")
 
         resolved_dir = Path(local_dir).expanduser().resolve()
