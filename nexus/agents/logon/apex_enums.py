@@ -197,7 +197,9 @@ class WorldLayerType(str, Enum):
     """Narrative layers for chunk categorization"""
     PRIMARY = "primary"           # Main narrative timeline
     FLASHBACK = "flashback"       # Past events
-    DREAM = "dream"               # Dream sequences
+    ATEMPORAL = (
+        "atemporal"  # Dream/hallucination or time-abnormal realm (clock does not apply)
+    )
     EXTRADIEGETIC = "extradiegetic"  # Meta-narrative elements
 
 

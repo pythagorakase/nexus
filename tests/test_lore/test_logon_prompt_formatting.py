@@ -380,7 +380,7 @@ def test_context_prompt_renders_intertitle() -> None:
 
 
 def test_context_prompt_announces_non_primary_layer() -> None:
-    """Flashback/dream layers are called out in the intertitle."""
+    """Flashback/atemporal layers are called out in the intertitle."""
 
     prompt = LogonUtility({})._format_context_prompt(
         {

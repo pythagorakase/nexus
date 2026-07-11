@@ -228,7 +228,7 @@ class TestWorldLayerFiltering:
             {'id': 1, 'world_layer': 'primary'},
             {'id': 2, 'world_layer': 'flashback'},
             {'id': 3, 'world_layer': 'primary'},
-            {'id': 4, 'world_layer': 'dream'}
+            {'id': 4, 'world_layer': 'atemporal'}
         ]
         
         filtered = filter_by_world_layer(chunks)
@@ -240,7 +240,7 @@ class TestWorldLayerFiltering:
         chunks = [
             {'id': 1, 'world_layer': 'primary'},
             {'id': 2, 'world_layer': 'flashback'},
-            {'id': 3, 'world_layer': 'dream'},
+            {'id': 3, 'world_layer': 'atemporal'},
             {'id': 4, 'world_layer': 'extradiegetic'}
         ]
         
