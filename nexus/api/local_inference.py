@@ -534,6 +534,13 @@ def start_download(
             str(resolved_dir),
             *[argument for filename in files for argument in ("--file", filename)],
         ]
+        worker_env = dict(os.environ)
+        if get_local_models_settings().download_disable_xet:
+            # Xet's chunk-based transfer discards byte partials on restart
+            # (verified live: a 7.2GB .incomplete restarted from zero). The
+            # classic HTTP path resumes via open("ab") + Range, which is what
+            # a cancelled multi-GB pull needs.
+            worker_env["HF_HUB_DISABLE_XET"] = "1"
         try:
             with (state_dir / DOWNLOAD_LOG_FILENAME).open("ab") as log_handle:
                 process = subprocess.Popen(
@@ -543,6 +550,7 @@ def start_download(
                     stderr=subprocess.STDOUT,
                     close_fds=True,
                     start_new_session=True,
+                    env=worker_env,
                 )
         except OSError as exc:
             raise LocalInferenceError(
