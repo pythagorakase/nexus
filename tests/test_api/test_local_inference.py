@@ -335,6 +335,13 @@ def test_concurrent_download_spawns_only_one_process(
 
     monkeypatch.setattr(local_inference, "load_settings", lambda: settings)
     monkeypatch.setattr(local_inference, "_pid_alive", lambda pid: True)
+    # This test exercises the lock's check-then-spawn race, so the fake PID
+    # must read as ours — the recycled-PID case is covered separately below.
+    monkeypatch.setattr(
+        local_inference,
+        "_download_process_is_ours",
+        lambda settings, pid, repo_id: True,
+    )
     monkeypatch.setattr(local_inference.subprocess, "Popen", fake_popen)
 
     def run_download():
@@ -363,6 +370,40 @@ def test_concurrent_download_spawns_only_one_process(
     ]
     assert len(errors) == 1
     assert "already in progress" in str(errors[0])
+
+
+def test_start_download_ignores_stale_record_with_recycled_pid(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """A live PID recycled by an unrelated process must not block downloads."""
+    settings = _settings_with_state_dir(tmp_path)
+    _write_download_state(tmp_path, files=["test.gguf"])
+    spawned = []
+
+    monkeypatch.setattr(local_inference, "load_settings", lambda: settings)
+    monkeypatch.setattr(local_inference, "_pid_alive", lambda pid: True)
+    monkeypatch.setattr(
+        local_inference,
+        "_download_process_is_ours",
+        lambda settings, pid, repo_id: False,
+    )
+    monkeypatch.setattr(
+        local_inference.subprocess,
+        "Popen",
+        lambda command, **kwargs: spawned.append(command) or SimpleNamespace(pid=999),
+    )
+
+    record = local_inference.start_download(
+        family="test",
+        quant="Q4_K_M",
+        repo_id="example/test",
+        local_dir=str(tmp_path / "models"),
+        files=["test.gguf"],
+        total_bytes=100,
+    )
+
+    assert len(spawned) == 1
+    assert record["pid"] == 999
 
 
 def _write_download_state(
