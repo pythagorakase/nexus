@@ -25,7 +25,6 @@ from nexus.util.gguf_inspect import inspect_gguf
 STATE_FILENAME = "local-model.pid.json"
 LOG_FILENAME = "local-model.log"
 REGISTERED_FILENAME = "local-models.registered.json"
-FAILURE_REPORT_WINDOW_SECONDS = 10 * 60
 
 _lifecycle_lock = threading.RLock()
 _registration_lock = threading.Lock()
@@ -158,46 +157,45 @@ def _configured_command(settings: Settings) -> tuple[str, list[str]]:
     return resolved, extras
 
 
-def _health_ok(host: str, port: int) -> bool:
+def _health_ok(settings: Settings, host: str, port: int) -> bool:
+    """Probe llama-server using the managed runtime health timeout."""
+    if settings.runtime is None:
+        raise LocalInferenceError("[runtime] is required for health probe settings")
     try:
-        response = requests.get(f"http://{host}:{port}/health", timeout=0.5)
+        response = requests.get(
+            f"http://{host}:{port}/health",
+            timeout=settings.runtime.health.timeout_seconds,
+        )
     except requests.RequestException:
         return False
     return response.status_code == 200
 
 
-def _port_open(host: str, port: int) -> bool:
+def _port_open(settings: Settings, host: str, port: int) -> bool:
+    """Probe the managed port using the runtime health timeout."""
+    if settings.runtime is None:
+        raise LocalInferenceError("[runtime] is required for port probe settings")
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.settimeout(0.25)
+        sock.settimeout(settings.runtime.health.timeout_seconds)
         return sock.connect_ex((host, port)) == 0
 
 
-def _process_is_ours(pid: int, gguf_path: str) -> bool:
+def _process_is_ours(settings: Settings, pid: int, gguf_path: str) -> bool:
     """Verify a live PID still names our binary and exact recorded model path."""
+    if settings.runtime is None:
+        raise LocalInferenceError("[runtime] is required for process probe settings")
     try:
         result = subprocess.run(
             ["ps", "-ww", "-p", str(pid), "-o", "command="],
             capture_output=True,
             check=False,
             text=True,
-            timeout=1.0,
+            timeout=settings.runtime.health.timeout_seconds,
         )
     except (OSError, subprocess.SubprocessError):
         return False
     command = result.stdout.strip()
     return result.returncode == 0 and "llama-server" in command and gguf_path in command
-
-
-def _started_recently(record: dict[str, Any]) -> bool:
-    """Return whether an unready process died within the failure-report window."""
-    try:
-        started_at = datetime.fromisoformat(str(record["started_at"]))
-    except (KeyError, TypeError, ValueError):
-        return False
-    if started_at.tzinfo is None:
-        started_at = started_at.replace(tzinfo=timezone.utc)
-    elapsed = (datetime.now(timezone.utc) - started_at).total_seconds()
-    return 0 <= elapsed <= FAILURE_REPORT_WINDOW_SECONDS
 
 
 def _read_active(settings: Settings) -> dict[str, Any] | None:
@@ -219,12 +217,15 @@ def _read_active(settings: Settings) -> dict[str, Any] | None:
             "error": record.get("error", "llama-server exited before becoming ready"),
         }
     if not _pid_alive(pid):
-        if record.get("ready_observed") is True or not _started_recently(record):
+        if record.get("ready_observed") is True:
             _state_path(settings).unlink(missing_ok=True)
             return None
         record["failed"] = True
         record["failed_at"] = datetime.now(timezone.utc).isoformat()
-        record["error"] = "llama-server exited before becoming ready"
+        record["error"] = (
+            "llama-server exited before becoming ready; see "
+            f"{_state_dir(settings) / LOG_FILENAME}"
+        )
         _write_json(_state_path(settings), record)
         return {
             "gguf_path": gguf_path,
@@ -233,11 +234,11 @@ def _read_active(settings: Settings) -> dict[str, Any] | None:
             "failed": True,
             "error": record["error"],
         }
-    if not _process_is_ours(pid, gguf_path):
+    if not _process_is_ours(settings, pid, gguf_path):
         _state_path(settings).unlink(missing_ok=True)
         return None
     host, _, _ = _endpoint(settings)
-    is_ready = _health_ok(host, port)
+    is_ready = _health_ok(settings, host, port)
     if is_ready and record.get("ready_observed") is not True:
         record["ready_observed"] = True
         _write_json(_state_path(settings), record)
@@ -279,22 +280,25 @@ def _deactivate_locked(settings: Settings) -> dict[str, Any]:
         return {"stopped": False, "failed_cleared": True}
     pid = int(current["pid"])
     gguf_path = str(current["gguf_path"])
-    if not _process_is_ours(pid, gguf_path):
+    if not _process_is_ours(settings, pid, gguf_path):
         _state_path(settings).unlink(missing_ok=True)
         return {"stopped": False, "ownership_lost": True}
     try:
         _signal_process_group(pid, signal.SIGTERM)
     except ProcessLookupError:
         pass
-    grace = settings.runtime.health.stop_grace_seconds if settings.runtime else 10.0
+    if settings.runtime is None:
+        raise LocalInferenceError("[runtime] is required for shutdown settings")
+    health = settings.runtime.health
+    grace = health.stop_grace_seconds
     deadline = time.monotonic() + grace
     while (
         _pid_alive(pid)
-        and _process_is_ours(pid, gguf_path)
+        and _process_is_ours(settings, pid, gguf_path)
         and time.monotonic() < deadline
     ):
-        time.sleep(0.1)
-    if _pid_alive(pid) and _process_is_ours(pid, gguf_path):
+        time.sleep(health.poll_interval_seconds)
+    if _pid_alive(pid) and _process_is_ours(settings, pid, gguf_path):
         try:
             _signal_process_group(pid, signal.SIGKILL)
         except ProcessLookupError:
@@ -326,7 +330,7 @@ def activate(gguf_path: str) -> dict[str, Any]:
             _deactivate_locked(settings)
         elif current is not None:
             _state_path(settings).unlink(missing_ok=True)
-        if _port_open(host, port):
+        if _port_open(settings, host, port):
             raise LocalInferenceError(
                 f"Port {port} is already in use by a process this manager does "
                 "not own; stop the static llama_server service or the other "
