@@ -199,7 +199,7 @@ def merge_deduplicate_chunks(chunks1: List[Dict],
 def filter_by_world_layer(chunks: List[Dict], 
                          allowed_layers: List[str] = None) -> List[Dict]:
     """
-    Filter chunks by world layer (primary, flashback, dream, extradiegetic).
+    Filter chunks by world layer (primary, flashback, atemporal, extradiegetic).
     
     Args:
         chunks: List of chunks with world_layer metadata
