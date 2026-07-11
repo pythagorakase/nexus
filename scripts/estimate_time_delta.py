@@ -1278,7 +1278,7 @@ def process_chunk(db: Engine, chunk: NarrativeChunk, test_mode: bool = False,
     """
     Process a single chunk to estimate and save time delta using an API-based LLM.
     
-    For non-primary world layers (flashback, dream, etc.), time_delta is set to 0
+    For non-primary world layers (flashback, atemporal, etc.), time_delta is set to 0
     without calling the LLM.
     
     Args:

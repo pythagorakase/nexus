@@ -3,6 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
+from nexus.agents.logon.apex_enums import WorldLayerType
 from nexus.agents.logon.apex_schema import (
     FactionStateUpdate,
     NewFaction,
@@ -13,6 +14,13 @@ from nexus.agents.logon.apex_schema import (
     StorytellerResponseExtended,
     create_minimal_response,
 )
+
+
+def test_world_layer_type_uses_atemporal_clock_semantics() -> None:
+    """Atemporal replaces the literary-mode dream layer."""
+
+    assert WorldLayerType.ATEMPORAL.value == "atemporal"
+    assert not hasattr(WorldLayerType, "DREAM")
 
 
 def test_bootstrap_response_schema_rejects_legacy_directives_and_metadata() -> None:

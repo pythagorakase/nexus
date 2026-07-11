@@ -140,7 +140,7 @@ class ChunkMetadata(Base):
     __tablename__ = 'chunk_metadata'
     
     chunk_id = Column(UUID(as_uuid=True), sa.ForeignKey('narrative_chunks.id', ondelete='CASCADE'), primary_key=True)
-    world_layer = Column(sa.Enum('primary', 'flashback', 'dream', 'extradimensional', 'non_canonical', 
+    world_layer = Column(sa.Enum('primary', 'flashback', 'atemporal', 'extradimensional', 'non_canonical',
                                name='world_layer_type', create_type=False))
     setting = Column(sa.JSON)
     season = Column(sa.Integer)

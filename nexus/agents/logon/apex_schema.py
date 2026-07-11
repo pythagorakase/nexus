@@ -726,7 +726,7 @@ class ChunkMetadataUpdate(BaseModel):
     )
     world_layer: WorldLayerType = Field(
         default=WorldLayerType.PRIMARY,
-        description="Narrative layer (primary, flashback, dream, etc.)",
+        description="Whether the in-world clock advances normally this chunk - almost always 'primary'. Default to 'primary' for any normal in-world scene where time moves forward with the chunk's time_delta. Only deviate for: 'flashback' (a scene set in the past - the clock is not advancing forward), 'atemporal' (the in-world clock does not apply - dream/hallucination sequences, or realms where time doesn't behave normally such as strange or alien dimensions), 'extradiegetic' (the user is addressing you out-of-game - no in-world time passes).",
     )
 
     model_config = ConfigDict(extra="forbid")
