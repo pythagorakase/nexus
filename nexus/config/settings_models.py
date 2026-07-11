@@ -2062,6 +2062,35 @@ class Settings(BaseModel):
             )
         return self
 
+    @model_validator(mode="after")
+    def _validate_runtime_llama_server_port_consistency(self) -> "Settings":
+        """The llama_server service port and the local provider base_url must agree.
+
+        Same failure mode as the mock/test pairing: if the supervised
+        [runtime.services.llama_server] binds a different port than the local
+        provider's base_url targets, every @local call connection-refuses at
+        request time. Reject the drift at load instead. Skipped while the
+        service is disabled (enabled = "never"), since nothing binds then.
+        """
+        if self.runtime is None:
+            return self
+        llama = self.runtime.services.get("llama_server")
+        local_provider = self.global_.model.api_models.get("local")
+        if llama is None or llama.enabled == "never":
+            return self
+        if local_provider is None or not local_provider.base_url:
+            return self
+        from urllib.parse import urlparse
+
+        base_port = urlparse(local_provider.base_url).port
+        if base_port != llama.port:
+            raise ValueError(
+                f"[runtime.services.llama_server] port {llama.port} does not "
+                f"match the local provider base_url port {base_port} "
+                f"({local_provider.base_url}). Keep them in sync."
+            )
+        return self
+
     def model_entry(self, model_id: str) -> APIModelEntry:
         """Return the registry entry for a concrete model ID (raises if absent)."""
         for provider_models in self.global_.model.api_models.values():

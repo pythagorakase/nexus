@@ -53,10 +53,11 @@ models = [
     { id = "TEST", label = "TEST", description = "Mock server with cached data (dev)" },
 ]
 
-# Headless `llama-server` (llama.cpp) serves this local model. A GGUF quant is
-# required: MLX's Outlines grammar engine compiles the Extended schema
-# pathologically slowly. This timeout is generous for local grammar compilation
-# plus generation.
+# Headless `llama-server` (llama.cpp) serves this local model over a GGUF quant.
+# llama.cpp's GBNF grammar compiles the Extended schema in seconds (the MLX
+# path's Outlines engine took ~17 min, which is why GGUF is required). The
+# 1800s timeout is generation headroom for a large local model, not grammar
+# compile — a full 70B turn can run several minutes.
 [global.model.api_models.local]
 base_url = "http://127.0.0.1:1234/v1"
 structured_transport = "chat_completions"
@@ -924,7 +925,7 @@ command = [
     "--ctx-size", "32768", "-ngl", "999", "--jinja",
 ]
 host = "127.0.0.1"
-port = 1234  # must match [global.model.api_models.local] base_url
+port = 1234  # must match [global.model.api_models.local] base_url (validated)
 health_path = "/health"
 enabled = "never"
 

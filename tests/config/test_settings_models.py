@@ -88,6 +88,22 @@ def test_global_default_slot_model_unknown_role_rejected():
         Settings(**raw)
 
 
+def test_llama_server_port_drift_rejected_when_enabled():
+    """An enabled llama_server whose port differs from the local base_url fails."""
+    raw = _nexus_toml_dict()
+    raw["runtime"]["services"]["llama_server"]["enabled"] = "always"
+    raw["runtime"]["services"]["llama_server"]["port"] = 1299
+    with pytest.raises(ValidationError, match="does not.*match the local provider"):
+        Settings(**raw)
+
+
+def test_llama_server_port_drift_ignored_while_disabled():
+    """Port drift is tolerated while the service is disabled (nothing binds)."""
+    raw = _nexus_toml_dict()
+    raw["runtime"]["services"]["llama_server"]["port"] = 1299  # enabled stays "never"
+    Settings(**raw)
+
+
 def test_global_default_slot_model_role_ref_resolves_at_load():
     """A valid role ref in default_slot_model resolves to the concrete ID."""
     raw = _nexus_toml_dict()
