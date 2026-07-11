@@ -69,7 +69,7 @@ def build_pydantic_ai_model(model: str) -> Model:
         raise ValueError(f"No base_url registry entry for model {model!r}")
     timeout = endpoint["request_timeout_seconds"]
     if timeout is not None:
-        # Slow local servers (LM Studio grammar compile) blow past the OpenAI
+        # Slow local servers (for example, grammar compilation) blow past the OpenAI
         # SDK's 600s default. Mirror the legacy provider call sites: hand the
         # pydantic-ai provider a client that carries the registry timeout.
         pyd_provider = PydanticOpenAIProvider(

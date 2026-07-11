@@ -148,8 +148,15 @@ every request builder routes to it.
 The supervisor treats these the same way: `[runtime.services.mock_openai]`
 spawns the mock server only while the TEST provider is registered
 (`enabled = "auto"`), and config load cross-validates that the service port
-and the registry `base_url` agree. A future local-LLM service follows the
-same pattern.
+and the registry `base_url` agree.
+
+`[runtime.services.llama_server]` defines the headless llama.cpp server for
+the `@local` provider. It is shipped with `enabled = "never"` because loading
+the configured Q6_K model consumes about 58 GB, so ordinary `nexus up` runs do
+not start it. For an on-demand session, run the configured `command` directly;
+it binds `127.0.0.1:1234`, exposes `/v1` and `/health`, and can be stopped with
+Ctrl+C. To make the supervisor own it, set `enabled = "always"` and run
+`nexus up`; use `nexus down llama_server` when it should be unloaded again.
 
 Per-model request-parameter capability also lives in the registry: an
 entry's `unsupported_params` lists parameters its API rejects (e.g.

@@ -371,7 +371,7 @@ def test_openai_chat_transport_dispatches_without_responses_attempt() -> None:
     """Configured Chat transport bypasses Responses at method dispatch."""
     expected = (_bootstrap_response(), Mock())
     provider = build_native_structured_provider(
-        model=resolve_model_ref("@lmstudio.default"),
+        model=resolve_model_ref("@local.default"),
         max_tokens=600,
         system_prompt="System prompt",
         structured_output_retries=0,
@@ -403,7 +403,7 @@ async def test_openai_chat_transport_dispatches_async_without_responses_attempt(
     """Configured Chat transport also bypasses Responses on the async path."""
     expected = (_bootstrap_response(), Mock())
     provider = build_native_structured_provider(
-        model=resolve_model_ref("@lmstudio.default"),
+        model=resolve_model_ref("@local.default"),
         max_tokens=600,
         system_prompt="System prompt",
         structured_output_retries=0,

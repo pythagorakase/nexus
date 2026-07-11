@@ -16,6 +16,7 @@ from nexus.config.settings_models import (
     APIModelEntry,
     ModelConfig,
     ProviderModels,
+    RuntimeServiceSettings,
     Settings,
 )
 
@@ -252,9 +253,10 @@ def test_get_openai_compatible_endpoint_routing():
         "structured_transport": "responses",
         "request_timeout_seconds": None,
     }
-    lmstudio = settings.global_.model.api_models["lmstudio"]
-    assert get_openai_compatible_endpoint(lmstudio.roles["default"]) == {
-        "base_url": lmstudio.base_url,
+    local = settings.global_.model.api_models["local"]
+    assert resolve_model_ref("@local.default") == "nousresearch/hermes-4-70b"
+    assert get_openai_compatible_endpoint(local.roles["default"]) == {
+        "base_url": local.base_url,
         "api_key": "nexus-local-no-key",
         "structured_transport": "chat_completions",
         "request_timeout_seconds": 1800,
@@ -263,6 +265,17 @@ def test_get_openai_compatible_endpoint_routing():
     assert get_openai_compatible_endpoint("claude-opus-4-8") is None
     # Models absent from the registry are treated as native/legacy overrides.
     assert get_openai_compatible_endpoint("unregistered-model") is None
+
+
+def test_llama_server_runtime_service_parses():
+    """The local llama-server is a disabled-by-default managed service."""
+    service = load_settings("nexus.toml").runtime.services["llama_server"]
+
+    assert isinstance(service, RuntimeServiceSettings)
+    assert service.command[0] == "/opt/homebrew/bin/llama-server"
+    assert service.enabled == "never"
+    assert service.port == 1234
+    assert service.health_path == "/health"
 
 
 def test_native_structured_output_override_parses_and_resolves(tmp_path, monkeypatch):

@@ -125,7 +125,7 @@ class ProviderModels(BaseModel):
         default="responses",
         description=(
             "OpenAI-compatible surface used for structured output. Use "
-            "'chat_completions' for local servers such as LM Studio, Ollama, "
+            "'chat_completions' for local servers such as llama-server, Ollama, "
             "or vLLM whose /v1/responses endpoint is missing or silently "
             "ignores text.format."
         ),

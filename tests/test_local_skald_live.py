@@ -1,4 +1,4 @@
-"""Live structured-output verification against the registered LM Studio model."""
+"""Live structured-output verification against the registered local model."""
 
 from __future__ import annotations
 
@@ -12,14 +12,16 @@ from scripts.api_openai import OpenAIProvider
 pytestmark = pytest.mark.live_llm
 
 
-def _require_lmstudio_model(base_url: str, model: str) -> None:
-    """Skip clearly when LM Studio or the configured model is unavailable."""
+def _require_local_model(base_url: str, model: str) -> None:
+    """Skip clearly when llama-server or the configured model is unavailable."""
     models_url = f"{base_url.rstrip('/')}/models"
     try:
         response = requests.get(models_url, timeout=2)
         response.raise_for_status()
     except requests.RequestException as exc:
-        pytest.skip(f"LM Studio models endpoint is unreachable at {models_url}: {exc}")
+        pytest.skip(
+            f"llama-server models endpoint is unreachable at {models_url}: {exc}"
+        )
 
     listed_models = {
         entry.get("id")
@@ -27,15 +29,15 @@ def _require_lmstudio_model(base_url: str, model: str) -> None:
         if isinstance(entry, dict)
     }
     if model not in listed_models:
-        pytest.skip(f"LM Studio does not list the configured model {model!r}")
+        pytest.skip(f"llama-server does not list the configured model {model!r}")
 
 
-def test_lmstudio_bootstrap_structured_completion_live() -> None:
+def test_local_bootstrap_structured_completion_live() -> None:
     """Generate and validate the Bootstrap schema through Chat Completions."""
-    model = resolve_model_ref("@lmstudio.default")
+    model = resolve_model_ref("@local.default")
     endpoint = get_openai_compatible_endpoint(model)
     assert endpoint is not None
-    _require_lmstudio_model(endpoint["base_url"], model)
+    _require_local_model(endpoint["base_url"], model)
 
     provider = OpenAIProvider(
         model=model,
