@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from nexus.api import local_inference
+from nexus.api import local_download_worker, local_inference
 from nexus.config import load_settings
 from nexus.util.gguf_inspect import GgufInfo
 
@@ -317,3 +317,242 @@ def test_concurrent_activate_spawns_only_one_process(
 
     assert spawn_count == 1
     assert [result["pid"] for result in results] == [43210, 43210]
+
+
+def test_concurrent_download_spawns_only_one_process(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """The download lock closes the singleton check-then-spawn race."""
+    settings = _settings_with_state_dir(tmp_path)
+    barrier = threading.Barrier(2)
+    spawn_count = 0
+
+    def fake_popen(command, **kwargs):
+        nonlocal spawn_count
+        spawn_count += 1
+        time.sleep(0.05)
+        return SimpleNamespace(pid=43210)
+
+    monkeypatch.setattr(local_inference, "load_settings", lambda: settings)
+    monkeypatch.setattr(local_inference, "_pid_alive", lambda pid: True)
+    monkeypatch.setattr(local_inference.subprocess, "Popen", fake_popen)
+
+    def run_download():
+        barrier.wait()
+        try:
+            return local_inference.start_download(
+                family="test",
+                quant="Q4_K_M",
+                repo_id="example/test",
+                local_dir=str(tmp_path / "models"),
+                files=["test.gguf"],
+                total_bytes=100,
+            )
+        except local_inference.LocalInferenceError as exc:
+            return exc
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(lambda _: run_download(), range(2)))
+
+    assert spawn_count == 1
+    assert len([result for result in results if isinstance(result, dict)]) == 1
+    errors = [
+        result
+        for result in results
+        if isinstance(result, local_inference.LocalInferenceError)
+    ]
+    assert len(errors) == 1
+    assert "already in progress" in str(errors[0])
+
+
+def _write_download_state(
+    tmp_path: Path, *, files: list[str], total_bytes: int = 100
+) -> None:
+    (tmp_path / local_inference.DOWNLOAD_FILENAME).write_text(
+        json.dumps(
+            {
+                "pid": 43210,
+                "family": "test",
+                "quant": "Q4_K_M",
+                "repo_id": "example/test",
+                "local_dir": str(tmp_path / "models"),
+                "files": files,
+                "total_bytes": total_bytes,
+                "started_at": "2026-01-01T00:00:00+00:00",
+            }
+        )
+    )
+
+
+def test_download_status_rediscovers_completed_download(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """A dead worker with every valid target is reported as done."""
+    settings = _settings_with_state_dir(tmp_path)
+    model_dir = tmp_path / "models"
+    model_dir.mkdir()
+    (model_dir / "test.gguf").write_bytes(b"GGUF complete")
+    _write_download_state(tmp_path, files=["test.gguf"])
+    monkeypatch.setattr(local_inference, "load_settings", lambda: settings)
+    monkeypatch.setattr(local_inference, "_pid_alive", lambda pid: False)
+    monkeypatch.setattr(
+        local_inference,
+        "inspect_gguf",
+        lambda path: GgufInfo(valid=True),
+    )
+
+    status = local_inference.download_status()
+
+    assert status is not None
+    assert status["state"] == "done"
+    assert status["downloaded_bytes"] == len(b"GGUF complete")
+
+
+def test_download_status_rediscovers_failed_download(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """A dead worker with missing targets reports its final log error."""
+    settings = _settings_with_state_dir(tmp_path)
+    _write_download_state(tmp_path, files=["missing.gguf"])
+    (tmp_path / local_inference.DOWNLOAD_LOG_FILENAME).write_text(
+        "starting\n\nrepository file not found\n"
+    )
+    monkeypatch.setattr(local_inference, "load_settings", lambda: settings)
+    monkeypatch.setattr(local_inference, "_pid_alive", lambda pid: False)
+
+    status = local_inference.download_status()
+
+    assert status is not None
+    assert status["state"] == "failed"
+    assert status["downloaded_bytes"] == 0
+    assert status["error"] == "repository file not found"
+
+
+def test_download_status_reports_live_progress(tmp_path: Path, monkeypatch) -> None:
+    """A rediscovered owned worker includes completed and partial byte progress."""
+    settings = _settings_with_state_dir(tmp_path)
+    model_dir = tmp_path / "models"
+    partial_dir = model_dir / ".cache" / "huggingface" / "download"
+    partial_dir.mkdir(parents=True)
+    (model_dir / "first.gguf").write_bytes(b"1234")
+    (partial_dir / "second.gguf.hash.incomplete").write_bytes(b"12")
+    _write_download_state(tmp_path, files=["first.gguf", "second.gguf"], total_bytes=12)
+    monkeypatch.setattr(local_inference, "load_settings", lambda: settings)
+    monkeypatch.setattr(local_inference, "_pid_alive", lambda pid: True)
+    monkeypatch.setattr(
+        local_inference,
+        "_download_process_is_ours",
+        lambda value, pid, repo_id: True,
+    )
+
+    status = local_inference.download_status()
+
+    assert status is not None
+    assert status["state"] == "downloading"
+    assert status["downloaded_bytes"] == 6
+    assert status["progress"] == 0.5
+
+
+def test_delete_model_rejects_active_shard(tmp_path: Path, monkeypatch) -> None:
+    """No shard set containing the serving model can be deleted."""
+    settings = _settings_with_state_dir(tmp_path)
+    first = tmp_path / "Hermes-Q6_K-00001-of-00002.gguf"
+    second = tmp_path / "Hermes-Q6_K-00002-of-00002.gguf"
+    first.write_bytes(b"GGUF first")
+    second.write_bytes(b"GGUF second")
+    monkeypatch.setattr(
+        local_inference,
+        "get_local_models_settings",
+        lambda: SimpleNamespace(models_dir=str(tmp_path)),
+    )
+    monkeypatch.setattr(local_inference, "load_settings", lambda: settings)
+    monkeypatch.setattr(
+        local_inference,
+        "active",
+        lambda: {"gguf_path": str(second), "ready": True, "pid": 123},
+    )
+
+    with pytest.raises(local_inference.LocalInferenceError, match="active"):
+        local_inference.delete_model(str(first))
+
+    assert first.exists()
+    assert second.exists()
+
+
+def test_delete_model_removes_all_shards(tmp_path: Path, monkeypatch) -> None:
+    """Deleting a split model removes every matching root-validated shard."""
+    settings = _settings_with_state_dir(tmp_path)
+    first = tmp_path / "Hermes-Q6_K-00001-of-00002.gguf"
+    second = tmp_path / "Hermes-Q6_K-00002-of-00002.gguf"
+    first.write_bytes(b"GGUF first")
+    second.write_bytes(b"GGUF second")
+    monkeypatch.setattr(
+        local_inference,
+        "get_local_models_settings",
+        lambda: SimpleNamespace(models_dir=str(tmp_path)),
+    )
+    monkeypatch.setattr(local_inference, "load_settings", lambda: settings)
+    monkeypatch.setattr(local_inference, "active", lambda: None)
+    monkeypatch.setattr(local_inference, "registered_paths", lambda: [])
+
+    result = local_inference.delete_model(str(first))
+
+    assert result == {
+        "deleted": [str(first), str(second)],
+        "was_registered": False,
+    }
+    assert not first.exists()
+    assert not second.exists()
+
+
+def test_shard_set_excludes_non_split_path_outside_roots(tmp_path: Path) -> None:
+    """A non-split path outside the allowed roots yields no deletable shards."""
+    root = tmp_path / "models"
+    root.mkdir()
+    inside = root / "model.gguf"
+    inside.write_bytes(b"GGUF inside")
+    outside = tmp_path / "elsewhere.gguf"
+    outside.write_bytes(b"GGUF outside")
+    roots = (root.resolve(),)
+
+    assert local_inference.shard_set(inside, roots) == [inside.resolve()]
+    assert local_inference.shard_set(outside, roots) == []
+
+
+def test_download_worker_fetches_files_in_order(tmp_path: Path, monkeypatch) -> None:
+    """The worker sends each requested shard through hf_hub_download in order."""
+    calls = []
+    monkeypatch.setattr(
+        local_download_worker.sys,
+        "argv",
+        [
+            "local_download_worker",
+            "--repo-id",
+            "example/test",
+            "--local-dir",
+            str(tmp_path),
+            "--file",
+            "first.gguf",
+            "--file",
+            "second.gguf",
+        ],
+    )
+    monkeypatch.setattr(
+        local_download_worker,
+        "hf_hub_download",
+        lambda **kwargs: calls.append(kwargs),
+    )
+
+    assert local_download_worker.main() == 0
+    assert calls == [
+        {
+            "repo_id": "example/test",
+            "filename": "first.gguf",
+            "local_dir": str(tmp_path),
+        },
+        {
+            "repo_id": "example/test",
+            "filename": "second.gguf",
+            "local_dir": str(tmp_path),
+        },
+    ]
