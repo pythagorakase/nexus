@@ -53,16 +53,18 @@ models = [
     { id = "TEST", label = "TEST", description = "Mock server with cached data (dev)" },
 ]
 
-# The first structured request after loading a model pays a one-time JSON-schema
-# grammar compile cost. Hermes 4 70B Extended measured about 17 min; cached after.
-[global.model.api_models.lmstudio]
+# Headless `llama-server` (llama.cpp) serves this local model over a GGUF quant.
+# llama.cpp's GBNF grammar compiles the Extended schema in seconds (the MLX
+# path's Outlines engine took ~17 min, which is why GGUF is required). The
+# 1800s timeout is generation headroom for a large local model, not grammar
+# compile — a full 70B turn can run several minutes.
+[global.model.api_models.local]
 base_url = "http://127.0.0.1:1234/v1"
 structured_transport = "chat_completions"
-# Local 70B on a full Skald prompt can take many minutes; the SDK's 600s default is too tight.
 request_timeout_seconds = 1800
 roles = { default = "nousresearch/hermes-4-70b" }
 models = [
-    { id = "nousresearch/hermes-4-70b", label = "Hermes 4 70B (Local)", description = "Local LM Studio inference (MLX)" },
+    { id = "nousresearch/hermes-4-70b", label = "Hermes 4 70B (Local)", description = "Local llama-server inference (GGUF)" },
 ]
 
 # =============================================================================
@@ -905,6 +907,27 @@ host = "127.0.0.1"
 port = 5102  # must match [global.model.api_models.test] base_url (validated)
 health_path = "/health"
 enabled = "auto"  # spawn only while the TEST provider is registered above
+
+[runtime.services.llama_server]
+# Headless llama.cpp OpenAI server for the local `@local` provider. Serves the
+# Q6_K GGUF via llama.cpp's fast GBNF grammar (the MLX/Outlines path compiled
+# the Extended schema in ~17 min; llama.cpp does it in seconds). Retires the
+# LM Studio GUI. The model is ~58GB, so this is NOT auto-started — enabled =
+# "never" keeps it off `nexus up`. Start it on demand for local inference, or
+# set enabled = "always" to keep it resident (e.g. for the guest sandbox).
+command = [
+    "/opt/homebrew/bin/llama-server",
+    "--model", "/Users/pythagor/.lmstudio/models/lmstudio-community/Hermes-4-70B-GGUF/Hermes-4-70B-Q6_K-00001-of-00002.gguf",
+    # --alias makes /v1/models report the registry id instead of the GGUF path,
+    # so it matches [global.model.api_models.local].models[].id.
+    "--alias", "nousresearch/hermes-4-70b",
+    "--host", "{host}", "--port", "{port}",
+    "--ctx-size", "32768", "-ngl", "999", "--jinja",
+]
+host = "127.0.0.1"
+port = 1234  # must match [global.model.api_models.local] base_url (validated)
+health_path = "/health"
+enabled = "never"
 
 # Attach targets for profile = "external" (uncomment to use):
 # [runtime.external]

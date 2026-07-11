@@ -77,16 +77,16 @@ def test_build_anthropic_model_without_override_omits_profile(monkeypatch):
     assert set(captured) == {"model_name", "provider"}
 
 
-def test_build_pydantic_ai_model_uses_chat_model_for_lmstudio():
+def test_build_pydantic_ai_model_uses_chat_model_for_local():
     """Chat-transport endpoints use pydantic-ai's Chat Completions model."""
     model = pydantic_ai_utils.build_pydantic_ai_model(
-        resolve_model_ref("@lmstudio.default")
+        resolve_model_ref("@local.default")
     )
 
     assert isinstance(model, OpenAIChatModel)
 
 
-def test_build_pydantic_ai_model_applies_registry_timeout_for_lmstudio():
+def test_build_pydantic_ai_model_applies_registry_timeout_for_local():
     """The registry request_timeout_seconds reaches the pydantic-ai client.
 
     The wizard chat flow builds its model here; without this, picking the
@@ -94,11 +94,11 @@ def test_build_pydantic_ai_model_applies_registry_timeout_for_lmstudio():
     and time out on the ~17-min local grammar compile.
     """
     model = pydantic_ai_utils.build_pydantic_ai_model(
-        resolve_model_ref("@lmstudio.default")
+        resolve_model_ref("@local.default")
     )
 
     expected = pydantic_ai_utils.get_openai_compatible_endpoint(
-        resolve_model_ref("@lmstudio.default")
+        resolve_model_ref("@local.default")
     )["request_timeout_seconds"]
     assert expected is not None
     assert model.client.timeout == expected

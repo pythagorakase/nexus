@@ -52,7 +52,7 @@ class FakeMemnon:
 
 @pytest.mark.asyncio
 async def test_retrieve_context_uses_direct_memnon_queries_without_local_llm() -> None:
-    """The legacy retrieval helper should no longer initialize LM Studio."""
+    """The legacy retrieval helper should no longer initialize local inference."""
 
     lore = LORE.__new__(LORE)
     lore.memnon = FakeMemnon()
