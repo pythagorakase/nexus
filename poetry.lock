@@ -3515,4 +3515,4 @@ dev = ["black", "flake8", "mypy", "pytest"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<3.14"
-content-hash = "264f44e23a7e9bf38db1815197dd442d40ea87d1d3271e9ad4241f84dbd019bd"
+content-hash = "3bded0935140db731bcc096d0d6600753efbd3ba2bdbb76eeb3929b87d164157"

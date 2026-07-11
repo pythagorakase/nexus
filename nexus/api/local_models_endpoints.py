@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from pathlib import Path
-import re
 from threading import Lock
 from typing import Any
 
@@ -20,10 +19,6 @@ router = APIRouter(prefix="/api/local-models", tags=["local-models"])
 _inspection_cache: dict[tuple[str, int, int], GgufInfo] = {}
 _inspection_cache_lock = Lock()
 _GENERIC_GGUF_ERROR = "No accessible GGUF model at the requested path."
-_SPLIT_GGUF_PATTERN = re.compile(
-    r"^(?P<stem>.+)-(?P<part>\d{5})-of-(?P<total>\d{5})\.gguf$",
-    re.IGNORECASE,
-)
 
 
 class PathRequest(BaseModel):
@@ -32,6 +27,15 @@ class PathRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     path: str
+
+
+class DownloadRequest(BaseModel):
+    """A curated catalog family and quantization selection."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    family: str
+    quant: str
 
 
 def _cached_inspect(path: Path) -> GgufInfo:
@@ -76,10 +80,7 @@ def _verified_path(raw_path: str, status_code: int) -> tuple[Path, GgufInfo]:
 
 def _split_shard(path: Path) -> tuple[str, int, int] | None:
     """Return split stem, part, and total for llama.cpp split filenames."""
-    match = _SPLIT_GGUF_PATTERN.match(path.name)
-    if match is None:
-        return None
-    return match.group("stem"), int(match.group("part")), int(match.group("total"))
+    return local_inference.split_shard(path)
 
 
 def _is_activatable_shard(path: Path) -> bool:
@@ -90,23 +91,7 @@ def _is_activatable_shard(path: Path) -> bool:
 
 def _model_size(path: Path, roots: tuple[Path, ...]) -> int:
     """Return one file's size or the aggregate size of its split set."""
-    split = _split_shard(path)
-    if split is None:
-        return path.stat().st_size
-    stem, _, total = split
-    size = 0
-    for sibling in path.parent.glob(f"{stem}-*-of-{total:05d}.gguf"):
-        resolved = sibling.resolve()
-        sibling_split = _split_shard(resolved)
-        if (
-            sibling_split is not None
-            and sibling_split[0] == stem
-            and sibling_split[2] == total
-            and _is_within(resolved, roots)
-            and resolved.is_file()
-        ):
-            size += resolved.stat().st_size
-    return size
+    return sum(shard.stat().st_size for shard in local_inference.shard_set(path, roots))
 
 
 def _installed_models(active_path: str | None) -> list[dict[str, Any]]:
@@ -209,15 +194,100 @@ def deactivate() -> dict[str, Any]:
     return {"active": None, **result}
 
 
-def _allowed_roots() -> tuple[Path, Path]:
-    return (
-        Path(get_local_models_settings().models_dir).resolve(),
-        Path.home().resolve(),
+def _catalog_files(filename: str) -> list[str]:
+    """Expand a catalog filename to its complete ordered split set."""
+    split = _split_shard(Path(filename))
+    if split is None:
+        return [filename]
+    stem, _, total = split
+    return [f"{stem}-{part:05d}-of-{total:05d}.gguf" for part in range(1, total + 1)]
+
+
+@router.post("/download")
+def download(request: DownloadRequest) -> dict[str, Any]:
+    """Start downloading one curated catalog quantization."""
+    settings = get_local_models_settings()
+    entry = next(
+        (
+            item
+            for item in settings.catalog
+            if item.family == request.family and item.quant == request.quant
+        ),
+        None,
     )
+    if entry is None:
+        raise HTTPException(
+            status_code=404, detail="Local model catalog entry not found"
+        )
+
+    local_dir = (Path(settings.models_dir) / entry.subdir).resolve()
+    if not _is_within(local_dir, _allowed_roots()):
+        raise HTTPException(
+            status_code=400, detail="Catalog model directory is outside allowed roots"
+        )
+    files = _catalog_files(entry.filename)
+    targets = [local_dir / filename for filename in files]
+    total_bytes = round(entry.size_gb * 1024**3)
+    if (
+        all(target.is_file() for target in targets)
+        and inspect_gguf(str(targets[0])).valid
+    ):
+        return {
+            "status": "already_installed",
+            "family": entry.family,
+            "quant": entry.quant,
+            "files": files,
+            "local_dir": str(local_dir),
+            "total_bytes": total_bytes,
+        }
+    try:
+        local_inference.start_download(
+            family=entry.family,
+            quant=entry.quant,
+            repo_id=entry.hf_repo,
+            local_dir=str(local_dir),
+            files=files,
+            total_bytes=total_bytes,
+        )
+    except local_inference.LocalInferenceError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    current = local_inference.download_status()
+    if current is None:
+        raise local_inference.LocalInferenceError(
+            "Download worker state disappeared immediately after start"
+        )
+    return {"status": "started", **current}
+
+
+@router.get("/download")
+def download_status() -> dict[str, Any]:
+    """Return the current detached download state, or idle."""
+    return local_inference.download_status() or {"state": "idle"}
+
+
+@router.post("/download/cancel")
+def cancel_download() -> dict[str, Any]:
+    """Cancel the current detached local-model download."""
+    return local_inference.cancel_download()
+
+
+@router.post("/delete")
+def delete_model(request: PathRequest) -> dict[str, Any]:
+    """Delete one verified inactive GGUF model or its full shard set."""
+    candidate, _ = _verified_path(request.path, status_code=404)
+    try:
+        result = local_inference.delete_model(str(candidate))
+    except local_inference.LocalInferenceError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"status": "deleted", **result}
+
+
+def _allowed_roots() -> tuple[Path, Path]:
+    return local_inference._allowed_roots()
 
 
 def _is_within(path: Path, roots: tuple[Path, ...]) -> bool:
-    return any(path == root or path.is_relative_to(root) for root in roots)
+    return local_inference._is_within(path, roots)
 
 
 @router.get("/browse")
