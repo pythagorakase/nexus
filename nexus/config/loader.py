@@ -31,7 +31,7 @@ except ModuleNotFoundError:
             "Install with: pip install tomli"
         )
 
-from .settings_models import Settings
+from .settings_models import LocalModelsSettings, Settings
 
 logger = logging.getLogger("nexus.config.loader")
 
@@ -150,6 +150,11 @@ def get_gateway_cors_allowed_origins() -> List[str]:
     if runtime is None:
         raise ValueError("[runtime.gateway] is required to configure gateway CORS")
     return runtime.gateway.cors_allowed_origins
+
+
+def get_local_models_settings() -> LocalModelsSettings:
+    """Return validated local-model management configuration."""
+    return load_settings().local_models
 
 
 def get_api_models_by_provider(ui_only: bool = False) -> Dict[str, List[dict]]:
