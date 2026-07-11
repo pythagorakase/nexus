@@ -671,6 +671,27 @@ httpx = ">=0.27"
 pydantic = ">=2.10"
 
 [[package]]
+name = "gguf"
+version = "0.19.0"
+description = "Read and write ML models in GGUF for GGML"
+optional = false
+python-versions = ">=3.10"
+groups = ["main"]
+files = [
+    {file = "gguf-0.19.0-py3-none-any.whl", hash = "sha256:70bcd10edfe697fb2dad6e40af2234b9d8ece9a41a99761405121ebda1c3c1cd"},
+    {file = "gguf-0.19.0.tar.gz", hash = "sha256:dbadcd6cc7ccd44256f2229fe7c2dff5e8aa5cf0612ab987fd2b1a57e428923f"},
+]
+
+[package.dependencies]
+numpy = ">=1.17"
+pyyaml = ">=5.1"
+requests = ">=2.25"
+tqdm = ">=4.27"
+
+[package.extras]
+gui = ["PySide6 (>=6.9,<7.0) ; python_version >= \"3.9\" and python_version < \"3.14\""]
+
+[[package]]
 name = "greenlet"
 version = "3.1.1"
 description = "Lightweight in-process concurrent programming"
@@ -3494,4 +3515,4 @@ dev = ["black", "flake8", "mypy", "pytest"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<3.14"
-content-hash = "c5a2f100ae5dd16c3a31bd36eecc8dfd727face79ca325bc31565468086fd012"
+content-hash = "264f44e23a7e9bf38db1815197dd442d40ea87d1d3271e9ad4241f84dbd019bd"

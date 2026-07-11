@@ -67,6 +67,7 @@ from nexus.api.narrative_generation import (
 from nexus.api.config_utils import get_max_choice_text_length
 from nexus.api.asset_endpoints import router as asset_router
 from nexus.api.reader_endpoints import router as reader_router
+from nexus.api.local_models_endpoints import router as local_models_router
 from nexus.api.secrets_endpoints import router as secrets_router
 from nexus.api.settings_endpoints import router as settings_router
 from nexus.api.slot_endpoints import router as slot_router
@@ -118,6 +119,7 @@ app.include_router(setup_router)
 app.include_router(wizard_chat_router)
 app.include_router(reader_router)
 app.include_router(asset_router)
+app.include_router(local_models_router)
 
 
 def _include_orrery_dev_router(target_app: FastAPI, settings: Any = None) -> None:

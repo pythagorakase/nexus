@@ -7,7 +7,7 @@ All models use `extra='forbid'` to catch typos in configuration keys.
 
 from dataclasses import dataclass
 from typing import Any, Dict, List, Literal, Optional, Tuple
-from pydantic import BaseModel, Field, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 # String prefix used for role references in consumer fields.
@@ -250,6 +250,55 @@ class GlobalSettings(BaseModel):
 
     model: ModelConfig
     narrative: NarrativeConfig
+
+
+class LocalModelCatalogEntry(BaseModel):
+    """One downloadable/labelable GGUF variant known to NEXUS."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    family: str
+    label: str
+    hf_repo: str
+    subdir: str = Field(
+        ...,
+        description="Directory beneath local_models.models_dir for this family",
+    )
+    filename: str
+    quant: str
+    size_gb: float = Field(..., gt=0)
+    min_ram_gb: float = Field(..., gt=0)
+
+    @field_validator("subdir")
+    @classmethod
+    def _validate_subdir(cls, value: str) -> str:
+        """Keep future downloads inside the configured models directory."""
+        from pathlib import PurePath
+
+        path = PurePath(value)
+        if path.is_absolute() or ".." in path.parts or value in {"", "."}:
+            raise ValueError("subdir must be a non-empty relative path without '..'")
+        return value
+
+
+class LocalModelsSettings(BaseModel):
+    """Configuration for interactive local GGUF discovery and serving."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    models_dir: str = Field(
+        default="~/.lmstudio/models/lmstudio-community",
+        description="Root directory scanned recursively for GGUF model files",
+    )
+    catalog: List[LocalModelCatalogEntry] = Field(default_factory=list)
+
+    @field_validator("models_dir")
+    @classmethod
+    def _expand_models_dir(cls, value: str) -> str:
+        """Expand the configured home shortcut once at config load."""
+        from pathlib import Path
+
+        return str(Path(value).expanduser())
 
 
 # =============================================================================
@@ -1916,6 +1965,7 @@ class Settings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     global_: GlobalSettings = Field(..., alias="global")
+    local_models: LocalModelsSettings = Field(default_factory=LocalModelsSettings)
     secrets: Optional[SecretsConfig] = Field(
         default=None,
         description="Provider -> 1Password reference mappings (sync_secrets.py only)",

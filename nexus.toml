@@ -67,6 +67,20 @@ models = [
     { id = "nousresearch/hermes-4-70b", label = "Hermes 4 70B (Local)", description = "Local llama-server inference (GGUF)" },
 ]
 
+# Interactive local GGUF management. The server port and alias remain sourced
+# from [global.model.api_models.local], not duplicated here.
+[local_models]
+models_dir = "~/.lmstudio/models/lmstudio-community"
+catalog = [
+    { family = "hermes-4-70b", label = "Hermes 4 70B Q4_K_M", hf_repo = "lmstudio-community/Hermes-4-70B-GGUF", subdir = "Hermes-4-70B-GGUF", filename = "Hermes-4-70B-Q4_K_M.gguf", quant = "Q4_K_M", size_gb = 42.5, min_ram_gb = 48 },
+    { family = "hermes-4-70b", label = "Hermes 4 70B Q6_K", hf_repo = "lmstudio-community/Hermes-4-70B-GGUF", subdir = "Hermes-4-70B-GGUF", filename = "Hermes-4-70B-Q6_K-00001-of-00002.gguf", quant = "Q6_K", size_gb = 57.9, min_ram_gb = 64 },
+    # Hermes 4.3 36B uses the Seed-OSS architecture and requires llama.cpp
+    # >= approximately build 9900 for seed_oss support.
+    { family = "hermes-4.3-36b", label = "Hermes 4.3 36B Q4_K_M", hf_repo = "bartowski/NousResearch_Hermes-4.3-36B-GGUF", subdir = "Hermes-4.3-36B-GGUF", filename = "NousResearch_Hermes-4.3-36B-Q4_K_M.gguf", quant = "Q4_K_M", size_gb = 21.8, min_ram_gb = 32 },
+    { family = "hermes-4.3-36b", label = "Hermes 4.3 36B Q6_K", hf_repo = "bartowski/NousResearch_Hermes-4.3-36B-GGUF", subdir = "Hermes-4.3-36B-GGUF", filename = "NousResearch_Hermes-4.3-36B-Q6_K.gguf", quant = "Q6_K", size_gb = 29.7, min_ram_gb = 40 },
+    { family = "hermes-4.3-36b", label = "Hermes 4.3 36B Q8_0", hf_repo = "bartowski/NousResearch_Hermes-4.3-36B-GGUF", subdir = "Hermes-4.3-36B-GGUF", filename = "NousResearch_Hermes-4.3-36B-Q8_0.gguf", quant = "Q8_0", size_gb = 38.4, min_ram_gb = 48 },
+]
+
 # =============================================================================
 # Secrets (API Keys)
 # =============================================================================
