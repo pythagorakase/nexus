@@ -33,6 +33,10 @@ const files = execSync(
   .split("\n")
   .filter(Boolean)
   .filter((p) => !/\.(test|spec|stories)\./.test(p))
+  // pages/dev-orrery/ is the internal /dev/orrery audit dashboard (a separate
+  // "design-package port", NOT part of the IRIS customer design system). Keep
+  // its heavy viz deps out of the synced bundle. See .design-sync/NOTES.md.
+  .filter((p) => !/\/pages\/dev-orrery\//.test(p))
   .sort();
 
 const project = new Project({

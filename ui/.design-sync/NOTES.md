@@ -77,6 +77,13 @@ around it:
 - `build.mjs`'s font-url rewrite (`/fonts/` → `../../../client/public/fonts/`) is
   path-depth-specific to `.cache/lib-dist/`.
 - Playwright/Chromium installed under `.ds-sync/node_modules` + `~/.cache/ms-playwright`.
+- **`pages/dev-orrery/` is excluded from the bundle** (`gen-entry.mjs` `find` filter).
+  It's the internal `/dev/orrery` audit dashboard (#430, a separate "design-package
+  port"), not IRIS's customer design system — its viz deps must not bloat the synced
+  bundle. If a genuinely new IRIS component appears (e.g. `Intertitle`, #456), it rides
+  the bundle uncarded until deliberately added to `config.json`'s `componentSrcMap` with
+  an authored preview. Never blind-merge `.cache/componentSrcMap.json`: discovery drifts
+  (it renamed the `Form` card's primary export to `FormItem`).
 
 ## Component-type recipes (folded from wave-2 authoring)
 

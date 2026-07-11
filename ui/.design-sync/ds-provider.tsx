@@ -2,8 +2,9 @@
 // Mounts the app's real providers so components that call useTheme/useFonts/
 // useSettings render instead of throwing, and applies the Veil (.dark) theme +
 // fonts. The fetch stub below mocks /api/settings (theme echoes each preview's
-// localStorage) and the character endpoints; retries are off so the render settles
-// immediately. Exported through the Vite lib entry → window.NexusIris.DesignThemeRoot.
+// localStorage), /api/secrets/status (API-key rows), and the character endpoints;
+// retries are off so the render settles immediately. Exported through the Vite lib
+// entry → window.NexusIris.DesignThemeRoot.
 import React from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
@@ -31,6 +32,16 @@ if (typeof window !== "undefined" && !(window as any).__dsFetchStubbed) {
     { id: 1, name: "Mira Vané", summary: "A cartographer of the drowned districts, charting streets the tide reclaimed.", appearance: "Lean and weather-worn, ink-stained fingers, a coat patched with old chart-cloth.", personality: "Methodical, stubborn, quietly funny when the lanterns are low.", emotionalState: "Wary but resolved.", currentActivity: "Tracing a route toward the Spire.", currentLocationName: "The Drowned Plaza", portraitPath: null },
     { id: 2, name: "Cassius Brenn", summary: "A dock-warden who runs more than he guards.", appearance: "Broad, scarred, a brass warden's pin he no longer has the right to wear.", personality: "Affable, calculating, loyal to whoever paid last.", emotionalState: "Restless.", currentActivity: "Counting debts in the lantern-light.", currentLocationName: "Harbor Steps", portraitPath: null },
     { id: 3, name: "The Archivist", summary: "Keeper of the Spire's flooded records; speaks in retrieved fragments.", appearance: "Robed, ageless, eyes like wet glass.", personality: "Patient, oblique, unnervingly precise.", emotionalState: "Serene.", currentActivity: "Cataloguing what the water took.", currentLocationName: "The Spire Vaults", portraitPath: null },
+  ];
+  // API-key status rows (GET /api/secrets/status → SecretStatus[]). Masked
+  // status only — no plaintext. A mixed present/absent set renders the KeysSection
+  // card populated (present rows show a filled dot + ••••last4 placeholder); an
+  // absent row shows the empty dot. Without this the query 404s and KeysSection's
+  // `if (error) throw error` blanks the whole SettingsPane.
+  const SECRETS = [
+    { provider: "anthropic", account: "nexus-api", present: true, last4: "8f2a" },
+    { provider: "openai", account: "nexus-api", present: true, last4: "b41c" },
+    { provider: "openrouter", account: "nexus-api", present: false, last4: null },
   ];
   // Full settings payload; theme echoes the preview's own localStorage so the
   // Theme/Font providers don't override a deco/splash card's intended theme.
@@ -65,6 +76,7 @@ if (typeof window !== "undefined" && !(window as any).__dsFetchStubbed) {
     const method = (init?.method ?? "GET").toUpperCase();
     const url = typeof input === "string" ? input : input?.url ?? "";
     if (method === "GET") {
+      if (url.includes("/api/secrets/status")) return Promise.resolve(json(SECRETS));
       if (url.includes("/api/settings")) {
         const theme = window.localStorage.getItem("nexus-theme") || "veil";
         return Promise.resolve(json(SETTINGS(theme)));
