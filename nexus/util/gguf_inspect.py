@@ -53,6 +53,7 @@ _SCALAR_SIZES: dict[int, int] = {
 _MAX_KEY_BYTES = 65_536
 _MAX_STRING_BYTES = 1 << 30
 _MAX_ARRAY_COUNT = 1 << 34
+_MAX_ARRAY_DEPTH = 8
 
 
 @dataclass(frozen=True)
@@ -109,16 +110,23 @@ def _skip_string(handle: BinaryIO) -> None:
     handle.seek(length, 1)
 
 
-def _skip_array(handle: BinaryIO) -> None:
-    """Seek past an array value without materializing its elements."""
+def _skip_array(handle: BinaryIO, depth: int = 0) -> None:
+    """Seek past an array value without materializing its elements.
+
+    Nested arrays are legal (if exotic) GGUF — llama.cpp loads such files, so
+    the parser skips them recursively rather than rejecting the model; only a
+    depth beyond any real metadata reads as corrupt.
+    """
+    if depth >= _MAX_ARRAY_DEPTH:
+        raise _HeaderError(f"array nesting exceeds depth bound {_MAX_ARRAY_DEPTH}")
     element_type = _read_u32(handle)
     count = _read_u64(handle)
     if count > _MAX_ARRAY_COUNT:
         raise _HeaderError(f"array count {count} exceeds sanity bound")
     if element_type == _ARRAY:
-        # No GGUF writer emits nested arrays; treat as corrupt rather than
-        # recurse into an unbounded structure.
-        raise _HeaderError("nested GGUF arrays are unsupported")
+        for _ in range(count):
+            _skip_array(handle, depth + 1)
+        return
     if element_type == _STRING:
         for _ in range(count):
             _skip_string(handle)
@@ -161,9 +169,11 @@ def _parse_header_fields(handle: BinaryIO) -> dict[str, Any]:
     for _ in range(kv_count):
         key = _read_string(handle, _MAX_KEY_BYTES)
         value_type = _read_u32(handle)
-        wanted = key in wanted_general or (
-            context_key is not None and key == context_key
-        )
+        # KV ordering is not guaranteed: collect EVERY scalar
+        # "<anything>.context_length" so a context field written before
+        # general.architecture is still on hand when the architecture lands
+        # (order-independent, like the old GGUFReader lookup).
+        wanted = key in wanted_general or key.endswith(".context_length")
         if wanted and value_type == _STRING:
             fields[key] = _read_string(handle, _MAX_STRING_BYTES)
         elif wanted and value_type != _ARRAY:
