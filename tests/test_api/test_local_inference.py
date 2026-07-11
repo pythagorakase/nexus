@@ -406,6 +406,39 @@ def test_start_download_ignores_stale_record_with_recycled_pid(
     assert record["pid"] == 999
 
 
+def test_start_download_env_controls_xet(tmp_path, monkeypatch) -> None:
+    """The worker env carries HF_HUB_DISABLE_XET=1 exactly when configured."""
+    from types import SimpleNamespace as NS
+
+    settings = _settings_with_state_dir(tmp_path)
+    captured = {}
+
+    def fake_popen(command, **kwargs):
+        captured.update(kwargs)
+        return NS(pid=4242)
+
+    monkeypatch.setattr(local_inference, "load_settings", lambda: settings)
+    monkeypatch.setattr(local_inference.subprocess, "Popen", fake_popen)
+
+    for disable, expected in ((True, "1"), (False, None)):
+        captured.clear()
+        monkeypatch.setattr(
+            local_inference,
+            "get_local_models_settings",
+            lambda disable=disable: NS(download_disable_xet=disable),
+        )
+        local_inference.start_download(
+            family="test",
+            quant="Q4_K_M",
+            repo_id="example/test",
+            local_dir=str(tmp_path / "models"),
+            files=["test.gguf"],
+            total_bytes=100,
+        )
+        assert captured["env"].get("HF_HUB_DISABLE_XET") == expected
+        (tmp_path / local_inference.DOWNLOAD_FILENAME).unlink()
+
+
 def _write_download_state(
     tmp_path: Path, *, files: list[str], total_bytes: int = 100
 ) -> None:

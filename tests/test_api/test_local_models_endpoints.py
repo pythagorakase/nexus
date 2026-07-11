@@ -329,7 +329,7 @@ def test_download_endpoint_starts_curated_entry(
         "family": "test",
         "quant": "Q4_K_M",
         "downloaded_bytes": 0,
-        "total_bytes": 1024**3,
+        "total_bytes": 1000**3,
         "progress": 0.0,
         "files": ["test.gguf"],
         "local_dir": str(tmp_path / "Test-GGUF"),
@@ -359,7 +359,7 @@ def test_download_endpoint_starts_curated_entry(
             "repo_id": "example/test",
             "local_dir": str(tmp_path / "Test-GGUF"),
             "files": ["test.gguf"],
-            "total_bytes": 1024**3,
+            "total_bytes": 1000**3,
         }
     ]
 

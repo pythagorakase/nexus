@@ -227,7 +227,10 @@ def download(request: DownloadRequest) -> dict[str, Any]:
         )
     files = _catalog_files(entry.filename)
     targets = [local_dir / filename for filename in files]
-    total_bytes = round(entry.size_gb * 1024**3)
+    # Catalog size_gb values are decimal gigabytes (matching HF's listed
+    # sizes); multiplying by 1024**3 overstated totals ~7% and capped a
+    # completed download's reported progress at ~0.93 (verified live).
+    total_bytes = round(entry.size_gb * 1000**3)
     if (
         all(target.is_file() for target in targets)
         and inspect_gguf(str(targets[0])).valid

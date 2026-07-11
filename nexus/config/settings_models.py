@@ -291,6 +291,15 @@ class LocalModelsSettings(BaseModel):
         description="Root directory scanned recursively for GGUF model files",
     )
     catalog: List[LocalModelCatalogEntry] = Field(default_factory=list)
+    download_disable_xet: bool = Field(
+        default=True,
+        description=(
+            "Spawn download workers with HF_HUB_DISABLE_XET=1 so multi-GB "
+            "GGUF pulls use the classic HTTP path with genuine byte-append "
+            "resume after a cancel; Xet's chunk transfer does not preserve "
+            "byte partials across restarts"
+        ),
+    )
 
     @field_validator("models_dir")
     @classmethod

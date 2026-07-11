@@ -71,6 +71,8 @@ models = [
 # from [global.model.api_models.local], not duplicated here.
 [local_models]
 models_dir = "~/.lmstudio/models/lmstudio-community"
+# Classic-HTTP downloads byte-resume after cancel; Xet chunk transfer does not.
+download_disable_xet = true
 catalog = [
     { family = "hermes-4-70b", label = "Hermes 4 70B Q4_K_M", hf_repo = "lmstudio-community/Hermes-4-70B-GGUF", subdir = "Hermes-4-70B-GGUF", filename = "Hermes-4-70B-Q4_K_M.gguf", quant = "Q4_K_M", size_gb = 42.5, min_ram_gb = 48 },
     { family = "hermes-4-70b", label = "Hermes 4 70B Q6_K", hf_repo = "lmstudio-community/Hermes-4-70B-GGUF", subdir = "Hermes-4-70B-GGUF", filename = "Hermes-4-70B-Q6_K-00001-of-00002.gguf", quant = "Q6_K", size_gb = 57.9, min_ram_gb = 64 },
