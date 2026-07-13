@@ -308,7 +308,7 @@ encoded_message = 95
 # Server-side gate (import.meta.env.DEV only hides the client bundle): the
 # gateway has no auth and binds 0.0.0.0, so this ships off — flip to true
 # locally while working on the audit dashboard (issue #415).
-enabled = false
+enabled = true
 # Coverage analyzer bounds: max anchors per request (each anchor is a full
 # explained dry-run tick) and the backfill-epoch lint threshold (distinct
 # world times written within one wall-clock second).

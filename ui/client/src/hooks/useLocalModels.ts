@@ -59,13 +59,19 @@ export function useLocalDownloadStatus(
 export function useLocalModelActions() {
   const queryClient = useQueryClient();
 
-  const refresh = useCallback(() => {
-    void queryClient.invalidateQueries({
-      queryKey: [...LOCAL_MODELS_STATUS_KEY],
-    });
-    void queryClient.invalidateQueries({
-      queryKey: [...LOCAL_MODELS_DOWNLOAD_KEY],
-    });
+  // Awaited so an action's promise settles only after the refetched
+  // state lands — callers key their in-flight guards on that promise, and
+  // clearing the guard against still-stale cache would reopen the
+  // double-POST window the guard exists to close.
+  const refresh = useCallback(async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: [...LOCAL_MODELS_STATUS_KEY],
+      }),
+      queryClient.invalidateQueries({
+        queryKey: [...LOCAL_MODELS_DOWNLOAD_KEY],
+      }),
+    ]);
   }, [queryClient]);
 
   const activate = useCallback(
@@ -73,7 +79,7 @@ export function useLocalModelActions() {
       try {
         await apiRequest("POST", "/api/local-models/activate", { path });
       } finally {
-        refresh();
+        await refresh();
       }
     },
     [refresh],
@@ -83,7 +89,7 @@ export function useLocalModelActions() {
     try {
       await apiRequest("POST", "/api/local-models/deactivate");
     } finally {
-      refresh();
+      await refresh();
     }
   }, [refresh]);
 
@@ -95,7 +101,7 @@ export function useLocalModelActions() {
           quant,
         });
       } finally {
-        refresh();
+        await refresh();
       }
     },
     [refresh],
@@ -105,7 +111,7 @@ export function useLocalModelActions() {
     try {
       await apiRequest("POST", "/api/local-models/download/cancel");
     } finally {
-      refresh();
+      await refresh();
     }
   }, [refresh]);
 
@@ -114,7 +120,7 @@ export function useLocalModelActions() {
       try {
         await apiRequest("POST", "/api/local-models/delete", { path });
       } finally {
-        refresh();
+        await refresh();
       }
     },
     [refresh],
