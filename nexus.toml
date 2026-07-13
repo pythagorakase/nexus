@@ -25,7 +25,9 @@ default_slot_model = "TEST"
 [global.model.api_models.openai]
 roles = { default = "gpt-5.5" }
 models = [
+    { id = "o3", label = "o3", unsupported_params = ["temperature", "top_p"] },
     { id = "gpt-5.5", label = "GPT-5.5", unsupported_params = ["temperature", "top_p"] },
+    { id = "gpt-5.6", label = "GPT-5.6-Sol", unsupported_params = ["temperature", "top_p"] },
 ]
 
 [global.model.api_models.anthropic]
@@ -35,7 +37,7 @@ roles = { default = "claude-opus-4-8", deep = "claude-fable-5", fast = "claude-s
 # 4/4 wizard phases on opus-4-8, plus a fable-5 setting-phase probe); the
 # schema strip set it relies on was proven on the legacy path in PR #410.
 models = [
-    { id = "claude-sonnet-4-6", label = "Sonnet 4.6", native_structured_output = true },
+    { id = "claude-sonnet-5-0", label = "Sonnet 5.0", native_structured_output = true },
     { id = "claude-opus-4-8", label = "Opus 4.8", unsupported_params = ["temperature", "top_p", "top_k"], native_structured_output = true },
     { id = "claude-fable-5", label = "Fable 5", unsupported_params = ["temperature", "top_p", "top_k"], native_structured_output = true },
 ]
@@ -308,7 +310,7 @@ encoded_message = 95
 # Server-side gate (import.meta.env.DEV only hides the client bundle): the
 # gateway has no auth and binds 0.0.0.0, so this ships off — flip to true
 # locally while working on the audit dashboard (issue #415).
-enabled = false
+enabled = true
 # Coverage analyzer bounds: max anchors per request (each anchor is a full
 # explained dry-run tick) and the backfill-epoch lint threshold (distinct
 # world times written within one wall-clock second).
