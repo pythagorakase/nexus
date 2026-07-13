@@ -630,3 +630,134 @@ def test_download_worker_fetches_files_in_order(tmp_path: Path, monkeypatch) -> 
             "local_dir": str(tmp_path),
         },
     ]
+
+
+def test_deactivate_waits_for_port_release(tmp_path: Path, monkeypatch) -> None:
+    """Teardown returns only after the dying server's socket frees.
+
+    The record is unlinked before the wait, so without it an immediate
+    follow-up activate (EJECT then APPLY) would fast-probe the port and
+    misread the lingering socket as foreign occupancy.
+    """
+    settings = _settings_with_state_dir(tmp_path)
+    state_path = tmp_path / local_inference.STATE_FILENAME
+    state_path.write_text("{}")
+    probes = {"count": 0}
+
+    def flaky_port_open(settings, host, port):
+        # Held for the first two probes (socket teardown lag), then free.
+        probes["count"] += 1
+        return probes["count"] <= 2
+
+    monkeypatch.setattr(
+        local_inference,
+        "_read_active",
+        lambda value: {
+            "pid": 43210,
+            "gguf_path": "/served/model.gguf",
+            "ready": True,
+            "failed": False,
+        },
+    )
+    monkeypatch.setattr(local_inference, "_pid_alive", lambda pid: False)
+    monkeypatch.setattr(
+        local_inference, "_process_is_ours", lambda settings, pid, path: True
+    )
+    monkeypatch.setattr(local_inference, "_signal_process_group", lambda pid, sig: None)
+    monkeypatch.setattr(local_inference, "_port_open", flaky_port_open)
+    monkeypatch.setattr(local_inference.time, "sleep", lambda seconds: None)
+
+    result = local_inference._deactivate_locked(settings)
+
+    assert result == {"stopped": True, "pid": 43210}
+    assert not state_path.exists()
+    assert probes["count"] >= 3
+
+
+def test_swap_proceeds_once_teardown_frees_the_port(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """A swap spawns after real teardown (with its port wait) completes."""
+    settings = _settings_with_state_dir(tmp_path)
+    gguf_path = tmp_path / "next.gguf"
+    gguf_path.write_bytes(b"GGUF")
+    probes = {"count": 0}
+
+    def flaky_port_open(settings, host, port):
+        probes["count"] += 1
+        return probes["count"] <= 2
+
+    monkeypatch.setattr(local_inference, "load_settings", lambda: settings)
+    monkeypatch.setattr(
+        local_inference,
+        "inspect_gguf",
+        lambda path: GgufInfo(architecture="test", quantization="Q6_K", valid=True),
+    )
+    monkeypatch.setattr(
+        local_inference,
+        "_read_active",
+        lambda value: {
+            "pid": 43210,
+            "gguf_path": "/previous/model.gguf",
+            "ready": True,
+            "failed": False,
+        },
+    )
+    monkeypatch.setattr(local_inference, "_pid_alive", lambda pid: False)
+    monkeypatch.setattr(
+        local_inference, "_process_is_ours", lambda settings, pid, path: True
+    )
+    monkeypatch.setattr(local_inference, "_signal_process_group", lambda pid, sig: None)
+    monkeypatch.setattr(local_inference, "_port_open", flaky_port_open)
+    monkeypatch.setattr(local_inference.time, "sleep", lambda seconds: None)
+    monkeypatch.setattr(local_inference.shutil, "which", lambda value: value)
+    monkeypatch.setattr(
+        local_inference.subprocess,
+        "Popen",
+        lambda command, **kwargs: SimpleNamespace(pid=54321),
+    )
+
+    result = local_inference.activate(str(gguf_path))
+
+    # Two held probes inside teardown's release wait, one free probe there,
+    # then activate's own fast probe sees it free and spawns.
+    assert result["pid"] == 54321
+    assert probes["count"] >= 3
+
+
+def test_swap_rejects_port_held_by_foreign_process(tmp_path: Path, monkeypatch) -> None:
+    """A port still held past the release window is treated as foreign."""
+    settings = _settings_with_state_dir(tmp_path)
+    assert settings.runtime is not None
+    settings.runtime.health.port_release_timeout_seconds = 0.01
+    gguf_path = tmp_path / "next.gguf"
+    gguf_path.write_bytes(b"GGUF")
+
+    monkeypatch.setattr(local_inference, "load_settings", lambda: settings)
+    monkeypatch.setattr(
+        local_inference,
+        "inspect_gguf",
+        lambda path: GgufInfo(architecture="test", quantization="Q6_K", valid=True),
+    )
+    monkeypatch.setattr(
+        local_inference,
+        "_read_active",
+        lambda value: {
+            "pid": 43210,
+            "gguf_path": "/previous/model.gguf",
+            "ready": True,
+            "failed": False,
+        },
+    )
+    monkeypatch.setattr(local_inference, "_pid_alive", lambda pid: False)
+    monkeypatch.setattr(
+        local_inference, "_process_is_ours", lambda settings, pid, path: True
+    )
+    monkeypatch.setattr(local_inference, "_signal_process_group", lambda pid, sig: None)
+    monkeypatch.setattr(
+        local_inference, "_port_open", lambda settings, host, port: True
+    )
+    monkeypatch.setattr(local_inference.time, "sleep", lambda seconds: None)
+
+    with pytest.raises(local_inference.LocalInferenceError, match="already in use"):
+        local_inference.activate(str(gguf_path))

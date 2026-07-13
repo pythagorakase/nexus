@@ -195,29 +195,43 @@ describe("LocalModelRows", () => {
     expect(apiRequestMock).not.toHaveBeenCalled();
   });
 
-  it("activates and selects local when a ready non-serving quant is clicked", () => {
+  it("stages a ready quant on click without any network write", () => {
     const onPickLocal = vi.fn();
-    renderRows({
-      status: {
-        ...STATUS,
-        installed: [
-          ...STATUS.installed,
-          {
-            path: `${MODELS_DIR}/Hermes-4.3-36B-GGUF/h36-q6.gguf`,
-            filename: "h36-q6.gguf",
-            arch: "seed_oss",
-            quant: "Q6_K",
-            size_bytes: 29_700_000_000,
-            verified: true,
-            active: false,
-          },
-        ],
-      },
-      onPickLocal,
-    });
+    renderRows({ status: WITH_Q6_INSTALLED, onPickLocal });
+
+    fireEvent.click(screen.getByTestId("lm-toggle-hermes-4.3-36b"));
+    const row = screen.getByTestId("lm-quant-hermes-4.3-36b-Q6_K");
+    fireEvent.click(row);
+
+    expect(row).toHaveClass("staged");
+    expect(screen.getByTestId("lm-staged-caption")).toHaveTextContent(
+      "hermes 4.3 36b q6_k · 29.7 gb",
+    );
+    expect(apiRequestMock).not.toHaveBeenCalled();
+    expect(onPickLocal).not.toHaveBeenCalled();
+  });
+
+  it("unstages on a second click and hides APPLY", () => {
+    renderRows({ status: WITH_Q6_INSTALLED });
+
+    fireEvent.click(screen.getByTestId("lm-toggle-hermes-4.3-36b"));
+    const row = screen.getByTestId("lm-quant-hermes-4.3-36b-Q6_K");
+    fireEvent.click(row);
+    expect(screen.getByTestId("lm-apply")).toBeInTheDocument();
+    fireEvent.click(row);
+
+    expect(row).not.toHaveClass("staged");
+    expect(screen.queryByTestId("lm-apply")).not.toBeInTheDocument();
+    expect(apiRequestMock).not.toHaveBeenCalled();
+  });
+
+  it("APPLY loads the staged quant and selects local as storyteller", () => {
+    const onPickLocal = vi.fn();
+    renderRows({ status: WITH_Q6_INSTALLED, onPickLocal });
 
     fireEvent.click(screen.getByTestId("lm-toggle-hermes-4.3-36b"));
     fireEvent.click(screen.getByTestId("lm-quant-hermes-4.3-36b-Q6_K"));
+    fireEvent.click(screen.getByTestId("lm-apply"));
 
     expect(apiRequestMock).toHaveBeenCalledWith(
       "POST",
@@ -225,6 +239,35 @@ describe("LocalModelRows", () => {
       { path: `${MODELS_DIR}/Hermes-4.3-36B-GGUF/h36-q6.gguf` },
     );
     expect(onPickLocal).toHaveBeenCalledTimes(1);
+  });
+
+  it("EJECT unloads the serving model", () => {
+    renderRows();
+
+    fireEvent.click(screen.getByTestId("lm-eject"));
+
+    expect(apiRequestMock).toHaveBeenCalledWith(
+      "POST",
+      "/api/local-models/deactivate",
+    );
+  });
+
+  it("family click with nothing serving only toggles the quant list", () => {
+    const onPickLocal = vi.fn();
+    renderRows({
+      status: { ...WITH_Q6_INSTALLED, active: null },
+      onPickLocal,
+    });
+
+    fireEvent.click(screen.getByTestId("model-local-hermes-4.3-36b"));
+
+    // The accordion opened (quant rows now in the document), but nothing
+    // loaded and the storyteller selection did not move.
+    expect(
+      screen.getByTestId("lm-quant-hermes-4.3-36b-Q6_K"),
+    ).toBeInTheDocument();
+    expect(apiRequestMock).not.toHaveBeenCalled();
+    expect(onPickLocal).not.toHaveBeenCalled();
   });
 
   it("starts a download when an absent quant is clicked", () => {

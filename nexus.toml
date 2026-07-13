@@ -913,6 +913,7 @@ timeout_seconds = 2.0            # per HTTP health probe
 startup_deadline_seconds = 30.0  # nexus up waits this long per service
 poll_interval_seconds = 0.25
 stop_grace_seconds = 10.0        # terminate -> kill escalation on nexus down
+port_release_timeout_seconds = 5.0 # swap waits this long for the old llama-server's socket
 
 [runtime.logs]
 tail_lines = 100          # default for `nexus logs`
