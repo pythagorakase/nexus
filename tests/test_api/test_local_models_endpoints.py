@@ -69,7 +69,8 @@ def test_status_shape(
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["models_dir"] == str(tmp_path)
+    # Resolved (symlink-free) so it string-joins against installed[].path.
+    assert payload["models_dir"] == str(tmp_path.resolve())
     assert payload["catalog"][0]["family"] == "test"
     assert payload["active"] is None
     assert payload["installed"] == [
@@ -83,6 +84,9 @@ def test_status_shape(
             "active": False,
         }
     ]
+    # GiB units so the client can compare against catalog min_ram_gb directly.
+    assert isinstance(payload["system_ram_gb"], float)
+    assert payload["system_ram_gb"] > 0
 
 
 def test_status_surfaces_failed_load(

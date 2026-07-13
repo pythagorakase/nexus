@@ -173,6 +173,24 @@
   color: var(--fg-muted);
   text-shadow: none;
 }
+/* Memory meter (#465): exists only while a local model serves or loads.
+   Fill = active quant's weight size vs detected RAM (static catalog data;
+   Metal-wired mmap pages are invisible to live process telemetry). */
+.topbar .mem-track {
+  width: 88px; height: 3px;
+  background: var(--border-faint);
+  border-radius: 2px; overflow: hidden;
+  display: inline-block;
+}
+.topbar .mem-fill {
+  display: block; height: 100%;
+  background: var(--brass);
+  box-shadow: var(--glow-soft);
+  transition: width .35s ease;
+}
+.topbar .mem-fill.over { background: var(--bronze); }
+.topbar .mem-fill.loading { animation: nexus-pulse 1.8s ease-in-out infinite; }
+.topbar .mem-text { letter-spacing: .1em; white-space: nowrap; }
 
 /* ─── Main grid ─── */
 .nexus-main {
@@ -1539,6 +1557,94 @@
 }
 .model-row .model-radio { color: var(--brass); display: inline-flex; }
 .model-name { flex: 1; }
+
+/* ─── 4b. Local provider: family rows + per-quant manager (#465) ─── */
+.lm-group { list-style: none; }
+.lm-fam .lm-name { flex: 0 0 auto; }
+.lm-fam .lm-sum { letter-spacing: .1em; }
+.lm-spacer { flex: 1; }
+.lm-chevron {
+  background: none; border: none; padding: 4px;
+  cursor: pointer; color: var(--fg-muted); display: inline-flex;
+  transition: color .2s;
+}
+.lm-chevron:hover { color: var(--brass); }
+.lm-chevron svg { transition: transform .25s ease; }
+.lm-chevron.open svg { transform: rotate(180deg); }
+.lm-quants { overflow: hidden; }
+.lm-quants[data-state="open"] { animation: lm-slide-down .3s cubic-bezier(.4, 0, .2, 1); }
+.lm-quants[data-state="closed"] { animation: lm-slide-up .25s cubic-bezier(.4, 0, .2, 1); }
+@keyframes lm-slide-down {
+  from { height: 0; }
+  to { height: var(--radix-collapsible-content-height); }
+}
+@keyframes lm-slide-up {
+  from { height: var(--radix-collapsible-content-height); }
+  to { height: 0; }
+}
+.lm-quant-list {
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 4px 8px 10px 24px;
+}
+.lm-quant {
+  position: relative; overflow: hidden;
+  display: grid; grid-template-columns: 12px 62px 1fr auto;
+  gap: 9px; align-items: center;
+  min-height: 30px; padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.lm-quant.ready { background: var(--bg-elev-3); }
+.lm-quant.dl { cursor: default; }
+.lm-quant.exceeds { opacity: .35; cursor: not-allowed; }
+.lm-quant.blocked { opacity: .5; cursor: default; }
+.lm-state { display: inline-flex; align-items: center; justify-content: center; }
+.lm-get { color: var(--fg-muted); opacity: .7; }
+.lm-quant:hover .lm-get { color: var(--brass); opacity: 1; }
+.lm-dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--brass-bright);
+  box-shadow: var(--glow-soft);
+}
+.lm-dot.loading { animation: nexus-pulse 1.8s ease-in-out infinite; }
+.lm-pct { color: var(--brass-bright); font-size: 8px; letter-spacing: 0; }
+.lm-quant-label { color: var(--fg-muted); letter-spacing: .1em; }
+.lm-quant.ready .lm-quant-label { color: var(--fg); }
+.lm-quant.active .lm-quant-label { color: var(--brass-bright); text-shadow: var(--glow-soft); }
+.lm-size { letter-spacing: .08em; white-space: nowrap; }
+.lm-action { display: inline-flex; align-items: center; min-width: 18px; justify-content: flex-end; }
+.lm-trash,
+.lm-cancel {
+  background: none; border: none; padding: 2px;
+  cursor: pointer; color: var(--fg-muted); display: inline-flex;
+  transition: color .2s;
+}
+.lm-trash.armed { color: var(--danger); }
+.lm-trash:disabled { opacity: .3; cursor: default; }
+.lm-cancel:hover { color: var(--danger); }
+.lm-bar {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  height: 2px; background: var(--border-faint);
+}
+.lm-bar-fill {
+  display: block; height: 100%;
+  background: var(--brass);
+  box-shadow: var(--glow-soft);
+  transition: width .18s linear;
+}
+.lm-alert { margin-top: 4px; }
+/* Portaled outside .nexus-shell; brand tokens resolve via html.dark. */
+.lm-tip.lm-tip {
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: .12em;
+  color: var(--fg-muted);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .5);
+}
 
 /* ─── 5. API keys ─── */
 .key-list {
