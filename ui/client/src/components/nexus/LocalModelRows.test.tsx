@@ -1,15 +1,32 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   LOCAL_MODELS_DOWNLOAD_KEY,
   LOCAL_MODELS_STATUS_KEY,
 } from "@/hooks/useLocalModels";
+import { apiRequest } from "@/lib/queryClient";
 import type {
   LocalDownloadStatus,
   LocalModelsStatus,
 } from "@/types/localModels";
 import { LocalModelRows } from "./LocalModelRows";
+
+// The component's four write actions all flow through apiRequest; spying it
+// is what lets these tests assert dispatches (method, URL, body) without a
+// network. Mutation testing showed render-only assertions stay green when
+// the dispatch wiring is deleted outright.
+vi.mock("@/lib/queryClient", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/lib/queryClient")>();
+  return { ...actual, apiRequest: vi.fn() };
+});
+const apiRequestMock = vi.mocked(apiRequest);
+
+beforeEach(() => {
+  apiRequestMock.mockReset();
+  apiRequestMock.mockResolvedValue(new Response("{}"));
+});
 
 const MODELS_DIR = "/models";
 
@@ -67,6 +84,23 @@ const STATUS: LocalModelsStatus = {
 };
 
 const IDLE: LocalDownloadStatus = { state: "idle" };
+
+// STATUS plus a second installed, non-serving quant (its trash is enabled).
+const WITH_Q6_INSTALLED: LocalModelsStatus = {
+  ...STATUS,
+  installed: [
+    ...STATUS.installed,
+    {
+      path: `${MODELS_DIR}/Hermes-4.3-36B-GGUF/h36-q6.gguf`,
+      filename: "h36-q6.gguf",
+      arch: "seed_oss",
+      quant: "Q6_K",
+      size_bytes: 29_700_000_000,
+      verified: true,
+      active: false,
+    },
+  ],
+};
 
 // Idle-cadence knobs are irrelevant inside a test's lifetime; keep them
 // huge so no poll fires mid-assertion.
@@ -158,13 +192,14 @@ describe("LocalModelRows", () => {
     fireEvent.click(screen.getByTestId("model-local-hermes-4.3-36b"));
 
     expect(onPickLocal).toHaveBeenCalledTimes(1);
+    expect(apiRequestMock).not.toHaveBeenCalled();
   });
 
-  it("arms the delete on first click instead of deleting", () => {
+  it("activates and selects local when a ready non-serving quant is clicked", () => {
+    const onPickLocal = vi.fn();
     renderRows({
       status: {
         ...STATUS,
-        // A second installed, non-active quant so its trash is enabled.
         installed: [
           ...STATUS.installed,
           {
@@ -178,15 +213,121 @@ describe("LocalModelRows", () => {
           },
         ],
       },
+      onPickLocal,
     });
+
+    fireEvent.click(screen.getByTestId("lm-toggle-hermes-4.3-36b"));
+    fireEvent.click(screen.getByTestId("lm-quant-hermes-4.3-36b-Q6_K"));
+
+    expect(apiRequestMock).toHaveBeenCalledWith(
+      "POST",
+      "/api/local-models/activate",
+      { path: `${MODELS_DIR}/Hermes-4.3-36B-GGUF/h36-q6.gguf` },
+    );
+    expect(onPickLocal).toHaveBeenCalledTimes(1);
+  });
+
+  it("starts a download when an absent quant is clicked", () => {
+    renderRows();
+
+    fireEvent.click(screen.getByTestId("lm-toggle-hermes-4.3-36b"));
+    fireEvent.click(screen.getByTestId("lm-quant-hermes-4.3-36b-Q6_K"));
+
+    expect(apiRequestMock).toHaveBeenCalledWith(
+      "POST",
+      "/api/local-models/download",
+      { family: "hermes-4.3-36b", quant: "Q6_K" },
+    );
+  });
+
+  it("fires exactly one download on a rapid double click", () => {
+    // Never-settling request keeps the in-flight guard armed across clicks.
+    apiRequestMock.mockImplementation(() => new Promise(() => {}));
+    renderRows();
+
+    fireEvent.click(screen.getByTestId("lm-toggle-hermes-4.3-36b"));
+    const row = screen.getByTestId("lm-quant-hermes-4.3-36b-Q6_K");
+    fireEvent.click(row);
+    fireEvent.click(row);
+
+    expect(apiRequestMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("arms the delete on first click instead of deleting", () => {
+    renderRows({ status: WITH_Q6_INSTALLED });
 
     fireEvent.click(screen.getByTestId("lm-toggle-hermes-4.3-36b"));
     const trash = screen.getByTestId("lm-trash-hermes-4.3-36b-Q6_K");
     fireEvent.click(trash);
 
     expect(trash).toHaveClass("armed");
+    expect(trash).toHaveAttribute("aria-pressed", "true");
+    expect(apiRequestMock).not.toHaveBeenCalled();
     // Still present: nothing was deleted, no error alert appeared.
     expect(screen.queryByTestId("lm-alert")).not.toBeInTheDocument();
+  });
+
+  it("deletes on the confirming second click", () => {
+    renderRows({ status: WITH_Q6_INSTALLED });
+
+    fireEvent.click(screen.getByTestId("lm-toggle-hermes-4.3-36b"));
+    const trash = screen.getByTestId("lm-trash-hermes-4.3-36b-Q6_K");
+    fireEvent.click(trash);
+    fireEvent.click(trash);
+
+    expect(apiRequestMock).toHaveBeenCalledWith(
+      "POST",
+      "/api/local-models/delete",
+      { path: `${MODELS_DIR}/Hermes-4.3-36B-GGUF/h36-q6.gguf` },
+    );
+  });
+
+  it("disarms on its own after the configured window", () => {
+    vi.useFakeTimers();
+    try {
+      renderRows({ status: WITH_Q6_INSTALLED });
+
+      fireEvent.click(screen.getByTestId("lm-toggle-hermes-4.3-36b"));
+      const trash = screen.getByTestId("lm-trash-hermes-4.3-36b-Q6_K");
+      fireEvent.click(trash);
+      expect(trash).toHaveClass("armed");
+
+      act(() => {
+        vi.advanceTimersByTime(KNOBS.delete_arm_ms + 1);
+      });
+
+      expect(trash).not.toHaveClass("armed");
+      expect(apiRequestMock).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("routes a failed-activation quant's delete through deactivate", () => {
+    renderRows({
+      status: {
+        ...WITH_Q6_INSTALLED,
+        active: {
+          gguf_path: `${MODELS_DIR}/Hermes-4.3-36B-GGUF/h36-q6.gguf`,
+          ready: false,
+          failed: true,
+          error: "llama-server exited before becoming ready",
+        },
+      },
+    });
+
+    fireEvent.click(screen.getByTestId("lm-toggle-hermes-4.3-36b"));
+    const trash = screen.getByTestId("lm-trash-hermes-4.3-36b-Q6_K");
+    fireEvent.click(trash);
+    fireEvent.click(trash);
+
+    // The failed record pins the path server-side (delete would 409);
+    // deactivate clears it, then the delete goes through.
+    expect(apiRequestMock).toHaveBeenNthCalledWith(
+      1,
+      "POST",
+      "/api/local-models/deactivate",
+    );
   });
 
   it("disables the trash on the quant that is serving", () => {

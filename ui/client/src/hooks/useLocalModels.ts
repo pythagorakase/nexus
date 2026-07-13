@@ -10,11 +10,17 @@
  */
 import { useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import type { Query } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import type {
   LocalDownloadStatus,
   LocalModelsStatus,
 } from "@/types/localModels";
+
+type PollInterval<T> =
+  | number
+  | false
+  | ((query: Query<T, Error>) => number | false | undefined);
 
 export const LOCAL_MODELS_STATUS_KEY = ["/api/local-models/status"] as const;
 export const LOCAL_MODELS_DOWNLOAD_KEY = ["/api/local-models/download"] as const;
@@ -32,7 +38,7 @@ export const LOCAL_MODELS_KNOB_DEFAULTS = {
 // document is hidden by default. A hidden window with a frozen memory
 // meter or download bar reads as current the moment it is glanced at —
 // keep polling; the endpoint is local and answers in milliseconds.
-export function useLocalModelsStatus(pollMs: number | false) {
+export function useLocalModelsStatus(pollMs: PollInterval<LocalModelsStatus>) {
   return useQuery<LocalModelsStatus>({
     queryKey: [...LOCAL_MODELS_STATUS_KEY],
     refetchInterval: pollMs,
@@ -40,7 +46,9 @@ export function useLocalModelsStatus(pollMs: number | false) {
   });
 }
 
-export function useLocalDownloadStatus(pollMs: number | false) {
+export function useLocalDownloadStatus(
+  pollMs: PollInterval<LocalDownloadStatus>,
+) {
   return useQuery<LocalDownloadStatus>({
     queryKey: [...LOCAL_MODELS_DOWNLOAD_KEY],
     refetchInterval: pollMs,
@@ -70,6 +78,14 @@ export function useLocalModelActions() {
     },
     [refresh],
   );
+
+  const deactivate = useCallback(async () => {
+    try {
+      await apiRequest("POST", "/api/local-models/deactivate");
+    } finally {
+      refresh();
+    }
+  }, [refresh]);
 
   const startDownload = useCallback(
     async (family: string, quant: string) => {
@@ -104,5 +120,5 @@ export function useLocalModelActions() {
     [refresh],
   );
 
-  return { activate, startDownload, cancelDownload, deleteModel };
+  return { activate, deactivate, startDownload, cancelDownload, deleteModel };
 }

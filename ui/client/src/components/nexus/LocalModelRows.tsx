@@ -63,6 +63,8 @@ interface QuantView {
   ready: boolean;
   isActive: boolean;
   isLoading: boolean;
+  /** A persisted failed-activation record points at this quant. */
+  hasFailedRecord: boolean;
   isDownloading: boolean;
   exceeds: boolean;
   progress: number;
@@ -97,6 +99,11 @@ export function LocalModelRows({
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [armed, setArmed] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  // In-flight action guard: server-derived guards (downloading, isLoading)
+  // only flip after the POST's invalidation refetch lands, leaving a
+  // ~100-300ms window where a second click double-POSTs and surfaces a
+  // spurious 409/404 alert for an action that succeeded.
+  const [pending, setPending] = useState(false);
 
   // Poll fast while a swap is in flight so active.ready flipping (or
   // failing) is seen promptly; idle cadence otherwise.
@@ -159,6 +166,7 @@ export function LocalModelRows({
         isLoading: Boolean(
           activeHere && !status.active?.ready && !status.active?.failed,
         ),
+        hasFailedRecord: Boolean(activeHere && status.active?.failed),
         isDownloading: Boolean(
           download?.state === "downloading" &&
             download.family === entry.family &&
@@ -190,24 +198,31 @@ export function LocalModelRows({
     );
   }
 
-  const run = (task: Promise<unknown>) => {
-    task.catch((caught) => {
-      setActionError(caught instanceof Error ? caught.message : String(caught));
-    });
+  const run = (task: () => Promise<unknown>) => {
+    setPending(true);
+    task()
+      .catch((caught) => {
+        setActionError(
+          caught instanceof Error ? caught.message : String(caught),
+        );
+      })
+      .finally(() => setPending(false));
   };
 
   const pickFamily = (quants: QuantView[]) => {
-    setActionError(null);
     const current = quants.find((q) => q.isActive || q.isLoading);
     if (current) {
+      setActionError(null);
       onPickLocal();
       return;
     }
+    if (pending) return;
+    setActionError(null);
     const best = quants
       .filter((q) => q.ready && !q.exceeds)
       .sort((a, b) => b.entry.size_gb - a.entry.size_gb)[0];
     if (best) {
-      run(actions.activate(best.path));
+      run(() => actions.activate(best.path));
       onPickLocal();
       return;
     }
@@ -217,15 +232,15 @@ export function LocalModelRows({
   };
 
   const clickQuant = (q: QuantView) => {
+    if (pending || q.exceeds || q.isDownloading || q.isLoading) return;
     setActionError(null);
-    if (q.exceeds || q.isDownloading || q.isLoading) return;
     if (q.ready) {
-      if (!q.isActive) run(actions.activate(q.path));
+      if (!q.isActive) run(() => actions.activate(q.path));
       onPickLocal();
       return;
     }
     if (!downloading) {
-      run(actions.startDownload(q.entry.family, q.entry.quant));
+      run(() => actions.startDownload(q.entry.family, q.entry.quant));
     }
   };
 
@@ -235,7 +250,13 @@ export function LocalModelRows({
     download?.state === "failed"
       ? (download.error ?? "download did not complete")
       : null;
-  const alertText = actionError ?? failedError ?? downloadError;
+  const alert = actionError
+    ? { title: "ACTION REJECTED", text: actionError }
+    : failedError
+      ? { title: "LOAD FAILED", text: failedError }
+      : downloadError
+        ? { title: "DOWNLOAD FAILED", text: downloadError }
+        : null;
 
   return (
     <TooltipProvider>
@@ -289,7 +310,11 @@ export function LocalModelRows({
                 </button>
               </div>
               <CollapsibleContent className="lm-quants">
-                <div className="lm-quant-list">
+                <div
+                  className="lm-quant-list"
+                  role="radiogroup"
+                  aria-label={`${group.label} quantizations`}
+                >
                   {group.quants.map((q) => {
                     const blocked = !q.ready && !q.isDownloading && downloading;
                     const row = (
@@ -306,8 +331,16 @@ export function LocalModelRows({
                           .filter(Boolean)
                           .join(" ")}
                         onClick={blocked ? undefined : () => clickQuant(q)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            if (!blocked) clickQuant(q);
+                          }
+                        }}
                         role="radio"
                         aria-checked={q.isActive}
+                        aria-disabled={q.exceeds || blocked || undefined}
+                        tabIndex={0}
                         data-testid={`lm-quant-${family}-${q.entry.quant}`}
                       >
                         <span className="lm-state">
@@ -336,14 +369,30 @@ export function LocalModelRows({
                               disabled={q.isActive || q.isLoading}
                               onClick={(event) => {
                                 event.stopPropagation();
+                                if (pending) return;
                                 if (armed === q.path) {
                                   setArmed(null);
-                                  run(actions.deleteModel(q.path));
+                                  // A failed-activation record pins the path
+                                  // server-side (delete would 409 forever);
+                                  // clear it first so the delete succeeds.
+                                  run(
+                                    q.hasFailedRecord
+                                      ? async () => {
+                                          await actions.deactivate();
+                                          await actions.deleteModel(q.path);
+                                        }
+                                      : () => actions.deleteModel(q.path),
+                                  );
                                 } else {
                                   setArmed(q.path);
                                 }
                               }}
-                              aria-label={`Delete ${group.label} ${q.entry.quant}`}
+                              aria-label={
+                                armed === q.path
+                                  ? `Confirm delete ${group.label} ${q.entry.quant}`
+                                  : `Delete ${group.label} ${q.entry.quant}`
+                              }
+                              aria-pressed={armed === q.path}
                               data-testid={`lm-trash-${family}-${q.entry.quant}`}
                             >
                               <Trash2 size={11} />
@@ -354,8 +403,9 @@ export function LocalModelRows({
                               className="lm-cancel"
                               onClick={(event) => {
                                 event.stopPropagation();
+                                if (pending) return;
                                 setActionError(null);
-                                run(actions.cancelDownload());
+                                run(() => actions.cancelDownload());
                               }}
                               aria-label="Cancel download"
                               data-testid="lm-dl-cancel"
@@ -392,13 +442,13 @@ export function LocalModelRows({
           </Collapsible>
         );
       })}
-      {alertText && (
+      {alert && (
         <li className="lm-group">
           <div className="alert danger lm-alert" data-testid="lm-alert">
             <AlertTriangle size={14} />
             <div>
-              <div className="alert-title">LOCAL MODEL</div>
-              <div className="alert-body">{alertText}</div>
+              <div className="alert-title">{alert.title}</div>
+              <div className="alert-body">{alert.text}</div>
             </div>
           </div>
         </li>

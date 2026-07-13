@@ -39,9 +39,19 @@ function MemoryMeter() {
   const pollIdleMs =
     settings?.ui?.local_models?.poll_idle_ms ??
     LOCAL_MODELS_KNOB_DEFAULTS.poll_idle_ms;
+  const pollBusyMs =
+    settings?.ui?.local_models?.poll_busy_ms ??
+    LOCAL_MODELS_KNOB_DEFAULTS.poll_busy_ms;
   const { data: status } = useQuery<LocalModelsStatus>({
     queryKey: [...LOCAL_MODELS_STATUS_KEY],
-    refetchInterval: pollIdleMs,
+    // Busy cadence while a swap is in flight: activation is fire-and-forget
+    // and the settings pane (the other busy observer) may be unmounted, so
+    // the meter must notice ready/failed flips on its own.
+    refetchInterval: (query) => {
+      const active = query.state.data?.active;
+      const busy = Boolean(active && !active.ready && !active.failed);
+      return busy ? pollBusyMs : pollIdleMs;
+    },
     // Keep the meter honest while the window is hidden (see useLocalModels).
     refetchIntervalInBackground: true,
   });
@@ -57,12 +67,16 @@ function MemoryMeter() {
   const installed = status.installed.find(
     (model) => model.path === active.gguf_path,
   );
-  const usedGb = entry?.size_gb ?? (installed ? installed.size_bytes / 1e9 : 0);
-  if (!usedGb) return null;
-
-  const totalGb = status.system_ram_gb;
-  const pct = Math.min(100, (usedGb / totalGb) * 100);
-  const over = usedGb > totalGb;
+  // Catalog size_gb is decimal GB; system_ram_gb is GiB (the min_ram_gb
+  // unit). Convert before comparing — the ~7.4% gap is a real fill-ratio
+  // error at meter scale. Display keeps decimal GB to match the quant list.
+  const usedBytes = entry
+    ? entry.size_gb * 1e9
+    : (installed?.size_bytes ?? 0);
+  const usedGib = usedBytes / 2 ** 30;
+  const totalGib = status.system_ram_gb;
+  const pct = Math.min(100, (usedGib / totalGib) * 100);
+  const over = usedGib > totalGib;
 
   return (
     <div className="field" data-testid="mem-meter">
@@ -74,7 +88,10 @@ function MemoryMeter() {
         />
       </span>
       <span className="k mem-text" data-testid="mem-text">
-        {usedGb.toFixed(1)} / {totalGb.toFixed(0)} gb
+        {/* A model activated by path outside the catalog/installed scan has
+            no known size; the meter still exists while it serves. */}
+        {usedBytes ? (usedBytes / 1e9).toFixed(1) : "—"} /{" "}
+        {totalGib.toFixed(0)} gb
       </span>
     </div>
   );

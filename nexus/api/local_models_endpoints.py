@@ -162,7 +162,10 @@ def status() -> dict[str, Any]:
             else None
         )
         return {
-            "models_dir": settings.models_dir,
+            # Resolved so the client's models_dir/subdir/filename string join
+            # equals installed[].path, which is Path.resolve()'d — a symlinked
+            # models_dir would otherwise break the catalog↔installed join.
+            "models_dir": str(Path(settings.models_dir).expanduser().resolve()),
             "system_ram_gb": _system_ram_gb(),
             "catalog": [entry.model_dump() for entry in settings.catalog],
             "installed": _installed_models(

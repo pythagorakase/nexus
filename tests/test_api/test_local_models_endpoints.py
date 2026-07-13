@@ -69,7 +69,8 @@ def test_status_shape(
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["models_dir"] == str(tmp_path)
+    # Resolved (symlink-free) so it string-joins against installed[].path.
+    assert payload["models_dir"] == str(tmp_path.resolve())
     assert payload["catalog"][0]["family"] == "test"
     assert payload["active"] is None
     assert payload["installed"] == [
