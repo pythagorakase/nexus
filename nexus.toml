@@ -864,7 +864,7 @@ max_sql_iterations = 5           # Max iterations for agentic SQL generation
 # =============================================================================
 
 [apex]
-provider = "openai"           # API provider: "openai" or "anthropic"
+provider = "openai"           # API provider: "openai", "anthropic", or "local"
 model = "@openai.default"     # Resolved via api_models registry; edit roles to migrate
 reasoning_effort = "medium"   # Reasoning effort level (low/medium/high)
 max_output_tokens = 25000     # Maximum tokens for generated narrative

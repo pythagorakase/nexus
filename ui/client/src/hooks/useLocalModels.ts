@@ -28,10 +28,15 @@ export const LOCAL_MODELS_KNOB_DEFAULTS = {
   delete_arm_ms: 2800,
 } as const;
 
+// refetchIntervalInBackground: React Query pauses intervals while the
+// document is hidden by default. A hidden window with a frozen memory
+// meter or download bar reads as current the moment it is glanced at —
+// keep polling; the endpoint is local and answers in milliseconds.
 export function useLocalModelsStatus(pollMs: number | false) {
   return useQuery<LocalModelsStatus>({
     queryKey: [...LOCAL_MODELS_STATUS_KEY],
     refetchInterval: pollMs,
+    refetchIntervalInBackground: true,
   });
 }
 
@@ -39,6 +44,7 @@ export function useLocalDownloadStatus(pollMs: number | false) {
   return useQuery<LocalDownloadStatus>({
     queryKey: [...LOCAL_MODELS_DOWNLOAD_KEY],
     refetchInterval: pollMs,
+    refetchIntervalInBackground: true,
   });
 }
 

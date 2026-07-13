@@ -42,6 +42,8 @@ function MemoryMeter() {
   const { data: status } = useQuery<LocalModelsStatus>({
     queryKey: [...LOCAL_MODELS_STATUS_KEY],
     refetchInterval: pollIdleMs,
+    // Keep the meter honest while the window is hidden (see useLocalModels).
+    refetchIntervalInBackground: true,
   });
 
   const active = status?.active;
