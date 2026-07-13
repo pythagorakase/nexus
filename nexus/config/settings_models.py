@@ -380,6 +380,14 @@ class RuntimeHealthSettings(BaseModel):
         gt=0,
         description="SIGTERM-to-SIGKILL escalation window on nexus down",
     )
+    port_release_timeout_seconds: float = Field(
+        default=5.0,
+        gt=0,
+        description=(
+            "How long a model swap waits for the just-stopped llama-server "
+            "to release its port before treating the occupant as foreign"
+        ),
+    )
 
 
 class RuntimeLogsSettings(BaseModel):

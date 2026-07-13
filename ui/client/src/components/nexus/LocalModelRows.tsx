@@ -4,10 +4,17 @@
  * "Local LLM Manager - Final").
  *
  * Each catalog family renders as a model-row with a chevron-expanded
- * quant list. Quant states: absent (download), downloading (percent +
- * cancel + thin progress bar), ready (activate on click, two-stage armed
- * delete), exceeds-RAM (dimmed, tooltip). Activating a quant also selects
- * the local provider as the storyteller model, mirroring the prototype.
+ * quant list. Quant states: absent (download on click), downloading
+ * (percent + cancel + thin progress bar), ready (STAGE on click,
+ * two-stage armed delete), exceeds-RAM (dimmed, tooltip).
+ *
+ * Loading is gated behind an explicit APPLY (owner decision after
+ * hands-on use): clicking a ready quant only stages it — these are
+ * 20-75 GB models whose swaps take tens of seconds to minutes, so
+ * nothing that heavy may ride on a single row click. APPLY activates
+ * the staged quant and selects local as the storyteller; EJECT unloads
+ * the serving model. Downloads stay direct: they never disturb the
+ * serving model and carry their own cancel.
  *
  * Server truth arrives by polling; cadence comes from `[ui.local_models]`
  * in nexus.toml. Activation is fire-and-forget on the backend, so the
@@ -98,6 +105,8 @@ export function LocalModelRows({
 
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [armed, setArmed] = useState<string | null>(null);
+  // Client-local staged quant path; APPLY is the only thing that loads it.
+  const [staged, setStaged] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   // In-flight action guard: server-derived guards (downloading, isLoading)
   // only flip after the POST's invalidation refetch lands, leaving a
@@ -216,27 +225,23 @@ export function LocalModelRows({
       onPickLocal();
       return;
     }
-    if (pending) return;
-    setActionError(null);
-    const best = quants
-      .filter((q) => q.ready && !q.exceeds)
-      .sort((a, b) => b.entry.size_gb - a.entry.size_gb)[0];
-    if (best) {
-      run(() => actions.activate(best.path));
-      onPickLocal();
-      return;
-    }
-    // Nothing runnable: open the quant list so the download menu is the
-    // affordance the click lands on.
-    setOpen((state) => ({ ...state, [quants[0].entry.family]: true }));
+    // Nothing serving here: the click opens the quant list. Loading only
+    // ever happens through APPLY on an explicitly staged quant.
+    setOpen((state) => ({
+      ...state,
+      [quants[0].entry.family]: !state[quants[0].entry.family],
+    }));
   };
 
   const clickQuant = (q: QuantView) => {
     if (pending || q.exceeds || q.isDownloading || q.isLoading) return;
     setActionError(null);
-    if (q.ready) {
-      if (!q.isActive) run(() => actions.activate(q.path));
+    if (q.isActive) {
       onPickLocal();
+      return;
+    }
+    if (q.ready) {
+      setStaged((current) => (current === q.path ? null : q.path));
       return;
     }
     if (!downloading) {
@@ -257,6 +262,36 @@ export function LocalModelRows({
       : downloadError
         ? { title: "DOWNLOAD FAILED", text: downloadError }
         : null;
+
+  // A staged path is honored only while it still names a loadable,
+  // non-serving quant in current server truth (a delete or an external
+  // swap invalidates it silently).
+  const stagedGroup = staged
+    ? families.find(([, group]) =>
+        group.quants.some(
+          (q) => q.path === staged && q.ready && !q.exceeds && !q.isActive,
+        ),
+      )
+    : undefined;
+  const stagedQuant = stagedGroup?.[1].quants.find((q) => q.path === staged);
+  const stagedLabel = stagedQuant
+    ? `${stagedGroup![1].label.toLowerCase()} ${stagedQuant.entry.quant.toLowerCase()} · ${stagedQuant.entry.size_gb.toFixed(1)} gb`
+    : null;
+  const serving = Boolean(status.active && !status.active.failed);
+
+  const applyStaged = () => {
+    if (!stagedQuant || pending) return;
+    setActionError(null);
+    setStaged(null);
+    run(() => actions.activate(stagedQuant.path));
+    onPickLocal();
+  };
+
+  const eject = () => {
+    if (pending) return;
+    setActionError(null);
+    run(() => actions.deactivate());
+  };
 
   return (
     <TooltipProvider>
@@ -324,6 +359,7 @@ export function LocalModelRows({
                           "lm-quant",
                           q.ready ? "ready" : "",
                           q.isActive ? "active" : "",
+                          stagedQuant?.path === q.path ? "staged" : "",
                           q.isDownloading ? "dl" : "",
                           q.exceeds ? "exceeds" : "",
                           blocked ? "blocked" : "",
@@ -352,6 +388,8 @@ export function LocalModelRows({
                             <span
                               className={`lm-dot ${q.isLoading ? "loading" : ""}`}
                             />
+                          ) : stagedQuant?.path === q.path ? (
+                            <span className="lm-stage-mark" />
                           ) : !q.installed && !q.exceeds ? (
                             <ArrowDownToLine size={12} className="lm-get" />
                           ) : null}
@@ -442,6 +480,39 @@ export function LocalModelRows({
           </Collapsible>
         );
       })}
+      {(stagedQuant || serving) && (
+        <li className="lm-group lm-actions" data-testid="lm-actions">
+          {stagedLabel && (
+            <span
+              className="caption dim lm-staged-caption"
+              data-testid="lm-staged-caption"
+            >
+              {stagedLabel}
+            </span>
+          )}
+          <span className="lm-spacer" />
+          {serving && (
+            <button
+              className="btn-soft"
+              onClick={eject}
+              aria-label="Unload the serving local model"
+              data-testid="lm-eject"
+            >
+              EJECT
+            </button>
+          )}
+          {stagedQuant && (
+            <button
+              className="btn-primary"
+              onClick={applyStaged}
+              aria-label={`Load ${stagedLabel ?? "staged quant"}`}
+              data-testid="lm-apply"
+            >
+              APPLY
+            </button>
+          )}
+        </li>
+      )}
       {alert && (
         <li className="lm-group">
           <div className="alert danger lm-alert" data-testid="lm-alert">

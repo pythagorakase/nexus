@@ -239,6 +239,28 @@ def _port_open(settings: Settings, host: str, port: int) -> bool:
         return sock.connect_ex((host, port)) == 0
 
 
+def _await_port_release(settings: Settings, host: str, port: int) -> bool:
+    """Poll until the managed port stops accepting connections.
+
+    A just-killed llama-server can hold its listener for a beat after
+    SIGKILL (kernel socket teardown), and one dying mid-mmap of a large
+    model routinely rides out the whole SIGTERM grace first. Probing the
+    port instantly after teardown misreads our own dying server as a
+    foreign occupant and rejects the swap with a spurious 409. Returns
+    True once the port frees within the release window, False if it is
+    still held at the deadline (a genuinely foreign process).
+    """
+    if settings.runtime is None:
+        raise LocalInferenceError("[runtime] is required for port probe settings")
+    health = settings.runtime.health
+    deadline = time.monotonic() + health.port_release_timeout_seconds
+    while _port_open(settings, host, port):
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(health.poll_interval_seconds)
+    return True
+
+
 def _process_is_ours(settings: Settings, pid: int, gguf_path: str) -> bool:
     """Verify a live PID still names our binary and exact recorded model path."""
     if settings.runtime is None:
@@ -405,13 +427,22 @@ def activate(gguf_path: str) -> dict[str, Any]:
         settings = load_settings()
         host, port, alias = _endpoint(settings)
         current = _read_active(settings)
+        just_stopped_own = False
         if current is not None and current.get("failed") is not True:
             if Path(current["gguf_path"]) == candidate:
                 return current
             _deactivate_locked(settings)
+            just_stopped_own = True
         elif current is not None:
             _state_path(settings).unlink(missing_ok=True)
-        if _port_open(settings, host, port):
+        # Foreign occupancy fails fast; our own just-stopped server gets the
+        # release window before its lingering socket counts as foreign.
+        port_busy = (
+            not _await_port_release(settings, host, port)
+            if just_stopped_own
+            else _port_open(settings, host, port)
+        )
+        if port_busy:
             raise LocalInferenceError(
                 f"Port {port} is already in use by a process this manager does "
                 "not own; stop the static llama_server service or the other "

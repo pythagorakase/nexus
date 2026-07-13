@@ -1591,10 +1591,12 @@
   display: grid; grid-template-columns: 12px 62px 1fr auto;
   gap: 9px; align-items: center;
   min-height: 30px; padding: 4px 10px;
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
   cursor: pointer;
 }
 .lm-quant.ready { background: var(--bg-elev-3); }
+.lm-quant.staged { border-color: var(--brass); border-style: dashed; }
 .lm-quant.dl { cursor: default; }
 .lm-quant.exceeds { opacity: .35; cursor: not-allowed; }
 .lm-quant.blocked { opacity: .5; cursor: default; }
@@ -1632,6 +1634,15 @@
   box-shadow: var(--glow-soft);
   transition: width .18s linear;
 }
+.lm-stage-mark {
+  width: 5px; height: 5px; border-radius: 50%;
+  border: 1px solid var(--brass-bright);
+}
+.lm-actions {
+  display: flex; align-items: center; gap: 10px;
+  padding: 4px 10px 8px;
+}
+.lm-staged-caption { letter-spacing: .1em; }
 .lm-alert { margin-top: 4px; }
 /* Portaled outside .nexus-shell; brand tokens resolve via html.dark. */
 .lm-tip.lm-tip {
