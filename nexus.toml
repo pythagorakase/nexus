@@ -31,7 +31,7 @@ models = [
 ]
 
 [global.model.api_models.anthropic]
-roles = { default = "claude-opus-4-8", deep = "claude-fable-5", fast = "claude-sonnet-4-6" }
+roles = { default = "claude-opus-4-8", deep = "claude-fable-5", fast = "claude-sonnet-5-0" }
 # Issue #454: native_structured_output overrides pydantic-ai's stale model
 # allowlist. Live-verified in PR #457 (tests/test_wizard_live.py -k anthropic:
 # 4/4 wizard phases on opus-4-8, plus a fable-5 setting-phase probe); the
