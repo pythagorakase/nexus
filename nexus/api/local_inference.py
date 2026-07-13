@@ -407,6 +407,12 @@ def _deactivate_locked(settings: Settings) -> dict[str, Any]:
         except ProcessLookupError:
             pass
     _state_path(settings).unlink(missing_ok=True)
+    # Teardown is not finished until the listener is gone: the record is
+    # already unlinked, so a follow-up activate (EJECT then APPLY) would
+    # otherwise fast-probe the port, meet this server's lingering socket,
+    # and reject with a spurious foreign-occupancy 409.
+    host, port, _ = _endpoint(settings)
+    _await_port_release(settings, host, port)
     return {"stopped": True, "pid": pid}
 
 
@@ -427,22 +433,15 @@ def activate(gguf_path: str) -> dict[str, Any]:
         settings = load_settings()
         host, port, alias = _endpoint(settings)
         current = _read_active(settings)
-        just_stopped_own = False
         if current is not None and current.get("failed") is not True:
             if Path(current["gguf_path"]) == candidate:
                 return current
+            # Waits out the dying server's socket before returning, so the
+            # probe below only ever sees genuinely foreign occupancy.
             _deactivate_locked(settings)
-            just_stopped_own = True
         elif current is not None:
             _state_path(settings).unlink(missing_ok=True)
-        # Foreign occupancy fails fast; our own just-stopped server gets the
-        # release window before its lingering socket counts as foreign.
-        port_busy = (
-            not _await_port_release(settings, host, port)
-            if just_stopped_own
-            else _port_open(settings, host, port)
-        )
-        if port_busy:
+        if _port_open(settings, host, port):
             raise LocalInferenceError(
                 f"Port {port} is already in use by a process this manager does "
                 "not own; stop the static llama_server service or the other "
