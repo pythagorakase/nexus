@@ -1682,7 +1682,7 @@ class APEXSettings(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    provider: str = Field(..., pattern="^(openai|anthropic)$")
+    provider: str = Field(..., pattern="^(openai|anthropic|local)$")
     model: str
     reasoning_effort: str = Field(..., pattern="^(low|medium|high)$")
     max_output_tokens: int = Field(..., ge=1)
@@ -1909,6 +1909,51 @@ class UILoreBudgetSlider(BaseModel):
         return self
 
 
+class UILocalModelsSettings(BaseModel):
+    """Cadence and interaction knobs for the local-model manager UI.
+
+    Consumed by the settings-pane quant manager and the topbar memory
+    meter; served raw through ``GET /api/settings`` like every other
+    ``[ui]`` table.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    poll_busy_ms: int = Field(
+        default=1500,
+        ge=250,
+        le=60_000,
+        description=(
+            "Status poll interval (ms) while an activation swap is in "
+            "flight — the UI is waiting for active.ready to flip"
+        ),
+    )
+    poll_idle_ms: int = Field(
+        default=15_000,
+        ge=1000,
+        le=300_000,
+        description=(
+            "Status poll interval (ms) at rest; catches llama-server "
+            "changes made outside this client (CLI, another browser)"
+        ),
+    )
+    download_poll_ms: int = Field(
+        default=1000,
+        ge=250,
+        le=60_000,
+        description="Download progress poll interval (ms)",
+    )
+    delete_arm_ms: int = Field(
+        default=2800,
+        ge=500,
+        le=30_000,
+        description=(
+            "How long (ms) a quant delete stays armed after the first "
+            "click before disarming back to safe"
+        ),
+    )
+
+
 class UISettings(BaseModel):
     """Settings consumed by the React client.
 
@@ -1938,6 +1983,10 @@ class UISettings(BaseModel):
     lore_budget_slider: UILoreBudgetSlider = Field(
         default_factory=UILoreBudgetSlider,
         description="Bounds and ladder stops for the LORE budget slider",
+    )
+    local_models: UILocalModelsSettings = Field(
+        default_factory=UILocalModelsSettings,
+        description="Cadence/interaction knobs for the local-model manager UI",
     )
 
 

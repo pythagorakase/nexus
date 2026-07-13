@@ -1,0 +1,102 @@
+/**
+ * Local-model manager state and actions (/api/local-models).
+ *
+ * Reads are React Query polls whose cadence the caller sets from the
+ * `[ui.local_models]` knobs (activation swaps and downloads are watched
+ * fast, rest state slow). Writes follow the useSecrets idiom: imperative
+ * callbacks around apiRequest that invalidate both query keys so every
+ * observer — the settings card and the topbar meter — converges on the
+ * next poll.
+ */
+import { useCallback } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import type {
+  LocalDownloadStatus,
+  LocalModelsStatus,
+} from "@/types/localModels";
+
+export const LOCAL_MODELS_STATUS_KEY = ["/api/local-models/status"] as const;
+export const LOCAL_MODELS_DOWNLOAD_KEY = ["/api/local-models/download"] as const;
+
+// Fallbacks used only until GET /api/settings resolves. Must stay in sync
+// with `[ui.local_models]` in nexus.toml (UILocalModelsSettings defaults).
+export const LOCAL_MODELS_KNOB_DEFAULTS = {
+  poll_busy_ms: 1500,
+  poll_idle_ms: 15_000,
+  download_poll_ms: 1000,
+  delete_arm_ms: 2800,
+} as const;
+
+export function useLocalModelsStatus(pollMs: number | false) {
+  return useQuery<LocalModelsStatus>({
+    queryKey: [...LOCAL_MODELS_STATUS_KEY],
+    refetchInterval: pollMs,
+  });
+}
+
+export function useLocalDownloadStatus(pollMs: number | false) {
+  return useQuery<LocalDownloadStatus>({
+    queryKey: [...LOCAL_MODELS_DOWNLOAD_KEY],
+    refetchInterval: pollMs,
+  });
+}
+
+export function useLocalModelActions() {
+  const queryClient = useQueryClient();
+
+  const refresh = useCallback(() => {
+    void queryClient.invalidateQueries({
+      queryKey: [...LOCAL_MODELS_STATUS_KEY],
+    });
+    void queryClient.invalidateQueries({
+      queryKey: [...LOCAL_MODELS_DOWNLOAD_KEY],
+    });
+  }, [queryClient]);
+
+  const activate = useCallback(
+    async (path: string) => {
+      try {
+        await apiRequest("POST", "/api/local-models/activate", { path });
+      } finally {
+        refresh();
+      }
+    },
+    [refresh],
+  );
+
+  const startDownload = useCallback(
+    async (family: string, quant: string) => {
+      try {
+        await apiRequest("POST", "/api/local-models/download", {
+          family,
+          quant,
+        });
+      } finally {
+        refresh();
+      }
+    },
+    [refresh],
+  );
+
+  const cancelDownload = useCallback(async () => {
+    try {
+      await apiRequest("POST", "/api/local-models/download/cancel");
+    } finally {
+      refresh();
+    }
+  }, [refresh]);
+
+  const deleteModel = useCallback(
+    async (path: string) => {
+      try {
+        await apiRequest("POST", "/api/local-models/delete", { path });
+      } finally {
+        refresh();
+      }
+    },
+    [refresh],
+  );
+
+  return { activate, startDownload, cancelDownload, deleteModel };
+}

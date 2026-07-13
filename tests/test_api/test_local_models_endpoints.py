@@ -83,6 +83,9 @@ def test_status_shape(
             "active": False,
         }
     ]
+    # GiB units so the client can compare against catalog min_ram_gb directly.
+    assert isinstance(payload["system_ram_gb"], float)
+    assert payload["system_ram_gb"] > 0
 
 
 def test_status_surfaces_failed_load(

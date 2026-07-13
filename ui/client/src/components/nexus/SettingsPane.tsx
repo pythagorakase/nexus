@@ -32,6 +32,7 @@ import {
 } from "@/hooks/useSecrets";
 import { themeIconPath } from "@/lib/themeIcons";
 import { FONT_CATALOG } from "./fontCatalog";
+import { LOCAL_PROVIDER, LocalModelRows } from "./LocalModelRows";
 import type {
   FontSlotId,
   FontSlots,
@@ -279,6 +280,8 @@ function TestModeSection({
 // ──────────────────────────────────────────────────────────────────────────
 // 4. Model - one picker; selection binds both narrative turns and the
 // new-story wizard to the same @provider.role reference in nexus.toml.
+// The local provider group renders catalog-driven family rows with a
+// per-quant manager (LocalModelRows) instead of its registry role row.
 // ──────────────────────────────────────────────────────────────────────────
 
 function ModelSection({
@@ -298,33 +301,47 @@ function ModelSection({
   return (
     <SettingsCard id="model" label="MODEL">
       <ul className="model-providers">
-        {providers.map((provider) => (
-          <li key={provider} className="model-provider open">
-            <div className="model-provider-head">
-              <span className="model-provider-name">{provider}</span>
-            </div>
-            <ul className="model-list">
-              {options
-                .filter((r) => r.provider === provider)
-                .map((role) => {
-                  const on = role.ref === current;
-                  return (
-                    <li
-                      key={role.ref}
-                      className={`model-row ${on ? "on" : ""}`}
-                      onClick={() => onPick(role.ref)}
-                      data-testid={`model-${role.provider}-${role.role}`}
-                    >
-                      <span className="model-radio">
-                        {on ? <CircleDot size={12} /> : <Circle size={12} />}
-                      </span>
-                      <span className="model-name">{role.label}</span>
-                    </li>
-                  );
-                })}
-            </ul>
-          </li>
-        ))}
+        {providers.map((provider) => {
+          const localRole =
+            provider === LOCAL_PROVIDER
+              ? options.find((r) => r.provider === LOCAL_PROVIDER)
+              : undefined;
+          return (
+            <li key={provider} className="model-provider open">
+              <div className="model-provider-head">
+                <span className="model-provider-name">{provider}</span>
+              </div>
+              <ul className="model-list">
+                {localRole ? (
+                  <LocalModelRows
+                    selected={localRole.ref === current}
+                    onPickLocal={() => onPick(localRole.ref)}
+                    knobs={settings.ui?.local_models}
+                  />
+                ) : (
+                  options
+                    .filter((r) => r.provider === provider)
+                    .map((role) => {
+                      const on = role.ref === current;
+                      return (
+                        <li
+                          key={role.ref}
+                          className={`model-row ${on ? "on" : ""}`}
+                          onClick={() => onPick(role.ref)}
+                          data-testid={`model-${role.provider}-${role.role}`}
+                        >
+                          <span className="model-radio">
+                            {on ? <CircleDot size={12} /> : <Circle size={12} />}
+                          </span>
+                          <span className="model-name">{role.label}</span>
+                        </li>
+                      );
+                    })
+                )}
+              </ul>
+            </li>
+          );
+        })}
       </ul>
     </SettingsCard>
   );

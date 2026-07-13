@@ -41,6 +41,14 @@ export interface LoreBudgetSlider {
   stops: number[];
 }
 
+/** Mirrors `[ui.local_models]` (UILocalModelsSettings in settings_models.py). */
+export interface LocalModelsUiKnobs {
+  poll_busy_ms?: number;
+  poll_idle_ms?: number;
+  download_poll_ms?: number;
+  delete_arm_ms?: number;
+}
+
 export interface SettingsPayload {
   ["Agent Settings"]?: {
     global?: {
@@ -72,6 +80,7 @@ export interface SettingsPayload {
     theme?: ThemeId;
     fonts?: FontMatrix;
     lore_budget_slider?: LoreBudgetSlider;
+    local_models?: LocalModelsUiKnobs;
   };
   settings_meta?: SettingsMeta;
 }

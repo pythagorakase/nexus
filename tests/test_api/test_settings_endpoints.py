@@ -119,6 +119,7 @@ class TestBuildPayload:
         assert "test" not in meta["apex_allowed_providers"]
         assert "openai" in meta["apex_allowed_providers"]
         assert "anthropic" in meta["apex_allowed_providers"]
+        assert "local" in meta["apex_allowed_providers"]
 
     def test_typewriter_bounds_from_model(self, raw_settings: dict) -> None:
         meta = _build_payload(raw_settings)["settings_meta"]
@@ -207,3 +208,16 @@ class TestRoundTripOnCopy:
         settings = load_settings(toml_copy)
         anthropic = settings.global_.model.api_models["anthropic"]
         assert settings.wizard.default_model == anthropic.roles["default"]
+
+    def test_local_apex_selection_round_trips(self, tmp_path: Path) -> None:
+        """Selecting the local llama-server provider as apex works (#465)."""
+        toml_copy = tmp_path / "nexus.toml"
+        shutil.copy2(REPO_ROOT / "nexus.toml", toml_copy)
+
+        patch = SettingsPatchRequest(apex_model_ref="@local.default")
+        save_settings(_updates_from_patch(patch), path=toml_copy, backup=False)
+
+        settings = load_settings(toml_copy)
+        assert settings.apex.provider == "local"
+        local = settings.global_.model.api_models["local"]
+        assert settings.apex.model == local.roles["default"]

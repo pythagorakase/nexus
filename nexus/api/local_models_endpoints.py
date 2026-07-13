@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import asdict
 from pathlib import Path
 from threading import Lock
@@ -132,6 +133,18 @@ def _installed_models(active_path: str | None) -> list[dict[str, Any]]:
     return sorted(installed, key=lambda item: item["path"].lower())
 
 
+def _system_ram_gb() -> float:
+    """Total physical memory in GiB — the unit catalog min_ram_gb is quoted in.
+
+    Live process telemetry cannot drive the client's memory meter: with
+    ``-ngl 999`` llama-server's weights are mmap'd clean pages wired into
+    Metal buffers, invisible to both RSS and phys_footprint (measured: a
+    21.8 GB model reports 2 GB RSS). The client instead compares static
+    catalog sizes against this total.
+    """
+    return round(os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") / 2**30, 1)
+
+
 @router.get("/status")
 def status() -> dict[str, Any]:
     """Return configured catalog, installed GGUFs, and managed process state."""
@@ -150,6 +163,7 @@ def status() -> dict[str, Any]:
         )
         return {
             "models_dir": settings.models_dir,
+            "system_ram_gb": _system_ram_gb(),
             "catalog": [entry.model_dump() for entry in settings.catalog],
             "installed": _installed_models(
                 current["gguf_path"]
