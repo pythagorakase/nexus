@@ -1,6 +1,4 @@
-"""
-Helper utilities to trigger narrative summary generation after episode/season transitions.
-"""
+"""Trigger narrative summary generation after episode/season transitions."""
 
 from __future__ import annotations
 
@@ -87,8 +85,8 @@ def schedule_summary_generation(
         tasks: Collection of summaries to generate.
         overwrite: Whether to regenerate existing summaries.
         model_candidates: Preferred models to try (fallback order).
-        run_in_thread: Execute generation on a background thread (default) or inline (for testing).
-        db_manager_factory: Optional factory for injecting a preconfigured DatabaseManager (for tests).
+        run_in_thread: Execute on a background thread (default) or inline.
+        db_manager_factory: Optional preconfigured DatabaseManager factory.
         generator_cls: Optional SummaryGenerator class for dependency injection/mocking.
     """
     if not tasks:
@@ -96,14 +94,15 @@ def schedule_summary_generation(
 
     models = _coalesce_models(model_candidates)
 
-    runner = lambda: _run_summary_generation(
-        list(tasks),
-        models,
-        overwrite,
-        slot=slot,
-        db_manager_factory=db_manager_factory,
-        generator_cls=generator_cls,
-    )
+    def runner() -> None:
+        _run_summary_generation(
+            list(tasks),
+            models,
+            overwrite,
+            slot=slot,
+            db_manager_factory=db_manager_factory,
+            generator_cls=generator_cls,
+        )
 
     if run_in_thread:
         _EXECUTOR.submit(runner)
@@ -148,8 +147,14 @@ def _run_summary_generation(
             _run_single_task(
                 task, db_manager, model_candidates, overwrite, generator_cls
             )
-        except Exception as exc:  # pragma: no cover - defensive logging
-            logger.error("Summary generation failed for %s: %s", task, exc)
+        except Exception as exc:  # pragma: no cover - last-resort durability guard
+            logger.exception("Summary generation failed for %s", task)
+            _persist_summary_failure(
+                db_manager,
+                task,
+                model_candidates,
+                f"Unexpected summary worker failure: {exc}",
+            )
 
 
 def _run_single_task(
@@ -182,9 +187,11 @@ def _run_single_task(
                 task.episode,
             )
             return
-        runner: Callable[[SummaryGenerator], Optional[dict]] = (
-            lambda gen: gen.generate_episode_summary(task.season, task.episode)
-        )
+        episode = task.episode
+
+        def generate(generator: SummaryGenerator) -> Optional[dict]:
+            return generator.generate_episode_summary(task.season, episode)
+
         target_label = f"S{task.season:02d}E{task.episode:02d}"
     else:
         if not overwrite and db_manager.season_summary_exists(task.season):
@@ -193,19 +200,35 @@ def _run_single_task(
                 task.season,
             )
             return
-        runner = lambda gen: gen.generate_season_summary(task.season)
+
+        def generate(generator: SummaryGenerator) -> Optional[dict]:
+            return generator.generate_season_summary(task.season)
+
         target_label = f"Season {task.season}"
 
+    failure_reasons: List[str] = []
     for index, model_name in enumerate(model_candidates):
-        generator = generator_cls(
-            model=model_name,
-            db_manager=db_manager,
-            overwrite=overwrite,
-            verbose=False,
-            save_prompt=False,
-            prompt_on_conflict=False,
-        )
-        summary = runner(generator)
+        generator: Optional[SummaryGenerator] = None
+        raised_error: Optional[str] = None
+        try:
+            generator = generator_cls(
+                model=model_name,
+                db_manager=db_manager,
+                overwrite=overwrite,
+                verbose=False,
+                save_prompt=False,
+                prompt_on_conflict=False,
+            )
+            summary = generate(generator)
+        except Exception as exc:
+            logger.exception(
+                "Model %s raised while generating %s summary",
+                model_name,
+                target_label,
+            )
+            raised_error = str(exc)
+            summary = None
+
         if summary:
             if index > 0:
                 logger.info(
@@ -219,17 +242,42 @@ def _run_single_task(
                 )
             return
 
+        reported_error = raised_error or getattr(generator, "last_error", None)
+        failure_reasons.append(
+            f"{model_name}: {reported_error or 'returned no summary'}"
+        )
         if index < len(model_candidates) - 1:
             logger.warning(
                 "Model %s failed to generate %s summary; trying next candidate",
                 model_name,
                 target_label,
             )
+    error = "; ".join(failure_reasons)
     logger.error(
-        "Failed to generate %s summary after trying %s",
+        "Failed to generate %s summary after trying %s: %s",
         target_label,
         ", ".join(model_candidates),
+        error,
     )
+    _persist_summary_failure(db_manager, task, model_candidates, error)
+
+
+def _persist_summary_failure(
+    db_manager: DatabaseManager,
+    task: SummaryTask,
+    model_candidates: Sequence[str],
+    error: str,
+) -> None:
+    """Write a durable error marker and log if even persistence fails."""
+    persisted = db_manager.record_summary_failure(
+        kind=task.kind,
+        season=task.season,
+        episode=task.episode,
+        error=error,
+        model_candidates=list(model_candidates),
+    )
+    if not persisted:
+        logger.error("Failed to persist durable summary error for %s", task)
 
 
 def _coalesce_models(model_candidates: Optional[Sequence[str]]) -> List[str]:
@@ -237,11 +285,13 @@ def _coalesce_models(model_candidates: Optional[Sequence[str]]) -> List[str]:
     # FALLBACK_MODEL constants at argparse time, so they are None when
     # imported here (M9 gate finding: every API-triggered episode summary
     # failed with zero model candidates). Resolve the default from the live
-    # apex config instead, keeping the legacy constants as extra candidates
+    # summaries config instead, keeping the legacy constants as extra candidates
     # for older callers that still set them.
-    models = (
-        list(model_candidates) if model_candidates else [DEFAULT_MODEL, FALLBACK_MODEL]
-    )
+    models: List[Optional[str]]
+    if model_candidates:
+        models = list(model_candidates)
+    else:
+        models = [DEFAULT_MODEL, FALLBACK_MODEL]
     deduped: List[str] = []
 
     for candidate in models:
@@ -251,6 +301,6 @@ def _coalesce_models(model_candidates: Optional[Sequence[str]]) -> List[str]:
     if not deduped:
         from nexus.config import load_settings
 
-        deduped.append(load_settings().apex.model)
+        deduped.append(load_settings().summaries.model)
 
     return deduped

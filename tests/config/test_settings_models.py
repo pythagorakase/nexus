@@ -72,6 +72,50 @@ def test_global_default_model_resolves_at_load():
     assert settings.global_.model.default_model == openai_default
 
 
+def test_summaries_model_resolves_openai_default_at_load():
+    """The dedicated summary model uses the same registry resolution pass."""
+    raw = _nexus_toml_dict()
+    assert raw["summaries"]["model"] == "@openai.default"
+
+    settings = Settings(**raw)
+    openai_default = settings.global_.model.api_models["openai"].roles["default"]
+
+    assert settings.summaries.model == openai_default
+
+
+def test_summaries_model_accepts_responses_compatible_test_provider():
+    """A base_url provider is routable when it implements Responses."""
+    raw = _nexus_toml_dict()
+    raw["summaries"]["model"] = "@test.default"
+
+    assert Settings(**raw).summaries.model == "TEST"
+
+
+def test_summaries_model_rejects_local_chat_completions_provider():
+    """Local Chat Completions routing remains outside the near-term fix."""
+    raw = _nexus_toml_dict()
+    raw["summaries"]["model"] = "@local.default"
+
+    with pytest.raises(
+        ValidationError,
+        match="structured_transport='responses'.*deferred routing work.*#481",
+    ):
+        Settings(**raw)
+
+
+def test_summaries_model_rejects_anthropic_literal():
+    """A native Anthropic ID cannot silently enter the OpenAI-only pipeline."""
+    raw = _nexus_toml_dict()
+    anthropic_id = raw["global"]["model"]["api_models"]["anthropic"]["models"][0]["id"]
+    raw["summaries"]["model"] = anthropic_id
+
+    with pytest.raises(
+        ValidationError,
+        match="native OpenAI provider.*deferred routing work.*#481",
+    ):
+        Settings(**raw)
+
+
 def test_global_default_model_unknown_role_rejected():
     """An unknown role in the global display default fails Settings validation."""
     raw = _nexus_toml_dict()

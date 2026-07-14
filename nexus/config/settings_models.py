@@ -1745,6 +1745,25 @@ class APEXSettings(BaseModel):
 
 
 # =============================================================================
+# Narrative Summary Settings Models
+# =============================================================================
+
+
+class SummariesSettings(BaseModel):
+    """Episode/season summary generation configuration."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    model: str = Field(
+        ...,
+        description=(
+            "Registry model reference used for episode and season summaries. "
+            "The current summarizer requires the OpenAI Responses transport."
+        ),
+    )
+
+
+# =============================================================================
 # Wizard Settings Models
 # =============================================================================
 
@@ -2084,6 +2103,7 @@ class Settings(BaseModel):
     memnon: MEMNONSettings
     memory: MemorySettings
     apex: APEXSettings
+    summaries: SummariesSettings
     wizard: WizardSettings
     api: Optional[APISettings] = Field(default=None, description="API settings")
     ui: UISettings = Field(
@@ -2114,6 +2134,7 @@ class Settings(BaseModel):
             (self.global_.model, "default_model", False),
             (self.global_.model, "default_slot_model", False),
             (self.apex, "model", False),
+            (self.summaries, "model", False),
             (self.wizard, "default_model", False),
             (self.wizard, "fallback_model", True),
         ]
@@ -2148,6 +2169,33 @@ class Settings(BaseModel):
             #      resolution pass or move that logic into _resolve_model_reference.
             object.__setattr__(container, attr, resolved)
 
+        return self
+
+    @model_validator(mode="after")
+    def _validate_summaries_transport(self) -> "Settings":
+        """Reject summary models the current Responses-only pipeline cannot route.
+
+        Issue #481 deliberately decouples summary model selection without also
+        adding Anthropic-native or local Chat Completions routing. Fail at config
+        load so an unsupported selection cannot become a dropped background job.
+        """
+        model_id = self.summaries.model
+        provider = self.provider_for_model(model_id)
+        provider_config = self.global_.model.api_models[provider]
+        responses_compatible = provider == "openai" or (
+            provider not in NATIVE_API_PROVIDERS
+            and provider_config.structured_transport == "responses"
+        )
+        if not responses_compatible:
+            raise ValueError(
+                "[summaries].model must resolve to the native OpenAI provider "
+                "or to an OpenAI-compatible registry provider with "
+                "structured_transport='responses'; "
+                f"'{model_id}' resolves to provider '{provider}' with "
+                f"structured_transport='{provider_config.structured_transport}'. "
+                "Anthropic-native and chat_completions summary routing are "
+                "deferred routing work tracked by #481."
+            )
         return self
 
     @model_validator(mode="after")
