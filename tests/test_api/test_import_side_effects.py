@@ -42,6 +42,14 @@ _FORBIDDEN_AGENT_UTILITY_IMPORT_MODULES = {
     "nexus.agents.memnon.memnon",
 }
 
+_FORBIDDEN_MEMNON_IMPORT_MODULES = {
+    *_FORBIDDEN_ML_IMPORT_MODULES,
+    "nexus.agents.memnon.utils.content_processor",
+    "nexus.agents.memnon.utils.cross_encoder",
+    "nexus.agents.memnon.utils.embedding_manager",
+    "nexus.agents.memnon.utils.search",
+}
+
 
 def _run_fresh_import(code: str) -> "subprocess.CompletedProcess[str]":
     env = {**os.environ, **_UNREACHABLE_DB_ENV}
@@ -137,6 +145,44 @@ def test_agent_utility_imports_do_not_import_agent_or_ml_stack() -> None:
             "print('OK')\n"
         )
         _assert_clean(_run_fresh_import(code))
+
+
+def test_memnon_module_import_defers_embedding_and_reranking_stack() -> None:
+    """Importing MEMNON must defer model tooling until its first use."""
+    module_list = repr(sorted(_FORBIDDEN_MEMNON_IMPORT_MODULES))
+    code = (
+        "import sys\n"
+        "from nexus.agents.memnon.memnon import MEMNON\n"
+        f"forbidden = {module_list}\n"
+        "loaded = [module for module in forbidden if module in sys.modules]\n"
+        "assert MEMNON.__name__ == 'MEMNON'\n"
+        "assert loaded == [], loaded\n"
+        "print('OK')\n"
+    )
+    _assert_clean(_run_fresh_import(code))
+
+
+def test_memnon_deferred_import_error_surfaces_at_first_use() -> None:
+    """A missing deferred dependency must raise its original import error."""
+    code = (
+        "import importlib\n"
+        "import sys\n"
+        "module = importlib.import_module('nexus.agents.memnon.memnon')\n"
+        "class DatabaseManager:\n"
+        "    def __init__(self, *args, **kwargs):\n"
+        "        self.Session = None\n"
+        "module.DatabaseManager = DatabaseManager\n"
+        "dependency = 'nexus.agents.memnon.utils.embedding_manager'\n"
+        "sys.modules[dependency] = None\n"
+        "try:\n"
+        "    module.MEMNON(interface=None, db_url='postgresql://unused')\n"
+        "except ModuleNotFoundError as exc:\n"
+        "    assert exc.name == dependency, (exc.name, str(exc))\n"
+        "else:\n"
+        "    raise AssertionError('deferred import failure was masked')\n"
+        "print('OK')\n"
+    )
+    _assert_clean(_run_fresh_import(code))
 
 
 def test_agent_package_level_imports_still_work() -> None:
