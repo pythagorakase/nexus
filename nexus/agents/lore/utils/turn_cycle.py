@@ -177,6 +177,7 @@ class TurnCycleManager:
                 pass2_update = self.lore.memory_manager.handle_user_input(
                     turn_context.user_input,
                     turn_context.token_counts,
+                    turn_id=turn_context.turn_id,
                 )
                 memory_update = pass2_update.to_dict()
             except Exception as exc:  # pragma: no cover - defensive logging

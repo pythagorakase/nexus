@@ -15,6 +15,7 @@ from .divergence import DivergenceDetector, DivergenceResult
 from .entity_detector import HighSpecificityEntityDetector
 from .incremental import IncrementalRetriever
 from .query_memory import QueryMemory
+from .retrieval_coverage import audit_retrieval_coverage
 
 try:  # pragma: no cover - optional dependency during unit tests
     from nexus.agents.memnon.utils.alias_search import load_aliases_from_db
@@ -436,6 +437,7 @@ class ContextMemoryManager:
         self,
         user_input: str,
         token_counts: Optional[Dict[str, int]] = None,
+        turn_id: Optional[str] = None,
     ) -> Pass2Update:
         """Run deterministic Phase 2 retrieval from raw user input.
 
@@ -461,6 +463,16 @@ class ContextMemoryManager:
 
         if not context or not transition:
             logger.debug("No baseline context available; skipping Phase 2")
+            audit_retrieval_coverage(
+                incremental_retriever=self.incremental,
+                detector=self.entity_detector,
+                turn_id=turn_id,
+                user_input=user_input,
+                raw_result_count=0,
+                kept_chunks=[],
+                kept_tokens=0,
+                available_budget=0,
+            )
             return Pass2Update(
                 divergence,
                 [],
@@ -473,6 +485,16 @@ class ContextMemoryManager:
         # STEP 1: Check if simple choice -> skip Phase 2 if yes
         if self.skip_simple_choices and self._is_simple_choice(user_input):
             logger.info("📌 Phase 2 skipped: Simple choice detected")
+            audit_retrieval_coverage(
+                incremental_retriever=self.incremental,
+                detector=self.entity_detector,
+                turn_id=turn_id,
+                user_input=user_input,
+                raw_result_count=0,
+                kept_chunks=[],
+                kept_tokens=0,
+                available_budget=available_budget,
+            )
             return Pass2Update(
                 divergence,
                 [],
@@ -482,6 +504,16 @@ class ContextMemoryManager:
 
         if available_budget <= 0:
             logger.info("📉 Phase 2 skipped: No remaining token budget available")
+            audit_retrieval_coverage(
+                incremental_retriever=self.incremental,
+                detector=self.entity_detector,
+                turn_id=turn_id,
+                user_input=user_input,
+                raw_result_count=0,
+                kept_chunks=[],
+                kept_tokens=0,
+                available_budget=available_budget,
+            )
             return Pass2Update(
                 divergence,
                 [],
@@ -499,6 +531,16 @@ class ContextMemoryManager:
 
         if not raw_search_results:
             logger.info("No results from raw vector search - Phase 2 complete")
+            audit_retrieval_coverage(
+                incremental_retriever=self.incremental,
+                detector=self.entity_detector,
+                turn_id=turn_id,
+                user_input=user_input,
+                raw_result_count=0,
+                kept_chunks=[],
+                kept_tokens=0,
+                available_budget=available_budget,
+            )
             return Pass2Update(
                 divergence,
                 [],
@@ -530,6 +572,17 @@ class ContextMemoryManager:
             )
         else:
             logger.info("Phase 2 complete: No chunks fit in remaining budget")
+
+        audit_retrieval_coverage(
+            incremental_retriever=self.incremental,
+            detector=self.entity_detector,
+            turn_id=turn_id,
+            user_input=user_input,
+            raw_result_count=len(raw_search_results),
+            kept_chunks=kept_chunks,
+            kept_tokens=total_tokens,
+            available_budget=available_budget,
+        )
 
         return Pass2Update(
             divergence,
