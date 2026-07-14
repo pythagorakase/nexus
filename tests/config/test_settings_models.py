@@ -72,15 +72,42 @@ def test_global_default_model_resolves_at_load():
     assert settings.global_.model.default_model == openai_default
 
 
-def test_summaries_model_resolves_openai_default_at_load():
-    """The dedicated summary model uses the same registry resolution pass."""
+def test_summaries_follow_the_storyteller_by_default():
+    """Absent [summaries].model follows apex — never a silently-cheaper model."""
     raw = _nexus_toml_dict()
-    assert raw["summaries"]["model"] == "@openai.default"
+    assert "model" not in raw.get(
+        "summaries", {}
+    ), "shipped config should leave summaries following the storyteller"
+
+    settings = Settings(**raw)
+    assert settings.summaries.model == settings.apex.model
+
+
+def test_summaries_follow_unroutable_storyteller_is_legal_but_flagged():
+    """A non-OpenAI storyteller stays selectable (the local-Skald path);
+    summaries follow it and the routability helper reports the gap for the
+    scheduler's durable error marker."""
+    raw = _nexus_toml_dict()
+    raw["apex"]["model"] = "@anthropic.default"
+    raw.get("summaries", {}).pop("model", None)
+
+    settings = Settings(**raw)
+    assert settings.summaries.model == settings.apex.model
+    assert settings.summaries_model_is_routable(settings.summaries.model) is False
+    assert settings.summaries_model_is_routable("TEST") is True
+
+
+def test_summaries_model_explicit_override_resolves_at_load():
+    """The advanced setting decouples the summarizer from the storyteller."""
+    raw = _nexus_toml_dict()
+    raw["apex"]["model"] = "@anthropic.default"
+    raw.setdefault("summaries", {})["model"] = "@openai.default"
 
     settings = Settings(**raw)
     openai_default = settings.global_.model.api_models["openai"].roles["default"]
 
     assert settings.summaries.model == openai_default
+    assert settings.summaries.model != settings.apex.model
 
 
 def test_summaries_model_accepts_responses_compatible_test_provider():

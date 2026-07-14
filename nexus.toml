@@ -887,10 +887,13 @@ structured_output_retries = 3 # Validation retry budget for structured story tur
 # =============================================================================
 
 [summaries]
-# Summary quality varies materially by model. Keep this on a top-tier registry
-# role; the current pipeline accepts native OpenAI or Responses-compatible
-# OpenAI endpoints only (Anthropic/local routing is deferred under issue #481).
-model = "@openai.default"
+# Summaries follow the storyteller (apex.model) by default — summary quality
+# varies materially by model, so the default is never a cheaper model. Set
+# `model` explicitly (advanced) to decouple the summarizer from the
+# storyteller. The current pipeline accepts native OpenAI or
+# Responses-compatible OpenAI endpoints only; a storyteller outside that set
+# requires an explicit routable model here until #481's routing lands.
+# model = "@openai.default"
 
 # =============================================================================
 # IR Evaluation V2 Settings

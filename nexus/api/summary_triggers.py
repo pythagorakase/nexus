@@ -157,6 +157,18 @@ def _run_summary_generation(
             )
 
 
+def _summaries_model_is_routable(model_name: str) -> bool:
+    from nexus.config import load_settings
+
+    settings = load_settings()
+    try:
+        return settings.summaries_model_is_routable(model_name)
+    except ValueError:
+        # Not in the registry at all — the pre-#481 pipeline would have sent
+        # this id to api.openai.com and 404'd; unroutable is the honest verdict.
+        return False
+
+
 def _run_single_task(
     task: SummaryTask,
     db_manager: DatabaseManager,
@@ -208,6 +220,21 @@ def _run_single_task(
 
     failure_reasons: List[str] = []
     for index, model_name in enumerate(model_candidates):
+        if not _summaries_model_is_routable(model_name):
+            # A followed non-OpenAI storyteller lands here (config load
+            # deliberately allows it — the local-Skald path must stay
+            # selectable). Record the gap durably instead of calling a
+            # provider that would 404.
+            reason = (
+                f"{model_name}: the Responses-only summary pipeline cannot "
+                "route this model. Set [summaries].model to a routable model "
+                "(native OpenAI, or a registry provider with "
+                "structured_transport='responses') to decouple summaries "
+                "from the storyteller, or wait for the #481 routing work."
+            )
+            logger.error("Cannot generate %s summary: %s", target_label, reason)
+            failure_reasons.append(reason)
+            continue
         generator: Optional[SummaryGenerator] = None
         raised_error: Optional[str] = None
         try:

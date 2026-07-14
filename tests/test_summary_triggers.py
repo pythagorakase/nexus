@@ -97,9 +97,9 @@ class _FailingGenerator:
 @pytest.mark.parametrize(
     "existing_episode,existing_season,expected_calls",
     [
-        (False, False, ["episode-5-1-gpt-5.1", "season-5-gpt-5.1"]),
-        (True, False, ["season-5-gpt-5.1"]),  # skip episode summary if present
-        (False, True, ["episode-5-1-gpt-5.1"]),  # skip season summary if present
+        (False, False, ["episode-5-1-TEST", "season-5-TEST"]),
+        (True, False, ["season-5-TEST"]),  # skip episode summary if present
+        (False, True, ["episode-5-1-TEST"]),  # skip season summary if present
     ],
 )
 def test_schedule_summary_generation_skips_existing(
@@ -124,7 +124,7 @@ def test_schedule_summary_generation_skips_existing(
     schedule_summary_generation(
         tasks,
         overwrite=False,
-        model_candidates=["gpt-5.1"],
+        model_candidates=["TEST"],
         run_in_thread=False,
         db_manager_factory=db_factory,
         generator_cls=generator_factory,
@@ -174,13 +174,39 @@ def test_schedule_summary_generation_skips_chunkless_episodes():
 
     schedule_summary_generation(
         [SummaryTask(kind="episode", season=1, episode=1)],
-        model_candidates=["gpt-test"],
+        model_candidates=["TEST"],
         run_in_thread=False,
         db_manager_factory=lambda: _FakeDB({}, {}, empty_episodes=["1-1"]),
         generator_cls=generator_factory,
     )
 
     assert recorder_calls == []
+
+
+def test_unroutable_storyteller_records_durable_marker_without_api_call(caplog):
+    """A followed non-OpenAI storyteller (the local-Skald path) must not
+    reach any provider: the scheduler records the instructive gap durably."""
+    recorder_calls: List[str] = []
+
+    def generator_factory(**kwargs):
+        return _RecorderGenerator(calls=recorder_calls, **kwargs)
+
+    db = _FakeDB({}, {}, failure_records=[])
+    with caplog.at_level(logging.ERROR, logger="nexus.api.summary_triggers"):
+        schedule_summary_generation(
+            [SummaryTask(kind="episode", season=7, episode=2)],
+            model_candidates=["nousresearch/hermes-4-70b"],
+            run_in_thread=False,
+            db_manager_factory=lambda: db,
+            generator_cls=generator_factory,
+        )
+
+    assert recorder_calls == [], "no generator may be constructed for it"
+    assert len(db.failure_records) == 1
+    marker = db.failure_records[0]
+    assert marker["status"] == "error"
+    assert "[summaries].model" in marker["error"]
+    assert "#481" in marker["error"]
 
 
 def test_generation_failure_is_durable_visible_and_refireable(caplog):

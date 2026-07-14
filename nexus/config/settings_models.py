@@ -1754,11 +1754,13 @@ class SummariesSettings(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    model: str = Field(
-        ...,
+    model: Optional[str] = Field(
+        default=None,
         description=(
             "Registry model reference used for episode and season summaries. "
-            "The current summarizer requires the OpenAI Responses transport."
+            "Absent (the default) follows the storyteller (apex.model); set "
+            "explicitly to decouple the summarizer from the storyteller. The "
+            "current summarizer requires the OpenAI Responses transport."
         ),
     )
 
@@ -2103,7 +2105,10 @@ class Settings(BaseModel):
     memnon: MEMNONSettings
     memory: MemorySettings
     apex: APEXSettings
-    summaries: SummariesSettings
+    summaries: SummariesSettings = Field(
+        default_factory=SummariesSettings,
+        description="Episode/season summary generation (follows apex by default)",
+    )
     wizard: WizardSettings
     api: Optional[APISettings] = Field(default=None, description="API settings")
     ui: UISettings = Field(
@@ -2134,7 +2139,7 @@ class Settings(BaseModel):
             (self.global_.model, "default_model", False),
             (self.global_.model, "default_slot_model", False),
             (self.apex, "model", False),
-            (self.summaries, "model", False),
+            (self.summaries, "model", True),
             (self.wizard, "default_model", False),
             (self.wizard, "fallback_model", True),
         ]
@@ -2179,14 +2184,21 @@ class Settings(BaseModel):
         adding Anthropic-native or local Chat Completions routing. Fail at config
         load so an unsupported selection cannot become a dropped background job.
         """
-        model_id = self.summaries.model
-        provider = self.provider_for_model(model_id)
-        provider_config = self.global_.model.api_models[provider]
-        responses_compatible = provider == "openai" or (
-            provider not in NATIVE_API_PROVIDERS
-            and provider_config.structured_transport == "responses"
-        )
-        if not responses_compatible:
+        followed = self.summaries.model is None
+        if followed:
+            # Owner decision (2026-07-14): summaries follow the storyteller
+            # unless explicitly decoupled — never a silently-cheaper model.
+            self.summaries.model = self.apex.model
+        if not self.summaries_model_is_routable(self.summaries.model):
+            model_id = self.summaries.model
+            provider = self.provider_for_model(model_id)
+            provider_config = self.global_.model.api_models[provider]
+            if followed:
+                # A non-OpenAI storyteller is a fully supported choice (the
+                # local-Skald path); refusing it here would block the apex
+                # picker. The summary pipeline records a durable, refireable
+                # error marker instead of silently losing summaries.
+                return self
             raise ValueError(
                 "[summaries].model must resolve to the native OpenAI provider "
                 "or to an OpenAI-compatible registry provider with "
@@ -2197,6 +2209,21 @@ class Settings(BaseModel):
                 "deferred routing work tracked by #481."
             )
         return self
+
+    def summaries_model_is_routable(self, model_id: str) -> bool:
+        """Whether the Responses-only summary pipeline can serve this model.
+
+        Shared by config validation (explicit [summaries].model choices fail
+        loudly) and the summary scheduler (a followed-but-unroutable
+        storyteller records a durable error marker instead of calling a
+        provider that would 404).
+        """
+        provider = self.provider_for_model(model_id)
+        provider_config = self.global_.model.api_models[provider]
+        return provider == "openai" or (
+            provider not in NATIVE_API_PROVIDERS
+            and provider_config.structured_transport == "responses"
+        )
 
     @model_validator(mode="after")
     def _validate_param_capabilities(self) -> "Settings":
