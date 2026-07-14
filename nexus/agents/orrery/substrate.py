@@ -1106,6 +1106,7 @@ _PROJECT_DUE_MODES = frozenset(
         "scouting_without_target",
         "scouting_milestone",
         "completion",
+        "neglected",
     }
 )
 
@@ -1181,6 +1182,12 @@ def project_due(
                 project.stall_count >= policy.stall_abandon_threshold
                 or overdue_hours >= policy.abandon_after_stalled_world_hours
             )
+        if normalized_mode == "neglected":
+            # A setback is diegetic, not dice: the plan lost ground because
+            # a full cadence interval passed unattended. Non-tautological by
+            # construction, so authored_order/deterministic selection can
+            # never stall a promptly-advanced project (PR #494 review).
+            return due and overdue_hours >= policy.advance_interval_hours
         if not due:
             return False
         if normalized_mode in {"saving", "scouting", "committing"}:

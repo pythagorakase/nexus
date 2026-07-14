@@ -375,6 +375,97 @@ def test_seeded_softmax_can_complete_arc_with_bounded_stall_economics() -> None:
     assert expected_terminal_stalls(0, 0) < POLICY.stall_abandon_threshold
 
 
+def test_authored_order_completes_arc_without_setbacks() -> None:
+    """Deterministic selection must never stall a promptly-advanced project.
+
+    PR #494 review: the setback arm's old tautological condition made
+    authored_order stall every due tick in scouting-with-target and
+    committing, so relocation could never complete under a supported
+    selection mode. With project_due("neglected") a prompt actor never
+    triggers it, and the full arc completes deterministically.
+    """
+
+    project = _project(due_at=NOW, progress=0.0)
+    stalls = 0
+    completed = False
+    for tick in range(1, 41):
+        state = _state(
+            world_time=NOW + timedelta(hours=24 * tick),
+            due_at=NOW + timedelta(hours=24 * tick),
+            stall_count=project.stall_count,
+            stage=project.stage,
+            progress=project.progress,
+            target_place_id=project.target_place_id,
+            current_tick=tick,
+        )
+        outcome = evaluate(
+            ADVANCE_RELOCATION_PLAN,
+            state,
+            BINDINGS,
+            BranchSelection(mode="authored_order"),
+        )
+        if "project.complete" in outcome.state_delta:
+            completed = True
+            break
+        assert "project.abandon" not in outcome.state_delta
+        if "project.stall" in outcome.state_delta:
+            stalls += 1
+            continue
+        advance = outcome.state_delta["project.advance"]
+        next_stage = str(advance.get("stage") or project.stage)
+        next_progress = (
+            float(advance["set_progress"])
+            if "set_progress" in advance
+            else min(
+                1.0,
+                project.progress + float(advance.get("progress_delta", 0.25)),
+            )
+        )
+        project = replace(
+            project,
+            status="active",
+            stage=next_stage,
+            progress=next_progress,
+            target_place_id=(
+                2 if advance.get("select_target") else project.target_place_id
+            ),
+            stall_count=0 if advance.get("milestone") else project.stall_count,
+        )
+
+    assert completed, "authored_order must complete the arc"
+    assert stalls == 0, "a promptly-advanced project never triggers a setback"
+
+
+def test_neglected_setback_requires_a_full_missed_interval() -> None:
+    """Setbacks are diegetic: due-but-prompt is not neglected; a project
+    overdue by a full cadence interval is."""
+
+    from nexus.agents.orrery.substrate import project_due
+
+    prompt = _state(
+        world_time=NOW,
+        due_at=NOW,
+        stall_count=0,
+        stage="committing",
+        progress=0.5,
+        target_place_id=2,
+        current_tick=5,
+    )
+    assert project_due("ready")(prompt, BINDINGS) is True
+    assert project_due("neglected")(prompt, BINDINGS) is False
+
+    neglected = _state(
+        world_time=NOW + timedelta(hours=POLICY.advance_interval_hours),
+        due_at=NOW,
+        stall_count=0,
+        stage="committing",
+        progress=0.5,
+        target_place_id=2,
+        current_tick=6,
+    )
+    assert project_due("neglected")(neglected, BINDINGS) is True
+
+
 def test_completion_preempts_abandon_when_both_are_due() -> None:
     state = _state(
         world_time=NOW,

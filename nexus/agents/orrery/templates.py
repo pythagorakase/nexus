@@ -4579,7 +4579,7 @@ ADVANCE_RELOCATION_PLAN = Template(
         ),
         Branch(
             label="Lose ground to a setback",
-            conditions=project_due("ready"),
+            conditions=project_due("neglected"),
             narrative_stub=(
                 "The present takes its cut from {actor}'s future: an expense, "
                 "a closed option, a promise that cannot yet be kept. The plan "

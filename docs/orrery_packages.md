@@ -1104,7 +1104,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 ### Branch 7 — Lose ground to a setback  *(mag 0.1)* · **not promotable**
 
-**When:** actor `plan_relocation` project passes `ready` due-state
+**When:** actor `plan_relocation` project passes `neglected` due-state
 
 **Does:** applies project `stall` transition
 **Event:** `relocation_plan_stalled`
