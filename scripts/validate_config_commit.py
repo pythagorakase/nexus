@@ -61,10 +61,14 @@ def main() -> int:
         text=True,
     )
     if drift.returncode != 0:
+        # The checker's findings may land on either stream; report both so
+        # the commit message never shows an empty failure.
+        report = "\n".join(
+            part for part in (drift.stdout.strip(), drift.stderr.strip()) if part
+        )
         failures.append(
             "Model-ID drift detected (add the id to the registry, route "
-            "through @provider.role, or mark '# pin: <reason>'):\n"
-            + drift.stdout.strip()
+            "through @provider.role, or mark '# pin: <reason>'):\n" + report
         )
 
     if failures:
