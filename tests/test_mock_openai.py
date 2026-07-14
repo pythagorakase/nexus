@@ -197,6 +197,7 @@ async def test_mock_responses_routes_turn_schema_as_native_text_format() -> None
 
 
 @pytest.mark.asyncio
+@pytest.mark.requires_postgres
 async def test_mock_responses_routes_bootstrap_schema_as_final_result_tool() -> None:
     """Bootstrap structured output must also call the required output tool."""
 
@@ -216,6 +217,7 @@ async def test_mock_responses_routes_bootstrap_schema_as_final_result_tool() -> 
 
 
 @pytest.mark.asyncio
+@pytest.mark.requires_postgres
 async def test_mock_responses_routes_bootstrap_schema_as_native_text_format() -> None:
     """Bootstrap native structured output should return message JSON."""
 

@@ -12,6 +12,8 @@ from typing import Dict, Any, Generator
 from unittest.mock import MagicMock
 import sys
 
+TEST_DB_CONNECT_TIMEOUT_SECONDS = 2
+
 # Configure logging for tests
 logging.basicConfig(
     level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -86,6 +88,7 @@ def db_connection(settings) -> Generator[psycopg2.extensions.connection, None, N
         user=db_config.get("user", "pythagor"),
         host=db_config.get("host", "localhost"),
         port=db_config.get("port", 5432),
+        connect_timeout=TEST_DB_CONNECT_TIMEOUT_SECONDS,
     )
 
     try:
