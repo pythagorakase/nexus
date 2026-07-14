@@ -12,9 +12,10 @@ from sqlalchemy import text
 
 from .context_state import ContextPackage, ContextStateManager, PassTransition
 from .divergence import DivergenceDetector, DivergenceResult
-from .entity_detector import HighSpecificityEntityDetector
+from .entity_detector import EntityMatch, HighSpecificityEntityDetector
 from .incremental import IncrementalRetriever
 from .query_memory import QueryMemory
+from .retrieval_coverage import audit_retrieval_coverage, coerce_chunk_id
 
 try:  # pragma: no cover - optional dependency during unit tests
     from nexus.agents.memnon.utils.alias_search import load_aliases_from_db
@@ -393,10 +394,12 @@ class ContextMemoryManager:
     def _detect_divergence(
         self,
         user_input: str,
+        entity_match: Optional["EntityMatch"] = None,
     ) -> DivergenceResult:
         """Detect divergence using high-specificity entity matching."""
 
-        entity_match = self.entity_detector.detect_entities(user_input)
+        if entity_match is None:
+            entity_match = self.entity_detector.detect_entities(user_input)
         summary = self.entity_detector.to_divergence_format(entity_match)
         return DivergenceResult(
             bool(summary.get("detected")),
@@ -436,6 +439,7 @@ class ContextMemoryManager:
         self,
         user_input: str,
         token_counts: Optional[Dict[str, int]] = None,
+        turn_id: Optional[str] = None,
     ) -> Pass2Update:
         """Run deterministic Phase 2 retrieval from raw user input.
 
@@ -447,7 +451,8 @@ class ContextMemoryManager:
         context = self.context_state.context
         transition = self.context_state.transition
 
-        divergence = self._detect_divergence(user_input)
+        entity_match = self.entity_detector.detect_entities(user_input)
+        divergence = self._detect_divergence(user_input, entity_match=entity_match)
         logger.debug(
             "Divergence detection: %s (confidence=%.2f)",
             divergence.detected,
@@ -461,6 +466,16 @@ class ContextMemoryManager:
 
         if not context or not transition:
             logger.debug("No baseline context available; skipping Phase 2")
+            audit_retrieval_coverage(
+                incremental_retriever=self.incremental,
+                entity_match=entity_match,
+                turn_id=turn_id,
+                user_input=user_input,
+                raw_result_count=0,
+                kept_chunks=[],
+                kept_tokens=0,
+                available_budget=0,
+            )
             return Pass2Update(
                 divergence,
                 [],
@@ -473,6 +488,16 @@ class ContextMemoryManager:
         # STEP 1: Check if simple choice -> skip Phase 2 if yes
         if self.skip_simple_choices and self._is_simple_choice(user_input):
             logger.info("📌 Phase 2 skipped: Simple choice detected")
+            audit_retrieval_coverage(
+                incremental_retriever=self.incremental,
+                entity_match=entity_match,
+                turn_id=turn_id,
+                user_input=user_input,
+                raw_result_count=0,
+                kept_chunks=[],
+                kept_tokens=0,
+                available_budget=available_budget,
+            )
             return Pass2Update(
                 divergence,
                 [],
@@ -482,6 +507,16 @@ class ContextMemoryManager:
 
         if available_budget <= 0:
             logger.info("📉 Phase 2 skipped: No remaining token budget available")
+            audit_retrieval_coverage(
+                incremental_retriever=self.incremental,
+                entity_match=entity_match,
+                turn_id=turn_id,
+                user_input=user_input,
+                raw_result_count=0,
+                kept_chunks=[],
+                kept_tokens=0,
+                available_budget=available_budget,
+            )
             return Pass2Update(
                 divergence,
                 [],
@@ -499,6 +534,16 @@ class ContextMemoryManager:
 
         if not raw_search_results:
             logger.info("No results from raw vector search - Phase 2 complete")
+            audit_retrieval_coverage(
+                incremental_retriever=self.incremental,
+                entity_match=entity_match,
+                turn_id=turn_id,
+                user_input=user_input,
+                raw_result_count=0,
+                kept_chunks=[],
+                kept_tokens=0,
+                available_budget=available_budget,
+            )
             return Pass2Update(
                 divergence,
                 [],
@@ -531,6 +576,17 @@ class ContextMemoryManager:
         else:
             logger.info("Phase 2 complete: No chunks fit in remaining budget")
 
+        audit_retrieval_coverage(
+            incremental_retriever=self.incremental,
+            entity_match=entity_match,
+            turn_id=turn_id,
+            user_input=user_input,
+            raw_result_count=len(raw_search_results),
+            kept_chunks=kept_chunks,
+            kept_tokens=total_tokens,
+            available_budget=available_budget,
+        )
+
         return Pass2Update(
             divergence,
             kept_chunks,
@@ -550,13 +606,7 @@ class ContextMemoryManager:
     def _coerce_chunk_id(self, chunk: Dict[str, Any]) -> Optional[int]:
         """Attempt to coerce a chunk identifier without logging noise."""
 
-        raw_id = chunk.get("chunk_id", chunk.get("id"))
-        if raw_id is None:
-            return None
-        try:
-            return int(raw_id)
-        except (TypeError, ValueError):
-            return None
+        return coerce_chunk_id(chunk)
 
     def augment_warm_slice(
         self, warm_slice: List[Dict[str, Any]]
