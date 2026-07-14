@@ -71,6 +71,7 @@ from nexus.agents.orrery.substrate import (
     _routine_schedule_due,
     _trust_values_are_asymmetric,
     project_due,
+    project_overdue_hours,
 )
 
 
@@ -1494,10 +1495,8 @@ def _project_due(
         and project.next_eligible_at_world_time is not None
         and state.world_time is not None
     ):
-        overdue_hours = max(
-            0.0,
-            (state.world_time - project.next_eligible_at_world_time).total_seconds()
-            / 3600.0,
+        overdue_hours = project_overdue_hours(
+            state.world_time, project.next_eligible_at_world_time
         )
     condition = project_due(
         mode,

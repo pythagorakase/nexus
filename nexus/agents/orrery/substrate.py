@@ -1093,6 +1093,17 @@ def is_in_transit(slot: Slot = Slot.ACTOR) -> Condition:
     return _named(_condition, f"is_in_transit(@{slot.value})")
 
 
+def project_overdue_hours(world_time: Any, next_eligible_at_world_time: Any) -> float:
+    """Shared overdue computation for the project_due predicate AND the
+    explain/coverage evidence display — one formula so the dashboard can
+    never silently diverge from the actual abandonment decision."""
+
+    return max(
+        0.0,
+        (world_time - next_eligible_at_world_time).total_seconds() / 3600.0,
+    )
+
+
 _PROJECT_DUE_MODES = frozenset(
     {
         "start",
@@ -1172,10 +1183,8 @@ def project_due(
         due = project.next_eligible_at_world_time <= state.world_time
         if normalized_mode == "ready":
             return due
-        overdue_hours = max(
-            0.0,
-            (state.world_time - project.next_eligible_at_world_time).total_seconds()
-            / 3600.0,
+        overdue_hours = project_overdue_hours(
+            state.world_time, project.next_eligible_at_world_time
         )
         if normalized_mode == "abandon":
             return due and (
