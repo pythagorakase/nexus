@@ -60,6 +60,10 @@ def test_orrery_settings_resolve_model_reference() -> None:
         "intimacy": 16,
     }
     assert settings.orrery.sunhelm.pressure.min_severity_level == 2
+    assert settings.orrery.package_selection.mode == "stochastic"
+    assert settings.orrery.package_selection.window_points == 6.0
+    assert settings.orrery.package_selection.temperature == 2.0
+    assert settings.orrery.package_selection.exempt_bands == ["crisis_constraint"]
     # The ship-off invariant applies to the COMMITTED config: flipping the
     # dashboard on locally is a documented workflow (nexus.toml comment,
     # issue #415), and asserting the working tree here trains developers to

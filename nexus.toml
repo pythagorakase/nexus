@@ -260,6 +260,15 @@ mode = "stochastic"
 temperature = 0.25
 seed_salt = ""
 
+[orrery.package_selection]
+# Stack winner selection after habituation: crisis (and any other exempt band)
+# keeps strict priority. Otherwise, gate-passing packages within window_points
+# of the maximum enter a seeded softmax on the 0-100 priority scale.
+mode = "stochastic"
+window_points = 6.0
+temperature = 2.0
+exempt_bands = ["crisis_constraint"]
+
 [orrery.reconstruction]
 # JSONB state checkpoint every N accepted chunks (0 disables); genesis and
 # manual snapshots via scripts/checkpoint_state.py.

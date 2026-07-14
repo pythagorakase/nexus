@@ -70,6 +70,7 @@ from nexus.agents.orrery.resolver import (
 from nexus.agents.orrery.substrate import (
     coerce_branch_selection,
     coerce_habituation,
+    coerce_package_selection,
     CONSTRAINED_TAGS,
     DRAMATIC_CONTACT_TAGS,
     DRIVE_BAND_ORDER,
@@ -477,6 +478,7 @@ def explain_dry_run(
     overrides: Optional[WorldStateOverrides] = None,
     selection_settings: Optional[Any] = None,
     habituation_settings: Optional[Any] = None,
+    package_selection_settings: Optional[Any] = None,
     fanout_settings: Optional[Any] = None,
 ) -> ExplainedTickReport:
     """Hydrate, bind, and explain Orrery packages without database writes.
@@ -495,6 +497,7 @@ def explain_dry_run(
     need_tuning = coerce_need_tuning(sunhelm_settings)
     selection = coerce_branch_selection(selection_settings)
     habituation = coerce_habituation(habituation_settings)
+    package_selection = coerce_package_selection(package_selection_settings)
     state = hydrate_world_state(
         session,
         anchor_chunk_id=anchor_chunk_id,
@@ -567,7 +570,12 @@ def explain_dry_run(
         actor_stacks: dict[int, StackExplanation] = {}
         for bindings in actor_bindings:
             actor_stacks[bindings[Slot.ACTOR]] = explain_stack(
-                actor_only_templates, tick_state, bindings, selection, habituation
+                actor_only_templates,
+                tick_state,
+                bindings,
+                selection,
+                habituation,
+                package_selection,
             )
         two_party_stacks: dict[int, List[StackExplanation]] = {}
         for pair_bindings in offscreen_pair_bindings:
@@ -578,6 +586,7 @@ def explain_dry_run(
                     pair_bindings,
                     selection,
                     habituation,
+                    package_selection,
                 )
             )
         pressure_stacks: dict[int, List[StackExplanation]] = {}
@@ -589,6 +598,7 @@ def explain_dry_run(
                     pair_bindings,
                     selection,
                     habituation,
+                    package_selection,
                 )
             )
         need_pressure_specs = _present_need_pressure_specs(

@@ -15,9 +15,10 @@ from nexus.agents.orrery.reciprocal import (
     detect_joint_beats,
 )
 from nexus.agents.orrery.substrate import (
-    BranchSelection,
+    PackageSelection,
     coerce_branch_selection,
     coerce_habituation,
+    coerce_package_selection,
     Bindings,
     EventRecord,
     INTIMACY_SUPPRESSOR_TAGS,
@@ -931,6 +932,7 @@ def resolve_dry_run(
     world_time_override: Optional[datetime] = None,
     selection_settings: Optional[Any] = None,
     habituation_settings: Optional[Any] = None,
+    package_selection_settings: Optional[Any] = None,
     fanout_settings: Optional[Any] = None,
 ) -> OrreryTickProposal:
     """Hydrate, bind, and evaluate Orrery packages without database writes."""
@@ -938,6 +940,9 @@ def resolve_dry_run(
     need_tuning = coerce_need_tuning(sunhelm_settings)
     selection = coerce_branch_selection(selection_settings)
     habituation = coerce_habituation(habituation_settings)
+    package_selection: Optional[PackageSelection] = coerce_package_selection(
+        package_selection_settings
+    )
     fanout = _coerce_fanout(fanout_settings)
     state = hydrate_world_state(
         session,
@@ -979,7 +984,12 @@ def resolve_dry_run(
     )
     for bindings in actor_bindings:
         resolution = evaluate_stack(
-            actor_only_templates, state, bindings, selection, habituation
+            actor_only_templates,
+            state,
+            bindings,
+            selection,
+            habituation,
+            package_selection,
         )
         if resolution is not None and resolution.passes:
             drafts.append(_draft_from_resolution(resolution))
@@ -996,7 +1006,12 @@ def resolve_dry_run(
         )
         for bindings in actor_target_bindings:
             resolution = evaluate_stack(
-                actor_target_templates, state, bindings, selection, habituation
+                actor_target_templates,
+                state,
+                bindings,
+                selection,
+                habituation,
+                package_selection,
             )
             if resolution is not None and resolution.passes:
                 drafts.append(_draft_from_resolution(resolution))
@@ -1017,7 +1032,12 @@ def resolve_dry_run(
             )
             for bindings in present_target_bindings:
                 resolution = evaluate_stack(
-                    pressure_templates, state, bindings, selection, habituation
+                    pressure_templates,
+                    state,
+                    bindings,
+                    selection,
+                    habituation,
+                    package_selection,
                 )
                 if resolution is not None and resolution.passes:
                     scene_pressure_results.append(resolution)

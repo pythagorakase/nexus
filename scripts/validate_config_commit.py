@@ -27,6 +27,12 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
+# The commit under validation must be checked with ITS OWN code, not
+# whatever checkout the shared venv's editable install points at — in a git
+# worktree those differ, and a config change paired with its settings-model
+# change would false-fail against the main checkout's older models.
+sys.path.insert(0, str(REPO_ROOT))
+
 
 def main() -> int:
     failures: list[str] = []
