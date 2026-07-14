@@ -37,6 +37,7 @@ import json
 import time
 import argparse
 import logging
+from datetime import datetime, timezone
 from typing import Dict, List, Any, Tuple, Optional, Union, Set
 from pydantic import BaseModel, Field
 
@@ -65,10 +66,10 @@ logger = logging.getLogger("nexus.summarize_narrative")
 
 
 def _resolve_default_summary_model() -> str:
-    """Read the default narrative-summary model from nexus.toml's [apex] section."""
+    """Read the dedicated narrative-summary model from nexus.toml."""
     from nexus.config import load_settings
 
-    return load_settings().apex.model
+    return load_settings().summaries.model
 
 
 # Constants
@@ -82,6 +83,7 @@ MAX_TOKENS_SEASON = 4000
 MAX_TOKENS_EPISODE = 2500
 CONTEXT_CHUNK_BEFORE = 1  # Number of chunks to include before target for context
 CONTEXT_CHUNK_AFTER = 1  # Number of chunks to include after target for context
+SUMMARY_FAILURE_STATUS = "error"
 
 # Database connection using SQLAlchemy
 import sqlalchemy as sa
@@ -714,12 +716,17 @@ class DatabaseManager:
                     """
                 SELECT id, summary 
                 FROM public.seasons 
-                WHERE id < :season AND summary IS NOT NULL
+                WHERE id < :season
+                  AND summary IS NOT NULL
+                  AND COALESCE(summary->>'status', '') <> :failure_status
                 ORDER BY id ASC
                 """
                 )
 
-                result = conn.execute(query, {"season": season})
+                result = conn.execute(
+                    query,
+                    {"season": season, "failure_status": SUMMARY_FAILURE_STATUS},
+                )
 
                 for row in result:
                     summaries.append({"season": row.id, "summary": row.summary})
@@ -750,12 +757,22 @@ class DatabaseManager:
                     """
                 SELECT season, episode, summary 
                 FROM public.episodes 
-                WHERE season = :season AND episode < :episode AND summary IS NOT NULL
+                WHERE season = :season
+                  AND episode < :episode
+                  AND summary IS NOT NULL
+                  AND COALESCE(summary->>'status', '') <> :failure_status
                 ORDER BY episode ASC
                 """
                 )
 
-                result = conn.execute(query, {"season": season, "episode": episode})
+                result = conn.execute(
+                    query,
+                    {
+                        "season": season,
+                        "episode": episode,
+                        "failure_status": SUMMARY_FAILURE_STATUS,
+                    },
+                )
 
                 for row in result:
                     summaries.append(
@@ -790,11 +807,18 @@ class DatabaseManager:
                         """
                         SELECT 1
                         FROM public.episodes
-                        WHERE season = :season AND episode = :episode AND summary IS NOT NULL
+                        WHERE season = :season
+                          AND episode = :episode
+                          AND summary IS NOT NULL
+                          AND COALESCE(summary->>'status', '') <> :failure_status
                         LIMIT 1
                         """
                     ),
-                    {"season": season, "episode": episode},
+                    {
+                        "season": season,
+                        "episode": episode,
+                        "failure_status": SUMMARY_FAILURE_STATUS,
+                    },
                 ).scalar()
                 return result is not None
         except Exception as e:
@@ -819,11 +843,16 @@ class DatabaseManager:
                     """
                 SELECT id, summary 
                 FROM public.seasons 
-                WHERE id = :season AND summary IS NOT NULL
+                WHERE id = :season
+                  AND summary IS NOT NULL
+                  AND COALESCE(summary->>'status', '') <> :failure_status
                 """
                 )
 
-                result = conn.execute(query, {"season": season}).fetchone()
+                result = conn.execute(
+                    query,
+                    {"season": season, "failure_status": SUMMARY_FAILURE_STATUS},
+                ).fetchone()
 
                 if result:
                     return {"season": result.id, "summary": result.summary}
@@ -849,11 +878,13 @@ class DatabaseManager:
                         """
                         SELECT 1
                         FROM public.seasons
-                        WHERE id = :season AND summary IS NOT NULL
+                        WHERE id = :season
+                          AND summary IS NOT NULL
+                          AND COALESCE(summary->>'status', '') <> :failure_status
                         LIMIT 1
                         """
                     ),
-                    {"season": season},
+                    {"season": season, "failure_status": SUMMARY_FAILURE_STATUS},
                 ).scalar()
                 return result is not None
         except Exception as e:
@@ -895,7 +926,12 @@ class DatabaseManager:
                 )
                 existing = conn.execute(check_query, {"season": season}).fetchone()
 
-                if existing and existing.summary and not overwrite:
+                if (
+                    existing
+                    and existing.summary
+                    and not self._is_failure_summary(existing.summary)
+                    and not overwrite
+                ):
                     if not prompt_on_conflict:
                         logger.info(
                             f"Existing summary found for Season {season}; skipping (overwrite disabled)"
@@ -1041,7 +1077,12 @@ class DatabaseManager:
                     check_query, {"season": season, "episode": episode}
                 ).fetchone()
 
-                if existing and existing.summary and not overwrite:
+                if (
+                    existing
+                    and existing.summary
+                    and not self._is_failure_summary(existing.summary)
+                    and not overwrite
+                ):
                     if not prompt_on_conflict:
                         logger.info(
                             f"Existing summary found for S{season:02d}E{episode:02d}; skipping (overwrite disabled)"
@@ -1138,6 +1179,89 @@ class DatabaseManager:
 
         except Exception as e:
             logger.error(f"Error saving episode summary: {e}")
+            return False
+
+    @staticmethod
+    def _is_failure_summary(summary: Any) -> bool:
+        """Return whether a JSONB summary value is a retryable failure marker."""
+        if isinstance(summary, str):
+            try:
+                summary = json.loads(summary)
+            except json.JSONDecodeError:
+                return False
+        return (
+            isinstance(summary, dict)
+            and summary.get("status") == SUMMARY_FAILURE_STATUS
+        )
+
+    def record_summary_failure(
+        self,
+        *,
+        kind: str,
+        season: int,
+        episode: Optional[int],
+        error: str,
+        model_candidates: List[str],
+    ) -> bool:
+        """Persist a retryable failure marker on the existing summary record.
+
+        The episodes/seasons JSONB summary columns are the established durable
+        operator surface. A marker remains visible there but is excluded by the
+        summary existence/context queries, so a later transition can refire and
+        replace it without requiring ``overwrite=True``.
+        """
+        failure = json.dumps(
+            {
+                "status": SUMMARY_FAILURE_STATUS,
+                "error": error,
+                "model_candidates": model_candidates,
+                "failed_at": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+        try:
+            with self.engine.connect() as conn:
+                if kind == "episode":
+                    if episode is None:
+                        raise ValueError(
+                            "episode is required when recording an episode failure"
+                        )
+                    query = text(
+                        """
+                        INSERT INTO public.episodes (season, episode, summary)
+                        VALUES (:season, :episode, CAST(:summary AS jsonb))
+                        ON CONFLICT (season, episode) DO UPDATE
+                        SET summary = EXCLUDED.summary
+                        """
+                    )
+                    params = {
+                        "season": season,
+                        "episode": episode,
+                        "summary": failure,
+                    }
+                elif kind == "season":
+                    query = text(
+                        """
+                        INSERT INTO public.seasons (id, summary)
+                        VALUES (:season, CAST(:summary AS jsonb))
+                        ON CONFLICT (id) DO UPDATE
+                        SET summary = EXCLUDED.summary
+                        """
+                    )
+                    params = {"season": season, "summary": failure}
+                else:
+                    raise ValueError(f"Unknown summary failure kind: {kind!r}")
+
+                conn.execute(query, params)
+                conn.commit()
+            return True
+        except Exception as exc:
+            logger.error(
+                "Unable to persist %s summary failure for season=%s episode=%s: %s",
+                kind,
+                season,
+                episode,
+                exc,
+            )
             return False
 
     def get_episode_chunk_span(
@@ -1258,29 +1382,65 @@ class SummaryGenerator:
         self.model = model
         self.temperature = temperature
         self.effort = effort
-        self.is_reasoning_model = model.startswith("o")
+        self.is_reasoning_model = self._model_rejects_temperature(model)
         self.db_manager = db_manager or DatabaseManager()
         self.dry_run = dry_run
         self.overwrite = overwrite
         self.verbose = verbose
         self.save_prompt = save_prompt
         self.prompt_on_conflict = prompt_on_conflict
+        self.last_error: Optional[str] = None
         self.provider = self._initialize_provider()
+
+    @staticmethod
+    def _model_rejects_temperature(model: str) -> bool:
+        """Registry-driven reasoning-model detection.
+
+        Reasoning-class models reject temperature and take reasoning_effort
+        instead; the [global.model.api_models] registry already declares that
+        per model via unsupported_params, so consult it rather than pattern-
+        matching model-id families that change with every roster bump.
+        """
+        from nexus.config import load_settings
+
+        settings = load_settings()
+        provider = settings.provider_for_model(model)
+        entry = next(
+            m
+            for m in settings.global_.model.api_models[provider].models
+            if m.id == model
+        )
+        return "temperature" in entry.unsupported_params
 
     def _initialize_provider(self) -> OpenAIProvider:
         """Initialize the OpenAI provider."""
         try:
+            from nexus.config import get_openai_compatible_endpoint
+
+            endpoint = get_openai_compatible_endpoint(self.model)
+            endpoint_kwargs: Dict[str, Any] = {}
+            if endpoint:
+                endpoint_kwargs = {
+                    "api_key": endpoint["api_key"],
+                    "base_url": endpoint["base_url"],
+                    "structured_transport": endpoint["structured_transport"],
+                    "request_timeout": endpoint["request_timeout_seconds"],
+                }
             # Use the streamlined provider initialization
             if self.is_reasoning_model:
                 provider = OpenAIProvider(
-                    model=self.model, reasoning_effort=self.effort
+                    model=self.model,
+                    reasoning_effort=self.effort,
+                    **endpoint_kwargs,
                 )
                 logger.info(
                     f"Initialized OpenAI provider with reasoning model: {self.model}, effort: {self.effort}"
                 )
             else:
                 provider = OpenAIProvider(
-                    model=self.model, temperature=self.temperature
+                    model=self.model,
+                    temperature=self.temperature,
+                    **endpoint_kwargs,
                 )
                 logger.info(
                     f"Initialized OpenAI provider with standard model: {self.model}, temperature: {self.temperature}"
@@ -1531,11 +1691,8 @@ I need a comprehensive, structured summary of Season {season} of the narrative. 
         self._save_prompt_to_file(prompt, f"season_{season}")
 
         try:
-            # Use the OpenAI responses.parse API with Pydantic model
-            import openai
-
-            # Set up the API client - using the direct OpenAI client
-            client = openai.OpenAI(api_key=self.provider.api_key)
+            # Reuse the provider client so registry base_url/timeout routing is kept.
+            client = self.provider.client
 
             # Prepare messages
             messages = [{"role": "user", "content": prompt}]
@@ -1607,6 +1764,7 @@ I need a comprehensive, structured summary of Season {season} of the narrative. 
                 return None
 
         except Exception as e:
+            self.last_error = str(e)
             logger.error(f"Error generating season summary: {e}")
             return None
 
@@ -1765,11 +1923,8 @@ I need a comprehensive, structured summary of Season {season}, Episode {episode}
         self._save_prompt_to_file(prompt, f"s{season:02d}e{episode:02d}")
 
         try:
-            # Use the OpenAI responses.parse API with Pydantic model
-            import openai
-
-            # Set up the API client - using the direct OpenAI client
-            client = openai.OpenAI(api_key=self.provider.api_key)
+            # Reuse the provider client so registry base_url/timeout routing is kept.
+            client = self.provider.client
 
             # Prepare messages
             messages = [{"role": "user", "content": prompt}]
@@ -1845,6 +2000,7 @@ I need a comprehensive, structured summary of Season {season}, Episode {episode}
                 return None
 
         except Exception as e:
+            self.last_error = str(e)
             logger.error(f"Error generating episode summary: {e}")
             return None
 
@@ -2137,11 +2293,8 @@ I need a comprehensive, structured summary of the provided narrative chunks (IDs
         self._save_prompt_to_file(prompt, f"chunks_{start_id}_{end_id}")
 
         try:
-            # Use the OpenAI responses.parse API with Pydantic model
-            import openai
-
-            # Set up the API client - using the direct OpenAI client
-            client = openai.OpenAI(api_key=self.provider.api_key)
+            # Reuse the provider client so registry base_url/timeout routing is kept.
+            client = self.provider.client
 
             # Prepare messages
             messages = [{"role": "user", "content": prompt}]
@@ -2274,6 +2427,7 @@ I need a comprehensive, structured summary of the provided narrative chunks (IDs
             return summary_dict
 
         except Exception as e:
+            self.last_error = str(e)
             logger.error(f"Error generating chunk range summary: {e}")
             return None
 
@@ -2326,11 +2480,11 @@ def main():
         help="Chunk ID range to summarize (manual fallback)",
     )
 
-    # OpenAI options. --model defaults to apex.model from nexus.toml when omitted.
+    # OpenAI options. --model defaults to summaries.model when omitted.
     parser.add_argument(
         "--model",
         default=None,
-        help="OpenAI model to use (default: resolved from nexus.toml [apex].model)",
+        help="OpenAI model to use (default: resolved from nexus.toml [summaries].model)",
     )
     parser.add_argument(
         "--fallback-model",
