@@ -27,9 +27,13 @@ def _forbid_unopted_postgres_connections(monkeypatch: pytest.MonkeyPatch) -> Non
         return
 
     def fail_connect(*args: object, **kwargs: object) -> None:
-        raise AssertionError(
+        # pytest.fail raises a BaseException-derived outcome, so application
+        # code that wraps optional DB reads in `except Exception` cannot
+        # swallow the tripwire and quietly proceed.
+        pytest.fail(
             "Unit test attempted psycopg2.connect; mark it requires_postgres "
-            "and run with NEXUS_RUN_POSTGRES=1."
+            "and run with NEXUS_RUN_POSTGRES=1.",
+            pytrace=False,
         )
 
     monkeypatch.setattr(psycopg2, "connect", fail_connect)
