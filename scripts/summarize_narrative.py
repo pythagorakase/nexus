@@ -27,7 +27,7 @@ Usage:
     python summarize_narrative.py --chunks 120 150
 
     # Options
-    python summarize_narrative.py --season 3 --model gpt-4.1 --dry-run
+    python summarize_narrative.py --season 3 --model @openai.default --dry-run
 """
 
 import os
@@ -1225,18 +1225,24 @@ class DatabaseManager:
                         raise ValueError(
                             "episode is required when recording an episode failure"
                         )
+                    # Never clobber a real summary: a slower failing job can
+                    # land after a concurrent success. Only fill NULLs or
+                    # replace an earlier error marker.
                     query = text(
                         """
                         INSERT INTO public.episodes (season, episode, summary)
                         VALUES (:season, :episode, CAST(:summary AS jsonb))
                         ON CONFLICT (season, episode) DO UPDATE
                         SET summary = EXCLUDED.summary
+                        WHERE public.episodes.summary IS NULL
+                           OR public.episodes.summary->>'status' = :failure_status
                         """
                     )
                     params = {
                         "season": season,
                         "episode": episode,
                         "summary": failure,
+                        "failure_status": SUMMARY_FAILURE_STATUS,
                     }
                 elif kind == "season":
                     query = text(
@@ -1245,9 +1251,15 @@ class DatabaseManager:
                         VALUES (:season, CAST(:summary AS jsonb))
                         ON CONFLICT (id) DO UPDATE
                         SET summary = EXCLUDED.summary
+                        WHERE public.seasons.summary IS NULL
+                           OR public.seasons.summary->>'status' = :failure_status
                         """
                     )
-                    params = {"season": season, "summary": failure}
+                    params = {
+                        "season": season,
+                        "summary": failure,
+                        "failure_status": SUMMARY_FAILURE_STATUS,
+                    }
                 else:
                     raise ValueError(f"Unknown summary failure kind: {kind!r}")
 
@@ -1400,11 +1412,23 @@ class SummaryGenerator:
         instead; the [global.model.api_models] registry already declares that
         per model via unsupported_params, so consult it rather than pattern-
         matching model-id families that change with every roster bump.
+
+        Registry membership is deliberately required (loud-errors doctrine):
+        an ad-hoc --model id not in nexus.toml would otherwise silently guess
+        the wrong parameter set.
         """
         from nexus.config import load_settings
 
         settings = load_settings()
-        provider = settings.provider_for_model(model)
+        try:
+            provider = settings.provider_for_model(model)
+        except ValueError as exc:
+            raise ValueError(
+                f"--model {model!r} is not declared in nexus.toml's "
+                "[global.model.api_models] registry, so its parameter "
+                "capabilities (temperature vs reasoning_effort) are unknown. "
+                "Add it to the registry or pass a '@provider.role' reference."
+            ) from exc
         entry = next(
             m
             for m in settings.global_.model.api_models[provider].models
@@ -2540,9 +2564,15 @@ def main():
 
     args = parser.parse_args()
 
-    # Resolve --model from nexus.toml when the user didn't specify it explicitly.
+    # Resolve --model from nexus.toml when the user didn't specify it
+    # explicitly; explicit "@provider.role" references resolve through the
+    # same registry authority.
     if args.model is None:
         args.model = _resolve_default_summary_model()
+    elif args.model.startswith("@"):
+        from nexus.config import resolve_model_ref
+
+        args.model = resolve_model_ref(args.model)
 
     # Set up database manager
     db_manager = DatabaseManager(db_url=args.db_url)

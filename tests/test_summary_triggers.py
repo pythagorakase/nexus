@@ -261,6 +261,28 @@ def test_generation_failure_marker_round_trips_and_can_be_replaced_live():
             prompt_on_conflict=False,
         )
         assert db.season_summary_exists(season) is True
+
+        # The reverse race: a slower FAILING job must never clobber the real
+        # summary a concurrent job already saved.
+        assert (
+            db.record_summary_failure(
+                kind="season",
+                season=season,
+                episode=None,
+                error="late failure after concurrent success",
+                model_candidates=["TEST"],
+            )
+            is True
+        )
+        with db.engine.connect() as conn:
+            survived = conn.execute(
+                text("SELECT summary FROM public.seasons WHERE id = :id"),
+                {"id": season},
+            ).scalar_one()
+        assert (
+            survived.get("status") != "error"
+        ), "a late failure marker must not overwrite a saved summary"
+        assert db.season_summary_exists(season) is True
     finally:
         with db.engine.connect() as conn:
             conn.execute(
