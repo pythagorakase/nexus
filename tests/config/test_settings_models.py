@@ -243,9 +243,10 @@ def test_configured_param_rejected_when_model_declares_it_unsupported():
 
 
 def test_configured_param_allowed_when_model_supports_it():
-    """A supporting model (Sonnet 4.6) accepts a configured temperature."""
+    """A supporting model (Sonnet 5.0) accepts a configured temperature."""
     raw = _nexus_toml_dict()
-    raw["orrery"]["narration"]["model_ref"] = "claude-sonnet-4-6"
+    # pin: needs a registry model WITHOUT temperature in unsupported_params
+    raw["orrery"]["narration"]["model_ref"] = "claude-sonnet-5-0"
     raw["orrery"]["narration"]["temperature"] = 0.4
     settings = Settings(**raw)
     assert settings.orrery.narration.temperature == 0.4
@@ -322,21 +323,15 @@ def test_native_structured_output_override_parses_and_resolves(tmp_path, monkeyp
 
 
 def test_shipped_anthropic_models_decide_native_structured_output_support():
-    """Every shipped Anthropic model carries an explicit #454 decision."""
-    entries = load_settings("nexus.toml").global_.model.api_models["anthropic"].models
-    expected_ids = {
-        "claude-sonnet-4-6",
-        "claude-opus-4-8",
-        "claude-fable-5",
-    }
+    """Every shipped Anthropic model carries an explicit #454 decision.
 
-    assert expected_ids <= {entry.id for entry in entries}
+    The invariant is per-entry explicitness, not a fixed roster — hardcoding
+    model ids here just breaks on every roster refresh.
+    """
+    entries = load_settings("nexus.toml").global_.model.api_models["anthropic"].models
+
+    assert entries, "shipped config must declare Anthropic models"
     assert all(entry.native_structured_output is not None for entry in entries)
-    assert all(
-        entry.native_structured_output is True
-        for entry in entries
-        if entry.id in expected_ids
-    )
 
 
 def test_default_load_honors_runtime_config_env(tmp_path, monkeypatch):
