@@ -1036,6 +1036,19 @@ def _transition_timeout_seconds() -> int:
     return orrery_settings.retrograde.wizard.transition_timeout_seconds
 
 
+def _generation_timeout_seconds() -> int:
+    """Read the narrative-turn HTTP timeout from nexus.toml.
+
+    Frontier storyteller generation runs inside the continue request and blocks
+    the API worker, so a status poll is not answered until the turn completes;
+    the client budget must exceed the slowest expected generation.
+    """
+
+    from nexus.config import load_settings
+
+    return load_settings().apex.generation_timeout_seconds
+
+
 def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
     """
     Advance the story (wizard or narrative).
@@ -1344,7 +1357,9 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                 for _ in range(GENERATION_POLL_SECONDS):
                     status_url = f"{get_api_url()}/api/narrative/status/{session_id}"
                     status_response = requests.get(
-                        status_url, params={"slot": args.slot}, timeout=30
+                        status_url,
+                        params={"slot": args.slot},
+                        timeout=_generation_timeout_seconds(),
                     )
                     if status_response.ok:
                         status = status_response.json()

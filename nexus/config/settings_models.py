@@ -1809,6 +1809,17 @@ class APEXSettings(BaseModel):
             "retry feeds the validation error back to the model."
         ),
     )
+    generation_timeout_seconds: int = Field(
+        default=300,
+        gt=0,
+        description=(
+            "HTTP client timeout for a narrative continue turn. Frontier "
+            "storyteller generation runs inside the request and the API "
+            "worker blocks while it does, so status polls are not answered "
+            "until the turn completes; the budget must exceed the slowest "
+            "expected generation, not a status ping's round-trip."
+        ),
+    )
 
 
 # =============================================================================

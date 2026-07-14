@@ -312,7 +312,6 @@ class RetrogradeSeedCandidateResponse(BaseModel):
     )
     selection_notes: Optional[str] = Field(
         default=None,
-        max_length=1200,
         description="Brief selection rationale for audit/debugging.",
     )
 
