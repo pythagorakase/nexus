@@ -67,6 +67,7 @@ class FakeSession:
         entity_name_rows=None,
         need_debt_rows=None,
         travel_state_rows=None,
+        project_state_rows=None,
         routine_anchor_rows=None,
         win_history_rows=None,
         intertitle_row=None,
@@ -99,6 +100,7 @@ class FakeSession:
         ]
         self.need_debt_rows = need_debt_rows or []
         self.travel_state_rows = travel_state_rows or []
+        self.project_state_rows = project_state_rows or []
         self.routine_anchor_rows = routine_anchor_rows or []
         self.win_history_rows = win_history_rows or []
         self.intertitle_row = intertitle_row or {
@@ -186,6 +188,10 @@ class FakeSession:
             assert "JOIN entities e" in sql
             assert "e.is_active = true" in sql
             return FakeResult(self.travel_state_rows)
+        if "/* orrery:project_states */" in sql:
+            assert "JOIN entities e" in sql
+            assert "e.is_active = true" in sql
+            return FakeResult(self.project_state_rows)
         if "/* orrery:win_history */" in sql:
             return FakeResult(self.win_history_rows)
         if "/* orrery:intertitle */" in sql:

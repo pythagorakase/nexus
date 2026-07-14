@@ -94,6 +94,7 @@ class BranchTrace:
 
     label: str
     magnitude: float
+    promotable: bool
     considered: bool
     result: bool
     selected: bool
@@ -103,6 +104,7 @@ class BranchTrace:
         return {
             "label": self.label,
             "magnitude": self.magnitude,
+            "promotable": self.promotable,
             "considered": self.considered,
             "result": self.result,
             "selected": self.selected,
@@ -126,6 +128,7 @@ class TemplateExplanation:
     chosen_branch: Optional[str]
     branches: Tuple[BranchTrace, ...]
     magnitude: float
+    promotable: bool
     event_type: Optional[str]
     signal_event_type: Optional[str]
     narrative_stub: Optional[str]
@@ -151,6 +154,7 @@ class TemplateExplanation:
             "chosen_branch": self.chosen_branch,
             "branches": [branch.to_dict() for branch in self.branches],
             "magnitude": self.magnitude if self.fired else None,
+            "promotable": self.promotable if self.fired else None,
             "event_type": self.event_type if self.fired else None,
             "signal_event_type": self.signal_event_type if self.fired else None,
             "narrative_stub": self.narrative_stub,
@@ -281,6 +285,7 @@ def explain_template(
                     BranchTrace(
                         label=branch.label,
                         magnitude=branch.magnitude,
+                        promotable=branch.promotable,
                         considered=False,
                         result=False,
                         selected=False,
@@ -294,6 +299,7 @@ def explain_template(
                 BranchTrace(
                     label=branch.label,
                     magnitude=branch.magnitude,
+                    promotable=branch.promotable,
                     considered=True,
                     result=passes,
                     selected=chosen is not None and branch.label == chosen.label,
@@ -327,6 +333,7 @@ def explain_template(
         chosen_branch=chosen_branch,
         branches=tuple(branch_traces),
         magnitude=truth.magnitude,
+        promotable=truth.promotable,
         event_type=truth.event_type,
         signal_event_type=truth.signal_event_type,
         narrative_stub=truth.narrative_stub,

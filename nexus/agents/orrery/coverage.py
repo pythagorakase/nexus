@@ -52,6 +52,7 @@ HYDRATION_HONESTY: Mapping[str, Tuple[str, ...]] = {
         "positions",
         "activities",
         "travel_states",
+        "project_states",
         "routine_anchors",
         "faction_memberships",
         "weather",
@@ -139,6 +140,8 @@ def _tally_report(
 ) -> dict[str, Any]:
     winners_by_band: dict[str, int] = {}
     gap_actor_ids: list[int] = []
+    project_gates: list[dict[str, Any]] = []
+    resolution_winners: list[dict[str, Any]] = []
     for group in report.actors:
         fired_anywhere = False
         for stack in _resolution_stacks(group):
@@ -156,6 +159,28 @@ def _tally_report(
                     tally.won += 1
                     winners_by_band[item.drive_band] = (
                         winners_by_band.get(item.drive_band, 0) + 1
+                    )
+                    resolution_winners.append(
+                        {
+                            "actor_entity_id": stack.bindings.get("actor"),
+                            "target_entity_id": stack.bindings.get("target"),
+                            "template_id": item.template_id,
+                            "drive_band": item.drive_band,
+                            "promotable": item.promotable,
+                        }
+                    )
+                if item.template_id in {
+                    "start_relocation_plan",
+                    "advance_relocation_plan",
+                }:
+                    project_gates.append(
+                        {
+                            "actor_entity_id": group.actor_entity_id,
+                            "template_id": item.template_id,
+                            "gate_passed": item.gate_passed,
+                            "stack_winner_id": stack.winner_id,
+                            "gate_trace": item.gate_trace.to_dict(),
+                        }
                     )
         for stack in group.scene_pressure_stacks:
             for item in stack.templates:
@@ -184,6 +209,8 @@ def _tally_report(
         "winners_by_band": winners_by_band,
         "gap_actor_ids": gap_actor_ids,
         "need_pressure_count": len(report.need_pressures),
+        "project_gates": project_gates,
+        "resolution_winners": resolution_winners,
     }
 
 
@@ -299,6 +326,7 @@ def analyze_coverage(
     selection_settings: Optional[Any] = None,
     habituation_settings: Optional[Any] = None,
     package_selection_settings: Optional[Any] = None,
+    project_settings: Optional[Any] = None,
     fanout_settings: Optional[Any] = None,
 ) -> dict[str, Any]:
     """Aggregate explained resolution coverage across historical anchors.
@@ -341,6 +369,7 @@ def analyze_coverage(
             selection_settings=selection_settings,
             habituation_settings=habituation_settings,
             package_selection_settings=package_selection_settings,
+            project_settings=project_settings,
             fanout_settings=fanout_settings,
         )
         anchors.append(_tally_report(report, tallies, gap_counts))
@@ -358,6 +387,14 @@ def analyze_coverage(
             "pressure_fired": tally.pressure_fired,
             "pressure_won": tally.pressure_won,
             "branch_chosen": dict(tally.branch_chosen),
+            "branch_promotable": {
+                branch.label: branch.promotable
+                for branch in next(
+                    template
+                    for template in templates_tuple
+                    if template.id == template_id
+                ).branches
+            },
             "branch_labels_never_chosen": [
                 label for label, chosen in tally.branch_chosen.items() if chosen == 0
             ],

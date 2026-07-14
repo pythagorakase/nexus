@@ -863,6 +863,61 @@ class OrreryPackageSelectionSettings(BaseModel):
     )
 
 
+class OrreryProjectSettings(BaseModel):
+    """Long-arc project policy for [orrery.projects]."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    advance_interval_hours: float = Field(
+        default=24.0,
+        gt=0.0,
+        description=(
+            "World-clock hours between project transitions; prevents an "
+            "open project from firing on every resolver tick."
+        ),
+    )
+    max_active_per_character: int = Field(
+        default=1,
+        ge=1,
+        le=1,
+        description=(
+            "Open-project budget per character. V1 is intentionally fixed at "
+            "one to match migration 074's partial unique index."
+        ),
+    )
+    stall_abandon_threshold: int = Field(
+        default=3,
+        ge=1,
+        description="Accumulated stalls that make abandonment preemptive when due.",
+    )
+    abandon_after_stalled_world_hours: float = Field(
+        default=168.0,
+        gt=0.0,
+        description=(
+            "Hours a project may remain overdue before deterministic "
+            "abandonment at its next evaluation."
+        ),
+    )
+    milestone_magnitude: float = Field(
+        default=0.40,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Magnitude applied to start, stage-transition, abandonment, and "
+            "completion branches so milestones enter the promotion funnel."
+        ),
+    )
+    coverage_distribution_tolerance: float = Field(
+        default=0.05,
+        gt=0.0,
+        le=1.0,
+        description=(
+            "Maximum accepted maintenance/routine winner-distribution shift "
+            "for the active-project coverage acceptance probe."
+        ),
+    )
+
+
 class OrreryReconstructionSettings(BaseModel):
     """Reconstruction-sufficiency knobs (issue #426)."""
 
@@ -1485,6 +1540,7 @@ class OrrerySettings(BaseModel):
     package_selection: OrreryPackageSelectionSettings = Field(
         default_factory=OrreryPackageSelectionSettings
     )
+    projects: OrreryProjectSettings = Field(default_factory=OrreryProjectSettings)
     retrograde: OrreryRetrogradeSettings
     dashboard: OrreryDashboardSettings = Field(default_factory=OrreryDashboardSettings)
     reconstruction: OrreryReconstructionSettings = Field(
@@ -1496,6 +1552,17 @@ class OrrerySettings(BaseModel):
         default_factory=OrreryHabituationSettings
     )
     fanout: OrreryFanoutSettings = Field(default_factory=OrreryFanoutSettings)
+
+    @model_validator(mode="after")
+    def _validate_project_milestone_promotion_floor(self) -> "OrrerySettings":
+        """Project milestones must enter the configured promotion funnel."""
+
+        if self.projects.milestone_magnitude < self.promote.magnitude_threshold:
+            raise ValueError(
+                "orrery.projects.milestone_magnitude must be >= "
+                "orrery.promote.magnitude_threshold"
+            )
+        return self
 
 
 # =============================================================================

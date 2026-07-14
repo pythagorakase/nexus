@@ -32,6 +32,7 @@ from nexus.agents.orrery.explain import explain_stack
 from nexus.agents.orrery.substrate import (
     ALWAYS,
     EventRecord,
+    ProjectPolicy,
     RoutineAnchor,
     Slot,
     TravelState,
@@ -75,6 +76,7 @@ from nexus.agents.orrery.substrate import (
     is_in_transit,
     lacks_pair_tag,
     lacks_tag,
+    project_due,
     recent_event,
     relationship_is_asymmetric,
     relationship_is_mutual_warm,
@@ -135,6 +137,7 @@ RICH_STATE = WorldState(
         ),
         4: TravelState(status="in_transit"),
     },
+    project_policy=ProjectPolicy(enabled=True),
     routine_anchors={
         (ACTOR, "work"): RoutineAnchor(
             anchor_type="work",
@@ -214,6 +217,7 @@ FACTORY_SWEEP = [
     recent_event(within_ticks=3),
     since_last_event_at_least("contact_made", 3),
     since_last_event_at_least("contact_made", 3, target_slot=Slot.TARGET),
+    project_due("start"),
     count_recent_events_at_least("mourning_act", within_ticks=30, min_count=4),
     count_recent_events_at_least(
         "surveillance_performed",

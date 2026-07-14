@@ -32,6 +32,10 @@ produces. Sections and their replay sources:
 - ``character_travel_states`` — forward for explicit payloads;
   ``travel.start`` resolves destinations and routes from live state at
   commit time, so windows containing travel deltas are approximate.
+- ``character_project_states`` — forward from the five ``project.*``
+  transitions. Every transition carries the exact applied project projection,
+  so cadence and applier-derived values are independent of current tuning;
+  project.complete also replays its explicit-destination travel.start handoff.
 - ``character_routine_anchors`` — checkpoint pass-through (no runtime
   writer; offline seed scripts mutate it invisibly between checkpoints).
 
@@ -66,6 +70,7 @@ from nexus.agents.orrery.needs import (
     severity_tags_for_need,
 )
 from nexus.agents.orrery.reconstruction import CHECKPOINT_SECTIONS
+from nexus.agents.orrery.substrate import ProjectPolicy, coerce_project_policy
 
 # Composite natural keys, verbatim column order (faction_relationships
 # enforces faction1_id < faction2_id; character_relationships only c1 <> c2
@@ -81,6 +86,7 @@ RELATIONSHIP_KEY_COLUMNS: dict[str, tuple[str, ...]] = {
 VOLATILE_COLUMNS: dict[str, frozenset[str]] = {
     "character_need_states": frozenset({"created_at", "updated_at"}),
     "character_travel_states": frozenset({"created_at", "updated_at"}),
+    "character_project_states": frozenset({"id", "created_at", "updated_at"}),
 }
 
 SKALD_SCALAR_FIELDS = frozenset(
@@ -114,6 +120,11 @@ REPLAYED_DELTA_KEYS = frozenset(
         "travel.advance",
         "travel.delay",
         "travel.arrive",
+        "project.start",
+        "project.advance",
+        "project.stall",
+        "project.abandon",
+        "project.complete",
     }
 )
 
@@ -277,6 +288,23 @@ def _coerce_travel_payload(raw: Any) -> dict[str, Any]:
     raise ValueError(f"travel payload must be a mapping, null, or true, got {raw!r}")
 
 
+def _coerce_project_payload(raw: Any) -> dict[str, Any]:
+    if raw is None or raw is True:
+        return {}
+    if isinstance(raw, dict):
+        return dict(raw)
+    raise ValueError(f"project payload must be a mapping, null, or true, got {raw!r}")
+
+
+def _load_project_policy() -> ProjectPolicy:
+    from nexus.config import load_settings
+
+    settings = load_settings()
+    if settings.orrery is None:
+        raise ValueError("Replay of project deltas requires [orrery.projects]")
+    return coerce_project_policy(settings.orrery.projects)
+
+
 class _Replayer:
     """Single-use forward/backward replay over one (checkpoint, N] window."""
 
@@ -285,6 +313,8 @@ class _Replayer:
         self.target_chunk_id = target_chunk_id
         self.target_created_at = _fetch_chunk_created_at(cur, target_chunk_id)
         self.need_tuning = load_need_tuning()
+        self.project_policy = _load_project_policy()
+        self.missing_base_sections: set[str] = set()
 
     # -- base checkpoint ---------------------------------------------------
 
@@ -326,10 +356,16 @@ class _Replayer:
                 f"base for reconstruction at chunk {self.target_chunk_id}"
             )
         missing = set(CHECKPOINT_SECTIONS) - set(state)
-        if missing:
+        allowed_missing = {"character_project_states"}
+        unexpected_missing = missing - allowed_missing
+        if unexpected_missing:
             raise ValueError(
-                f"Checkpoint {checkpoint_id} lacks sections {sorted(missing)}"
+                f"Checkpoint {checkpoint_id} lacks sections "
+                f"{sorted(unexpected_missing)}"
             )
+        if "character_project_states" in missing:
+            state["character_project_states"] = []
+            self.missing_base_sections.add("character_project_states")
         return checkpoint_id, chunk_id, created_at, state
 
     # -- forward scalar replay ----------------------------------------------
@@ -344,6 +380,14 @@ class _Replayer:
             base_checkpoint_chunk_id=base_chunk,
             state={},
         )
+        if "character_project_states" in self.missing_base_sections:
+            result.add_note(
+                "character_project_states",
+                "base checkpoint predates migration 074 and lacks the project "
+                "section; treated as empty because no project table/writer "
+                "existed at that checkpoint",
+                approximate=True,
+            )
 
         characters = {row["id"]: dict(row) for row in base_state["characters"]}
         places = {row["id"]: dict(row) for row in base_state["places"]}
@@ -355,6 +399,9 @@ class _Replayer:
             row["character_entity_id"]: dict(row)
             for row in base_state["character_travel_states"]
         }
+        projects: dict[Any, dict[str, Any]] = {
+            row["id"]: dict(row) for row in base_state["character_project_states"]
+        }
 
         born_entities = self._seed_window_births(characters, places, result)
 
@@ -362,7 +409,7 @@ class _Replayer:
             for chunk_id in self._window_chunks(base_chunk):
                 self._apply_skald_rows(chunk_id, characters, places, result)
                 self._apply_orrery_resolutions(
-                    chunk_id, characters, needs, travel, result
+                    chunk_id, characters, needs, travel, projects, result
                 )
 
         tag_workings, tag_touched_entities = self._replay_tags(
@@ -388,6 +435,14 @@ class _Replayer:
         result.state["character_travel_states"] = [
             travel[key] for key in sorted(travel)
         ]
+        result.state["character_project_states"] = sorted(
+            projects.values(),
+            key=lambda row: (
+                row["character_entity_id"],
+                row.get("source_chunk_id") or -1,
+                row.get("id") or -1,
+            ),
+        )
         result.state["character_routine_anchors"] = sorted(
             (dict(row) for row in base_state["character_routine_anchors"]),
             key=lambda r: r["id"],
@@ -521,6 +576,7 @@ class _Replayer:
         characters: dict[int, dict[str, Any]],
         needs: dict[tuple[int, str], dict[str, Any]],
         travel: dict[int, dict[str, Any]],
+        projects: dict[Any, dict[str, Any]],
         result: ReplayResult,
     ) -> None:
         self.cur.execute(
@@ -565,6 +621,25 @@ class _Replayer:
                     needs,
                     result,
                 )
+            for project_key in (
+                "project.start",
+                "project.advance",
+                "project.stall",
+                "project.abandon",
+                "project.complete",
+            ):
+                if project_key in delta:
+                    self._replay_project(
+                        project_key,
+                        chunk_id,
+                        actor_entity_id,
+                        delta[project_key],
+                        world_time,
+                        projects,
+                        travel,
+                        by_entity,
+                        result,
+                    )
             for travel_key in (
                 "travel.start",
                 "travel.advance",
@@ -582,6 +657,163 @@ class _Replayer:
                         by_entity,
                         result,
                     )
+
+    def _open_project(
+        self,
+        projects: dict[Any, dict[str, Any]],
+        actor_entity_id: int,
+    ) -> tuple[Any, dict[str, Any]]:
+        matches = [
+            (key, row)
+            for key, row in projects.items()
+            if row["character_entity_id"] == actor_entity_id
+            and row["status"] in {"active", "paused", "stalled"}
+        ]
+        if len(matches) != 1:
+            raise ValueError(
+                f"Actor {actor_entity_id} has {len(matches)} open projects "
+                "in replay working state"
+            )
+        key, row = matches[0]
+        if row["project_type"] != "plan_relocation":
+            raise ValueError(
+                f"Actor {actor_entity_id} has unsupported replay project "
+                f"type {row['project_type']!r}"
+            )
+        return key, row
+
+    def _replay_project(
+        self,
+        delta_key: str,
+        chunk_id: int,
+        actor_entity_id: int,
+        raw_payload: Any,
+        world_time: Optional[datetime],
+        projects: dict[Any, dict[str, Any]],
+        travel: dict[int, dict[str, Any]],
+        characters_by_entity: dict[int, dict[str, Any]],
+        result: ReplayResult,
+    ) -> None:
+        """Forward one project transition and its completion handoff."""
+
+        payload = _coerce_project_payload(raw_payload)
+        applied = payload.get("applied")
+        if not isinstance(applied, dict):
+            raise ValueError(
+                f"{delta_key} at chunk {chunk_id} is missing its required "
+                "applied project projection"
+            )
+        required_applied = {
+            "project_type",
+            "status",
+            "stage",
+            "target_place_id",
+            "progress",
+            "stall_count",
+            "next_eligible_at_world_time",
+            "source_chunk_id",
+        }
+        missing_applied = required_applied - set(applied)
+        if missing_applied:
+            raise ValueError(
+                f"{delta_key} at chunk {chunk_id} has incomplete applied project "
+                f"projection: missing {sorted(missing_applied)}"
+            )
+        project_type = str(applied["project_type"])
+        stage = str(applied["stage"])
+        if project_type != "plan_relocation":
+            raise ValueError(f"Unsupported replay project type {project_type!r}")
+        if stage not in {"saving", "scouting", "committing"}:
+            raise ValueError(f"Unsupported replay project stage {stage!r}")
+        expected_status = {
+            "project.start": "active",
+            "project.advance": "active",
+            "project.stall": "stalled",
+            "project.abandon": "abandoned",
+            "project.complete": "completed",
+        }[delta_key]
+        if applied["status"] != expected_status:
+            raise ValueError(
+                f"{delta_key} at chunk {chunk_id} applied status must be "
+                f"{expected_status!r}, got {applied['status']!r}"
+            )
+
+        applied_row = {
+            "project_type": project_type,
+            "status": expected_status,
+            "stage": stage,
+            "target_place_id": applied["target_place_id"],
+            "progress": _pg_round(float(applied["progress"]), 4),
+            "stall_count": int(applied["stall_count"]),
+            "next_eligible_at_world_time": applied["next_eligible_at_world_time"],
+            "source_chunk_id": int(applied["source_chunk_id"]),
+        }
+        if applied_row["source_chunk_id"] != chunk_id:
+            raise ValueError(
+                f"{delta_key} at chunk {chunk_id} applied source_chunk_id is "
+                f"{applied_row['source_chunk_id']}"
+            )
+        if delta_key == "project.start":
+            if any(
+                row["character_entity_id"] == actor_entity_id
+                and row["status"] in {"active", "paused", "stalled"}
+                for row in projects.values()
+            ):
+                raise ValueError(
+                    f"project.start at chunk {chunk_id} for actor "
+                    f"{actor_entity_id} already holding an open project"
+                )
+            projects[("new", chunk_id, actor_entity_id)] = {
+                "id": None,
+                "character_entity_id": actor_entity_id,
+                **applied_row,
+            }
+            return
+
+        _project_key, row = self._open_project(projects, actor_entity_id)
+        if row["project_type"] != project_type:
+            raise ValueError(
+                f"{delta_key} at chunk {chunk_id} changes project type from "
+                f"{row['project_type']!r} to {project_type!r}"
+            )
+        if delta_key == "project.advance":
+            row.update(applied_row)
+            return
+        if delta_key == "project.stall":
+            row.update(applied_row)
+            return
+        if delta_key == "project.abandon":
+            row.update(applied_row)
+            return
+        if delta_key == "project.complete":
+            if applied_row["stage"] != "committing":
+                raise ValueError("project.complete replay requires committing stage")
+            if float(applied_row["progress"] or 0.0) < 1.0:
+                raise ValueError("project.complete replay requires full progress")
+            destination = applied_row["target_place_id"]
+            if destination is None:
+                raise ValueError(
+                    "project.complete replay requires project target_place_id"
+                )
+            row.update(applied_row)
+            travel_payload = {
+                key: value
+                for key, value in payload.items()
+                if key not in {"applied", "milestone", "reason"}
+            }
+            travel_payload["destination_place_id"] = destination
+            self._replay_travel(
+                "travel.start",
+                chunk_id,
+                actor_entity_id,
+                travel_payload,
+                world_time,
+                travel,
+                characters_by_entity,
+                result,
+            )
+            return
+        raise AssertionError(f"Unhandled project replay key {delta_key!r}")
 
     def _replay_need_fulfill(
         self,
@@ -1293,12 +1525,19 @@ def _section_key_fn(section: str) -> Any:
         return lambda row: f"{row['character_entity_id']}:{row['need_type']}"
     if section == "character_travel_states":
         return lambda row: row["character_entity_id"]
+    if section == "character_project_states":
+        return lambda row: (
+            f"{row['character_entity_id']}:{row['project_type']}:"
+            f"{row.get('source_chunk_id')}"
+        )
     return lambda row: row["id"]
 
 
 def _load_checkpoint_state(cur: Any, checkpoint_id: int) -> dict[str, Any]:
     cur.execute("SELECT state FROM state_checkpoints WHERE id = %s", (checkpoint_id,))
-    return _as_document(_row_value(cur.fetchone(), 0))
+    state = _as_document(_row_value(cur.fetchone(), 0))
+    state.setdefault("character_project_states", [])
+    return state
 
 
 def verify_checkpoints_sync(cur: Any) -> list[CheckpointPairVerdict]:

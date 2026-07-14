@@ -71,6 +71,8 @@ from nexus.agents.orrery.substrate import (
     coerce_branch_selection,
     coerce_habituation,
     coerce_package_selection,
+    coerce_project_policy,
+    configure_project_magnitudes,
     CONSTRAINED_TAGS,
     DRAMATIC_CONTACT_TAGS,
     DRIVE_BAND_ORDER,
@@ -479,6 +481,7 @@ def explain_dry_run(
     selection_settings: Optional[Any] = None,
     habituation_settings: Optional[Any] = None,
     package_selection_settings: Optional[Any] = None,
+    project_settings: Optional[Any] = None,
     fanout_settings: Optional[Any] = None,
 ) -> ExplainedTickReport:
     """Hydrate, bind, and explain Orrery packages without database writes.
@@ -498,6 +501,7 @@ def explain_dry_run(
     selection = coerce_branch_selection(selection_settings)
     habituation = coerce_habituation(habituation_settings)
     package_selection = coerce_package_selection(package_selection_settings)
+    project_policy = coerce_project_policy(project_settings)
     state = hydrate_world_state(
         session,
         anchor_chunk_id=anchor_chunk_id,
@@ -505,9 +509,10 @@ def explain_dry_run(
         need_tuning=need_tuning,
         world_time_override=world_time_override,
         win_history_window=habituation.window_ticks if habituation.enabled else 0,
+        project_settings=project_settings,
     )
 
-    templates_list = list(templates)
+    templates_list = list(configure_project_magnitudes(templates, project_policy))
     actor_only_templates = [
         t for t in templates_list if t.required_slots == _ACTOR_ONLY_SLOTS
     ]
@@ -880,6 +885,7 @@ def build_catalog(
                 {
                     "label": branch.label,
                     "magnitude": branch.magnitude,
+                    "promotable": branch.promotable,
                     "event_type": branch.event_type,
                     "signal_event_type": branch.signal_event_type,
                     "has_scene_pressure_stub": branch.scene_pressure_stub is not None,

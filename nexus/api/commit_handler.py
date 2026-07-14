@@ -557,6 +557,7 @@ async def commit_incubator_to_database(
                 storyteller_state_updates=incubator.get("entity_updates"),
                 prompt_settings=_orrery_prompt_settings(),
                 ecology_settings=_orrery_ecology_settings(),
+                project_settings=_orrery_project_settings(),
             )
             if (
                 orrery_result.resolution_count
@@ -632,6 +633,14 @@ def _orrery_prompt_settings() -> Any:
     from nexus.config import load_settings_as_dict
 
     return (load_settings_as_dict().get("orrery") or {}).get("prompt")
+
+
+def _orrery_project_settings() -> Any:
+    """[orrery.projects] cadence and abandonment policy."""
+
+    from nexus.config import load_settings_as_dict
+
+    return (load_settings_as_dict().get("orrery") or {}).get("projects")
 
 
 def _orrery_checkpoint_interval() -> int:

@@ -42,6 +42,7 @@ from nexus.agents.orrery.substrate import (
     is_constrained,
     is_hidden,
     is_in_transit,
+    project_due,
     recent_event,
     relationship_is_asymmetric,
     relationship_is_mutual_warm,
@@ -1017,6 +1018,7 @@ SURVEIL = Template(
     required_slots=(Slot.ACTOR, Slot.TARGET),
     package_gate=AND(
         has_minimal_context(),
+        NOT(project_due("ready")),
         NOT(is_constrained()),
         NOT(has_inbound_pair_tag("hunting")),
         NOT(has_ephemeral("grudge_active")),
@@ -4335,6 +4337,286 @@ RECREATE = Template(
 )
 
 
+START_RELOCATION_PLAN = Template(
+    id="start_relocation_plan",
+    priority=17,
+    drive_band=DriveBand.PROJECT_IDENTITY,
+    priority_override_rationale=(
+        "A relocation plan begins only after repeated local routine plus a "
+        "recent negative signal; the narrow gate lets it interrupt the mundane "
+        "floor without becoming ambient project noise."
+    ),
+    blurb=(
+        "Repeated local maintenance and a fresh setback become an explicit "
+        "decision to leave."
+    ),
+    required_slots=(Slot.ACTOR,),
+    package_gate=AND(
+        project_due("start"),
+        has_minimal_context(),
+        at_routine_anchor("home"),
+        NOT(is_constrained()),
+        NOT(is_in_transit()),
+        OR(
+            count_recent_events_at_least("upkeep_done", within_ticks=30, min_count=2),
+            count_recent_events_at_least("errands_run", within_ticks=30, min_count=2),
+            count_recent_events_at_least(
+                "recreation_taken", within_ticks=30, min_count=2
+            ),
+            count_recent_events_at_least(
+                "work_performed", within_ticks=30, min_count=2
+            ),
+        ),
+        OR(
+            recent_event("travel_delayed", within_ticks=12, actor_slot=Slot.ACTOR),
+            recent_event("contact_deferred", within_ticks=12, actor_slot=Slot.ACTOR),
+            recent_event("threat_issued", within_ticks=12, target_slot=Slot.ACTOR),
+            recent_event(
+                "retaliation_attempted", within_ticks=12, target_slot=Slot.ACTOR
+            ),
+        ),
+    ),
+    branches=(
+        Branch(
+            label="Begin putting something aside",
+            conditions=ALWAYS,
+            narrative_stub=(
+                "{actor} stops treating departure as the thought that arrives "
+                "after a bad day. They make a ledger, name what it would cost, "
+                "and put the first real thing aside."
+            ),
+            state_delta={
+                "project.start": {
+                    "project_type": "plan_relocation",
+                    "stage": "saving",
+                    "milestone": True,
+                }
+            },
+            event_type="relocation_plan_started",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.stage",
+                "character_project_states.next_eligible_at_world_time",
+            ),
+            magnitude=0.40,
+        ),
+    ),
+)
+
+
+ADVANCE_RELOCATION_PLAN = Template(
+    id="advance_relocation_plan",
+    priority=47,
+    drive_band=DriveBand.PROJECT_IDENTITY,
+    priority_override_rationale=(
+        "A due relocation plan occupies SURVEIL's adjacent priority slot; "
+        "SURVEIL yields while the project is due, so project work displaces "
+        "surveillance idling while its cadence protects maintenance wins."
+    ),
+    blurb=(
+        "A due relocation plan saves, scouts, commits, stalls, or reaches its "
+        "travel handoff."
+    ),
+    required_slots=(Slot.ACTOR,),
+    package_gate=AND(
+        project_due("ready"),
+        NOT(is_in_transit()),
+        NOT(is_constrained()),
+        # A due project yields to the embodied floor. The need writer clears
+        # debt when those packages fire, so this delays rather than starves the
+        # project while keeping eating, drinking, and sleep intact.
+        NOT(
+            OR(
+                has_need_debt_at_or_above("sleep", 8),
+                has_need_debt_at_or_above("thirst", 2),
+                has_need_debt_at_or_above("hunger", 4),
+            )
+        ),
+    ),
+    branches=(
+        Branch(
+            label="Commit to the road",
+            conditions=project_due("completion"),
+            narrative_stub=(
+                "{actor} makes the final commitment. The chosen place stops "
+                "being a possibility and becomes a destination; the project "
+                "ends where the journey begins."
+            ),
+            state_delta={
+                "project.complete": {
+                    "mode": "mixed",
+                    "initial_progress": 0.0,
+                    "milestone": True,
+                }
+            },
+            event_type="relocation_plan_completed",
+            changed_fields=(
+                "character_project_states.status",
+                "character_travel_states.status",
+                "character_travel_states.destination_place_id",
+            ),
+            magnitude=0.40,
+            preemptive=True,
+        ),
+        Branch(
+            label="Let the plan go rather than live in limbo",
+            conditions=project_due("abandon"),
+            narrative_stub=(
+                "{actor} opens the plan one last time and recognizes that it "
+                "has become a ritual of not leaving. They close the ledger and "
+                "release the future it had been holding hostage."
+            ),
+            state_delta={
+                "project.abandon": {
+                    "reason": "stalled_or_overdue",
+                    "milestone": True,
+                }
+            },
+            event_type="relocation_plan_abandoned",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.source_chunk_id",
+            ),
+            magnitude=0.40,
+            preemptive=True,
+        ),
+        Branch(
+            label="Turn the savings into a search",
+            conditions=project_due("saving_milestone"),
+            narrative_stub=(
+                "{actor} has enough margin now to stop counting and start "
+                "looking. Prices become neighborhoods, routes, and actual "
+                "doors they might one day close behind them."
+            ),
+            state_delta={
+                "project.advance": {
+                    "stage": "scouting",
+                    "set_progress": 0.0,
+                    "milestone": True,
+                }
+            },
+            event_type="relocation_plan_milestone",
+            changed_fields=(
+                "character_project_states.stage",
+                "character_project_states.progress",
+            ),
+            magnitude=0.40,
+            preemptive=True,
+        ),
+        Branch(
+            label="Choose the place and begin committing",
+            conditions=project_due("scouting_milestone"),
+            narrative_stub=(
+                "{actor} stops comparing exits. One place has survived every "
+                "practical objection, and choosing it turns research into a "
+                "promise with consequences."
+            ),
+            state_delta={
+                "project.advance": {
+                    "stage": "committing",
+                    "set_progress": 0.0,
+                    "milestone": True,
+                }
+            },
+            event_type="relocation_plan_milestone",
+            changed_fields=(
+                "character_project_states.stage",
+                "character_project_states.progress",
+            ),
+            magnitude=0.40,
+            preemptive=True,
+        ),
+        Branch(
+            label="Put another share aside",
+            conditions=project_due("saving"),
+            narrative_stub=(
+                "{actor} makes the unremarkable sacrifice the plan requires: "
+                "one expense refused, one small reserve protected from the "
+                "present."
+            ),
+            state_delta={"project.advance": {"progress_delta": 0.35}},
+            event_type="relocation_plan_progressed",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.progress",
+                "character_project_states.next_eligible_at_world_time",
+            ),
+            magnitude=0.18,
+            promotable=False,
+        ),
+        Branch(
+            label="Scout a candidate place",
+            conditions=AND(
+                project_due("scouting_without_target"),
+                has_location_class_destination(
+                    "dwelling", "haven", "urban_sparse", "urban_dense"
+                ),
+            ),
+            narrative_stub=(
+                "{actor} follows one candidate past the fantasy of it: cost, "
+                "distance, the shape of an ordinary morning there. For the "
+                "first time, the plan has a place attached."
+            ),
+            state_delta={
+                "project.advance": {
+                    "progress_delta": 0.50,
+                    "select_target": True,
+                    "destination_place_classes": [
+                        "dwelling",
+                        "haven",
+                        "urban_sparse",
+                        "urban_dense",
+                    ],
+                }
+            },
+            event_type="relocation_plan_progressed",
+            changed_fields=(
+                "character_project_states.target_place_id",
+                "character_project_states.progress",
+            ),
+            magnitude=0.20,
+            promotable=False,
+        ),
+        Branch(
+            label="Lose ground to a setback",
+            conditions=project_due("neglected"),
+            narrative_stub=(
+                "The present takes its cut from {actor}'s future: an expense, "
+                "a closed option, a promise that cannot yet be kept. The plan "
+                "stalls, but it is not silently erased."
+            ),
+            state_delta={"project.stall": {"increment": 1}},
+            event_type="relocation_plan_stalled",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.stall_count",
+                "character_project_states.next_eligible_at_world_time",
+            ),
+            magnitude=0.10,
+            promotable=False,
+        ),
+        Branch(
+            label="Press on with the next practical step",
+            conditions=ALWAYS,
+            narrative_stub=(
+                "{actor} does the next small thing the move requires — a "
+                "message, a form, a measured risk — work too ordinary to look "
+                "like transformation until enough of it accumulates."
+            ),
+            state_delta={"project.advance": {"progress_delta": 0.25}},
+            event_type="relocation_plan_progressed",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.progress",
+                "character_project_states.next_eligible_at_world_time",
+            ),
+            magnitude=0.16,
+            promotable=False,
+        ),
+    ),
+)
+
+
 BUILTIN_TEMPLATES = (
     EVADE_PURSUERS,
     PROTECT_KIN,
@@ -4344,6 +4626,7 @@ BUILTIN_TEMPLATES = (
     HONOR_DEBT,
     WARN_ALLY,
     SURVEIL,
+    ADVANCE_RELOCATION_PLAN,
     ACT_ON_INTEL,
     UNCOVER_PAST,
     CHECK_ON_DEPENDENT,
@@ -4366,6 +4649,7 @@ BUILTIN_TEMPLATES = (
     STROLL,
     UPKEEP,
     RECREATE,
+    START_RELOCATION_PLAN,
     MAINTAIN_COVER,
 )
 

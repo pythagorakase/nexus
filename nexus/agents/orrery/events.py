@@ -33,7 +33,11 @@ from nexus.agents.orrery.routing import (
     RouteGraphEdge,
     shortest_route,
 )
-from nexus.agents.orrery.substrate import SUPPORTED_TRAVEL_PURPOSES
+from nexus.agents.orrery.substrate import (
+    ProjectPolicy,
+    SUPPORTED_TRAVEL_PURPOSES,
+    coerce_project_policy,
+)
 
 
 ENTITY_BINDING_SLOTS = frozenset({"actor", "target", "targets", "faction"})
@@ -52,6 +56,11 @@ SUPPORTED_STATE_DELTA_KEYS = frozenset(
         "travel.advance",
         "travel.arrive",
         "travel.delay",
+        "project.start",
+        "project.advance",
+        "project.stall",
+        "project.abandon",
+        "project.complete",
     }
 )
 ADJUDICATION_ACTIONS = frozenset({"defer", "replace", "void"})
@@ -327,10 +336,12 @@ def commit_orrery_tick_sync(
     storyteller_state_updates: Any = None,
     prompt_settings: Optional[Any] = None,
     ecology_settings: Optional[Any] = None,
+    project_settings: Optional[Any] = None,
 ) -> CommitOrreryTickResult:
     """Materialize a preview proposal inside the accepted-chunk transaction."""
 
     signal_detection = coerce_signal_detection(ecology_settings)
+    project_policy = coerce_project_policy(project_settings)
     coerced = coerce_proposal(proposal)
     has_resolutions = coerced is not None and bool(coerced.resolutions)
     if has_resolutions:
@@ -484,10 +495,12 @@ def commit_orrery_tick_sync(
             tag_mutation_count += _apply_state_delta_sync(
                 cur,
                 adjudicated.draft_to_commit,
+                resolution_id=resolution_id,
                 actor_entity_id=actor_entity_id,
                 target_entity_id=target_entity_id,
                 source_chunk_id=tick_chunk_id,
                 need_tuning=need_tuning,
+                project_policy=project_policy,
             )
             event_id = _emit_world_event_sync(
                 cur,
@@ -538,10 +551,12 @@ async def commit_orrery_tick_async(
     storyteller_state_updates: Any = None,
     prompt_settings: Optional[Any] = None,
     ecology_settings: Optional[Any] = None,
+    project_settings: Optional[Any] = None,
 ) -> CommitOrreryTickResult:
     """Async parity wrapper for tests and non-production commit callers."""
 
     signal_detection = coerce_signal_detection(ecology_settings)
+    project_policy = coerce_project_policy(project_settings)
     coerced = coerce_proposal(proposal)
     has_resolutions = coerced is not None and bool(coerced.resolutions)
     if has_resolutions:
@@ -694,10 +709,12 @@ async def commit_orrery_tick_async(
         tag_mutation_count += await _apply_state_delta_async(
             conn,
             adjudicated.draft_to_commit,
+            resolution_id=resolution_id,
             actor_entity_id=actor_entity_id,
             target_entity_id=target_entity_id,
             source_chunk_id=tick_chunk_id,
             need_tuning=need_tuning,
+            project_policy=project_policy,
         )
         event_id = await _emit_world_event_async(
             conn,
@@ -1347,8 +1364,9 @@ def _insert_resolution_sync(
         """
         INSERT INTO orrery_resolutions (
             tick_chunk_id, template_id, binding_hash, actor_entity_id,
-            priority, magnitude, state_delta, brief
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s)
+            priority, magnitude, state_delta, promotion_status, brief
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb,
+                  %s::orrery_promotion_status, %s)
         ON CONFLICT (tick_chunk_id, template_id, binding_hash) DO NOTHING
         RETURNING id
         """,
@@ -1360,6 +1378,7 @@ def _insert_resolution_sync(
             draft.priority,
             draft.magnitude,
             json.dumps(draft.state_delta),
+            "pending" if draft.promotable else "skipped",
             brief,
         ),
     )
@@ -1381,8 +1400,9 @@ async def _insert_resolution_async(
         """
         INSERT INTO orrery_resolutions (
             tick_chunk_id, template_id, binding_hash, actor_entity_id,
-            priority, magnitude, state_delta, brief
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8)
+            priority, magnitude, state_delta, promotion_status, brief
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb,
+                  $8::orrery_promotion_status, $9)
         ON CONFLICT (tick_chunk_id, template_id, binding_hash) DO NOTHING
         RETURNING id
         """,
@@ -1393,6 +1413,7 @@ async def _insert_resolution_async(
         draft.priority,
         draft.magnitude,
         json.dumps(draft.state_delta),
+        "pending" if draft.promotable else "skipped",
         brief,
     )
 
@@ -1401,10 +1422,12 @@ def _apply_state_delta_sync(
     cur: Any,
     draft: OrreryResolutionDraft,
     *,
+    resolution_id: int,
     actor_entity_id: Optional[int],
     target_entity_id: Optional[int],
     source_chunk_id: int,
     need_tuning: NeedTuning,
+    project_policy: ProjectPolicy,
 ) -> int:
     if not draft.state_delta:
         return 0
@@ -1417,6 +1440,12 @@ def _apply_state_delta_sync(
         raise ValueError(f"Orrery draft {draft.template_id} has no actor binding")
 
     tag_mutations = 0
+    project_keys = [key for key in draft.state_delta if key.startswith("project.")]
+    if len(project_keys) > 1:
+        raise ValueError(
+            f"Orrery draft {draft.template_id} carries multiple project "
+            f"transitions: {sorted(project_keys)}"
+        )
     if "character.current_activity" in draft.state_delta:
         cur.execute(
             "UPDATE characters SET current_activity = %s WHERE entity_id = %s",
@@ -1529,6 +1558,57 @@ def _apply_state_delta_sync(
             source_chunk_id=source_chunk_id,
             need_tuning=need_tuning,
         )
+    project_applied: Optional[dict[str, Any]] = None
+    if "project.start" in draft.state_delta:
+        project_applied = _apply_project_start_sync(
+            cur,
+            actor_entity_id=actor_entity_id,
+            payload=draft.state_delta["project.start"],
+            source_chunk_id=source_chunk_id,
+            policy=project_policy,
+        )
+    if "project.advance" in draft.state_delta:
+        project_applied = _apply_project_advance_sync(
+            cur,
+            actor_entity_id=actor_entity_id,
+            payload=draft.state_delta["project.advance"],
+            source_chunk_id=source_chunk_id,
+            policy=project_policy,
+        )
+    if "project.stall" in draft.state_delta:
+        project_applied = _apply_project_stall_sync(
+            cur,
+            actor_entity_id=actor_entity_id,
+            payload=draft.state_delta["project.stall"],
+            source_chunk_id=source_chunk_id,
+            policy=project_policy,
+        )
+    if "project.abandon" in draft.state_delta:
+        project_applied = _apply_project_abandon_sync(
+            cur,
+            actor_entity_id=actor_entity_id,
+            payload=draft.state_delta["project.abandon"],
+            source_chunk_id=source_chunk_id,
+            policy=project_policy,
+        )
+    if "project.complete" in draft.state_delta:
+        project_applied = _apply_project_complete_sync(
+            cur,
+            actor_entity_id=actor_entity_id,
+            payload=draft.state_delta["project.complete"],
+            source_chunk_id=source_chunk_id,
+            policy=project_policy,
+        )
+    if project_keys:
+        if project_applied is None:
+            raise AssertionError("project transition produced no applied ledger values")
+        _update_resolution_project_applied_sync(
+            cur,
+            resolution_id=resolution_id,
+            state_delta=draft.state_delta,
+            project_key=project_keys[0],
+            applied=project_applied,
+        )
     if "travel.start" in draft.state_delta:
         _apply_travel_start_sync(
             cur,
@@ -1564,10 +1644,12 @@ async def _apply_state_delta_async(
     conn: Any,
     draft: OrreryResolutionDraft,
     *,
+    resolution_id: int,
     actor_entity_id: Optional[int],
     target_entity_id: Optional[int],
     source_chunk_id: int,
     need_tuning: NeedTuning,
+    project_policy: ProjectPolicy,
 ) -> int:
     if not draft.state_delta:
         return 0
@@ -1580,6 +1662,12 @@ async def _apply_state_delta_async(
         raise ValueError(f"Orrery draft {draft.template_id} has no actor binding")
 
     tag_mutations = 0
+    project_keys = [key for key in draft.state_delta if key.startswith("project.")]
+    if len(project_keys) > 1:
+        raise ValueError(
+            f"Orrery draft {draft.template_id} carries multiple project "
+            f"transitions: {sorted(project_keys)}"
+        )
     if "character.current_activity" in draft.state_delta:
         status = await conn.execute(
             "UPDATE characters SET current_activity = $1 WHERE entity_id = $2",
@@ -1689,6 +1777,57 @@ async def _apply_state_delta_async(
             template_id=draft.template_id,
             source_chunk_id=source_chunk_id,
             need_tuning=need_tuning,
+        )
+    project_applied: Optional[dict[str, Any]] = None
+    if "project.start" in draft.state_delta:
+        project_applied = await _apply_project_start_async(
+            conn,
+            actor_entity_id=actor_entity_id,
+            payload=draft.state_delta["project.start"],
+            source_chunk_id=source_chunk_id,
+            policy=project_policy,
+        )
+    if "project.advance" in draft.state_delta:
+        project_applied = await _apply_project_advance_async(
+            conn,
+            actor_entity_id=actor_entity_id,
+            payload=draft.state_delta["project.advance"],
+            source_chunk_id=source_chunk_id,
+            policy=project_policy,
+        )
+    if "project.stall" in draft.state_delta:
+        project_applied = await _apply_project_stall_async(
+            conn,
+            actor_entity_id=actor_entity_id,
+            payload=draft.state_delta["project.stall"],
+            source_chunk_id=source_chunk_id,
+            policy=project_policy,
+        )
+    if "project.abandon" in draft.state_delta:
+        project_applied = await _apply_project_abandon_async(
+            conn,
+            actor_entity_id=actor_entity_id,
+            payload=draft.state_delta["project.abandon"],
+            source_chunk_id=source_chunk_id,
+            policy=project_policy,
+        )
+    if "project.complete" in draft.state_delta:
+        project_applied = await _apply_project_complete_async(
+            conn,
+            actor_entity_id=actor_entity_id,
+            payload=draft.state_delta["project.complete"],
+            source_chunk_id=source_chunk_id,
+            policy=project_policy,
+        )
+    if project_keys:
+        if project_applied is None:
+            raise AssertionError("project transition produced no applied ledger values")
+        await _update_resolution_project_applied_async(
+            conn,
+            resolution_id=resolution_id,
+            state_delta=draft.state_delta,
+            project_key=project_keys[0],
+            applied=project_applied,
         )
     if "travel.start" in draft.state_delta:
         await _apply_travel_start_async(
@@ -1858,6 +1997,662 @@ async def _apply_need_fulfillment_async(
         template_id=template_id,
         source_chunk_id=source_chunk_id,
         need_tuning=need_tuning,
+    )
+
+
+PROJECT_OPEN_STATUSES = ("active", "paused", "stalled")
+PROJECT_STAGES = frozenset({"saving", "scouting", "committing"})
+
+
+def _coerce_project_payload(raw: Any) -> dict[str, Any]:
+    """Normalize one typed project transition payload."""
+
+    if raw is True or raw is None:
+        return {}
+    if isinstance(raw, Mapping):
+        return dict(raw)
+    raise ValueError("project state_delta values must be mappings or true")
+
+
+def _require_project_policy(policy: ProjectPolicy) -> None:
+    if not policy.enabled:
+        raise ValueError(
+            "project state_delta requires configured [orrery.projects] settings"
+        )
+
+
+def _project_next_eligible(world_time: Any, policy: ProjectPolicy) -> Any:
+    return world_time + timedelta(hours=policy.advance_interval_hours)
+
+
+def _project_applied_snapshot(
+    *,
+    project_type: str,
+    status: str,
+    stage: str,
+    target_place_id: Optional[int],
+    progress: float,
+    stall_count: int,
+    next_eligible_at_world_time: Any,
+    source_chunk_id: int,
+) -> dict[str, Any]:
+    """Return the exact project projection values persisted by one transition."""
+
+    return {
+        "project_type": project_type,
+        "status": status,
+        "stage": stage,
+        "target_place_id": target_place_id,
+        "progress": float(progress),
+        "stall_count": int(stall_count),
+        "next_eligible_at_world_time": (
+            next_eligible_at_world_time.isoformat()
+            if next_eligible_at_world_time is not None
+            else None
+        ),
+        "source_chunk_id": source_chunk_id,
+    }
+
+
+def _state_delta_with_project_applied(
+    state_delta: Mapping[str, Any], project_key: str, applied: Mapping[str, Any]
+) -> dict[str, Any]:
+    persisted = dict(state_delta)
+    payload = _coerce_project_payload(persisted[project_key])
+    payload["applied"] = dict(applied)
+    persisted[project_key] = payload
+    return persisted
+
+
+def _update_resolution_project_applied_sync(
+    cur: Any,
+    *,
+    resolution_id: int,
+    state_delta: Mapping[str, Any],
+    project_key: str,
+    applied: Mapping[str, Any],
+) -> None:
+    cur.execute(
+        "UPDATE orrery_resolutions SET state_delta = %s::jsonb WHERE id = %s",
+        (
+            json.dumps(
+                _state_delta_with_project_applied(state_delta, project_key, applied)
+            ),
+            resolution_id,
+        ),
+    )
+
+
+async def _update_resolution_project_applied_async(
+    conn: Any,
+    *,
+    resolution_id: int,
+    state_delta: Mapping[str, Any],
+    project_key: str,
+    applied: Mapping[str, Any],
+) -> None:
+    await conn.execute(
+        "UPDATE orrery_resolutions SET state_delta = $1::jsonb WHERE id = $2",
+        json.dumps(
+            _state_delta_with_project_applied(state_delta, project_key, applied)
+        ),
+        resolution_id,
+    )
+
+
+def _current_project_sync(cur: Any, actor_entity_id: int) -> Optional[dict[str, Any]]:
+    cur.execute(
+        """
+        SELECT id, project_type, status, stage, target_place_id,
+               progress, stall_count, next_eligible_at_world_time,
+               source_chunk_id
+        FROM character_project_states
+        WHERE character_entity_id = %s
+          AND status IN ('active', 'paused', 'stalled')
+        ORDER BY id
+        FOR UPDATE
+        """,
+        (actor_entity_id,),
+    )
+    rows = cur.fetchall()
+    if len(rows) > 1:
+        raise ValueError(
+            f"Character entity {actor_entity_id} has multiple open projects"
+        )
+    if not rows:
+        return None
+    row = rows[0]
+    names = (
+        "id",
+        "project_type",
+        "status",
+        "stage",
+        "target_place_id",
+        "progress",
+        "stall_count",
+        "next_eligible_at_world_time",
+        "source_chunk_id",
+    )
+    return {name: _row_get(row, name, index) for index, name in enumerate(names)}
+
+
+async def _current_project_async(
+    conn: Any, actor_entity_id: int
+) -> Optional[dict[str, Any]]:
+    rows = await conn.fetch(
+        """
+        SELECT id, project_type, status, stage, target_place_id,
+               progress, stall_count, next_eligible_at_world_time,
+               source_chunk_id
+        FROM character_project_states
+        WHERE character_entity_id = $1
+          AND status IN ('active', 'paused', 'stalled')
+        ORDER BY id
+        FOR UPDATE
+        """,
+        actor_entity_id,
+    )
+    if len(rows) > 1:
+        raise ValueError(
+            f"Character entity {actor_entity_id} has multiple open projects"
+        )
+    return dict(rows[0]) if rows else None
+
+
+def _require_open_relocation_project(
+    project: Optional[Mapping[str, Any]], actor_entity_id: int
+) -> Mapping[str, Any]:
+    if project is None:
+        raise ValueError(
+            f"Actor entity {actor_entity_id} has no open project to transition"
+        )
+    if project["project_type"] != "plan_relocation":
+        raise ValueError(
+            f"Actor entity {actor_entity_id} has unsupported project type "
+            f"{project['project_type']!r}"
+        )
+    return project
+
+
+def _apply_project_start_sync(
+    cur: Any,
+    *,
+    actor_entity_id: int,
+    payload: Any,
+    source_chunk_id: int,
+    policy: ProjectPolicy,
+) -> dict[str, Any]:
+    _require_project_policy(policy)
+    data = _coerce_project_payload(payload)
+    project_type = str(data.get("project_type") or "plan_relocation")
+    stage = str(data.get("stage") or "saving")
+    if project_type != "plan_relocation":
+        raise ValueError(f"Unsupported project.start type {project_type!r}")
+    if stage not in PROJECT_STAGES:
+        raise ValueError(f"Unsupported project.start stage {stage!r}")
+    if _current_project_sync(cur, actor_entity_id) is not None:
+        raise ValueError(f"Actor entity {actor_entity_id} already has an open project")
+    world_time = _tick_world_time_sync(cur, source_chunk_id)
+    next_eligible = _project_next_eligible(world_time, policy)
+    target_place_id = data.get("target_place_id")
+    progress = float(data.get("progress", 0.0))
+    cur.execute(
+        """
+        INSERT INTO character_project_states (
+            character_entity_id, project_type, status, stage,
+            target_place_id, progress, stall_count,
+            next_eligible_at_world_time, source_chunk_id
+        ) VALUES (%s, %s, 'active', %s, %s, %s, 0, %s, %s)
+        """,
+        (
+            actor_entity_id,
+            project_type,
+            stage,
+            target_place_id,
+            progress,
+            next_eligible,
+            source_chunk_id,
+        ),
+    )
+    return _project_applied_snapshot(
+        project_type=project_type,
+        status="active",
+        stage=stage,
+        target_place_id=target_place_id,
+        progress=progress,
+        stall_count=0,
+        next_eligible_at_world_time=next_eligible,
+        source_chunk_id=source_chunk_id,
+    )
+
+
+async def _apply_project_start_async(
+    conn: Any,
+    *,
+    actor_entity_id: int,
+    payload: Any,
+    source_chunk_id: int,
+    policy: ProjectPolicy,
+) -> dict[str, Any]:
+    _require_project_policy(policy)
+    data = _coerce_project_payload(payload)
+    project_type = str(data.get("project_type") or "plan_relocation")
+    stage = str(data.get("stage") or "saving")
+    if project_type != "plan_relocation":
+        raise ValueError(f"Unsupported project.start type {project_type!r}")
+    if stage not in PROJECT_STAGES:
+        raise ValueError(f"Unsupported project.start stage {stage!r}")
+    if await _current_project_async(conn, actor_entity_id) is not None:
+        raise ValueError(f"Actor entity {actor_entity_id} already has an open project")
+    world_time = await _tick_world_time_async(conn, source_chunk_id)
+    next_eligible = _project_next_eligible(world_time, policy)
+    target_place_id = data.get("target_place_id")
+    progress = float(data.get("progress", 0.0))
+    await conn.execute(
+        """
+        INSERT INTO character_project_states (
+            character_entity_id, project_type, status, stage,
+            target_place_id, progress, stall_count,
+            next_eligible_at_world_time, source_chunk_id
+        ) VALUES ($1, $2, 'active', $3, $4, $5, 0, $6, $7)
+        """,
+        actor_entity_id,
+        project_type,
+        stage,
+        target_place_id,
+        progress,
+        next_eligible,
+        source_chunk_id,
+    )
+    return _project_applied_snapshot(
+        project_type=project_type,
+        status="active",
+        stage=stage,
+        target_place_id=target_place_id,
+        progress=progress,
+        stall_count=0,
+        next_eligible_at_world_time=next_eligible,
+        source_chunk_id=source_chunk_id,
+    )
+
+
+def _project_advance_values(
+    project: Mapping[str, Any], data: Mapping[str, Any]
+) -> tuple[str, Optional[int], float]:
+    stage = str(data.get("stage") or project["stage"])
+    if stage not in PROJECT_STAGES:
+        raise ValueError(f"Unsupported project.advance stage {stage!r}")
+    if data.get("select_target") and data.get("target_place_id") is None:
+        raise ValueError(
+            "project.advance select_target must persist target_place_id in state_delta"
+        )
+    target_place_id = data.get("target_place_id", project["target_place_id"])
+    if "set_progress" in data:
+        progress = float(data["set_progress"])
+    else:
+        progress = float(project["progress"] or 0.0) + float(
+            data.get("progress_delta", 0.25)
+        )
+    return stage, target_place_id, min(1.0, max(0.0, progress))
+
+
+def _apply_project_advance_sync(
+    cur: Any,
+    *,
+    actor_entity_id: int,
+    payload: Any,
+    source_chunk_id: int,
+    policy: ProjectPolicy,
+) -> dict[str, Any]:
+    _require_project_policy(policy)
+    data = _coerce_project_payload(payload)
+    project = _require_open_relocation_project(
+        _current_project_sync(cur, actor_entity_id), actor_entity_id
+    )
+    stage, target_place_id, progress = _project_advance_values(project, data)
+    reached_milestone = bool(data.get("milestone")) and (
+        (project["stage"], stage)
+        in {("saving", "scouting"), ("scouting", "committing")}
+    )
+    stall_count = 0 if reached_milestone else int(project["stall_count"] or 0)
+    world_time = _tick_world_time_sync(cur, source_chunk_id)
+    next_eligible = _project_next_eligible(world_time, policy)
+    cur.execute(
+        """
+        UPDATE character_project_states
+        SET status = 'active', stage = %s, target_place_id = %s,
+            progress = %s, stall_count = %s,
+            next_eligible_at_world_time = %s, source_chunk_id = %s,
+            updated_at = now()
+        WHERE id = %s
+        """,
+        (
+            stage,
+            target_place_id,
+            progress,
+            stall_count,
+            next_eligible,
+            source_chunk_id,
+            project["id"],
+        ),
+    )
+    return _project_applied_snapshot(
+        project_type=str(project["project_type"]),
+        status="active",
+        stage=stage,
+        target_place_id=target_place_id,
+        progress=progress,
+        stall_count=stall_count,
+        next_eligible_at_world_time=next_eligible,
+        source_chunk_id=source_chunk_id,
+    )
+
+
+async def _apply_project_advance_async(
+    conn: Any,
+    *,
+    actor_entity_id: int,
+    payload: Any,
+    source_chunk_id: int,
+    policy: ProjectPolicy,
+) -> dict[str, Any]:
+    _require_project_policy(policy)
+    data = _coerce_project_payload(payload)
+    project = _require_open_relocation_project(
+        await _current_project_async(conn, actor_entity_id), actor_entity_id
+    )
+    stage, target_place_id, progress = _project_advance_values(project, data)
+    reached_milestone = bool(data.get("milestone")) and (
+        (project["stage"], stage)
+        in {("saving", "scouting"), ("scouting", "committing")}
+    )
+    stall_count = 0 if reached_milestone else int(project["stall_count"] or 0)
+    world_time = await _tick_world_time_async(conn, source_chunk_id)
+    next_eligible = _project_next_eligible(world_time, policy)
+    await conn.execute(
+        """
+        UPDATE character_project_states
+        SET status = 'active', stage = $1, target_place_id = $2,
+            progress = $3, stall_count = $4,
+            next_eligible_at_world_time = $5, source_chunk_id = $6,
+            updated_at = now()
+        WHERE id = $7
+        """,
+        stage,
+        target_place_id,
+        progress,
+        stall_count,
+        next_eligible,
+        source_chunk_id,
+        project["id"],
+    )
+    return _project_applied_snapshot(
+        project_type=str(project["project_type"]),
+        status="active",
+        stage=stage,
+        target_place_id=target_place_id,
+        progress=progress,
+        stall_count=stall_count,
+        next_eligible_at_world_time=next_eligible,
+        source_chunk_id=source_chunk_id,
+    )
+
+
+def _apply_project_stall_sync(
+    cur: Any,
+    *,
+    actor_entity_id: int,
+    payload: Any,
+    source_chunk_id: int,
+    policy: ProjectPolicy,
+) -> dict[str, Any]:
+    _require_project_policy(policy)
+    data = _coerce_project_payload(payload)
+    project = _require_open_relocation_project(
+        _current_project_sync(cur, actor_entity_id), actor_entity_id
+    )
+    increment = int(data.get("increment", 1))
+    if increment < 1:
+        raise ValueError("project.stall increment must be >= 1")
+    stall_count = int(project["stall_count"] or 0) + increment
+    world_time = _tick_world_time_sync(cur, source_chunk_id)
+    next_eligible = _project_next_eligible(world_time, policy)
+    cur.execute(
+        """
+        UPDATE character_project_states
+        SET status = 'stalled', stall_count = stall_count + %s,
+            next_eligible_at_world_time = %s, source_chunk_id = %s,
+            updated_at = now()
+        WHERE id = %s
+        """,
+        (
+            increment,
+            next_eligible,
+            source_chunk_id,
+            project["id"],
+        ),
+    )
+    return _project_applied_snapshot(
+        project_type=str(project["project_type"]),
+        status="stalled",
+        stage=str(project["stage"]),
+        target_place_id=project["target_place_id"],
+        progress=float(project["progress"] or 0.0),
+        stall_count=stall_count,
+        next_eligible_at_world_time=next_eligible,
+        source_chunk_id=source_chunk_id,
+    )
+
+
+async def _apply_project_stall_async(
+    conn: Any,
+    *,
+    actor_entity_id: int,
+    payload: Any,
+    source_chunk_id: int,
+    policy: ProjectPolicy,
+) -> dict[str, Any]:
+    _require_project_policy(policy)
+    data = _coerce_project_payload(payload)
+    project = _require_open_relocation_project(
+        await _current_project_async(conn, actor_entity_id), actor_entity_id
+    )
+    increment = int(data.get("increment", 1))
+    if increment < 1:
+        raise ValueError("project.stall increment must be >= 1")
+    stall_count = int(project["stall_count"] or 0) + increment
+    world_time = await _tick_world_time_async(conn, source_chunk_id)
+    next_eligible = _project_next_eligible(world_time, policy)
+    await conn.execute(
+        """
+        UPDATE character_project_states
+        SET status = 'stalled', stall_count = stall_count + $1,
+            next_eligible_at_world_time = $2, source_chunk_id = $3,
+            updated_at = now()
+        WHERE id = $4
+        """,
+        increment,
+        next_eligible,
+        source_chunk_id,
+        project["id"],
+    )
+    return _project_applied_snapshot(
+        project_type=str(project["project_type"]),
+        status="stalled",
+        stage=str(project["stage"]),
+        target_place_id=project["target_place_id"],
+        progress=float(project["progress"] or 0.0),
+        stall_count=stall_count,
+        next_eligible_at_world_time=next_eligible,
+        source_chunk_id=source_chunk_id,
+    )
+
+
+def _apply_project_abandon_sync(
+    cur: Any,
+    *,
+    actor_entity_id: int,
+    payload: Any,
+    source_chunk_id: int,
+    policy: ProjectPolicy,
+) -> dict[str, Any]:
+    _require_project_policy(policy)
+    _coerce_project_payload(payload)
+    project = _require_open_relocation_project(
+        _current_project_sync(cur, actor_entity_id), actor_entity_id
+    )
+    cur.execute(
+        """
+        UPDATE character_project_states
+        SET status = 'abandoned', next_eligible_at_world_time = NULL,
+            source_chunk_id = %s, updated_at = now()
+        WHERE id = %s
+        """,
+        (source_chunk_id, project["id"]),
+    )
+    return _project_applied_snapshot(
+        project_type=str(project["project_type"]),
+        status="abandoned",
+        stage=str(project["stage"]),
+        target_place_id=project["target_place_id"],
+        progress=float(project["progress"] or 0.0),
+        stall_count=int(project["stall_count"] or 0),
+        next_eligible_at_world_time=None,
+        source_chunk_id=source_chunk_id,
+    )
+
+
+async def _apply_project_abandon_async(
+    conn: Any,
+    *,
+    actor_entity_id: int,
+    payload: Any,
+    source_chunk_id: int,
+    policy: ProjectPolicy,
+) -> dict[str, Any]:
+    _require_project_policy(policy)
+    _coerce_project_payload(payload)
+    project = _require_open_relocation_project(
+        await _current_project_async(conn, actor_entity_id), actor_entity_id
+    )
+    await conn.execute(
+        """
+        UPDATE character_project_states
+        SET status = 'abandoned', next_eligible_at_world_time = NULL,
+            source_chunk_id = $1, updated_at = now()
+        WHERE id = $2
+        """,
+        source_chunk_id,
+        project["id"],
+    )
+    return _project_applied_snapshot(
+        project_type=str(project["project_type"]),
+        status="abandoned",
+        stage=str(project["stage"]),
+        target_place_id=project["target_place_id"],
+        progress=float(project["progress"] or 0.0),
+        stall_count=int(project["stall_count"] or 0),
+        next_eligible_at_world_time=None,
+        source_chunk_id=source_chunk_id,
+    )
+
+
+def _project_completion_travel_payload(
+    project: Mapping[str, Any], payload: Any
+) -> dict[str, Any]:
+    data = _coerce_project_payload(payload)
+    if project["stage"] != "committing":
+        raise ValueError("project.complete requires the committing stage")
+    if float(project["progress"] or 0.0) < 1.0:
+        raise ValueError("project.complete requires full committing progress")
+    target_place_id = project["target_place_id"]
+    if target_place_id is None:
+        raise ValueError("project.complete requires target_place_id")
+    travel = {
+        key: value for key, value in data.items() if key not in {"milestone", "reason"}
+    }
+    travel["destination_place_id"] = target_place_id
+    return travel
+
+
+def _apply_project_complete_sync(
+    cur: Any,
+    *,
+    actor_entity_id: int,
+    payload: Any,
+    source_chunk_id: int,
+    policy: ProjectPolicy,
+) -> dict[str, Any]:
+    _require_project_policy(policy)
+    project = _require_open_relocation_project(
+        _current_project_sync(cur, actor_entity_id), actor_entity_id
+    )
+    travel_payload = _project_completion_travel_payload(project, payload)
+    cur.execute(
+        """
+        UPDATE character_project_states
+        SET status = 'completed', next_eligible_at_world_time = NULL,
+            source_chunk_id = %s, updated_at = now()
+        WHERE id = %s
+        """,
+        (source_chunk_id, project["id"]),
+    )
+    _apply_travel_start_sync(
+        cur,
+        actor_entity_id=actor_entity_id,
+        payload=travel_payload,
+        source_chunk_id=source_chunk_id,
+    )
+    return _project_applied_snapshot(
+        project_type=str(project["project_type"]),
+        status="completed",
+        stage=str(project["stage"]),
+        target_place_id=project["target_place_id"],
+        progress=float(project["progress"] or 0.0),
+        stall_count=int(project["stall_count"] or 0),
+        next_eligible_at_world_time=None,
+        source_chunk_id=source_chunk_id,
+    )
+
+
+async def _apply_project_complete_async(
+    conn: Any,
+    *,
+    actor_entity_id: int,
+    payload: Any,
+    source_chunk_id: int,
+    policy: ProjectPolicy,
+) -> dict[str, Any]:
+    _require_project_policy(policy)
+    project = _require_open_relocation_project(
+        await _current_project_async(conn, actor_entity_id), actor_entity_id
+    )
+    travel_payload = _project_completion_travel_payload(project, payload)
+    await conn.execute(
+        """
+        UPDATE character_project_states
+        SET status = 'completed', next_eligible_at_world_time = NULL,
+            source_chunk_id = $1, updated_at = now()
+        WHERE id = $2
+        """,
+        source_chunk_id,
+        project["id"],
+    )
+    await _apply_travel_start_async(
+        conn,
+        actor_entity_id=actor_entity_id,
+        payload=travel_payload,
+        source_chunk_id=source_chunk_id,
+    )
+    return _project_applied_snapshot(
+        project_type=str(project["project_type"]),
+        status="completed",
+        stage=str(project["stage"]),
+        target_place_id=project["target_place_id"],
+        progress=float(project["progress"] or 0.0),
+        stall_count=int(project["stall_count"] or 0),
+        next_eligible_at_world_time=None,
+        source_chunk_id=source_chunk_id,
     )
 
 

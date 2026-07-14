@@ -16,9 +16,13 @@ from nexus.agents.orrery.reciprocal import (
 )
 from nexus.agents.orrery.substrate import (
     PackageSelection,
+    ProjectPolicy,
+    ProjectState,
     coerce_branch_selection,
     coerce_habituation,
     coerce_package_selection,
+    coerce_project_policy,
+    configure_project_magnitudes,
     Bindings,
     EventRecord,
     INTIMACY_SUPPRESSOR_TAGS,
@@ -75,6 +79,7 @@ class OrreryResolutionDraft:
     signal_event_type: Optional[str] = None
     changed_fields: Tuple[str, ...] = ()
     magnitude: float = 0.0
+    promotable: bool = True
     # Slot name -> entity display name. Skald adjudicates these proposals;
     # without names it cannot tell WHO an off-screen resolution is about and
     # may misattribute it to an on-screen character (M9 gate finding).
@@ -103,6 +108,7 @@ class OrreryResolutionDraft:
             "signal_event_type": self.signal_event_type,
             "changed_fields": list(self.changed_fields),
             "magnitude": self.magnitude,
+            "promotable": self.promotable,
         }
 
     @classmethod
@@ -134,6 +140,7 @@ class OrreryResolutionDraft:
             signal_event_type=data.get("signal_event_type"),
             changed_fields=tuple(data.get("changed_fields") or ()),
             magnitude=float(data.get("magnitude") or 0.0),
+            promotable=bool(data.get("promotable", True)),
             binding_names=dict(data.get("binding_names") or {}),
         )
 
@@ -259,6 +266,7 @@ def hydrate_world_state(
     need_tuning: Optional[NeedTuning] = None,
     world_time_override: Optional[datetime] = None,
     win_history_window: int = 0,
+    project_settings: Optional[Any] = None,
 ) -> WorldState:
     """Hydrate the read-side Orrery state snapshot from database tables.
 
@@ -268,6 +276,7 @@ def hydrate_world_state(
     """
 
     need_tuning = coerce_need_tuning(need_tuning)
+    project_policy = coerce_project_policy(project_settings)
 
     tags: dict[int, set[str]] = {}
     ephemeral_tags: dict[int, set[str]] = {}
@@ -441,6 +450,7 @@ def hydrate_world_state(
         anchor_chunk_id=anchor_chunk_id,
     )
     travel_states = _load_travel_states(session)
+    project_states = _load_project_states(session) if project_policy.enabled else {}
     routine_anchors = _load_routine_anchors(session)
     win_history = _load_win_history(
         session,
@@ -475,6 +485,8 @@ def hydrate_world_state(
         location_zones=location_zones,
         need_debt_scores=need_debt_scores,
         travel_states=travel_states,
+        project_states=project_states,
+        project_policy=project_policy,
         routine_anchors=routine_anchors,
         recent_events=recent_events,
         win_history=win_history,
@@ -597,6 +609,51 @@ def _load_travel_states(session: Any) -> dict[int, TravelState]:
                 else None
             ),
             route_purpose=row.get("route_purpose"),
+        )
+    return states
+
+
+def _load_project_states(session: Any) -> dict[int, ProjectState]:
+    """Load the one budgeted open project projection per active character."""
+
+    states: dict[int, ProjectState] = {}
+    for row in session.execute(
+        text(
+            """
+            /* orrery:project_states */
+            SELECT cps.id,
+                   cps.character_entity_id,
+                   cps.project_type,
+                   cps.status,
+                   cps.stage,
+                   cps.target_place_id,
+                   cps.progress,
+                   cps.stall_count,
+                   cps.next_eligible_at_world_time,
+                   cps.source_chunk_id
+            FROM character_project_states cps
+            JOIN entities e
+              ON e.id = cps.character_entity_id
+             AND e.kind = 'character'
+             AND e.is_active = true
+            WHERE cps.status IN ('active', 'paused', 'stalled')
+            ORDER BY cps.id
+            """
+        )
+    ).mappings():
+        entity_id = int(row["character_entity_id"])
+        if entity_id in states:
+            raise ValueError(f"Character entity {entity_id} has multiple open projects")
+        states[entity_id] = ProjectState(
+            id=int(row["id"]),
+            project_type=str(row["project_type"]),
+            status=str(row["status"]),
+            stage=str(row["stage"]),
+            target_place_id=row.get("target_place_id"),
+            progress=float(row["progress"] or 0.0),
+            stall_count=int(row["stall_count"] or 0),
+            next_eligible_at_world_time=row.get("next_eligible_at_world_time"),
+            source_chunk_id=row.get("source_chunk_id"),
         )
     return states
 
@@ -933,6 +990,7 @@ def resolve_dry_run(
     selection_settings: Optional[Any] = None,
     habituation_settings: Optional[Any] = None,
     package_selection_settings: Optional[Any] = None,
+    project_settings: Optional[Any] = None,
     fanout_settings: Optional[Any] = None,
 ) -> OrreryTickProposal:
     """Hydrate, bind, and evaluate Orrery packages without database writes."""
@@ -943,6 +1001,7 @@ def resolve_dry_run(
     package_selection: Optional[PackageSelection] = coerce_package_selection(
         package_selection_settings
     )
+    project_policy: ProjectPolicy = coerce_project_policy(project_settings)
     fanout = _coerce_fanout(fanout_settings)
     state = hydrate_world_state(
         session,
@@ -951,9 +1010,10 @@ def resolve_dry_run(
         need_tuning=need_tuning,
         world_time_override=world_time_override,
         win_history_window=habituation.window_ticks if habituation.enabled else 0,
+        project_settings=project_settings,
     )
 
-    templates_list = list(templates)
+    templates_list = list(configure_project_magnitudes(templates, project_policy))
     actor_only_templates = [
         t for t in templates_list if t.required_slots == _ACTOR_ONLY_SLOTS
     ]
@@ -992,7 +1052,7 @@ def resolve_dry_run(
             package_selection,
         )
         if resolution is not None and resolution.passes:
-            drafts.append(_draft_from_resolution(resolution))
+            drafts.append(_draft_from_resolution(resolution, state=state))
 
     actor_target_bindings: Tuple[Bindings, ...] = ()
     present_target_bindings: Tuple[Bindings, ...] = ()
@@ -1014,7 +1074,7 @@ def resolve_dry_run(
                 package_selection,
             )
             if resolution is not None and resolution.passes:
-                drafts.append(_draft_from_resolution(resolution))
+                drafts.append(_draft_from_resolution(resolution, state=state))
 
         pressure_templates = [
             template
@@ -1277,7 +1337,77 @@ def _classify_weather(raw_weather: str) -> str:
     return "clear"
 
 
-def _draft_from_resolution(resolution: Resolution) -> OrreryResolutionDraft:
+def _project_destination(
+    state: WorldState,
+    *,
+    actor_entity_id: int,
+    location_classes: Iterable[str],
+) -> int:
+    """Choose the same-zone-first deterministic project destination."""
+
+    current_place_id = state.locations.get(actor_entity_id)
+    if current_place_id is None:
+        raise ValueError(
+            f"Project actor {actor_entity_id} has no current place for scouting"
+        )
+    candidates: set[int] = set()
+    requested = frozenset(str(value) for value in location_classes)
+    for place_id, classes in state.location_classes.items():
+        if place_id != current_place_id and requested.intersection(classes):
+            candidates.add(place_id)
+    for place_id, location_class in state.location_class.items():
+        if place_id != current_place_id and location_class in requested:
+            candidates.add(place_id)
+    if not candidates:
+        raise ValueError(
+            f"Project actor {actor_entity_id} has no destination in classes "
+            f"{sorted(requested)}"
+        )
+    origin_zone = state.location_zones.get(current_place_id)
+    return min(
+        candidates,
+        key=lambda place_id: (
+            (
+                0
+                if origin_zone is not None
+                and state.location_zones.get(place_id) == origin_zone
+                else 1
+            ),
+            place_id,
+        ),
+    )
+
+
+def _materialize_project_delta(
+    resolution: Resolution, state: WorldState
+) -> Mapping[str, Any]:
+    """Persist any scouting choice into the resolution ledger before commit."""
+
+    delta = dict(resolution.state_delta)
+    raw_advance = delta.get("project.advance")
+    if not isinstance(raw_advance, Mapping) or not raw_advance.get("select_target"):
+        return delta
+    actor = resolution.bindings.get(Slot.ACTOR)
+    if not isinstance(actor, int):
+        raise ValueError("project.advance target selection requires actor binding")
+    classes = raw_advance.get("destination_place_classes")
+    if not isinstance(classes, (list, tuple)) or not classes:
+        raise ValueError(
+            "project.advance select_target requires destination_place_classes"
+        )
+    payload = dict(raw_advance)
+    payload["target_place_id"] = _project_destination(
+        state,
+        actor_entity_id=actor,
+        location_classes=classes,
+    )
+    delta["project.advance"] = payload
+    return delta
+
+
+def _draft_from_resolution(
+    resolution: Resolution, *, state: Optional[WorldState] = None
+) -> OrreryResolutionDraft:
     if resolution.branch_label is None or resolution.narrative_stub is None:
         raise RuntimeError(
             f"Orrery resolution {resolution.template_id!r} passed gate but lacks "
@@ -1293,11 +1423,16 @@ def _draft_from_resolution(resolution: Resolution) -> OrreryResolutionDraft:
         },
         branch_label=resolution.branch_label,
         narrative_stub=resolution.narrative_stub,
-        state_delta=resolution.state_delta,
+        state_delta=(
+            _materialize_project_delta(resolution, state)
+            if state is not None
+            else resolution.state_delta
+        ),
         event_type=resolution.event_type,
         signal_event_type=resolution.signal_event_type,
         changed_fields=resolution.changed_fields,
         magnitude=resolution.magnitude,
+        promotable=resolution.promotable,
     )
 
 

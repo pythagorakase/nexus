@@ -921,6 +921,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 - **AND:**
   - actor has enough hydrated context
+  - **NOT:** actor `plan_relocation` project passes `ready` due-state
   - **NOT:** actor is constrained or immobilized
   - **NOT:** actor has inbound `hunting` pair tag
   - **NOT:** actor has `grudge_active` ephemeral
@@ -1021,6 +1022,103 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 **Scene-pressure prompt** (storyteller-LLM-only; no state mutation):
 
 > {actor} is watching around {target} but has not made contact. The Storyteller may adapt, delay, ignore, or incorporate that pressure without letting Orrery decide what {target} does.
+
+---
+
+## ADVANCE_RELOCATION_PLAN — priority 47
+
+> A due relocation plan saves, scouts, commits, stalls, or reaches its travel handoff.
+
+**Drive band:** project identity — A due relocation plan occupies SURVEIL's adjacent priority slot; SURVEIL yields while the project is due, so project work displaces surveillance idling while its cadence protects maintenance wins.
+**Slots:** ACTOR
+
+**Gate:**
+
+- **AND:**
+  - actor `plan_relocation` project passes `ready` due-state
+  - **NOT:** actor is in transit
+  - **NOT:** actor is constrained or immobilized
+  - **NOT:**
+    - **OR:**
+      - actor has `sleep` debt ≥ 8
+      - actor has `thirst` debt ≥ 2
+      - actor has `hunger` debt ≥ 4
+
+### Branch 1 — Commit to the road  *(mag 0.4)* · **preemptive**
+
+**When:** actor `plan_relocation` project passes `completion` due-state
+
+**Does:** applies project `complete` transition
+**Event:** `relocation_plan_completed`
+
+> {actor} makes the final commitment. The chosen place stops being a possibility and becomes a destination; the project ends where the journey begins.
+
+### Branch 2 — Let the plan go rather than live in limbo  *(mag 0.4)* · **preemptive**
+
+**When:** actor `plan_relocation` project passes `abandon` due-state
+
+**Does:** applies project `abandon` transition
+**Event:** `relocation_plan_abandoned`
+
+> {actor} opens the plan one last time and recognizes that it has become a ritual of not leaving. They close the ledger and release the future it had been holding hostage.
+
+### Branch 3 — Turn the savings into a search  *(mag 0.4)* · **preemptive**
+
+**When:** actor `plan_relocation` project passes `saving_milestone` due-state
+
+**Does:** applies project `advance` transition
+**Event:** `relocation_plan_milestone`
+
+> {actor} has enough margin now to stop counting and start looking. Prices become neighborhoods, routes, and actual doors they might one day close behind them.
+
+### Branch 4 — Choose the place and begin committing  *(mag 0.4)* · **preemptive**
+
+**When:** actor `plan_relocation` project passes `scouting_milestone` due-state
+
+**Does:** applies project `advance` transition
+**Event:** `relocation_plan_milestone`
+
+> {actor} stops comparing exits. One place has survived every practical objection, and choosing it turns research into a promise with consequences.
+
+### Branch 5 — Put another share aside  *(mag 0.18)* · **not promotable**
+
+**When:** actor `plan_relocation` project passes `saving` due-state
+
+**Does:** applies project `advance` transition
+**Event:** `relocation_plan_progressed`
+
+> {actor} makes the unremarkable sacrifice the plan requires: one expense refused, one small reserve protected from the present.
+
+### Branch 6 — Scout a candidate place  *(mag 0.2)* · **not promotable**
+
+**When:**
+
+- **AND:**
+  - actor `plan_relocation` project passes `scouting_without_target` due-state
+  - actor can resolve a destination with place class `dwelling,haven,urban_sparse,urban_dense`
+
+**Does:** applies project `advance` transition
+**Event:** `relocation_plan_progressed`
+
+> {actor} follows one candidate past the fantasy of it: cost, distance, the shape of an ordinary morning there. For the first time, the plan has a place attached.
+
+### Branch 7 — Lose ground to a setback  *(mag 0.1)* · **not promotable**
+
+**When:** actor `plan_relocation` project passes `neglected` due-state
+
+**Does:** applies project `stall` transition
+**Event:** `relocation_plan_stalled`
+
+> The present takes its cut from {actor}'s future: an expense, a closed option, a promise that cannot yet be kept. The plan stalls, but it is not silently erased.
+
+### Branch 8 — Press on with the next practical step  *(mag 0.16)* · **not promotable**
+
+**When:** *(always)*
+
+**Does:** applies project `advance` transition
+**Event:** `relocation_plan_progressed`
+
+> {actor} does the next small thing the move requires — a message, a form, a measured risk — work too ordinary to look like transformation until enough of it accumulates.
 
 ---
 
@@ -1826,6 +1924,43 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 **Event:** `socialized_alone`
 
 > {actor} spends an hour with the voice of a stranger — a book, a serial, a recording — which is not the same as company but is enough like company to take the worst edge off.
+
+---
+
+## START_RELOCATION_PLAN — priority 17
+
+> Repeated local maintenance and a fresh setback become an explicit decision to leave.
+
+**Drive band:** project identity — A relocation plan begins only after repeated local routine plus a recent negative signal; the narrow gate lets it interrupt the mundane floor without becoming ambient project noise.
+**Slots:** ACTOR
+
+**Gate:**
+
+- **AND:**
+  - actor `plan_relocation` project passes `start` due-state
+  - actor has enough hydrated context
+  - actor is at `home` anchor
+  - **NOT:** actor is constrained or immobilized
+  - **NOT:** actor is in transit
+  - **OR:**
+    - ≥ 2 `upkeep_done` events within 30 ticks for actor
+    - ≥ 2 `errands_run` events within 30 ticks for actor
+    - ≥ 2 `recreation_taken` events within 30 ticks for actor
+    - ≥ 2 `work_performed` events within 30 ticks for actor
+  - **OR:**
+    - recent `travel_delayed` event with actor=actor in last 12 ticks
+    - recent `contact_deferred` event with actor=actor in last 12 ticks
+    - recent `threat_issued` event targeting actor in last 12 ticks
+    - recent `retaliation_attempted` event targeting actor in last 12 ticks
+
+### Branch 1 — Begin putting something aside  *(mag 0.4)*
+
+**When:** *(always)*
+
+**Does:** applies project `start` transition
+**Event:** `relocation_plan_started`
+
+> {actor} stops treating departure as the thought that arrives after a bad day. They make a ledger, name what it would cost, and put the first real thing aside.
 
 ---
 
@@ -2736,6 +2871,12 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `protective_intervention`
 - `pursue_identity_lead`
 - `recreation_taken`
+- `relocation_plan_abandoned`
+- `relocation_plan_completed`
+- `relocation_plan_milestone`
+- `relocation_plan_progressed`
+- `relocation_plan_stalled`
+- `relocation_plan_started`
 - `retaliation_attempted`
 - `retaliation_executed`
 - `rival_consulted`
@@ -2780,6 +2921,7 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `tomb`
 - `transit`
 - `urban_dense`
+- `urban_sparse`
 - `water_source`
 - `wilderness`
 

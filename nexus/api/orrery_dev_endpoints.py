@@ -312,6 +312,7 @@ async def post_resolve(request: OrreryResolveRequest) -> dict[str, Any]:
                 selection_settings=orrery.get("selection"),
                 habituation_settings=orrery.get("habituation"),
                 package_selection_settings=orrery.get("package_selection"),
+                project_settings=orrery.get("projects"),
                 fanout_settings=orrery.get("fanout"),
             )
         except OverrideValidationError as exc:
@@ -399,6 +400,7 @@ async def post_coverage(request: OrreryCoverageRequest) -> dict[str, Any]:
             selection_settings=orrery.get("selection"),
             habituation_settings=orrery.get("habituation"),
             package_selection_settings=orrery.get("package_selection"),
+            project_settings=orrery.get("projects"),
             fanout_settings=orrery.get("fanout"),
         )
 

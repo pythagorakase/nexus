@@ -70,6 +70,8 @@ from nexus.agents.orrery.substrate import (
     _routine_anchor_destination_available,
     _routine_schedule_due,
     _trust_values_are_asymmetric,
+    project_due,
+    project_overdue_hours,
 )
 
 
@@ -1470,6 +1472,58 @@ def _since_last_event_at_least(
             "elapsed_ticks": elapsed,
         },
         result=result,
+    )
+
+
+@_resolver("project_due")
+def _project_due(
+    match: re.Match, state: WorldState, bindings: Bindings
+) -> dict[str, Any]:
+    project_type = match["project"]
+    mode = match["mode"]
+    slot = match["slot"]
+    entity_id = _entity(bindings, slot)
+    project = state.project_states.get(entity_id) if entity_id is not None else None
+    project_payload = asdict(project) if project is not None else None
+    if project_payload is not None:
+        next_eligible = project_payload.get("next_eligible_at_world_time")
+        if next_eligible is not None:
+            project_payload["next_eligible_at_world_time"] = next_eligible.isoformat()
+    overdue_hours: Optional[float] = None
+    if (
+        project is not None
+        and project.next_eligible_at_world_time is not None
+        and state.world_time is not None
+    ):
+        overdue_hours = project_overdue_hours(
+            state.world_time, project.next_eligible_at_world_time
+        )
+    condition = project_due(
+        mode,
+        project_type=project_type,
+        slot=Slot(slot),
+    )
+    return _evidence(
+        "project_due",
+        params={
+            "project_type": project_type,
+            "mode": mode,
+            "slot": slot,
+        },
+        entities={slot: entity_id},
+        observed={
+            "world_time": (
+                state.world_time.isoformat() if state.world_time is not None else None
+            ),
+            "project": project_payload,
+            "overdue_hours": overdue_hours,
+            "advance_interval_hours": (state.project_policy.advance_interval_hours),
+            "stall_abandon_threshold": (state.project_policy.stall_abandon_threshold),
+            "abandon_after_stalled_world_hours": (
+                state.project_policy.abandon_after_stalled_world_hours
+            ),
+        },
+        result=condition(state, bindings),
     )
 
 
