@@ -27,7 +27,8 @@ roles = { default = "gpt-5.5" }
 models = [
     { id = "o3", label = "o3", unsupported_params = ["temperature", "top_p"] },
     { id = "gpt-5.5", label = "GPT-5.5", unsupported_params = ["temperature", "top_p"] },
-    { id = "gpt-5.6", label = "GPT-5.6-Sol", unsupported_params = ["temperature", "top_p"] },
+    { id = "gpt-5.6-sol", label = "GPT-5.6-Sol", unsupported_params = ["temperature", "top_p"] },
+    { id = "gpt-5.6-terra", label = "GPT-5.6-Terra", unsupported_params = ["temperature", "top_p"] },
 ]
 
 [global.model.api_models.anthropic]
