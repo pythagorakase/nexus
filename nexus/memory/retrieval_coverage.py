@@ -8,7 +8,7 @@ from typing import Any, Dict, Iterable, List, Optional
 
 from sqlalchemy import text
 
-from .entity_detector import EntityMatch, HighSpecificityEntityDetector
+from .entity_detector import EntityMatch
 
 logger = logging.getLogger(__name__)
 
@@ -74,25 +74,33 @@ def _detected_entities(entity_match: EntityMatch) -> List[Dict[str, Any]]:
     return sorted(detected, key=lambda entity: (entity["kind"], entity["id"]))
 
 
+def coerce_chunk_id(chunk: Dict[str, Any]) -> Optional[int]:
+    """Shared chunk-id coercion (manager._coerce_chunk_id delegates here)."""
+    raw_id = chunk.get("chunk_id", chunk.get("id"))
+    if raw_id is None:
+        return None
+    try:
+        return int(raw_id)
+    except (TypeError, ValueError):
+        return None
+
+
 def _chunk_ids(chunks: Iterable[Dict[str, Any]]) -> List[int]:
     chunk_ids: List[int] = []
+    seen: set = set()
     for chunk in chunks:
-        raw_id = chunk.get("chunk_id", chunk.get("id"))
-        if raw_id is None:
+        chunk_id = coerce_chunk_id(chunk)
+        if chunk_id is None or chunk_id in seen:
             continue
-        try:
-            chunk_id = int(raw_id)
-        except (TypeError, ValueError):
-            continue
-        if chunk_id not in chunk_ids:
-            chunk_ids.append(chunk_id)
+        seen.add(chunk_id)
+        chunk_ids.append(chunk_id)
     return chunk_ids
 
 
 def _write_retrieval_coverage(
     connection: Any,
     *,
-    detector: HighSpecificityEntityDetector,
+    entity_match: EntityMatch,
     turn_id: Optional[str],
     user_input: str,
     raw_result_count: int,
@@ -101,7 +109,6 @@ def _write_retrieval_coverage(
     available_budget: int,
     error_context: Dict[str, Any],
 ) -> None:
-    entity_match = detector.detect_entities(user_input)
     detected_entities = _detected_entities(entity_match)
     error_context["detected_entities"] = detected_entities
 
@@ -152,7 +159,7 @@ def _write_retrieval_coverage(
 def audit_retrieval_coverage(
     *,
     incremental_retriever: Any,
-    detector: HighSpecificityEntityDetector,
+    entity_match: EntityMatch,
     user_input: str,
     raw_result_count: int,
     kept_chunks: Iterable[Dict[str, Any]],
@@ -188,7 +195,7 @@ def audit_retrieval_coverage(
             with database_access.begin() as connection:
                 _write_retrieval_coverage(
                     connection,
-                    detector=detector,
+                    entity_match=entity_match,
                     turn_id=turn_id,
                     user_input=user_input,
                     raw_result_count=raw_result_count,
@@ -200,7 +207,7 @@ def audit_retrieval_coverage(
         else:
             _write_retrieval_coverage(
                 database_access,
-                detector=detector,
+                entity_match=entity_match,
                 turn_id=turn_id,
                 user_input=user_input,
                 raw_result_count=raw_result_count,

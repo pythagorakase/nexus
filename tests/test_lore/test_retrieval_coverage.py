@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from typing import Dict
 
 from nexus.memory import ContextMemoryManager
+from nexus.memory.entity_detector import EntityMatch
 from nexus.memory.retrieval_coverage import audit_retrieval_coverage
 from scripts.report_retrieval_coverage import format_retrieval_coverage_report
 
@@ -62,7 +63,7 @@ def test_attempted_retrieval_coverage_failure_logs_and_returns(caplog) -> None:
 
     audit_retrieval_coverage(
         incremental_retriever=retriever,
-        detector=SimpleNamespace(),
+        entity_match=EntityMatch(characters=[], places=[], factions=[]),
         turn_id="failed-audit-turn",
         user_input="Ask Alex.",
         raw_result_count=1,
