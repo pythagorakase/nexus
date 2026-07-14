@@ -44,22 +44,15 @@ from .utils.continuous_temporal_search import (
     analyze_temporal_intent,
 )
 from .utils.idf_dictionary import IDFDictionary
-from .utils.embedding_manager import EmbeddingManager
-from .utils.search import SearchManager
 from .utils.query_analysis import QueryAnalyzer
 from .utils.db_schema import DatabaseManager
-from .utils.content_processor import ContentProcessor
 from .utils.embedding_tables import list_embedding_tables
-
-# Sentence transformers for embedding
-from sentence_transformers import SentenceTransformer
 
 # Legacy Letta framework references (for historical context)
 # Letta imports removed - using custom memory system instead
 
 # Import alias search utilities
 from .utils.alias_search import load_aliases_from_db, ALIAS_LOOKUP
-from .utils.cross_encoder import rerank_results
 
 # Set up a basic console logger for initial settings loading
 settings_logger = logging.getLogger("nexus.memnon.settings")
@@ -290,6 +283,8 @@ class MEMNON:
 
         # Set up embedding models using EmbeddingManager
         logger.info("Initializing embedding models through EmbeddingManager")
+        from .utils.embedding_manager import EmbeddingManager
+
         self.embedding_manager = EmbeddingManager(settings=MEMNON_SETTINGS)
 
         # Initialize IDF dictionary
@@ -336,6 +331,8 @@ class MEMNON:
 
         # Initialize SearchManager with required dependencies
         logger.info("Initializing SearchManager...")
+        from .utils.search import SearchManager
+
         self.search_manager = SearchManager(
             db_url=self.db_url,
             embedding_manager=self.embedding_manager,
@@ -350,6 +347,8 @@ class MEMNON:
 
         # Initialize ContentProcessor
         logger.info("Initializing ContentProcessor...")
+        from .utils.content_processor import ContentProcessor
+
         self.content_processor = ContentProcessor(
             db_manager=self.db_manager,
             embedding_manager=self.embedding_manager,
@@ -2022,6 +2021,8 @@ class MEMNON:
             cross_encoder_config.get("enabled", False)
             and len(search_results_initial) > 0
         ):
+            from .utils.cross_encoder import rerank_results
+
             try:
                 logger.info("Applying cross-encoder reranking")
                 search_metadata["strategies_used"].append("cross_encoder_reranking")
