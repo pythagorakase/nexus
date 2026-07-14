@@ -1,0 +1,468 @@
+"""Event-anchored claims and character awareness for Orrery Epistemics v1."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Any, Iterable, Mapping, Optional, Sequence
+
+from sqlalchemy import bindparam, text
+
+
+CLAIM_SCOPES = frozenset({"common", "bounded", "private"})
+EVENT_ROLES = frozenset({"actor", "target", "observer", "witness", "beneficiary"})
+PARTICIPANT_ROLES = frozenset({"actor", "target", "beneficiary"})
+WITNESS_ROLES = frozenset({"observer", "witness"})
+
+
+@dataclass(frozen=True, slots=True)
+class EpistemicsPolicy:
+    """Normalized runtime view of ``[orrery.epistemics]``."""
+
+    enabled: bool = False
+    claim_event_types: frozenset[str] = frozenset()
+    aware_roles: frozenset[str] = frozenset()
+
+
+@dataclass(frozen=True, slots=True)
+class ClaimParticipant:
+    """One canonical event participant available to claim minting."""
+
+    entity_id: int
+    role: str
+    name: str
+    entity_kind: str = "character"
+
+
+@dataclass(frozen=True, slots=True)
+class MintResult:
+    """Identifiers materialized or recovered by an idempotent claim mint."""
+
+    claim_id: int
+    awareness_ids: tuple[int, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class RevelationResult:
+    """Outcome of an idempotent explicit awareness grant."""
+
+    awareness_id: int
+    source_tier: str
+    inserted: bool
+
+
+@dataclass(frozen=True, slots=True)
+class AwarenessHydration:
+    """Claim scopes and per-character awareness for one recent-event window."""
+
+    claimed_event_scopes: Mapping[int, str]
+    awareness_by_entity: Mapping[int, frozenset[int]]
+
+
+def coerce_epistemics_policy(raw: Any) -> EpistemicsPolicy:
+    """Normalize a Pydantic model or mapping into strict runtime policy."""
+
+    if raw is None:
+        return EpistemicsPolicy()
+    if isinstance(raw, EpistemicsPolicy):
+        return raw
+    if hasattr(raw, "model_dump"):
+        raw = raw.model_dump()
+    if not isinstance(raw, Mapping):
+        raise TypeError("Epistemics settings must be a mapping or Pydantic model")
+    event_types = [str(value).strip() for value in raw.get("claim_event_types", ())]
+    aware_roles = [str(value).strip() for value in raw.get("aware_roles", ())]
+    if any(not value for value in event_types):
+        raise ValueError("Epistemics claim_event_types entries must be non-empty")
+    unknown_roles = set(aware_roles) - EVENT_ROLES
+    if unknown_roles:
+        raise ValueError(f"Unknown Epistemics aware roles: {sorted(unknown_roles)}")
+    return EpistemicsPolicy(
+        enabled=bool(raw.get("enabled", True)),
+        claim_event_types=frozenset(event_types),
+        aware_roles=frozenset(aware_roles),
+    )
+
+
+def load_epistemics_policy() -> EpistemicsPolicy:
+    """Load the canonical ``[orrery.epistemics]`` policy or fail loudly."""
+
+    from nexus.config import load_settings
+
+    settings = load_settings()
+    if settings.orrery is None:
+        raise ValueError("settings.orrery is required for Epistemics")
+    return coerce_epistemics_policy(settings.orrery.epistemics)
+
+
+def mechanical_claim_summary(
+    event_type: str, participants: Iterable[ClaimParticipant | Mapping[str, Any]]
+) -> str:
+    """Build deterministic claim prose from event type, roles, and entity names."""
+
+    normalized = _normalize_participants(participants)
+    subject = event_type.replace("_", " ").strip()
+    if not subject:
+        raise ValueError("Claim event_type must be non-empty")
+    if not normalized:
+        raise ValueError("Claim summaries require at least one named participant")
+    rendered = ", ".join(
+        f"{participant.role} {participant.name}" for participant in normalized
+    )
+    return f"{subject.capitalize()}: {rendered}."
+
+
+def mint_claim_for_event(
+    cur: Any,
+    *,
+    world_event_id: int,
+    event_type: str,
+    summary: str,
+    participants: Iterable[ClaimParticipant | Mapping[str, Any]],
+    source_chunk_id: Optional[int],
+    source_resolution_id: Optional[int],
+    settings: Any,
+) -> Optional[MintResult]:
+    """Mint or recover one event claim and its configured awareness rows."""
+
+    policy = coerce_epistemics_policy(settings)
+    if not policy.enabled or event_type not in policy.claim_event_types:
+        return None
+    normalized = _normalize_participants(participants)
+    clean_summary = summary.strip()
+    if not clean_summary:
+        raise ValueError("Claim summary must be non-empty")
+    cur.execute(
+        """
+        INSERT INTO claims (
+            world_event_id, summary, scope, source_chunk_id, source_resolution_id
+        ) VALUES (%s, %s, 'bounded', %s, %s)
+        ON CONFLICT (world_event_id) WHERE world_event_id IS NOT NULL DO NOTHING
+        RETURNING id
+        """,
+        (world_event_id, clean_summary, source_chunk_id, source_resolution_id),
+    )
+    row = cur.fetchone()
+    if row is None:
+        cur.execute(
+            "SELECT id FROM claims WHERE world_event_id = %s", (world_event_id,)
+        )
+        row = cur.fetchone()
+        if row is None:
+            raise RuntimeError(
+                f"Claim conflict for world event {world_event_id} had no existing row"
+            )
+    claim_id = int(_row_value(row, "id", 0))
+    awareness_ids = _mint_awareness_sync(
+        cur,
+        claim_id=claim_id,
+        participants=normalized,
+        policy=policy,
+        source_chunk_id=source_chunk_id,
+    )
+    return MintResult(claim_id=claim_id, awareness_ids=awareness_ids)
+
+
+async def mint_claim_for_event_async(
+    conn: Any,
+    *,
+    world_event_id: int,
+    event_type: str,
+    summary: str,
+    participants: Iterable[ClaimParticipant | Mapping[str, Any]],
+    source_chunk_id: Optional[int],
+    source_resolution_id: Optional[int],
+    settings: Any,
+) -> Optional[MintResult]:
+    """Async twin of :func:`mint_claim_for_event` for asyncpg appliers."""
+
+    policy = coerce_epistemics_policy(settings)
+    if not policy.enabled or event_type not in policy.claim_event_types:
+        return None
+    normalized = _normalize_participants(participants)
+    clean_summary = summary.strip()
+    if not clean_summary:
+        raise ValueError("Claim summary must be non-empty")
+    claim_id = await conn.fetchval(
+        """
+        INSERT INTO claims (
+            world_event_id, summary, scope, source_chunk_id, source_resolution_id
+        ) VALUES ($1, $2, 'bounded', $3, $4)
+        ON CONFLICT (world_event_id) WHERE world_event_id IS NOT NULL DO NOTHING
+        RETURNING id
+        """,
+        world_event_id,
+        clean_summary,
+        source_chunk_id,
+        source_resolution_id,
+    )
+    if claim_id is None:
+        claim_id = await conn.fetchval(
+            "SELECT id FROM claims WHERE world_event_id = $1", world_event_id
+        )
+        if claim_id is None:
+            raise RuntimeError(
+                f"Claim conflict for world event {world_event_id} had no existing row"
+            )
+    awareness_ids = await _mint_awareness_async(
+        conn,
+        claim_id=int(claim_id),
+        participants=normalized,
+        policy=policy,
+        source_chunk_id=source_chunk_id,
+    )
+    return MintResult(claim_id=int(claim_id), awareness_ids=awareness_ids)
+
+
+def record_revelation(
+    cur: Any,
+    *,
+    claim_id: int,
+    character_entity_id: int,
+    source_entity_id: Optional[int] = None,
+    channel: Optional[str] = None,
+    world_time: Optional[datetime] = None,
+    source_chunk_id: Optional[int] = None,
+) -> RevelationResult:
+    """Idempotently grant told or manual awareness of an existing claim."""
+
+    source_tier = "told" if source_entity_id is not None else "granted"
+    cur.execute(
+        """
+        INSERT INTO claim_awareness (
+            claim_id, character_entity_id, source_tier,
+            immediate_source_entity_id, root_source_entity_id, channel,
+            acquired_at_world_time, source_chunk_id
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (claim_id, character_entity_id) DO NOTHING
+        RETURNING id
+        """,
+        (
+            claim_id,
+            character_entity_id,
+            source_tier,
+            source_entity_id,
+            None,
+            channel,
+            world_time,
+            source_chunk_id,
+        ),
+    )
+    row = cur.fetchone()
+    inserted = row is not None
+    if row is None:
+        cur.execute(
+            """
+            SELECT id, source_tier FROM claim_awareness
+            WHERE claim_id = %s AND character_entity_id = %s
+            """,
+            (claim_id, character_entity_id),
+        )
+        row = cur.fetchone()
+        if row is None:
+            raise RuntimeError(
+                "Awareness conflict did not resolve to an existing row for "
+                f"claim {claim_id}, entity {character_entity_id}"
+            )
+    return RevelationResult(
+        awareness_id=int(_row_value(row, "id", 0)),
+        source_tier=(
+            source_tier if inserted else str(_row_value(row, "source_tier", 1))
+        ),
+        inserted=inserted,
+    )
+
+
+def promote_claim_scope(cur: Any, *, claim_id: int, new_scope: str) -> None:
+    """Promote a common claim to bounded/private; reject every narrowing."""
+
+    if new_scope not in CLAIM_SCOPES:
+        raise ValueError(f"Unknown claim scope {new_scope!r}")
+    cur.execute("SELECT scope FROM claims WHERE id = %s FOR UPDATE", (claim_id,))
+    row = cur.fetchone()
+    if row is None:
+        raise ValueError(f"Claim {claim_id} does not exist")
+    current_scope = str(_row_value(row, "scope", 0))
+    if new_scope == current_scope:
+        return
+    if current_scope != "common" or new_scope == "common":
+        raise ValueError(
+            f"Illegal claim scope transition {current_scope!r} -> {new_scope!r}"
+        )
+    cur.execute("UPDATE claims SET scope = %s WHERE id = %s", (new_scope, claim_id))
+
+
+def load_awareness_for_events(
+    session: Any, *, world_event_ids: Sequence[int]
+) -> AwarenessHydration:
+    """Hydrate claim scopes and awareness in one query for selected events."""
+
+    event_ids = sorted(set(int(event_id) for event_id in world_event_ids))
+    if not event_ids:
+        return AwarenessHydration({}, {})
+    query = text(
+        """
+        /* orrery:epistemics_awareness */
+        SELECT c.world_event_id, c.scope, ca.character_entity_id
+        FROM claims c
+        LEFT JOIN claim_awareness ca ON ca.claim_id = c.id
+        WHERE c.world_event_id IN :world_event_ids
+        ORDER BY c.world_event_id, ca.character_entity_id
+        """
+    ).bindparams(bindparam("world_event_ids", expanding=True))
+    scopes: dict[int, str] = {}
+    awareness: dict[int, set[int]] = {}
+    for row in session.execute(query, {"world_event_ids": event_ids}).mappings():
+        event_id = int(row["world_event_id"])
+        scope = str(row["scope"])
+        if scope not in CLAIM_SCOPES:
+            raise ValueError(f"Claim on event {event_id} has unknown scope {scope!r}")
+        scopes[event_id] = scope
+        character_entity_id = row["character_entity_id"]
+        if character_entity_id is not None:
+            awareness.setdefault(int(character_entity_id), set()).add(event_id)
+    return AwarenessHydration(
+        claimed_event_scopes=scopes,
+        awareness_by_entity={
+            entity_id: frozenset(events) for entity_id, events in awareness.items()
+        },
+    )
+
+
+def _normalize_participants(
+    participants: Iterable[ClaimParticipant | Mapping[str, Any]],
+) -> tuple[ClaimParticipant, ...]:
+    normalized = []
+    for raw in participants:
+        if isinstance(raw, ClaimParticipant):
+            participant = raw
+        elif isinstance(raw, Mapping):
+            participant = ClaimParticipant(
+                entity_id=int(raw["entity_id"]),
+                role=str(raw["role"]),
+                name=str(raw["name"]),
+                entity_kind=str(raw.get("entity_kind", "character")),
+            )
+        else:
+            raise TypeError("Claim participants must be mappings or ClaimParticipant")
+        if participant.role not in EVENT_ROLES:
+            raise ValueError(f"Unknown event participant role {participant.role!r}")
+        if not participant.name.strip():
+            raise ValueError(
+                f"Claim participant {participant.entity_id} has no entity name"
+            )
+        normalized.append(participant)
+    return tuple(normalized)
+
+
+def _tier_for_role(role: str) -> str:
+    if role in PARTICIPANT_ROLES:
+        return "participant"
+    if role in WITNESS_ROLES:
+        return "witness"
+    raise ValueError(f"Unknown awareness role {role!r}")
+
+
+def _aware_participants(
+    participants: Sequence[ClaimParticipant], policy: EpistemicsPolicy
+) -> tuple[tuple[int, str], ...]:
+    by_entity: dict[int, str] = {}
+    for participant in participants:
+        if participant.entity_kind != "character":
+            continue
+        if participant.role not in policy.aware_roles:
+            continue
+        tier = _tier_for_role(participant.role)
+        current = by_entity.get(participant.entity_id)
+        if current is None or (current == "witness" and tier == "participant"):
+            by_entity[participant.entity_id] = tier
+    return tuple(sorted(by_entity.items()))
+
+
+def _mint_awareness_sync(
+    cur: Any,
+    *,
+    claim_id: int,
+    participants: Sequence[ClaimParticipant],
+    policy: EpistemicsPolicy,
+    source_chunk_id: Optional[int],
+) -> tuple[int, ...]:
+    awareness_ids = []
+    for entity_id, tier in _aware_participants(participants, policy):
+        cur.execute(
+            """
+            INSERT INTO claim_awareness (
+                claim_id, character_entity_id, source_tier, source_chunk_id
+            ) VALUES (%s, %s, %s, %s)
+            ON CONFLICT (claim_id, character_entity_id) DO NOTHING
+            RETURNING id
+            """,
+            (claim_id, entity_id, tier, source_chunk_id),
+        )
+        row = cur.fetchone()
+        if row is None:
+            cur.execute(
+                """
+                SELECT id FROM claim_awareness
+                WHERE claim_id = %s AND character_entity_id = %s
+                """,
+                (claim_id, entity_id),
+            )
+            row = cur.fetchone()
+            if row is None:
+                raise RuntimeError(
+                    f"Awareness conflict for claim {claim_id}, entity {entity_id} "
+                    "had no existing row"
+                )
+        awareness_ids.append(int(_row_value(row, "id", 0)))
+    return tuple(awareness_ids)
+
+
+async def _mint_awareness_async(
+    conn: Any,
+    *,
+    claim_id: int,
+    participants: Sequence[ClaimParticipant],
+    policy: EpistemicsPolicy,
+    source_chunk_id: Optional[int],
+) -> tuple[int, ...]:
+    awareness_ids = []
+    for entity_id, tier in _aware_participants(participants, policy):
+        awareness_id = await conn.fetchval(
+            """
+            INSERT INTO claim_awareness (
+                claim_id, character_entity_id, source_tier, source_chunk_id
+            ) VALUES ($1, $2, $3, $4)
+            ON CONFLICT (claim_id, character_entity_id) DO NOTHING
+            RETURNING id
+            """,
+            claim_id,
+            entity_id,
+            tier,
+            source_chunk_id,
+        )
+        if awareness_id is None:
+            awareness_id = await conn.fetchval(
+                """
+                SELECT id FROM claim_awareness
+                WHERE claim_id = $1 AND character_entity_id = $2
+                """,
+                claim_id,
+                entity_id,
+            )
+            if awareness_id is None:
+                raise RuntimeError(
+                    f"Awareness conflict for claim {claim_id}, entity {entity_id} "
+                    "had no existing row"
+                )
+        awareness_ids.append(int(awareness_id))
+    return tuple(awareness_ids)
+
+
+def _row_value(row: Any, key: str, index: int) -> Any:
+    if isinstance(row, Mapping):
+        return row[key]
+    try:
+        return row[index]
+    except (KeyError, TypeError):
+        return getattr(row, key)

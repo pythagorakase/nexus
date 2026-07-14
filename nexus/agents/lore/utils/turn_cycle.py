@@ -5,7 +5,6 @@ Handles the execution of individual turn cycle phases.
 """
 
 import logging
-import time
 from typing import Dict, List, Any, Optional, Union, Iterable
 from datetime import datetime
 
@@ -15,7 +14,7 @@ from nexus.memory.retrieval_coverage import coerce_chunk_id
 logger = logging.getLogger("nexus.lore.turn_cycle")
 
 try:
-    from .turn_context import TurnContext, TurnPhase
+    from .turn_context import TurnContext
     from .entity_queries import (
         fetch_all_characters_with_references,
         fetch_all_places_with_references,
@@ -37,7 +36,7 @@ try:
     from nexus.config.settings_models import LORERetrievalSettings
 except ImportError:
     # If relative import fails, try absolute
-    from nexus.agents.lore.utils.turn_context import TurnContext, TurnPhase
+    from nexus.agents.lore.utils.turn_context import TurnContext
     from nexus.agents.lore.utils.entity_queries import (
         fetch_all_characters_with_references,
         fetch_all_places_with_references,
@@ -250,7 +249,8 @@ class TurnCycleManager:
                     )
                 else:
                     logger.warning(
-                        f"Requested parent chunk {target_chunk_id} not found; using recent chunks instead"
+                        f"Requested parent chunk {target_chunk_id} not found; "
+                        "using recent chunks instead"
                     )
             except Exception as exc:
                 logger.error(f"Failed to load requested chunk {target_chunk_id}: {exc}")
@@ -282,7 +282,8 @@ class TurnCycleManager:
                 turn_context.warm_slice = warm_slice_chunks
 
                 logger.info(
-                    f"Retrieved {len(turn_context.warm_slice)} warm-slice chunks (including anchors)"
+                    f"Retrieved {len(turn_context.warm_slice)} warm-slice chunks "
+                    "(including anchors)"
                 )
             except Exception as e:
                 logger.error(f"Failed to retrieve warm slice: {e}")
@@ -316,7 +317,8 @@ class TurnCycleManager:
 
     async def query_entity_states(self, turn_context: TurnContext):
         """
-        Phase 3: Query for entity states using hierarchical baseline + featured structure.
+        Phase 3: Query for entity states using hierarchical baseline + featured
+        structure.
 
         Universal baseline: ALL entities with minimal tracking fields (always included)
         Featured entities: Referenced entities with full details
@@ -351,9 +353,6 @@ class TurnCycleManager:
         include_threats = entity_settings.get("include_all_active_threats", True)
         event_statuses = entity_settings.get(
             "active_event_statuses", ["active", "ongoing", "escalating"]
-        )
-        threat_statuses = entity_settings.get(
-            "active_threat_statuses", ["active", "imminent"]
         )
 
         # Get chunk IDs from warm slice for featured entity queries
@@ -436,7 +435,8 @@ class TurnCycleManager:
                         for row in result:
                             relationships.append(dict(row._mapping))
                     logger.info(
-                        f"Found {len(relationships)} relationships between featured characters"
+                        f"Found {len(relationships)} relationships between "
+                        "featured characters"
                     )
             except Exception as e:
                 logger.error(f"Failed to query relationships: {e}")
@@ -523,9 +523,12 @@ class TurnCycleManager:
 
         logger.info(
             f"Entity query complete (hierarchical): "
-            f"chars {len(characters_data.get('baseline', []))}+{len(characters_data.get('featured', []))}, "
-            f"places {len(places_data.get('baseline', []))}+{len(places_data.get('featured', []))}, "
-            f"factions {len(factions_data.get('baseline', []))}+{len(factions_data.get('featured', []))}, "
+            f"chars {len(characters_data.get('baseline', []))}+"
+            f"{len(characters_data.get('featured', []))}, "
+            f"places {len(places_data.get('baseline', []))}+"
+            f"{len(places_data.get('featured', []))}, "
+            f"factions {len(factions_data.get('baseline', []))}+"
+            f"{len(factions_data.get('featured', []))}, "
             f"{len(relationships)} rels, {len(events)} events, {len(threats)} threats"
         )
 
@@ -659,6 +662,7 @@ class TurnCycleManager:
                 habituation_settings=orrery_settings.get("habituation"),
                 package_selection_settings=orrery_settings.get("package_selection"),
                 project_settings=orrery_settings.get("projects"),
+                epistemics_settings=orrery_settings.get("epistemics"),
                 fanout_settings=orrery_settings.get("fanout"),
             )
 
@@ -1075,7 +1079,9 @@ class TurnCycleManager:
                     "expected_user_themes": (
                         transition.expected_user_themes if transition else []
                     ),
-                    "remaining_budget": self.lore.memory_manager.context_state.get_remaining_budget(),
+                    "remaining_budget": (
+                        self.lore.memory_manager.context_state.get_remaining_budget()
+                    ),
                     "structured_passages": baseline.structured_passages,
                 }
                 turn_context.memory_state["pass1"] = baseline_snapshot

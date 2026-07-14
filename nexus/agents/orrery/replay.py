@@ -114,6 +114,9 @@ TAG_DELTA_KEYS = frozenset(
 
 REPLAYED_DELTA_KEYS = frozenset(
     {
+        # Append-only producer ledger metadata. Epistemics rows reconstruct
+        # themselves from their provenance and are intentionally not replayed.
+        "applied",
         "character.current_activity",
         "need.fulfill",
         "travel.start",

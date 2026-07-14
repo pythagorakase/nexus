@@ -36,6 +36,10 @@ from typing import Any, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from sqlalchemy import text
 
+from nexus.agents.orrery.epistemics import (
+    coerce_epistemics_policy,
+    load_epistemics_policy,
+)
 from nexus.agents.orrery.explain import StackExplanation, explain_stack
 from nexus.agents.orrery.reciprocal import OrreryJointBeat, detect_joint_beats
 from nexus.agents.orrery.overrides import (
@@ -482,6 +486,7 @@ def explain_dry_run(
     habituation_settings: Optional[Any] = None,
     package_selection_settings: Optional[Any] = None,
     project_settings: Optional[Any] = None,
+    epistemics_settings: Optional[Any] = None,
     fanout_settings: Optional[Any] = None,
 ) -> ExplainedTickReport:
     """Hydrate, bind, and explain Orrery packages without database writes.
@@ -502,6 +507,11 @@ def explain_dry_run(
     habituation = coerce_habituation(habituation_settings)
     package_selection = coerce_package_selection(package_selection_settings)
     project_policy = coerce_project_policy(project_settings)
+    epistemics_policy = (
+        load_epistemics_policy()
+        if epistemics_settings is None
+        else coerce_epistemics_policy(epistemics_settings)
+    )
     state = hydrate_world_state(
         session,
         anchor_chunk_id=anchor_chunk_id,
@@ -510,6 +520,7 @@ def explain_dry_run(
         world_time_override=world_time_override,
         win_history_window=habituation.window_ticks if habituation.enabled else 0,
         project_settings=project_settings,
+        epistemics_settings=epistemics_policy,
     )
 
     templates_list = list(configure_project_magnitudes(templates, project_policy))

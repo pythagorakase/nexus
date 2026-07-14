@@ -9,6 +9,11 @@ from typing import Any, Iterable, Mapping, Optional, Tuple
 
 from sqlalchemy import text
 
+from nexus.agents.orrery.epistemics import (
+    coerce_epistemics_policy,
+    load_epistemics_policy,
+    load_awareness_for_events,
+)
 from nexus.agents.orrery.reciprocal import (
     OrreryJointBeat,
     coerce_joint_beats,
@@ -198,6 +203,9 @@ class OrreryTickProposal:
     resolutions: Tuple[OrreryResolutionDraft, ...]
     scene_pressures: Tuple[OrreryScenePressureDraft, ...] = ()
     joint_beats: Tuple[OrreryJointBeat, ...] = ()
+    epistemics_settings: Mapping[str, Any] = field(
+        default_factory=lambda: {"enabled": False}
+    )
     generated_at: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
@@ -226,6 +234,7 @@ class OrreryTickProposal:
                 pressure.to_dict() for pressure in self.scene_pressures
             ],
             "joint_beats": [beat.to_dict() for beat in self.joint_beats],
+            "epistemics_settings": dict(self.epistemics_settings),
         }
 
     @classmethod
@@ -245,6 +254,9 @@ class OrreryTickProposal:
                 for item in data.get("scene_pressures", ())
             ),
             joint_beats=coerce_joint_beats(data.get("joint_beats")),
+            epistemics_settings=dict(
+                data.get("epistemics_settings") or {"enabled": False}
+            ),
         )
 
 
@@ -267,6 +279,7 @@ def hydrate_world_state(
     world_time_override: Optional[datetime] = None,
     win_history_window: int = 0,
     project_settings: Optional[Any] = None,
+    epistemics_settings: Optional[Any] = None,
 ) -> WorldState:
     """Hydrate the read-side Orrery state snapshot from database tables.
 
@@ -277,6 +290,7 @@ def hydrate_world_state(
 
     need_tuning = coerce_need_tuning(need_tuning)
     project_policy = coerce_project_policy(project_settings)
+    epistemics_policy = coerce_epistemics_policy(epistemics_settings)
 
     tags: dict[int, set[str]] = {}
     ephemeral_tags: dict[int, set[str]] = {}
@@ -435,6 +449,16 @@ def hydrate_world_state(
         anchor_chunk_id=anchor_chunk_id,
         window_chunks=window_chunks,
     )
+    awareness = (
+        load_awareness_for_events(
+            session,
+            world_event_ids=[
+                event.event_id for event in recent_events if event.event_id is not None
+            ],
+        )
+        if epistemics_policy.enabled
+        else None
+    )
     world_time = world_time_override or _load_world_time(
         session, anchor_chunk_id=anchor_chunk_id
     )
@@ -488,6 +512,13 @@ def hydrate_world_state(
         project_policy=project_policy,
         routine_anchors=routine_anchors,
         recent_events=recent_events,
+        claimed_event_scopes=(
+            awareness.claimed_event_scopes if awareness is not None else {}
+        ),
+        awareness_by_entity=(
+            awareness.awareness_by_entity if awareness is not None else {}
+        ),
+        epistemics_enabled=epistemics_policy.enabled,
         win_history=win_history,
         time_of_day=time_of_day,
         world_time=world_time,
@@ -990,6 +1021,7 @@ def resolve_dry_run(
     habituation_settings: Optional[Any] = None,
     package_selection_settings: Optional[Any] = None,
     project_settings: Optional[Any] = None,
+    epistemics_settings: Optional[Any] = None,
     fanout_settings: Optional[Any] = None,
 ) -> OrreryTickProposal:
     """Hydrate, bind, and evaluate Orrery packages without database writes."""
@@ -1002,6 +1034,11 @@ def resolve_dry_run(
     )
     project_policy: ProjectPolicy = coerce_project_policy(project_settings)
     fanout = _coerce_fanout(fanout_settings)
+    epistemics_policy = (
+        load_epistemics_policy()
+        if epistemics_settings is None
+        else coerce_epistemics_policy(epistemics_settings)
+    )
     state = hydrate_world_state(
         session,
         anchor_chunk_id=anchor_chunk_id,
@@ -1010,6 +1047,7 @@ def resolve_dry_run(
         world_time_override=world_time_override,
         win_history_window=habituation.window_ticks if habituation.enabled else 0,
         project_settings=project_settings,
+        epistemics_settings=epistemics_policy,
     )
 
     templates_list = list(configure_project_magnitudes(templates, project_policy))
@@ -1169,6 +1207,11 @@ def resolve_dry_run(
         resolutions=tuple(drafts),
         scene_pressures=scene_pressures,
         joint_beats=detect_joint_beats(drafts, draft_entity_names),
+        epistemics_settings={
+            "enabled": epistemics_policy.enabled,
+            "claim_event_types": sorted(epistemics_policy.claim_event_types),
+            "aware_roles": sorted(epistemics_policy.aware_roles),
+        },
     )
 
 
@@ -1187,7 +1230,8 @@ def _load_recent_events(
         text(
             """
             /* orrery:recent_events */
-            SELECT event_type,
+            SELECT id,
+                   event_type,
                    tick_chunk_id,
                    actor_entity_id,
                    target_entity_id,
@@ -1206,6 +1250,7 @@ def _load_recent_events(
     ).mappings():
         events.append(
             EventRecord(
+                event_id=row.get("id"),
                 event_type=row["event_type"],
                 tick=row["tick_chunk_id"],
                 actor_entity_id=row["actor_entity_id"],

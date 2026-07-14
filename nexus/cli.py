@@ -13,6 +13,7 @@ Commands:
     nexus retrograde-expand-seeds  Call Skald for non-mutating R6 expansion
     nexus retrograde-apply-expansion --slot N  Dry-run Retrograde persistence
     nexus retrograde-embed-history --slot N  Sync Retrograde summary retrieval
+    nexus record-revelation --slot N  Grant awareness of an existing claim
     nexus faction-audit --slot N  Dry-run legacy faction column migration audit
     nexus faction-manifest --slot N  Build reviewed faction migration manifest
     nexus faction-apply --slot N  Dry-run ready faction manifest operations
@@ -29,6 +30,7 @@ all other state (wizard phase, current chunk, thread ID) automatically.
 from __future__ import annotations
 
 import argparse
+from datetime import datetime
 import functools
 import json
 import logging
@@ -1949,6 +1951,7 @@ def run_retrograde_apply_expansion(args: argparse.Namespace) -> Dict[str, Any]:
                     create_missing_entities=args.create_stubs,
                     summaries_enabled=retrieval_settings.summaries_enabled,
                     recorded_at_chunk_id=recorded_at_chunk_id,
+                    epistemics_settings=orrery_settings.epistemics,
                 )
     except ValueError as exc:
         return {"success": False, "error": str(exc)}
@@ -2066,6 +2069,61 @@ def run_retrograde_embed_history(args: argparse.Namespace) -> Dict[str, Any]:
             "embedding_pending_summary_ids": pending_summary_ids,
             "embedding_results": embedding_results,
         },
+    }
+
+
+def run_record_revelation(
+    args: argparse.Namespace, *, connection: Optional[Any] = None
+) -> Dict[str, Any]:
+    """Record an explicit told or manual claim-awareness grant."""
+
+    from nexus.agents.orrery.epistemics import record_revelation
+    from nexus.api.db_pool import get_connection
+    from nexus.api.slot_utils import slot_dbname
+
+    world_time = None
+    if args.world_time is not None:
+        world_time = datetime.fromisoformat(args.world_time)
+        if world_time.tzinfo is None:
+            raise ValueError("--world-time must include a UTC offset")
+    dbname = slot_dbname(args.slot)
+
+    def apply(conn: Any) -> Any:
+        with conn.cursor() as cur:
+            return record_revelation(
+                cur,
+                claim_id=args.claim_id,
+                character_entity_id=args.character_entity_id,
+                source_entity_id=args.source_entity_id,
+                channel=args.channel,
+                world_time=world_time,
+                source_chunk_id=args.source_chunk_id,
+            )
+
+    if connection is None:
+        with get_connection(dbname, dict_cursor=True) as conn:
+            revelation = apply(conn)
+    else:
+        revelation = apply(connection)
+    message = (
+        f"Granted awareness for claim {args.claim_id} "
+        f"(tier: {revelation.source_tier})."
+        if revelation.inserted
+        else (
+            f"Claim {args.claim_id} is already known by entity "
+            f"{args.character_entity_id}; unchanged."
+        )
+    )
+    return {
+        "success": True,
+        "message": message,
+        "slot": args.slot,
+        "dbname": dbname,
+        "claim_id": args.claim_id,
+        "character_entity_id": args.character_entity_id,
+        "claim_awareness_id": revelation.awareness_id,
+        "source_tier": revelation.source_tier,
+        "inserted": revelation.inserted,
     }
 
 
@@ -2873,6 +2931,7 @@ Examples:
   nexus retrograde-apply-expansion --slot 5 --packet packet.json ...
   nexus retrograde-embed-history --slot 5  Dry-run Retrograde retrieval sync
   nexus retrograde-embed-history --slot 5 --execute
+  nexus record-revelation --slot 2 --claim-id 7 --character-entity-id 42
   nexus faction-audit --slot 2  Dry-run faction column migration audit
   nexus faction-manifest --slot 2  Build faction migration manifest
   nexus faction-apply --slot 2  Dry-run ready faction manifest operations
@@ -3238,6 +3297,28 @@ Examples:
         ),
     )
 
+    revelation_parser = subparsers.add_parser(
+        "record-revelation",
+        help="Grant told or manual awareness of an existing claim",
+    )
+    revelation_parser.add_argument(
+        "--slot", type=int, required=True, help="Slot number (1-5)"
+    )
+    revelation_parser.add_argument("--claim-id", type=int, required=True)
+    revelation_parser.add_argument("--character-entity-id", type=int, required=True)
+    revelation_parser.add_argument(
+        "--source-entity-id",
+        type=int,
+        help="Immediate named source; omission records a manual granted tier.",
+    )
+    revelation_parser.add_argument(
+        "--channel", help="Free-vocabulary acquisition channel."
+    )
+    revelation_parser.add_argument(
+        "--world-time", help="Timezone-aware ISO-8601 in-world acquisition time."
+    )
+    revelation_parser.add_argument("--source-chunk-id", type=int)
+
     # faction-audit command
     faction_audit_parser = subparsers.add_parser(
         "faction-audit",
@@ -3457,6 +3538,7 @@ def main() -> int:
         "retrograde-packet",
         "retrograde-apply-expansion",
         "retrograde-embed-history",
+        "record-revelation",
         "faction-audit",
         "faction-manifest",
         "faction-apply",
@@ -3525,6 +3607,8 @@ def main() -> int:
         result = run_retrograde_apply_expansion(args)
     elif args.command == "retrograde-embed-history":
         result = run_retrograde_embed_history(args)
+    elif args.command == "record-revelation":
+        result = run_record_revelation(args)
     elif args.command == "faction-audit":
         result = run_faction_audit(args)
     elif args.command == "faction-manifest":

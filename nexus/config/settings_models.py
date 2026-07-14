@@ -974,6 +974,52 @@ class OrreryProjectSettings(BaseModel):
     )
 
 
+class OrreryEpistemicsSettings(BaseModel):
+    """Claim minting and awareness policy for [orrery.epistemics]."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = Field(
+        default=True,
+        description="Enable claim producers and knower-gated predicates.",
+    )
+    claim_event_types: List[str] = Field(
+        default_factory=lambda: ["threat_issued"],
+        description="World event types that mint bounded claims at birth.",
+    )
+    aware_roles: List[str] = Field(
+        default_factory=lambda: ["actor", "target", "observer", "witness"],
+        description=(
+            "world_event_entities roles that receive awareness when a claim is minted."
+        ),
+    )
+
+    @field_validator("claim_event_types")
+    @classmethod
+    def _validate_claim_event_types(cls, values: List[str]) -> List[str]:
+        """Reject blank or duplicate event-type policy entries."""
+
+        normalized = [value.strip() for value in values]
+        if any(not value for value in normalized):
+            raise ValueError("claim_event_types entries must be non-empty")
+        if len(set(normalized)) != len(normalized):
+            raise ValueError("claim_event_types entries must be unique")
+        return normalized
+
+    @field_validator("aware_roles")
+    @classmethod
+    def _validate_aware_roles(cls, values: List[str]) -> List[str]:
+        """Reject duplicate awareness roles."""
+
+        allowed = {"actor", "target", "observer", "witness", "beneficiary"}
+        unknown = set(values) - allowed
+        if unknown:
+            raise ValueError(f"aware_roles contains unknown roles: {sorted(unknown)}")
+        if len(set(values)) != len(values):
+            raise ValueError("aware_roles entries must be unique")
+        return values
+
+
 class OrreryReconstructionSettings(BaseModel):
     """Reconstruction-sufficiency knobs (issue #426)."""
 
@@ -1604,6 +1650,9 @@ class OrrerySettings(BaseModel):
         default_factory=OrreryPackageSelectionSettings
     )
     projects: OrreryProjectSettings = Field(default_factory=OrreryProjectSettings)
+    epistemics: OrreryEpistemicsSettings = Field(
+        default_factory=OrreryEpistemicsSettings
+    )
     retrograde: OrreryRetrogradeSettings
     dashboard: OrreryDashboardSettings = Field(default_factory=OrreryDashboardSettings)
     reconstruction: OrreryReconstructionSettings = Field(

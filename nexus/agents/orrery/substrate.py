@@ -312,6 +312,7 @@ class EventRecord:
 
     event_type: str
     tick: int
+    event_id: Optional[int] = None
     actor_entity_id: Optional[int] = None
     target_entity_id: Optional[int] = None
     location_id: Optional[int] = None
@@ -351,6 +352,9 @@ class WorldState:
         default_factory=dict
     )
     recent_events: Tuple[EventRecord, ...] = ()
+    claimed_event_scopes: Mapping[int, str] = field(default_factory=dict)
+    awareness_by_entity: Mapping[int, frozenset[int]] = field(default_factory=dict)
+    epistemics_enabled: bool = False
     time_of_day: str = "midday"
     world_time: Optional[datetime] = None
     weather: str = "clear"
@@ -1760,6 +1764,72 @@ def recent_event(
     if changed_fields:
         parts.append("fields")
     return _named(_condition, f"recent_event({','.join(parts)})")
+
+
+def knows_recent_event(
+    event_type: Optional[str] = None,
+    *,
+    within_ticks: int = 5,
+    actor_slot: Optional[Slot] = None,
+    target_slot: Optional[Slot] = None,
+    changed_fields_any_of: Iterable[str] = (),
+) -> Condition:
+    """Return whether the actor knows a matching recent event.
+
+    Events without claims and common-scope claims remain visible to every
+    actor. Bounded/private claims require an awareness row for the entity
+    bound to :class:`Slot.ACTOR`. Disabling Epistemics makes this predicate
+    exactly equivalent to :func:`recent_event`.
+    """
+
+    changed_fields = frozenset(changed_fields_any_of)
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        knower_id = _slot_entity(bindings, Slot.ACTOR)
+        if state.epistemics_enabled and knower_id is None:
+            return False
+        actor_id = _slot_entity(bindings, actor_slot) if actor_slot else None
+        target_id = _slot_entity(bindings, target_slot) if target_slot else None
+        if actor_slot is not None and actor_id is None:
+            return False
+        if target_slot is not None and target_id is None:
+            return False
+        cutoff = state.current_tick - within_ticks
+        known_events: frozenset[int] = frozenset()
+        if knower_id is not None:
+            known_events = state.awareness_by_entity.get(knower_id, frozenset())
+        for event in state.recent_events:
+            if event.tick < cutoff:
+                continue
+            if event_type is not None and event.event_type != event_type:
+                continue
+            if actor_id is not None and event.actor_entity_id != actor_id:
+                continue
+            if target_id is not None and event.target_entity_id != target_id:
+                continue
+            if changed_fields and not changed_fields.intersection(event.changed_fields):
+                continue
+            if not state.epistemics_enabled:
+                return True
+            scope = (
+                state.claimed_event_scopes.get(event.event_id)
+                if event.event_id is not None
+                else None
+            )
+            if scope is None or scope == "common":
+                return True
+            if event.event_id in known_events:
+                return True
+        return False
+
+    parts = [event_type or "*", f"<={within_ticks}", "knower=actor"]
+    if actor_slot:
+        parts.append(f"actor={actor_slot.value}")
+    if target_slot:
+        parts.append(f"target={target_slot.value}")
+    if changed_fields:
+        parts.append("fields")
+    return _named(_condition, f"knows_recent_event({','.join(parts)})")
 
 
 def since_last_event_at_least(
