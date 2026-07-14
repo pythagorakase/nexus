@@ -7,6 +7,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import os
 from collections import Counter, defaultdict
 from typing import Any, Dict, Iterable, List, Mapping, Sequence
 
@@ -133,7 +134,14 @@ def format_retrieval_coverage_report(
 
 
 def _load_rows(slot: int) -> List[Mapping[str, Any]]:
-    connection = psycopg2.connect(dbname=slot_dbname(slot), host="localhost")
+    # Honor the standard libpq env vars (the pattern the live-test helpers
+    # use); bare defaults match the documented single-machine setup.
+    connection = psycopg2.connect(
+        dbname=slot_dbname(slot),
+        host=os.environ.get("PGHOST", "localhost"),
+        user=os.environ.get("PGUSER", "pythagor"),
+        port=os.environ.get("PGPORT", "5432"),
+    )
     connection.set_session(readonly=True)
     try:
         with connection.cursor(cursor_factory=RealDictCursor) as cursor:
