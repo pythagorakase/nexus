@@ -894,6 +894,10 @@ model = "@openai.default"     # Resolved via api_models registry; edit roles to 
 reasoning_effort = "medium"   # Reasoning effort level (low/medium/high)
 max_output_tokens = 25000     # Maximum tokens for generated narrative
 structured_output_retries = 3 # Validation retry budget for structured story turns
+# HTTP client timeout for a narrative continue turn. Frontier generation runs
+# inside the request and blocks the API worker, so status polls aren't answered
+# until the turn finishes; this must exceed the slowest expected generation.
+generation_timeout_seconds = 300
 
 # =============================================================================
 # Narrative Summary Settings
