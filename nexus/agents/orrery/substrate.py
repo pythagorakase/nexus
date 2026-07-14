@@ -2143,40 +2143,55 @@ def select_package(
 ) -> PackageSelectionOutcome:
     """Choose one firing package through the production/explain authority.
 
-    Effective priority is computed after habituation for every firing
-    candidate. Missing policy and explicit ``argmax`` retain the former
-    first-firing behavior. In stochastic mode, configured exempt bands
-    preempt randomization; otherwise only candidates in the near-tie window
-    enter a seeded softmax. The seed uses binding identity and the persisted
-    tick plus a package-specific salt, so the same evaluation is replay-
-    identical without sharing branch-selection calibration.
+    Evaluation is lazy in effective-priority order: with no policy or
+    explicit ``argmax``, the first firing template returns immediately —
+    exactly the legacy ``evaluate_stack`` short-circuit; shadowed templates
+    are never evaluated. Stochastic mode keeps evaluating only down to the
+    near-tie window's floor (``peak - window_points``); candidates below
+    the floor cannot win under either regime, so their gates and branch
+    RNG never run. An exempt-band candidate firing at or above the floor
+    preempts randomization for the whole stack. The softmax seed uses
+    binding identity and the persisted tick plus a package-specific salt,
+    so the same evaluation is replay-identical without sharing
+    branch-selection calibration.
     """
 
     habituation_policy = habituation or HabituationPolicy()
     ordered = stack_order(templates, state, bindings, habituation_policy)
-    passing = [
-        (
-            template,
-            evaluate(template, state, bindings, branch_selection),
-            habituation_policy.effective_priority(template, state, bindings),
+    stochastic = (
+        package_selection is not None and package_selection.mode == "stochastic"
+    )
+
+    window: list[tuple[Template, Resolution, float]] = []
+    peak: Optional[float] = None
+    for template in ordered:
+        effective_priority = habituation_policy.effective_priority(
+            template, state, bindings
         )
-        for template in ordered
-    ]
-    passing = [candidate for candidate in passing if candidate[1].passes]
-    if not passing:
+        if peak is not None and (
+            effective_priority < peak - package_selection.window_points
+        ):
+            break  # ordered descending: nothing below the floor can win
+        resolution = evaluate(template, state, bindings, branch_selection)
+        if not resolution.passes:
+            continue
+        if not stochastic:
+            return PackageSelectionOutcome(
+                winner=resolution,
+                window_template_ids=(template.id,),
+                reason="argmax",
+            )
+        if peak is None:
+            peak = effective_priority
+        window.append((template, resolution, effective_priority))
+
+    if not window:
         return PackageSelectionOutcome(winner=None)
 
-    argmax = passing[0]
-    if package_selection is None or package_selection.mode == "argmax":
-        return PackageSelectionOutcome(
-            winner=argmax[1],
-            window_template_ids=(argmax[0].id,),
-            reason="argmax",
-        )
-
+    argmax = window[0]
     if any(
         template.drive_band.value in package_selection.exempt_bands
-        for template, _resolution, _priority in passing
+        for template, _resolution, _priority in window
     ):
         return PackageSelectionOutcome(
             winner=argmax[1],
@@ -2185,11 +2200,6 @@ def select_package(
         )
 
     peak = argmax[2]
-    window = [
-        candidate
-        for candidate in passing
-        if peak - candidate[2] <= package_selection.window_points
-    ]
     window_ids = tuple(template.id for template, _resolution, _priority in window)
     if len(window) == 1:
         return PackageSelectionOutcome(

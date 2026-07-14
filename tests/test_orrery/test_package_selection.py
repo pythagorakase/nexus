@@ -155,3 +155,57 @@ def test_explain_reports_window_and_softmax_choice() -> None:
     assert explained.chosen_by_softmax is True
     assert explained.selection_reason == "window_softmax"
     assert explained.to_dict()["chosen_by_softmax"] is True
+
+
+def test_argmax_short_circuits_shadowed_templates() -> None:
+    """Legacy laziness is preserved: once a winner fires in argmax mode (or
+    with no policy), shadowed templates' gates are never evaluated — and in
+    stochastic mode, evaluation stops at the near-tie window's floor."""
+
+    from nexus.agents.orrery.substrate import Condition, select_package
+
+    evaluated: list[str] = []
+
+    def _tracking_gate(name: str) -> Condition:
+        def probe(state: WorldState, bindings: dict) -> bool:
+            evaluated.append(name)
+            return True
+
+        probe.__name__ = f"tracking_{name}"
+        return probe
+
+    def _tracked(template_id: str, priority: int) -> Template:
+        return Template(
+            id=template_id,
+            priority=priority,
+            drive_band=DriveBand.ANCHORED_ROUTINE,
+            blurb="Short-circuit probe.",
+            required_slots=(Slot.ACTOR,),
+            package_gate=_tracking_gate(template_id),
+            branches=(Branch("act", ALWAYS, "{actor} acts."),),
+        )
+
+    top = _tracked("top", 50)
+    shadowed = _tracked("shadowed", 40)
+    state = WorldState(current_tick=7)
+
+    evaluated.clear()
+    outcome = select_package((shadowed, top), state, BINDINGS)
+    assert outcome.winner is not None and outcome.winner.template_id == "top"
+    assert evaluated == ["top"], "no-policy argmax must not evaluate shadowed gates"
+
+    evaluated.clear()
+    select_package((shadowed, top), state, BINDINGS, package_selection=_stochastic())
+    assert evaluated == [
+        "top"
+    ], "stochastic evaluation must stop at the window floor (50 - 6 > 40)"
+
+    evaluated.clear()
+    near = _tracked("near", 46)
+    select_package(
+        (shadowed, near, top), state, BINDINGS, package_selection=_stochastic()
+    )
+    assert evaluated == [
+        "top",
+        "near",
+    ], "in-window gates evaluate; below-floor gates never run"
