@@ -111,9 +111,8 @@ def test_pass2_handles_karaoke_divergence(
     authorial_passages.append(structured_stub)
 
     analysis = context.phase_states.get("warm_analysis", {}).get("analysis", {})
-    assert analysis.get(
-        "characters"
-    ), "Warm analysis should capture characters for notes"
+    assert analysis.get("source") == "programmatic_warm_slice"
+    assert KARAOKE_CHUNK_ID in analysis.get("warm_chunk_ids", [])
     assert context.entity_data.get(
         "characters"
     ), "Structured character lookups should be populated"

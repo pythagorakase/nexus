@@ -176,7 +176,7 @@ def test_pass2_divergence_triggers_incremental_retrieval(
     )
 
 
-def test_pass2_ignores_entities_already_in_baseline(
+def test_pass2_preserves_entity_detection_when_character_is_in_baseline(
     minimal_settings, dummy_memnon, baseline_inputs
 ):
     manager = ContextMemoryManager(minimal_settings, memnon=dummy_memnon)
@@ -193,8 +193,9 @@ def test_pass2_ignores_entities_already_in_baseline(
 
     update = manager.handle_user_input("Ask Emilia about the vault.")
 
-    assert update.divergence.detected is False
-    assert update.divergence.gaps == {}
+    assert update.divergence.detected is True
+    assert update.divergence.gaps == {"character_2": "Character 'Emilia' mentioned"}
+    assert update.divergence.references_seen == {"user_input"}
 
 
 def test_pass2_marks_matched_entities_outside_baseline(
