@@ -2036,6 +2036,80 @@ def coerce_habituation(raw: Any) -> HabituationPolicy:
     raise ValueError(f"Unsupported habituation settings: {type(raw)!r}")
 
 
+@dataclass(frozen=True, slots=True)
+class PackageSelection:
+    """Stack-winner policy from [orrery.package_selection].
+
+    ``argmax`` preserves the legacy first-firing template in effective-priority
+    order. ``stochastic`` softmax-samples only the gate-passing templates whose
+    effective priorities sit within ``window_points`` of the maximum. Any
+    passing template in ``exempt_bands`` disables sampling for the whole stack,
+    preserving strict priority for crisis and other configured safety bands.
+    """
+
+    mode: str
+    window_points: float
+    temperature: float
+    exempt_bands: frozenset[str]
+
+    def __post_init__(self) -> None:
+        if self.mode not in ("argmax", "stochastic"):
+            raise ValueError(
+                f"Unknown package-selection mode {self.mode!r}; expected "
+                "'argmax' or 'stochastic'"
+            )
+        if self.window_points < 0:
+            raise ValueError(
+                "Package-selection window_points must be >= 0, got "
+                f"{self.window_points}"
+            )
+        if self.temperature <= 0:
+            raise ValueError(
+                "Package-selection temperature must be > 0, got " f"{self.temperature}"
+            )
+
+
+def coerce_package_selection(raw: Any) -> Optional[PackageSelection]:
+    """Coerce [orrery.package_selection] config to its runtime policy.
+
+    ``None`` preserves the legacy strict-argmax stack behavior for callers
+    that have not supplied configuration.
+    """
+
+    if raw is None or isinstance(raw, PackageSelection):
+        return raw
+    if isinstance(raw, Mapping):
+        return PackageSelection(
+            mode=str(raw["mode"]),
+            window_points=float(raw["window_points"]),
+            temperature=float(raw["temperature"]),
+            exempt_bands=frozenset(raw["exempt_bands"]),
+        )
+    return PackageSelection(
+        mode=str(raw.mode),
+        window_points=float(raw.window_points),
+        temperature=float(raw.temperature),
+        exempt_bands=frozenset(raw.exempt_bands),
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class PackageSelectionOutcome:
+    """Auditable result from the shared stack-winner authority."""
+
+    winner: Optional[Resolution]
+    window_template_ids: Tuple[str, ...] = ()
+    chosen_by_softmax: bool = False
+    reason: str = "no_passing_candidate"
+
+
+def _package_selection_rng(digest: str, tick: int) -> random.Random:
+    """PRNG keyed on binding identity, persisted tick, and a distinct salt."""
+
+    seed_material = f"{digest}:{tick}:package_selection"
+    return random.Random(int(sha256(seed_material.encode("utf-8")).hexdigest(), 16))
+
+
 def stack_order(
     templates: Iterable[Template],
     state: WorldState,
@@ -2059,20 +2133,104 @@ def stack_order(
     )
 
 
+def select_package(
+    templates: Iterable[Template],
+    state: WorldState,
+    bindings: Bindings,
+    branch_selection: Optional[BranchSelection] = None,
+    habituation: Optional[HabituationPolicy] = None,
+    package_selection: Optional[PackageSelection] = None,
+) -> PackageSelectionOutcome:
+    """Choose one firing package through the production/explain authority.
+
+    Effective priority is computed after habituation for every firing
+    candidate. Missing policy and explicit ``argmax`` retain the former
+    first-firing behavior. In stochastic mode, configured exempt bands
+    preempt randomization; otherwise only candidates in the near-tie window
+    enter a seeded softmax. The seed uses binding identity and the persisted
+    tick plus a package-specific salt, so the same evaluation is replay-
+    identical without sharing branch-selection calibration.
+    """
+
+    habituation_policy = habituation or HabituationPolicy()
+    ordered = stack_order(templates, state, bindings, habituation_policy)
+    passing = [
+        (
+            template,
+            evaluate(template, state, bindings, branch_selection),
+            habituation_policy.effective_priority(template, state, bindings),
+        )
+        for template in ordered
+    ]
+    passing = [candidate for candidate in passing if candidate[1].passes]
+    if not passing:
+        return PackageSelectionOutcome(winner=None)
+
+    argmax = passing[0]
+    if package_selection is None or package_selection.mode == "argmax":
+        return PackageSelectionOutcome(
+            winner=argmax[1],
+            window_template_ids=(argmax[0].id,),
+            reason="argmax",
+        )
+
+    if any(
+        template.drive_band.value in package_selection.exempt_bands
+        for template, _resolution, _priority in passing
+    ):
+        return PackageSelectionOutcome(
+            winner=argmax[1],
+            window_template_ids=(argmax[0].id,),
+            reason="exempt_band_argmax",
+        )
+
+    peak = argmax[2]
+    window = [
+        candidate
+        for candidate in passing
+        if peak - candidate[2] <= package_selection.window_points
+    ]
+    window_ids = tuple(template.id for template, _resolution, _priority in window)
+    if len(window) == 1:
+        return PackageSelectionOutcome(
+            winner=argmax[1],
+            window_template_ids=window_ids,
+            reason="single_candidate_window",
+        )
+
+    weights = [
+        math.exp((effective_priority - peak) / package_selection.temperature)
+        for _template, _resolution, effective_priority in window
+    ]
+    digest = binding_hash(bindings)
+    rng = _package_selection_rng(digest, state.current_tick)
+    chosen = rng.choices(window, weights=weights, k=1)[0]
+    return PackageSelectionOutcome(
+        winner=chosen[1],
+        window_template_ids=window_ids,
+        chosen_by_softmax=True,
+        reason="window_softmax",
+    )
+
+
 def evaluate_stack(
     templates: Iterable[Template],
     state: WorldState,
     bindings: Bindings,
     selection: Optional[BranchSelection] = None,
     habituation: Optional[HabituationPolicy] = None,
+    package_selection: Optional[PackageSelection] = None,
 ) -> Optional[Resolution]:
-    """Evaluate templates in effective-priority order; first firing branch wins."""
+    """Evaluate a stack through the shared package-selection authority."""
 
-    for template in stack_order(templates, state, bindings, habituation):
-        result = evaluate(template, state, bindings, selection)
-        if result.passes:
-            return result
-    return None
+    return select_package(
+        templates,
+        state,
+        bindings,
+        selection,
+        habituation,
+        package_selection,
+    ).winner
 
 
 def validate_always_fallbacks(templates: Iterable[Template]) -> None:

@@ -34,6 +34,8 @@ from nexus.agents.orrery.substrate import (
     BranchSelection,
     CompoundCondition,
     Condition,
+    HabituationPolicy,
+    PackageSelection,
     Resolution,
     Slot,
     Template,
@@ -41,7 +43,7 @@ from nexus.agents.orrery.substrate import (
     binding_hash,
     evaluate,
     select_branch,
-    HabituationPolicy,
+    select_package,
     stack_order,
 )
 
@@ -166,6 +168,9 @@ class StackExplanation:
     bindings: Mapping[str, Any]
     winner_id: Optional[str]
     templates: Tuple[TemplateExplanation, ...]
+    selection_window_ids: Tuple[str, ...] = ()
+    chosen_by_softmax: bool = False
+    selection_reason: str = "no_passing_candidate"
 
     @property
     def shadowed_ids(self) -> Tuple[str, ...]:
@@ -188,6 +193,9 @@ class StackExplanation:
         return {
             "bindings": dict(self.bindings),
             "winner_id": self.winner_id,
+            "selection_window_ids": list(self.selection_window_ids),
+            "chosen_by_softmax": self.chosen_by_softmax,
+            "selection_reason": self.selection_reason,
             "shadowed_ids": list(self.shadowed_ids),
             "templates": templates,
         }
@@ -335,22 +343,31 @@ def explain_stack(
     bindings: Bindings,
     selection: Optional[BranchSelection] = None,
     habituation: Optional[HabituationPolicy] = None,
+    package_selection: Optional[PackageSelection] = None,
 ) -> StackExplanation:
     """Explain every template in effective-priority order; flag the winner.
 
-    Mirrors :func:`evaluate_stack` selection (highest effective priority
-    firing template wins) while retaining the full audit record for every
-    template, so the dashboard can render the winner alongside the shadowed
-    packages. Ordering routes through the shared :func:`stack_order`
-    authority — habituation dampening shows up here exactly as it does in
-    production.
+    Mirrors :func:`evaluate_stack` through the shared :func:`select_package`
+    authority while retaining the full audit record for every template, so
+    the dashboard can render the winner, near-tie window, and shadowed
+    packages. Ordering routes through :func:`stack_order`, so habituation
+    dampening shows up here exactly as it does in production.
     """
 
-    ordered = stack_order(templates, state, bindings, habituation)
+    templates_tuple = tuple(templates)
+    outcome = select_package(
+        templates_tuple,
+        state,
+        bindings,
+        selection,
+        habituation,
+        package_selection,
+    )
+    ordered = stack_order(templates_tuple, state, bindings, habituation)
     explanations = tuple(
         explain_template(template, state, bindings, selection) for template in ordered
     )
-    winner_id = next((item.template_id for item in explanations if item.fired), None)
+    winner_id = outcome.winner.template_id if outcome.winner is not None else None
     serialized_bindings = {
         slot.value if isinstance(slot, Slot) else str(slot): value
         for slot, value in bindings.items()
@@ -359,4 +376,7 @@ def explain_stack(
         bindings=serialized_bindings,
         winner_id=winner_id,
         templates=explanations,
+        selection_window_ids=outcome.window_template_ids,
+        chosen_by_softmax=outcome.chosen_by_softmax,
+        selection_reason=outcome.reason,
     )

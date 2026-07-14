@@ -826,6 +826,43 @@ class OrrerySelectionSettings(BaseModel):
     )
 
 
+class OrreryPackageSelectionSettings(BaseModel):
+    """Near-tie stack-winner policy for [orrery.package_selection]."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["stochastic", "argmax"] = Field(
+        default="stochastic",
+        description=(
+            "Package winner rule: strict effective-priority argmax, or a "
+            "seeded softmax within window_points of the maximum."
+        ),
+    )
+    window_points: float = Field(
+        default=6.0,
+        ge=0.0,
+        description=(
+            "Maximum effective-priority distance from the stack maximum for "
+            "entry into stochastic package selection."
+        ),
+    )
+    temperature: float = Field(
+        default=2.0,
+        gt=0.0,
+        description=(
+            "Softmax temperature on the package priority's 0-100 scale; this "
+            "is intentionally separate from branch magnitude temperature."
+        ),
+    )
+    exempt_bands: list[str] = Field(
+        default_factory=lambda: ["crisis_constraint"],
+        description=(
+            "Drive bands that disable package randomization whenever any "
+            "candidate in that band passes."
+        ),
+    )
+
+
 class OrreryReconstructionSettings(BaseModel):
     """Reconstruction-sufficiency knobs (issue #426)."""
 
@@ -1445,6 +1482,9 @@ class OrrerySettings(BaseModel):
     promote: OrreryPromoteSettings = Field(default_factory=OrreryPromoteSettings)
     sunhelm: OrrerySunhelmSettings = Field(default_factory=OrrerySunhelmSettings)
     selection: OrrerySelectionSettings = Field(default_factory=OrrerySelectionSettings)
+    package_selection: OrreryPackageSelectionSettings = Field(
+        default_factory=OrreryPackageSelectionSettings
+    )
     retrograde: OrreryRetrogradeSettings
     dashboard: OrreryDashboardSettings = Field(default_factory=OrreryDashboardSettings)
     reconstruction: OrreryReconstructionSettings = Field(

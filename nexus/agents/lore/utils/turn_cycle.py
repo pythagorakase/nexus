@@ -642,6 +642,7 @@ class TurnCycleManager:
                 sunhelm_settings=orrery_settings.get("sunhelm"),
                 selection_settings=orrery_settings.get("selection"),
                 habituation_settings=orrery_settings.get("habituation"),
+                package_selection_settings=orrery_settings.get("package_selection"),
                 fanout_settings=orrery_settings.get("fanout"),
             )
 
