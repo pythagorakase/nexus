@@ -21,3 +21,15 @@ repos:
           files, not only templates.py/substrate.py/catalog.py. If the doc
           changes, pre-commit aborts the commit; re-stage the regenerated file
           and commit again.
+      - id: validate-config
+        name: Validate NEXUS config and model-ID drift
+        entry: poetry run python scripts/validate_config_commit.py
+        language: system
+        pass_filenames: false
+        files: (^nexus\.toml$|\.py$)
+        description: >
+          Makes model-roster edits safe to commit: loads nexus.toml through
+          the Pydantic models (dangling @provider.role refs abort here, not
+          at the next boot), enforces the dev-dashboard ship-off invariant,
+          and runs the model-ID drift scan for stale literals lacking a
+          "# pin:" comment.

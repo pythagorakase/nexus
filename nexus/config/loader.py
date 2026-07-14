@@ -344,6 +344,13 @@ def _load_from_toml(path: Path) -> Settings:
     with open(path, "rb") as f:
         data = tomllib.load(f)
 
+    # Dev escape hatch (same pattern as NEXUS_KEYRING_DISABLE): the committed
+    # [orrery.dashboard] enabled must ship false (no-auth gateway on 0.0.0.0),
+    # so local dashboard work uses the environment instead of a dirty — and
+    # historically, accidentally committed — nexus.toml.
+    if os.environ.get("NEXUS_DEV_DASHBOARD") == "1":
+        data.setdefault("orrery", {}).setdefault("dashboard", {})["enabled"] = True
+
     try:
         settings = Settings(**data)
         return settings

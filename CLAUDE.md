@@ -20,6 +20,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Config in `.pre-commit-config.yaml`. Hooks fire on `git commit`. Currently:
 
 - **regenerate-orrery-catalog** — always runs and regenerates `docs/orrery_packages.md` so the human-readable catalog stays in lockstep with the canonical Python source. The hook modifies the file; if it does, pre-commit aborts the commit and prompts you to re-stage the regenerated doc + commit again.
+- **validate-config** — fires when `nexus.toml` or any `.py` file is staged; makes model-roster edits safe to commit. Loads `nexus.toml` through the Pydantic models (a removed model id with a dangling `@provider.role` reference aborts the commit here, not at the next boot), enforces the dev-dashboard ship-off invariant (`[orrery.dashboard] enabled` must be committed `false`; use `NEXUS_DEV_DASHBOARD=1` for local dashboard work), and runs `scripts/check_model_drift.py` for stale literal model ids lacking a `# pin: <reason>` comment.
 
 Bypass (use sparingly): `git commit --no-verify`. CI staleness tests still gate merges.
 

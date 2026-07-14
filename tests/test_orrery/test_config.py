@@ -19,6 +19,15 @@ from nexus.config.settings_models import (
 )
 
 
+def test_dev_dashboard_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    """NEXUS_DEV_DASHBOARD=1 enables the dashboard without editing the file
+    — the escape hatch that keeps the committed flag false."""
+
+    monkeypatch.setenv("NEXUS_DEV_DASHBOARD", "1")
+    settings = load_settings("nexus.toml")
+    assert settings.orrery.dashboard.enabled is True
+
+
 def test_orrery_settings_resolve_model_reference() -> None:
     """Orrery narration config resolves provider role references at load time."""
 

@@ -243,10 +243,21 @@ def test_configured_param_rejected_when_model_declares_it_unsupported():
 
 
 def test_configured_param_allowed_when_model_supports_it():
-    """A supporting model (Sonnet 5.0) accepts a configured temperature."""
+    """A registry model without a temperature restriction accepts one.
+
+    Uses a synthetic registry entry: whether any REAL shipped model still
+    accepts temperature is a roster fact that changes with every version
+    bump — this test guards the validator, not the roster.
+    """
     raw = _nexus_toml_dict()
-    # pin: needs a registry model WITHOUT temperature in unsupported_params
-    raw["orrery"]["narration"]["model_ref"] = "claude-sonnet-5-0"
+    raw["global"]["model"]["api_models"]["anthropic"]["models"].append(
+        {
+            "id": "synthetic-temperature-model",
+            "label": "Synthetic (test only)",
+            "native_structured_output": True,
+        }
+    )
+    raw["orrery"]["narration"]["model_ref"] = "synthetic-temperature-model"
     raw["orrery"]["narration"]["temperature"] = 0.4
     settings = Settings(**raw)
     assert settings.orrery.narration.temperature == 0.4
