@@ -1,5 +1,7 @@
 """Tests for Orrery configuration loading."""
 
+import subprocess
+import tomllib
 from copy import deepcopy
 
 import pytest
@@ -49,7 +51,23 @@ def test_orrery_settings_resolve_model_reference() -> None:
         "intimacy": 16,
     }
     assert settings.orrery.sunhelm.pressure.min_severity_level == 2
-    assert settings.orrery.dashboard.enabled is False
+    # The ship-off invariant applies to the COMMITTED config: flipping the
+    # dashboard on locally is a documented workflow (nexus.toml comment,
+    # issue #415), and asserting the working tree here trains developers to
+    # commit the flag just to green the suite — which is how it leaked in
+    # 4917cfc9. CI runs on committed trees, so the gate still blocks commits.
+    committed_toml = subprocess.run(
+        ["git", "show", "HEAD:nexus.toml"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    committed_dashboard = tomllib.loads(committed_toml)["orrery"]["dashboard"]
+    assert committed_dashboard["enabled"] is False, (
+        "[orrery.dashboard] enabled must ship false: the gateway has no "
+        "auth and binds 0.0.0.0 (see the nexus.toml comment). Flip it "
+        "locally only — never commit it."
+    )
     assert settings.orrery.dashboard.coverage_max_anchors == 50
     assert settings.orrery.dashboard.coverage_epoch_min_world_times == 10
     weird = settings.orrery.retrograde.weird
