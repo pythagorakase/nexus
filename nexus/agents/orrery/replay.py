@@ -24,8 +24,11 @@ produces. Sections and their replay sources:
   Exact only while ``[orrery.sunhelm]`` tuning matches its value at the
   original commit; the tuning is not versioned. The un-ledgered
   need-applicability trigger (migration 057: entity_tags changes insert/
-  delete need rows and clear severity tags) is mirrored after tag replay,
-  since its final effect is a pure function of the final tag set.
+  delete need rows and clear severity tags) is mirrored after tag replay:
+  row presence follows the final tag set, and rows whose applicability
+  toggled off-and-back inside the window are reset to the trigger's
+  fresh-insert shape (detected chronologically from chunk-keyed
+  immunity-tag events).
 - ``character_travel_states`` — forward for explicit payloads;
   ``travel.start`` resolves destinations and routes from live state at
   commit time, so windows containing travel deltas are approximate.
@@ -55,6 +58,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Optional
 
 from nexus.agents.orrery.needs import (
+    NEED_IMMUNITY_TAGS,
     NEED_TYPES,
     effective_debt_score,
     load_need_tuning,
@@ -264,11 +268,13 @@ def _coerce_need_payload(raw: Any) -> dict[str, Any]:
 
 
 def _coerce_travel_payload(raw: Any) -> dict[str, Any]:
-    if raw is True:
+    # Mirror events._coerce_travel_payload: None and True both mean "use
+    # defaults" — a JSON null travel value is a live production write path.
+    if raw is None or raw is True:
         return {}
     if isinstance(raw, dict):
         return dict(raw)
-    raise ValueError(f"travel payload must be a mapping or true, got {raw!r}")
+    raise ValueError(f"travel payload must be a mapping, null, or true, got {raw!r}")
 
 
 class _Replayer:
@@ -367,6 +373,8 @@ class _Replayer:
             characters,
             tag_workings["entity_tags"],
             needs,
+            base_chunk,
+            base_state,
             result,
         )
         for section, working in tag_workings.items():
@@ -905,6 +913,8 @@ class _Replayer:
         characters: dict[int, dict[str, Any]],
         entity_tags_working: dict[int, dict[str, Any]],
         needs: dict[tuple[int, str], dict[str, Any]],
+        base_chunk: int,
+        base_state: dict[str, Any],
         result: ReplayResult,
     ) -> None:
         """Mirror ``orrery_sync_character_need_states`` (migration 057).
@@ -912,10 +922,14 @@ class _Replayer:
         Production triggers on entity_tags changes (and character INSERTs)
         ensure need rows for every applicable need type, DELETE rows for
         needs the entity's tags make inapplicable, and clear that need's
-        severity tags — all un-ledgered. The final table state is a pure
-        function of the final active tag set, so the mirror runs once, after
-        tag replay, over the entities whose tags changed in the window (the
-        population the trigger fired for).
+        severity tags — all un-ledgered. Row PRESENCE at the target is a
+        pure function of the final active tag set; row CONTENTS are not —
+        an applicability toggle (immunity tag applied then cleared inside
+        one window) makes production delete and re-insert a FRESH row, so
+        toggled rows are reset to the fresh-insert shape here with their
+        wall-clock-dependent columns flagged unreproducible. Toggles are
+        detected by walking the window's chunk-keyed immunity-tag events
+        chronologically.
         """
 
         if not affected_entities:
@@ -937,9 +951,13 @@ class _Replayer:
                 (list(tag_ids),),
             )
             tag_names = dict(self.cur.fetchall())
+        went_inapplicable = self._needs_that_toggled_inapplicable(
+            affected_entities & character_entities, base_chunk, base_state
+        )
 
         synthesized = 0
         deleted = 0
+        reset = 0
         severity_cleared = 0
         for entity_id in sorted(affected_entities & character_entities):
             active_tags = {
@@ -952,6 +970,7 @@ class _Replayer:
             }
             for need in NEED_TYPES:
                 key = (entity_id, need)
+                row_key = f"{entity_id}:{need}"
                 if need in applicable and key not in needs:
                     needs[key] = {
                         "character_entity_id": entity_id,
@@ -966,12 +985,40 @@ class _Replayer:
                     # The trigger stamps MAX(chunk_metadata.world_time) at
                     # firing time — not reconstructable after the fact.
                     result.unreproducible.add(
-                        (
-                            "character_need_states",
-                            f"{entity_id}:{need}",
-                            "last_evaluated_at",
-                        )
+                        ("character_need_states", row_key, "last_evaluated_at")
                     )
+                elif need in applicable and key in needs and key in went_inapplicable:
+                    # Applicability toggled off then back on inside the
+                    # window: production deleted the row and re-inserted a
+                    # FRESH one; the checkpoint-inherited contents are stale.
+                    fulfilled_after = (
+                        needs[key].get("last_evaluated_chunk_id") or 0
+                    ) > base_chunk
+                    needs[key] = {
+                        "character_entity_id": entity_id,
+                        "need_type": need,
+                        "debt_score": 0.0,
+                        "last_evaluated_at": None,
+                        "last_evaluated_chunk_id": None,
+                        "last_fulfilled_at": None,
+                        "metadata": {"synced_by": "need_applicability"},
+                    }
+                    reset += 1
+                    columns = ["last_evaluated_at"]
+                    if fulfilled_after:
+                        # A need.fulfill also landed in the window; whether
+                        # it hit the pre-toggle or post-toggle row is not
+                        # reconstructable from the ledger's chunk grain.
+                        columns += [
+                            "debt_score",
+                            "last_evaluated_chunk_id",
+                            "last_fulfilled_at",
+                            "metadata",
+                        ]
+                    for column in columns:
+                        result.unreproducible.add(
+                            ("character_need_states", row_key, column)
+                        )
                 elif need not in applicable and key in needs:
                     del needs[key]
                     deleted += 1
@@ -986,14 +1033,96 @@ class _Replayer:
                     ]:
                         del entity_tags_working[row_id]
                         severity_cleared += 1
-        if synthesized or deleted or severity_cleared:
+        if synthesized or deleted or reset or severity_cleared:
             result.add_note(
                 "character_need_states",
                 "need-applicability trigger mirrored: "
                 f"{synthesized} row(s) synthesized, {deleted} deleted, "
+                f"{reset} reset after an applicability toggle, "
                 f"{severity_cleared} un-logged severity tag clear(s) applied",
                 approximate=False,
             )
+
+    def _needs_that_toggled_inapplicable(
+        self,
+        entities: set[int],
+        base_chunk: int,
+        base_state: dict[str, Any],
+    ) -> set[tuple[int, str]]:
+        """(entity, need) pairs whose applicability went FALSE at some point
+        in the window, per a chronological walk of chunk-keyed immunity-tag
+        bestowals and clearances. An immunity tag both bestowed and cleared
+        in the SAME chunk counts as a toggle (the trigger fires per
+        statement; intra-chunk order is not reconstructable)."""
+
+        if not entities:
+            return set()
+        all_immunity = frozenset().union(*NEED_IMMUNITY_TAGS.values())
+        self.cur.execute(
+            "SELECT id, tag FROM tags WHERE tag = ANY(%s)",
+            (list(all_immunity),),
+        )
+        immunity_by_id: dict[int, str] = dict(self.cur.fetchall())
+        if not immunity_by_id:
+            return set()
+
+        current: dict[int, set[str]] = {entity: set() for entity in entities}
+        for row in base_state["entity_tags"]:
+            name = immunity_by_id.get(row["tag_id"])
+            if name is not None and row["entity_id"] in current:
+                current[row["entity_id"]].add(name)
+
+        events: dict[tuple[int, int], tuple[set[str], set[str]]] = {}
+
+        def _event(entity: int, chunk: int) -> tuple[set[str], set[str]]:
+            return events.setdefault((entity, chunk), (set(), set()))
+
+        self.cur.execute(
+            """
+            SELECT entity_id, tag_id, source_chunk_id FROM entity_tags
+            WHERE entity_id = ANY(%s) AND tag_id = ANY(%s)
+              AND source_chunk_id > %s AND source_chunk_id <= %s
+            """,
+            (
+                list(entities),
+                list(immunity_by_id),
+                base_chunk,
+                self.target_chunk_id,
+            ),
+        )
+        for entity_id, tag_id, chunk in self.cur.fetchall():
+            _event(entity_id, chunk)[0].add(immunity_by_id[tag_id])
+        self.cur.execute(
+            """
+            SELECT et.entity_id, et.tag_id, l.source_chunk_id
+            FROM tag_clearance_log l
+            JOIN entity_tags et ON et.id = l.entity_tag_id
+            WHERE et.entity_id = ANY(%s) AND et.tag_id = ANY(%s)
+              AND l.source_chunk_id > %s AND l.source_chunk_id <= %s
+            """,
+            (
+                list(entities),
+                list(immunity_by_id),
+                base_chunk,
+                self.target_chunk_id,
+            ),
+        )
+        for entity_id, tag_id, chunk in self.cur.fetchall():
+            _event(entity_id, chunk)[1].add(immunity_by_id[tag_id])
+
+        toggled: set[tuple[int, str]] = set()
+        for (entity_id, _chunk), (added, cleared) in sorted(
+            events.items(), key=lambda item: (item[0][0], item[0][1])
+        ):
+            transient = added & cleared
+            state = current[entity_id]
+            state |= added
+            state -= cleared
+            for need in NEED_TYPES:
+                immunity = NEED_IMMUNITY_TAGS[need]
+                if immunity & state or immunity & transient:
+                    toggled.add((entity_id, need))
+        return toggled
 
     # -- relationship unwind ---------------------------------------------------
 

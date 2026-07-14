@@ -568,6 +568,84 @@ def test_need_applicability_trigger_is_mirrored() -> None:
         conn.close()
 
 
+def test_applicability_toggle_resets_need_row_to_fresh_shape() -> None:
+    """Immunity applied at one chunk and cleared at the next: the REAL
+    trigger deletes then re-inserts a FRESH need row. The mirror must reset
+    the checkpoint-inherited row rather than let stale contents survive."""
+
+    conn = _connect()
+    try:
+        with conn.cursor() as cur:
+            head = _head_chunk(cur)
+            _, char_entity, _, _ = _probe_character(cur)
+            base_id = capture_state_checkpoint_sync(cur, chunk_id=head, label="manual")
+            bestow_chunk = _fabricate_chunk(cur, None)
+            clear_chunk = _fabricate_chunk(cur, None)
+
+            cur.execute("SELECT id FROM tags WHERE tag = 'inorganic'")
+            immunity_tag_id = cur.fetchone()[0]
+            cur.execute(
+                """
+                INSERT INTO entity_tags (
+                    entity_id, tag_id, source_kind, source_chunk_id
+                ) VALUES (%s, %s, 'template', %s) RETURNING id
+                """,
+                (char_entity, immunity_tag_id, bestow_chunk),
+            )
+            immunity_row_id = cur.fetchone()[0]
+            # Clear it one chunk later — the UPDATE fires the trigger, which
+            # re-inserts fresh rows for the newly-applicable needs.
+            cur.execute(
+                "UPDATE entity_tags SET cleared_at = now() WHERE id = %s",
+                (immunity_row_id,),
+            )
+            cur.execute(
+                """
+                INSERT INTO tag_clearance_log (
+                    entity_tag_id, mechanism, source_chunk_id
+                ) VALUES (%s, 'authored', %s)
+                """,
+                (immunity_row_id, clear_chunk),
+            )
+            cur.execute(
+                """
+                SELECT metadata FROM character_need_states
+                WHERE character_entity_id = %s AND need_type = 'hunger'
+                """,
+                (char_entity,),
+            )
+            live_metadata = cur.fetchone()[0]
+            assert (
+                live_metadata.get("synced_by") == "need_applicability"
+            ), "the DB trigger must have re-inserted a fresh row"
+            capture_state_checkpoint_sync(cur, chunk_id=clear_chunk, label="manual")
+
+            at_clear = reconstruct_state_at_sync(
+                cur, clear_chunk, base_checkpoint_id=base_id
+            )
+            row = _section_row(
+                at_clear.state["character_need_states"],
+                character_entity_id=char_entity,
+                need_type="hunger",
+            )
+            assert row is not None, "hunger must be applicable again at clear_chunk"
+            assert row["debt_score"] == 0.0
+            assert row["metadata"] == {"synced_by": "need_applicability"}
+            assert (
+                "character_need_states",
+                f"{char_entity}:hunger",
+                "last_evaluated_at",
+            ) in at_clear.unreproducible
+
+            verdicts = verify_checkpoints_sync(cur)
+            probe_pair = [v for v in verdicts if v.target_chunk_id == clear_chunk]
+            assert len(probe_pair) == 1
+            assert probe_pair[0].drifts == []
+    finally:
+        conn.rollback()
+        conn.close()
+
+
 def test_travel_replay_start_advance_arrive() -> None:
     """Travel deltas replay production-faithfully for explicit payloads:
     travel.start anchors at the origin, travel.arrive moves the character
