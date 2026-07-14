@@ -38,6 +38,7 @@ class TestTokenCalculation:
         """Test empty string token count."""
         assert calculate_chunk_tokens("") == 0
     
+    @pytest.mark.requires_postgres
     def test_calculate_chunk_tokens_narrative(self, sample_chunks):
         """Test token counting on real narrative text."""
         # Use a dialogue scene

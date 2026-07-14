@@ -21,10 +21,12 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import psycopg2
-from psycopg2.extras import RealDictCursor
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from psycopg2.extras import RealDictCursor
 from pydantic import BaseModel
+
+from nexus.config import load_settings
 
 logger = logging.getLogger("nexus.api.mock_openai")
 
@@ -58,12 +60,17 @@ app.add_middleware(
 )
 
 
-def get_mock_connection():
+def get_mock_connection() -> psycopg2.extensions.connection:
     """Get connection to mock database."""
+    settings = load_settings()
+    if settings.api is None:
+        raise ValueError("nexus.toml is missing the [api] section")
+
     return psycopg2.connect(
         host="localhost",
         database=MOCK_DB,
         user="pythagor",
+        connect_timeout=settings.api.database.connect_timeout_seconds,
         cursor_factory=RealDictCursor,
     )
 

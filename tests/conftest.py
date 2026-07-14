@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from typing import Iterable
 
+import psycopg2
 import pytest
 
 
@@ -17,6 +18,21 @@ def _apply_marker_skip(items: Iterable[pytest.Item], marker: str, reason: str) -
     for item in items:
         if marker in item.keywords:
             item.add_marker(skip_marker)
+
+
+@pytest.fixture(autouse=True)
+def _forbid_unopted_postgres_connections(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Fail immediately if a default-path test attempts a live DB connection."""
+    if _flag_enabled("NEXUS_RUN_POSTGRES"):
+        return
+
+    def fail_connect(*args: object, **kwargs: object) -> None:
+        raise AssertionError(
+            "Unit test attempted psycopg2.connect; mark it requires_postgres "
+            "and run with NEXUS_RUN_POSTGRES=1."
+        )
+
+    monkeypatch.setattr(psycopg2, "connect", fail_connect)
 
 
 def pytest_collection_modifyitems(
