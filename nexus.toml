@@ -269,6 +269,19 @@ window_points = 6.0
 temperature = 2.0
 exempt_bands = ["crisis_constraint"]
 
+[orrery.projects]
+# PLAN_RELOCATION pilot: projects advance on their own world-clock cadence.
+# The database enforces the v1 budget of one open project per character.
+advance_interval_hours = 24.0
+max_active_per_character = 1
+stall_abandon_threshold = 3
+abandon_after_stalled_world_hours = 168.0
+# Must remain at or above [orrery.promote].magnitude_threshold; routine
+# progress arms stay below that floor in templates.py.
+milestone_magnitude = 0.40
+# Acceptance guard for active-vs-inactive maintenance/routine winner shares.
+coverage_distribution_tolerance = 0.05
+
 [orrery.reconstruction]
 # JSONB state checkpoint every N accepted chunks (0 disables); genesis and
 # manual snapshots via scripts/checkpoint_state.py.

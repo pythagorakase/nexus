@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 import os
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any, Optional
 
 import psycopg2
@@ -33,7 +34,10 @@ from nexus.agents.logon.apex_schema import (
     LocationStateUpdate,
     StateUpdates,
 )
-from nexus.agents.orrery.events import _apply_need_fulfillment_sync
+from nexus.agents.orrery.events import (
+    _apply_need_fulfillment_sync,
+    _apply_state_delta_sync,
+)
 from nexus.agents.orrery.needs import load_need_tuning
 from nexus.agents.orrery.reconstruction import (
     capture_state_checkpoint_sync,
@@ -43,6 +47,8 @@ from nexus.agents.orrery.replay import (
     reconstruct_state_at_sync,
     verify_checkpoints_sync,
 )
+from nexus.agents.orrery.resolver import OrreryResolutionDraft
+from nexus.agents.orrery.substrate import ProjectPolicy
 from nexus.api.commit_handler_sync import apply_state_updates_sync
 
 pytestmark = pytest.mark.requires_postgres
@@ -51,12 +57,15 @@ WRITE_SLOT = 2
 
 
 def _connect() -> Any:
-    return psycopg2.connect(
+    conn = psycopg2.connect(
         host=os.environ.get("PGHOST", "localhost"),
         database=f"save_{WRITE_SLOT:02d}",
         user=os.environ.get("PGUSER", "pythagor"),
         port=os.environ.get("PGPORT", "5432"),
     )
+    with conn.cursor() as cur:
+        _apply_migration_074(cur)
+    return conn
 
 
 def _head_chunk(cur: Any) -> int:
@@ -90,6 +99,13 @@ def _fabricate_chunk(
             "INSERT INTO chunk_metadata (chunk_id, world_time) VALUES (%s, %s)",
             (chunk_id, world_time),
         )
+        # The statement-level metadata trigger recomputes world_time after
+        # INSERT from cumulative time_delta. Restore the requested test clock
+        # with a world_time-only UPDATE, which does not retrigger that function.
+        cur.execute(
+            "UPDATE chunk_metadata SET world_time = %s WHERE chunk_id = %s",
+            (world_time, chunk_id),
+        )
     # No metadata row when world_time is None: trg_chunk_metadata_refresh_
     # world_time backfills world_time on insert, so a NULL-world-time chunk
     # is only fabricable by omitting the row entirely.
@@ -98,16 +114,18 @@ def _fabricate_chunk(
 
 def _insert_resolution(
     cur: Any, chunk_id: int, actor_entity_id: int, state_delta: dict[str, Any]
-) -> None:
+) -> int:
     cur.execute(
         """
         INSERT INTO orrery_resolutions (
             tick_chunk_id, template_id, binding_hash, actor_entity_id,
             priority, magnitude, state_delta
         ) VALUES (%s, 'replay_probe', %s, %s, 50, 0.5, %s)
+        RETURNING id
         """,
         (chunk_id, f"probe-{chunk_id}", actor_entity_id, json.dumps(state_delta)),
     )
+    return cur.fetchone()[0]
 
 
 def _probe_character(cur: Any) -> tuple[int, int, str, Optional[int]]:
@@ -134,6 +152,55 @@ def _next_world_time(cur: Any) -> datetime:
     latest = cur.fetchone()[0]
     base = latest or datetime(2026, 1, 1, tzinfo=timezone.utc)
     return base + timedelta(hours=6)
+
+
+PROJECT_POLICY = ProjectPolicy(
+    enabled=True,
+    advance_interval_hours=24.0,
+    max_active_per_character=1,
+    stall_abandon_threshold=3,
+    abandon_after_stalled_world_hours=168.0,
+    milestone_magnitude=0.40,
+    coverage_distribution_tolerance=0.05,
+)
+
+
+def _apply_migration_074(cur: Any) -> None:
+    """Create the pilot table only inside this rolled-back save_02 transaction."""
+
+    cur.execute(Path("migrations/074_plan_relocation_projects.sql").read_text())
+
+
+def _apply_transition(
+    cur: Any,
+    *,
+    chunk_id: int,
+    actor_entity_id: int,
+    state_delta: dict[str, Any],
+) -> None:
+    """Write a real projection transition plus its replay ledger row."""
+
+    resolution_id = _insert_resolution(cur, chunk_id, actor_entity_id, state_delta)
+    draft = OrreryResolutionDraft(
+        template_id="replay_probe",
+        priority=47,
+        binding_hash=f"project-{chunk_id}",
+        bindings={"actor": actor_entity_id},
+        branch_label="project replay probe",
+        narrative_stub="probe",
+        state_delta=state_delta,
+        magnitude=0.4,
+    )
+    _apply_state_delta_sync(
+        cur,
+        draft,
+        resolution_id=resolution_id,
+        actor_entity_id=actor_entity_id,
+        target_entity_id=None,
+        source_chunk_id=chunk_id,
+        need_tuning=load_need_tuning(),
+        project_policy=PROJECT_POLICY,
+    )
 
 
 def test_scalar_replay_round_trip_and_within_chunk_ordering() -> None:
@@ -948,6 +1015,441 @@ def test_verify_catches_unlogged_tag_clear() -> None:
                 and d.row_key == str(cleared_row_id)
                 for d in probe_pair[0].drifts
             ), "verify must catch the un-logged clear as extra_row drift"
+    finally:
+        conn.rollback()
+        conn.close()
+
+
+def test_project_transition_window_replays_with_zero_checkpoint_drift() -> None:
+    """Every project transition plus a crisis no-op survives checkpoint replay."""
+
+    conn = _connect()
+    try:
+        with conn.cursor() as cur:
+            _apply_migration_074(cur)
+            cur.execute(
+                """
+                SELECT c.entity_id, c.current_location
+                FROM characters c
+                WHERE c.entity_id IS NOT NULL
+                  AND c.current_location IS NOT NULL
+                ORDER BY c.id LIMIT 1
+                """
+            )
+            actor_entity, origin = cur.fetchone()
+            cur.execute(
+                "SELECT id FROM places WHERE id <> %s ORDER BY id LIMIT 1", (origin,)
+            )
+            target = cur.fetchone()[0]
+
+            base_time = _next_world_time(cur)
+            base_chunk = _fabricate_chunk(cur, base_time)
+            base_id = capture_state_checkpoint_sync(
+                cur, chunk_id=base_chunk, label="manual"
+            )
+            # Imported pre-074 checkpoints may lack the additive section.
+            # Replay treats that one omission as an empty genesis with an
+            # explicit fidelity note, then applies project ledger entries.
+            cur.execute(
+                """
+                UPDATE state_checkpoints
+                SET state = state - 'character_project_states'
+                WHERE id = %s
+                """,
+                (base_id,),
+            )
+
+            start_one = _fabricate_chunk(cur, base_time + timedelta(hours=24))
+            _apply_transition(
+                cur,
+                chunk_id=start_one,
+                actor_entity_id=actor_entity,
+                state_delta={
+                    "project.start": {
+                        "project_type": "plan_relocation",
+                        "stage": "saving",
+                        "milestone": True,
+                    }
+                },
+            )
+            advance_one = _fabricate_chunk(cur, base_time + timedelta(hours=48))
+            _apply_transition(
+                cur,
+                chunk_id=advance_one,
+                actor_entity_id=actor_entity,
+                state_delta={"project.advance": {"progress_delta": 0.35}},
+            )
+
+            # A crisis-band win writes only its own activity. The project row
+            # must remain byte-for-byte untouched and replay must preserve that.
+            cur.execute(
+                """
+                SELECT status, stage, progress, stall_count,
+                       next_eligible_at_world_time, source_chunk_id
+                FROM character_project_states
+                WHERE character_entity_id = %s
+                  AND status IN ('active', 'paused', 'stalled')
+                """,
+                (actor_entity,),
+            )
+            before_crisis = cur.fetchone()
+            assert before_crisis[4] == base_time + timedelta(hours=72)
+            crisis_chunk = _fabricate_chunk(cur, base_time + timedelta(hours=72))
+            _apply_transition(
+                cur,
+                chunk_id=crisis_chunk,
+                actor_entity_id=actor_entity,
+                state_delta={
+                    "character.current_activity": "evading replay probe crisis"
+                },
+            )
+            cur.execute(
+                """
+                SELECT status, stage, progress, stall_count,
+                       next_eligible_at_world_time, source_chunk_id
+                FROM character_project_states
+                WHERE character_entity_id = %s
+                  AND status IN ('active', 'paused', 'stalled')
+                """,
+                (actor_entity,),
+            )
+            assert cur.fetchone() == before_crisis
+
+            # The crisis tick left the project due. The next project
+            # evaluation resumes it and advances the cadence normally.
+            resume = _fabricate_chunk(cur, base_time + timedelta(hours=73))
+            _apply_transition(
+                cur,
+                chunk_id=resume,
+                actor_entity_id=actor_entity,
+                state_delta={"project.advance": {"progress_delta": 0.15}},
+            )
+            cur.execute(
+                """
+                SELECT status, next_eligible_at_world_time
+                FROM character_project_states
+                WHERE character_entity_id = %s
+                  AND status IN ('active', 'paused', 'stalled')
+                """,
+                (actor_entity,),
+            )
+            assert cur.fetchone() == (
+                "active",
+                base_time + timedelta(hours=97),
+            )
+            stall = _fabricate_chunk(cur, base_time + timedelta(hours=97))
+            _apply_transition(
+                cur,
+                chunk_id=stall,
+                actor_entity_id=actor_entity,
+                state_delta={"project.stall": {"increment": 1}},
+            )
+            # Stall cadence is due at +121h. By +290h it is 169h overdue,
+            # beyond the configured 168h aging threshold.
+            cur.execute(
+                """
+                SELECT stall_count, next_eligible_at_world_time
+                FROM character_project_states
+                WHERE character_entity_id = %s
+                  AND status IN ('active', 'paused', 'stalled')
+                """,
+                (actor_entity,),
+            )
+            assert cur.fetchone() == (
+                1,
+                base_time + timedelta(hours=121),
+            )
+            abandon = _fabricate_chunk(cur, base_time + timedelta(hours=290))
+            _apply_transition(
+                cur,
+                chunk_id=abandon,
+                actor_entity_id=actor_entity,
+                state_delta={
+                    "project.abandon": {
+                        "reason": "overdue_world_time",
+                        "milestone": True,
+                    }
+                },
+            )
+
+            start_two = _fabricate_chunk(cur, base_time + timedelta(hours=314))
+            _apply_transition(
+                cur,
+                chunk_id=start_two,
+                actor_entity_id=actor_entity,
+                state_delta={
+                    "project.start": {
+                        "project_type": "plan_relocation",
+                        "stage": "saving",
+                        "milestone": True,
+                    }
+                },
+            )
+            ready = _fabricate_chunk(cur, base_time + timedelta(hours=338))
+            _apply_transition(
+                cur,
+                chunk_id=ready,
+                actor_entity_id=actor_entity,
+                state_delta={
+                    "project.advance": {
+                        "stage": "committing",
+                        "target_place_id": target,
+                        "set_progress": 1.0,
+                        "milestone": True,
+                    }
+                },
+            )
+            complete = _fabricate_chunk(cur, base_time + timedelta(hours=362))
+            _apply_transition(
+                cur,
+                chunk_id=complete,
+                actor_entity_id=actor_entity,
+                state_delta={
+                    "project.complete": {
+                        "mode": "mixed",
+                        "initial_progress": 0.0,
+                        "milestone": True,
+                    }
+                },
+            )
+            target_id = capture_state_checkpoint_sync(
+                cur, chunk_id=complete, label="manual"
+            )
+
+            reconstructed = reconstruct_state_at_sync(
+                cur, complete, base_checkpoint_id=base_id
+            )
+            assert "character_project_states" in reconstructed.approximate_sections
+            assert any(
+                "migration 074" in note
+                for note in reconstructed.notes["character_project_states"]
+            )
+            statuses = {
+                row["status"]
+                for row in reconstructed.state["character_project_states"]
+                if row["character_entity_id"] == actor_entity
+            }
+            assert statuses == {"abandoned", "completed"}
+
+            verdicts = verify_checkpoints_sync(cur)
+            pair = [
+                verdict
+                for verdict in verdicts
+                if verdict.base_checkpoint_id == base_id
+                and verdict.target_checkpoint_id == target_id
+            ]
+            assert len(pair) == 1
+            assert pair[0].drifts == []
+    finally:
+        conn.rollback()
+        conn.close()
+
+
+def test_project_complete_hands_off_and_real_travel_applier_relocates() -> None:
+    """Completion starts travel at the project target; arrival moves the actor."""
+
+    conn = _connect()
+    try:
+        with conn.cursor() as cur:
+            _apply_migration_074(cur)
+            cur.execute(
+                """
+                SELECT c.entity_id, c.current_location
+                FROM characters c
+                WHERE c.entity_id IS NOT NULL
+                  AND c.current_location IS NOT NULL
+                ORDER BY c.id LIMIT 1
+                """
+            )
+            actor_entity, origin = cur.fetchone()
+            cur.execute(
+                "SELECT id FROM places WHERE id <> %s ORDER BY id LIMIT 1", (origin,)
+            )
+            target = cur.fetchone()[0]
+            base_time = _next_world_time(cur)
+
+            start = _fabricate_chunk(cur, base_time)
+            _apply_transition(
+                cur,
+                chunk_id=start,
+                actor_entity_id=actor_entity,
+                state_delta={
+                    "project.start": {
+                        "project_type": "plan_relocation",
+                        "stage": "saving",
+                    }
+                },
+            )
+            ready = _fabricate_chunk(cur, base_time + timedelta(hours=24))
+            _apply_transition(
+                cur,
+                chunk_id=ready,
+                actor_entity_id=actor_entity,
+                state_delta={
+                    "project.advance": {
+                        "stage": "committing",
+                        "target_place_id": target,
+                        "set_progress": 1.0,
+                    }
+                },
+            )
+            complete = _fabricate_chunk(cur, base_time + timedelta(hours=48))
+            _apply_transition(
+                cur,
+                chunk_id=complete,
+                actor_entity_id=actor_entity,
+                state_delta={"project.complete": {"mode": "mixed"}},
+            )
+            cur.execute(
+                """
+                SELECT cps.status, cts.status, cts.destination_place_id
+                FROM character_project_states cps
+                JOIN character_travel_states cts
+                  ON cts.character_entity_id = cps.character_entity_id
+                WHERE cps.character_entity_id = %s
+                ORDER BY cps.id DESC LIMIT 1
+                """,
+                (actor_entity,),
+            )
+            assert cur.fetchone() == ("completed", "in_transit", target)
+
+            arrive = _fabricate_chunk(cur, base_time + timedelta(hours=49))
+            _apply_transition(
+                cur,
+                chunk_id=arrive,
+                actor_entity_id=actor_entity,
+                state_delta={"travel.arrive": True},
+            )
+            cur.execute(
+                """
+                SELECT c.current_location, cts.status,
+                       cts.destination_place_id
+                FROM characters c
+                JOIN character_travel_states cts
+                  ON cts.character_entity_id = c.entity_id
+                WHERE c.entity_id = %s
+                """,
+                (actor_entity,),
+            )
+            assert cur.fetchone() == (target, "at_place", None)
+    finally:
+        conn.rollback()
+        conn.close()
+
+
+def test_project_applied_ledger_survives_replay_policy_retuning(monkeypatch) -> None:
+    """Replay consumes committed cadence and milestone reset, not live tuning."""
+
+    import nexus.agents.orrery.replay as replay_module
+
+    conn = _connect()
+    try:
+        with conn.cursor() as cur:
+            _char_id, actor_entity, _activity, _location = _probe_character(cur)
+            base_time = _next_world_time(cur)
+            base_chunk = _fabricate_chunk(cur, base_time)
+            base_id = capture_state_checkpoint_sync(
+                cur, chunk_id=base_chunk, label="manual"
+            )
+
+            start = _fabricate_chunk(cur, base_time + timedelta(hours=24))
+            _apply_transition(
+                cur,
+                chunk_id=start,
+                actor_entity_id=actor_entity,
+                state_delta={
+                    "project.start": {
+                        "project_type": "plan_relocation",
+                        "stage": "saving",
+                        "milestone": True,
+                    }
+                },
+            )
+            stall = _fabricate_chunk(cur, base_time + timedelta(hours=48))
+            _apply_transition(
+                cur,
+                chunk_id=stall,
+                actor_entity_id=actor_entity,
+                state_delta={"project.stall": {"increment": 1}},
+            )
+            milestone = _fabricate_chunk(cur, base_time + timedelta(hours=72))
+            _apply_transition(
+                cur,
+                chunk_id=milestone,
+                actor_entity_id=actor_entity,
+                state_delta={
+                    "project.advance": {
+                        "stage": "scouting",
+                        "set_progress": 0.0,
+                        "milestone": True,
+                    }
+                },
+            )
+            target_id = capture_state_checkpoint_sync(
+                cur, chunk_id=milestone, label="manual"
+            )
+
+            cur.execute(
+                """
+                SELECT state_delta->'project.advance'->'applied'
+                FROM orrery_resolutions
+                WHERE tick_chunk_id = %s AND template_id = 'replay_probe'
+                """,
+                (milestone,),
+            )
+            applied = cur.fetchone()[0]
+            assert applied["stage"] == "scouting"
+            assert applied["stall_count"] == 0
+            assert datetime.fromisoformat(
+                applied["next_eligible_at_world_time"]
+            ) == base_time + timedelta(hours=96)
+
+            monkeypatch.setattr(
+                replay_module,
+                "_load_project_policy",
+                lambda: ProjectPolicy(
+                    enabled=True,
+                    advance_interval_hours=12.0,
+                    stall_abandon_threshold=3,
+                    abandon_after_stalled_world_hours=168.0,
+                    milestone_magnitude=0.40,
+                    coverage_distribution_tolerance=0.05,
+                ),
+            )
+            verdicts = verify_checkpoints_sync(cur)
+            pair = [
+                verdict
+                for verdict in verdicts
+                if verdict.base_checkpoint_id == base_id
+                and verdict.target_checkpoint_id == target_id
+            ]
+            assert len(pair) == 1
+            assert pair[0].drifts == []
+    finally:
+        conn.rollback()
+        conn.close()
+
+
+def test_project_replay_rejects_ledger_without_applied_projection() -> None:
+    conn = _connect()
+    try:
+        with conn.cursor() as cur:
+            _char_id, actor_entity, _activity, _location = _probe_character(cur)
+            base_time = _next_world_time(cur)
+            base_chunk = _fabricate_chunk(cur, base_time)
+            base_id = capture_state_checkpoint_sync(
+                cur, chunk_id=base_chunk, label="manual"
+            )
+            raw_chunk = _fabricate_chunk(cur, base_time + timedelta(hours=24))
+            _insert_resolution(
+                cur,
+                raw_chunk,
+                actor_entity,
+                {"project.start": {"project_type": "plan_relocation"}},
+            )
+
+            with pytest.raises(ValueError, match="missing its required applied"):
+                reconstruct_state_at_sync(cur, raw_chunk, base_checkpoint_id=base_id)
     finally:
         conn.rollback()
         conn.close()

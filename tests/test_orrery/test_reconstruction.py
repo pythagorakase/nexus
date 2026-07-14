@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 from typing import Any
 
 import psycopg2
@@ -38,12 +39,15 @@ WRITE_SLOT = 2
 
 
 def _connect() -> Any:
-    return psycopg2.connect(
+    conn = psycopg2.connect(
         host=os.environ.get("PGHOST", "localhost"),
         database=f"save_{WRITE_SLOT:02d}",
         user=os.environ.get("PGUSER", "pythagor"),
         port=os.environ.get("PGPORT", "5432"),
     )
+    with conn.cursor() as cur:
+        cur.execute(Path("migrations/074_plan_relocation_projects.sql").read_text())
+    return conn
 
 
 def test_checkpoint_captures_every_section_and_is_idempotent() -> None:
@@ -236,18 +240,20 @@ def test_unattributed_relationship_write_versions_with_null_chunk() -> None:
 
 
 def test_migration_genesis_sections_mirror_checkpoint_sections() -> None:
-    """The 065 genesis backfill duplicates CHECKPOINT_SECTIONS in SQL; this
-    tripwire fails if either side gains a section the other lacks."""
+    """Genesis SQL across 065 plus additive 074 mirrors checkpoint sections."""
 
     from pathlib import Path
 
     migration = Path("migrations/065_reconstructability.sql").read_text()
     genesis = migration[migration.index("jsonb_build_object") :]
+    additive = Path("migrations/074_plan_relocation_projects.sql").read_text()
+    genesis_sources = genesis + additive
     for section in CHECKPOINT_SECTIONS:
         assert (
-            f"'{section}', (" in genesis
-        ), f"migration genesis backfill lacks section {section!r}"
+            f"'{section}', (" in genesis_sources
+        ), f"migration genesis/extension SQL lacks section {section!r}"
     import re
 
     migration_sections = set(re.findall(r"'(\w+)', \(SELECT", genesis))
+    migration_sections.update(re.findall(r"'(character_project_states)', \(", additive))
     assert migration_sections == set(CHECKPOINT_SECTIONS)

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace as dataclass_replace
 from datetime import datetime
 from enum import Enum
 from hashlib import sha256
@@ -205,6 +205,87 @@ class TravelState:
 
 
 @dataclass(frozen=True, slots=True)
+class ProjectState:
+    """Read-side state for one character's open project."""
+
+    id: int
+    project_type: str
+    status: str
+    stage: str
+    target_place_id: Optional[int] = None
+    progress: float = 0.0
+    stall_count: int = 0
+    next_eligible_at_world_time: Optional[datetime] = None
+    source_chunk_id: Optional[int] = None
+
+
+@dataclass(frozen=True, slots=True)
+class ProjectPolicy:
+    """Runtime policy from [orrery.projects]."""
+
+    enabled: bool = False
+    advance_interval_hours: float = 24.0
+    max_active_per_character: int = 1
+    stall_abandon_threshold: int = 3
+    abandon_after_stalled_world_hours: float = 168.0
+    milestone_magnitude: float = 0.40
+    coverage_distribution_tolerance: float = 0.05
+
+    def __post_init__(self) -> None:
+        if self.advance_interval_hours <= 0:
+            raise ValueError("Project advance_interval_hours must be > 0")
+        if self.max_active_per_character != 1:
+            raise ValueError("PLAN_RELOCATION v1 requires max_active_per_character = 1")
+        if self.stall_abandon_threshold < 1:
+            raise ValueError("Project stall_abandon_threshold must be >= 1")
+        if self.abandon_after_stalled_world_hours <= 0:
+            raise ValueError("Project abandon_after_stalled_world_hours must be > 0")
+        if not 0 <= self.milestone_magnitude <= 1:
+            raise ValueError("Project milestone_magnitude must be between 0 and 1")
+        if not 0 < self.coverage_distribution_tolerance <= 1:
+            raise ValueError(
+                "Project coverage_distribution_tolerance must be in (0, 1]"
+            )
+
+
+def coerce_project_policy(raw: Any) -> ProjectPolicy:
+    """Coerce [orrery.projects] config; None keeps the subsystem disabled."""
+
+    if raw is None:
+        return ProjectPolicy()
+    if isinstance(raw, ProjectPolicy):
+        return raw
+    if isinstance(raw, Mapping):
+        values = raw
+    elif hasattr(raw, "advance_interval_hours"):
+        values = {
+            "advance_interval_hours": raw.advance_interval_hours,
+            "max_active_per_character": raw.max_active_per_character,
+            "stall_abandon_threshold": raw.stall_abandon_threshold,
+            "abandon_after_stalled_world_hours": (
+                raw.abandon_after_stalled_world_hours
+            ),
+            "milestone_magnitude": raw.milestone_magnitude,
+            "coverage_distribution_tolerance": (raw.coverage_distribution_tolerance),
+        }
+    else:
+        raise ValueError(f"Unsupported Orrery project settings: {type(raw)!r}")
+    return ProjectPolicy(
+        enabled=True,
+        advance_interval_hours=float(values["advance_interval_hours"]),
+        max_active_per_character=int(values["max_active_per_character"]),
+        stall_abandon_threshold=int(values["stall_abandon_threshold"]),
+        abandon_after_stalled_world_hours=float(
+            values["abandon_after_stalled_world_hours"]
+        ),
+        milestone_magnitude=float(values["milestone_magnitude"]),
+        coverage_distribution_tolerance=float(
+            values.get("coverage_distribution_tolerance", 0.05)
+        ),
+    )
+
+
+@dataclass(frozen=True, slots=True)
 class RoutineAnchor:
     """Read-side home/work routine anchor for one character."""
 
@@ -264,6 +345,8 @@ class WorldState:
     orbit_distance: Mapping[Tuple[int, int], int] = field(default_factory=dict)
     need_debt_scores: Mapping[Tuple[int, str], float] = field(default_factory=dict)
     travel_states: Mapping[int, TravelState] = field(default_factory=dict)
+    project_states: Mapping[int, ProjectState] = field(default_factory=dict)
+    project_policy: ProjectPolicy = field(default_factory=ProjectPolicy)
     routine_anchors: Mapping[Tuple[int, str], RoutineAnchor] = field(
         default_factory=dict
     )
@@ -1010,6 +1093,122 @@ def is_in_transit(slot: Slot = Slot.ACTOR) -> Condition:
     return _named(_condition, f"is_in_transit(@{slot.value})")
 
 
+_PROJECT_DUE_MODES = frozenset(
+    {
+        "start",
+        "exists",
+        "ready",
+        "abandon",
+        "saving",
+        "scouting",
+        "committing",
+        "saving_milestone",
+        "scouting_without_target",
+        "scouting_milestone",
+        "completion",
+    }
+)
+
+
+def project_due(
+    mode: str = "ready",
+    *,
+    project_type: str = "plan_relocation",
+    slot: Slot = Slot.ACTOR,
+) -> Condition:
+    """Return a configured project lifecycle/due-ness verdict.
+
+    ``project_due`` is deliberately the one project predicate authority used
+    by production, explain, and coverage. Besides the base cadence verdict it
+    exposes the stage/milestone cases templates need, and the deterministic
+    abandonment case (stall threshold OR overdue world hours). ``start`` means
+    the configured subsystem is enabled and no open project exists.
+    """
+
+    normalized_mode = str(mode).strip().lower()
+    if normalized_mode not in _PROJECT_DUE_MODES:
+        raise ValueError(
+            f"Unsupported project_due mode {mode!r}; expected one of "
+            f"{sorted(_PROJECT_DUE_MODES)}"
+        )
+    if project_type != "plan_relocation":
+        raise ValueError(
+            f"Unsupported project_due project type {project_type!r}; "
+            "expected 'plan_relocation'"
+        )
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        policy = state.project_policy
+        if not policy.enabled:
+            return False
+        entity_id = _slot_entity(bindings, slot)
+        if entity_id is None:
+            return False
+        project = state.project_states.get(entity_id)
+        if project is not None and project.project_type != project_type:
+            raise ValueError(
+                f"Actor {entity_id} has unsupported open project type "
+                f"{project.project_type!r}"
+            )
+        if normalized_mode == "start":
+            return project is None
+        if normalized_mode == "exists":
+            return project is not None
+        if project is None:
+            return False
+        if project.status not in {"active", "paused", "stalled"}:
+            raise ValueError(
+                f"Hydrated project {project.id} is not open: {project.status!r}"
+            )
+        if project.next_eligible_at_world_time is None:
+            raise ValueError(
+                f"Open project {project.id} lacks next_eligible_at_world_time"
+            )
+        if state.world_time is None:
+            raise ValueError(
+                f"Cannot evaluate project {project.id} due-ness without world_time"
+            )
+        due = project.next_eligible_at_world_time <= state.world_time
+        if normalized_mode == "ready":
+            return due
+        overdue_hours = max(
+            0.0,
+            (state.world_time - project.next_eligible_at_world_time).total_seconds()
+            / 3600.0,
+        )
+        if normalized_mode == "abandon":
+            return due and (
+                project.stall_count >= policy.stall_abandon_threshold
+                or overdue_hours >= policy.abandon_after_stalled_world_hours
+            )
+        if not due:
+            return False
+        if normalized_mode in {"saving", "scouting", "committing"}:
+            return project.stage == normalized_mode
+        if normalized_mode == "saving_milestone":
+            return project.stage == "saving" and project.progress >= 1.0
+        if normalized_mode == "scouting_without_target":
+            return project.stage == "scouting" and project.target_place_id is None
+        if normalized_mode == "scouting_milestone":
+            return (
+                project.stage == "scouting"
+                and project.target_place_id is not None
+                and project.progress >= 1.0
+            )
+        if normalized_mode == "completion":
+            return (
+                project.stage == "committing"
+                and project.target_place_id is not None
+                and project.progress >= 1.0
+            )
+        raise AssertionError(f"Unhandled project_due mode {normalized_mode!r}")
+
+    return _named(
+        _condition,
+        f"project_due({project_type},{normalized_mode}@{slot.value})",
+    )
+
+
 def has_travel_destination(slot: Slot = Slot.ACTOR) -> Condition:
     """Return whether a slot-bound character has a planned destination."""
 
@@ -1725,6 +1924,9 @@ class Branch:
     # event_type. Signals feed other packages' gates without disturbing the
     # emitting package's cooldowns.
     signal_event_type: Optional[str] = None
+    # Routine project maintenance can opt out of the promotion queue even
+    # when package priority or branch magnitude clears a generic threshold.
+    promotable: bool = True
     # Lifecycle-terminal branches (a state transition like grief completing)
     # must fire the tick they become eligible in EVERY selection mode;
     # stochastic sampling is for flavor variety among peer branches, not
@@ -1767,6 +1969,44 @@ class Template:
                 )
 
 
+def configure_project_magnitudes(
+    templates: Iterable[Template], policy: ProjectPolicy
+) -> Tuple[Template, ...]:
+    """Apply the configured milestone magnitude to project lifecycle arms.
+
+    Routine project.advance/project.stall arms keep their authored sub-floor
+    magnitudes. A branch opts into the configured promotion magnitude through
+    a ``milestone`` marker inside its project payload; the marker is also
+    persisted in state_delta and harmless to the applier/replayer.
+    """
+
+    configured: list[Template] = []
+    for template in templates:
+        changed = False
+        branches: list[Branch] = []
+        for branch in template.branches:
+            milestone = any(
+                isinstance(branch.state_delta.get(key), Mapping)
+                and bool(branch.state_delta[key].get("milestone"))
+                for key in (
+                    "project.start",
+                    "project.advance",
+                    "project.abandon",
+                    "project.complete",
+                )
+            )
+            if milestone and branch.magnitude != policy.milestone_magnitude:
+                branch = dataclass_replace(branch, magnitude=policy.milestone_magnitude)
+                changed = True
+            branches.append(branch)
+        configured.append(
+            dataclass_replace(template, branches=tuple(branches))
+            if changed
+            else template
+        )
+    return tuple(configured)
+
+
 @dataclass(frozen=True, slots=True)
 class Resolution:
     """Result of evaluating one template against one set of bindings."""
@@ -1784,6 +2024,7 @@ class Resolution:
     magnitude: float = 0.0
     scene_pressure_stub: Optional[str] = None
     signal_event_type: Optional[str] = None
+    promotable: bool = True
 
 
 def binding_hash(bindings: Bindings) -> str:
@@ -1967,6 +2208,7 @@ def evaluate(
             magnitude=branch.magnitude,
             scene_pressure_stub=branch.scene_pressure_stub,
             signal_event_type=branch.signal_event_type,
+            promotable=branch.promotable,
         )
 
     return Resolution(

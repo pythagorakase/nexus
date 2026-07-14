@@ -59,6 +59,10 @@ CHECKPOINT_SECTIONS: dict[str, str] = {
         "SELECT coalesce(jsonb_agg(to_jsonb(t)), '[]'::jsonb) "
         "FROM character_travel_states t"
     ),
+    "character_project_states": (
+        "SELECT coalesce(jsonb_agg(to_jsonb(t)), '[]'::jsonb) "
+        "FROM character_project_states t"
+    ),
     "character_routine_anchors": (
         "SELECT coalesce(jsonb_agg(to_jsonb(t)), '[]'::jsonb) "
         "FROM character_routine_anchors t"

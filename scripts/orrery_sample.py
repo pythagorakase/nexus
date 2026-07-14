@@ -28,6 +28,7 @@ from nexus.agents.orrery.resolver import (
 from nexus.agents.orrery.substrate import PresentTargetPolicy, Slot, evaluate
 from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
 from nexus.api.slot_utils import get_slot_db_url
+from nexus.config import load_settings_as_dict
 
 
 ACTOR_ONLY_SLOTS = (Slot.ACTOR,)
@@ -657,6 +658,7 @@ def sample_anchor(
     world_time_override: Optional[datetime] = None,
     location_overrides: Optional[list[tuple[str, str]]] = None,
 ) -> Path:
+    orrery_settings = load_settings_as_dict()["orrery"]
     engine = create_engine(get_slot_db_url(slot=slot))
     with Session(engine) as session:
         actor_only_templates = [
@@ -671,6 +673,7 @@ def sample_anchor(
             anchor_chunk_id=anchor_chunk_id,
             window_chunks=window_chunks,
             need_tuning=None,
+            project_settings=orrery_settings.get("projects"),
             world_time_override=world_time_override,
         )
         override_locations, override_labels = resolve_location_overrides(

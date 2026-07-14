@@ -643,6 +643,7 @@ class TurnCycleManager:
                 selection_settings=orrery_settings.get("selection"),
                 habituation_settings=orrery_settings.get("habituation"),
                 package_selection_settings=orrery_settings.get("package_selection"),
+                project_settings=orrery_settings.get("projects"),
                 fanout_settings=orrery_settings.get("fanout"),
             )
 

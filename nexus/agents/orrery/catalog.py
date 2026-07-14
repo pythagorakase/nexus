@@ -410,6 +410,14 @@ _register(
     _render_since_last_event,
 )
 
+_register(
+    r"project_due\((?P<project>[^,()]+),(?P<mode>[^@()]+)" r"@(?P<slot>\w+)\)",
+    lambda m: (
+        f"{_slot(m.group('slot'))} `{m.group('project')}` project "
+        f"passes `{m.group('mode')}` due-state"
+    ),
+)
+
 
 def _render_count_recent_events(m: re.Match) -> str:
     event = m.group("event")
@@ -565,6 +573,10 @@ def _render_state_delta(delta: Mapping[str, Any]) -> str:
         if key == "travel.delay":
             parts.append("records travel delay")
             continue
+        if key.startswith("project."):
+            transition = key.removeprefix("project.")
+            parts.append(f"applies project `{transition}` transition")
+            continue
         parts.append(f"`{key}` = `{value}`")
     return "; ".join(parts)
 
@@ -579,7 +591,12 @@ def _render_narrative_stub(stub: str) -> List[str]:
 
 
 def _render_branch(idx: int, branch: Branch) -> List[str]:
-    marker = " · **preemptive**" if branch.preemptive else ""
+    markers = []
+    if branch.preemptive:
+        markers.append("**preemptive**")
+    if not branch.promotable:
+        markers.append("**not promotable**")
+    marker = f" · {' · '.join(markers)}" if markers else ""
     lines = [
         f"### Branch {idx} — {branch.label}  *(mag {branch.magnitude})*{marker}",
         "",

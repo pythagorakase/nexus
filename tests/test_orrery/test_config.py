@@ -13,6 +13,7 @@ from nexus.config.settings_models import (
     OrreryBleedSettings,
     OrreryDashboardSettings,
     OrreryPromoteSettings,
+    OrrerySettings,
     OrreryRetrogradeMaturationSettings,
     OrreryRetrogradeWeirdGenreBands,
     OrreryRetrogradeWeirdSettings,
@@ -64,6 +65,12 @@ def test_orrery_settings_resolve_model_reference() -> None:
     assert settings.orrery.package_selection.window_points == 6.0
     assert settings.orrery.package_selection.temperature == 2.0
     assert settings.orrery.package_selection.exempt_bands == ["crisis_constraint"]
+    assert settings.orrery.projects.advance_interval_hours == 24.0
+    assert settings.orrery.projects.max_active_per_character == 1
+    assert settings.orrery.projects.stall_abandon_threshold == 3
+    assert settings.orrery.projects.abandon_after_stalled_world_hours == 168.0
+    assert settings.orrery.projects.milestone_magnitude == 0.40
+    assert settings.orrery.projects.coverage_distribution_tolerance == 0.05
     # The ship-off invariant applies to the COMMITTED config: flipping the
     # dashboard on locally is a documented workflow (nexus.toml comment,
     # issue #415), and asserting the working tree here trains developers to
@@ -91,6 +98,16 @@ def test_orrery_settings_resolve_model_reference() -> None:
     assert set(weird.bands_by_genre) == {genre.value for genre in Genre}
     assert weird.bands_by_genre["cyberpunk"].medium.min == 0.36
     assert weird.bands_by_genre["historical"].medium.min == 0.12
+
+
+def test_project_milestones_cannot_fall_below_promotion_floor() -> None:
+    """Configured stage changes must remain eligible for promotion."""
+
+    payload = load_settings("nexus.toml").orrery.model_dump()
+    payload["projects"]["milestone_magnitude"] = 0.34
+
+    with pytest.raises(ValidationError, match="milestone_magnitude must be >="):
+        OrrerySettings.model_validate(payload)
 
 
 def test_orrery_dashboard_defaults_to_disabled() -> None:
