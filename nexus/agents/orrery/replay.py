@@ -620,14 +620,17 @@ class _Replayer:
         metadata["last_fulfillment"] = payload
         row["metadata"] = metadata
         if world_time is None:
-            # Production fell back to wall-clock now() at commit time —
-            # unreproducible; leave prior values and flag the columns.
-            for column in ("last_evaluated_at", "last_fulfilled_at"):
+            # Production fell back to wall-clock now() at commit time and
+            # accrued debt against it — the timestamps AND the debt math are
+            # unreproducible; leave prior timestamp values and flag all three
+            # columns.
+            for column in ("last_evaluated_at", "last_fulfilled_at", "debt_score"):
                 result.unreproducible.add(("character_need_states", row_key, column))
             result.add_note(
                 "character_need_states",
                 f"chunk {chunk_id} has NULL world_time; production stamped "
-                f"wall-clock now() on {row_key} — timestamps unreproducible",
+                f"wall-clock now() on {row_key} — timestamps and accrued "
+                "debt unreproducible",
                 approximate=True,
             )
         else:
@@ -654,6 +657,16 @@ class _Replayer:
     ) -> None:
         payload = _coerce_travel_payload(raw_payload)
         row = travel.get(actor_entity_id)
+        if world_time is None:
+            # Production stamped wall-clock now() on this tick's travel
+            # world-time columns; replay writes NULLs it cannot back.
+            time_columns = ["updated_at_world_time"]
+            if delta_key == "travel.start":
+                time_columns.append("started_at_world_time")
+            for column in time_columns:
+                result.unreproducible.add(
+                    ("character_travel_states", str(actor_entity_id), column)
+                )
         if delta_key == "travel.start":
             destination = payload.get("destination_place_id")
             origin = payload.get("origin_place_id") or (
@@ -723,11 +736,25 @@ class _Replayer:
                 "destination_place_id"
             )
             if destination is None:
+                # Production DID move the character (destination came from
+                # live travel state at commit time); replay cannot know
+                # where. Flag every column the arrival wrote so verify skips
+                # instead of reporting false drift.
+                character = characters_by_entity.get(actor_entity_id)
+                if character is not None:
+                    result.unreproducible.add(
+                        ("characters", str(character["id"]), "current_location")
+                    )
+                for column in ("anchor_place_id", "route_metadata"):
+                    result.unreproducible.add(
+                        ("character_travel_states", str(actor_entity_id), column)
+                    )
                 result.add_note(
                     "characters",
                     f"travel.arrive at chunk {chunk_id} for actor "
                     f"{actor_entity_id} has no reconstructable destination; "
-                    "current_location not updated",
+                    "current_location and arrival columns flagged "
+                    "unreproducible",
                     approximate=True,
                 )
             else:

@@ -722,6 +722,50 @@ def test_travel_replay_start_advance_arrive() -> None:
         conn.close()
 
 
+def test_unresolved_arrival_marks_location_unreproducible() -> None:
+    """travel.start via anchor/class (no explicit destination) followed by a
+    bare travel.arrive: production moved the character somewhere replay
+    cannot know — every column the arrival wrote must be flagged, not left
+    to read as false drift."""
+
+    conn = _connect()
+    try:
+        with conn.cursor() as cur:
+            head = _head_chunk(cur)
+            char_id, char_entity, _, _ = _probe_character(cur)
+            base_id = capture_state_checkpoint_sync(cur, chunk_id=head, label="manual")
+            start_chunk = _fabricate_chunk(cur, _next_world_time(cur))
+            arrive_chunk = _fabricate_chunk(
+                cur, _next_world_time(cur) + timedelta(hours=1)
+            )
+            _insert_resolution(
+                cur,
+                start_chunk,
+                char_entity,
+                {"travel.start": {"destination_anchor": "home"}},
+            )
+            _insert_resolution(cur, arrive_chunk, char_entity, {"travel.arrive": True})
+
+            at_arrive = reconstruct_state_at_sync(
+                cur, arrive_chunk, base_checkpoint_id=base_id
+            )
+            assert (
+                "characters",
+                str(char_id),
+                "current_location",
+            ) in at_arrive.unreproducible
+            for column in ("anchor_place_id", "route_metadata", "destination_place_id"):
+                assert (
+                    "character_travel_states",
+                    str(char_entity),
+                    column,
+                ) in at_arrive.unreproducible
+            assert "characters" in at_arrive.approximate_sections
+    finally:
+        conn.rollback()
+        conn.close()
+
+
 def test_null_world_time_marks_need_timestamps_unreproducible() -> None:
     """A tick without world_time makes production stamp wall-clock now();
     replay must flag those columns instead of guessing — and verify must
@@ -755,17 +799,21 @@ def test_null_world_time_marks_need_timestamps_unreproducible() -> None:
                 cur, probe_chunk, base_checkpoint_id=base_id
             )
             row_key = f"{char_entity}:thirst"
-            assert (
-                "character_need_states",
-                row_key,
-                "last_evaluated_at",
-            ) in at_probe.unreproducible
+            for column in ("last_evaluated_at", "last_fulfilled_at", "debt_score"):
+                assert (
+                    "character_need_states",
+                    row_key,
+                    column,
+                ) in at_probe.unreproducible, (
+                    f"{column} depends on the wall-clock fallback and must be "
+                    "flagged"
+                )
 
             verdicts = verify_checkpoints_sync(cur)
             probe_pair = [v for v in verdicts if v.target_chunk_id == probe_chunk]
             assert len(probe_pair) == 1
             assert probe_pair[0].drifts == []
-            assert probe_pair[0].skipped_unreproducible >= 2
+            assert probe_pair[0].skipped_unreproducible >= 3
     finally:
         conn.rollback()
         conn.close()
