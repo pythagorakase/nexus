@@ -263,7 +263,8 @@ def test_generation_failure_marker_round_trips_and_can_be_replaced_live():
         assert db.season_summary_exists(season) is True
 
         # The reverse race: a slower FAILING job must never clobber the real
-        # summary a concurrent job already saved.
+        # summary a concurrent job already saved — and the recorder must
+        # report that it did NOT persist the marker.
         assert (
             db.record_summary_failure(
                 kind="season",
@@ -272,7 +273,7 @@ def test_generation_failure_marker_round_trips_and_can_be_replaced_live():
                 error="late failure after concurrent success",
                 model_candidates=["TEST"],
             )
-            is True
+            is False
         )
         with db.engine.connect() as conn:
             survived = conn.execute(

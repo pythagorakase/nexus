@@ -1263,8 +1263,22 @@ class DatabaseManager:
                 else:
                     raise ValueError(f"Unknown summary failure kind: {kind!r}")
 
-                conn.execute(query, params)
+                result = conn.execute(query, params)
                 conn.commit()
+                if result.rowcount == 0:
+                    # The no-clobber guard blocked the write: a real summary
+                    # already occupies the row (overwrite=True regeneration
+                    # that failed). Report honestly instead of claiming the
+                    # marker landed.
+                    logger.warning(
+                        "Not recording %s summary failure for season=%s "
+                        "episode=%s: a non-error summary already exists and "
+                        "is preserved",
+                        kind,
+                        season,
+                        episode,
+                    )
+                    return False
             return True
         except Exception as exc:
             logger.error(
