@@ -1,14 +1,15 @@
-"""Generation-time registry validation for storyteller Orrery tag bestowals.
+"""Generation-time registry validation for storyteller Orrery vocabulary.
 
 Skald freely invents tag names (often ``category:name`` composites) when
-introducing entities or updating state. The closed-vocabulary tag writers
-hard-error on unknown names -- but they run inside the chunk COMMIT
-transaction, where the only outcome is a dead player turn (M9 gate finding).
+introducing entities, updating state, or emitting ``new_entities`` declaration
+hints. The closed-vocabulary tag writers hard-error on unknown names -- but
+they run inside the chunk COMMIT transaction, where the only outcome is a dead
+player turn (M9 gate finding).
 
 This module walks a parsed storyteller response and validates every
-``orrery_tags`` bestowal against the live registry, so LOGON's structured
-output validator can hand the issues back to the model as a retry while the
-model still owns the turn.
+``orrery_tags`` bestowal and declaration hint against the live registry, so
+LOGON's structured output validator can hand the issues back to the model as a
+retry while the model still owns the turn.
 """
 
 from __future__ import annotations
@@ -16,6 +17,9 @@ from __future__ import annotations
 import logging
 from typing import Any, List, Optional, Tuple
 
+from nexus.agents.orrery.declaration_validation import (
+    collect_new_entity_declaration_vocabulary_issues,
+)
 from nexus.agents.orrery.tag_schemas import OrreryTagBestowal
 from nexus.agents.orrery.tag_writer import validate_tag_bestowal
 
@@ -84,7 +88,7 @@ def _bestowal_sites(response: Any) -> List[Tuple[str, str, OrreryTagBestowal]]:
 
 
 def collect_orrery_tag_issues(response: Any, cur: Any) -> List[str]:
-    """Validate every bestowal in the response against the live registry."""
+    """Validate every bestowal and declaration against the live registry."""
 
     issues: List[str] = []
     for path, entity_kind, bestowal in _bestowal_sites(response):
@@ -92,6 +96,11 @@ def collect_orrery_tag_issues(response: Any, cur: Any) -> List[str]:
             cur, entity_kind=entity_kind, bestowal=bestowal
         ):
             issues.append(f"{path}: {issue}")
+    issues.extend(
+        collect_new_entity_declaration_vocabulary_issues(
+            cur, getattr(response, "new_entities", None) or []
+        )
+    )
     return issues
 
 
@@ -118,15 +127,19 @@ def build_storyteller_tag_validator(dbname: Optional[str]) -> Optional[Any]:
         if issues:
             formatted = "\n".join(f"- {issue}" for issue in issues)
             logger.info(
-                "Storyteller orrery_tags failed registry validation (%s issues); "
-                "requesting model retry",
+                "Storyteller Orrery vocabulary failed registry validation "
+                "(%s issues); requesting model retry",
                 len(issues),
             )
             raise ModelRetry(
-                "Your orrery_tags failed closed-registry validation. Use bare "
-                "registered tag names only (e.g. 'comfortable'), never "
-                "'category:name' composites; drop any tag with no registered "
-                f"equivalent. Fix these and resubmit:\n{formatted}"
+                "Your Orrery tags or new-entity declaration hints failed "
+                "closed-registry validation. For applied_tags and tag_hints, "
+                "use bare registered tag names only (e.g. 'comfortable'), never "
+                "'category:name' composites. For pair_tag_hints, use the exact "
+                "registered pair-tag name; pair tags may contain colons (e.g. "
+                "'contact:social'). Drop any tag with no registered equivalent. "
+                "Fix every listed "
+                f"path and resubmit the complete response:\n{formatted}"
             )
         return output
 

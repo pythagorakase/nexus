@@ -1087,6 +1087,38 @@ def _lookup_pair_tag_row(cur: Any, tag: str) -> Any:
     return row
 
 
+def validate_pair_tag_endpoint(
+    cur: Any,
+    *,
+    tag: str,
+    entity_kind: str,
+    role: Literal["subject", "object"],
+) -> None:
+    """Validate one known endpoint of a registered directed pair tag.
+
+    Declaration hints name the other endpoint but do not resolve it yet, so
+    generation and commit can only validate the declared entity's side of the
+    relation.  The registry lookup and kind rules intentionally share the same
+    primitives as :func:`apply_pair_tag_bestowal`.
+    """
+
+    if entity_kind not in VALID_ENTITY_KINDS:
+        raise ValueError(
+            f"Unknown entity_kind={entity_kind!r}; expected one of "
+            f"{sorted(VALID_ENTITY_KINDS)}"
+        )
+
+    row = _lookup_pair_tag_row(cur, tag)
+    allowed_index = 1 if role == "subject" else 2
+    allowed_key = "subject_kinds" if role == "subject" else "object_kinds"
+    allowed = _row_value(row, allowed_key, allowed_index) or []
+    if entity_kind not in allowed:
+        raise ValueError(
+            f"pair_tag {tag!r} does not allow {role}_kind={entity_kind!r}; "
+            f"allowed: {sorted(allowed)}"
+        )
+
+
 def _validate_pair_tag_kinds(
     *,
     tag: str,

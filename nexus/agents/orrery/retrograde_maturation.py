@@ -40,6 +40,9 @@ from psycopg2.extras import RealDictCursor
 from pydantic import BaseModel
 
 from nexus.agents.logon.apex_schema import NewEntityDeclaration
+from nexus.agents.orrery.declaration_validation import (
+    collect_new_entity_declaration_vocabulary_issues,
+)
 from nexus.agents.orrery.retrograde_vocabulary import SeedEligibleVocabulary
 from nexus.agents.orrery.tag_schemas import OrreryTagBestowal
 from nexus.agents.orrery.tag_writer import apply_tag_bestowal
@@ -135,8 +138,16 @@ def enqueue_declared_entity_maturations(
     lowered_text = (raw_text or "").lower()
 
     with conn.cursor() as cur:
+        vocabulary_issues = collect_new_entity_declaration_vocabulary_issues(
+            cur, parsed
+        )
+        if vocabulary_issues:
+            formatted = "\n".join(f"- {issue}" for issue in vocabulary_issues)
+            raise RetrogradeMaturationVocabularyError(
+                f"New-entity declaration vocabulary validation failed:\n{formatted}"
+            )
+
         for declaration in parsed:
-            _validate_pair_tag_hints(cur, declaration)
             record = _resolve_or_create_stub(cur, declaration)
             if record.created:
                 result.stubs_created += 1
@@ -166,41 +177,6 @@ def enqueue_declared_entity_maturations(
                 result.jobs_already_present += 1
 
     return result
-
-
-def _validate_pair_tag_hints(cur: Any, declaration: NewEntityDeclaration) -> None:
-    """Reject unregistered or kind-incompatible pair-tag hints loudly."""
-
-    for hint in declaration.pair_tag_hints:
-        cur.execute(
-            """
-            /* orrery:maturation:pair_tag_hint_lookup */
-            SELECT subject_kinds, object_kinds, deprecated
-            FROM pair_tags
-            WHERE tag = %s
-            """,
-            (hint.tag,),
-        )
-        row = cur.fetchone()
-        if row is None:
-            raise RetrogradeMaturationVocabularyError(
-                f"Declaration {declaration.name!r} uses unregistered pair-tag "
-                f"hint {hint.tag!r}"
-            )
-        if _row_value(row, "deprecated", 2):
-            raise RetrogradeMaturationVocabularyError(
-                f"Declaration {declaration.name!r} uses deprecated pair-tag "
-                f"hint {hint.tag!r}"
-            )
-        if hint.declared_entity_role == "subject":
-            allowed = _row_value(row, "subject_kinds", 0)
-        else:
-            allowed = _row_value(row, "object_kinds", 1)
-        if declaration.kind not in set(allowed or ()):
-            raise RetrogradeMaturationVocabularyError(
-                f"Pair-tag hint {hint.tag!r} does not allow "
-                f"{declaration.kind!r} as {hint.declared_entity_role}"
-            )
 
 
 def _resolve_or_create_stub(

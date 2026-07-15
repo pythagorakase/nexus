@@ -175,7 +175,11 @@ class _RecordingCursor:
         normalized = " ".join(str(sql).split())
         self._fetchall = []
         self._fetchone = None
-        if "FROM characters WHERE name" in normalized:
+        if "FROM tag_category_registry" in normalized:
+            self._fetchall = [("bodyform",), ("disposition",)]
+        elif "FROM tags" in normalized:
+            self._fetchone = None
+        elif "FROM characters WHERE name" in normalized:
             self._fetchall = self.existing_entity_rows
         elif "INSERT INTO orrery_maturation_jobs" in normalized:
             self._fetchone = self.job_insert_returns.pop(0)
@@ -307,6 +311,40 @@ def test_enqueue_rejects_ambiguous_names() -> None:
             slot=2,
             settings=_ENABLED_SETTINGS,
         )
+
+
+def test_enqueue_validates_whole_declaration_batch_before_stub_processing() -> None:
+    """The accept-time backstop rejects the turn before any entity mutation."""
+
+    cursor = _RecordingCursor(existing_entity_rows=[], job_insert_returns=[])
+    conn = _RecordingConnection(cursor)
+    invalid_declaration = {
+        "kind": "character",
+        "name": "The Hallucinated Clerk",
+        "summary": "A clerk carrying an unregistered declaration hint.",
+        "tag_hints": ["invented:tag"],
+    }
+
+    with pytest.raises(
+        RetrogradeMaturationVocabularyError,
+        match=r"new_entities\[1\]\.tag_hints",
+    ):
+        enqueue_declared_entity_maturations(
+            conn,
+            declarations=[_DECLARATION, invalid_declaration],
+            chunk_id=10,
+            raw_text="Sister Anechka meets The Hallucinated Clerk.",
+            slot=2,
+            settings=_ENABLED_SETTINGS,
+        )
+
+    assert not any(
+        "FROM characters WHERE name" in " ".join(sql.split())
+        for sql, _params in cursor.executed
+    )
+    assert not any(
+        "INSERT INTO" in sql or "UPDATE " in sql for sql, _params in cursor.executed
+    )
 
 
 # ============================================================================
