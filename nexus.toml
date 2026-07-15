@@ -454,6 +454,10 @@ max_sample_retries = 12
 edge_kind_weights = { relationship = 0.4, pair_tag = 0.3, event = 0.3 }
 anchor_role_weights = { protagonist = 3.0, starting_location = 2.0, default = 1.0 }
 event_open_endpoint_weights = { character = 0.6, faction = 0.25, place = 0.15 }
+# Cold-start braiding: low-weird histories remain star-shaped, while medium
+# and high require one pair of seed candidates to resolve separate rolled
+# edges to the same unknown entity. Runtime maturation remains unbraided.
+junction_counts_by_weird = { low = 0, medium = 1, high = 1 }
 # Tick-loop bookkeeping makes weak backstory dice — never roll "once did
 # upkeep with an unknown party" into a history menu. Event types in these
 # registry categories are barred from the event edge pool only; expansion

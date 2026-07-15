@@ -7,6 +7,7 @@ from typing import Annotated, Any, Literal, Mapping, Optional, cast
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from nexus.agents.orrery.retrograde_junctions import resolve_junctions
 from nexus.agents.orrery.retrograde_packet import (
     CORE_ENTITIES_HEADING,
     NAMED_SEED_NPCS_HEADING,
@@ -533,6 +534,19 @@ def render_expansion_prompt(
         for candidate in candidates.candidates
         if candidate.seed_id in set(candidates.selected_seed_ids)
     ]
+    resolved_junctions, junction_issues = resolve_junctions(
+        seed_generation_request=seed_generation_request,
+        candidates_payload=candidates.model_dump(mode="json"),
+    )
+    if junction_issues:
+        formatted = "; ".join(junction_issues)
+        raise ValueError(f"Retrograde junction resolution failed: {formatted}")
+    selected_seed_ids = set(candidates.selected_seed_ids)
+    selected_junctions = [
+        junction
+        for junction in resolved_junctions
+        if set(junction["seed_ids"]) <= selected_seed_ids
+    ]
     prompt_payload = {
         "task": (
             "Weave selected Retrograde seed candidates into a compact, coherent "
@@ -546,6 +560,7 @@ def render_expansion_prompt(
         "budget": seed_generation_request.get("budget", {}),
         "selected_seed_ids": candidates.selected_seed_ids,
         "selected_candidates": selected_candidates,
+        "selected_junctions": selected_junctions,
         "core_prompt_sections": (
             seed_generation_request.get("prompt_sections", [])[:4]
         ),
@@ -563,6 +578,10 @@ def render_expansion_prompt(
         "These summaries surface later as retrieved documents, not story.\n"
         "Every selected seed must be accounted for as woven, deferred, or "
         "rejected. Every woven thread must terminate in a present leaf anchor.\n"
+        "For every selected junction, either weave both member seeds through "
+        "the promised shared entity using structured event participants/location, "
+        "or reject both without planning events for either seed. Junction members "
+        "cannot be deferred or survive independently.\n"
         "If the woven history means an entity is dead, destroyed, or "
         "dissolved before the story opens, declare it as a mechanical_plan "
         "row with plan='death' citing the causing event; a death asserted "
@@ -594,13 +613,27 @@ def validate_expansion_plan(
         seed_generation_request=seed_generation_request,
         vocabulary=vocabulary,
     )
+    resolved_junctions, junction_issues = resolve_junctions(
+        seed_generation_request=seed_generation_request,
+        candidates_payload=candidates.model_dump(mode="json"),
+    )
+    if junction_issues:
+        formatted = "\n".join(f"- {issue}" for issue in junction_issues)
+        raise RetrogradeExpansionValidationError(formatted)
+    selected_seed_ids = set(candidates.selected_seed_ids)
+    selected_junctions = [
+        junction
+        for junction in resolved_junctions
+        if set(junction["seed_ids"]) <= selected_seed_ids
+    ]
     response = coerce_expansion_response_payload(
         payload,
         selected_seed_ids=list(candidates.selected_seed_ids),
     )
     issues = _expansion_contract_issues(
         response=response,
-        selected_seed_ids=set(candidates.selected_seed_ids),
+        selected_seed_ids=selected_seed_ids,
+        selected_junctions=selected_junctions,
         vocabulary=vocabulary,
         known_entity_keys=_packet_known_entity_keys(packet),
         max_new_entity_stubs=_budget_entity_stub_cap(seed_generation_request),
@@ -683,6 +716,7 @@ def _expansion_contract_issues(
     *,
     response: RetrogradeExpansionPlanResponse,
     selected_seed_ids: set[str],
+    selected_junctions: list[dict[str, Any]],
     vocabulary: SeedEligibleVocabulary,
     known_entity_keys: Optional[set[tuple[str, str]]] = None,
     max_new_entity_stubs: Optional[int] = None,
@@ -784,7 +818,13 @@ def _expansion_contract_issues(
         _thread_plan_issues(
             thread_plan=response.thread_plan,
             selected_seed_ids=selected_seed_ids,
-            event_refs=event_refs,
+            events_by_ref=events_by_ref,
+        )
+    )
+    issues.extend(
+        _junction_plan_issues(
+            response=response,
+            selected_junctions=selected_junctions,
         )
     )
     issues.extend(_commit_readiness_issues(response.commit_readiness))
@@ -1086,7 +1126,7 @@ def _thread_plan_issues(
     *,
     thread_plan: list[RetrogradeExpansionThreadPlan],
     selected_seed_ids: set[str],
-    event_refs: set[str],
+    events_by_ref: Mapping[str, RetrogradeExpansionEventPlan],
 ) -> list[str]:
     issues: list[str] = []
     thread_seed_ids = {thread.seed_id for thread in thread_plan}
@@ -1097,15 +1137,118 @@ def _thread_plan_issues(
     if unknown_threads:
         issues.append(f"thread_plan references non-selected seeds {unknown_threads}")
     for thread in thread_plan:
-        unknown_event_refs = sorted(set(thread.event_refs) - event_refs)
+        unknown_event_refs = sorted(set(thread.event_refs) - set(events_by_ref))
         if unknown_event_refs:
             issues.append(
                 f"thread {thread.seed_id!r} references unknown event_refs "
                 f"{unknown_event_refs}"
             )
+        for event_ref in sorted(set(thread.event_refs) & set(events_by_ref)):
+            event = events_by_ref[event_ref]
+            if thread.seed_id not in event.seed_ids:
+                issues.append(
+                    f"thread {thread.seed_id!r} references event {event_ref!r}, "
+                    "but that event does not list the thread's seed_id"
+                )
         if thread.status == "woven" and not thread.event_refs:
             issues.append(f"woven thread {thread.seed_id!r} must include event_refs")
     return issues
+
+
+def _junction_plan_issues(
+    *,
+    response: RetrogradeExpansionPlanResponse,
+    selected_junctions: list[dict[str, Any]],
+) -> list[str]:
+    """Require selected junctions to survive or fail as realized atomic pairs."""
+
+    issues: list[str] = []
+    threads_by_seed = {thread.seed_id: thread for thread in response.thread_plan}
+    events_by_ref = {event.event_ref: event for event in response.event_plan}
+
+    for junction in selected_junctions:
+        junction_id = str(junction["junction_id"])
+        seed_ids = [str(seed_id) for seed_id in junction["seed_ids"]]
+        threads = [threads_by_seed.get(seed_id) for seed_id in seed_ids]
+        # The general thread-plan validator reports missing accounting. Avoid
+        # duplicating that error while still validating complete junctions.
+        if any(thread is None for thread in threads):
+            continue
+
+        complete_threads = [thread for thread in threads if thread is not None]
+        statuses = [thread.status for thread in complete_threads]
+        if all(status == "rejected" for status in statuses):
+            referenced_events = sorted(
+                {
+                    event.event_ref
+                    for event in response.event_plan
+                    if set(event.seed_ids) & set(seed_ids)
+                }
+                | {
+                    event_ref
+                    for thread in complete_threads
+                    for event_ref in thread.event_refs
+                }
+            )
+            if referenced_events:
+                issues.append(
+                    f"junction {junction_id!r} rejects both seeds but still "
+                    f"plans or references events {referenced_events}"
+                )
+            continue
+
+        if not all(status == "woven" for status in statuses):
+            status_by_seed = {
+                seed_id: thread.status
+                for seed_id, thread in zip(seed_ids, complete_threads)
+            }
+            issues.append(
+                f"junction {junction_id!r} members must be both woven or both "
+                f"rejected, not {status_by_seed}"
+            )
+            continue
+
+        entity_kind = str(junction["entity_kind"])
+        normalized_entity_ref = str(junction["normalized_entity_ref"])
+        for seed_id, thread in zip(seed_ids, complete_threads):
+            evidence_refs = [
+                event_ref
+                for event_ref in thread.event_refs
+                if event_ref in events_by_ref
+                and seed_id in events_by_ref[event_ref].seed_ids
+                and _event_contains_junction_entity(
+                    events_by_ref[event_ref],
+                    entity_kind=entity_kind,
+                    normalized_entity_ref=normalized_entity_ref,
+                )
+            ]
+            if not evidence_refs:
+                issues.append(
+                    f"junction {junction_id!r} woven seed {seed_id!r} lacks a "
+                    "thread event containing the promised shared "
+                    f"{entity_kind} {junction['entity_ref']!r}"
+                )
+
+    return issues
+
+
+def _event_contains_junction_entity(
+    event: RetrogradeExpansionEventPlan,
+    *,
+    entity_kind: str,
+    normalized_entity_ref: str,
+) -> bool:
+    participant_keys = {
+        (participant.entity_kind, normalize_entity_ref(participant.entity_ref))
+        for participant in event.participants
+    }
+    if (entity_kind, normalized_entity_ref) in participant_keys:
+        return True
+    return bool(
+        entity_kind == "place"
+        and event.location_ref
+        and normalize_entity_ref(event.location_ref) == normalized_entity_ref
+    )
 
 
 def _commit_readiness_issues(
@@ -1127,7 +1270,15 @@ def _hard_validation_rules() -> list[str]:
     return [
         "Every event_plan item must reference one or more selected seed ids.",
         "Every selected seed must appear once in thread_plan.",
-        "Woven threads must reference planned event_ref values.",
+        (
+            "Woven threads must reference planned event_ref values whose "
+            "event seed_ids include that thread's seed_id."
+        ),
+        (
+            "Each selected junction must have both member seeds woven through "
+            "its promised shared entity in structured event participants/location, "
+            "or both rejected with no events; junction members cannot be deferred."
+        ),
         (
             "mechanical_plan rows use plan='entity_tag', 'pair_tag', "
             "'relationship', or 'death'. Leave fields irrelevant to that "

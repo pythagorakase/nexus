@@ -1219,6 +1219,16 @@ class OrreryRetrogradeWizardSettings(BaseModel):
     )
 
 
+class OrreryRetrogradeJunctionCountSettings(BaseModel):
+    """Shared-entity junction counts by player-facing weirdness level."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    low: int = Field(default=0, ge=0)
+    medium: int = Field(default=1, ge=0)
+    high: int = Field(default=1, ge=0)
+
+
 class OrreryRetrogradeGraphSettings(BaseModel):
     """R3 candidate-graph sampling calibration ([orrery.retrograde.graph])."""
 
@@ -1274,6 +1284,13 @@ class OrreryRetrogradeGraphSettings(BaseModel):
             "pool. Tick-loop bookkeeping (needs, upkeep, package resolution) "
             "makes weak backstory dice; expansion validation still accepts "
             "every registered type."
+        ),
+    )
+    junction_counts_by_weird: OrreryRetrogradeJunctionCountSettings = Field(
+        default_factory=OrreryRetrogradeJunctionCountSettings,
+        description=(
+            "Cold-start shared-entity junctions sampled at each player-facing "
+            "weirdness level. Runtime maturation does not consume this setting."
         ),
     )
 

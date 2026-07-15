@@ -82,18 +82,45 @@ VOCABULARY = {
 WEIRD = {"level": "medium", "raw_min": 0.28, "raw_max": 0.55}
 
 
-def _build(seed: str = "test:mara", generate: int = 6) -> dict:
+def _build(
+    seed: str = "test:mara",
+    generate: int = 6,
+    junction_count: int = 0,
+) -> dict:
     return build_candidate_graph(
         candidate_scaffolds=SCAFFOLDS,
         vocabulary=VOCABULARY,
         weird=WEIRD,
         generate_candidates=generate,
         rng_seed_material=seed,
+        junction_count=junction_count,
     )
 
 
 def test_graph_is_deterministic_for_identical_inputs() -> None:
     assert _build() == _build()
+
+
+def test_shared_entity_junction_is_deterministic_and_kind_compatible() -> None:
+    """R3 rolls two distinct edge legs around one shared unknown entity."""
+
+    graph = _build(junction_count=1)
+    assert graph == _build(junction_count=1)
+    assert graph["schema_version"] == 2
+    assert len(graph["junctions"]) == 1
+
+    junction = graph["junctions"][0]
+    assert junction["junction_id"] == "junction_01"
+    assert junction["resolution"] == "shared_entity"
+    assert len(junction["edge_ids"]) == 2
+    assert len(set(junction["edge_ids"])) == 2
+
+    edges_by_id = {edge["edge_id"]: edge for edge in graph["dangling_edges"]}
+    legs = [edges_by_id[edge_id] for edge_id in junction["edge_ids"]]
+    assert all(
+        leg["open_endpoint_kind"] == junction["open_endpoint_kind"] for leg in legs
+    )
+    assert len({(leg["kind"], leg["edge_type"]) for leg in legs}) == 2
 
 
 def test_different_seed_material_rolls_a_different_graph() -> None:
@@ -273,6 +300,32 @@ def test_excluded_event_categories_come_from_settings() -> None:
         "physiological",
         "routine",
     ]
+    assert cfg.junction_counts_by_weird.model_dump() == {
+        "low": 0,
+        "medium": 1,
+        "high": 1,
+    }
+
+
+def test_impossible_junction_vocabulary_fails_loudly() -> None:
+    """A required braid cannot silently degrade into a star-shaped graph."""
+
+    vocabulary = {
+        **VOCABULARY,
+        "relationship_types": ["rival"],
+        "multi_entity_tag_definitions": [],
+        "event_types": [],
+    }
+    with pytest.raises(ValueError, match="junction 1"):
+        build_candidate_graph(
+            candidate_scaffolds=SCAFFOLDS,
+            vocabulary=vocabulary,
+            weird=WEIRD,
+            generate_candidates=4,
+            rng_seed_material="test:impossible-junction",
+            graph_settings={"edge_kind_weights": {"relationship": 1.0}},
+            junction_count=1,
+        )
 
 
 def test_runtime_maturation_packet_sizes_graph_from_its_own_budget() -> None:
@@ -310,6 +363,7 @@ def test_runtime_maturation_packet_sizes_graph_from_its_own_budget() -> None:
     edges = request["candidate_graph"]["dangling_edges"]
     expected_max = max(2, ceil(cfg.generate_candidates * 1.5))
     assert len(edges) <= expected_max
+    assert request["candidate_graph"]["junctions"] == []
 
     # entropy(cold_start) > entropy(maturation): the roll happens inside
     # the genre band contracted by weird_band_fraction from its floor.

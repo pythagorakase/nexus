@@ -102,12 +102,17 @@ def build_retrograde_dry_run_packet(
     )
     if settings.orrery is None:
         raise ValueError("settings.orrery is required for Retrograde budgets")
+    junction_count = getattr(
+        settings.orrery.retrograde.graph.junction_counts_by_weird,
+        str(weird["level"]),
+    )
     seed_generation_request = build_seed_generation_request(
         candidate_scaffolds=candidate_scaffolds,
         vocabulary=vocabulary,
         weird=weird,
         max_new_entity_stubs=settings.orrery.retrograde.wizard.max_new_entity_stubs,
         graph_settings=settings.orrery.retrograde.graph,
+        junction_count=junction_count,
     )
 
     return {
@@ -158,13 +163,16 @@ def build_seed_generation_request(
     rng_seed_material: Optional[str] = None,
     budget_override: Optional[Mapping[str, int]] = None,
     graph_settings: Any = None,
+    junction_count: int = 0,
 ) -> dict[str, Any]:
     """Build the non-mutating R4/R5 request contract for Skald-as-weaver.
 
     ``budget_override`` replaces the level-derived generate/select counts —
     the runtime maturation path passes its tighter budget here so the R3
     candidate graph is sized for the budget that will actually run, not
-    the wizard default.
+    the wizard default. ``junction_count`` defaults to zero so shared-entity
+    braiding remains a wizard cold-start feature rather than leaking into
+    runtime maturation.
     """
 
     level = str(weird.get("level") or "medium")
@@ -200,6 +208,7 @@ def build_seed_generation_request(
         generate_candidates=int(budget["generate_candidates"]),
         rng_seed_material=rng_seed_material,
         graph_settings=graph_settings,
+        junction_count=junction_count,
     )
 
     return {
