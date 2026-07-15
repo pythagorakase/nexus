@@ -34,7 +34,8 @@ def main():
 
     p_start = sub.add_parser("start")
     p_start.add_argument("--slot", type=int, required=True)
-    # When --model is omitted, fall back to the wizard.default_model from nexus.toml
+    # Omission lets the core preserve an operator-set slot model or choose the
+    # wizard default for a fresh slot.
     p_start.add_argument("--model", default=None)
 
     p_resume = sub.add_parser("resume")
@@ -54,10 +55,6 @@ def main():
     args = parser.parse_args()
 
     if args.command == "start":
-        if args.model is None:
-            from nexus.config import load_settings
-
-            args.model = load_settings().wizard.default_model
         thread_id = start_setup(args.slot, model=args.model)
         print(f"Started thread {thread_id} for slot {args.slot}")
     elif args.command == "resume":

@@ -54,7 +54,6 @@ from nexus.api.retry_handler import (
     openai_rate_limiter,
     FallbackChain,
 )
-from nexus.api.config_utils import get_new_story_model
 
 if TYPE_CHECKING:
     from nexus.agents.lore.lore import LORE
@@ -726,9 +725,7 @@ async def delete_session(
 @app.post("/api/story/new/setup/start", response_model=NewStoryStartResponse)
 def new_story_setup_start(request: NewStoryStartRequest) -> NewStoryStartResponse:
     """Start a new story setup for a slot (creates conversations thread, clears cache)."""
-    # Use provided model or fall back to settings
-    model_to_use = request.model or get_new_story_model()
-    thread_id = start_new_story_setup(request.slot, model=model_to_use)
+    thread_id = start_new_story_setup(request.slot, model=request.model)
     return NewStoryStartResponse(thread_id=thread_id, slot=request.slot)
 
 

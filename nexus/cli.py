@@ -1066,10 +1066,9 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
 
         if state.get("is_empty"):
             # Initialize via setup/start endpoint. Forward only an explicit
-            # --model override; otherwise the backend resolves the configured
-            # wizard default. The empty slot's pre-wizard model stamp (the
-            # dev reset default) is deliberately NOT forwarded so the mock
-            # TEST server is never selected implicitly.
+            # --model override; otherwise the backend preserves an
+            # operator-set slot model or resolves the configured wizard
+            # default for a fresh slot.
             setup_url = f"{get_api_url()}/api/story/new/setup/start"
             setup_payload = {"slot": args.slot}
             model_to_use = getattr(args, "model", None)
@@ -1126,8 +1125,9 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
             else:
                 # Call wizard chat directly
                 url = f"{get_api_url()}/api/story/new/chat"
-                # Use CLI override or slot's configured model (e.g., TEST mode)
-                model_to_use = args.model or state.get("model")
+                # Omission is meaningful: the backend resolves the slot's
+                # locked model. Only forward an explicit CLI override.
+                model_to_use = getattr(args, "model", None)
 
                 # Check if we're in trait selection mode
                 trait_menu = state.get("trait_menu")
@@ -1331,7 +1331,9 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
         # (Also reached after wizard transition above)
         if not state.get("is_wizard_mode"):
             # Narrative mode - call continue directly
-            model_to_use = args.model or state.get("model")
+            # The API already resolves the persisted slot model. Sending a
+            # model is an explicit override and must remain opt-in.
+            model_to_use = getattr(args, "model", None)
             user_text = args.user_text or ""
 
             url = f"{get_api_url()}/api/narrative/continue"
