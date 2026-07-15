@@ -55,7 +55,8 @@ class FakeSession:
             return FakeResult(self.candidate_rows[: params["limit"]])
         if "/* orrery:record_bleed_offers */" in sql:
             return FakeResult([])
-        if "SELECT max(id) AS max_id" in sql:
+        if "SELECT max(nc.id) AS max_id" in sql:
+            assert "orrery:retrograde_prologue_anchor" in sql
             return FakeResult([{"max_id": self.max_chunk_id}])
         raise AssertionError(f"Unexpected Bleed query: {sql}")
 
@@ -284,7 +285,7 @@ async def test_assemble_context_payload_reuses_orrery_proposal_anchor() -> None:
         if "/* orrery:bleed_candidates */" in sql
     )
     assert candidate_params["anchor_chunk_id"] == 77
-    assert not any("SELECT max(id) AS max_id" in sql for sql, _ in session.executed)
+    assert not any("SELECT max(nc.id) AS max_id" in sql for sql, _ in session.executed)
 
 
 @pytest.mark.asyncio

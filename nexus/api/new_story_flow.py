@@ -197,9 +197,9 @@ def perform_transition_with_retrograde(
        cache, stays in wizard-ready, and the retry re-runs the pipeline from
        the clean-slate preamble. A history-less world can never silently
        enter narrative mode.
-    3. After commit, pending Retrograde summary chunks are embedded through
-       the standard chunk lifecycle. An embedding failure surfaces loudly;
-       the chunks stay pending and retryable via
+    3. After commit, pending Retrograde summaries are embedded through their
+       dedicated lifecycle. An embedding failure surfaces loudly; the rows
+       stay pending and retryable via
        ``nexus retrograde-embed-history --slot N --execute``.
 
     Retrograde is skipped (plain transition) when the [orrery] section is
@@ -217,7 +217,7 @@ def perform_transition_with_retrograde(
     """
     from nexus.agents.orrery.retrograde_orchestrator import (
         build_wizard_history_surface,
-        embed_retrograde_history_chunks,
+        embed_retrograde_history_summaries,
         generate_retrograde_history,
         persist_retrograde_history,
         record_retrograde_progress,
@@ -332,7 +332,7 @@ def perform_transition_with_retrograde(
 
     manifest = manifest_holder["manifest"]
     try:
-        embedding_results = embed_retrograde_history_chunks(
+        embedding_results = embed_retrograde_history_summaries(
             dbname=dbname,
             manifest=manifest,
             settings=settings,
@@ -349,7 +349,7 @@ def perform_transition_with_retrograde(
     record_retrograde_progress(
         slot_number,
         "done",
-        {"embedded_chunks": len(embedding_results)},
+        {"embedded_summaries": len(embedding_results)},
     )
     result["retrograde"] = {
         "enabled": True,
@@ -357,7 +357,7 @@ def perform_transition_with_retrograde(
         "weird": bundle.weird,
         "surface": surface,
         "counters": dict(manifest["counters"]),
-        "embedded_chunk_ids": [entry["chunk_id"] for entry in embedding_results],
+        "embedded_summary_ids": [entry["summary_id"] for entry in embedding_results],
         "timings": [timing.model_dump() for timing in bundle.timings],
     }
     result["trait_inputs"] = trait_inputs_outcome or {"derived": False}

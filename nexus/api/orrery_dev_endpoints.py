@@ -33,6 +33,7 @@ from nexus.agents.orrery.overrides import (
     TagOverride,
     WorldStateOverrides,
 )
+from nexus.agents.orrery.reconstruction import playable_narrative_predicate
 from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
 from nexus.api.slot_utils import get_slot_db_url
 
@@ -263,7 +264,12 @@ def _slot_session(slot: Optional[int]) -> Iterator[Session]:
 def _default_anchor_chunk_id(session: Session) -> Optional[int]:
     # Same fallback the turn cycle uses when no target chunk is in play.
     row = (
-        session.execute(text("SELECT max(id) AS max_id FROM narrative_chunks"))
+        session.execute(
+            text(
+                "SELECT max(nc.id) AS max_id FROM narrative_chunks nc WHERE "
+                + playable_narrative_predicate("nc")
+            )
+        )
         .mappings()
         .first()
     )

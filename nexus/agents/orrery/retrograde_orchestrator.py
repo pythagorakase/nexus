@@ -9,12 +9,12 @@ new-story wizard fires at the ready -> narrative transition:
    the R6 Skald expansion call. No canonical rows are written.
 2. ``persist_retrograde_history`` joins the caller's transaction cursor and
    executes the persistence plan (events, tags, pair tags, relationships,
-   stubs, summary chunks). Decision 14: this runs inside the same transaction
+   stubs, dedicated summaries). Decision 14: this runs inside the same transaction
    as the wizard transition writes, so a blocked persistence rolls back the
    whole world and the slot stays in wizard-ready for a loud, retryable
    failure -- a history-less world can never silently enter narrative mode.
-3. ``embed_retrograde_history_chunks`` runs the standard chunk embedding
-   lifecycle for the new summary chunks after the transaction commits.
+3. ``embed_retrograde_history_summaries`` runs the summary embedding lifecycle
+   for the new rows after the transaction commits.
 4. ``build_wizard_history_surface`` projects the persistence manifest into
    the Decision 6 split: core entities and intentional relationships are
    player-visible; event prose, tags, and deferred seeds stay hidden with
@@ -229,6 +229,7 @@ def persist_retrograde_history(
     *,
     bundle: RetrogradeGenerationBundle,
     settings: Settings,
+    recorded_at_chunk_id: Optional[int] = None,
     progress: Optional[ProgressCallback] = None,
 ) -> dict[str, Any]:
     """Execute the persistence plan on the caller's transaction cursor.
@@ -255,7 +256,8 @@ def persist_retrograde_history(
         dbname=bundle.dbname,
         dry_run=True,
         create_missing_entities=wizard_settings.create_entity_stubs,
-        summary_chunks_enabled=retrieval_settings.summary_chunks,
+        summaries_enabled=retrieval_settings.summaries_enabled,
+        recorded_at_chunk_id=recorded_at_chunk_id,
     )
 
     blockers = list(dry_manifest["execute_blockers"])
@@ -299,7 +301,8 @@ def persist_retrograde_history(
         dbname=bundle.dbname,
         dry_run=False,
         create_missing_entities=wizard_settings.create_entity_stubs,
-        summary_chunks_enabled=retrieval_settings.summary_chunks,
+        summaries_enabled=retrieval_settings.summaries_enabled,
+        recorded_at_chunk_id=recorded_at_chunk_id,
     )
     logger.info(
         "Retrograde persistence executed for slot %s: %s",
@@ -309,36 +312,36 @@ def persist_retrograde_history(
     return manifest
 
 
-def embed_retrograde_history_chunks(
+def embed_retrograde_history_summaries(
     *,
     dbname: str,
     manifest: Mapping[str, Any],
     settings: Settings,
     progress: Optional[ProgressCallback] = None,
 ) -> list[dict[str, Any]]:
-    """Embed pending Retrograde summary chunks after the apply commit.
+    """Embed pending Retrograde summaries after the apply commit.
 
-    Must run after the persistence transaction commits; the embedding
-    subprocess opens its own connection. Raises ``RuntimeError`` (from the
-    embedding layer) if any chunk fails; pending chunks stay retryable via
+    Must run after the persistence transaction commits. The embedding layer
+    generates vectors in-process and writes them through a pooled connection.
+    Raises ``RuntimeError`` if any summary fails; pending rows stay retryable via
     ``nexus retrograde-embed-history --slot N --execute``.
     """
 
     from nexus.agents.orrery.retrograde_embedding import (
-        embed_retrograde_summary_chunks,
+        embed_retrograde_summaries,
     )
 
     _, retrieval_settings = _require_retrograde_settings(settings)
-    pending_chunk_ids = [
-        int(chunk_id)
-        for chunk_id in manifest.get("retrieval", {}).get(
-            "embedding_pending_chunk_ids", []
+    pending_summary_ids = [
+        int(summary_id)
+        for summary_id in manifest.get("retrieval", {}).get(
+            "embedding_pending_summary_ids", []
         )
     ]
-    if not retrieval_settings.embed_after_apply or not pending_chunk_ids:
+    if not retrieval_settings.embed_after_apply or not pending_summary_ids:
         return []
-    _emit(progress, "embedding", {"pending_chunks": len(pending_chunk_ids)})
-    return embed_retrograde_summary_chunks(dbname, pending_chunk_ids)
+    _emit(progress, "embedding", {"pending_summaries": len(pending_summary_ids)})
+    return embed_retrograde_summaries(dbname, pending_summary_ids)
 
 
 def build_wizard_history_surface(

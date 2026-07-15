@@ -25,6 +25,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException
 
+from nexus.agents.orrery.reconstruction import playable_narrative_predicate
 from nexus.api.db_pool import get_connection
 from nexus.api.slot_utils import require_slot_dbname
 
@@ -167,9 +168,10 @@ async def get_latest_chunk(slot: Optional[int] = None) -> Dict[str, Any]:
     rows = _fetch_all(
         dbname,
         _CHUNK_SELECT
-        + """
+        + f"""
         FROM narrative_chunks nc
         JOIN chunk_metadata cm ON cm.chunk_id = nc.id
+        WHERE {playable_narrative_predicate()}
         ORDER BY nc.id DESC
         LIMIT 1
         """,
@@ -188,10 +190,11 @@ async def get_outline(slot: Optional[int] = None) -> List[Dict[str, Any]]:
     dbname = resolve_dbname(slot)
     rows = _fetch_all(
         dbname,
-        """
+        f"""
         SELECT cm.chunk_id, cm.season, cm.episode, cm.scene, cm.slug
         FROM chunk_metadata cm
         JOIN narrative_chunks nc ON nc.id = cm.chunk_id
+        WHERE {playable_narrative_predicate()}
         ORDER BY cm.chunk_id
         """,
     )
@@ -216,10 +219,11 @@ async def get_adjacent_chunks(
     previous_rows = _fetch_all(
         dbname,
         _CHUNK_SELECT
-        + """
+        + f"""
         FROM narrative_chunks nc
         JOIN chunk_metadata cm ON cm.chunk_id = nc.id
-        WHERE nc.id < %s
+        WHERE {playable_narrative_predicate()}
+          AND nc.id < %s
         ORDER BY nc.id DESC
         LIMIT 1
         """,
@@ -228,10 +232,11 @@ async def get_adjacent_chunks(
     next_rows = _fetch_all(
         dbname,
         _CHUNK_SELECT
-        + """
+        + f"""
         FROM narrative_chunks nc
         JOIN chunk_metadata cm ON cm.chunk_id = nc.id
-        WHERE nc.id > %s
+        WHERE {playable_narrative_predicate()}
+          AND nc.id > %s
         ORDER BY nc.id ASC
         LIMIT 1
         """,
@@ -303,10 +308,11 @@ async def get_chunks_by_season_and_episode(
     rows = _fetch_all(
         dbname,
         _CHUNK_SELECT
-        + """
+        + f"""
         FROM narrative_chunks nc
         LEFT JOIN chunk_metadata cm ON cm.chunk_id = nc.id
-        WHERE cm.season = %s AND cm.episode = %s
+        WHERE {playable_narrative_predicate()}
+          AND cm.season = %s AND cm.episode = %s
         ORDER BY nc.id
         LIMIT %s OFFSET %s
         """,
@@ -314,11 +320,12 @@ async def get_chunks_by_season_and_episode(
     )
     count_rows = _fetch_all(
         dbname,
-        """
+        f"""
         SELECT count(*) AS count
         FROM narrative_chunks nc
         LEFT JOIN chunk_metadata cm ON cm.chunk_id = nc.id
-        WHERE cm.season = %s AND cm.episode = %s
+        WHERE {playable_narrative_predicate()}
+          AND cm.season = %s AND cm.episode = %s
         """,
         (season_id, episode_id),
     )
@@ -339,10 +346,11 @@ async def get_chunk_by_id(chunk_id: int, slot: Optional[int] = None) -> Dict[str
     rows = _fetch_all(
         dbname,
         _CHUNK_SELECT
-        + """
+        + f"""
         FROM narrative_chunks nc
         JOIN chunk_metadata cm ON cm.chunk_id = nc.id
-        WHERE nc.id = %s
+        WHERE {playable_narrative_predicate()}
+          AND nc.id = %s
         """,
         (chunk_id,),
     )

@@ -24,6 +24,8 @@ from nexus.agents.logon.apex_schema import (
 )
 from nexus.agents.orrery.tag_library import format_tag_library_for_prompt
 from nexus.config.loader import get_provider_for_model
+from nexus.memory.context_state import is_retrograde_summary
+from nexus.memory.retrieval_coverage import coerce_chunk_id
 
 logger = logging.getLogger("nexus.lore.logon")
 
@@ -73,6 +75,19 @@ def _labeled_lines(rows: list[tuple[str, Any]]) -> list[str]:
         if rendered:
             lines.append(f"- {label}: {rendered}")
     return lines
+
+
+def _retrieval_source_label(memory: Dict[str, Any]) -> str:
+    """Render the retrieval corpus and identity without faking a chunk id."""
+
+    if is_retrograde_summary(memory):
+        summary_id = memory.get("summary_id")
+        if summary_id is None:
+            summary_id = (memory.get("metadata") or {}).get("summary_id")
+        return f"Retrograde summary {summary_id}"
+
+    chunk_id = coerce_chunk_id(memory)
+    return f"Chunk {chunk_id}" if chunk_id is not None else "Retrieved passage"
 
 
 class LogonUtility:
@@ -519,7 +534,11 @@ class LogonUtility:
         if context.get("warm_slice"):
             sections.append("=== RECENT NARRATIVE ===")
             for chunk in context["warm_slice"]["chunks"]:
-                sections.append(chunk.get("text", ""))
+                chunk_text = chunk.get("text", "")
+                if is_retrograde_summary(chunk):
+                    sections.append(f"[{_retrieval_source_label(chunk)}] {chunk_text}")
+                else:
+                    sections.append(chunk_text)
 
         bootstrap_sections = self._format_bootstrap_context(
             context.get("bootstrap_data")
@@ -667,7 +686,9 @@ class LogonUtility:
                 :5
             ]:  # Limit to top 5
                 sections.append(
-                    f"[Score: {passage.get('score', 0):.2f}] {passage.get('text', '')}"
+                    f"[{_retrieval_source_label(passage)} | "
+                    f"Score: {passage.get('score', 0):.2f}] "
+                    f"{passage.get('text', '')}"
                 )
 
         # Render caps shared with the commit-time prompt-exposure log

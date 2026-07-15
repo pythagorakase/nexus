@@ -4,11 +4,13 @@ Turn Cycle Phase Implementations for LORE
 Handles the execution of individual turn cycle phases.
 """
 
-import json
 import logging
 import time
 from typing import Dict, List, Any, Optional, Union, Iterable
 from datetime import datetime
+
+from nexus.memory.context_state import memory_identity
+from nexus.memory.retrieval_coverage import coerce_chunk_id
 
 logger = logging.getLogger("nexus.lore.turn_cycle")
 
@@ -90,6 +92,39 @@ def _chunk_text(chunk: Dict[str, Any]) -> str:
 
     text = chunk.get("text") or chunk.get("full_text") or ""
     return text.strip() if isinstance(text, str) else ""
+
+
+def _narrative_chunk_ids(memories: Iterable[Dict[str, Any]]) -> List[int]:
+    """Return deduplicated narrative ids, excluding Retrograde summaries."""
+
+    chunk_ids: List[int] = []
+    seen: set[int] = set()
+    for memory in memories:
+        chunk_id = coerce_chunk_id(memory)
+        if chunk_id is None or chunk_id in seen:
+            continue
+        seen.add(chunk_id)
+        chunk_ids.append(chunk_id)
+    return chunk_ids
+
+
+def _deduplicate_retrieval_results(
+    results: Iterable[Dict[str, Any]], *, limit: int = 30
+) -> List[Dict[str, Any]]:
+    """Keep the highest-scoring row for each typed retrieval identity."""
+
+    seen: Dict[Union[int, str], Dict[str, Any]] = {}
+    for result in results:
+        identity = memory_identity(result)
+        if identity is None:
+            continue
+        if identity not in seen or result.get("score", 0) > seen[identity].get(
+            "score", 0
+        ):
+            seen[identity] = result
+    return sorted(
+        seen.values(), key=lambda result: result.get("score", 0), reverse=True
+    )[:limit]
 
 
 class TurnCycleManager:
@@ -271,12 +306,7 @@ class TurnCycleManager:
             "source": "programmatic_warm_slice",
             "chunk_count": len(turn_context.warm_slice),
             "target_chunk_id": target_chunk_id,
-            "warm_chunk_ids": [
-                chunk.get("id") or chunk.get("chunk_id")
-                for chunk in turn_context.warm_slice
-                if isinstance(chunk, dict)
-                and (chunk.get("id") is not None or chunk.get("chunk_id") is not None)
-            ],
+            "warm_chunk_ids": _narrative_chunk_ids(turn_context.warm_slice),
         }
 
         turn_context.phase_states["warm_analysis"] = {
@@ -327,9 +357,7 @@ class TurnCycleManager:
         )
 
         # Get chunk IDs from warm slice for featured entity queries
-        warm_chunk_ids = [
-            chunk.get("id") for chunk in turn_context.warm_slice if chunk.get("id")
-        ]
+        warm_chunk_ids = _narrative_chunk_ids(turn_context.warm_slice)
 
         if not warm_chunk_ids:
             logger.warning("No chunk IDs in warm slice for entity queries")
@@ -574,22 +602,8 @@ class TurnCycleManager:
             except Exception as e:
                 logger.error(f"Query failed for '{query_obj['text'][:50]}...': {e}")
 
-        # Store unique results, preserving highest scores
-        seen_ids = {}
-        for result in all_results:
-            chunk_id = result.get("id")
-            if chunk_id:
-                if chunk_id not in seen_ids or result.get("score", 0) > seen_ids[
-                    chunk_id
-                ].get("score", 0):
-                    seen_ids[chunk_id] = result
-
         # Sort by score and take top results
-        unique_results = sorted(
-            seen_ids.values(), key=lambda x: x.get("score", 0), reverse=True
-        )[
-            :30
-        ]  # Keep top 30 for augmentation
+        unique_results = _deduplicate_retrieval_results(all_results)
 
         turn_context.retrieved_passages = unique_results
         turn_context.phase_states["deep_queries"] = {
@@ -731,39 +745,26 @@ class TurnCycleManager:
             return turn_context.target_chunk_id
 
         # The anchor is deliberately NOT inferred from warm-slice ids:
-        # pass-2 retrieval can append vector-retrieved chunks to the warm
-        # slice, retrograde summaries are retrievable by design, and their
-        # recent insertion ids would win a max() — anchoring the turn on
-        # season-zero backstory state. The filtered query below is the
-        # single source of truth for "newest real narrative chunk".
+        # pass-2 retrieval can append generated-history hits to the warm
+        # slice. The canonical playable predicate below is the single source
+        # of truth for "newest player-played narrative chunk".
         from sqlalchemy import text
 
-        from nexus.agents.orrery.retrograde_markers import (
-            RETROGRADE_PROLOGUE_MARKER,
-            RETROGRADE_SUMMARY_MARKER,
+        from nexus.agents.orrery.reconstruction import (
+            playable_narrative_predicate,
         )
 
-        # Retrograde/maturation chunks interleave by id with live narrative;
-        # anchoring on one would hand the intertitle (and the resolve) the
-        # season-zero backstory frame instead of the story's present.
+        # The synthetic prologue is a world-event FK anchor, not a turn
+        # anchor. Dedicated Retrograde summaries no longer occupy this table.
         row = (
             session.execute(
                 text(
+                    f"""
+                    SELECT max(nc.id) AS max_id
+                    FROM narrative_chunks nc
+                    WHERE {playable_narrative_predicate()}
                     """
-                    SELECT max(id) AS max_id
-                    FROM narrative_chunks
-                    WHERE NOT (
-                        COALESCE(authorial_directives, '[]'::jsonb)
-                            @> CAST(:prologue_marker AS jsonb)
-                        OR COALESCE(authorial_directives, '[]'::jsonb)
-                            @> CAST(:summary_marker AS jsonb)
-                    )
-                    """
-                ),
-                {
-                    "prologue_marker": json.dumps([RETROGRADE_PROLOGUE_MARKER]),
-                    "summary_marker": json.dumps([RETROGRADE_SUMMARY_MARKER]),
-                },
+                )
             )
             .mappings()
             .first()

@@ -3,12 +3,29 @@
 from __future__ import annotations
 
 import logging
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
-from .context_state import ContextStateManager
+from .context_state import (
+    ContextStateManager,
+    MemoryIdentity,
+    is_retrograde_summary,
+    memory_identity,
+)
 from .query_memory import QueryMemory
 
 logger = logging.getLogger(__name__)
+
+
+def _normalize_retrieval_memory(
+    memory: Dict[str, Any],
+) -> Tuple[Optional[MemoryIdentity], Dict[str, Any]]:
+    """Normalize narrative ids while preserving typed summary identities."""
+
+    normalized = dict(memory)
+    identity = memory_identity(normalized)
+    if identity is not None and not is_retrograde_summary(normalized):
+        normalized.setdefault("chunk_id", identity)
+    return identity, normalized
 
 
 class IncrementalRetriever:
@@ -36,11 +53,14 @@ class IncrementalRetriever:
             return [], 0
 
         collected: List[Dict[str, object]] = []
+        collected_ids: Set[MemoryIdentity] = set()
         tokens_used = 0
 
         for reference, reason in gaps.items():
             if self.query_memory.remaining_iterations("pass2") <= 0:
-                logger.debug("Pass 2 query budget exhausted; stopping incremental retrieval")
+                logger.debug(
+                    "Pass 2 query budget exhausted; stopping incremental retrieval"
+                )
                 break
 
             query = f"{reference} {reason}".strip()
@@ -51,30 +71,31 @@ class IncrementalRetriever:
             try:
                 result = self.memnon.query_memory(query=query, k=5, use_hybrid=True)
             except Exception as exc:  # pragma: no cover - defensive logging
-                logger.error("Incremental retrieval failed for query '%s': %s", query, exc)
+                logger.error(
+                    "Incremental retrieval failed for query '%s': %s", query, exc
+                )
                 continue
 
             self.query_memory.record("pass2", query)
 
             for chunk in result.get("results", []):
-                chunk_id = chunk.get("chunk_id") or chunk.get("id")
-                try:
-                    chunk_id = int(chunk_id) if chunk_id is not None else None
-                except (TypeError, ValueError):
-                    chunk_id = None
-                if chunk_id is None:
+                identity, normalized = _normalize_retrieval_memory(chunk)
+                if identity is None:
                     continue
-                if self.context_state.is_chunk_known(chunk_id):
+                if identity in collected_ids or self.context_state.is_chunk_known(
+                    identity
+                ):
                     continue
 
-                estimated_tokens = self._estimate_tokens(chunk.get("text", ""))
+                estimated_tokens = self._estimate_tokens(normalized.get("text", ""))
                 if tokens_used + estimated_tokens > budget:
                     logger.debug(
-                        "Token budget reached while processing chunk %s", chunk_id
+                        "Token budget reached while processing memory %s", identity
                     )
                     return collected, tokens_used
 
-                collected.append({"chunk_id": chunk_id, **chunk})
+                collected.append(normalized)
+                collected_ids.add(identity)
                 tokens_used += estimated_tokens
 
                 if tokens_used >= budget:
@@ -107,6 +128,7 @@ class IncrementalRetriever:
             return [], 0
 
         collected: List[Dict[str, object]] = []
+        collected_ids: Set[MemoryIdentity] = set()
         tokens_used = 0
 
         # Check if we have query iterations remaining
@@ -123,7 +145,9 @@ class IncrementalRetriever:
             return [], 0
 
         try:
-            logger.info("Performing raw user input vector search for enhanced retrieval")
+            logger.info(
+                "Performing raw user input vector search for enhanced retrieval"
+            )
             # Send raw input directly to hybrid search (vector + text)
             result = self.memnon.query_memory(query=query, k=k, use_hybrid=True)
         except Exception as exc:
@@ -135,28 +159,25 @@ class IncrementalRetriever:
 
         # Process retrieved chunks
         for chunk in result.get("results", []):
-            chunk_id = chunk.get("chunk_id") or chunk.get("id")
-            try:
-                chunk_id = int(chunk_id) if chunk_id is not None else None
-            except (TypeError, ValueError):
-                chunk_id = None
-
-            if chunk_id is None:
+            identity, normalized = _normalize_retrieval_memory(chunk)
+            if identity is None:
                 continue
 
-            # Skip if already in context
-            if self.context_state.is_chunk_known(chunk_id):
+            # Skip if already in context or duplicated in this result set.
+            if identity in collected_ids or self.context_state.is_chunk_known(identity):
                 continue
 
             # Check token budget
-            estimated_tokens = self._estimate_tokens(chunk.get("text", ""))
+            estimated_tokens = self._estimate_tokens(normalized.get("text", ""))
             if tokens_used + estimated_tokens > budget:
                 logger.debug(
-                    "Token budget reached while processing raw input chunk %s", chunk_id
+                    "Token budget reached while processing raw input memory %s",
+                    identity,
                 )
                 return collected, tokens_used
 
-            collected.append({"chunk_id": chunk_id, **chunk})
+            collected.append(normalized)
+            collected_ids.add(identity)
             tokens_used += estimated_tokens
 
             if tokens_used >= budget:
@@ -165,7 +186,7 @@ class IncrementalRetriever:
         logger.info(
             "Raw input retrieval collected %d chunks using %d tokens",
             len(collected),
-            tokens_used
+            tokens_used,
         )
         return collected, tokens_used
 
@@ -181,22 +202,24 @@ class IncrementalRetriever:
             return [], 0
 
         additions: List[Dict[str, object]] = []
+        addition_ids: Set[MemoryIdentity] = set()
         tokens_used = 0
 
         for chunk in recent.get("results", []):
-            chunk_id = chunk.get("chunk_id") or chunk.get("id")
-            try:
-                chunk_id = int(chunk_id) if chunk_id is not None else None
-            except (TypeError, ValueError):
-                chunk_id = None
-            if chunk_id is None or self.context_state.is_chunk_known(chunk_id):
+            identity, normalized = _normalize_retrieval_memory(chunk)
+            if (
+                identity is None
+                or identity in addition_ids
+                or self.context_state.is_chunk_known(identity)
+            ):
                 continue
 
-            estimated_tokens = self._estimate_tokens(chunk.get("text", ""))
+            estimated_tokens = self._estimate_tokens(normalized.get("text", ""))
             if tokens_used + estimated_tokens > budget:
                 break
 
-            additions.append({"chunk_id": chunk_id, **chunk})
+            additions.append(normalized)
+            addition_ids.add(identity)
             tokens_used += estimated_tokens
 
             if tokens_used >= budget:

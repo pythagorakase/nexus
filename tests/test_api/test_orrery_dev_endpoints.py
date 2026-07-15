@@ -27,6 +27,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
 from nexus.agents.orrery.needs import NEED_SEVERITY_PREFIX
+from nexus.agents.orrery.reconstruction import playable_narrative_predicate
 from nexus.agents.orrery.resolver import (
     OrreryTickProposal,
     _present_actor_ids_at_anchor,
@@ -60,7 +61,10 @@ def _production_proposal(slot: int) -> tuple[Optional[int], OrreryTickProposal]:
     try:
         with Session(engine) as session:
             anchor_chunk_id = session.execute(
-                text("SELECT max(id) FROM narrative_chunks")
+                text(
+                    "SELECT max(nc.id) FROM narrative_chunks nc WHERE "
+                    + playable_narrative_predicate("nc")
+                )
             ).scalar()
             proposal = resolve_dry_run(
                 session,
@@ -783,7 +787,11 @@ def test_coverage_anchor_cap_and_sampling(client: TestClient) -> None:
         with Session(engine) as session:
             ids_desc = list(
                 session.execute(
-                    text("SELECT id FROM narrative_chunks ORDER BY id DESC LIMIT 9")
+                    text(
+                        "SELECT nc.id FROM narrative_chunks nc WHERE "
+                        + playable_narrative_predicate("nc")
+                        + " ORDER BY nc.id DESC LIMIT 9"
+                    )
                 ).scalars()
             )
     finally:

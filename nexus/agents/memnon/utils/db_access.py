@@ -11,15 +11,137 @@ import psycopg2
 from typing import Dict, List, Tuple, Optional, Union, Any
 from urllib.parse import urlparse
 
+from nexus.agents.orrery.reconstruction import playable_narrative_predicate
+
 from .embedding_tables import (
     PGVECTOR_ANN_INDEX_MAX_DIMENSIONS,
     parse_embedding_table_dimensions,
+    retrograde_summary_table_name_for_dimensions,
     resolve_dimension_table,
     supports_pgvector_ann_index,
 )
 
 # Set up logging
 logger = logging.getLogger("nexus.memnon.db_access")
+
+
+def retrograde_summary_memory_id(summary_id: int) -> str:
+    """Return the typed public identity for a Retrograde summary."""
+    return f"retrograde_summary:{int(summary_id)}"
+
+
+def _retrograde_summaries_exist(cursor) -> bool:
+    """Return whether the dedicated Retrograde summary corpus exists."""
+    return _embedding_table_exists(cursor, "retrograde_summaries")
+
+
+def _retrograde_summaries_allowed(filters: Optional[Dict[str, Any]]) -> bool:
+    """Keep narrative metadata filters scoped to narrative rows.
+
+    Retrograde summaries do not own season, episode, or world-layer metadata.
+    Excluding them when filters are supplied is safer than silently ignoring a
+    caller's narrative constraint.
+    """
+    narrative_filter_keys = {"season", "episode", "world_layer"}
+    return not any(key in narrative_filter_keys for key in (filters or {}))
+
+
+def _retrograde_summary_result(
+    summary_id: int,
+    summary_text: str,
+    world_event_id: int,
+    recorded_at_chunk_id: Optional[int],
+    chronology: Any,
+    created_at: Any,
+) -> Dict[str, Any]:
+    """Build a retrieval result without inventing a narrative chunk id."""
+    memory_id = retrograde_summary_memory_id(summary_id)
+    serialized_created_at = (
+        created_at.isoformat() if hasattr(created_at, "isoformat") else created_at
+    )
+    return {
+        "id": memory_id,
+        "memory_id": memory_id,
+        "summary_id": int(summary_id),
+        "world_event_id": int(world_event_id),
+        "text": summary_text,
+        "content_type": "retrograde_summary",
+        "metadata": {
+            "summary_id": int(summary_id),
+            "world_event_id": int(world_event_id),
+            "recorded_at_chunk_id": (
+                int(recorded_at_chunk_id) if recorded_at_chunk_id is not None else None
+            ),
+            "chronology": chronology,
+            "created_at": serialized_created_at,
+        },
+        "model_scores": {},
+        "text_score": 0.0,
+        "vector_score": 0.0,
+    }
+
+
+def _execute_retrograde_summary_vector_search(
+    cursor,
+    dimensions: int,
+    embedding_value: str,
+    model_key: str,
+    top_k: int,
+) -> List[Dict[str, Any]]:
+    """Return summary vector candidates for one model and dimension."""
+    if not _retrograde_summaries_exist(cursor):
+        return []
+    table_name = retrograde_summary_table_name_for_dimensions(dimensions)
+    if not _embedding_table_exists(cursor, table_name):
+        return []
+
+    cursor.execute(
+        f"""
+        SELECT
+            rs.id,
+            rs.summary_text,
+            rs.world_event_id,
+            rs.recorded_at_chunk_id,
+            rs.chronology,
+            rs.created_at,
+            1 - (rse.embedding <=> %s::vector({dimensions})) AS score
+        FROM retrograde_summaries rs
+        JOIN {table_name} rse ON rs.id = rse.summary_id
+        WHERE rse.model = %s
+        ORDER BY score DESC
+        LIMIT %s
+        """,
+        (embedding_value, model_key, top_k),
+    )
+    results: List[Dict[str, Any]] = []
+    for row in cursor.fetchall():
+        (
+            summary_id,
+            summary_text,
+            world_event_id,
+            recorded_at_chunk_id,
+            chronology,
+            created_at,
+            score,
+        ) = row
+        result = _retrograde_summary_result(
+            summary_id,
+            summary_text,
+            world_event_id,
+            recorded_at_chunk_id,
+            chronology,
+            created_at,
+        )
+        numeric_score = float(score) if score is not None else 0.0
+        result.update(
+            {
+                "model_scores": {model_key: numeric_score},
+                "score": numeric_score,
+                "source": "vector_search",
+            }
+        )
+        results.append(result)
+    return results
 
 
 def _embedding_table_exists(cursor, table_name: str) -> bool:
@@ -109,7 +231,7 @@ def execute_vector_search(
     db_url: str,
     query_embedding: list,
     model_key: str,
-    filters: Dict[str, Any] = None,
+    filters: Optional[Dict[str, Any]] = None,
     top_k: int = 10,
 ) -> List[Dict[str, Any]]:
     """
@@ -165,22 +287,34 @@ def execute_vector_search(
 
                 # Get dimensions of the query embedding to determine which table to use
                 dimensions = len(query_embedding)
+                embedding_str = "[" + ",".join(str(x) for x in query_embedding) + "]"
+
+                if _retrograde_summaries_allowed(filters):
+                    for summary_result in _execute_retrograde_summary_vector_search(
+                        cursor,
+                        dimensions,
+                        embedding_str,
+                        model_key,
+                        top_k,
+                    ):
+                        results[summary_result["id"]] = summary_result
 
                 # Map dimensions to table names
                 table_name = resolve_dimension_table(dimensions)
                 if not _embedding_table_exists(cursor, table_name):
                     logger.warning(
-                        "Embedding table %s does not exist; vector search has no rows",
+                        "Narrative embedding table %s does not exist",
                         table_name,
                     )
-                    return []
+                    return sorted(
+                        results.values(),
+                        key=lambda result: result.get("score", 0.0),
+                        reverse=True,
+                    )[:top_k]
 
                 logger.info(
                     f"Using {table_name} for vector search with {dimensions}D embeddings"
                 )
-
-                # Build embedding array as a string - pgvector expects [x,y,z] format
-                embedding_str = "[" + ",".join(str(x) for x in query_embedding) + "]"
 
                 # Use proper vector similarity search with the <=> operator
                 # This works now that we're using the correct vector type tables
@@ -203,6 +337,7 @@ def execute_vector_search(
                     narrative_view nv ON nc.id = nv.id
                 WHERE 
                     ce.model = %s
+                    AND {playable_narrative_predicate()}
                     {filter_sql}
                 ORDER BY
                     score DESC
@@ -252,8 +387,10 @@ def execute_vector_search(
         finally:
             conn.close()
 
-        # Return as list of values
-        return list(results.values())
+        # Rank both corpora together; neither corpus receives an implicit boost.
+        return sorted(
+            results.values(), key=lambda result: result.get("score", 0.0), reverse=True
+        )[:top_k]
 
     except Exception as e:
         logger.error(f"Error in vector search: {e}")
@@ -301,19 +438,19 @@ def prepare_tsquery(query_text: str) -> str:
     return " | ".join(query_words)
 
 
-def execute_hybrid_search(
+def _execute_narrative_only_hybrid_search_legacy(
     db_url: str,
     query_text: str,
     query_embedding: list,
     model_key: str,
     vector_weight: float = 0.6,
     text_weight: float = 0.4,
-    filters: Dict[str, Any] = None,
+    filters: Optional[Dict[str, Any]] = None,
     top_k: int = 10,
     idf_dict=None,
 ) -> List[Dict[str, Any]]:
     """
-    Execute a hybrid search combining vector similarity and text search.
+    Legacy narrative-only hybrid implementation retained for compatibility review.
 
     Args:
         db_url: PostgreSQL database URL
@@ -421,6 +558,7 @@ def execute_hybrid_search(
                         narrative_view nv ON nc.id = nv.id
                     WHERE 
                         to_tsvector('english', nc.raw_text) @@ to_tsquery('english', %s)
+                        AND {playable_narrative_predicate()}
                         {filter_sql}
                     ORDER BY 
                         text_score DESC
@@ -461,6 +599,7 @@ def execute_hybrid_search(
                         narrative_view nv ON nc.id = nv.id
                     WHERE 
                         to_tsvector('english', nc.raw_text) @@ to_tsquery('english', %s)
+                        AND {playable_narrative_predicate()}
                         {filter_sql}
                     ORDER BY 
                         text_score DESC
@@ -562,6 +701,7 @@ def execute_hybrid_search(
                     chunk_metadata cm ON nc.id = cm.chunk_id
                 WHERE 
                     ce.model = %s
+                    AND {playable_narrative_predicate()}
                     {filter_sql}
                 ORDER BY
                     vector_score DESC
@@ -730,6 +870,39 @@ def execute_hybrid_search(
         return []
 
 
+def execute_hybrid_search(
+    db_url: str,
+    query_text: str,
+    query_embedding: list,
+    model_key: str,
+    vector_weight: float = 0.6,
+    text_weight: float = 0.4,
+    filters: Optional[Dict[str, Any]] = None,
+    top_k: int = 10,
+    idf_dict=None,
+) -> List[Dict[str, Any]]:
+    """Search narrative and Retrograde summary corpora with one model.
+
+    The multi-model implementation is the canonical scorer. Supplying a
+    single model with weight 1.0 keeps text/vector normalization and candidate
+    ranking identical across both public paths, without a hidden corpus weight.
+    """
+    results = execute_multi_model_hybrid_search(
+        db_url=db_url,
+        query_text=query_text,
+        query_embeddings={model_key: query_embedding},
+        model_weights={model_key: 1.0},
+        vector_weight=vector_weight,
+        text_weight=text_weight,
+        filters=filters,
+        top_k=top_k,
+        idf_dict=idf_dict,
+    )
+    for result in results:
+        result["source"] = "hybrid_search"
+    return results
+
+
 def setup_database_indexes(db_url: str) -> bool:
     """
     Set up necessary database indexes for efficient search.
@@ -892,7 +1065,7 @@ def execute_multi_model_hybrid_search(
     model_weights: Dict[str, float],  # Dictionary of model_key -> weight
     vector_weight: float = 0.6,
     text_weight: float = 0.4,
-    filters: Dict[str, Any] = None,
+    filters: Optional[Dict[str, Any]] = None,
     top_k: int = 10,
     idf_dict=None,
 ) -> List[Dict[str, Any]]:
@@ -992,6 +1165,7 @@ def execute_multi_model_hybrid_search(
                     narrative_view nv ON nc.id = nv.id
                 WHERE
                     to_tsvector('english', nc.raw_text) @@ to_tsquery('english', %s)
+                    AND {playable_narrative_predicate()}
                     {filter_sql}
                 ORDER BY
                     text_score DESC
@@ -1016,6 +1190,7 @@ def execute_multi_model_hybrid_search(
                     narrative_view nv ON nc.id = nv.id
                 WHERE
                     to_tsvector('english', nc.raw_text) @@ websearch_to_tsquery('english', %s)
+                    AND {playable_narrative_predicate()}
                     {filter_sql}
                 ORDER BY
                     text_score DESC
@@ -1104,6 +1279,64 @@ def execute_multi_model_hybrid_search(
                     else:
                         results[chunk_id]["raw_text_score"] = text_score
 
+                # Search the dedicated summary corpus with the same query form
+                # and normalize it in the same score population. No corpus
+                # multiplier is applied before ranking.
+                if (
+                    text_query_value
+                    and _retrograde_summaries_allowed(filters)
+                    and _retrograde_summaries_exist(cursor)
+                ):
+                    summary_query_function = (
+                        "websearch_to_tsquery"
+                        if text_query_kind == "websearch_to_tsquery"
+                        else "to_tsquery"
+                    )
+                    cursor.execute(
+                        f"""
+                        SELECT
+                            rs.id,
+                            rs.summary_text,
+                            rs.world_event_id,
+                            rs.recorded_at_chunk_id,
+                            rs.chronology,
+                            rs.created_at,
+                            ts_rank(
+                                to_tsvector('english', rs.summary_text),
+                                {summary_query_function}('english', %s)
+                            ) AS text_score
+                        FROM retrograde_summaries rs
+                        WHERE to_tsvector('english', rs.summary_text)
+                              @@ {summary_query_function}('english', %s)
+                        ORDER BY text_score DESC
+                        LIMIT %s
+                        """,
+                        (text_query_value, text_query_value, top_k * 3),
+                    )
+                    for row in cursor.fetchall():
+                        (
+                            summary_id,
+                            summary_text,
+                            world_event_id,
+                            recorded_at_chunk_id,
+                            chronology,
+                            created_at,
+                            text_score,
+                        ) = row
+                        text_score = float(text_score)
+                        all_text_scores.append(text_score)
+                        memory_id = retrograde_summary_memory_id(summary_id)
+                        summary_result = _retrograde_summary_result(
+                            summary_id,
+                            summary_text,
+                            world_event_id,
+                            recorded_at_chunk_id,
+                            chronology,
+                            created_at,
+                        )
+                        summary_result["raw_text_score"] = text_score
+                        results[memory_id] = summary_result
+
                 # Find max text score for normalization (if any results)
                 max_text_score = max(all_text_scores) if all_text_scores else 1.0
                 logger.info(f"Normalizing text scores with max value: {max_text_score}")
@@ -1144,6 +1377,7 @@ def execute_multi_model_hybrid_search(
                             narrative_view nv ON nc.id = nv.id
                         WHERE 
                             nc.raw_text ILIKE '%%' || %s || '%%'
+                            AND {playable_narrative_predicate()}
                             {filter_sql}
                         LIMIT %s
                         """
@@ -1175,6 +1409,29 @@ def execute_multi_model_hybrid_search(
                                     "vector_score": 0.0,
                                 }
 
+                        if _retrograde_summaries_allowed(
+                            filters
+                        ) and _retrograde_summaries_exist(cursor):
+                            cursor.execute(
+                                """
+                                SELECT
+                                    id,
+                                    summary_text,
+                                    world_event_id,
+                                    recorded_at_chunk_id,
+                                    chronology,
+                                    created_at
+                                FROM retrograde_summaries
+                                WHERE summary_text ILIKE '%%' || %s || '%%'
+                                LIMIT %s
+                                """,
+                                (single, top_k * 3),
+                            )
+                            for row in cursor.fetchall():
+                                summary_result = _retrograde_summary_result(*row)
+                                summary_result["text_score"] = 0.05
+                                results[summary_result["id"]] = summary_result
+
                 # Now run vector searches for each model
                 for model_key, embedding in query_embeddings.items():
                     if model_key not in model_weights or model_weights[model_key] <= 0:
@@ -1195,6 +1452,100 @@ def execute_multi_model_hybrid_search(
                     # Get dimensions of the query embedding to determine which table to use
                     dimensions = len(embedding)
 
+                    # Build embedding array as a string - pgvector expects
+                    # [x,y,z] format for both independent corpora.
+                    embedding_str = "[" + ",".join(str(x) for x in embedding) + "]"
+
+                    if _retrograde_summaries_allowed(
+                        filters
+                    ) and _retrograde_summaries_exist(cursor):
+                        summary_table = retrograde_summary_table_name_for_dimensions(
+                            dimensions
+                        )
+                        if _embedding_table_exists(cursor, summary_table):
+                            cursor.execute(
+                                f"""
+                                SELECT
+                                    rs.id,
+                                    rs.summary_text,
+                                    rs.world_event_id,
+                                    rs.recorded_at_chunk_id,
+                                    rs.chronology,
+                                    rs.created_at,
+                                    1 - (
+                                        rse.embedding
+                                        <=> %s::vector({dimensions})
+                                    ) AS vector_score
+                                FROM retrograde_summaries rs
+                                JOIN {summary_table} rse
+                                  ON rs.id = rse.summary_id
+                                WHERE rse.model = %s
+                                ORDER BY vector_score DESC
+                                LIMIT %s
+                                """,
+                                (embedding_str, model_key, top_k * 3),
+                            )
+                            for row in cursor.fetchall():
+                                (
+                                    summary_id,
+                                    summary_text,
+                                    world_event_id,
+                                    recorded_at_chunk_id,
+                                    chronology,
+                                    created_at,
+                                    vector_score,
+                                ) = row
+                                vector_score = float(vector_score)
+                                memory_id = retrograde_summary_memory_id(summary_id)
+                                if memory_id in results:
+                                    results[memory_id]["model_scores"][
+                                        model_key
+                                    ] = vector_score
+                                    continue
+
+                                calculated_text_score = 0.0
+                                if text_query_value:
+                                    summary_query_function = (
+                                        "websearch_to_tsquery"
+                                        if text_query_kind == "websearch_to_tsquery"
+                                        else "to_tsquery"
+                                    )
+                                    cursor.execute(
+                                        f"""
+                                        SELECT ts_rank(
+                                            to_tsvector('english', %s),
+                                            {summary_query_function}('english', %s)
+                                        )
+                                        """,
+                                        (summary_text, text_query_value),
+                                    )
+                                    fetched = cursor.fetchone()
+                                    calculated_text_score = (
+                                        fetched[0]
+                                        if fetched and fetched[0] is not None
+                                        else 0.0
+                                    )
+
+                                summary_result = _retrograde_summary_result(
+                                    summary_id,
+                                    summary_text,
+                                    world_event_id,
+                                    recorded_at_chunk_id,
+                                    chronology,
+                                    created_at,
+                                )
+                                summary_result.update(
+                                    {
+                                        "model_scores": {model_key: vector_score},
+                                        "text_score": float(
+                                            calculated_text_score / max_text_score
+                                            if max_text_score > 0
+                                            else 0.0
+                                        ),
+                                    }
+                                )
+                                results[memory_id] = summary_result
+
                     table_name = resolve_dimension_table(dimensions)
                     if not _embedding_table_exists(cursor, table_name):
                         logger.warning(
@@ -1207,9 +1558,6 @@ def execute_multi_model_hybrid_search(
                     logger.debug(
                         f"Using {table_name} for model {model_key} with {dimensions}D embeddings"
                     )
-
-                    # Build embedding array as a string - pgvector expects [x,y,z] format
-                    embedding_str = "[" + ",".join(str(x) for x in embedding) + "]"
 
                     # Use proper vector search with cosine similarity
                     vector_sql = f"""
@@ -1224,6 +1572,7 @@ def execute_multi_model_hybrid_search(
                         chunk_metadata cm ON nc.id = cm.chunk_id
                     WHERE 
                         ce.model = %s
+                        AND {playable_narrative_predicate()}
                         {filter_sql}
                     ORDER BY
                         vector_score DESC

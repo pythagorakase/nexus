@@ -55,7 +55,7 @@ from nexus.config.settings_models import (
 logger = logging.getLogger("nexus.orrery.retrograde_maturation")
 
 MATURATION_PACKET_SCHEMA_VERSION = "orrery_retrograde_maturation_packet.v0"
-MATURATION_MANIFEST_SCHEMA_VERSION = "orrery_retrograde_maturation_manifest.v0"
+MATURATION_MANIFEST_SCHEMA_VERSION = "orrery_retrograde_maturation_manifest.v1"
 MATURATION_EVENT_REF_PREFIX = "maturation_job"
 
 _SUBTYPE_TABLES: Mapping[str, str] = {
@@ -584,7 +584,8 @@ def _mature_one(
                 dbname=dbname,
                 dry_run=False,
                 create_missing_entities=True,
-                summary_chunks_enabled=retrieval.summary_chunks,
+                summaries_enabled=retrieval.summaries_enabled,
+                recorded_at_chunk_id=int(row["requesting_chunk_id"]),
             )
             persistence_elapsed = time.monotonic() - persistence_started
             total_elapsed = time.monotonic() - started
@@ -598,8 +599,8 @@ def _mature_one(
                     "world_event_ids": persistence["commit_readiness"][
                         "event_ref_to_id"
                     ],
-                    "embedding_pending_chunk_ids": list(
-                        persistence["retrieval"]["embedding_pending_chunk_ids"]
+                    "embedding_pending_summary_ids": list(
+                        persistence["retrieval"]["embedding_pending_summary_ids"]
                     ),
                     "embedding": {"status": "pending"},
                     "timings_seconds": {
@@ -658,9 +659,9 @@ def _resume_embedding(
     with conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             pending = _pending_embedding_ids(
-                cur, manifest.get("embedding_pending_chunk_ids") or []
+                cur, manifest.get("embedding_pending_summary_ids") or []
             )
-    manifest["embedding_pending_chunk_ids"] = pending
+    manifest["embedding_pending_summary_ids"] = pending
     return _finish_embedding(
         conn,
         row=row,
@@ -678,15 +679,15 @@ def _finish_embedding(
     dbname: str,
     retrieval: OrreryRetrogradeRetrievalSettings,
 ) -> dict[str, Any]:
-    """Embed pending summary chunks, then mark the job succeeded."""
+    """Embed pending summaries, then mark the job succeeded."""
 
-    pending = list(manifest.get("embedding_pending_chunk_ids") or [])
+    pending = list(manifest.get("embedding_pending_summary_ids") or [])
     if pending and retrieval.embed_after_apply:
         from nexus.agents.orrery.retrograde_embedding import (
-            embed_retrograde_summary_chunks,
+            embed_retrograde_summaries,
         )
 
-        results = embed_retrograde_summary_chunks(dbname, pending)
+        results = embed_retrograde_summaries(dbname, pending)
         manifest["embedding"] = {"status": "succeeded", "results": results}
     elif pending:
         manifest["embedding"] = {
@@ -1081,13 +1082,13 @@ def _entity_event_count(cur: Any, entity_id: int) -> int:
     return int(_row_value(cur.fetchone(), "count", 0))
 
 
-def _pending_embedding_ids(cur: Any, chunk_ids: Sequence[Any]) -> list[int]:
-    ids = [int(chunk_id) for chunk_id in chunk_ids]
+def _pending_embedding_ids(cur: Any, summary_ids: Sequence[Any]) -> list[int]:
+    ids = [int(summary_id) for summary_id in summary_ids]
     if not ids:
         return []
     cur.execute(
         """
-        SELECT id FROM narrative_chunks
+        SELECT id FROM retrograde_summaries
         WHERE id = ANY(%s) AND embedding_generated_at IS NULL
         ORDER BY id
         """,

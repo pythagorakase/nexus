@@ -8,6 +8,7 @@ from typing import Any, Dict, Iterable, List, Optional
 
 from sqlalchemy import text
 
+from .context_state import is_retrograde_summary
 from .entity_detector import EntityMatch
 
 logger = logging.getLogger(__name__)
@@ -75,7 +76,15 @@ def _detected_entities(entity_match: EntityMatch) -> List[Dict[str, Any]]:
 
 
 def coerce_chunk_id(chunk: Dict[str, Any]) -> Optional[int]:
-    """Shared chunk-id coercion (manager._coerce_chunk_id delegates here)."""
+    """Return a real narrative chunk id for narrative-only consumers.
+
+    A Retrograde summary may carry ``recorded_at_chunk_id`` as a chronology
+    coordinate, but it never owns a narrative chunk identity and must not enter
+    entity chunk-reference or retrieval-coverage queries.
+    """
+
+    if is_retrograde_summary(chunk):
+        return None
     raw_id = chunk.get("chunk_id", chunk.get("id"))
     if raw_id is None:
         return None

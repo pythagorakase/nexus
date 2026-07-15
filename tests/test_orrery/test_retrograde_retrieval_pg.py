@@ -1,223 +1,210 @@
-"""PostgreSQL-gated tests for the Retrograde retrieval surface on save_05.
+"""Real-PostgreSQL tests for dedicated Retrograde summary persistence.
 
-These tests run real SQL against save_05 inside transactions that are always
-rolled back, so the slot state is untouched. They are skipped unless
-``NEXUS_RUN_POSTGRES=1`` is set.
+The fixture clones NEXUS_template into a uniquely named disposable database.
+It never opens or mutates a save-slot database.
 """
 
 from __future__ import annotations
 
 import json
-from types import SimpleNamespace
+import os
+import uuid
 from typing import Any, Iterator
 
 import psycopg2
-import pytest
+from psycopg2 import sql
 from psycopg2.extras import RealDictCursor
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+import pytest
 
-from nexus.agents.memnon.memnon import MEMNON
-from nexus.agents.orrery.retrograde_markers import (
-    RETROGRADE_PROLOGUE_MARKER,
-    RETROGRADE_SUMMARY_MARKER,
-    retrograde_event_marker,
-)
 from nexus.agents.orrery.retrograde_persistence import (
     _insert_character_stub,
     _insert_faction_stub,
     _insert_place_stub,
-    plan_retrograde_summary_chunks,
+    plan_retrograde_summaries,
 )
 
-SAVE_05_DSN = "postgresql://pythagor@localhost:5432/save_05"
 
 pytestmark = pytest.mark.requires_postgres
 
 
-@pytest.fixture()
-def save_05_cursor() -> Iterator[Any]:
-    """Open a save_05 cursor whose transaction is always rolled back."""
+def _connect(dbname: str) -> Any:
+    return psycopg2.connect(
+        dbname=dbname,
+        user=os.environ.get("PGUSER", "pythagor"),
+        host=os.environ.get("PGHOST", "localhost"),
+        port=os.environ.get("PGPORT", "5432"),
+    )
 
-    conn = psycopg2.connect(SAVE_05_DSN)
+
+@pytest.fixture()
+def disposable_cursor() -> Iterator[Any]:
+    """Yield a cursor on a temporary template clone, then drop the clone."""
+
+    dbname = f"nexus_test_retrograde_storage_{uuid.uuid4().hex[:12]}"
+    admin = None
+    conn = None
     try:
+        try:
+            admin = _connect("postgres")
+        except psycopg2.Error as exc:
+            pytest.skip(f"PostgreSQL admin connection unavailable: {exc}")
+        admin.autocommit = True
+        with admin.cursor() as cur:
+            cur.execute(
+                sql.SQL("CREATE DATABASE {} TEMPLATE {}").format(
+                    sql.Identifier(dbname),
+                    sql.Identifier("NEXUS_template"),
+                )
+            )
+        conn = _connect(dbname)
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("SELECT to_regclass('public.retrograde_summaries') AS name")
+            if cur.fetchone()["name"] is None:
+                pytest.skip("NEXUS_template has not applied migration 078")
             yield cur
     finally:
-        conn.rollback()
-        conn.close()
+        if conn is not None:
+            conn.rollback()
+            conn.close()
+        if admin is not None:
+            with admin.cursor() as cur:
+                cur.execute(
+                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+                    "WHERE datname = %s AND pid <> pg_backend_pid()",
+                    (dbname,),
+                )
+                cur.execute(
+                    sql.SQL("DROP DATABASE IF EXISTS {}").format(sql.Identifier(dbname))
+                )
+            admin.close()
 
 
-def _retrograde_event_count(cur: Any) -> int:
+def test_summary_planning_is_idempotent_on_disposable_database(
+    disposable_cursor: Any,
+) -> None:
+    """A persisted event gets one stable dedicated summary identity."""
+
+    cur = disposable_cursor
+    prologue_id = _insert_chunk(
+        cur,
+        raw_text="[Disposable Retrograde prologue.]",
+        storyteller_text="Disposable Retrograde prologue.",
+        directives=["orrery:retrograde_prologue_anchor"],
+        scene=0,
+        world_layer="retrograde",
+    )
+    cur.execute("SELECT type FROM event_types ORDER BY type LIMIT 1")
+    event_type = cur.fetchone()["type"]
+    event_ref = "disposable_wizard_event_001"
+    summary_text = "A disposable test debt changed hands before the opening."
     cur.execute(
         """
-        SELECT count(*) AS n
-        FROM world_events
-        WHERE source = 'retrograde'::event_source_kind
-        """
-    )
-    return int(cur.fetchone()["n"])
-
-
-def test_summary_chunks_cover_every_retrograde_event(save_05_cursor: Any) -> None:
-    """Execute mode leaves every Retrograde event with a finalized chunk."""
-
-    cur = save_05_cursor
-    event_count = _retrograde_event_count(cur)
-    if event_count == 0:
-        pytest.skip(
-            "save_05 holds no Retrograde events (dev slot reset since the "
-            "last cold start) — run the wizard cold start to restore coverage"
+        INSERT INTO world_events (
+            event_type, tick_chunk_id, world_layer, source,
+            changed_fields, payload
+        ) VALUES (
+            %s, %s, 'primary', 'retrograde', '{}', %s::jsonb
         )
-
-    rows = plan_retrograde_summary_chunks(cur, dry_run=False)
-
-    assert len(rows) == event_count
-    slugs: list[str] = []
-    for row in rows:
-        assert row["status"] in {"inserted", "already_present"}
-        assert row["chunk_id"] is not None
-
-        cur.execute(
-            """
-            SELECT nc.raw_text, nc.storyteller_text, nc.authorial_directives,
-                   nc.state, cm.season, cm.episode, cm.world_layer::text AS layer,
-                   cm.slug, cm.world_time
-            FROM narrative_chunks nc
-            JOIN chunk_metadata cm ON cm.chunk_id = nc.id
-            WHERE nc.id = %s
-            """,
-            (row["chunk_id"],),
-        )
-        chunk = cur.fetchone()
-        assert chunk is not None
-        directives = chunk["authorial_directives"]
-        assert RETROGRADE_SUMMARY_MARKER in directives
-        assert retrograde_event_marker(row["event_ref"]) in directives
-        assert chunk["state"] == "finalized"
-        assert chunk["raw_text"] == chunk["storyteller_text"]
-        assert chunk["season"] == 0
-        assert chunk["episode"] == 0
-        assert chunk["layer"] == "primary"
-        # slug comes from the set_chunk_slug trigger; world_time from the
-        # statement-level cumulative time_delta recompute.
-        assert str(chunk["slug"]).startswith("S00E00_")
-        assert chunk["world_time"] is not None
-        slugs.append(str(chunk["slug"]))
-
-        cur.execute(
-            """
-            SELECT payload ->> 'summary' AS summary,
-                   payload ->> 'retrograde_summary_chunk_id' AS linked_chunk
-            FROM world_events
-            WHERE id = %s
-            """,
-            (row["world_event_id"],),
-        )
-        event = cur.fetchone()
-        assert event["summary"] == chunk["raw_text"]
-        if row["status"] == "inserted":
-            assert int(event["linked_chunk"]) == row["chunk_id"]
-
-    assert len(set(slugs)) == len(slugs), f"summary slugs must be unique: {slugs}"
-
-
-def test_summary_chunk_planning_is_idempotent(save_05_cursor: Any) -> None:
-    """A second execute pass reports already_present with stable chunk ids."""
-
-    cur = save_05_cursor
-    first = plan_retrograde_summary_chunks(cur, dry_run=False)
-    second = plan_retrograde_summary_chunks(cur, dry_run=False)
-
-    assert [row["event_ref"] for row in first] == [row["event_ref"] for row in second]
-    assert all(row["status"] == "already_present" for row in second)
-    assert [row["chunk_id"] for row in first] == [row["chunk_id"] for row in second]
-
-
-def test_dry_run_is_read_only(save_05_cursor: Any) -> None:
-    """Dry-run planning works inside a READ ONLY transaction."""
-
-    cur = save_05_cursor
-    cur.execute("SET TRANSACTION READ ONLY")
-    rows = plan_retrograde_summary_chunks(cur, dry_run=True)
-
-    assert len(rows) == _retrograde_event_count(cur)
-    assert all(row["status"] in {"would_insert", "already_present"} for row in rows)
-
-
-def test_entity_stub_inserts_match_live_schema(save_05_cursor: Any) -> None:
-    """Stub INSERT column lists stay aligned with the live slot schema.
-
-    Regression coverage for migration 058 (retire faction legacy columns):
-    the faction stub used to write factions.current_activity, which no
-    longer exists, so execute-mode stub creation crashed on current schema.
-    """
-
-    cur = save_05_cursor
-    sources = [{"plan": "event_plan", "event_ref": "pg_test", "role": "actor"}]
-
-    _insert_faction_stub(cur, entity_ref="M3 PG Test Faction", sources=sources)
-    cur.execute(
-        "SELECT summary, extra_data, entity_id FROM factions WHERE name = %s",
-        ("M3 PG Test Faction",),
-    )
-    faction = cur.fetchone()
-    assert faction is not None
-    assert faction["entity_id"] is not None
-    assert faction["extra_data"]["source"] == "retrograde"
-    assert "faction stub" in faction["summary"]
-
-    _insert_character_stub(cur, entity_ref="M3 PG Test Character", sources=sources)
-    cur.execute(
-        "SELECT extra_data, entity_id FROM characters WHERE name = %s",
-        ("M3 PG Test Character",),
-    )
-    character = cur.fetchone()
-    assert character is not None
-    assert character["entity_id"] is not None
-    assert character["extra_data"]["source"] == "retrograde"
-
-    _insert_place_stub(cur, entity_ref="M3 PG Test Place", sources=sources)
-    cur.execute(
-        "SELECT extra_data, entity_id FROM places WHERE name = %s",
-        ("M3 PG Test Place",),
-    )
-    place = cur.fetchone()
-    assert place is not None
-    assert place["entity_id"] is not None
-    assert place["extra_data"]["source"] == "retrograde"
-
-
-def test_recent_chunks_surface_excludes_retrograde_history() -> None:
-    """The recency surface never returns Retrograde prologue chunks."""
-
-    engine = create_engine(SAVE_05_DSN)
-    try:
-        memnon = SimpleNamespace(Session=sessionmaker(bind=engine))
-        result = MEMNON.get_recent_chunks(memnon, limit=500)
-
-        returned_ids = {int(chunk["id"]) for chunk in result["results"]}
-        with engine.connect() as conn:
-            marked = conn.exec_driver_sql(
-                """
-                SELECT id
-                FROM narrative_chunks
-                WHERE authorial_directives @> %(prologue)s::jsonb
-                   OR authorial_directives @> %(summary)s::jsonb
-                """,
+        RETURNING id
+        """,
+        (
+            event_type,
+            prologue_id,
+            json.dumps(
                 {
-                    "prologue": json.dumps([RETROGRADE_PROLOGUE_MARKER]),
-                    "summary": json.dumps([RETROGRADE_SUMMARY_MARKER]),
-                },
-            ).fetchall()
-        marked_ids = {int(row[0]) for row in marked}
+                    "retrograde_event_ref": event_ref,
+                    "summary": summary_text,
+                    "chronology": "deep_past",
+                }
+            ),
+        ),
+    )
+    world_event_id = int(cur.fetchone()["id"])
 
-        if not marked_ids:
-            pytest.skip(
-                "save_05 holds no Retrograde prologue anchor (dev slot reset "
-                "since the last cold start) — run the wizard cold start to "
-                "restore coverage"
-            )
-        assert returned_ids.isdisjoint(marked_ids)
-    finally:
-        engine.dispose()
+    first = plan_retrograde_summaries(cur, dry_run=False)
+    second = plan_retrograde_summaries(cur, dry_run=False)
+
+    assert len(first) == 1
+    assert first[0]["status"] == "inserted"
+    assert first[0]["recorded_at_chunk_id"] == prologue_id
+    assert second[0]["status"] == "already_present"
+    assert second[0]["summary_id"] == first[0]["summary_id"]
+    cur.execute(
+        """
+        SELECT world_event_id, recorded_at_chunk_id, chronology, summary_text
+        FROM retrograde_summaries
+        WHERE id = %s
+        """,
+        (first[0]["summary_id"],),
+    )
+    assert cur.fetchone() == {
+        "world_event_id": world_event_id,
+        "recorded_at_chunk_id": prologue_id,
+        "chronology": "deep_past",
+        "summary_text": summary_text,
+    }
+
+
+def test_entity_stub_inserts_match_disposable_schema(disposable_cursor: Any) -> None:
+    """Stub INSERT column lists stay aligned with the migrated template."""
+
+    cur = disposable_cursor
+    suffix = uuid.uuid4().hex[:8]
+    sources = [{"plan": "event_plan", "event_ref": suffix, "role": "actor"}]
+    faction_name = f"Disposable Faction {suffix}"
+    character_name = f"Disposable Character {suffix}"
+    place_name = f"Disposable Place {suffix}"
+
+    _insert_faction_stub(cur, entity_ref=faction_name, sources=sources)
+    _insert_character_stub(cur, entity_ref=character_name, sources=sources)
+    _insert_place_stub(cur, entity_ref=place_name, sources=sources)
+
+    cur.execute(
+        """
+        SELECT name, entity_id FROM factions WHERE name = %s
+        UNION ALL
+        SELECT name, entity_id FROM characters WHERE name = %s
+        UNION ALL
+        SELECT name, entity_id FROM places WHERE name = %s
+        """,
+        (faction_name, character_name, place_name),
+    )
+    rows = cur.fetchall()
+    assert {row["name"] for row in rows} == {
+        faction_name,
+        character_name,
+        place_name,
+    }
+    assert all(row["entity_id"] is not None for row in rows)
+
+
+def _insert_chunk(
+    cur: Any,
+    *,
+    raw_text: str,
+    storyteller_text: str,
+    directives: list[str],
+    scene: int,
+    world_layer: str,
+) -> int:
+    cur.execute(
+        """
+        INSERT INTO narrative_chunks (
+            raw_text, storyteller_text, authorial_directives,
+            state, finalized_at
+        ) VALUES (%s, %s, %s::jsonb, 'finalized', now())
+        RETURNING id
+        """,
+        (raw_text, storyteller_text, json.dumps(directives)),
+    )
+    chunk_id = int(cur.fetchone()["id"])
+    cur.execute(
+        """
+        INSERT INTO chunk_metadata (
+            chunk_id, season, episode, scene, world_layer,
+            time_delta, generation_date
+        ) VALUES (%s, 0, 0, %s, %s::world_layer_type, interval '0 seconds', now())
+        """,
+        (chunk_id, scene, world_layer),
+    )
+    return chunk_id

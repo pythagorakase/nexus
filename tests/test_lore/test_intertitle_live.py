@@ -39,15 +39,15 @@ def test_load_intertitle_executes_against_live_slot() -> None:
         assert intertitle["location_geom"].startswith("SRID=4326;POINT(")
 
 
-def test_anchor_fallback_skips_retrograde_chunks() -> None:
-    """A maturation chunk at head must not become the resolve/intertitle anchor."""
+def test_anchor_fallback_skips_retrograde_prologue() -> None:
+    """A synthetic prologue at head must not become the intertitle anchor."""
 
     import json as _json
 
     from sqlalchemy import text
 
     from nexus.agents.lore.utils.turn_context import TurnContext
-    from nexus.agents.orrery.retrograde_markers import RETROGRADE_SUMMARY_MARKER
+    from nexus.agents.orrery.retrograde_markers import RETROGRADE_PROLOGUE_MARKER
 
     engine = create_engine(get_slot_db_url(slot=LIVE_SLOT))
     with sessionmaker(engine)() as session:
@@ -55,10 +55,10 @@ def test_anchor_fallback_skips_retrograde_chunks() -> None:
             text(
                 """
                 INSERT INTO narrative_chunks (raw_text, authorial_directives)
-                VALUES ('synthetic maturation summary', CAST(:markers AS jsonb))
+                VALUES ('synthetic prologue anchor', CAST(:markers AS jsonb))
                 """
             ),
-            {"markers": _json.dumps([RETROGRADE_SUMMARY_MARKER])},
+            {"markers": _json.dumps([RETROGRADE_PROLOGUE_MARKER])},
         )
         inserted = session.execute(
             text("SELECT max(id) FROM narrative_chunks")

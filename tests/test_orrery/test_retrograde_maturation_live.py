@@ -85,7 +85,7 @@ def test_live_maturation_end_to_end(save_02_conn: Any) -> None:
     assert manifest["embedding"]["status"] in {"succeeded", "none_pending"}
 
     # The matured history is real world_events rows with retrograde source
-    # and embedded summary chunks (MEMNON's chunk-search surface).
+    # and embedded dedicated summaries on MEMNON's retrieval surface.
     with save_02_conn.cursor(cursor_factory=RealDictCursor) as cur:
         event_ids = list(manifest["world_event_ids"].values())
         cur.execute(
@@ -98,12 +98,12 @@ def test_live_maturation_end_to_end(save_02_conn: Any) -> None:
         )
         assert int(cur.fetchone()["n"]) == len(event_ids)
 
-        pending = manifest.get("embedding_pending_chunk_ids") or []
+        pending = manifest.get("embedding_pending_summary_ids") or []
         if pending:
             cur.execute(
                 """
                 SELECT count(*) AS n
-                FROM narrative_chunks
+                FROM retrograde_summaries
                 WHERE id = ANY(%s) AND embedding_generated_at IS NOT NULL
                 """,
                 (pending,),
@@ -117,11 +117,13 @@ def test_live_maturation_end_to_end(save_02_conn: Any) -> None:
         memnon = MEMNON(interface=None, db_url=SAVE_02_DSN)
         search = memnon.query_memory(query=name, k=15, use_hybrid=True)
         returned_ids = {
-            int(chunk.get("chunk_id") or chunk["id"]) for chunk in search["results"]
+            int(item["summary_id"])
+            for item in search["results"]
+            if item.get("content_type") == "retrograde_summary"
         }
         assert returned_ids & set(pending), (
             "MEMNON did not retrieve the matured history: "
-            f"summary_chunks={sorted(pending)} returned={sorted(returned_ids)}"
+            f"summaries={sorted(pending)} returned={sorted(returned_ids)}"
         )
 
     # Idempotency: a matured entity never re-matures.

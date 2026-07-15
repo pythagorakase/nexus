@@ -12,7 +12,7 @@ Commands:
     nexus retrograde-seed-candidates  Call Skald for non-mutating seed candidates
     nexus retrograde-expand-seeds  Call Skald for non-mutating R6 expansion
     nexus retrograde-apply-expansion --slot N  Dry-run Retrograde persistence
-    nexus retrograde-embed-history --slot N  Sync Retrograde retrieval chunks
+    nexus retrograde-embed-history --slot N  Sync Retrograde summary retrieval
     nexus faction-audit --slot N  Dry-run legacy faction column migration audit
     nexus faction-manifest --slot N  Build reviewed faction migration manifest
     nexus faction-apply --slot N  Dry-run ready faction manifest operations
@@ -381,23 +381,28 @@ def _print_retrograde_persistence(payload: Dict[str, Any]) -> None:
         "deaths_deactivated",
         "deaths_already_inactive",
         "deaths_blocked",
-        "summary_chunks_would_insert",
-        "summary_chunks_inserted",
-        "summary_chunks_already_present",
-        "summary_chunks_blocked",
+        "summaries_would_insert",
+        "summaries_inserted",
+        "summaries_already_present",
+        "summaries_blocked",
     ):
         print(f"  {key}: {counters.get(key, 0)}")
     retrieval = plan.get("retrieval") or {}
     if retrieval:
-        print(f"  summary_chunks_enabled: {retrieval.get('summary_chunks_enabled')}")
-        pending = retrieval.get("embedding_pending_chunk_ids") or []
-        print(f"  embedding_pending_chunk_ids: {pending}")
+        print(f"  summaries_enabled: {retrieval.get('summaries_enabled')}")
+        pending = retrieval.get("embedding_pending_summary_ids") or []
+        print(f"  embedding_pending_summary_ids: {pending}")
     embedding_results = payload.get("retrograde_embedding") or []
     if embedding_results:
         print()
-        print("Embedded summary chunks:")
+        print("Embedded Retrograde summaries:")
         for result in embedding_results:
-            print(f"  - chunk {result.get('chunk_id')}: {result.get('job_id')}")
+            print(
+                f"  - summary {result.get('summary_id')}: "
+                f"models={result.get('models')}, "
+                f"dimensions={result.get('dimensions')}, "
+                f"embedded_at={result.get('embedding_generated_at')}"
+            )
     if blockers:
         print()
         print("Execute blockers:")
@@ -412,26 +417,33 @@ def _print_retrograde_embed_history(payload: Dict[str, Any]) -> None:
     """Print a compact Retrograde history retrieval sync summary."""
 
     sync = payload.get("retrograde_embed_history") or {}
-    rows = sync.get("summary_chunk_rows") or []
-    pending = sync.get("embedding_pending_chunk_ids") or []
+    rows = sync.get("summary_rows") or []
+    pending = sync.get("embedding_pending_summary_ids") or []
     embedded = sync.get("embedding_results") or []
 
     print("Retrograde history retrieval sync:")
     print(f"  dry_run: {sync.get('dry_run')}")
-    print(f"  summary_chunk_rows: {len(rows)}")
+    print(f"  summary_rows: {len(rows)}")
     for row in rows:
-        chunk = row.get("chunk_id")
-        chunk_label = f"chunk {chunk}" if chunk is not None else "no chunk"
+        summary_id = row.get("summary_id")
+        summary_label = (
+            f"summary {summary_id}" if summary_id is not None else "no summary"
+        )
         print(
-            f"  - {row.get('event_ref')}: {row.get('status')} ({chunk_label}, "
+            f"  - {row.get('event_ref')}: {row.get('status')} ({summary_label}, "
             f"embedding_pending={row.get('embedding_pending')})"
         )
-    print(f"  embedding_pending_chunk_ids: {pending}")
+    print(f"  embedding_pending_summary_ids: {pending}")
     if embedded:
         print()
-        print("Embedded summary chunks:")
+        print("Embedded Retrograde summaries:")
         for result in embedded:
-            print(f"  - chunk {result.get('chunk_id')}: {result.get('job_id')}")
+            print(
+                f"  - summary {result.get('summary_id')}: "
+                f"models={result.get('models')}, "
+                f"dimensions={result.get('dimensions')}, "
+                f"embedded_at={result.get('embedding_generated_at')}"
+            )
 
 
 def _print_retrograde_transition(retrograde: Dict[str, Any]) -> None:
@@ -465,8 +477,8 @@ def _print_retrograde_transition(retrograde: Dict[str, Any]) -> None:
         f"{hidden.get('pair_tags', 0)} pair tags, "
         f"{hidden.get('deferred_seeds', 0)} deferred seeds"
     )
-    embedded = retrograde.get("embedded_chunk_ids") or []
-    print(f"  embedded summary chunks: {len(embedded)}")
+    embedded = retrograde.get("embedded_summary_ids") or []
+    print(f"  embedded summaries: {len(embedded)}")
     for timing in retrograde.get("timings") or []:
         print(f"  timing {timing.get('stage')}: {timing.get('seconds'):.1f}s")
 
@@ -1814,10 +1826,11 @@ def run_retrograde_apply_expansion(args: argparse.Namespace) -> Dict[str, Any]:
     """Dry-run or execute a Retrograde R6 expansion persistence plan."""
 
     from nexus.agents.orrery.retrograde_embedding import (
-        embed_retrograde_summary_chunks,
+        embed_retrograde_summaries,
     )
     from nexus.agents.orrery.retrograde_persistence import (
         build_retrograde_persistence_plan,
+        find_latest_playable_chunk_id,
     )
     from nexus.api.db_pool import get_connection
     from nexus.api.slot_utils import slot_dbname
@@ -1847,6 +1860,7 @@ def run_retrograde_apply_expansion(args: argparse.Namespace) -> Dict[str, Any]:
             with conn.cursor() as cur:
                 if dry_run:
                     cur.execute("SET TRANSACTION READ ONLY")
+                recorded_at_chunk_id = find_latest_playable_chunk_id(cur)
                 persistence = build_retrograde_persistence_plan(
                     cur,
                     packet=packet,
@@ -1856,20 +1870,19 @@ def run_retrograde_apply_expansion(args: argparse.Namespace) -> Dict[str, Any]:
                     dbname=dbname,
                     dry_run=dry_run,
                     create_missing_entities=args.create_stubs,
-                    summary_chunks_enabled=retrieval_settings.summary_chunks,
+                    summaries_enabled=retrieval_settings.summaries_enabled,
+                    recorded_at_chunk_id=recorded_at_chunk_id,
                 )
     except ValueError as exc:
         return {"success": False, "error": str(exc)}
 
     embedding_results: List[Dict[str, Any]] = []
-    pending_chunk_ids = list(
-        persistence.get("retrieval", {}).get("embedding_pending_chunk_ids", [])
+    pending_summary_ids = list(
+        persistence.get("retrieval", {}).get("embedding_pending_summary_ids", [])
     )
-    if not dry_run and retrieval_settings.embed_after_apply and pending_chunk_ids:
+    if not dry_run and retrieval_settings.embed_after_apply and pending_summary_ids:
         try:
-            embedding_results = embed_retrograde_summary_chunks(
-                dbname, pending_chunk_ids
-            )
+            embedding_results = embed_retrograde_summaries(dbname, pending_summary_ids)
         except RuntimeError as exc:
             return {
                 "success": False,
@@ -1901,13 +1914,13 @@ def run_retrograde_apply_expansion(args: argparse.Namespace) -> Dict[str, Any]:
 
 
 def run_retrograde_embed_history(args: argparse.Namespace) -> Dict[str, Any]:
-    """Ensure and embed summary chunks for persisted Retrograde history."""
+    """Ensure and embed dedicated summaries for persisted Retrograde history."""
 
     from nexus.agents.orrery.retrograde_embedding import (
-        embed_retrograde_summary_chunks,
+        embed_retrograde_summaries,
     )
     from nexus.agents.orrery.retrograde_persistence import (
-        plan_retrograde_summary_chunks,
+        plan_retrograde_summaries,
     )
     from nexus.api.db_pool import get_connection
     from nexus.api.slot_utils import slot_dbname
@@ -1923,11 +1936,11 @@ def run_retrograde_embed_history(args: argparse.Namespace) -> Dict[str, Any]:
             ),
         }
     retrieval_settings = orrery_settings.retrograde.retrieval
-    if not retrieval_settings.summary_chunks:
+    if not retrieval_settings.summaries_enabled:
         return {
             "success": False,
             "error": (
-                "orrery.retrograde.retrieval.summary_chunks is disabled in "
+                "orrery.retrograde.retrieval.summaries_enabled is disabled in "
                 "nexus.toml; enable it before embedding Retrograde history"
             ),
         }
@@ -1939,29 +1952,27 @@ def run_retrograde_embed_history(args: argparse.Namespace) -> Dict[str, Any]:
             with conn.cursor() as cur:
                 if dry_run:
                     cur.execute("SET TRANSACTION READ ONLY")
-                summary_chunk_rows = plan_retrograde_summary_chunks(
+                summary_rows = plan_retrograde_summaries(
                     cur,
                     dry_run=dry_run,
                 )
     except ValueError as exc:
         return {"success": False, "error": str(exc)}
 
-    pending_chunk_ids = [
-        int(row["chunk_id"])
-        for row in summary_chunk_rows
-        if row["embedding_pending"] and row["chunk_id"] is not None
+    pending_summary_ids = [
+        int(row["summary_id"])
+        for row in summary_rows
+        if row["embedding_pending"] and row["summary_id"] is not None
     ]
     embedding_results: List[Dict[str, Any]] = []
-    if not dry_run and retrieval_settings.embed_after_apply and pending_chunk_ids:
+    if not dry_run and retrieval_settings.embed_after_apply and pending_summary_ids:
         try:
-            embedding_results = embed_retrograde_summary_chunks(
-                dbname, pending_chunk_ids
-            )
+            embedding_results = embed_retrograde_summaries(dbname, pending_summary_ids)
         except RuntimeError as exc:
             return {
                 "success": False,
                 "error": str(exc),
-                "summary_chunk_rows": summary_chunk_rows,
+                "summary_rows": summary_rows,
             }
 
     mode = "dry run" if dry_run else "executed"
@@ -1974,8 +1985,8 @@ def run_retrograde_embed_history(args: argparse.Namespace) -> Dict[str, Any]:
         "dbname": dbname,
         "retrograde_embed_history": {
             "dry_run": dry_run,
-            "summary_chunk_rows": summary_chunk_rows,
-            "embedding_pending_chunk_ids": pending_chunk_ids,
+            "summary_rows": summary_rows,
+            "embedding_pending_summary_ids": pending_summary_ids,
             "embedding_results": embedding_results,
         },
     }
@@ -3128,7 +3139,7 @@ Examples:
     retrograde_embed_parser = subparsers.add_parser(
         "retrograde-embed-history",
         help=(
-            "Ensure and embed retrieval summary chunks for persisted "
+            "Ensure and embed retrieval summaries for persisted "
             "Retrograde world events"
         ),
     )
@@ -3139,7 +3150,7 @@ Examples:
         "--execute",
         action="store_true",
         help=(
-            "Write summary chunks and run the standard embedding lifecycle. "
+            "Write dedicated summaries and run their embedding lifecycle. "
             "Without this flag the command uses a read-only dry run."
         ),
     )

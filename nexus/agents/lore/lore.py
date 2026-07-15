@@ -57,11 +57,42 @@ from utils.token_budget import TokenBudgetManager
 from nexus.agents.lore.logon_utility import LogonUtility
 
 from nexus.memory import ContextMemoryManager
+from nexus.memory.context_state import (
+    MemoryIdentity,
+    is_retrograde_summary,
+    memory_identity,
+)
+from nexus.memory.retrieval_coverage import coerce_chunk_id
 from nexus.memory.user_confirmation import request_input
 
 # Configure logger
 logger = logging.getLogger("nexus.lore")
 qa_logger = logging.getLogger("nexus.lore.qa")
+
+
+def _direct_retrieval_source_label(result: Dict[str, Any]) -> str:
+    """Label a direct retrieval result with its real corpus identity."""
+
+    if is_retrograde_summary(result):
+        return f"Retrograde summary {result.get('summary_id', 'unknown')}"
+    chunk_id = coerce_chunk_id(result)
+    return f"Chunk {chunk_id}" if chunk_id is not None else "Retrieved passage"
+
+
+def _retrieval_memory_sources(
+    results: List[Dict[str, Any]],
+) -> List[MemoryIdentity]:
+    """Return typed source identities in rank order without duplicates."""
+
+    sources: List[MemoryIdentity] = []
+    seen: set[MemoryIdentity] = set()
+    for result in results:
+        identity = memory_identity(result)
+        if identity is None or identity in seen:
+            continue
+        seen.add(identity)
+        sources.append(identity)
+    return sources
 
 
 class LORE:
@@ -428,6 +459,7 @@ class LORE:
         Returns dict with:
         - retrieved_context: The assembled contextual information (dict keyed by directive)
         - sources: List of chunk IDs used
+        - memory_sources: List of typed retrieval identities used
         - queries: The direct MEMNON queries executed
         - retrieval_reasoning: Deterministic retrieval metadata
         """
@@ -463,6 +495,7 @@ class LORE:
             "chunk_id": chunk_id,
             "directives": {},  # Store all per-directive data here
             "sources": [],  # Combined sources from all directives
+            "memory_sources": [],  # Combined typed sources from all directives
             "queries": [],  # Combined queries from all directives
         }
 
@@ -479,14 +512,19 @@ class LORE:
                 "sql_attempts": directive_result.get("sql_attempts", []),
                 "search_progress": directive_result.get("search_progress", []),
                 "sources": directive_result["sources"],
+                "memory_sources": directive_result["memory_sources"],
             }
 
             # Also aggregate sources and queries for convenience
             all_results["sources"].extend(directive_result["sources"])
+            all_results["memory_sources"].extend(directive_result["memory_sources"])
             all_results["queries"].extend(directive_result["queries"])
 
         # Deduplicate sources while preserving order
         all_results["sources"] = list(dict.fromkeys(all_results["sources"]))
+        all_results["memory_sources"] = list(
+            dict.fromkeys(all_results["memory_sources"])
+        )
 
         return all_results
 
@@ -536,7 +574,7 @@ class LORE:
         queries = list(dict.fromkeys(queries))  # Deduplicate
 
         # Execute queries via MEMNON
-        aggregated_results: Dict[str, Dict[str, Any]] = {}
+        aggregated_results: Dict[MemoryIdentity, Dict[str, Any]] = {}
         search_progress: List[Dict[str, Any]] = []
 
         for q in queries:
@@ -551,19 +589,25 @@ class LORE:
                     }
                 )
                 for item in result.get("results", []):
-                    result_chunk_id = str(item.get("chunk_id") or item.get("id"))
-                    if not result_chunk_id:
+                    identity = memory_identity(item)
+                    if identity is None:
                         continue
-                    if result_chunk_id not in aggregated_results:
-                        aggregated_results[result_chunk_id] = {
-                            "chunk_id": result_chunk_id,
-                            "text": item.get("text", ""),
-                            "metadata": item.get("metadata", {}),
-                            "score": float(item.get("score", 0.0)),
-                        }
+                    if identity not in aggregated_results:
+                        aggregated_results[identity] = dict(item)
+                        aggregated_results[identity].update(
+                            {
+                                "text": item.get("text", ""),
+                                "metadata": item.get("metadata", {}),
+                                "score": float(item.get("score", 0.0)),
+                            }
+                        )
+                        if not is_retrograde_summary(item):
+                            aggregated_results[identity].setdefault(
+                                "chunk_id", identity
+                            )
                     else:
-                        aggregated_results[result_chunk_id]["score"] = max(
-                            aggregated_results[result_chunk_id]["score"],
+                        aggregated_results[identity]["score"] = max(
+                            aggregated_results[identity]["score"],
                             float(item.get("score", 0.0)),
                         )
             except Exception as e:
@@ -586,6 +630,7 @@ class LORE:
             return {
                 "retrieved_context": f"No relevant information found for: {directive}",
                 "sources": [],
+                "memory_sources": [],
                 "queries": queries,
                 "reasoning": reasoning,
                 "sql_attempts": [],
@@ -596,7 +641,7 @@ class LORE:
         context_parts = []
         for i, result in enumerate(sorted_results, 1):
             context_parts.append(
-                f"[Source {i}] Chunk {result['chunk_id']} "
+                f"[Source {i}] {_direct_retrieval_source_label(result)} "
                 f"(score: {result['score']:.2f})\n{result['text'][:700]}"
             )
 
@@ -608,12 +653,17 @@ class LORE:
 
         # Extract chunk IDs from results
         source_ids = [
-            int(r["chunk_id"]) for r in sorted_results if r["chunk_id"].isdigit()
+            source_id
+            for result in sorted_results
+            for source_id in [coerce_chunk_id(result)]
+            if source_id is not None
         ]
+        memory_source_ids = _retrieval_memory_sources(sorted_results)
 
         return {
             "retrieved_context": retrieved_context,
             "sources": source_ids,
+            "memory_sources": memory_source_ids,
             "queries": queries,
             "reasoning": reasoning,
             "sql_attempts": [],

@@ -6,7 +6,7 @@ from argparse import Namespace
 from typing import Any
 
 from nexus import cli
-from nexus.cli import GENERATION_POLL_SECONDS, _is_terminal_generation_status
+from nexus.cli import _is_terminal_generation_status
 
 
 class DummyResponse:
@@ -38,12 +38,6 @@ def test_terminal_generation_statuses_include_api_and_incubator_values() -> None
     assert _is_terminal_generation_status("committed")
     assert not _is_terminal_generation_status("processing")
     assert not _is_terminal_generation_status("error")
-
-
-def test_generation_poll_window_covers_live_reasoning_models() -> None:
-    """CLI polling should outlast slow structured generation calls."""
-
-    assert GENERATION_POLL_SECONDS >= 180
 
 
 def test_continue_posts_choice_to_backend_without_preapproving(
@@ -658,7 +652,7 @@ def test_retrograde_apply_expansion_dry_runs_saved_artifacts(
     monkeypatch,
     tmp_path,
 ) -> None:
-    """The persistence command mirrors manifest apply grammar."""
+    """The persistence command forwards the dedicated-summary contract."""
 
     from nexus.agents.orrery import retrograde_persistence
     from nexus.api import db_pool
@@ -704,7 +698,8 @@ def test_retrograde_apply_expansion_dry_runs_saved_artifacts(
         dbname: str,
         dry_run: bool,
         create_missing_entities: bool,
-        summary_chunks_enabled: bool,
+        summaries_enabled: bool,
+        recorded_at_chunk_id: int,
     ) -> dict[str, Any]:
         calls.append(
             (
@@ -715,7 +710,8 @@ def test_retrograde_apply_expansion_dry_runs_saved_artifacts(
                 dbname,
                 dry_run,
                 create_missing_entities,
-                summary_chunks_enabled,
+                summaries_enabled,
+                recorded_at_chunk_id,
             )
         )
         return {
@@ -725,6 +721,7 @@ def test_retrograde_apply_expansion_dry_runs_saved_artifacts(
             "dbname": dbname,
             "counters": {"events_would_insert": 0},
             "execute_blockers": [],
+            "retrieval": {"embedding_pending_summary_ids": []},
         }
 
     monkeypatch.setattr(
@@ -734,6 +731,11 @@ def test_retrograde_apply_expansion_dry_runs_saved_artifacts(
         retrograde_persistence,
         "build_retrograde_persistence_plan",
         fake_build,
+    )
+    monkeypatch.setattr(
+        retrograde_persistence,
+        "find_latest_playable_chunk_id",
+        lambda cur: 147,
     )
 
     result = cli.run_retrograde_apply_expansion(
@@ -764,12 +766,13 @@ def test_retrograde_apply_expansion_dry_runs_saved_artifacts(
             True,
             True,
             True,
+            147,
         )
     ]
 
 
 def test_retrograde_embed_history_executes_and_embeds(monkeypatch) -> None:
-    """Execute mode ensures summary chunks then embeds pending ones."""
+    """Execute mode creates and embeds pending dedicated summaries."""
 
     from nexus.agents.orrery import retrograde_embedding, retrograde_persistence
     from nexus.api import db_pool
@@ -779,43 +782,41 @@ def test_retrograde_embed_history_executes_and_embeds(monkeypatch) -> None:
     summary_rows = [
         {
             "event_ref": "r6_e01",
-            "marker": "orrery:retrograde_event:r6_e01",
             "world_event_id": 107,
             "source_status": "persisted",
             "status": "inserted",
-            "chunk_id": 72,
+            "summary_id": 72,
             "embedding_pending": True,
         },
         {
             "event_ref": "r6_e02",
-            "marker": "orrery:retrograde_event:r6_e02",
             "world_event_id": 108,
             "source_status": "persisted",
             "status": "already_present",
-            "chunk_id": 73,
+            "summary_id": 73,
             "embedding_pending": False,
         },
     ]
 
-    def fake_plan(cur: Any, *, dry_run: bool, event_sources: Any = None) -> Any:
-        plan_calls.append((dry_run, event_sources))
+    def fake_plan(cur: Any, *, dry_run: bool) -> Any:
+        plan_calls.append(dry_run)
         return summary_rows
 
-    def fake_embed(dbname: str, chunk_ids: Any) -> Any:
-        embed_calls.append((dbname, list(chunk_ids)))
-        return [{"chunk_id": 72, "job_id": "embed_72_test"}]
+    def fake_embed(dbname: str, summary_ids: Any) -> Any:
+        embed_calls.append((dbname, list(summary_ids)))
+        return [{"summary_id": 72, "job_id": "embed_72_test"}]
 
     monkeypatch.setattr(
         db_pool, "get_connection", lambda *args, **kwargs: FakeApplyConnection()
     )
     monkeypatch.setattr(
         retrograde_persistence,
-        "plan_retrograde_summary_chunks",
+        "plan_retrograde_summaries",
         fake_plan,
     )
     monkeypatch.setattr(
         retrograde_embedding,
-        "embed_retrograde_summary_chunks",
+        "embed_retrograde_summaries",
         fake_embed,
     )
 
@@ -824,32 +825,31 @@ def test_retrograde_embed_history_executes_and_embeds(monkeypatch) -> None:
     assert result["success"] is True
     sync = result["retrograde_embed_history"]
     assert sync["dry_run"] is False
-    assert sync["embedding_pending_chunk_ids"] == [72]
-    assert sync["embedding_results"] == [{"chunk_id": 72, "job_id": "embed_72_test"}]
-    assert plan_calls == [(False, None)]
+    assert sync["embedding_pending_summary_ids"] == [72]
+    assert sync["embedding_results"] == [{"summary_id": 72, "job_id": "embed_72_test"}]
+    assert plan_calls == [False]
     assert embed_calls == [("save_05", [72])]
 
 
 def test_retrograde_embed_history_dry_run_skips_embedding(monkeypatch) -> None:
-    """Dry-run mode never reaches the embedding lifecycle."""
+    """Dry-run mode never reaches the summary embedding lifecycle."""
 
     from nexus.agents.orrery import retrograde_embedding, retrograde_persistence
     from nexus.api import db_pool
 
-    def fake_plan(cur: Any, *, dry_run: bool, event_sources: Any = None) -> Any:
+    def fake_plan(cur: Any, *, dry_run: bool) -> Any:
         return [
             {
                 "event_ref": "r6_e01",
-                "marker": "orrery:retrograde_event:r6_e01",
                 "world_event_id": 107,
                 "source_status": "persisted",
                 "status": "would_insert",
-                "chunk_id": None,
+                "summary_id": None,
                 "embedding_pending": True,
             }
         ]
 
-    def fail_embed(dbname: str, chunk_ids: Any) -> Any:
+    def fail_embed(dbname: str, summary_ids: Any) -> Any:
         raise AssertionError("dry run must not embed")
 
     monkeypatch.setattr(
@@ -857,12 +857,12 @@ def test_retrograde_embed_history_dry_run_skips_embedding(monkeypatch) -> None:
     )
     monkeypatch.setattr(
         retrograde_persistence,
-        "plan_retrograde_summary_chunks",
+        "plan_retrograde_summaries",
         fake_plan,
     )
     monkeypatch.setattr(
         retrograde_embedding,
-        "embed_retrograde_summary_chunks",
+        "embed_retrograde_summaries",
         fail_embed,
     )
 
@@ -871,5 +871,70 @@ def test_retrograde_embed_history_dry_run_skips_embedding(monkeypatch) -> None:
     assert result["success"] is True
     sync = result["retrograde_embed_history"]
     assert sync["dry_run"] is True
-    assert sync["embedding_pending_chunk_ids"] == []
+    assert sync["embedding_pending_summary_ids"] == []
     assert sync["embedding_results"] == []
+
+
+def test_retrograde_persistence_formatter_uses_summary_identity(capsys) -> None:
+    """The persistence formatter renders dedicated summary identities."""
+
+    cli._print_retrograde_persistence(
+        {
+            "retrograde_persistence": {
+                "dry_run": False,
+                "source_kind": "retrograde",
+                "prologue_anchor": {"status": "already_present", "chunk_id": 1},
+                "counters": {"summaries_inserted": 2},
+                "execute_blockers": [],
+                "retrieval": {
+                    "summaries_enabled": True,
+                    "embedding_pending_summary_ids": [72, 73],
+                },
+            },
+            "retrograde_embedding": [
+                {
+                    "summary_id": 72,
+                    "models": ["embedding/test"],
+                    "dimensions": [768],
+                    "embedding_generated_at": "2026-07-15T01:02:03+00:00",
+                }
+            ],
+        }
+    )
+
+    output = capsys.readouterr().out
+    assert "summaries_inserted: 2" in output
+    assert "embedding_pending_summary_ids: [72, 73]" in output
+    assert "summary 72" in output
+    assert "models=['embedding/test']" in output
+    assert "dimensions=[768]" in output
+    assert "job_id" not in output
+    assert "summary_chunks" not in output
+
+
+def test_retrograde_history_formatter_uses_summary_rows(capsys) -> None:
+    """The history formatter never presents generated summaries as chunks."""
+
+    cli._print_retrograde_embed_history(
+        {
+            "retrograde_embed_history": {
+                "dry_run": True,
+                "summary_rows": [
+                    {
+                        "event_ref": "r6_e01",
+                        "status": "would_insert",
+                        "summary_id": None,
+                        "embedding_pending": True,
+                    }
+                ],
+                "embedding_pending_summary_ids": [],
+                "embedding_results": [],
+            }
+        }
+    )
+
+    output = capsys.readouterr().out
+    assert "summary_rows: 1" in output
+    assert "no summary" in output
+    assert "embedding_pending_summary_ids: []" in output
+    assert "summary_chunk" not in output

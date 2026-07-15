@@ -135,6 +135,7 @@ READONLY_SQL_ALLOWED_TABLES = {
     "orrery_route_graph_edges",
     "orrery_place_route_graph_nodes",
     "offscreen_narrations",
+    "retrograde_summaries",
     "event_types",
     "tags",
 }
@@ -371,7 +372,10 @@ class MEMNON:
                 "type": "database",
                 "tables": ["characters", "places", "factions", "items"],
             },
-            "narrative": {"type": "vector", "collections": ["narrative_chunks"]},
+            "narrative": {
+                "type": "vector",
+                "collections": ["narrative_chunks", "retrograde_summaries"],
+            },
         }
 
         # Query type registry - Simplified, used for rule-based planning
@@ -1174,11 +1178,11 @@ class MEMNON:
             logger.error(f"Error querying structured data: {e}")
             return []
 
-    def _query_text_search(
+    def _query_narrative_text_search_legacy(
         self, query_text: str, filters: Dict[str, Any] = None, limit: int = 10
     ) -> List[Dict[str, Any]]:
         """
-        Perform a keyword-based text search on narrative chunks.
+        Legacy narrative-only keyword search retained for compatibility review.
 
         Args:
             query_text: The text to search for
@@ -1276,6 +1280,21 @@ class MEMNON:
         except Exception as e:
             logger.error(f"Error in text search: {e}")
             return []
+
+    def _query_text_search(
+        self,
+        query_text: str,
+        filters: Dict[str, Any] = None,
+        limit: int = 10,
+    ) -> List[Dict[str, Any]]:
+        """Search narrative and Retrograde summary text through SearchManager."""
+        with self.Session() as session:
+            return self.search_manager.query_text_search(
+                query_text=query_text,
+                session=session,
+                filters=filters,
+                limit=limit,
+            )
 
     def process_all_narrative_files(self, glob_pattern: str = None) -> int:
         """
@@ -1722,48 +1741,29 @@ class MEMNON:
         Returns:
             Dictionary containing the recent chunks and metadata
         """
-        from nexus.agents.orrery.retrograde_markers import (
-            RETROGRADE_PROLOGUE_MARKER,
-            RETROGRADE_SUMMARY_MARKER,
+        from nexus.agents.orrery.reconstruction import (
+            playable_narrative_predicate,
         )
 
         try:
             with self.Session() as session:
-                # Retrograde prologue chunks (the anchor stub and per-event
-                # history summaries) are deliberately excluded from this
-                # recency surface: generated history is memory, reachable via
-                # vector/text search like aged play history, not recent
-                # narration for the warm slice.
+                # The synthetic prologue remains a narrative FK anchor but is
+                # not player-played prose. Dedicated Retrograde summaries no
+                # longer occupy narrative_chunks after migration 078.
                 query = text(
-                    """
+                    f"""
                     SELECT nc.id, nc.raw_text,
                            cm.season, cm.episode, cm.scene AS scene_number,
                            cm.world_layer
                     FROM narrative_chunks nc
                     LEFT JOIN chunk_metadata cm ON nc.id = cm.chunk_id
-                    WHERE NOT (
-                        COALESCE(nc.authorial_directives, '[]'::jsonb)
-                            @> CAST(:retrograde_prologue_marker AS jsonb)
-                        OR COALESCE(nc.authorial_directives, '[]'::jsonb)
-                            @> CAST(:retrograde_summary_marker AS jsonb)
-                    )
+                    WHERE {playable_narrative_predicate()}
                     ORDER BY nc.id DESC
                     LIMIT :limit
                 """
                 )
 
-                results = session.execute(
-                    query,
-                    {
-                        "limit": limit,
-                        "retrograde_prologue_marker": json.dumps(
-                            [RETROGRADE_PROLOGUE_MARKER]
-                        ),
-                        "retrograde_summary_marker": json.dumps(
-                            [RETROGRADE_SUMMARY_MARKER]
-                        ),
-                    },
-                ).fetchall()
+                results = session.execute(query, {"limit": limit}).fetchall()
 
                 chunks = []
                 for result in results:
@@ -1980,7 +1980,7 @@ class MEMNON:
                     # Execute vector search using SearchManager
                     results = self.search_manager.query_vector_search(
                         query_text=strategy["query"],
-                        collections=["narrative_chunks"],
+                        collections=["narrative_chunks", "retrograde_summaries"],
                         filters=strategy.get("filters"),
                         top_k=strategy.get("limit", k),
                     )

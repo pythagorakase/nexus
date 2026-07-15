@@ -1,79 +1,82 @@
-"""Live retrieval proof: Retrograde history comes back from MEMNON search.
+"""Opt-in real-Postgres proof for dedicated Retrograde summary retrieval.
 
-This test commits Retrograde summary chunks on save_05 (idempotent), embeds
-any pending ones through the standard chunk embedding lifecycle (a real
-Octen-Embedding-4B run via scripts/regenerate_embeddings.py), then runs the
-production MEMNON hybrid search path and asserts a retrograde-sourced chunk
-is retrieved. Skipped unless ``NEXUS_RUN_LIVE_LLM=1`` and
-``NEXUS_RUN_POSTGRES=1`` are both set.
+The test database must already contain migration 078, at least one embedded
+Retrograde summary, and the corresponding configured local embedding model.
+It is deliberately read-only and refuses every production/save-slot database.
 """
 
 from __future__ import annotations
 
-from typing import Any
+import os
+from urllib.parse import urlparse
 
 import psycopg2
 import pytest
-from psycopg2.extras import RealDictCursor
 
 from nexus.agents.memnon.memnon import MEMNON
-from nexus.agents.orrery.retrograde_embedding import (
-    embed_retrograde_summary_chunks,
-)
-from nexus.agents.orrery.retrograde_persistence import (
-    plan_retrograde_summary_chunks,
-)
-
-SAVE_05_DSN = "postgresql://pythagor@localhost:5432/save_05"
-SAVE_05_DBNAME = "save_05"
-
-pytestmark = [pytest.mark.live, pytest.mark.requires_postgres]
-
-# Phrased near the persisted retrograde event summaries on save_05 without
-# quoting any of them verbatim, so the hit has to come from semantic and
-# keyword relevance rather than string identity.
-RETROGRADE_QUERY = (
-    "How did Mara's safe aliases end up carrying Vale's debt after Vale "
-    "disappeared through the shelter network?"
-)
 
 
-def _ensure_summary_chunks_committed() -> list[dict[str, Any]]:
-    conn = psycopg2.connect(SAVE_05_DSN)
+TEST_DB_URL = os.environ.get("NEXUS_RETROGRADE_RETRIEVAL_TEST_DB_URL")
+
+pytestmark = [
+    pytest.mark.live,
+    pytest.mark.requires_postgres,
+    pytest.mark.skipif(
+        not TEST_DB_URL,
+        reason="NEXUS_RETROGRADE_RETRIEVAL_TEST_DB_URL is not configured",
+    ),
+]
+
+
+def _require_disposable_database(db_url: str) -> None:
+    """Reject every known user/runtime database before opening a connection."""
+    database = urlparse(db_url).path.lstrip("/")
+    protected = {"NEXUS", *(f"save_{slot:02d}" for slot in range(1, 6))}
+    if database in protected or not database.startswith("test_"):
+        raise RuntimeError(
+            "Retrograde retrieval live tests require a disposable database "
+            "whose name starts with 'test_'; got "
+            f"{database!r}"
+        )
+
+
+def test_retrograde_history_comes_back_with_typed_identity() -> None:
+    """Production hybrid search retrieves a pre-embedded summary as itself."""
+    assert TEST_DB_URL is not None
+    _require_disposable_database(TEST_DB_URL)
+
+    with psycopg2.connect(TEST_DB_URL) as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT id, summary_text
+                FROM retrograde_summaries
+                WHERE embedding_generated_at IS NOT NULL
+                ORDER BY id
+                LIMIT 1
+                """
+            )
+            row = cursor.fetchone()
+    assert row is not None, "fixture database has no embedded Retrograde summary"
+    summary_id, summary_text = int(row[0]), str(row[1])
+    query = " ".join(summary_text.split()[:16])
+
+    memnon = MEMNON(interface=None, db_url=TEST_DB_URL)
     try:
-        with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            rows = plan_retrograde_summary_chunks(cur, dry_run=False)
-        conn.commit()
-        return rows
+        result = memnon.query_memory(query=query, k=15, use_hybrid=True)
     finally:
-        conn.close()
+        memnon.close()
 
-
-def test_retrograde_history_comes_back_from_memnon_search() -> None:
-    """A retrograde-sourced memory is retrieved by the production search."""
-
-    rows = _ensure_summary_chunks_committed()
-    assert rows, "save_05 holds no persisted Retrograde events to retrieve"
-
-    summary_chunk_ids = {int(row["chunk_id"]) for row in rows}
-    pending = [int(row["chunk_id"]) for row in rows if row["embedding_pending"]]
-    if pending:
-        embedded = embed_retrograde_summary_chunks(SAVE_05_DBNAME, pending)
-        assert {entry["chunk_id"] for entry in embedded} == set(pending)
-
-    memnon = MEMNON(interface=None, db_url=SAVE_05_DSN)
-    result = memnon.query_memory(
-        query=RETROGRADE_QUERY,
-        k=15,
-        use_hybrid=True,
+    matching = [
+        candidate
+        for candidate in result["results"]
+        if candidate.get("id") == f"retrograde_summary:{summary_id}"
+    ]
+    assert matching, (
+        "Dedicated Retrograde summary was not retrieved; "
+        f"summary_id={summary_id}, returned_ids="
+        f"{[candidate.get('id') for candidate in result['results']]}"
     )
-
-    returned_ids = {
-        int(chunk.get("chunk_id") or chunk["id"]) for chunk in result["results"]
-    }
-    hits = returned_ids & summary_chunk_ids
-    assert hits, (
-        "No Retrograde summary chunk retrieved. "
-        f"summary_chunk_ids={sorted(summary_chunk_ids)} "
-        f"returned_ids={sorted(returned_ids)}"
-    )
+    assert matching[0]["content_type"] == "retrograde_summary"
+    assert matching[0]["summary_id"] == summary_id
+    assert "chunk_id" not in matching[0]

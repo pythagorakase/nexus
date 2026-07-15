@@ -9,6 +9,9 @@ from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
 EMBEDDING_TABLE_PATTERN = re.compile(r"^chunk_embeddings_(?P<dimensions>\d+)d$")
+RETROGRADE_SUMMARY_EMBEDDING_TABLE_PATTERN = re.compile(
+    r"^retrograde_summary_embeddings_(?P<dimensions>\d+)d$"
+)
 
 # pgvector 0.8.x caps HNSW/IVFFlat indexes at 2000 dimensions in this local
 # deployment. Higher-dimensional tables still support exact vector search.
@@ -34,9 +37,26 @@ def resolve_dimension_table(dimensions: int) -> str:
     return table_name_for_dimensions(dimensions)
 
 
+def retrograde_summary_table_name_for_dimensions(dimensions: int) -> str:
+    """Return the dedicated Retrograde summary table for ``dimensions``."""
+    if dimensions <= 0:
+        raise ValueError(f"Embedding dimensions must be positive, got {dimensions}")
+    return f"retrograde_summary_embeddings_{dimensions:04d}d"
+
+
 def parse_embedding_table_dimensions(table_name: str) -> Optional[int]:
     """Return dimensions encoded in an embedding table name, if it matches."""
     match = EMBEDDING_TABLE_PATTERN.match(table_name)
+    if not match:
+        return None
+    return int(match.group("dimensions"))
+
+
+def parse_retrograde_summary_embedding_table_dimensions(
+    table_name: str,
+) -> Optional[int]:
+    """Return dimensions encoded in a Retrograde summary embedding table."""
+    match = RETROGRADE_SUMMARY_EMBEDDING_TABLE_PATTERN.match(table_name)
     if not match:
         return None
     return int(match.group("dimensions"))
@@ -101,6 +121,41 @@ def ensure_embedding_table(connection: Connection, dimensions: int) -> str:
                 embedding vector({dimensions}) NOT NULL,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 PRIMARY KEY (chunk_id, model)
+            )
+            """
+        )
+    )
+    connection.execute(
+        text(
+            f"""
+            CREATE INDEX IF NOT EXISTS {table_name}_model_idx
+            ON {table_name} (model)
+            """
+        )
+    )
+    return table_name
+
+
+def ensure_retrograde_summary_embedding_table(
+    connection: Connection, dimensions: int
+) -> str:
+    """Ensure the dedicated Retrograde summary embedding table exists.
+
+    The summary corpus deliberately has no ``chunk_id`` column or relationship
+    to ``narrative_chunks``. Its identity remains ``summary_id`` end to end.
+    """
+    table_name = retrograde_summary_table_name_for_dimensions(dimensions)
+
+    connection.execute(
+        text(
+            f"""
+            CREATE TABLE IF NOT EXISTS {table_name} (
+                summary_id BIGINT NOT NULL
+                    REFERENCES retrograde_summaries(id) ON DELETE CASCADE,
+                model TEXT NOT NULL,
+                embedding vector({dimensions}) NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                PRIMARY KEY (summary_id, model)
             )
             """
         )
