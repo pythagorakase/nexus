@@ -49,7 +49,6 @@ TERMINAL_GENERATION_STATUSES = {
     "approved",
     "committed",
 }
-GENERATION_POLL_SECONDS = 240
 FACTION_APPLY_SOURCE_KIND_CHOICES = (
     "authored",
     "llm_generated",
@@ -1354,7 +1353,10 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
             session_id = data.get("session_id")
             if session_id:
                 # Poll for completion; websocket is intentionally not used here.
-                for _ in range(GENERATION_POLL_SECONDS):
+                # Bounded by elapsed wall time, not iteration count — local
+                # 70B-class turns legitimately exceed a fixed 240s.
+                poll_deadline = time.monotonic() + _generation_timeout_seconds()
+                while time.monotonic() < poll_deadline:
                     status_url = f"{get_api_url()}/api/narrative/status/{session_id}"
                     status_response = requests.get(
                         status_url,
@@ -1456,7 +1458,9 @@ def run_regenerate(args: argparse.Namespace) -> Dict[str, Any]:
         if not session_id:
             return {"success": False, "error": "No session ID returned from regenerate"}
 
-        for _ in range(GENERATION_POLL_SECONDS):
+        # Elapsed-time bound, matching the continue path — see that loop's note.
+        poll_deadline = time.monotonic() + _generation_timeout_seconds()
+        while time.monotonic() < poll_deadline:
             status_url = f"{get_api_url()}/api/narrative/status/{session_id}"
             try:
                 status_response = requests.get(

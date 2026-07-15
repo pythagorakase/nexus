@@ -68,6 +68,7 @@ request_timeout_seconds = 1800
 roles = { default = "nousresearch/hermes-4-70b" }
 models = [
     { id = "nousresearch/hermes-4-70b", label = "Hermes 4 70B (Local)", description = "Local llama-server inference (GGUF)" },
+    { id = "nousresearch/hermes-4.3-36b", label = "Hermes 4.3 36B (Local)", description = "Local llama-server inference (GGUF, Seed-OSS)" },
 ]
 
 # Interactive local GGUF management. The server port and alias remain sourced
@@ -897,8 +898,10 @@ max_output_tokens = 25000     # Maximum tokens for generated narrative
 structured_output_retries = 3 # Validation retry budget for structured story turns
 # HTTP client timeout for a narrative continue turn. Frontier generation runs
 # inside the request and blocks the API worker, so status polls aren't answered
-# until the turn finishes; this must exceed the slowest expected generation.
-generation_timeout_seconds = 300
+# until the turn finishes; this must exceed the slowest expected generation —
+# including local 70B-class turns, which can run several minutes per the
+# [runtime.services.llama_server] notes.
+generation_timeout_seconds = 1200
 
 # =============================================================================
 # Narrative Summary Settings
