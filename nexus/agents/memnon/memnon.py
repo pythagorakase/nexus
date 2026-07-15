@@ -37,7 +37,6 @@ from .utils.db_access import (
     execute_vector_search,
     execute_hybrid_search,
     setup_database_indexes,
-    prepare_tsquery,
 )
 from .utils.continuous_temporal_search import (
     execute_time_aware_search,
@@ -1176,109 +1175,6 @@ class MEMNON:
 
         except Exception as e:
             logger.error(f"Error querying structured data: {e}")
-            return []
-
-    def _query_narrative_text_search_legacy(
-        self, query_text: str, filters: Dict[str, Any] = None, limit: int = 10
-    ) -> List[Dict[str, Any]]:
-        """
-        Legacy narrative-only keyword search retained for compatibility review.
-
-        Args:
-            query_text: The text to search for
-            filters: Optional metadata filters
-            limit: Maximum number of results to return
-
-        Returns:
-            List of matching chunks with scores and metadata
-        """
-        try:
-            # Use prepare_tsquery from db_access for consistent processing
-            processed_query = prepare_tsquery(query_text)
-
-            with self.Session() as session:
-                # Build query with filters
-                filter_conditions = []
-                if filters:
-                    if "season" in filters:
-                        filter_conditions.append(f"cm.season = :season")
-                    if "episode" in filters:
-                        filter_conditions.append(f"cm.episode = :episode")
-                    if "world_layer" in filters:
-                        filter_conditions.append(f"cm.world_layer = :world_layer")
-
-                filter_sql = " AND ".join(filter_conditions)
-                if filter_sql:
-                    filter_sql = " AND " + filter_sql
-
-                # Execute text search
-                query_sql = f"""
-                SELECT 
-                    nc.id, 
-                    nc.raw_text, 
-                    cm.season, 
-                    cm.episode, 
-                    cm.scene as scene_number,
-                    ts_rank(to_tsvector('english', nc.raw_text), to_tsquery('english', :query)) as score,
-                    ts_headline('english', nc.raw_text, to_tsquery('english', :query), 'MaxFragments=3, MinWords=15, MaxWords=35') as highlights
-                FROM 
-                    narrative_chunks nc
-                JOIN 
-                    chunk_metadata cm ON nc.id = cm.chunk_id
-                WHERE 
-                    to_tsvector('english', nc.raw_text) @@ to_tsquery('english', :query)
-                    {filter_sql}
-                ORDER BY 
-                    score DESC
-                LIMIT 
-                    :limit
-                """
-
-                query_params = {"query": processed_query, "limit": limit}
-                if filters:
-                    if "season" in filters:
-                        query_params["season"] = filters["season"]
-                    if "episode" in filters:
-                        query_params["episode"] = filters["episode"]
-                    if "world_layer" in filters:
-                        query_params["world_layer"] = filters["world_layer"]
-
-                result = session.execute(text(query_sql), query_params)
-
-                # Process results
-                text_results = []
-                for row in result:
-                    (
-                        chunk_id,
-                        raw_text,
-                        season,
-                        episode,
-                        scene_number,
-                        score,
-                        highlights,
-                    ) = row
-
-                    text_results.append(
-                        {
-                            "id": str(chunk_id),
-                            "chunk_id": str(chunk_id),
-                            "text": raw_text,
-                            "content_type": "narrative",
-                            "metadata": {
-                                "season": season,
-                                "episode": episode,
-                                "scene_number": scene_number,
-                                "highlights": highlights,
-                            },
-                            "score": float(score),
-                            "source": "text_search",
-                        }
-                    )
-
-                return text_results
-
-        except Exception as e:
-            logger.error(f"Error in text search: {e}")
             return []
 
     def _query_text_search(

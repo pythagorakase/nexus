@@ -10,6 +10,8 @@ import re
 import logging
 from typing import Dict, List, Optional, Any, Tuple, Union, Set
 
+from nexus.memory.context_state import is_retrograde_summary
+
 # Set up logging
 logger = logging.getLogger("nexus.memnon.continuous_temporal_search")
 
@@ -241,7 +243,7 @@ def result_temporal_anchor(result: Dict[str, Any]) -> Optional[int]:
     ``recorded_at_chunk_id`` is used only as a temporal coordinate and is never
     exposed as the result's ``chunk_id``.
     """
-    if result.get("content_type") == "retrograde_summary":
+    if is_retrograde_summary(result):
         recorded_at_chunk_id = result.get("metadata", {}).get("recorded_at_chunk_id")
         return int(recorded_at_chunk_id) if recorded_at_chunk_id is not None else None
 

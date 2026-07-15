@@ -1169,7 +1169,9 @@ def _install_legacy_write_guards(cur: Any) -> None:
         LANGUAGE plpgsql
         AS $guard$
         BEGIN
-            IF NEW.result_manifest = '{}'::jsonb THEN
+            IF NEW.result_manifest IS NULL
+                OR NEW.result_manifest = '{}'::jsonb
+            THEN
                 RETURN NEW;
             END IF;
 

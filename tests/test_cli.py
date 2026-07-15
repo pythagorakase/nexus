@@ -40,6 +40,12 @@ def test_terminal_generation_statuses_include_api_and_incubator_values() -> None
     assert not _is_terminal_generation_status("error")
 
 
+def test_generation_poll_window_covers_live_reasoning_models() -> None:
+    """The configured elapsed-time budget covers slow reasoning models."""
+
+    assert cli._generation_timeout_seconds() >= 180
+
+
 def test_continue_posts_choice_to_backend_without_preapproving(
     monkeypatch,
 ) -> None:

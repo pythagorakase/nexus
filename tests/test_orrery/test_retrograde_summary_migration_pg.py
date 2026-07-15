@@ -225,6 +225,32 @@ def test_migration_078_moves_ids_embeddings_manifests_and_rolls_back(
             )
             assert cur.fetchone()[0] == allowed_manifest
 
+        # Fresh queue rows intentionally leave result_manifest NULL until the
+        # worker records a result. The post-078 guard must preserve that path.
+        cur.execute(
+            "DELETE FROM orrery_maturation_jobs WHERE id = %s",
+            (seeded["job_id"],),
+        )
+        cur.execute(
+            """
+            INSERT INTO orrery_maturation_jobs (
+                entity_id, entity_kind, entity_subtype_id, entity_name, slot,
+                requesting_chunk_id, declaration, state
+            ) VALUES (
+                %s, 'character', %s, %s, 'disposable_078', %s,
+                '{}'::jsonb, 'queued'
+            )
+            RETURNING result_manifest
+            """,
+            (
+                seeded["entity_id"],
+                seeded["character_id"],
+                "Migration Courier",
+                seeded["requesting_chunk_id"],
+            ),
+        )
+        assert cur.fetchone()[0] is None
+
     conn.rollback()
     with conn.cursor() as cur:
         cur.execute("SELECT to_regclass('public.retrograde_summaries')")
@@ -555,6 +581,8 @@ def _seed_legacy_runtime_summary(conn: Any) -> dict[str, Any]:
         "summary_id": summary_id,
         "world_event_id": world_event_id,
         "requesting_chunk_id": requesting_chunk_id,
+        "character_id": character_id,
+        "entity_id": entity_id,
         "job_id": job_id,
         "summary_text": summary_text,
         "embedded_at": embedded_at,

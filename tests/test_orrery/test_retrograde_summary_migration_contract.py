@@ -185,6 +185,7 @@ def test_manifest_guard_allows_only_empty_or_v1_manifests(
 
     assert cursor.params == (migration.TARGET_MANIFEST_SCHEMA_VERSION,)
     for guard_clause in (
+        "NEW.result_manifest IS NULL",
         "NEW.result_manifest = '{}'::jsonb",
         "jsonb_typeof(NEW.result_manifest) IS DISTINCT FROM 'object'",
         "NEW.result_manifest ? 'embedding_pending_chunk_ids'",

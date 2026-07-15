@@ -12,6 +12,7 @@ from nexus.agents.memnon.utils.db_access import (
     _retrograde_summary_result,
 )
 from nexus.agents.memnon.utils.embedding_tables import (
+    ensure_retrograde_summary_embedding_table,
     parse_retrograde_summary_embedding_table_dimensions,
     retrograde_summary_table_name_for_dimensions,
 )
@@ -36,6 +37,27 @@ def test_retrograde_summary_embedding_table_names_are_dimension_specific() -> No
     )
 
 
+def test_retrograde_summary_embedding_table_helper_accepts_dbapi_cursor() -> None:
+    """The shared DDL helper serves the pooled psycopg write path."""
+
+    class RecordingCursor:
+        def __init__(self) -> None:
+            self.statements: list[str] = []
+
+        def execute(self, statement: str) -> None:
+            self.statements.append(statement)
+
+    cursor = RecordingCursor()
+    table_name = ensure_retrograde_summary_embedding_table(cursor, 384)
+
+    assert table_name == "retrograde_summary_embeddings_0384d"
+    assert len(cursor.statements) == 2
+    assert "CREATE TABLE IF NOT EXISTS retrograde_summary_embeddings_0384d" in (
+        cursor.statements[0]
+    )
+    assert "CREATE INDEX IF NOT EXISTS" in cursor.statements[1]
+
+
 def test_retrograde_summary_result_keeps_typed_identity() -> None:
     """A summary result never masquerades as a narrative chunk."""
     created_at = datetime(2089, 4, 3, tzinfo=timezone.utc)
@@ -56,6 +78,17 @@ def test_retrograde_summary_result_keeps_typed_identity() -> None:
     assert "chunk_id" not in result
     assert result["metadata"]["recorded_at_chunk_id"] == 133
     assert result["metadata"]["created_at"] == created_at.isoformat()
+    assert result_temporal_anchor(result) == 133
+
+
+def test_temporal_anchor_uses_shared_typed_summary_classifier() -> None:
+    """Typed identities remain summaries even without a redundant type field."""
+
+    result = {
+        "id": "retrograde_summary:17",
+        "metadata": {"recorded_at_chunk_id": 133},
+    }
+
     assert result_temporal_anchor(result) == 133
 
 

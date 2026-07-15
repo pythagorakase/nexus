@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Sequence
 
 from nexus.agents.memnon.utils.embedding_tables import (
-    retrograde_summary_table_name_for_dimensions,
+    ensure_retrograde_summary_embedding_table,
 )
 
 
@@ -122,34 +122,16 @@ def embed_retrograde_summaries(
 
     with get_connection(dbname, dict_cursor=True) as conn:
         with conn.cursor() as cursor:
-            ensured_dimensions: set[int] = set()
+            ensured_tables: dict[int, str] = {}
             for model_embeddings in generated.values():
                 for model_name, embedding in model_embeddings:
                     dimensions = len(embedding)
-                    table_name = retrograde_summary_table_name_for_dimensions(
-                        dimensions
-                    )
-                    if dimensions not in ensured_dimensions:
-                        cursor.execute(
-                            f"""
-                            CREATE TABLE IF NOT EXISTS {table_name} (
-                                summary_id BIGINT NOT NULL
-                                    REFERENCES retrograde_summaries(id)
-                                    ON DELETE CASCADE,
-                                model TEXT NOT NULL,
-                                embedding vector({dimensions}) NOT NULL,
-                                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                                PRIMARY KEY (summary_id, model)
-                            )
-                            """
+                    table_name = ensured_tables.get(dimensions)
+                    if table_name is None:
+                        table_name = ensure_retrograde_summary_embedding_table(
+                            cursor, dimensions
                         )
-                        cursor.execute(
-                            f"""
-                            CREATE INDEX IF NOT EXISTS {table_name}_model_idx
-                            ON {table_name} (model)
-                            """
-                        )
-                        ensured_dimensions.add(dimensions)
+                        ensured_tables[dimensions] = table_name
 
                     embedding_value = "[" + ",".join(str(x) for x in embedding) + "]"
                     cursor.execute(

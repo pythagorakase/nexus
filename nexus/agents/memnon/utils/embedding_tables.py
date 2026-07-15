@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import List, Optional
+from typing import Any, List, Optional, Protocol
 
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
@@ -23,6 +23,22 @@ LEGACY_EMBEDDING_DIMENSIONS = (1024, 1536, 2560, 4096)
 DIMENSION_TABLES: List[str] = [
     f"chunk_embeddings_{dimensions:04d}d" for dimensions in LEGACY_EMBEDDING_DIMENSIONS
 ]
+
+
+class _DDLExecutor(Protocol):
+    """Structural interface shared by SQLAlchemy connections and DBAPI cursors."""
+
+    def execute(self, statement: Any) -> Any:
+        """Execute one DDL statement."""
+
+
+def _execute_ddl(executor: _DDLExecutor, statement: str) -> None:
+    """Execute raw DDL through SQLAlchemy or a DBAPI cursor."""
+    exec_driver_sql = getattr(executor, "exec_driver_sql", None)
+    if callable(exec_driver_sql):
+        exec_driver_sql(statement)
+        return
+    executor.execute(statement)
 
 
 def table_name_for_dimensions(dimensions: int) -> str:
@@ -137,7 +153,7 @@ def ensure_embedding_table(connection: Connection, dimensions: int) -> str:
 
 
 def ensure_retrograde_summary_embedding_table(
-    connection: Connection, dimensions: int
+    connection: _DDLExecutor, dimensions: int
 ) -> str:
     """Ensure the dedicated Retrograde summary embedding table exists.
 
@@ -146,26 +162,24 @@ def ensure_retrograde_summary_embedding_table(
     """
     table_name = retrograde_summary_table_name_for_dimensions(dimensions)
 
-    connection.execute(
-        text(
-            f"""
-            CREATE TABLE IF NOT EXISTS {table_name} (
-                summary_id BIGINT NOT NULL
-                    REFERENCES retrograde_summaries(id) ON DELETE CASCADE,
-                model TEXT NOT NULL,
-                embedding vector({dimensions}) NOT NULL,
-                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                PRIMARY KEY (summary_id, model)
-            )
-            """
+    _execute_ddl(
+        connection,
+        f"""
+        CREATE TABLE IF NOT EXISTS {table_name} (
+            summary_id BIGINT NOT NULL
+                REFERENCES retrograde_summaries(id) ON DELETE CASCADE,
+            model TEXT NOT NULL,
+            embedding vector({dimensions}) NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (summary_id, model)
         )
+        """,
     )
-    connection.execute(
-        text(
-            f"""
-            CREATE INDEX IF NOT EXISTS {table_name}_model_idx
-            ON {table_name} (model)
-            """
-        )
+    _execute_ddl(
+        connection,
+        f"""
+        CREATE INDEX IF NOT EXISTS {table_name}_model_idx
+        ON {table_name} (model)
+        """,
     )
     return table_name
