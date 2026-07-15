@@ -48,23 +48,11 @@ def test_start_setup_request_model_defaults_to_none() -> None:
     assert request.model is None
 
 
-def test_setup_model_explicit_request_wins() -> None:
-    assert (
-        resolve_setup_model(
-            "explicit-model",
-            "operator-model",
-            default_slot_model="fresh-placeholder",
-            wizard_default_model="wizard-default",
-        )
-        == "explicit-model"
-    )
-
-
 def test_setup_model_preserves_operator_slot_model() -> None:
     assert (
         resolve_setup_model(
-            None,
             "operator-model",
+            setup_started=False,
             default_slot_model="fresh-placeholder",
             wizard_default_model="wizard-default",
         )
@@ -72,15 +60,16 @@ def test_setup_model_preserves_operator_slot_model() -> None:
     )
 
 
-def test_setup_model_treats_empty_request_as_omitted() -> None:
+def test_setup_model_preserves_default_named_model_after_setup_started() -> None:
+    """A prior wizard row disambiguates an intentional TEST model stamp."""
     assert (
         resolve_setup_model(
-            "",
-            "operator-model",
-            default_slot_model="fresh-placeholder",
+            "TEST",
+            setup_started=True,
+            default_slot_model="TEST",
             wizard_default_model="wizard-default",
         )
-        == "operator-model"
+        == "TEST"
     )
 
 
@@ -90,8 +79,8 @@ def test_setup_model_uses_wizard_default_only_for_fresh_slot(
 ) -> None:
     assert (
         resolve_setup_model(
-            None,
             slot_model,
+            setup_started=False,
             default_slot_model="fresh-placeholder",
             wizard_default_model="wizard-default",
         )
@@ -100,17 +89,19 @@ def test_setup_model_uses_wizard_default_only_for_fresh_slot(
 
 
 @pytest.mark.parametrize(
-    ("requested_model", "slot_model", "expected_model"),
+    ("requested_model", "slot_model", "setup_started", "expected_model"),
     [
-        ("explicit-model", "operator-model", "explicit-model"),
-        (None, "operator-model", "operator-model"),
-        (None, "fresh-placeholder", "wizard-default"),
+        ("explicit-model", "operator-model", False, "explicit-model"),
+        (None, "operator-model", False, "operator-model"),
+        (None, "fresh-placeholder", False, "wizard-default"),
+        (None, "fresh-placeholder", True, "fresh-placeholder"),
     ],
 )
 def test_start_setup_persists_resolved_model(
     monkeypatch: pytest.MonkeyPatch,
     requested_model: str | None,
     slot_model: str,
+    setup_started: bool,
     expected_model: str,
 ) -> None:
     """The core applies precedence once, then persists the selected model."""
@@ -139,6 +130,11 @@ def test_start_setup_persists_resolved_model(
         new_story_flow,
         "get_slot_model",
         lambda _slot, dbname=None: slot_model,
+    )
+    monkeypatch.setattr(
+        new_story_flow,
+        "read_cache_raw",
+        lambda _dbname: SimpleNamespace() if setup_started else None,
     )
     monkeypatch.setattr(new_story_flow, "clear_cache", lambda _dbname: None)
     monkeypatch.setattr(new_story_flow, "init_cache", lambda *_args, **_kwargs: None)
@@ -171,6 +167,66 @@ def test_start_setup_persists_resolved_model(
             "dbname": "save_test",
         }
     ]
+
+
+def test_start_setup_preserves_explicit_test_model_on_restart(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A TEST setup stamp survives a later omitted-model restart."""
+    clients: list[str] = []
+    slot_state: dict[str, Any] = {"model": "TEST", "cache": None}
+
+    class FakeConnection:
+        def close(self) -> None:
+            """Mirror the psycopg connection close surface."""
+
+    class FakeConversationsClient:
+        def __init__(self, model: str) -> None:
+            clients.append(model)
+
+        def create_thread(self) -> str:
+            return f"thread-{len(clients)}"
+
+    monkeypatch.setattr(
+        new_story_flow.psycopg2,
+        "connect",
+        lambda **_kwargs: FakeConnection(),
+    )
+    monkeypatch.setattr(new_story_flow, "slot_dbname", lambda _slot: "save_test")
+    monkeypatch.setattr(
+        new_story_flow,
+        "get_slot_model",
+        lambda _slot, dbname=None: slot_state["model"],
+    )
+    monkeypatch.setattr(
+        new_story_flow,
+        "read_cache_raw",
+        lambda _dbname: slot_state["cache"],
+    )
+    monkeypatch.setattr(new_story_flow, "clear_cache", lambda _dbname: None)
+    monkeypatch.setattr(
+        new_story_flow,
+        "init_cache",
+        lambda *_args, **_kwargs: slot_state.update(cache={"id": True}),
+    )
+    monkeypatch.setattr(new_story_flow, "clear_active", lambda _dbname: None)
+    monkeypatch.setattr(
+        new_story_flow,
+        "upsert_slot",
+        lambda _slot, **kwargs: slot_state.update(model=kwargs["model"]),
+    )
+    monkeypatch.setattr(new_story_flow, "ConversationsClient", FakeConversationsClient)
+    monkeypatch.setattr(
+        "nexus.config.load_settings",
+        lambda: SimpleNamespace(
+            global_=SimpleNamespace(model=SimpleNamespace(default_slot_model="TEST")),
+            wizard=SimpleNamespace(default_model="wizard-default"),
+        ),
+    )
+
+    assert new_story_flow.start_setup(4, model="TEST") == "thread-1"
+    assert new_story_flow.start_setup(4) == "thread-2"
+    assert clients == ["TEST", "TEST"]
 
 
 def test_setup_endpoint_passes_omitted_model_to_core(

@@ -11,7 +11,13 @@ from typing import Any, Dict, Optional, TYPE_CHECKING
 import psycopg2
 
 from nexus.api.conversations import ConversationsClient
-from nexus.api.new_story_cache import read_cache, write_cache, clear_cache, init_cache
+from nexus.api.new_story_cache import (
+    clear_cache,
+    init_cache,
+    read_cache,
+    read_cache_raw,
+    write_cache,
+)
 from nexus.api.save_slots import clear_active, get_slot_model, upsert_slot
 from nexus.api.slot_utils import slot_dbname, all_slots
 from scripts.new_story_setup import create_slot_schema_only
@@ -27,22 +33,19 @@ MOCK_WIZARD_MODEL = "TEST"
 
 
 def resolve_setup_model(
-    requested_model: Optional[str],
     slot_model: Optional[str],
     *,
+    setup_started: bool,
     default_slot_model: str,
     wizard_default_model: str,
 ) -> str:
-    """Resolve the model locked in when a new-story setup starts.
+    """Resolve an omitted model when a new-story setup starts.
 
-    An explicit request is authoritative. Otherwise, preserve an operator-set
-    slot model, identified by a value other than the configured fresh-slot
-    placeholder. Only an unset/fresh slot falls back to the wizard roster
-    default.
+    Preserve a slot model when it differs from the fresh-slot placeholder or
+    when an existing wizard-cache row proves setup already locked that model.
+    Only a genuinely fresh slot falls back to the wizard roster default.
     """
-    if requested_model:
-        return requested_model
-    if slot_model and slot_model != default_slot_model:
+    if slot_model and (setup_started or slot_model != default_slot_model):
         return slot_model
     return wizard_default_model
 
@@ -85,8 +88,8 @@ def start_setup(slot_number: int, model: Optional[str] = None) -> str:
 
         settings = load_settings()
         model_to_use = resolve_setup_model(
-            None,
             get_slot_model(slot_number, dbname=dbname),
+            setup_started=read_cache_raw(dbname) is not None,
             default_slot_model=settings.global_.model.default_slot_model,
             wizard_default_model=settings.wizard.default_model,
         )
