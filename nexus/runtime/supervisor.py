@@ -35,10 +35,10 @@ from nexus.config.settings_models import (
     Settings,
 )
 from nexus.runtime.contract import (
-    NEXUS_AUTH_HEADER,
     RUNTIME_CONFIG_ENV,
     RUNTIME_STATUS_PATH,
 )
+from nexus.runtime.remote_auth import build_runtime_request_auth
 
 
 class RuntimeError_(Exception):
@@ -403,10 +403,12 @@ class Supervisor:
     def _check_remote(self) -> Dict[str, Any]:
         remote = self.runtime.remote
         url = remote.base_url.rstrip("/") + RUNTIME_STATUS_PATH
+        auth = build_runtime_request_auth(url, remote)
         response = requests.get(
             url,
             timeout=self.runtime.health.timeout_seconds,
-            headers={NEXUS_AUTH_HEADER: os.environ.get("NEXUS_AUTH", "")},
+            headers=auth.headers,
+            allow_redirects=auth.allow_redirects,
         )
         response.raise_for_status()
         return {"success": True, "profile": "remote", "runtime": response.json()}
@@ -528,10 +530,13 @@ class Supervisor:
     def _fetch_runtime_status(self) -> Dict[str, Any]:
         url = self._gateway_url() + RUNTIME_STATUS_PATH
         try:
+            remote = self.runtime.remote if self.runtime.profile == "remote" else None
+            auth = build_runtime_request_auth(url, remote)
             response = requests.get(
                 url,
                 timeout=self.runtime.health.timeout_seconds,
-                headers={NEXUS_AUTH_HEADER: os.environ.get("NEXUS_AUTH", "")},
+                headers=auth.headers,
+                allow_redirects=auth.allow_redirects,
             )
             response.raise_for_status()
             return response.json()

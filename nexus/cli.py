@@ -29,14 +29,22 @@ all other state (wizard phase, current chunk, thread ID) automatically.
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import logging
+import os
 from pathlib import Path
 import sys
 import time
 from typing import Any, Dict, List, Mapping, Optional
 
 import requests
+
+from nexus.config import load_settings
+from nexus.config.settings_models import Settings
+from nexus.runtime.contract import RUNTIME_CONFIG_ENV
+from nexus.runtime.remote_auth import build_runtime_request_auth
+from nexus.util.secret_manager import MissingSecretError
 
 logger = logging.getLogger("nexus.cli")
 
@@ -58,11 +66,80 @@ FACTION_APPLY_SOURCE_KIND_CHOICES = (
 )
 
 
-def get_api_url() -> str:
-    """Get the API server URL from environment or default."""
-    import os
+def _load_cli_settings() -> Optional[Settings]:
+    """Load explicit, working-directory, or checkout settings when available."""
+    explicit = os.environ.get(RUNTIME_CONFIG_ENV)
+    if explicit:
+        return _load_cli_settings_file(Path(explicit))
 
-    return os.environ.get("NEXUS_API_URL", DEFAULT_API_URL)
+    working_config = Path("nexus.toml")
+    if working_config.exists():
+        return _load_cli_settings_file(working_config)
+
+    checkout_config = Path(__file__).resolve().parents[1] / "nexus.toml"
+    if checkout_config.exists():
+        return _load_cli_settings_file(checkout_config)
+    return None
+
+
+def _load_cli_settings_file(path: Path) -> Settings:
+    """Load one config version once, invalidating when its file changes."""
+    resolved = path.resolve()
+    stat = resolved.stat()
+    return _load_cli_settings_version(str(resolved), stat.st_mtime_ns, stat.st_size)
+
+
+@functools.lru_cache(maxsize=8)
+def _load_cli_settings_version(path: str, modified_ns: int, size: int) -> Settings:
+    """Cache a validated settings tree for an exact on-disk file version."""
+    del modified_ns, size
+    return load_settings(path)
+
+
+def get_api_url() -> str:
+    """Get the API URL from an override, remote profile, or local default."""
+
+    override = os.environ.get("NEXUS_API_URL")
+    if override:
+        return override.rstrip("/")
+
+    settings = _load_cli_settings()
+    runtime = settings.runtime if settings is not None else None
+    if runtime is not None and runtime.profile == "remote":
+        remote = runtime.remote
+        if remote is None:  # guarded by RuntimeSettings validation
+            raise ValueError("Remote runtime profile has no remote configuration")
+        return remote.base_url.rstrip("/")
+    return DEFAULT_API_URL
+
+
+def _api_request(method: str, url: str, **kwargs: Any) -> requests.Response:
+    """Send a NEXUS API request with origin-scoped runtime authentication."""
+    settings = _load_cli_settings()
+    remote = (
+        settings.runtime.remote
+        if settings is not None and settings.runtime is not None
+        else None
+    )
+    auth = build_runtime_request_auth(url, remote)
+
+    supplied_headers = kwargs.pop("headers", None) or {}
+    headers = dict(supplied_headers)
+    headers.update(auth.headers)
+    kwargs["headers"] = headers
+    if not auth.allow_redirects:
+        kwargs["allow_redirects"] = False
+    return getattr(requests, method)(url, **kwargs)
+
+
+def _api_get(url: str, **kwargs: Any) -> requests.Response:
+    """Send an authenticated GET to the configured NEXUS API."""
+    return _api_request("get", url, **kwargs)
+
+
+def _api_post(url: str, **kwargs: Any) -> requests.Response:
+    """Send an authenticated POST to the configured NEXUS API."""
+    return _api_request("post", url, **kwargs)
 
 
 def _is_terminal_generation_status(status: Optional[str]) -> bool:
@@ -980,7 +1057,7 @@ def run_load(args: argparse.Namespace) -> Dict[str, Any]:
     url = f"{get_api_url()}/api/slot/{args.slot}/state"
 
     try:
-        response = requests.get(url, timeout=30)
+        response = _api_get(url, timeout=30)
         response.raise_for_status()
         data = response.json()
 
@@ -1072,7 +1149,7 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
     try:
         # First, get slot state to determine mode
         state_url = f"{get_api_url()}/api/slot/{args.slot}/state"
-        state_response = requests.get(state_url, timeout=30)
+        state_response = _api_get(state_url, timeout=30)
         state_response.raise_for_status()
         state = state_response.json()
 
@@ -1086,7 +1163,7 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
             model_to_use = getattr(args, "model", None)
             if model_to_use:
                 setup_payload["model"] = model_to_use
-            setup_response = requests.post(setup_url, json=setup_payload, timeout=30)
+            setup_response = _api_post(setup_url, json=setup_payload, timeout=30)
             if not setup_response.ok:
                 return {
                     "success": False,
@@ -1111,7 +1188,7 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                 # cold-start generation runs inside the transition, so the
                 # timeout comes from orrery.retrograde.wizard settings.
                 transition_url = f"{get_api_url()}/api/story/new/transition"
-                transition_response = requests.post(
+                transition_response = _api_post(
                     transition_url,
                     json={"slot": args.slot},
                     timeout=_transition_timeout_seconds(),
@@ -1124,7 +1201,7 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                 retrograde_info = transition_response.json().get("retrograde")
 
                 # Transition complete - refresh state and continue to narrative
-                state_response = requests.get(state_url, timeout=30)
+                state_response = _api_get(state_url, timeout=30)
                 state = state_response.json()
 
                 if state.get("is_wizard_mode"):
@@ -1183,7 +1260,7 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                     if model_to_use:
                         payload["model"] = model_to_use
 
-                    response = requests.post(url, json=payload, timeout=120)
+                    response = _api_post(url, json=payload, timeout=120)
                     response.raise_for_status()
                     data = response.json()
 
@@ -1204,7 +1281,7 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                             if model_to_use:
                                 intro_payload["model"] = model_to_use
 
-                            intro_response = requests.post(
+                            intro_response = _api_post(
                                 url, json=intro_payload, timeout=120
                             )
                             if intro_response.ok:
@@ -1260,7 +1337,7 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                 if model_to_use:
                     payload["model"] = model_to_use
 
-                response = requests.post(url, json=payload, timeout=120)
+                response = _api_post(url, json=payload, timeout=120)
                 response.raise_for_status()
                 data = response.json()
 
@@ -1297,7 +1374,7 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                         if model_to_use:
                             transition_payload["model"] = model_to_use
 
-                        intro_response = requests.post(
+                        intro_response = _api_post(
                             url, json=transition_payload, timeout=120
                         )
                         if intro_response.ok:
@@ -1310,7 +1387,7 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                     elif next_phase == "ready":
                         # Seed phase complete → transition to narrative mode
                         transition_url = f"{get_api_url()}/api/story/new/transition"
-                        transition_response = requests.post(
+                        transition_response = _api_post(
                             transition_url,
                             json={"slot": args.slot},
                             timeout=_transition_timeout_seconds(),
@@ -1324,7 +1401,7 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                             continue_payload = {"slot": args.slot, "user_text": ""}
                             if model_to_use:
                                 continue_payload["model"] = model_to_use
-                            narrative_response = requests.post(
+                            narrative_response = _api_post(
                                 continue_url, json=continue_payload, timeout=120
                             )
                             if narrative_response.ok:
@@ -1359,7 +1436,7 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
             if model_to_use:
                 payload["model"] = model_to_use
 
-            response = requests.post(url, json=payload, timeout=120)
+            response = _api_post(url, json=payload, timeout=120)
             response.raise_for_status()
             data = response.json()
 
@@ -1372,7 +1449,7 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                 poll_deadline = time.monotonic() + _generation_timeout_seconds()
                 while time.monotonic() < poll_deadline:
                     status_url = f"{get_api_url()}/api/narrative/status/{session_id}"
-                    status_response = requests.get(
+                    status_response = _api_get(
                         status_url,
                         params={"slot": args.slot},
                         timeout=_generation_timeout_seconds(),
@@ -1428,7 +1505,7 @@ def run_undo(args: argparse.Namespace) -> Dict[str, Any]:
     url = f"{get_api_url()}/api/slot/{args.slot}/undo"
 
     try:
-        response = requests.post(url, timeout=30)
+        response = _api_post(url, timeout=30)
         response.raise_for_status()
         data = response.json()
 
@@ -1464,7 +1541,7 @@ def run_regenerate(args: argparse.Namespace) -> Dict[str, Any]:
         payload["note"] = args.note
 
     try:
-        response = requests.post(url, json=payload, timeout=120)
+        response = _api_post(url, json=payload, timeout=120)
         response.raise_for_status()
         data = response.json()
 
@@ -1477,7 +1554,7 @@ def run_regenerate(args: argparse.Namespace) -> Dict[str, Any]:
         while time.monotonic() < poll_deadline:
             status_url = f"{get_api_url()}/api/narrative/status/{session_id}"
             try:
-                status_response = requests.get(
+                status_response = _api_get(
                     status_url, params={"slot": args.slot}, timeout=30
                 )
             except requests.exceptions.RequestException:
@@ -1538,7 +1615,7 @@ def run_model(args: argparse.Namespace) -> Dict[str, Any]:
 
         if args.set:
             # Set the model
-            response = requests.post(base_url, json={"model": args.set}, timeout=30)
+            response = _api_post(base_url, json={"model": args.set}, timeout=30)
             response.raise_for_status()
             data = response.json()
             return {
@@ -1548,7 +1625,7 @@ def run_model(args: argparse.Namespace) -> Dict[str, Any]:
             }
 
         # Get current model
-        response = requests.get(base_url, timeout=30)
+        response = _api_get(base_url, timeout=30)
         response.raise_for_status()
         data = response.json()
         current = data.get("model") or "(default)"
@@ -1579,7 +1656,7 @@ def run_clear(args: argparse.Namespace) -> Dict[str, Any]:
     """
     try:
         url = f"{get_api_url()}/api/story/new/setup/reset"
-        response = requests.post(url, json={"slot": args.slot}, timeout=30)
+        response = _api_post(url, json={"slot": args.slot}, timeout=30)
         response.raise_for_status()
         return {
             "success": True,
@@ -2547,7 +2624,7 @@ def run_lock(args: argparse.Namespace) -> Dict[str, Any]:
     """
     try:
         url = f"{get_api_url()}/api/slot/{args.slot}/lock"
-        response = requests.post(url, timeout=30)
+        response = _api_post(url, timeout=30)
         response.raise_for_status()
         return {
             "success": True,
@@ -2572,7 +2649,7 @@ def run_unlock(args: argparse.Namespace) -> Dict[str, Any]:
     """
     try:
         url = f"{get_api_url()}/api/slot/{args.slot}/unlock"
-        response = requests.post(url, timeout=30)
+        response = _api_post(url, timeout=30)
         response.raise_for_status()
         return {
             "success": True,
@@ -2611,7 +2688,13 @@ def run_up(args: argparse.Namespace) -> Dict[str, Any]:
             foreground=args.foreground,
             echo=not args.json,
         )
-    except (RuntimeError_, FileNotFoundError, requests.RequestException) as exc:
+    except (
+        RuntimeError_,
+        FileNotFoundError,
+        MissingSecretError,
+        ValueError,
+        requests.RequestException,
+    ) as exc:
         return {"success": False, "error": str(exc)}
 
 
@@ -2732,7 +2815,7 @@ def run_status(args: argparse.Namespace) -> Dict[str, Any]:
         if not args.json:
             _print_runtime_status(result)
         return result
-    except (RuntimeError_, FileNotFoundError) as exc:
+    except (RuntimeError_, FileNotFoundError, MissingSecretError, ValueError) as exc:
         return {"success": False, "error": str(exc)}
 
 

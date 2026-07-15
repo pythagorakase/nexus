@@ -1014,6 +1014,11 @@ enabled = "never"
 # gateway_url = "http://127.0.0.1:8002"
 # mock_openai_url = "http://127.0.0.1:5102"
 
-# Hosted runtime for profile = "remote" (uncomment to use):
-# [runtime.remote]
-# base_url = "https://nexus.example.com"
+# Hosted runtime for profile = "remote". The Access values are secret-store
+# account names under service `nexus-api`; credential material never lives here.
+[runtime.remote]
+base_url = "https://nexus.pythagora.net"
+
+[runtime.remote.cloudflare_access]
+client_id_secret = "cloudflare_access_client_id"
+client_secret_secret = "cloudflare_access_client_secret"

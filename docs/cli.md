@@ -15,6 +15,40 @@ poetry run nexus load --slot 5
 poetry run nexus continue --slot 5
 ```
 
+## Remote Runtimes
+
+Story commands use `[runtime.remote].base_url` when `[runtime].profile` is
+`"remote"`. `NEXUS_API_URL` remains an explicit override. If Cloudflare
+Access protects the origin, configure secret-store account names—not token
+values—in `nexus.toml`:
+
+```toml
+[runtime]
+profile = "remote"
+
+[runtime.remote]
+base_url = "https://nexus.example.com"
+
+[runtime.remote.cloudflare_access]
+client_id_secret = "cloudflare_access_client_id"
+client_secret_secret = "cloudflare_access_client_secret"
+```
+
+Store both values through `nexus.util.secret_manager.set_secret()`. On macOS
+they live in Keychain service `nexus-api`. The CLI adds the two `CF-Access-*`
+headers only for the configured origin and does not follow redirects while
+carrying them.
+
+To select an alternate config for story commands without editing the checkout:
+
+```bash
+NEXUS_RUNTIME_CONFIG=/path/to/remote.toml poetry run nexus load --slot 5
+```
+
+An explicit `NEXUS_API_URL` can select the same configured origin directly;
+the Access headers are omitted if its origin differs from
+`[runtime.remote].base_url`.
+
 ## Commands
 
 ### `load` — View Current State

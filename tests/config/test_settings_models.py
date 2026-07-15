@@ -16,6 +16,7 @@ from nexus.config.settings_models import (
     APIModelEntry,
     ModelConfig,
     ProviderModels,
+    RuntimeRemoteSettings,
     RuntimeServiceSettings,
     Settings,
 )
@@ -466,6 +467,75 @@ def test_gateway_cors_origins_parse_and_accessor_returns_default() -> None:
     assert settings.runtime is not None
     assert settings.runtime.gateway.cors_allowed_origins == expected
     assert get_gateway_cors_allowed_origins() == expected
+
+
+def test_remote_cloudflare_access_references_parse_from_shipped_config() -> None:
+    """Remote Access configuration contains account names, never credentials."""
+    remote = load_settings("nexus.toml").runtime.remote
+
+    assert remote is not None
+    assert remote.base_url == "https://nexus.pythagora.net"
+    assert remote.cloudflare_access is not None
+    assert remote.cloudflare_access.client_id_secret == "cloudflare_access_client_id"
+    assert (
+        remote.cloudflare_access.client_secret_secret
+        == "cloudflare_access_client_secret"
+    )
+
+
+@pytest.mark.parametrize("missing", ["client_id_secret", "client_secret_secret"])
+def test_remote_cloudflare_access_requires_both_references(missing: str) -> None:
+    """A half-configured service token fails during config validation."""
+    raw = _nexus_toml_dict()
+    del raw["runtime"]["remote"]["cloudflare_access"][missing]
+
+    with pytest.raises(ValidationError, match=missing):
+        Settings(**raw)
+
+
+@pytest.mark.parametrize("field", ["client_id_secret", "client_secret_secret"])
+def test_remote_cloudflare_access_rejects_blank_references(field: str) -> None:
+    """Whitespace is not a valid secret-store account name."""
+    raw = _nexus_toml_dict()
+    raw["runtime"]["remote"]["cloudflare_access"][field] = "   "
+
+    with pytest.raises(ValidationError, match=field):
+        Settings(**raw)
+
+
+def test_remote_cloudflare_access_requires_distinct_accounts() -> None:
+    """The token ID and secret cannot intentionally resolve to one value."""
+    raw = _nexus_toml_dict()
+    access = raw["runtime"]["remote"]["cloudflare_access"]
+    access["client_secret_secret"] = access["client_id_secret"].upper()
+
+    with pytest.raises(ValidationError, match="different secret-store accounts"):
+        Settings(**raw)
+
+
+@pytest.mark.parametrize(
+    "base_url",
+    [
+        "http://nexus.example.com",
+        "https://user@nexus.example.com",
+        "https://nexus.example.com?target=other",
+        "https://nexus.example.com#fragment",
+    ],
+)
+def test_remote_cloudflare_access_requires_secure_origin(base_url: str) -> None:
+    """Access credentials require HTTPS and an unambiguous remote URL."""
+    raw = _nexus_toml_dict()
+    raw["runtime"]["remote"]["base_url"] = base_url
+
+    with pytest.raises(ValidationError, match="requires an HTTPS base_url"):
+        Settings(**raw)
+
+
+def test_remote_cloudflare_access_remains_optional() -> None:
+    """Existing remote configurations with only a base URL remain valid."""
+    remote = RuntimeRemoteSettings(base_url="https://example.com")
+
+    assert remote.cloudflare_access is None
 
 
 def test_gateway_cors_origins_reject_wildcard() -> None:

@@ -415,14 +415,70 @@ class RuntimeExternalSettings(BaseModel):
     )
 
 
-class RuntimeRemoteSettings(BaseModel):
-    """A hosted NEXUS runtime reached purely over HTTP."""
+class RuntimeCloudflareAccessSettings(BaseModel):
+    """Secret-store references for a Cloudflare Access service token."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid", str_strip_whitespace=True, str_to_lower=True
+    )
+
+    client_id_secret: str = Field(
+        ...,
+        min_length=1,
+        description="Secret-store account containing CF-Access-Client-Id",
+    )
+    client_secret_secret: str = Field(
+        ...,
+        min_length=1,
+        description="Secret-store account containing CF-Access-Client-Secret",
+    )
+
+    @model_validator(mode="after")
+    def _require_distinct_accounts(self) -> "RuntimeCloudflareAccessSettings":
+        """The ID and secret must never resolve from the same store entry."""
+        if self.client_id_secret == self.client_secret_secret:
+            raise ValueError(
+                "Cloudflare Access client ID and client secret must use "
+                "different secret-store accounts"
+            )
+        return self
+
+
+class RuntimeRemoteSettings(BaseModel):
+    """A hosted NEXUS runtime reached purely over HTTP(S)."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     base_url: str = Field(
         ..., min_length=1, description="Base URL of the remote runtime origin"
     )
+    cloudflare_access: Optional[RuntimeCloudflareAccessSettings] = Field(
+        default=None,
+        description="Optional Cloudflare Access service-token references",
+    )
+
+    @model_validator(mode="after")
+    def _require_secure_access_origin(self) -> "RuntimeRemoteSettings":
+        """Never transmit Cloudflare service-token credentials over plaintext."""
+        if self.cloudflare_access is None:
+            return self
+
+        from urllib.parse import urlsplit
+
+        parsed = urlsplit(self.base_url)
+        if (
+            parsed.scheme.lower() != "https"
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise ValueError(
+                "cloudflare_access requires an HTTPS base_url without "
+                "credentials, query, or fragment"
+            )
+        return self
 
 
 class RuntimeGatewaySettings(BaseModel):
