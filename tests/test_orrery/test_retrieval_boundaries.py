@@ -90,9 +90,9 @@ def test_warm_slice_recent_chunks_reads_only_narrative_chunks() -> None:
 def test_warm_slice_recent_chunks_excludes_retrograde_prologue() -> None:
     """Generated Retrograde history is memory, not recent narration.
 
-    The recency surface filters out both the synthetic prologue anchor and
-    per-event Retrograde summary chunks; those chunks stay reachable through
-    vector and text search only.
+    The recency surface filters out the synthetic prologue anchor. Per-event
+    Retrograde summaries live in a dedicated table, so they cannot enter this
+    narrative-only query in the first place.
     """
 
     session = CapturingSession(rows=[])
@@ -105,12 +105,9 @@ def test_warm_slice_recent_chunks_excludes_retrograde_prologue() -> None:
     assert "authorial_directives" in issued_sql.lower()
     assert "where not" in issued_sql.lower()
     assert params is not None
-    assert params["retrograde_prologue_marker"] == (
-        '["orrery:retrograde_prologue_anchor"]'
-    )
-    assert params["retrograde_summary_marker"] == (
-        '["orrery:retrograde_event_summary"]'
-    )
+    assert "orrery:retrograde_prologue_anchor" in issued_sql
+    assert "retrograde_prologue_marker" not in params
+    assert "retrograde_summary_marker" not in params
 
 
 def test_text_search_reads_only_narrative_chunks() -> None:
@@ -153,8 +150,8 @@ def test_text_search_like_fallback_reads_only_narrative_chunks() -> None:
     assert "offscreen_narrations" not in issued_sql
 
 
-def test_query_memory_vector_search_uses_only_narrative_collection() -> None:
-    """The vector-search fallback cannot request an off-screen collection."""
+def test_query_memory_vector_search_includes_retrograde_summary_collection() -> None:
+    """Vector fallback searches narrative and dedicated generated history."""
 
     # TODO: add a hybrid-path boundary test if hybrid search becomes enabled
     # by default; that path uses SearchManager.perform_hybrid_search instead
@@ -178,7 +175,7 @@ def test_query_memory_vector_search_uses_only_narrative_collection() -> None:
     assert search_manager.vector_calls == [
         {
             "query_text": "Mara pursuit",
-            "collections": ["narrative_chunks"],
+            "collections": ["narrative_chunks", "retrograde_summaries"],
             "filters": None,
             "top_k": 3,
         }

@@ -24,6 +24,7 @@ import re
 import psycopg2
 from pydantic import BaseModel, Field
 
+from nexus.agents.orrery.reconstruction import playable_narrative_predicate
 from nexus.api.db_pool import get_connection
 
 logger = logging.getLogger("nexus.api.chunk_workflow")
@@ -269,13 +270,17 @@ class ChunkWorkflow:
                             f"Chunk {chunk_id} cannot be accepted (current state: {result[0]})"
                         )
 
-                # Get previous chunk (N-1) to trigger embedding
+                # Get the previous player-played chunk to trigger embedding.
+                # Sparse ids and Retrograde's synthetic prologue mean this
+                # is not necessarily the row with the immediately preceding
+                # id.
                 cur.execute(
-                    """
-                    SELECT id, embedding_generated_at
-                    FROM narrative_chunks
-                    WHERE id < %s
-                    ORDER BY id DESC
+                    f"""
+                    SELECT nc.id, nc.embedding_generated_at
+                    FROM narrative_chunks nc
+                    WHERE nc.id < %s
+                      AND {playable_narrative_predicate("nc")}
+                    ORDER BY nc.id DESC
                     LIMIT 1
                 """,
                     (chunk_id,),

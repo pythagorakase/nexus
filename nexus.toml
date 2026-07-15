@@ -418,11 +418,11 @@ magnitude_cap = 0.85
 
 [orrery.retrograde.retrieval]
 # Retrieval surface for persisted Retrograde history (spec decision 14 / M3).
-# summary_chunks: write one finalized prose summary chunk per persisted
-# Retrograde world event so MEMNON chunk search retrieves generated history.
-summary_chunks = true
-# embed_after_apply: run the standard chunk embedding lifecycle for pending
-# Retrograde summary chunks immediately after a successful apply commit.
+# summaries_enabled: write one dedicated prose summary per persisted Retrograde
+# world event without inserting generated history into narrative continuity.
+summaries_enabled = true
+# embed_after_apply: run the Retrograde summary embedding lifecycle for pending
+# summaries immediately after a successful apply commit.
 embed_after_apply = true
 
 [orrery.retrograde.wizard]

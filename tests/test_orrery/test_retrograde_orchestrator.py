@@ -136,7 +136,7 @@ def test_persist_retrograde_history_executes_when_clear() -> None:
     assert manifest["counters"]["entity_tags_inserted"] == 2
     assert manifest["counters"]["pair_tags_inserted"] == 1
     assert manifest["counters"]["relationships_inserted"] == 1
-    assert manifest["retrieval"]["embedding_pending_chunk_ids"]
+    assert manifest["retrieval"]["embedding_pending_summary_ids"]
 
 
 def test_persist_retrograde_history_raises_on_blockers() -> None:

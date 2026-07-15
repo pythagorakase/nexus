@@ -27,7 +27,9 @@ from nexus.agents.orrery.retrograde_maturation import (
 )
 from nexus.agents.orrery.reconstruction import (
     capture_state_checkpoint_sync,
+    interval_checkpoint_due,
     log_state_delta_sync,
+    playable_narrative_ordinal_sync,
     set_commit_chunk_attribution_sync,
 )
 from nexus.agents.orrery.tag_writer import _row_value, apply_tag_bestowal
@@ -586,17 +588,24 @@ def commit_incubator_to_database_sync(
             # Fresh cursor: the earlier `with conn.cursor()` blocks have
             # closed theirs by this point (review finding on #428).
             checkpoint_interval = _orrery_checkpoint_interval()
-            if checkpoint_interval and chunk_id % checkpoint_interval == 0:
+            if checkpoint_interval:
                 with conn.cursor() as checkpoint_cur:
-                    checkpoint_id = capture_state_checkpoint_sync(
-                        checkpoint_cur, chunk_id=chunk_id, label="interval"
-                    )
-                if checkpoint_id is not None:
-                    logger.info(
-                        "State checkpoint %s taken at chunk %s",
-                        checkpoint_id,
-                        chunk_id,
-                    )
+                    playable_ordinal = playable_narrative_ordinal_sync(checkpoint_cur)
+                    if interval_checkpoint_due(
+                        playable_ordinal=playable_ordinal,
+                        interval=checkpoint_interval,
+                    ):
+                        checkpoint_id = capture_state_checkpoint_sync(
+                            checkpoint_cur, chunk_id=chunk_id, label="interval"
+                        )
+                        if checkpoint_id is not None:
+                            logger.info(
+                                "State checkpoint %s taken at playable chunk "
+                                "%s (narrative_chunks.id=%s)",
+                                checkpoint_id,
+                                playable_ordinal,
+                                chunk_id,
+                            )
 
             # Step 8.6: Process Skald new-entity declarations inside the
             # commit transaction (Retrograde stub maturation outbox, spec

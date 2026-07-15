@@ -69,6 +69,8 @@ async def test_retrieve_context_uses_direct_memnon_queries_without_local_llm() -
     assert directive["reasoning"]["mode"] == "direct_memnon_retrieval"
     assert directive["sql_attempts"] == []
     assert result["sources"] == [1, 2]
+    assert result["memory_sources"] == [1, 2]
+    assert directive["memory_sources"] == [1, 2]
 
 
 @pytest.mark.asyncio

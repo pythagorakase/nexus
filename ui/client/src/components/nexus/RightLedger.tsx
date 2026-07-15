@@ -36,6 +36,14 @@ interface RightLedgerProps {
   onNavigate: (chunkId: number | null) => void;
 }
 
+/** Build a player-facing scene label without exposing the storage PK. */
+export function outlineSceneLabel(row: OutlineRow, episodeOrder: number): string {
+  const slug = row.slug?.trim();
+  if (slug) return slug;
+  if (row.scene !== null) return `Scene ${row.scene}`;
+  return `Scene ${episodeOrder}`;
+}
+
 export function RightLedger({
   slot,
   engine,
@@ -176,7 +184,7 @@ export function RightLedger({
                           </button>
                           {eOpen && (
                             <ul>
-                              {ep.chunks.map((chunk) => {
+                              {ep.chunks.map((chunk, chunkIndex) => {
                                 const live = isLiveRow(
                                   chunk.id,
                                   outlineIds,
@@ -201,7 +209,7 @@ export function RightLedger({
                                       data-testid={`tree-chunk-${chunk.id}`}
                                     >
                                       <span className="hier-slug">
-                                        {chunk.slug ?? `chunk ${chunk.id}`}
+                                        {outlineSceneLabel(chunk, chunkIndex + 1)}
                                       </span>
                                     </button>
                                   </li>

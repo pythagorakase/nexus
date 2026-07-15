@@ -1,7 +1,7 @@
 """Golden-Path Release Gate (M9): one live end-to-end run proves the MVP.
 
 DESTRUCTIVE, EXPENSIVE, SLOW. This is the backend v1.0 release gate: it drops
-and recreates the save_05 database (slot 5, the designated dev slot), boots
+and recreates an explicitly confirmed disposable save slot (never slot 5), boots
 the real API server as a subprocess, runs the wizard -> narrative transition
 with a real Retrograde cold start, then plays live turns through the
 production HTTP surface -- every model call is a real frontier call.
@@ -15,7 +15,7 @@ manual run is documented on the M9 PR.
 
 Stages (ordered; each test asserts one category against the shared run):
   1. Retrograde cold start fired at the transition (world_events
-     source='retrograde', embedded per-event summary chunks, derived trait
+     source='retrograde', embedded per-event summaries, derived trait
      inputs, trait-compiler stubs, decision-8 caps, no duplicate entities).
   2. Live play: scripted turns including one freeform directive, one
      entity-eliciting input, and one explicit time skip (sunhelm needs accrue
@@ -36,16 +36,18 @@ Stages (ordered; each test asserts one category against the shared run):
   8. Server log scan: no tracebacks, no ERROR lines.
 
 Gating: NEXUS_RUN_LIVE_LLM=1, NEXUS_RUN_POSTGRES=1, and the destructive
-opt-in NEXUS_GOLDEN_PATH_E2E=1.
+opt-in NEXUS_GOLDEN_PATH_E2E=1. The disposable slot is selected with
+NEXUS_DISPOSABLE_TEST_SLOT=1..4 and its database name must be repeated exactly
+in NEXUS_CONFIRM_DISPOSABLE_DB.
 
 Cost and wall clock: measured green run (2026-06-11, gpt-5.5 +
 @anthropic.default narration): 20 frontier calls, 14m30s end to end.
 Budget ~20-35 calls / 15-30 minutes; the adaptive tail adds turns only
 when promotion/bleed-weave/persisted maturation lag. Budget accordingly before CI.
 
-Cleanup: the API server subprocess is terminated on teardown. Slot 5 is
-deliberately left with the run's data for post-mortem inspection; rerun
-``python scripts/new_story_setup.py --slot 5 --force`` to reset it.
+Cleanup: the API server subprocess is terminated on teardown. The explicitly
+selected disposable slot is left with the run's data for post-mortem inspection;
+reset that same disposable slot before reuse.
 """
 
 from __future__ import annotations
@@ -65,8 +67,8 @@ import requests
 import tomlkit
 from psycopg2.extras import RealDictCursor  # type: ignore[import-untyped]
 
-SLOT = 5
-DBNAME = "save_05"
+SLOT = int(os.environ.get("NEXUS_DISPOSABLE_TEST_SLOT", "0"))
+DBNAME = f"save_{SLOT:02d}"
 DSN = f"postgresql://pythagor@localhost:5432/{DBNAME}"
 # NARRATIVE_API_PORT lets the gate run beside a live dev stack on 8002
 # (agent worktrees); the spawned server subprocess inherits it via env.
@@ -115,10 +117,13 @@ pytestmark = [
     pytest.mark.live_llm,
     pytest.mark.requires_postgres,
     pytest.mark.skipif(
-        os.environ.get("NEXUS_GOLDEN_PATH_E2E") != "1",
+        os.environ.get("NEXUS_GOLDEN_PATH_E2E") != "1"
+        or SLOT not in {1, 2, 3, 4}
+        or os.environ.get("NEXUS_CONFIRM_DISPOSABLE_DB") != DBNAME,
         reason=(
-            "Set NEXUS_GOLDEN_PATH_E2E=1 to run the destructive slot-5 "
-            "golden-path release gate (30-60 live frontier calls)."
+            "Set NEXUS_GOLDEN_PATH_E2E=1, choose disposable slot 1-4 with "
+            "NEXUS_DISPOSABLE_TEST_SLOT, and confirm its database name with "
+            "NEXUS_CONFIRM_DISPOSABLE_DB. Slot 5 is forbidden."
         ),
     ),
 ]
@@ -500,11 +505,13 @@ def test_stage1_retrograde_cold_start(golden_path: GoldenPathRun) -> None:
     assert "dependents" in trait_inputs.get("traits", []), trait_inputs
 
     events = _query(
-        "SELECT id, payload ->> 'retrograde_summary_chunk_id' AS cid "
-        "FROM world_events WHERE source = 'retrograde'"
+        "SELECT we.id, rs.id AS summary_id "
+        "FROM world_events we "
+        "JOIN retrograde_summaries rs ON rs.world_event_id = we.id "
+        "WHERE we.source = 'retrograde'"
     )
     assert events, "No retrograde world_events were persisted"
-    assert all(row["cid"] is not None for row in events)
+    assert all(row["summary_id"] is not None for row in events)
 
     # Trait-compiler stubs exist for the fixture's patron and dependents.
     trait_stubs = _query(
@@ -544,18 +551,10 @@ def test_stage3_chunk_persistence_and_incubator(golden_path: GoldenPathRun) -> N
     """Committed chunks exist and exactly one provisional chunk is pending."""
 
     committed = int(_scalar("SELECT count(*) FROM narrative_chunks"))
-    summary_chunks = int(
-        _scalar(
-            "SELECT count(*) FROM narrative_chunks "
-            "WHERE authorial_directives @> %s::jsonb",
-            (json.dumps(["orrery:retrograde_event_summary"]),),
-        )
-    )
-    played = committed - summary_chunks - 1  # minus prologue anchor
+    played = committed - 1  # minus the synthetic prologue anchor
     assert played >= len(golden_path.turns) - 1, (
         f"Expected at least {len(golden_path.turns) - 1} committed played "
-        f"chunks, found {played} (committed={committed}, "
-        f"summaries={summary_chunks})"
+        f"chunks, found {played} (committed={committed})"
     )
     pending = _query("SELECT chunk_id FROM incubator")
     assert len(pending) == 1, pending
@@ -567,8 +566,8 @@ def test_stage4_embedding_lifecycle(golden_path: GoldenPathRun) -> None:
     The undo buffer is the newest committed played chunk: it stays mutable
     (and unembedded) until the next turn locks it. The Retrograde prologue
     anchor is intentionally never embedded. Everything else must embed --
-    including played chunks separated from their successor by interleaved
-    summary chunks (the M9 id-arithmetic regression).
+    including played chunks separated from their successor by preserved gaps
+    from retired summary rows (the M9 id-arithmetic regression).
     """
 
     deadline = time.monotonic() + 180
@@ -602,19 +601,21 @@ def test_stage5_retrograde_history_retrievable(golden_path: GoldenPathRun) -> No
     from nexus.agents.memnon.memnon import MEMNON
 
     events = _query(
-        "SELECT payload ->> 'summary' AS summary, "
-        "payload ->> 'retrograde_summary_chunk_id' AS cid "
-        "FROM world_events WHERE source = 'retrograde' "
-        "AND payload ->> 'retrograde_summary_chunk_id' IS NOT NULL"
+        "SELECT rs.summary_text AS summary, rs.id AS summary_id "
+        "FROM retrograde_summaries rs "
+        "JOIN world_events we ON we.id = rs.world_event_id "
+        "WHERE we.source = 'retrograde'"
     )
     target = max(events, key=lambda row: len(row["summary"] or ""))
     memnon = MEMNON(interface=None, db_url=DSN)
     search = memnon.query_memory(query=target["summary"], k=10, use_hybrid=True)
     returned = {
-        int(chunk.get("chunk_id") or chunk["id"]) for chunk in search["results"]
+        int(item["summary_id"])
+        for item in search["results"]
+        if item.get("content_type") == "retrograde_summary"
     }
-    assert int(target["cid"]) in returned, (
-        f"MEMNON missed retrograde summary chunk {target['cid']}; "
+    assert int(target["summary_id"]) in returned, (
+        f"MEMNON missed retrograde summary {target['summary_id']}; "
         f"returned={sorted(returned)}"
     )
 
@@ -672,16 +673,18 @@ def test_stage7_runtime_maturation(golden_path: GoldenPathRun) -> None:
 
     from nexus.agents.memnon.memnon import MEMNON
 
-    pending = manifest.get("embedding_pending_chunk_ids") or []
-    assert pending, "Maturation produced no summary chunks"
+    pending = manifest.get("embedding_pending_summary_ids") or []
+    assert pending, "Maturation produced no summaries"
     memnon = MEMNON(interface=None, db_url=DSN)
     search = memnon.query_memory(query=job["entity_name"], k=15, use_hybrid=True)
     returned = {
-        int(chunk.get("chunk_id") or chunk["id"]) for chunk in search["results"]
+        int(item["summary_id"])
+        for item in search["results"]
+        if item.get("content_type") == "retrograde_summary"
     }
     assert returned & set(map(int, pending)), (
         f"MEMNON did not retrieve matured history for {job['entity_name']}: "
-        f"chunks={pending} returned={sorted(returned)}"
+        f"summaries={pending} returned={sorted(returned)}"
     )
 
 

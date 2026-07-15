@@ -440,9 +440,9 @@ def _trigger_locked_chunk_embedding(
     Continuing from chunk N creates a provisional successor, leaving chunk N
     undoable while every committed chunk before it is locked and must be
     embedded ("embedded == ironman"). Chunk ids are NOT contiguous: regens
-    burn ids and Retrograde/maturation summary chunks interleave with played
-    chunks, so the old single-id ``parent - 1`` arithmetic silently skipped
-    played chunks whenever a summary chunk sat in between (M9 gate finding).
+    burn ids, and migration 078 deliberately preserves gaps left by retired
+    Retrograde summary rows. The old single-id ``parent - 1`` arithmetic
+    therefore silently skipped playable chunks across those gaps.
     This catch-up form embeds every unembedded locked chunk except the
     intentionally unembedded Retrograde prologue anchor, healing any
     previously skipped chunk on the next turn.

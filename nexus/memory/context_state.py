@@ -4,23 +4,74 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, List, Optional, Set
+from typing import Any, Dict, Iterable, List, Optional, Set, Union
 
 logger = logging.getLogger(__name__)
+
+
+MemoryIdentity = Union[int, str]
+RETROGRADE_SUMMARY_CONTENT_TYPE = "retrograde_summary"
+RETROGRADE_SUMMARY_ID_PREFIX = "retrograde_summary:"
+
+
+def is_retrograde_summary(memory: Dict[str, Any]) -> bool:
+    """Return whether a retrieval row is a dedicated Retrograde summary."""
+
+    if memory.get("content_type") == RETROGRADE_SUMMARY_CONTENT_TYPE:
+        return True
+    for key in ("memory_id", "id"):
+        value = memory.get(key)
+        if isinstance(value, str) and value.startswith(RETROGRADE_SUMMARY_ID_PREFIX):
+            return True
+    return False
+
+
+def memory_identity(memory: Dict[str, Any]) -> Optional[MemoryIdentity]:
+    """Return a corpus-aware identity without inventing a narrative chunk id.
+
+    Narrative rows retain the historical integer coercion used by LORE's
+    baseline state. Retrograde summaries use their public typed identity so a
+    summary id can never collide with a narrative chunk id.
+    """
+
+    if is_retrograde_summary(memory):
+        raw_identity = memory.get("memory_id") or memory.get("id")
+        if isinstance(raw_identity, str) and raw_identity.startswith(
+            RETROGRADE_SUMMARY_ID_PREFIX
+        ):
+            return raw_identity
+
+        summary_id = memory.get("summary_id")
+        if summary_id is None:
+            return None
+        try:
+            return f"{RETROGRADE_SUMMARY_ID_PREFIX}{int(summary_id)}"
+        except (TypeError, ValueError):
+            return None
+
+    raw_id = memory.get("chunk_id")
+    if raw_id is None:
+        raw_id = memory.get("id")
+    if raw_id is None:
+        return None
+    try:
+        return int(raw_id)
+    except (TypeError, ValueError):
+        return None
 
 
 @dataclass
 class ContextPackage:
     """State container for baseline and incremental context across passes."""
 
-    baseline_chunks: Set[int] = field(default_factory=set)
+    baseline_chunks: Set[MemoryIdentity] = field(default_factory=set)
     baseline_entities: Dict[str, Any] = field(default_factory=dict)
     baseline_themes: List[str] = field(default_factory=list)
     structured_passages: List[Dict[str, Any]] = field(default_factory=list)
     token_usage: Dict[str, int] = field(default_factory=dict)
     divergence_detected: bool = False
     divergence_confidence: float = 0.0
-    additional_chunks: Set[int] = field(default_factory=set)
+    additional_chunks: Set[MemoryIdentity] = field(default_factory=set)
     gap_analysis: Dict[str, str] = field(default_factory=dict)
 
 
@@ -41,7 +92,7 @@ class ContextStateManager:
     def __init__(self) -> None:
         self._context: Optional[ContextPackage] = None
         self._transition: Optional[PassTransition] = None
-        self._chunk_cache: Dict[int, Dict[str, Any]] = {}
+        self._chunk_cache: Dict[MemoryIdentity, Dict[str, Any]] = {}
 
     # ------------------------------------------------------------------
     # Baseline context management
@@ -76,17 +127,17 @@ class ContextStateManager:
         """Register chunk payloads for quick lookup and deduplication."""
 
         for chunk in chunks:
-            chunk_id = self._extract_chunk_id(chunk)
-            if chunk_id is None:
+            identity = memory_identity(chunk)
+            if identity is None:
                 continue
             if self._context:
                 if (
-                    chunk_id in self._context.baseline_chunks
-                    or chunk_id in self._context.additional_chunks
+                    identity in self._context.baseline_chunks
+                    or identity in self._context.additional_chunks
                 ):
-                    self._chunk_cache[chunk_id] = chunk
+                    self._chunk_cache[identity] = chunk
             else:
-                self._chunk_cache[chunk_id] = chunk
+                self._chunk_cache[identity] = chunk
 
     # ------------------------------------------------------------------
     # Accessors
@@ -111,7 +162,7 @@ class ContextStateManager:
     # ------------------------------------------------------------------
     # Chunk helpers
     # ------------------------------------------------------------------
-    def is_chunk_known(self, chunk_id: int) -> bool:
+    def is_chunk_known(self, chunk_id: MemoryIdentity) -> bool:
         if not self._context:
             return False
         return (
@@ -132,11 +183,11 @@ class ContextStateManager:
 
         new_chunks: List[Dict[str, Any]] = []
         for chunk in chunks:
-            chunk_id = self._extract_chunk_id(chunk)
-            if chunk_id is None or self.is_chunk_known(chunk_id):
+            identity = memory_identity(chunk)
+            if identity is None or self.is_chunk_known(identity):
                 continue
-            self._context.additional_chunks.add(chunk_id)
-            self._chunk_cache[chunk_id] = chunk
+            self._context.additional_chunks.add(identity)
+            self._chunk_cache[identity] = chunk
             new_chunks.append(chunk)
         return new_chunks
 
@@ -147,7 +198,7 @@ class ContextStateManager:
         ordered_ids = list(self._context.baseline_chunks) + list(
             self._context.additional_chunks
         )
-        seen: Set[int] = set()
+        seen: Set[MemoryIdentity] = set()
         result: List[Dict[str, Any]] = []
         for chunk_id in ordered_ids:
             if chunk_id in seen:
@@ -205,16 +256,3 @@ class ContextStateManager:
         self._context.divergence_detected = detected
         self._context.divergence_confidence = confidence
         self._context.gap_analysis = gaps
-
-    # ------------------------------------------------------------------
-    # Utility helpers
-    # ------------------------------------------------------------------
-    def _extract_chunk_id(self, chunk: Dict[str, Any]) -> Optional[int]:
-        chunk_id = chunk.get("id") or chunk.get("chunk_id")
-        if chunk_id is None:
-            return None
-        try:
-            return int(chunk_id)
-        except (TypeError, ValueError):
-            logger.debug("Could not coerce chunk id '%s' to int", chunk_id)
-            return None

@@ -34,6 +34,7 @@ from nexus.agents.orrery.audit import (
     explain_dry_run,
 )
 from nexus.agents.orrery.explain import StackExplanation
+from nexus.agents.orrery.reconstruction import playable_narrative_predicate
 from nexus.agents.orrery.substrate import Template
 
 HYDRATION_HONESTY: Mapping[str, Tuple[str, ...]] = {
@@ -88,17 +89,17 @@ def sample_anchor_ids(
     stride: int,
     end_chunk_id: Optional[int] = None,
 ) -> List[int]:
-    """Return up to ``count`` real chunk ids walking backward from the end.
+    """Return player-played chunk ids walking backward from the end.
 
     Chunk ids may have gaps, so sampling selects every ``stride``-th existing
-    chunk rather than assuming contiguous ids. Returned ascending.
+    playable chunk rather than assuming contiguous ids. Returned ascending.
     """
 
     if count < 1:
         raise ValueError(f"anchor sample count must be >= 1, got {count}")
     if stride < 1:
         raise ValueError(f"anchor sample stride must be >= 1, got {stride}")
-    end_clause = "WHERE id <= :end_chunk_id" if end_chunk_id is not None else ""
+    end_clause = "AND nc.id <= :end_chunk_id" if end_chunk_id is not None else ""
     params: dict[str, Any] = {"stride": stride, "limit": count}
     if end_chunk_id is not None:
         params["end_chunk_id"] = end_chunk_id
@@ -109,9 +110,10 @@ def sample_anchor_ids(
             f"""
             /* orrery_coverage:sample_anchors */
             SELECT id FROM (
-                SELECT id,
-                       row_number() OVER (ORDER BY id DESC) AS rn
-                FROM narrative_chunks
+                SELECT nc.id,
+                       row_number() OVER (ORDER BY nc.id DESC) AS rn
+                FROM narrative_chunks nc
+                WHERE {playable_narrative_predicate("nc")}
                 {end_clause}
             ) ordered
             WHERE mod(rn - 1, :stride) = 0

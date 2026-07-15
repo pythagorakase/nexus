@@ -209,7 +209,8 @@ class FakeSession:
             return FakeResult([{"world_time": self.world_time}])
         if "/* orrery:seed_weather */" in sql:
             return FakeResult([{"weather": self.weather}])
-        if "SELECT max(id) AS max_id" in sql:
+        if "SELECT max(nc.id) AS max_id" in sql:
+            assert "orrery:retrograde_prologue_anchor" in sql
             self.max_id_queries += 1
             return FakeResult([{"max_id": self.max_chunk_id}])
         raise AssertionError(f"Unexpected resolver query: {sql}")

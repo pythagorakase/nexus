@@ -15,7 +15,75 @@ chunk order up to T. Relationship pre-images live in
 from __future__ import annotations
 
 import json
+import re
 from typing import Any, Optional
+
+from nexus.agents.orrery.retrograde_markers import RETROGRADE_PROLOGUE_MARKER
+
+
+_SQL_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def playable_narrative_predicate(table_alias: str = "nc") -> str:
+    """Return the canonical SQL predicate for player-played narrative rows.
+
+    Retrograde's synthetic prologue remains in ``narrative_chunks`` because
+    ``world_events.tick_chunk_id`` needs a real FK anchor.  It is not a scene
+    the player can read or continue from.  All player-facing readers and
+    accepted-chunk cadence calculations share this predicate so sparse raw
+    chunk ids never leak back into story-order semantics.
+
+    ``table_alias`` is interpolated as SQL syntax, so accept identifiers only.
+    The marker itself is a trusted code constant and is encoded as JSON here.
+    """
+
+    if not _SQL_IDENTIFIER_RE.fullmatch(table_alias):
+        raise ValueError(f"Unsafe narrative table alias: {table_alias!r}")
+    marker_json = json.dumps([RETROGRADE_PROLOGUE_MARKER]).replace("'", "''")
+    return (
+        "NOT ("
+        f"COALESCE({table_alias}.authorial_directives, '[]'::jsonb) "
+        f"@> '{marker_json}'::jsonb"
+        ")"
+    )
+
+
+def playable_narrative_ordinal_sync(cur: Any) -> int:
+    """Count accepted player-played chunks in the current transaction."""
+
+    cur.execute(
+        "SELECT COUNT(*) FROM narrative_chunks nc WHERE "
+        + playable_narrative_predicate()
+    )
+    row = cur.fetchone()
+    if row is None:
+        raise RuntimeError("Playable narrative ordinal query returned no row")
+    if hasattr(row, "keys"):
+        return int(next(iter(row.values())))
+    return int(row[0])
+
+
+async def playable_narrative_ordinal_async(conn: Any) -> int:
+    """Async equivalent of :func:`playable_narrative_ordinal_sync`."""
+
+    value = await conn.fetchval(
+        "SELECT COUNT(*) FROM narrative_chunks nc WHERE "
+        + playable_narrative_predicate()
+    )
+    if value is None:
+        raise RuntimeError("Playable narrative ordinal query returned no value")
+    return int(value)
+
+
+def interval_checkpoint_due(*, playable_ordinal: int, interval: int) -> bool:
+    """Whether this accepted playable chunk reaches checkpoint cadence."""
+
+    if interval <= 0:
+        return False
+    if playable_ordinal < 1:
+        raise ValueError("playable_ordinal must be positive after chunk insertion")
+    return playable_ordinal % interval == 0
+
 
 # Every mutable table the resolver's hydration or the Skald commit path can
 # read or write. A checkpoint is one JSONB document with one array per entry.

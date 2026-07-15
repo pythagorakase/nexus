@@ -1100,18 +1100,19 @@ class OrreryRetrogradeRetrievalSettings(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    summary_chunks: bool = Field(
+    summaries_enabled: bool = Field(
         default=True,
         description=(
-            "Write one finalized prose summary chunk per persisted Retrograde "
-            "world event so MEMNON chunk search retrieves generated history."
+            "Write one dedicated prose summary per persisted Retrograde world "
+            "event so MEMNON can retrieve generated history without treating "
+            "it as played narrative."
         ),
     )
     embed_after_apply: bool = Field(
         default=True,
         description=(
-            "Trigger the standard chunk embedding lifecycle for pending "
-            "Retrograde summary chunks immediately after a successful apply."
+            "Trigger the Retrograde summary embedding lifecycle for pending "
+            "summaries immediately after a successful apply."
         ),
     )
 

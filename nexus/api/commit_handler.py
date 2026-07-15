@@ -21,7 +21,9 @@ from nexus.agents.logon.apex_schema import (
 from nexus.agents.orrery.events import commit_orrery_tick_async
 from nexus.agents.orrery.reconstruction import (
     capture_state_checkpoint_async,
+    interval_checkpoint_due,
     log_state_delta_async,
+    playable_narrative_ordinal_async,
     set_commit_chunk_attribution_async,
 )
 from nexus.agents.orrery.tag_writer import apply_tag_bestowal_async
@@ -588,16 +590,23 @@ async def commit_incubator_to_database(
 
             # Step 8.55: interval state checkpoint (reconstruction bar 7c)
             checkpoint_interval = _orrery_checkpoint_interval()
-            if checkpoint_interval and chunk_id % checkpoint_interval == 0:
-                checkpoint_id = await capture_state_checkpoint_async(
-                    conn, chunk_id=chunk_id, label="interval"
-                )
-                if checkpoint_id is not None:
-                    logger.info(
-                        "State checkpoint %s taken at chunk %s",
-                        checkpoint_id,
-                        chunk_id,
+            if checkpoint_interval:
+                playable_ordinal = await playable_narrative_ordinal_async(conn)
+                if interval_checkpoint_due(
+                    playable_ordinal=playable_ordinal,
+                    interval=checkpoint_interval,
+                ):
+                    checkpoint_id = await capture_state_checkpoint_async(
+                        conn, chunk_id=chunk_id, label="interval"
                     )
+                    if checkpoint_id is not None:
+                        logger.info(
+                            "State checkpoint %s taken at playable chunk %s "
+                            "(narrative_chunks.id=%s)",
+                            checkpoint_id,
+                            playable_ordinal,
+                            chunk_id,
+                        )
 
             # Step 9: Clear incubator
             await clear_incubator(conn, session_id)

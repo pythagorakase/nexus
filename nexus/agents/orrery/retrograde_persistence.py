@@ -6,6 +6,7 @@ from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
+import re
 from typing import Any, Mapping, Optional, Sequence
 
 from nexus.agents.orrery.retrograde_expansion import (
@@ -18,8 +19,6 @@ from nexus.agents.orrery.retrograde_expansion import (
 )
 from nexus.agents.orrery.retrograde_markers import (
     RETROGRADE_PROLOGUE_MARKER,
-    RETROGRADE_SUMMARY_MARKER,
-    retrograde_event_marker,
 )
 from nexus.agents.orrery.retrograde_vocabulary import normalize_entity_ref
 
@@ -35,6 +34,7 @@ RETROGRADE_PROLOGUE_STORYTELLER_TEXT = (
     "prose to player-visible continuity."
 )
 EVENT_ROLE_KINDS = frozenset({"actor", "target", "observer", "beneficiary", "witness"})
+MATURATION_EVENT_REF_PATTERN = re.compile(r"^maturation_job_(?P<job_id>[1-9]\d*)_")
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,17 +74,22 @@ def build_retrograde_persistence_plan(
     dbname: str,
     dry_run: bool = True,
     create_missing_entities: bool = False,
-    summary_chunks_enabled: bool = True,
+    summaries_enabled: bool = True,
+    recorded_at_chunk_id: Optional[int] = None,
 ) -> dict[str, Any]:
     """Build or apply a canonical persistence plan for a Retrograde expansion.
 
     Dry-run mode performs only reads and returns row-shaped operations. Execute
     mode writes the prologue anchor, world_events, entity_tags, and
     entity_pair_tags when every planned reference resolves and no unsupported
-    relationship rows remain. When ``summary_chunks_enabled`` is true, execute
-    mode also writes one finalized prose summary chunk per persisted Retrograde
-    world event so MEMNON chunk search retrieves generated history; the
-    returned manifest lists chunk ids still pending embedding.
+    relationship rows remain. When ``summaries_enabled`` is true, execute mode
+    also writes one dedicated summary row per persisted Retrograde world event;
+    the returned manifest lists summary ids still pending embedding.
+
+    ``recorded_at_chunk_id`` identifies the accepted narrative boundary that
+    caused this history to be generated. Wizard-time history defaults to the
+    synthetic prologue anchor; runtime maturation must pass its requesting
+    accepted chunk explicitly.
     """
 
     expansion = validate_expansion_plan(
@@ -116,7 +121,8 @@ def build_retrograde_persistence_plan(
         create_missing_entities=create_missing_entities,
         inserted_stub_keys=frozenset(),
         prologue_was_inserted=False,
-        summary_chunks_enabled=summary_chunks_enabled,
+        summaries_enabled=summaries_enabled,
+        recorded_at_chunk_id=recorded_at_chunk_id,
     )
     if dry_run:
         return manifest
@@ -153,7 +159,8 @@ def build_retrograde_persistence_plan(
         create_missing_entities=create_missing_entities,
         inserted_stub_keys=inserted_stub_keys,
         prologue_was_inserted=prologue_was_inserted,
-        summary_chunks_enabled=summary_chunks_enabled,
+        summaries_enabled=summaries_enabled,
+        recorded_at_chunk_id=recorded_at_chunk_id or prologue_chunk_id,
     )
 
 
@@ -174,7 +181,8 @@ def _build_plan(
     create_missing_entities: bool,
     inserted_stub_keys: frozenset[tuple[str, str]],
     prologue_was_inserted: bool,
-    summary_chunks_enabled: bool,
+    summaries_enabled: bool,
+    recorded_at_chunk_id: Optional[int],
 ) -> dict[str, Any]:
     counters: Counter[str] = Counter()
     reference_issues: list[dict[str, Any]] = []
@@ -283,23 +291,25 @@ def _build_plan(
         reference_issues.extend(planned.pop("_reference_issues"))
         death_issues.extend(planned.pop("_death_issues"))
 
-    summary_chunk_rows: list[dict[str, Any]] = []
-    if summary_chunks_enabled:
-        summary_chunk_rows = plan_retrograde_summary_chunks(
+    summary_rows: list[dict[str, Any]] = []
+    if summaries_enabled:
+        summary_rows = plan_retrograde_summaries(
             cur,
             dry_run=dry_run,
+            recorded_at_chunk_id=recorded_at_chunk_id,
             event_sources=[
                 {
                     "event_ref": str(row["event_ref"]),
                     "summary": str(row["summary"]),
+                    "chronology": str(row["chronology"]),
                     "world_event_id": row.get("world_event_id"),
                     "source_status": str(row["status"]),
                 }
                 for row in event_rows
             ],
         )
-        for summary_row in summary_chunk_rows:
-            counters[f"summary_chunks_{summary_row['status']}"] += 1
+        for summary_row in summary_rows:
+            counters[f"summaries_{summary_row['status']}"] += 1
 
     _append_reference_blockers(execute_blockers, reference_issues)
     _append_vocabulary_blockers(execute_blockers, vocabulary_issues)
@@ -331,10 +341,10 @@ def _build_plan(
         "deaths_deactivated",
         "deaths_already_inactive",
         "deaths_blocked",
-        "summary_chunks_would_insert",
-        "summary_chunks_inserted",
-        "summary_chunks_already_present",
-        "summary_chunks_blocked",
+        "summaries_would_insert",
+        "summaries_inserted",
+        "summaries_already_present",
+        "summaries_blocked",
     ):
         counters.setdefault(key, 0)
 
@@ -362,14 +372,13 @@ def _build_plan(
         "pair_tag_rows": pair_tag_rows,
         "relationship_rows": relationship_rows,
         "death_rows": death_rows,
-        "summary_chunk_rows": summary_chunk_rows,
+        "summary_rows": summary_rows,
         "retrieval": {
-            "summary_chunks_enabled": summary_chunks_enabled,
-            "summary_chunk_marker": RETROGRADE_SUMMARY_MARKER,
-            "embedding_pending_chunk_ids": [
-                int(row["chunk_id"])
-                for row in summary_chunk_rows
-                if row["embedding_pending"] and row["chunk_id"] is not None
+            "summaries_enabled": summaries_enabled,
+            "embedding_pending_summary_ids": [
+                int(row["summary_id"])
+                for row in summary_rows
+                if row["embedding_pending"] and row["summary_id"] is not None
             ],
         },
         "thread_plan": [
@@ -910,28 +919,32 @@ def _deactivate_entity(cur: Any, entity_id: int) -> None:
     )
 
 
-def plan_retrograde_summary_chunks(
+def plan_retrograde_summaries(
     cur: Any,
     *,
     dry_run: bool,
+    recorded_at_chunk_id: Optional[int] = None,
     event_sources: Optional[Sequence[Mapping[str, Any]]] = None,
 ) -> list[dict[str, Any]]:
-    """Ensure one finalized prose summary chunk per Retrograde world event.
+    """Ensure one dedicated summary row per Retrograde world event.
 
-    Each summary chunk carries the Skald-woven event summary as raw_text and
-    storyteller_text, a shared retrieval marker plus a per-event idempotency
-    marker in authorial_directives, and a chunk_metadata row in the season-0
-    prologue block. Execute mode also cross-links the source world event via
-    ``payload.retrograde_summary_chunk_id``. Embedding is intentionally not
-    performed here; callers trigger the standard chunk embedding lifecycle for
-    the returned ``embedding_pending`` chunk ids after the transaction commits.
+    ``retrograde_summaries.world_event_id`` is the idempotency boundary. A
+    repeated write with identical summary content, chronology, and recording
+    boundary reports ``already_present``; a divergent reapply raises instead
+    of quietly accepting conflicting generated history. Embedding is performed
+    after the caller's transaction commits.
 
     Args:
         cur: An open database cursor owned by the caller's transaction.
         dry_run: When true, perform only reads and report planned statuses.
-        event_sources: Event descriptors with ``event_ref``, ``summary``,
-            ``world_event_id``, and ``source_status`` keys. Defaults to every
-            persisted Retrograde world event in the slot.
+        recorded_at_chunk_id: Accepted narrative boundary at which the history
+            was generated. Required for new rows unless each loaded persisted
+            event supplies its own boundary.
+        event_sources: Event descriptors with a ``world_event_id`` or the
+            ``event_ref``, ``summary``, and ``chronology`` needed to plan an
+            unpersisted event. Persisted fields are derived from the canonical
+            world-event payload; any supplied copies must match it exactly.
+            Defaults to every persisted Retrograde world event in the slot.
 
     Returns:
         Row-shaped plan entries, one per source event.
@@ -941,16 +954,48 @@ def plan_retrograde_summary_chunks(
         event_sources = _load_persisted_retrograde_event_sources(cur)
 
     rows: list[dict[str, Any]] = []
-    next_scene: Optional[int] = None
     for source in event_sources:
-        event_ref = str(source["event_ref"])
-        marker = retrograde_event_marker(event_ref)
         source_status = str(source.get("source_status") or "persisted")
         world_event_id = _optional_int(source.get("world_event_id"))
+        canonical_source = (
+            _load_canonical_retrograde_event_source(
+                cur,
+                world_event_id=world_event_id,
+            )
+            if world_event_id is not None
+            else None
+        )
+        if canonical_source is not None:
+            divergent_fields = [
+                field
+                for field in ("event_ref", "summary", "chronology")
+                if field in source
+                and str(source[field]) != str(canonical_source[field])
+            ]
+            if divergent_fields:
+                raise ValueError(
+                    f"Retrograde world event {world_event_id} incoming source "
+                    "diverges from canonical world_events.payload fields: "
+                    + ", ".join(divergent_fields)
+                )
+            event_ref = str(canonical_source["event_ref"])
+            summary = str(canonical_source["summary"])
+            chronology = str(canonical_source["chronology"])
+        else:
+            event_ref = str(source.get("event_ref") or "").strip()
+            if not event_ref:
+                raise ValueError("Retrograde event source has no event_ref")
+            summary = str(source.get("summary") or "").strip()
+            chronology = str(source.get("chronology") or "").strip()
+
+        boundary_value = source.get("recorded_at_chunk_id")
+        if boundary_value is None:
+            boundary_value = recorded_at_chunk_id
+        source_recorded_at_chunk_id = _optional_int(boundary_value)
         base = {
             "event_ref": event_ref,
-            "marker": marker,
             "world_event_id": world_event_id,
+            "recorded_at_chunk_id": source_recorded_at_chunk_id,
             "source_status": source_status,
         }
         if source_status == "blocked":
@@ -958,58 +1003,147 @@ def plan_retrograde_summary_chunks(
                 {
                     **base,
                     "status": "blocked",
-                    "chunk_id": None,
+                    "summary_id": None,
                     "embedding_pending": False,
                 }
             )
             continue
 
-        summary = str(source.get("summary") or "").strip()
         if not summary:
             raise ValueError(
                 f"Retrograde event {event_ref!r} has no summary text; cannot "
-                "build a retrievable summary chunk"
+                "build a retrievable summary"
+            )
+        if chronology not in {"deep_past", "recent_past", "opening_pressure"}:
+            raise ValueError(
+                f"Retrograde event {event_ref!r} has invalid chronology "
+                f"{chronology!r}"
             )
 
-        existing = _find_summary_chunk(cur, marker=marker)
+        existing = (
+            _find_retrograde_summary(cur, world_event_id=world_event_id)
+            if world_event_id is not None
+            else None
+        )
         if existing is not None:
+            divergent_fields = []
+            if existing["summary_text"] != summary:
+                divergent_fields.append("summary_text")
+            if existing["chronology"] != chronology:
+                divergent_fields.append("chronology")
+            if (
+                source_recorded_at_chunk_id is not None
+                and existing["recorded_at_chunk_id"] != source_recorded_at_chunk_id
+            ):
+                divergent_fields.append("recorded_at_chunk_id")
+            if divergent_fields:
+                raise ValueError(
+                    f"Retrograde world event {world_event_id} already has "
+                    "divergent summary fields: " + ", ".join(divergent_fields)
+                )
             rows.append(
                 {
                     **base,
                     "status": "already_present",
-                    "chunk_id": existing["chunk_id"],
+                    "summary_id": existing["summary_id"],
                     "embedding_pending": existing["embedding_generated_at"] is None,
                 }
             )
             continue
 
-        if dry_run or world_event_id is None:
+        if dry_run:
             rows.append(
                 {
                     **base,
                     "status": "would_insert",
-                    "chunk_id": None,
+                    "summary_id": None,
                     "embedding_pending": True,
                 }
             )
             continue
 
-        if next_scene is None:
-            next_scene = _next_prologue_scene(cur)
-        chunk_id = _insert_summary_chunk(cur, summary=summary, marker=marker)
-        _insert_summary_metadata(cur, chunk_id=chunk_id, scene=next_scene)
-        next_scene += 1
-        _link_summary_chunk(cur, world_event_id=world_event_id, chunk_id=chunk_id)
+        if world_event_id is None:
+            raise ValueError(
+                f"Retrograde event {event_ref!r} has no persisted world-event id"
+            )
+        if source_recorded_at_chunk_id is None:
+            raise ValueError(
+                f"Retrograde event {event_ref!r} has no recorded narrative boundary"
+            )
+        summary_id = _insert_retrograde_summary(
+            cur,
+            world_event_id=world_event_id,
+            recorded_at_chunk_id=source_recorded_at_chunk_id,
+            chronology=chronology,
+            summary=summary,
+        )
         rows.append(
             {
                 **base,
                 "status": "inserted",
-                "chunk_id": chunk_id,
-                "scene": next_scene - 1,
+                "summary_id": summary_id,
                 "embedding_pending": True,
             }
         )
     return rows
+
+
+def _load_canonical_retrograde_event_source(
+    cur: Any,
+    *,
+    world_event_id: int,
+) -> dict[str, str]:
+    """Load and validate summary identity from the canonical world event."""
+
+    cur.execute(
+        """
+        /* orrery:retrograde:canonical_world_event_source */
+        SELECT
+            source::text AS source_kind,
+            payload ->> 'retrograde_event_ref' AS event_ref,
+            payload ->> 'summary' AS summary,
+            payload ->> 'chronology' AS chronology
+        FROM world_events
+        WHERE id = %s
+        """,
+        (world_event_id,),
+    )
+    row = cur.fetchone()
+    if row is None:
+        raise ValueError(
+            f"Retrograde summary names missing world event {world_event_id}"
+        )
+
+    source_kind = str(_row_value(row, "source_kind", 0))
+    if source_kind != RETROGRADE_SOURCE_KIND:
+        raise ValueError(
+            f"Retrograde summary source mismatch for world event "
+            f"{world_event_id}: expected {RETROGRADE_SOURCE_KIND!r}, got "
+            f"{source_kind!r}"
+        )
+
+    canonical: dict[str, str] = {}
+    for index, field in enumerate(("event_ref", "summary", "chronology"), start=1):
+        value = _row_value(row, field, index)
+        if value is None or not str(value).strip():
+            if field == "summary":
+                raise ValueError(
+                    f"Retrograde world event {world_event_id} has no summary "
+                    "text in canonical payload"
+                )
+            raise ValueError(
+                f"Retrograde world event {world_event_id} is missing "
+                f"payload.{field}"
+            )
+        canonical[field] = str(value)
+
+    chronology = canonical["chronology"]
+    if chronology not in {"deep_past", "recent_past", "opening_pressure"}:
+        raise ValueError(
+            f"Retrograde world event {world_event_id} has invalid canonical "
+            f"payload.chronology {chronology!r}"
+        )
+    return canonical
 
 
 def _load_persisted_retrograde_event_sources(cur: Any) -> list[dict[str, Any]]:
@@ -1017,12 +1151,15 @@ def _load_persisted_retrograde_event_sources(cur: Any) -> list[dict[str, Any]]:
         """
         /* orrery:retrograde:persisted_retrograde_events */
         SELECT
-            id AS world_event_id,
-            payload ->> 'retrograde_event_ref' AS event_ref,
-            payload ->> 'summary' AS summary
-        FROM world_events
-        WHERE source = 'retrograde'::event_source_kind
-        ORDER BY id
+            we.id AS world_event_id,
+            we.payload ->> 'retrograde_event_ref' AS event_ref,
+            we.payload ->> 'summary' AS summary,
+            we.payload ->> 'chronology' AS chronology,
+            rs.recorded_at_chunk_id AS existing_recorded_at_chunk_id
+        FROM world_events AS we
+        LEFT JOIN retrograde_summaries AS rs ON rs.world_event_id = we.id
+        WHERE we.source = 'retrograde'::event_source_kind
+        ORDER BY we.id
         """
     )
     sources = []
@@ -1030,110 +1167,143 @@ def _load_persisted_retrograde_event_sources(cur: Any) -> list[dict[str, Any]]:
         world_event_id = int(_row_value(row, "world_event_id", 0))
         event_ref = _row_value(row, "event_ref", 1)
         summary = _row_value(row, "summary", 2)
+        chronology = _row_value(row, "chronology", 3)
+        existing_recorded_at_chunk_id = _optional_int(
+            _row_value(row, "existing_recorded_at_chunk_id", 4)
+        )
         if not event_ref:
             raise ValueError(
                 f"Retrograde world event {world_event_id} is missing "
                 "payload.retrograde_event_ref"
             )
+        recorded_at_chunk_id = existing_recorded_at_chunk_id
+        if recorded_at_chunk_id is None:
+            recorded_at_chunk_id = _derive_recording_boundary(
+                cur,
+                event_ref=str(event_ref),
+            )
         sources.append(
             {
                 "event_ref": str(event_ref),
                 "summary": summary,
+                "chronology": chronology,
                 "world_event_id": world_event_id,
+                "recorded_at_chunk_id": recorded_at_chunk_id,
                 "source_status": "persisted",
             }
         )
     return sources
 
 
-def _find_summary_chunk(cur: Any, *, marker: str) -> Optional[dict[str, Any]]:
+def _derive_recording_boundary(cur: Any, *, event_ref: str) -> int:
+    """Resolve a missing summary's accepted narrative recording boundary."""
+
+    maturation_match = MATURATION_EVENT_REF_PATTERN.match(event_ref)
+    if maturation_match is not None:
+        job_id = int(maturation_match.group("job_id"))
+        cur.execute(
+            """
+            /* orrery:retrograde:maturation_recording_boundary */
+            SELECT requesting_chunk_id
+            FROM orrery_maturation_jobs
+            WHERE id = %s
+            """,
+            (job_id,),
+        )
+        job_row = cur.fetchone()
+        if job_row is None:
+            raise ValueError(
+                f"Runtime Retrograde event {event_ref!r} names missing "
+                f"maturation job {job_id}; cannot derive its recording boundary"
+            )
+        return int(_row_value(job_row, "requesting_chunk_id", 0))
+
+    prologue_chunk_id = _find_prologue_chunk_id(cur)
+    if prologue_chunk_id is None:
+        raise ValueError(
+            f"Wizard Retrograde event {event_ref!r} has no prologue anchor; "
+            "cannot derive its recording boundary"
+        )
+    return prologue_chunk_id
+
+
+def find_latest_playable_chunk_id(cur: Any) -> Optional[int]:
+    """Return the latest accepted played-narrative boundary, if one exists."""
+
+    from nexus.agents.orrery.reconstruction import playable_narrative_predicate
+
     cur.execute(
         """
-        /* orrery:retrograde:summary_chunk_lookup */
-        SELECT id, embedding_generated_at
-        FROM narrative_chunks
-        WHERE authorial_directives @> %s::jsonb
-        ORDER BY id
+        /* orrery:retrograde:latest_playable_recording_boundary */
+        SELECT nc.id
+        FROM narrative_chunks AS nc
+        WHERE nc.state::text = 'finalized'
+          AND btrim(COALESCE(nc.storyteller_text, nc.raw_text, '')) <> ''
+          AND """
+        + playable_narrative_predicate("nc")
+        + """
+        ORDER BY nc.id DESC
         LIMIT 1
+        """
+    )
+    row = cur.fetchone()
+    if row is None:
+        return None
+    return int(_row_value(row, "id", 0))
+
+
+def _find_retrograde_summary(
+    cur: Any, *, world_event_id: int
+) -> Optional[dict[str, Any]]:
+    cur.execute(
+        """
+        /* orrery:retrograde:summary_lookup */
+        SELECT
+            id,
+            recorded_at_chunk_id,
+            chronology,
+            summary_text,
+            embedding_generated_at
+        FROM retrograde_summaries
+        WHERE world_event_id = %s
         """,
-        (json.dumps([marker]),),
+        (world_event_id,),
     )
     row = cur.fetchone()
     if row is None:
         return None
     return {
-        "chunk_id": int(_row_value(row, "id", 0)),
-        "embedding_generated_at": _row_value(row, "embedding_generated_at", 1),
+        "summary_id": int(_row_value(row, "id", 0)),
+        "recorded_at_chunk_id": int(_row_value(row, "recorded_at_chunk_id", 1)),
+        "chronology": str(_row_value(row, "chronology", 2)),
+        "summary_text": str(_row_value(row, "summary_text", 3)),
+        "embedding_generated_at": _row_value(row, "embedding_generated_at", 4),
     }
 
 
-def _next_prologue_scene(cur: Any) -> int:
+def _insert_retrograde_summary(
+    cur: Any,
+    *,
+    world_event_id: int,
+    recorded_at_chunk_id: int,
+    chronology: str,
+    summary: str,
+) -> int:
     cur.execute(
         """
-        /* orrery:retrograde:summary_scene_base */
-        SELECT COALESCE(MAX(scene), -1) + 1 AS next_scene
-        FROM chunk_metadata
-        WHERE season = 0 AND episode = 0
-        """
-    )
-    return int(_row_value(cur.fetchone(), "next_scene", 0))
-
-
-def _insert_summary_chunk(cur: Any, *, summary: str, marker: str) -> int:
-    cur.execute(
-        """
-        /* orrery:retrograde:insert_summary_chunk */
-        INSERT INTO narrative_chunks (
-            raw_text, storyteller_text, choice_object, choice_text,
-            authorial_directives, state, finalized_at
+        /* orrery:retrograde:insert_summary */
+        INSERT INTO retrograde_summaries (
+            world_event_id,
+            recorded_at_chunk_id,
+            chronology,
+            summary_text
         )
-        VALUES (%s, %s, NULL, NULL, %s::jsonb, 'finalized', now())
+        VALUES (%s, %s, %s, %s)
         RETURNING id
         """,
-        (
-            summary,
-            summary,
-            json.dumps([RETROGRADE_SUMMARY_MARKER, marker]),
-        ),
+        (world_event_id, recorded_at_chunk_id, chronology, summary),
     )
     return int(_row_value(cur.fetchone(), "id", 0))
-
-
-def _insert_summary_metadata(cur: Any, *, chunk_id: int, scene: int) -> None:
-    # slug and world_time are intentionally omitted: the BEFORE INSERT
-    # trigger set_chunk_slug derives the unique scene slug (S00E00_NNN) from
-    # season/episode/scene, and the statement-level trigger
-    # refresh_world_time_from_chunk_trigger recomputes world_time for every
-    # row from global base_timestamp + cumulative time_delta ordered by
-    # chunk_id — any values supplied here would be overwritten.
-    cur.execute(
-        """
-        /* orrery:retrograde:insert_summary_metadata */
-        INSERT INTO chunk_metadata (
-            chunk_id, season, episode, scene, world_layer, time_delta,
-            generation_date
-        )
-        VALUES (
-            %s, 0, 0, %s, 'retrograde'::world_layer_type,
-            interval '0 seconds', now()
-        )
-        """,
-        (chunk_id, scene),
-    )
-
-
-def _link_summary_chunk(cur: Any, *, world_event_id: int, chunk_id: int) -> None:
-    cur.execute(
-        """
-        /* orrery:retrograde:link_summary_chunk */
-        UPDATE world_events
-        SET payload = jsonb_set(
-            payload, '{retrograde_summary_chunk_id}', to_jsonb(%s::bigint), true
-        )
-        WHERE id = %s
-        """,
-        (chunk_id, world_event_id),
-    )
 
 
 def _insert_world_event(

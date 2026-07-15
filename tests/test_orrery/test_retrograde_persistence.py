@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import json
 from typing import Any, Optional
 
 import pytest
@@ -13,7 +14,7 @@ from nexus.agents.orrery.retrograde_expansion import (
 from nexus.agents.orrery.retrograde_packet import build_seed_generation_request
 from nexus.agents.orrery.retrograde_persistence import (
     build_retrograde_persistence_plan,
-    plan_retrograde_summary_chunks,
+    plan_retrograde_summaries,
 )
 from nexus.agents.orrery.retrograde_seed_candidates import (
     SEED_CANDIDATE_RESPONSE_SCHEMA_VERSION,
@@ -217,24 +218,23 @@ def test_persistence_execute_writes_canonical_rows() -> None:
     assert plan["counters"]["entity_tags_inserted"] == 2
     assert plan["counters"]["pair_tags_inserted"] == 1
     assert plan["counters"]["relationships_inserted"] == 1
-    assert plan["counters"]["summary_chunks_inserted"] == 1
+    assert plan["counters"]["summaries_inserted"] == 1
     assert any("insert_prologue_chunk" in sql for sql in cur.statements)
     assert any("insert_world_event" in sql for sql in cur.statements)
     assert any("insert_entity_tag" in sql for sql in cur.statements)
     assert any("insert_pair_tag" in sql for sql in cur.statements)
     assert any("insert_character_relationship" in sql for sql in cur.statements)
-    assert any("insert_summary_chunk" in sql for sql in cur.statements)
-    assert any("insert_summary_metadata" in sql for sql in cur.statements)
-    assert any("link_summary_chunk" in sql for sql in cur.statements)
-    summary_row = plan["summary_chunk_rows"][0]
+    assert any("insert_summary" in sql for sql in cur.statements)
+    summary_row = plan["summary_rows"][0]
     assert summary_row["status"] == "inserted"
-    assert summary_row["chunk_id"] == 951
+    assert summary_row["summary_id"] == 951
+    assert summary_row["recorded_at_chunk_id"] == 900
     assert summary_row["embedding_pending"] is True
-    assert plan["retrieval"]["embedding_pending_chunk_ids"] == [951]
+    assert plan["retrieval"]["embedding_pending_summary_ids"] == [951]
 
 
-def test_persistence_dry_run_plans_summary_chunks() -> None:
-    """Dry-run reports a retrieval summary chunk per planned event."""
+def test_persistence_dry_run_plans_summaries() -> None:
+    """Dry-run reports a dedicated summary per planned event."""
 
     vocabulary = _persistence_test_vocabulary()
     cur = FakeRetrogradePersistenceCursor(vocabulary)
@@ -249,20 +249,19 @@ def test_persistence_dry_run_plans_summary_chunks() -> None:
         dry_run=True,
     )
 
-    assert plan["counters"]["summary_chunks_would_insert"] == 1
-    summary_row = plan["summary_chunk_rows"][0]
+    assert plan["counters"]["summaries_would_insert"] == 1
+    summary_row = plan["summary_rows"][0]
     assert summary_row["event_ref"] == "retro_event_001"
-    assert summary_row["marker"] == "orrery:retrograde_event:retro_event_001"
     assert summary_row["status"] == "would_insert"
-    assert summary_row["chunk_id"] is None
+    assert summary_row["summary_id"] is None
     assert summary_row["embedding_pending"] is True
-    assert plan["retrieval"]["summary_chunks_enabled"] is True
-    assert plan["retrieval"]["embedding_pending_chunk_ids"] == []
-    assert not any("insert_summary_chunk" in sql for sql in cur.statements)
+    assert plan["retrieval"]["summaries_enabled"] is True
+    assert plan["retrieval"]["embedding_pending_summary_ids"] == []
+    assert not any("insert_summary" in sql for sql in cur.statements)
 
 
-def test_persistence_summary_chunks_can_be_disabled() -> None:
-    """The retrieval surface toggle suppresses summary chunk planning."""
+def test_persistence_summaries_can_be_disabled() -> None:
+    """The retrieval surface toggle suppresses summary planning."""
 
     vocabulary = _persistence_test_vocabulary()
     cur = FakeRetrogradePersistenceCursor(vocabulary)
@@ -275,24 +274,29 @@ def test_persistence_summary_chunks_can_be_disabled() -> None:
         slot=5,
         dbname="save_05",
         dry_run=True,
-        summary_chunks_enabled=False,
+        summaries_enabled=False,
     )
 
-    assert plan["summary_chunk_rows"] == []
-    assert plan["counters"]["summary_chunks_would_insert"] == 0
-    assert plan["retrieval"]["summary_chunks_enabled"] is False
-    assert not any("summary_chunk_lookup" in sql for sql in cur.statements)
+    assert plan["summary_rows"] == []
+    assert plan["counters"]["summaries_would_insert"] == 0
+    assert plan["retrieval"]["summaries_enabled"] is False
+    assert not any("summary_lookup" in sql for sql in cur.statements)
 
 
-def test_persistence_summary_chunks_idempotent_when_embedded() -> None:
-    """Existing embedded summary chunks are reported without re-pending."""
+def test_persistence_summaries_idempotent_when_embedded() -> None:
+    """Existing embedded summaries are reported without re-pending."""
 
     vocabulary = _persistence_test_vocabulary()
     cur = FakeRetrogradePersistenceCursor(
         vocabulary,
-        existing_summary_chunks=[
+        existing_summaries=[
             {
                 "id": 940,
+                "recorded_at_chunk_id": 900,
+                "chronology": "recent_past",
+                "summary_text": (
+                    "The handler died before clearing Mara's inherited debt."
+                ),
                 "embedding_generated_at": datetime(2026, 6, 1, tzinfo=timezone.utc),
             }
         ],
@@ -308,15 +312,15 @@ def test_persistence_summary_chunks_idempotent_when_embedded() -> None:
         dry_run=True,
     )
 
-    summary_row = plan["summary_chunk_rows"][0]
+    summary_row = plan["summary_rows"][0]
     assert summary_row["status"] == "already_present"
-    assert summary_row["chunk_id"] == 940
+    assert summary_row["summary_id"] == 940
     assert summary_row["embedding_pending"] is False
-    assert plan["retrieval"]["embedding_pending_chunk_ids"] == []
+    assert plan["retrieval"]["embedding_pending_summary_ids"] == []
 
 
-def test_plan_summary_chunks_from_persisted_events() -> None:
-    """The DB-driven path backfills chunks for already-persisted events."""
+def test_plan_summaries_from_persisted_events() -> None:
+    """The DB-driven path backfills dedicated rows for persisted events."""
 
     vocabulary = _persistence_test_vocabulary()
     cur = FakeRetrogradePersistenceCursor(
@@ -327,28 +331,24 @@ def test_plan_summary_chunks_from_persisted_events() -> None:
                 "event_ref": "r6_e01_vale_debt_spliced",
                 "summary": "A debt broker spliced Vale's escape account onto "
                 "Mara's first safe alias.",
+                "chronology": "deep_past",
+                "existing_recorded_at_chunk_id": 88,
             }
         ],
     )
 
-    rows = plan_retrograde_summary_chunks(cur, dry_run=False)
+    rows = plan_retrograde_summaries(cur, dry_run=False)
 
     assert len(rows) == 1
     assert rows[0]["status"] == "inserted"
-    assert rows[0]["chunk_id"] == 951
+    assert rows[0]["summary_id"] == 951
     assert rows[0]["world_event_id"] == 107
+    assert rows[0]["recorded_at_chunk_id"] == 88
     assert rows[0]["embedding_pending"] is True
-    assert any("insert_summary_chunk" in sql for sql in cur.statements)
-    assert any("link_summary_chunk" in sql for sql in cur.statements)
-    link_params = [
-        params
-        for sql, params in zip(cur.statements, cur.params)
-        if "link_summary_chunk" in sql
-    ]
-    assert link_params == [(951, 107)]
+    assert any("insert_summary" in sql for sql in cur.statements)
 
 
-def test_plan_summary_chunks_requires_summary_text() -> None:
+def test_plan_summaries_requires_summary_text() -> None:
     """Events without summary prose fail loudly instead of embedding stubs."""
 
     vocabulary = _persistence_test_vocabulary()
@@ -359,12 +359,151 @@ def test_plan_summary_chunks_requires_summary_text() -> None:
                 "world_event_id": 107,
                 "event_ref": "r6_e01_vale_debt_spliced",
                 "summary": "",
+                "chronology": "deep_past",
+                "existing_recorded_at_chunk_id": 88,
             }
         ],
     )
 
     with pytest.raises(ValueError, match="has no summary text"):
-        plan_retrograde_summary_chunks(cur, dry_run=False)
+        plan_retrograde_summaries(cur, dry_run=False)
+
+
+def test_plan_summaries_derives_content_from_canonical_world_event() -> None:
+    """An id-only source writes the canonical event payload, never caller prose."""
+
+    vocabulary = _persistence_test_vocabulary()
+    canonical_summary = "Vale's canonical debt history survived the splice."
+    cur = FakeRetrogradePersistenceCursor(
+        vocabulary,
+        canonical_world_events=[
+            {
+                "world_event_id": 107,
+                "source_kind": "retrograde",
+                "event_ref": "r6_e01_vale_debt_spliced",
+                "summary": canonical_summary,
+                "chronology": "deep_past",
+            }
+        ],
+    )
+
+    rows = plan_retrograde_summaries(
+        cur,
+        dry_run=False,
+        recorded_at_chunk_id=88,
+        event_sources=[{"world_event_id": 107}],
+    )
+
+    assert rows[0]["event_ref"] == "r6_e01_vale_debt_spliced"
+    assert rows[0]["status"] == "inserted"
+    insert_params = [
+        params
+        for sql, params in zip(cur.statements, cur.params)
+        if "orrery:retrograde:insert_summary" in sql
+    ]
+    assert insert_params == [(107, 88, "deep_past", canonical_summary)]
+
+
+@pytest.mark.parametrize("field", ["event_ref", "summary", "chronology"])
+def test_plan_summaries_rejects_incoming_canonical_payload_divergence(
+    field: str,
+) -> None:
+    """Supplied rerun content must exactly match the canonical event payload."""
+
+    vocabulary = _persistence_test_vocabulary()
+    canonical = {
+        "world_event_id": 107,
+        "source_kind": "retrograde",
+        "event_ref": "r6_e01_vale_debt_spliced",
+        "summary": "Vale's canonical debt history survived the splice.",
+        "chronology": "deep_past",
+    }
+    incoming = {
+        "world_event_id": 107,
+        "event_ref": canonical["event_ref"],
+        "summary": canonical["summary"],
+        "chronology": canonical["chronology"],
+    }
+    incoming[field] = f"contradictory_{field}"
+    cur = FakeRetrogradePersistenceCursor(
+        vocabulary,
+        canonical_world_events=[canonical],
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=rf"diverges from canonical world_events.payload fields: {field}",
+    ):
+        plan_retrograde_summaries(
+            cur,
+            dry_run=False,
+            recorded_at_chunk_id=88,
+            event_sources=[incoming],
+        )
+
+    assert not any("orrery:retrograde:insert_summary" in sql for sql in cur.statements)
+
+
+def test_plan_summaries_rejects_non_retrograde_world_event_source() -> None:
+    """A world-event id from another provenance cannot acquire a summary row."""
+
+    vocabulary = _persistence_test_vocabulary()
+    cur = FakeRetrogradePersistenceCursor(
+        vocabulary,
+        canonical_world_events=[
+            {
+                "world_event_id": 107,
+                "source_kind": "resolver",
+                "event_ref": "resolver_event_107",
+                "summary": "A resolver-owned event.",
+                "chronology": "recent_past",
+            }
+        ],
+    )
+
+    with pytest.raises(ValueError, match="source mismatch.*expected 'retrograde'"):
+        plan_retrograde_summaries(
+            cur,
+            dry_run=False,
+            recorded_at_chunk_id=88,
+            event_sources=[{"world_event_id": 107}],
+        )
+
+    assert not any("orrery:retrograde:insert_summary" in sql for sql in cur.statements)
+
+
+def test_existing_event_rerun_cannot_seed_summary_from_new_plan_content() -> None:
+    """The high-level caller also rejects contradictory rerun summary prose."""
+
+    vocabulary = _persistence_test_vocabulary()
+    cur = FakeRetrogradePersistenceCursor(
+        vocabulary,
+        canonical_world_events=[
+            {
+                "world_event_id": 901,
+                "source_kind": "retrograde",
+                "event_ref": "retro_event_001",
+                "summary": "The canonical handler history remains unchanged.",
+                "chronology": "recent_past",
+            }
+        ],
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="diverges from canonical world_events.payload fields: summary",
+    ):
+        build_retrograde_persistence_plan(
+            cur,
+            packet=_packet(vocabulary),
+            seed_candidate_response=_seed_response(vocabulary),
+            expansion_plan_payload=_valid_expansion(vocabulary),
+            slot=5,
+            dbname="save_05",
+            dry_run=True,
+        )
+
+    assert not any("orrery:retrograde:insert_summary" in sql for sql in cur.statements)
 
 
 def test_persistence_execute_rejects_cross_kind_relationship_plan() -> None:
@@ -553,23 +692,50 @@ class FakeRetrogradePersistenceCursor:
         omit_place: bool = False,
         include_retrograde_sources: bool = True,
         omit_first_event_type: bool = False,
-        existing_summary_chunks: Optional[list[dict[str, Any]]] = None,
+        existing_summaries: Optional[list[dict[str, Any]]] = None,
         persisted_retrograde_events: Optional[list[dict[str, Any]]] = None,
+        canonical_world_events: Optional[list[dict[str, Any]]] = None,
         inactive_entity_ids: Optional[set[int]] = None,
     ) -> None:
         self.vocabulary = vocabulary
         self.omit_place = omit_place
         self.include_retrograde_sources = include_retrograde_sources
         self.omit_first_event_type = omit_first_event_type
-        self.existing_summary_chunks = existing_summary_chunks or []
+        self.existing_summaries = existing_summaries or []
         self.persisted_retrograde_events = persisted_retrograde_events or []
+        canonical_rows = [
+            {
+                "world_event_id": row["world_event_id"],
+                "source_kind": row.get("source_kind", "retrograde"),
+                "event_ref": row.get("event_ref"),
+                "summary": row.get("summary"),
+                "chronology": row.get("chronology"),
+            }
+            for row in self.persisted_retrograde_events
+        ]
+        canonical_rows.extend(canonical_world_events or [])
+        if self.existing_summaries and not canonical_rows:
+            canonical_rows.append(
+                {
+                    "world_event_id": 901,
+                    "source_kind": "retrograde",
+                    "event_ref": "retro_event_001",
+                    "summary": (
+                        "The handler died before clearing Mara's inherited debt."
+                    ),
+                    "chronology": "recent_past",
+                }
+            )
+        self.canonical_world_events = {
+            int(row["world_event_id"]): dict(row) for row in canonical_rows
+        }
         self.inactive_entity_ids = set(inactive_entity_ids or set())
         self.deactivated_entity_ids: list[int] = []
         self.inserted_character_stubs: list[str] = []
         self.statements: list[str] = []
         self.params: list[Any] = []
         self._result: list[dict[str, Any]] = []
-        self._summary_chunk_seq = 950
+        self._summary_seq = 950
 
     def execute(self, sql: str, params: Optional[Any] = None) -> None:
         self.statements.append(sql)
@@ -653,7 +819,14 @@ class FakeRetrogradePersistenceCursor:
         elif "orrery:retrograde:world_time" in sql:
             self._result = [{"world_time": datetime(2026, 1, 1, tzinfo=timezone.utc)}]
         elif "orrery:retrograde:existing_world_event" in sql:
-            self._result = []
+            assert params is not None
+            event_ref = str(params[0])
+            matching_ids = [
+                world_event_id
+                for world_event_id, row in self.canonical_world_events.items()
+                if row["source_kind"] == "retrograde" and row["event_ref"] == event_ref
+            ]
+            self._result = [{"id": min(matching_ids)}] if matching_ids else []
         elif "orrery:retrograde:active_entity_tag" in sql:
             self._result = []
         elif "orrery:retrograde:active_pair_tag" in sql:
@@ -669,6 +842,15 @@ class FakeRetrogradePersistenceCursor:
         elif "orrery:retrograde:insert_world_event_entity" in sql:
             self._result = []
         elif "orrery:retrograde:insert_world_event" in sql:
+            assert params is not None
+            payload = json.loads(str(params[7]))
+            self.canonical_world_events[901] = {
+                "world_event_id": 901,
+                "source_kind": "retrograde",
+                "event_ref": payload["retrograde_event_ref"],
+                "summary": payload["summary"],
+                "chronology": payload["chronology"],
+            }
             self._result = [{"id": 901}]
         elif "orrery:retrograde:insert_entity_tag" in sql:
             self._result = [{"id": 902}]
@@ -676,17 +858,15 @@ class FakeRetrogradePersistenceCursor:
             self._result = [{"id": 903}]
         elif "orrery:retrograde:insert_character_relationship" in sql:
             self._result = []
-        elif "orrery:retrograde:summary_chunk_lookup" in sql:
-            self._result = list(self.existing_summary_chunks)
-        elif "orrery:retrograde:summary_scene_base" in sql:
-            self._result = [{"next_scene": 1}]
-        elif "orrery:retrograde:insert_summary_chunk" in sql:
-            self._summary_chunk_seq += 1
-            self._result = [{"id": self._summary_chunk_seq}]
-        elif "orrery:retrograde:insert_summary_metadata" in sql:
-            self._result = []
-        elif "orrery:retrograde:link_summary_chunk" in sql:
-            self._result = []
+        elif "orrery:retrograde:canonical_world_event_source" in sql:
+            assert params is not None
+            row = self.canonical_world_events.get(int(params[0]))
+            self._result = [row] if row is not None else []
+        elif "orrery:retrograde:summary_lookup" in sql:
+            self._result = list(self.existing_summaries)
+        elif "orrery:retrograde:insert_summary" in sql:
+            self._summary_seq += 1
+            self._result = [{"id": self._summary_seq}]
         elif "orrery:retrograde:persisted_retrograde_events" in sql:
             self._result = list(self.persisted_retrograde_events)
         elif "orrery:retrograde:insert_character_stub" in sql:

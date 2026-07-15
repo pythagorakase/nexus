@@ -37,7 +37,6 @@ from .utils.db_access import (
     execute_vector_search,
     execute_hybrid_search,
     setup_database_indexes,
-    prepare_tsquery,
 )
 from .utils.continuous_temporal_search import (
     execute_time_aware_search,
@@ -135,6 +134,7 @@ READONLY_SQL_ALLOWED_TABLES = {
     "orrery_route_graph_edges",
     "orrery_place_route_graph_nodes",
     "offscreen_narrations",
+    "retrograde_summaries",
     "event_types",
     "tags",
 }
@@ -371,7 +371,10 @@ class MEMNON:
                 "type": "database",
                 "tables": ["characters", "places", "factions", "items"],
             },
-            "narrative": {"type": "vector", "collections": ["narrative_chunks"]},
+            "narrative": {
+                "type": "vector",
+                "collections": ["narrative_chunks", "retrograde_summaries"],
+            },
         }
 
         # Query type registry - Simplified, used for rule-based planning
@@ -1175,107 +1178,19 @@ class MEMNON:
             return []
 
     def _query_text_search(
-        self, query_text: str, filters: Dict[str, Any] = None, limit: int = 10
+        self,
+        query_text: str,
+        filters: Dict[str, Any] = None,
+        limit: int = 10,
     ) -> List[Dict[str, Any]]:
-        """
-        Perform a keyword-based text search on narrative chunks.
-
-        Args:
-            query_text: The text to search for
-            filters: Optional metadata filters
-            limit: Maximum number of results to return
-
-        Returns:
-            List of matching chunks with scores and metadata
-        """
-        try:
-            # Use prepare_tsquery from db_access for consistent processing
-            processed_query = prepare_tsquery(query_text)
-
-            with self.Session() as session:
-                # Build query with filters
-                filter_conditions = []
-                if filters:
-                    if "season" in filters:
-                        filter_conditions.append(f"cm.season = :season")
-                    if "episode" in filters:
-                        filter_conditions.append(f"cm.episode = :episode")
-                    if "world_layer" in filters:
-                        filter_conditions.append(f"cm.world_layer = :world_layer")
-
-                filter_sql = " AND ".join(filter_conditions)
-                if filter_sql:
-                    filter_sql = " AND " + filter_sql
-
-                # Execute text search
-                query_sql = f"""
-                SELECT 
-                    nc.id, 
-                    nc.raw_text, 
-                    cm.season, 
-                    cm.episode, 
-                    cm.scene as scene_number,
-                    ts_rank(to_tsvector('english', nc.raw_text), to_tsquery('english', :query)) as score,
-                    ts_headline('english', nc.raw_text, to_tsquery('english', :query), 'MaxFragments=3, MinWords=15, MaxWords=35') as highlights
-                FROM 
-                    narrative_chunks nc
-                JOIN 
-                    chunk_metadata cm ON nc.id = cm.chunk_id
-                WHERE 
-                    to_tsvector('english', nc.raw_text) @@ to_tsquery('english', :query)
-                    {filter_sql}
-                ORDER BY 
-                    score DESC
-                LIMIT 
-                    :limit
-                """
-
-                query_params = {"query": processed_query, "limit": limit}
-                if filters:
-                    if "season" in filters:
-                        query_params["season"] = filters["season"]
-                    if "episode" in filters:
-                        query_params["episode"] = filters["episode"]
-                    if "world_layer" in filters:
-                        query_params["world_layer"] = filters["world_layer"]
-
-                result = session.execute(text(query_sql), query_params)
-
-                # Process results
-                text_results = []
-                for row in result:
-                    (
-                        chunk_id,
-                        raw_text,
-                        season,
-                        episode,
-                        scene_number,
-                        score,
-                        highlights,
-                    ) = row
-
-                    text_results.append(
-                        {
-                            "id": str(chunk_id),
-                            "chunk_id": str(chunk_id),
-                            "text": raw_text,
-                            "content_type": "narrative",
-                            "metadata": {
-                                "season": season,
-                                "episode": episode,
-                                "scene_number": scene_number,
-                                "highlights": highlights,
-                            },
-                            "score": float(score),
-                            "source": "text_search",
-                        }
-                    )
-
-                return text_results
-
-        except Exception as e:
-            logger.error(f"Error in text search: {e}")
-            return []
+        """Search narrative and Retrograde summary text through SearchManager."""
+        with self.Session() as session:
+            return self.search_manager.query_text_search(
+                query_text=query_text,
+                session=session,
+                filters=filters,
+                limit=limit,
+            )
 
     def process_all_narrative_files(self, glob_pattern: str = None) -> int:
         """
@@ -1722,48 +1637,29 @@ class MEMNON:
         Returns:
             Dictionary containing the recent chunks and metadata
         """
-        from nexus.agents.orrery.retrograde_markers import (
-            RETROGRADE_PROLOGUE_MARKER,
-            RETROGRADE_SUMMARY_MARKER,
+        from nexus.agents.orrery.reconstruction import (
+            playable_narrative_predicate,
         )
 
         try:
             with self.Session() as session:
-                # Retrograde prologue chunks (the anchor stub and per-event
-                # history summaries) are deliberately excluded from this
-                # recency surface: generated history is memory, reachable via
-                # vector/text search like aged play history, not recent
-                # narration for the warm slice.
+                # The synthetic prologue remains a narrative FK anchor but is
+                # not player-played prose. Dedicated Retrograde summaries no
+                # longer occupy narrative_chunks after migration 078.
                 query = text(
-                    """
+                    f"""
                     SELECT nc.id, nc.raw_text,
                            cm.season, cm.episode, cm.scene AS scene_number,
                            cm.world_layer
                     FROM narrative_chunks nc
                     LEFT JOIN chunk_metadata cm ON nc.id = cm.chunk_id
-                    WHERE NOT (
-                        COALESCE(nc.authorial_directives, '[]'::jsonb)
-                            @> CAST(:retrograde_prologue_marker AS jsonb)
-                        OR COALESCE(nc.authorial_directives, '[]'::jsonb)
-                            @> CAST(:retrograde_summary_marker AS jsonb)
-                    )
+                    WHERE {playable_narrative_predicate()}
                     ORDER BY nc.id DESC
                     LIMIT :limit
                 """
                 )
 
-                results = session.execute(
-                    query,
-                    {
-                        "limit": limit,
-                        "retrograde_prologue_marker": json.dumps(
-                            [RETROGRADE_PROLOGUE_MARKER]
-                        ),
-                        "retrograde_summary_marker": json.dumps(
-                            [RETROGRADE_SUMMARY_MARKER]
-                        ),
-                    },
-                ).fetchall()
+                results = session.execute(query, {"limit": limit}).fetchall()
 
                 chunks = []
                 for result in results:
@@ -1980,7 +1876,7 @@ class MEMNON:
                     # Execute vector search using SearchManager
                     results = self.search_manager.query_vector_search(
                         query_text=strategy["query"],
-                        collections=["narrative_chunks"],
+                        collections=["narrative_chunks", "retrograde_summaries"],
                         filters=strategy.get("filters"),
                         top_k=strategy.get("limit", k),
                     )

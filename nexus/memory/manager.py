@@ -10,7 +10,14 @@ from typing import Any, Dict, Iterable, List, Optional, Set
 
 from sqlalchemy import text
 
-from .context_state import ContextPackage, ContextStateManager, PassTransition
+from .context_state import (
+    ContextPackage,
+    ContextStateManager,
+    MemoryIdentity,
+    PassTransition,
+    is_retrograde_summary,
+    memory_identity,
+)
 from .divergence import DivergenceDetector, DivergenceResult
 from .entity_detector import EntityMatch, HighSpecificityEntityDetector
 from .incremental import IncrementalRetriever
@@ -102,12 +109,22 @@ class Pass2Update:
     baseline_available: bool = True
 
     def to_dict(self) -> Dict[str, Any]:
+        retrieved_memory_ids = [
+            identity
+            for chunk in self.retrieved_chunks
+            for identity in [memory_identity(chunk)]
+            if identity is not None
+        ]
+        narrative_chunk_ids = [
+            chunk_id
+            for chunk in self.retrieved_chunks
+            for chunk_id in [coerce_chunk_id(chunk)]
+            if chunk_id is not None
+        ]
         return {
             "divergence": self.divergence.to_dict(),
-            "retrieved_chunk_ids": [
-                chunk.get("chunk_id") or chunk.get("id")
-                for chunk in self.retrieved_chunks
-            ],
+            "retrieved_memory_ids": retrieved_memory_ids,
+            "retrieved_chunk_ids": narrative_chunk_ids,
             "tokens_used": self.tokens_used,
             "baseline_available": self.baseline_available,
         }
@@ -275,28 +292,30 @@ class ContextMemoryManager:
         baseline_themes = analysis.get("themes", [])
         expected_user_themes = analysis.get("expected", [])
 
-        baseline_chunks: set[int] = set()
+        baseline_chunks: Set[MemoryIdentity] = set()
         chunk_details: List[Dict[str, Any]] = []
         structured_passages: List[Dict[str, Any]] = []
 
         for collection in warm_slice or []:
             normalized = dict(collection)
-            chunk_id = self._coerce_chunk_id(normalized)
-            if chunk_id is None:
+            identity = memory_identity(normalized)
+            if identity is None:
                 structured_passages.append(normalized)
                 continue
-            normalized.setdefault("chunk_id", chunk_id)
-            baseline_chunks.add(chunk_id)
-            chunk_details.append({"chunk_id": chunk_id, **normalized})
+            if not is_retrograde_summary(normalized):
+                normalized.setdefault("chunk_id", identity)
+            baseline_chunks.add(identity)
+            chunk_details.append(normalized)
 
         chunk_retrievals: List[Dict[str, Any]] = []
         for passage in retrieved_passages or []:
             normalized = dict(passage)
-            chunk_id = self._coerce_chunk_id(normalized)
-            if chunk_id is None:
+            identity = memory_identity(normalized)
+            if identity is None:
                 structured_passages.append(normalized)
                 continue
-            normalized.setdefault("chunk_id", chunk_id)
+            if not is_retrograde_summary(normalized):
+                normalized.setdefault("chunk_id", identity)
             chunk_retrievals.append(normalized)
 
         if assembled_context is not None:
@@ -304,11 +323,11 @@ class ContextMemoryManager:
             structured_section.extend(dict(result) for result in structured_passages)
 
         for passage in chunk_retrievals:
-            chunk_id = passage.get("chunk_id")
-            if chunk_id is None:
+            identity = memory_identity(passage)
+            if identity is None:
                 continue
-            baseline_chunks.add(chunk_id)
-            chunk_details.append({"chunk_id": chunk_id, **passage})
+            baseline_chunks.add(identity)
+            chunk_details.append(passage)
 
         token_usage = token_usage or {}
         baseline_tokens = sum(
@@ -608,6 +627,11 @@ class ContextMemoryManager:
 
         return coerce_chunk_id(chunk)
 
+    def _memory_identity(self, memory: Dict[str, Any]) -> Optional[MemoryIdentity]:
+        """Return a typed identity shared by both retrieval corpora."""
+
+        return memory_identity(memory)
+
     def augment_warm_slice(
         self, warm_slice: List[Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
@@ -624,17 +648,17 @@ class ContextMemoryManager:
             return warm_slice
 
         known_ids = {
-            chunk_id
+            identity
             for chunk in warm_slice
-            for chunk_id in [self._coerce_chunk_id(chunk)]
-            if chunk_id is not None
+            for identity in [self._memory_identity(chunk)]
+            if identity is not None
         }
         for chunk in additions:
-            chunk_id = self._coerce_chunk_id(chunk)
-            if chunk_id is None or chunk_id in known_ids:
+            identity = self._memory_identity(chunk)
+            if identity is None or identity in known_ids:
                 continue
             warm_slice.append(chunk)
-            known_ids.add(chunk_id)
+            known_ids.add(identity)
 
         return warm_slice
 

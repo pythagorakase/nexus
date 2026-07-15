@@ -21,20 +21,24 @@ Phase detection uses normalized columns and assets.traits:
 
 from __future__ import annotations
 
-import json
 import logging
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-from nexus.agents.orrery.retrograde_markers import (
-    RETROGRADE_PROLOGUE_MARKER,
-    RETROGRADE_SUMMARY_MARKER,
-)
+from nexus.agents.orrery.reconstruction import playable_narrative_predicate
 from nexus.api.choice_handling import extract_presented_choices, resolve_input_text
 from nexus.api.db_pool import get_connection
 from nexus.api.slot_utils import slot_dbname
 
 logger = logging.getLogger("nexus.api.slot_state")
+
+_LATEST_PLAYABLE_CHUNK_SQL = f"""
+    SELECT nc.id, nc.raw_text, nc.choice_object
+    FROM narrative_chunks nc
+    WHERE {playable_narrative_predicate()}
+    ORDER BY nc.id DESC
+    LIMIT 1
+"""
 
 
 @dataclass
@@ -269,31 +273,20 @@ def _get_narrative_state(cur) -> NarrativeState:
             session_id=incubator_row.get("session_id"),
         )
 
-    # No pending content - get latest committed chunk. Retrograde-authored
-    # chunks (the prologue anchor and per-event history summaries) are
-    # excluded from this resume surface, mirroring MEMNON's recent-chunks
-    # boundary: generated history is memory, not recent narration. Without
-    # this filter a freshly transitioned slot would resolve a Retrograde
-    # summary chunk as the continuation parent and skip bootstrap.
-    cur.execute(
-        """
-        SELECT nc.id, nc.raw_text, nc.choice_object
-        FROM narrative_chunks nc
-        WHERE NOT (
-            COALESCE(nc.authorial_directives, '[]'::jsonb)
-                @> %(retrograde_prologue_marker)s::jsonb
-            OR COALESCE(nc.authorial_directives, '[]'::jsonb)
-                @> %(retrograde_summary_marker)s::jsonb
-        )
-        ORDER BY nc.id DESC
-        LIMIT 1
-        """,
-        {
-            "retrograde_prologue_marker": json.dumps([RETROGRADE_PROLOGUE_MARKER]),
-            "retrograde_summary_marker": json.dumps([RETROGRADE_SUMMARY_MARKER]),
-        },
-    )
+    # No pending content - get latest committed playable chunk. Retrograde's
+    # synthetic prologue remains a world-event FK anchor, not a continuation
+    # parent. A freshly transitioned slot therefore still resolves chunk 0
+    # and follows the ordinary narrative bootstrap path.
+    cur.execute(_LATEST_PLAYABLE_CHUNK_SQL)
     chunk_row = cur.fetchone()
+
+    return _narrative_state_from_committed_chunk(chunk_row)
+
+
+def _narrative_state_from_committed_chunk(
+    chunk_row: Optional[Dict[str, Any]],
+) -> NarrativeState:
+    """Map the latest playable row (or its absence) to resume state."""
 
     if chunk_row:
         choices = extract_presented_choices(chunk_row.get("choice_object"))
