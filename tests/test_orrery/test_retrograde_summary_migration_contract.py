@@ -150,6 +150,67 @@ def test_runtime_boundary_trusts_validated_durable_job(migration: ModuleType) ->
     assert "ORDER BY" not in cursor.statement
 
 
+def test_nested_maturation_request_resolves_to_surviving_root(
+    migration: ModuleType,
+) -> None:
+    jobs = {
+        21: (1447, {}, False),
+        22: (1456, {}, False),
+    }
+    owner_by_summary = {1456: 21}
+
+    assert (
+        migration._resolve_surviving_job_request(
+            job_id=22,
+            jobs=jobs,
+            owner_by_summary=owner_by_summary,
+        )
+        == 1447
+    )
+
+
+def test_nested_maturation_request_rejects_owner_cycles(
+    migration: ModuleType,
+) -> None:
+    jobs = {
+        21: (1457, {}, False),
+        22: (1456, {}, False),
+    }
+    owner_by_summary = {
+        1456: 21,
+        1457: 22,
+    }
+
+    with pytest.raises(RuntimeError, match="ancestry cycle"):
+        migration._resolve_surviving_job_request(
+            job_id=22,
+            jobs=jobs,
+            owner_by_summary=owner_by_summary,
+        )
+
+
+def test_nested_maturation_request_rejects_ownerless_summary(
+    migration: ModuleType,
+) -> None:
+    with pytest.raises(RuntimeError, match="without a maturation-job owner"):
+        migration._resolve_surviving_job_request(
+            job_id=22,
+            jobs={22: (1456, {}, False)},
+            owner_by_summary={1456: None},
+        )
+
+
+def test_nested_maturation_request_rejects_missing_owner_job(
+    migration: ModuleType,
+) -> None:
+    with pytest.raises(RuntimeError, match="names missing owner job"):
+        migration._resolve_surviving_job_request(
+            job_id=22,
+            jobs={22: (1456, {}, False)},
+            owner_by_summary={1456: 21},
+        )
+
+
 def test_migration_installs_guards_after_legacy_cleanup() -> None:
     source = (
         Path(__file__).parents[2] / "migrations" / "078_retrograde_summary_storage.py"

@@ -39,11 +39,13 @@ def run(conn: Any) -> None:
         _require_clean_target(cur)
         _require_base_schema(cur)
         _lock_legacy_writers(cur)
+        _repair_empty_narrative_lifecycle_schema(cur)
         embedding_tables = _discover_source_embedding_tables(cur)
         _lock_source_embedding_tables(cur, embedding_tables)
         legacy_rows = _load_and_validate_legacy_rows(cur)
         backfill_rows = _load_and_validate_backfill_events(cur)
         legacy_ids = [int(row[0]) for row in legacy_rows]
+        _reanchor_maturation_jobs(cur, legacy_rows)
         recording_boundaries = _resolve_recording_boundaries(cur, legacy_rows)
         backfill_boundaries = _resolve_backfill_recording_boundaries(cur, backfill_rows)
         all_boundaries = set(recording_boundaries.values()) | set(
@@ -66,6 +68,12 @@ def run(conn: Any) -> None:
         _copy_summaries(cur, legacy_rows, recording_boundaries)
         _copy_backfill_summaries(cur, backfill_rows, backfill_boundaries)
         embedding_counts = _copy_embeddings(cur, embedding_tables, legacy_ids)
+        _delete_legacy_embeddings(
+            cur,
+            embedding_tables,
+            legacy_ids,
+            embedding_counts,
+        )
         _update_maturation_manifests(cur, legacy_ids)
         _remove_legacy_payload_links(cur, legacy_ids)
         _delete_legacy_chunks(cur, legacy_ids)
@@ -74,6 +82,8 @@ def run(conn: Any) -> None:
             cur,
             expected_summary_count=len(legacy_ids) + len(backfill_rows),
             expected_embedding_counts=embedding_counts,
+            source_embedding_tables=embedding_tables,
+            legacy_ids=legacy_ids,
         )
 
 
@@ -99,28 +109,18 @@ def _require_clean_target(cur: Any) -> None:
 
 
 def _require_base_schema(cur: Any) -> None:
+    """Require only columns used even when no legacy summaries exist."""
+
     requirements = {
         "narrative_chunks": {
             "id",
-            "raw_text",
-            "storyteller_text",
-            "choice_object",
-            "choice_text",
             "authorial_directives",
-            "state",
-            "embedding_generated_at",
-            "created_at",
         },
         "chunk_metadata": {
             "chunk_id",
-            "season",
-            "episode",
-            "scene",
-            "world_layer",
         },
         "world_events": {
             "id",
-            "tick_chunk_id",
             "source",
             "payload",
             "created_at",
@@ -132,6 +132,52 @@ def _require_base_schema(cur: Any) -> None:
             "updated_at",
         },
     }
+    _require_columns(cur, requirements)
+
+    cur.execute("SELECT to_regtype('vector') IS NOT NULL")
+    if not bool(cur.fetchone()[0]):
+        raise RuntimeError("Migration 078 requires the pgvector vector type")
+
+
+def _require_legacy_copy_schema(cur: Any) -> None:
+    """Require every heavy-copy column once a matched legacy set exists."""
+
+    _require_columns(
+        cur,
+        {
+            "narrative_chunks": {
+                "id",
+                "raw_text",
+                "storyteller_text",
+                "choice_object",
+                "choice_text",
+                "authorial_directives",
+                "state",
+                "embedding_generated_at",
+                "created_at",
+            },
+            "chunk_metadata": {
+                "chunk_id",
+                "season",
+                "episode",
+                "scene",
+                "world_layer",
+            },
+            "world_events": {
+                "id",
+                "tick_chunk_id",
+                "source",
+                "payload",
+                "created_at",
+            },
+        },
+    )
+
+
+def _require_columns(
+    cur: Any,
+    requirements: dict[str, set[str]],
+) -> None:
     for table_name, required_columns in requirements.items():
         cur.execute(
             """
@@ -148,10 +194,6 @@ def _require_base_schema(cur: Any) -> None:
                 f"Migration 078 requires public.{table_name} columns: {missing}"
             )
 
-    cur.execute("SELECT to_regtype('vector') IS NOT NULL")
-    if not bool(cur.fetchone()[0]):
-        raise RuntimeError("Migration 078 requires the pgvector vector type")
-
 
 def _lock_legacy_writers(cur: Any) -> None:
     """Freeze every legacy writer before the migration reads its source set."""
@@ -166,6 +208,49 @@ def _lock_legacy_writers(cur: Any) -> None:
         IN ACCESS EXCLUSIVE MODE
         """
     )
+
+
+def _repair_empty_narrative_lifecycle_schema(cur: Any) -> None:
+    """Repair two historical empty-slot omissions under the writer lock.
+
+    Some setup-only slots were stamped through migration 075 without the
+    lifecycle columns used by later narrative schemas.  Adding nullable/defaulted
+    columns is deterministic while the table is empty.  A populated table with
+    either omission is ambiguous and must still fail loud.
+    """
+
+    cur.execute(
+        """
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'narrative_chunks'
+          AND column_name IN ('state', 'embedding_generated_at')
+        """
+    )
+    present = {str(row[0]) for row in cur.fetchall()}
+    missing = {"state", "embedding_generated_at"} - present
+    if not missing:
+        return
+
+    cur.execute("SELECT count(*) FROM narrative_chunks")
+    row_count = int(cur.fetchone()[0])
+    if row_count:
+        raise RuntimeError(
+            "Migration 078 cannot repair populated public.narrative_chunks; "
+            f"missing lifecycle columns: {sorted(missing)} rows={row_count}"
+        )
+
+    if "state" in missing:
+        cur.execute(
+            "ALTER TABLE narrative_chunks "
+            "ADD COLUMN state varchar(20) DEFAULT 'draft'"
+        )
+    if "embedding_generated_at" in missing:
+        cur.execute(
+            "ALTER TABLE narrative_chunks "
+            "ADD COLUMN embedding_generated_at timestamptz"
+        )
 
 
 def _lock_source_embedding_tables(
@@ -236,9 +321,7 @@ def _validate_source_embedding_table(
     }
     expected = {
         "chunk_id": ("bigint", True),
-        "model": ("text", True),
         "embedding": (f"vector({dimensions})", True),
-        "created_at": ("timestamp with time zone", True),
     }
     mismatches = {
         name: {"expected": spec, "actual": columns.get(name)}
@@ -250,6 +333,41 @@ def _validate_source_embedding_table(
             f"Embedding table public.{table_name} failed catalog preflight: "
             f"{mismatches}"
         )
+
+    model_column = columns.get("model")
+    model_type = model_column[0] if model_column is not None else ""
+    if (
+        model_column is None
+        or not model_column[1]
+        or (
+            model_type != "text"
+            and re.fullmatch(r"character varying(?:\(\d+\))?", model_type) is None
+        )
+    ):
+        raise RuntimeError(
+            f"Embedding table public.{table_name} failed model-column preflight: "
+            f"expected non-null text-compatible type, actual={model_column!r}"
+        )
+
+    created_at_column = columns.get("created_at")
+    if created_at_column is None or created_at_column[0] != "timestamp with time zone":
+        raise RuntimeError(
+            f"Embedding table public.{table_name} failed created-at preflight: "
+            "expected timestamp with time zone, "
+            f"actual={created_at_column!r}"
+        )
+    if not created_at_column[1]:
+        cur.execute(
+            sql.SQL(
+                "SELECT chunk_id, model FROM {} " "WHERE created_at IS NULL LIMIT 1"
+            ).format(sql.Identifier(table_name))
+        )
+        null_timestamp = cur.fetchone()
+        if null_timestamp is not None:
+            raise RuntimeError(
+                f"Embedding table {table_name} contains a NULL created_at "
+                f"for identity {null_timestamp!r}"
+            )
 
     cur.execute(
         sql.SQL(
@@ -334,6 +452,23 @@ def _load_and_validate_legacy_rows(cur: Any) -> list[tuple[Any, ...]]:
             "Legacy Retrograde summaries must have both marker and world-event "
             f"link: chunk={unmatched[0]} marked={unmatched[1]} linked={unmatched[2]}"
         )
+
+    cur.execute(
+        """
+        SELECT EXISTS (
+            SELECT 1
+            FROM narrative_chunks AS nc
+            JOIN world_events AS we
+              ON (we.payload ->> 'retrograde_summary_chunk_id')::bigint = nc.id
+            WHERE nc.authorial_directives @> %s::jsonb
+        )
+        """,
+        (marker_json,),
+    )
+    if not bool(cur.fetchone()[0]):
+        return []
+
+    _require_legacy_copy_schema(cur)
 
     cur.execute(
         """
@@ -495,6 +630,171 @@ def _load_and_validate_backfill_events(cur: Any) -> list[tuple[Any, ...]]:
                 + "; ".join(problems)
             )
     return rows
+
+
+def _reanchor_maturation_jobs(cur: Any, legacy_rows: list[tuple[Any, ...]]) -> None:
+    """Collapse job requests through legacy-summary ownership ancestry.
+
+    A legacy worker could enqueue a new maturation from a summary chunk emitted
+    by an earlier job.  That summary is deleted by this migration, so preserve
+    causality by following its owning job until the first surviving narrative
+    request is reached.  The relational FK and any matching manifest audit field
+    move together in this transaction.
+    """
+
+    owner_by_summary: dict[int, int | None] = {}
+    for row in legacy_rows:
+        summary_id = int(row[0])
+        event_ref = str(row[8] or "")
+        match = MATURATION_EVENT_REF.match(event_ref)
+        owner_by_summary[summary_id] = (
+            int(match.group("job_id")) if match is not None else None
+        )
+    if not owner_by_summary:
+        return
+
+    cur.execute(
+        """
+        SELECT
+            id,
+            requesting_chunk_id,
+            result_manifest,
+            result_manifest IS NULL AS manifest_is_sql_null
+        FROM orrery_maturation_jobs
+        ORDER BY id
+        """
+    )
+    jobs = {
+        int(job_id): (int(requesting_chunk_id), manifest, bool(manifest_is_sql_null))
+        for job_id, requesting_chunk_id, manifest, manifest_is_sql_null in cur.fetchall()
+    }
+
+    impacted_job_ids = sorted(
+        job_id
+        for job_id, (
+            requesting_chunk_id,
+            _manifest,
+            _manifest_is_sql_null,
+        ) in jobs.items()
+        if requesting_chunk_id in owner_by_summary
+    )
+    for job_id in impacted_job_ids:
+        original_chunk_id, raw_manifest, manifest_is_sql_null = jobs[job_id]
+        surviving_chunk_id = _resolve_surviving_job_request(
+            job_id=job_id,
+            jobs=jobs,
+            owner_by_summary=owner_by_summary,
+        )
+
+        cur.execute(
+            "SELECT id FROM narrative_chunks WHERE id = %s",
+            (surviving_chunk_id,),
+        )
+        if cur.fetchone() is None:
+            raise RuntimeError(
+                f"Maturation job {job_id} resolves to missing narrative chunk "
+                f"{surviving_chunk_id}"
+            )
+
+        updated_manifest = raw_manifest
+        if manifest_is_sql_null:
+            if raw_manifest is not None:
+                raise AssertionError("SQL NULL manifest decoded as a value")
+        else:
+            if not isinstance(raw_manifest, dict):
+                raise RuntimeError(f"Maturation job {job_id} has a non-object manifest")
+            updated_manifest = dict(raw_manifest)
+            if "requesting_chunk_id" in updated_manifest:
+                manifest_chunk_id = _strict_positive_manifest_id(
+                    updated_manifest["requesting_chunk_id"],
+                    artifact=(f"Maturation job {job_id} manifest requesting chunk id"),
+                )
+                if manifest_chunk_id != original_chunk_id:
+                    raise RuntimeError(
+                        f"Maturation job {job_id} request mismatch: "
+                        f"column={original_chunk_id} resolved={surviving_chunk_id} "
+                        f"manifest={manifest_chunk_id}"
+                    )
+                updated_manifest["requesting_chunk_id"] = surviving_chunk_id
+
+        cur.execute(
+            """
+            UPDATE orrery_maturation_jobs
+            SET requesting_chunk_id = %s,
+                result_manifest = %s::jsonb,
+                updated_at = now()
+            WHERE id = %s AND requesting_chunk_id = %s
+            """,
+            (
+                surviving_chunk_id,
+                (
+                    json.dumps(updated_manifest)
+                    if updated_manifest is not None
+                    else None
+                ),
+                job_id,
+                original_chunk_id,
+            ),
+        )
+        if cur.rowcount != 1:
+            raise RuntimeError(
+                f"Maturation job {job_id} changed during boundary repair"
+            )
+
+    legacy_ids = sorted(owner_by_summary)
+    cur.execute(
+        """
+        SELECT id, requesting_chunk_id
+        FROM orrery_maturation_jobs
+        WHERE requesting_chunk_id = ANY(%s)
+        ORDER BY id
+        LIMIT 1
+        """,
+        (legacy_ids,),
+    )
+    remaining = cur.fetchone()
+    if remaining is not None:
+        raise RuntimeError(
+            "Maturation request still references a legacy summary after repair: "
+            f"job={remaining[0]} chunk={remaining[1]}"
+        )
+
+
+def _resolve_surviving_job_request(
+    *,
+    job_id: int,
+    jobs: dict[int, tuple[int, Any, bool]],
+    owner_by_summary: dict[int, int | None],
+) -> int:
+    """Resolve one job's request through prior summary-producing jobs."""
+
+    if job_id not in jobs:
+        raise RuntimeError(f"Missing maturation job {job_id} during boundary repair")
+    requesting_chunk_id = jobs[job_id][0]
+    visited_jobs = {job_id}
+    ancestry = [job_id]
+    while requesting_chunk_id in owner_by_summary:
+        owner_job_id = owner_by_summary[requesting_chunk_id]
+        if owner_job_id is None:
+            raise RuntimeError(
+                f"Maturation job {job_id} requests legacy summary "
+                f"{requesting_chunk_id} without a maturation-job owner"
+            )
+        if owner_job_id in visited_jobs:
+            raise RuntimeError(
+                f"Maturation request ancestry cycle for job {job_id}: "
+                f"{ancestry + [owner_job_id]}"
+            )
+        owner_job = jobs.get(owner_job_id)
+        if owner_job is None:
+            raise RuntimeError(
+                f"Legacy summary {requesting_chunk_id} names missing owner job "
+                f"{owner_job_id}"
+            )
+        visited_jobs.add(owner_job_id)
+        ancestry.append(owner_job_id)
+        requesting_chunk_id = owner_job[0]
+    return requesting_chunk_id
 
 
 def _resolve_recording_boundaries(
@@ -843,6 +1143,40 @@ def _copy_embeddings(
     return copied
 
 
+def _delete_legacy_embeddings(
+    cur: Any,
+    embedding_tables: Iterable[tuple[str, int]],
+    legacy_ids: list[int],
+    expected_embedding_counts: dict[str, int],
+) -> None:
+    """Remove copied vectors even when a historical source table lacks its FK.
+
+    Canonical source tables cascade from ``narrative_chunks``, but older slot
+    schemas are not assumed to retain that constraint.  Deleting explicitly
+    prevents an accepted-but-unconstrained source catalog from keeping orphaned
+    chunk identities after the narrative rows are removed.
+    """
+
+    for source_table_name, dimensions in embedding_tables:
+        target_table_name = _target_embedding_table(dimensions)
+        expected = expected_embedding_counts[target_table_name]
+        if legacy_ids:
+            cur.execute(
+                sql.SQL("DELETE FROM {} WHERE chunk_id = ANY(%s)").format(
+                    sql.Identifier(source_table_name)
+                ),
+                (legacy_ids,),
+            )
+            deleted = cur.rowcount
+        else:
+            deleted = 0
+        if deleted != expected:
+            raise RuntimeError(
+                f"Migration 078 embedding cleanup mismatch for "
+                f"{source_table_name}: expected {expected}, deleted {deleted}"
+            )
+
+
 def _target_embedding_table(dimensions: int) -> str:
     if dimensions <= 0:
         raise ValueError(f"Embedding dimensions must be positive, got {dimensions}")
@@ -855,7 +1189,7 @@ def _target_embedding_table(dimensions: int) -> str:
 def _update_maturation_manifests(cur: Any, legacy_ids: list[int]) -> None:
     cur.execute(
         """
-        SELECT id, result_manifest
+        SELECT id, requesting_chunk_id, result_manifest
         FROM orrery_maturation_jobs
         WHERE result_manifest <> '{}'::jsonb
         ORDER BY id
@@ -882,14 +1216,25 @@ def _update_maturation_manifests(cur: Any, legacy_ids: list[int]) -> None:
             int(match.group("job_id")) if match is not None else None
         )
 
-    for job_id_raw, raw_manifest in job_rows:
+    for job_id_raw, requesting_chunk_id_raw, raw_manifest in job_rows:
         job_id = int(job_id_raw)
+        requesting_chunk_id = int(requesting_chunk_id_raw)
         manifest = _rewrite_maturation_manifest(
             job_id=job_id,
             raw_manifest=raw_manifest,
             legacy_id_set=legacy_id_set,
             legacy_owner_by_summary=legacy_owner_by_summary,
         )
+        if "requesting_chunk_id" in manifest:
+            manifest_request = _strict_positive_manifest_id(
+                manifest["requesting_chunk_id"],
+                artifact=f"Maturation job {job_id} manifest requesting chunk id",
+            )
+            if manifest_request != requesting_chunk_id:
+                raise RuntimeError(
+                    f"Maturation job {job_id} request mismatch after repair: "
+                    f"column={requesting_chunk_id} manifest={manifest_request}"
+                )
 
         cur.execute(
             """
@@ -1230,6 +1575,8 @@ def _validate_postconditions(
     *,
     expected_summary_count: int,
     expected_embedding_counts: dict[str, int],
+    source_embedding_tables: Iterable[tuple[str, int]],
+    legacy_ids: list[int],
 ) -> None:
     cur.execute("SELECT count(*) FROM retrograde_summaries")
     actual_summary_count = int(cur.fetchone()[0])
@@ -1248,6 +1595,20 @@ def _validate_postconditions(
             raise RuntimeError(
                 f"Migration 078 embedding copy mismatch for {table_name}: "
                 f"expected {expected}, copied {actual}"
+            )
+
+    for table_name, _dimensions in source_embedding_tables:
+        cur.execute(
+            sql.SQL("SELECT count(*) FROM {} WHERE chunk_id = ANY(%s)").format(
+                sql.Identifier(table_name)
+            ),
+            (legacy_ids,),
+        )
+        remaining_embeddings = int(cur.fetchone()[0])
+        if remaining_embeddings:
+            raise RuntimeError(
+                f"Migration 078 left {remaining_embeddings} legacy vectors in "
+                f"{table_name}"
             )
 
     cur.execute(
