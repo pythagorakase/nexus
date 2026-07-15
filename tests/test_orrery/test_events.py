@@ -142,8 +142,8 @@ class RecordingCursor:
                 },
             )
         elif (
-            "SELECT debt_score, last_evaluated_at, last_evaluated_chunk_id"
-            " FROM character_need_states" in normalized
+            "SELECT debt_score, last_evaluated_at FROM character_need_states"
+            in normalized
         ):
             entity_id, need_type = params
             self._fetchone = self.need_state.get((entity_id, need_type))

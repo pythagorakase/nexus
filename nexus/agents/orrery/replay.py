@@ -848,8 +848,6 @@ class _Replayer:
             last_evaluated_at=last_evaluated,
             current_world_time=world_time,
             tuning=self.need_tuning,
-            last_evaluated_chunk_id=row.get("last_evaluated_chunk_id"),
-            current_chunk_id=chunk_id,
         )
         # numeric(8,2) storage rounds; mirror it.
         row["debt_score"] = _pg_round(

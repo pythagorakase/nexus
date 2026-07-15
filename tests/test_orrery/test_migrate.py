@@ -62,6 +62,24 @@ def test_relationship_valence_migration_uses_explicit_mapping() -> None:
         assert f"WHEN '{label}' THEN {magnitude}" in migration_sql
 
 
+def test_need_state_chunk_stamp_comment_describes_provenance() -> None:
+    """The forward-fix documents the stamp without reviving the retired floor."""
+
+    migration_sql = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "079_need_state_chunk_provenance_comment.sql"
+    ).read_text()
+
+    assert (
+        "COMMENT ON COLUMN character_need_states.last_evaluated_chunk_id"
+        in migration_sql
+    )
+    assert "mutation and replay provenance" in migration_sql
+    assert "elapsed-world-time debt accrual" in migration_sql
+    assert "min_accrual_hours_per_chunk" not in migration_sql
+
+
 def test_retrograde_persistence_migration_adds_distinct_sources() -> None:
     """Retrograde canonical writes need explicit event and tag provenance."""
 
