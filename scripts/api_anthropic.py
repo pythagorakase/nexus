@@ -274,6 +274,7 @@ class AnthropicProvider(LLMProvider):
         top_p: Optional[float] = None,
         top_k: Optional[int] = None,
         timeout: int = 120,
+        reasoning_effort: Optional[str] = None,
         thinking_enabled: bool = False,
         thinking_budget_tokens: Optional[int] = None,
         structured_output_retries: Optional[int] = None,
@@ -291,6 +292,7 @@ class AnthropicProvider(LLMProvider):
             top_p: Optional top-p sampling parameter (0.0-1.0)
             top_k: Optional top-k sampling parameter
             timeout: Request timeout in seconds
+            reasoning_effort: Anthropic output effort for structured requests
             thinking_enabled: Enable extended thinking (requires Claude 4+ models)
             thinking_budget_tokens: Thinking token budget (typically 32000)
             structured_output_retries: Validation retry budget for structured
@@ -301,6 +303,7 @@ class AnthropicProvider(LLMProvider):
         self.top_p = top_p
         self.top_k = top_k
         self.timeout = timeout
+        self.reasoning_effort = reasoning_effort
         self.thinking_enabled = thinking_enabled
         self.thinking_budget_tokens = thinking_budget_tokens
         self.structured_output_retries = (
@@ -314,6 +317,10 @@ class AnthropicProvider(LLMProvider):
         if thinking_enabled and thinking_budget_tokens is None:
             raise ValueError(
                 "thinking_budget_tokens must be specified when thinking_enabled=True"
+            )
+        if reasoning_effort not in {None, "low", "medium", "high"}:
+            raise ValueError(
+                "reasoning_effort must be one of 'low', 'medium', or 'high'"
             )
 
         # Call parent init
@@ -619,6 +626,9 @@ class AnthropicProvider(LLMProvider):
                 if output_format is not None
                 else anthropic_output_config(schema_model)
             )
+        if self.reasoning_effort is not None:
+            output_config = dict(output_config)
+            output_config.setdefault("effort", self.reasoning_effort)
 
         params: Dict[str, Any] = {
             "model": self.model,

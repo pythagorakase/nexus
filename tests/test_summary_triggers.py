@@ -322,6 +322,7 @@ def test_summary_generator_uses_registry_native_provider_contract(
         assert isinstance(provider, AnthropicProvider)
         assert expected_transport is None
         assert provider.max_tokens == settings.season_max_output_tokens
+        assert provider.reasoning_effort == settings.reasoning_effort
 
 
 @pytest.mark.requires_postgres

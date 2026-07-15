@@ -180,6 +180,8 @@ def build_native_structured_provider(
         anthropic_kwargs: Dict[str, Any] = {}
         if temperature is not None:
             anthropic_kwargs["temperature"] = temperature
+        if reasoning_effort is not None:
+            anthropic_kwargs["reasoning_effort"] = reasoning_effort
         return AnthropicProvider(
             model=model,
             max_tokens=max_tokens,
