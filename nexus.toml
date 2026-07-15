@@ -998,7 +998,14 @@ command = [
     # apex_context_window = 75k ceiling; measured 36.8k at slot-5 depth ~75)
     # PLUS generation headroom — 32768 rejected real turns with
     # exceed_context_size_error. 98304 = 75k prompt ceiling + >20k output.
-    "--ctx-size", "98304", "-ngl", "999", "--jinja",
+    # --parallel 1: NEXUS turns are strictly sequential, and the server
+    # build defaults to 4 slots, each provisioning the full ctx — 4x98304
+    # of KV (~120GB) spilled off-Metal and prefill collapsed to ~30 tok/s
+    # (a measured 26.5-minute turn). One slot keeps KV (~30GB) GPU-resident.
+    # (--flash-attn defaults to auto on this build; passing it bare eats the
+    # next argv token as its value and aborts startup, so it stays unset.)
+    "--ctx-size", "98304", "--parallel", "1",
+    "-ngl", "999", "--jinja",
 ]
 host = "127.0.0.1"
 port = 1234  # must match [global.model.api_models.local] base_url (validated)
