@@ -11,9 +11,14 @@ from typing import Any, Dict, Optional, TYPE_CHECKING
 import psycopg2
 
 from nexus.api.conversations import ConversationsClient
-from nexus.api.config_utils import get_new_story_model
-from nexus.api.new_story_cache import read_cache, write_cache, clear_cache, init_cache
-from nexus.api.save_slots import upsert_slot, clear_active
+from nexus.api.new_story_cache import (
+    clear_cache,
+    init_cache,
+    read_cache,
+    read_cache_raw,
+    write_cache,
+)
+from nexus.api.save_slots import clear_active, get_slot_model, upsert_slot
 from nexus.api.slot_utils import slot_dbname, all_slots
 from scripts.new_story_setup import create_slot_schema_only
 
@@ -27,6 +32,24 @@ logger = logging.getLogger("nexus.api.new_story_flow")
 MOCK_WIZARD_MODEL = "TEST"
 
 
+def resolve_setup_model(
+    slot_model: Optional[str],
+    *,
+    setup_started: bool,
+    default_slot_model: str,
+    wizard_default_model: str,
+) -> str:
+    """Resolve an omitted model when a new-story setup starts.
+
+    Preserve a slot model when it differs from the fresh-slot placeholder or
+    when an existing wizard-cache row proves setup already locked that model.
+    Only a genuinely fresh slot falls back to the wizard roster default.
+    """
+    if slot_model and (setup_started or slot_model != default_slot_model):
+        return slot_model
+    return wizard_default_model
+
+
 def start_setup(slot_number: int, model: Optional[str] = None) -> str:
     """
     Start a new setup conversation for a slot.
@@ -37,11 +60,9 @@ def start_setup(slot_number: int, model: Optional[str] = None) -> str:
 
     Args:
         slot_number: Target save slot (1-5)
-        model: Optional model name. The HTTP setup endpoint resolves the
-            model before calling (explicit override or the configured
-            wizard default), so it always passes a concrete ID; direct
-            callers (e.g., scripts/new_story_cli.py) may pass None to get
-            the nexus.toml wizard.default_model fallback here.
+        model: Optional explicit model override. When omitted, an existing
+            operator-set slot model is preserved; only an unset/fresh slot
+            uses the configured wizard default.
 
     Returns:
         Thread ID for the new conversation
@@ -58,9 +79,22 @@ def start_setup(slot_number: int, model: Optional[str] = None) -> str:
         # New slot databases are created by cloning this template's structure.
         create_slot_schema_only(slot_number, source_db="NEXUS_template")
 
+    if model:
+        # Preserve the explicit-override path without requiring config or a
+        # metadata read: it is authoritative by definition.
+        model_to_use = model
+    else:
+        from nexus.config import load_settings
+
+        settings = load_settings()
+        model_to_use = resolve_setup_model(
+            get_slot_model(slot_number, dbname=dbname),
+            setup_started=read_cache_raw(dbname) is not None,
+            default_slot_model=settings.global_.model.default_slot_model,
+            wizard_default_model=settings.wizard.default_model,
+        )
+
     clear_cache(dbname)
-    # Use provided model or fall back to settings
-    model_to_use = model or get_new_story_model()
     client = ConversationsClient(model=model_to_use)
     thread_id = client.create_thread()
     init_cache(dbname, thread_id=thread_id, target_slot=slot_number)

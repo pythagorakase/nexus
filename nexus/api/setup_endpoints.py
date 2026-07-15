@@ -30,8 +30,8 @@ from nexus.api.new_story_flow import (
     activate_slot,
 )
 from nexus.api.new_story_cache import write_wizard_choices
+from nexus.api.save_slots import get_slot_model
 from nexus.api.slot_utils import slot_dbname
-from nexus.api.config_utils import get_new_story_model
 
 logger = logging.getLogger("nexus.api.setup_endpoints")
 
@@ -42,14 +42,15 @@ router = APIRouter(prefix="/api/story/new", tags=["setup"])
 async def start_setup_endpoint(request: StartSetupRequest) -> Dict[str, Any]:
     """Start a new setup conversation"""
     try:
-        # Resolve the effective model once: an explicit request override
-        # (backend/CLI test flows may pass TEST here) or the configured
-        # wizard default from nexus.toml. The resolved model is stamped on
-        # the slot by start_setup, overriding any pre-wizard slot stamp such
-        # as the dev reset default; the mock TEST server is never selected
-        # implicitly.
-        model_to_use = request.model or get_new_story_model()
-        thread_id = start_setup(request.slot, model_to_use)
+        # The core resolves and persists the setup model. Passing the raw
+        # request keeps omitted client values distinct from explicit
+        # overrides so an operator-set slot model can be preserved.
+        thread_id = start_setup(request.slot, request.model)
+        model_to_use = get_slot_model(request.slot, dbname=slot_dbname(request.slot))
+        if not model_to_use:
+            raise RuntimeError(
+                f"Setup for slot {request.slot} started without a persisted model"
+            )
 
         # Load welcome message and choices from frontmatter
         prompt_path = (

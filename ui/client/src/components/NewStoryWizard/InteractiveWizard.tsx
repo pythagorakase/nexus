@@ -164,8 +164,9 @@ export function InteractiveWizard({
                     return;
                 }
 
-                // No model in the payload: the backend resolves the
-                // configured wizard default and stamps it on the slot.
+                // No model in the payload: the backend preserves an
+                // operator-set slot model, or chooses the wizard default for
+                // a fresh slot, and stamps that resolution on the setup.
                 const startRes = await fetch("/api/story/new/setup/start", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
