@@ -2,16 +2,22 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any, List, Optional, Tuple
+
+import pytest
+from pydantic_ai import ModelRetry
 
 from nexus.agents.logon.apex_schema import (
     CharacterReference,
     CharacterStateUpdate,
     LocationStateUpdate,
     NewCharacter,
+    NewEntityDeclaration,
     ReferencedEntities,
     ReferenceType,
     StateUpdates,
+    StorytellerResponseExtended,
 )
 from nexus.agents.logon.orrery_tag_schema import (
     storyteller_anthropic_output_config,
@@ -24,6 +30,7 @@ from nexus.agents.logon.orrery_tag_validation import (
 )
 from nexus.agents.orrery.tag_library import TagLibraryEntry
 from nexus.agents.orrery.tag_schemas import OrreryTagBestowal
+from scripts.api_openai import OpenAIProvider
 
 
 class FakeRegistryCursor:
@@ -36,6 +43,10 @@ class FakeRegistryCursor:
             "perceptive": (2, "disposition", False, None),
             "haven": (3, "place_class", False, None),
         }
+        # tag -> (id, subject_kinds, object_kinds)
+        self.pair_tags = {
+            "protects": (11, ["character", "faction"], ["place"]),
+        }
         self.categories_by_kind = {
             "character": {"bodyform", "disposition"},
             "place": {"place_class"},
@@ -43,6 +54,12 @@ class FakeRegistryCursor:
         }
         self._result: List[Tuple[Any, ...]] = []
         self._one: Optional[Tuple[Any, ...]] = None
+
+    def __enter__(self) -> "FakeRegistryCursor":
+        return self
+
+    def __exit__(self, *_args: Any) -> bool:
+        return False
 
     def execute(self, sql: str, params: Tuple[Any, ...] = ()) -> None:
         if "tag_category_registry" in sql:
@@ -53,6 +70,10 @@ class FakeRegistryCursor:
             self._one = None
         elif "FROM tags" in sql:
             row = self.tags.get(params[0])
+            self._one = row
+            self._result = [row] if row else []
+        elif "FROM pair_tags" in sql:
+            row = self.pair_tags.get(params[0])
             self._one = row
             self._result = [row] if row else []
         else:
@@ -69,8 +90,53 @@ def _response(**kwargs: Any) -> Any:
     class _FakeResponse:
         referenced_entities = kwargs.get("referenced_entities")
         state_updates = kwargs.get("state_updates")
+        new_entities = kwargs.get("new_entities", [])
 
     return _FakeResponse()
+
+
+class FakeRegistryConnection:
+    """Context-managed connection exposing a fixed registry cursor."""
+
+    def __init__(self, cursor: FakeRegistryCursor) -> None:
+        self._cursor = cursor
+
+    def __enter__(self) -> "FakeRegistryConnection":
+        return self
+
+    def __exit__(self, *_args: Any) -> bool:
+        return False
+
+    def cursor(self) -> FakeRegistryCursor:
+        return self._cursor
+
+
+def _storyteller_response(
+    *,
+    tag_hints: Optional[List[str]] = None,
+    pair_tag_hints: Optional[List[dict[str, str]]] = None,
+) -> StorytellerResponseExtended:
+    return StorytellerResponseExtended.model_validate(
+        {
+            "narrative": "Marra Kest steps out from behind the sluice gate.",
+            "choices": ["Question Marra.", "Keep walking."],
+            "chunk_metadata": {},
+            "referenced_entities": {},
+            "state_updates": {},
+            "operations": None,
+            "orrery_adjudications": [],
+            "new_entities": [
+                {
+                    "kind": "character",
+                    "name": "Marra Kest",
+                    "summary": "A sluice keeper with divided loyalties.",
+                    "tag_hints": tag_hints or [],
+                    "pair_tag_hints": pair_tag_hints or [],
+                }
+            ],
+            "reasoning": None,
+        }
+    )
 
 
 def test_valid_bestowals_produce_no_issues() -> None:
@@ -138,6 +204,214 @@ def test_kind_incompatible_tags_are_flagged() -> None:
     issues = collect_orrery_tag_issues(response, FakeRegistryCursor())
     assert len(issues) == 1
     assert "haven" in issues[0]
+
+
+def test_new_entity_hint_issues_are_path_qualified_and_aggregated() -> None:
+    response = _response(
+        new_entities=[
+            NewEntityDeclaration.model_validate(
+                {
+                    "kind": "character",
+                    "name": "Marra Kest",
+                    "summary": "A sluice keeper with divided loyalties.",
+                    "tag_hints": ["invented:tag"],
+                    "pair_tag_hints": [
+                        {
+                            "tag": "invented_pair_tag",
+                            "other_entity_name": "The Sluice Guild",
+                            "declared_entity_role": "subject",
+                        },
+                        {
+                            "tag": "protects",
+                            "other_entity_name": "The Sluice Guild",
+                            "declared_entity_role": "object",
+                        },
+                    ],
+                }
+            )
+        ]
+    )
+
+    issues = collect_orrery_tag_issues(response, FakeRegistryCursor())
+
+    assert len(issues) == 3
+    assert issues[0].startswith("new_entities[0].tag_hints:")
+    assert issues[1].startswith("new_entities[0].pair_tag_hints[0].tag:")
+    assert issues[2].startswith("new_entities[0].pair_tag_hints[1].tag:")
+    assert "does not allow object_kind='character'" in issues[2]
+
+
+def test_registered_new_entity_hints_produce_no_issues() -> None:
+    response = _storyteller_response(
+        tag_hints=["human"],
+        pair_tag_hints=[
+            {
+                "tag": "protects",
+                "other_entity_name": "The Lower Sluice",
+                "declared_entity_role": "subject",
+            }
+        ],
+    )
+
+    assert collect_orrery_tag_issues(response, FakeRegistryCursor()) == []
+
+
+@pytest.mark.asyncio
+async def test_storyteller_validator_attributes_declaration_failure_to_model_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from nexus.api import db_pool
+
+    cursor = FakeRegistryCursor()
+    monkeypatch.setattr(
+        db_pool,
+        "get_connection",
+        lambda _dbname: FakeRegistryConnection(cursor),
+    )
+    validator = build_storyteller_tag_validator("test_slot")
+    assert validator is not None
+
+    with pytest.raises(ModelRetry) as exc_info:
+        await validator(
+            SimpleNamespace(retry=0),
+            _storyteller_response(tag_hints=["invented:tag"]),
+        )
+
+    assert "new_entities[0].tag_hints" in exc_info.value.message
+    assert "resubmit the complete response" in exc_info.value.message
+
+
+def test_provider_repairs_invalid_declaration_inside_structured_retry_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Only the repaired response can escape LOGON's provider boundary."""
+
+    from nexus.api import db_pool
+
+    cursor = FakeRegistryCursor()
+    monkeypatch.setattr(
+        db_pool,
+        "get_connection",
+        lambda _dbname: FakeRegistryConnection(cursor),
+    )
+
+    invalid = _storyteller_response(tag_hints=["invented:tag"])
+    repaired = _storyteller_response(tag_hints=["human"])
+    prompts: list[str] = []
+    outputs = [invalid, repaired]
+
+    class FakeResponses:
+        def parse(self, **kwargs: Any) -> Any:
+            prompts.append(kwargs["input"][-1]["content"])
+            output = outputs.pop(0)
+            return SimpleNamespace(
+                output_parsed=output,
+                output_text=output.model_dump_json(),
+                usage=SimpleNamespace(input_tokens=11, output_tokens=22),
+            )
+
+    provider = OpenAIProvider(
+        model="gpt-4.1",
+        api_key="test-key",
+        structured_output_retries=1,
+        output_validator=build_storyteller_tag_validator("test_slot"),
+    )
+    provider.client = SimpleNamespace(responses=FakeResponses())
+
+    parsed, _llm_response = provider.get_structured_completion(
+        "Continue the story.", StorytellerResponseExtended
+    )
+
+    assert parsed == repaired
+    assert outputs == []
+    assert len(prompts) == 2
+    assert "=== STRUCTURED OUTPUT RETRY ===" in prompts[1]
+    assert "new_entities[0].tag_hints" in prompts[1]
+
+
+@pytest.mark.asyncio
+async def test_exhausted_declaration_validation_never_reaches_incubator(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A declaration rejected at LOGON's boundary cannot be persisted."""
+
+    from nexus.api import db_pool, narrative_generation
+
+    cursor = FakeRegistryCursor()
+    monkeypatch.setattr(
+        db_pool,
+        "get_connection",
+        lambda _dbname: FakeRegistryConnection(cursor),
+    )
+    validator = build_storyteller_tag_validator("test_slot")
+    assert validator is not None
+
+    class InvalidDeclarationLore:
+        def __init__(self, *_args: Any, **_kwargs: Any) -> None:
+            self.turn_context = SimpleNamespace(error_log=[])
+
+        async def process_turn(
+            self,
+            _user_text: str,
+            parent_chunk_id: int,
+            note: Optional[str] = None,
+        ) -> Any:
+            del parent_chunk_id, note
+            return await validator(
+                SimpleNamespace(retry=1),
+                _storyteller_response(tag_hints=["invented:tag"]),
+            )
+
+        def close(self) -> None:
+            pass
+
+    class GenerationConnection:
+        closed = False
+
+        def close(self) -> None:
+            self.closed = True
+
+    class ProgressManager:
+        def __init__(self) -> None:
+            self.events: list[tuple[str, str, Optional[dict[str, Any]]]] = []
+
+        async def send_progress(
+            self,
+            session_id: str,
+            status: str,
+            data: Optional[dict[str, Any]] = None,
+        ) -> None:
+            self.events.append((session_id, status, data))
+
+    async def get_chunk_info(_conn: Any, _chunk_id: int) -> dict[str, Any]:
+        return {"season": 1, "episode": 1, "place_name": "The Sluice"}
+
+    async def reject_incubator_write(*_args: Any, **_kwargs: Any) -> None:
+        pytest.fail("invalid declaration output must not reach the incubator")
+
+    monkeypatch.setattr(narrative_generation, "LORE", InvalidDeclarationLore)
+    monkeypatch.setattr(narrative_generation, "get_chunk_info", get_chunk_info)
+    monkeypatch.setattr(
+        narrative_generation, "write_to_incubator", reject_incubator_write
+    )
+    conn = GenerationConnection()
+    manager = ProgressManager()
+
+    await narrative_generation.generate_narrative_async(
+        session_id="invalid-declaration",
+        parent_chunk_id=12,
+        user_text="Continue.",
+        slot=5,
+        get_db_connection=lambda _slot: conn,
+        load_settings=lambda: {},
+        manager=manager,
+    )
+
+    errors = [data for _session, status, data in manager.events if status == "error"]
+    assert len(errors) == 1
+    assert errors[0] is not None
+    assert "new_entities[0].tag_hints" in errors[0]["error"]
+    assert conn.closed is True
 
 
 def test_validator_skipped_without_slot_database() -> None:
