@@ -435,6 +435,10 @@ _register(
         f"passes `{m.group('mode')}` due-state"
     ),
 )
+_register(
+    r"project_target_is\((?P<slot>\w+)\)",
+    lambda m: f"advancing recruitment of {_slot(m.group('slot'))}",
+)
 
 
 def _render_count_recent_events(m: re.Match) -> str:

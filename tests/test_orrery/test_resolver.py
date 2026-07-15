@@ -64,6 +64,7 @@ class FakeSession:
         inbound_ephemeral_pair_actor_rows=None,
         present_actor_rows=None,
         actor_target_relationship_rows=None,
+        actor_target_social_contact_rows=None,
         entity_name_rows=None,
         need_debt_rows=None,
         travel_state_rows=None,
@@ -93,6 +94,7 @@ class FakeSession:
         self.inbound_ephemeral_pair_actor_rows = inbound_ephemeral_pair_actor_rows or []
         self.present_actor_rows = present_actor_rows or []
         self.actor_target_relationship_rows = actor_target_relationship_rows or []
+        self.actor_target_social_contact_rows = actor_target_social_contact_rows or []
         self.entity_name_rows = entity_name_rows or [
             {"id": 1, "name": "Mara"},
             {"id": 2, "name": "Vale"},
@@ -178,6 +180,10 @@ class FakeSession:
         if "/* orrery:actor_target_bindings_character_relationships */" in sql:
             assert "relationship_scope = 'character'" in sql
             return FakeResult(self.actor_target_relationship_rows)
+        if "/* orrery:actor_target_bindings_social_contacts */" in sql:
+            assert "pt.tag = 'contact:social'" in sql
+            assert "ept.cleared_at IS NULL" in sql
+            return FakeResult(self.actor_target_social_contact_rows)
         if "/* orrery:entity_names */" in sql:
             return FakeResult(self.entity_name_rows)
         if "/* orrery:need_debt_scores */" in sql:
@@ -1799,6 +1805,27 @@ def test_compose_actor_target_bindings_yields_both_directions() -> None:
 
     pairs = {(b[Slot.ACTOR], b[Slot.TARGET]) for b in bindings}
     assert pairs == {(1, 2), (2, 1)}
+
+
+def test_compose_actor_target_bindings_includes_directed_social_contacts() -> None:
+    """A social-contact edge can source RECRUIT_ALLY without a relationship."""
+
+    session = FakeSession(
+        chunk_ref_actor_rows=[{"entity_id": 1}, {"entity_id": 2}],
+        actor_target_social_contact_rows=[
+            {"source_entity_id": 1, "target_entity_id": 2},
+        ],
+    )
+
+    bindings = compose_actor_target_bindings(
+        session,
+        anchor_chunk_id=100,
+        window_chunks=30,
+        include_social_contacts=True,
+    )
+
+    pairs = {(b[Slot.ACTOR], b[Slot.TARGET]) for b in bindings}
+    assert pairs == {(1, 2)}
 
 
 def test_compose_actor_target_bindings_filters_to_recently_relevant_actors() -> None:

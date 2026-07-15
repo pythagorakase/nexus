@@ -922,6 +922,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 - **AND:**
   - actor has enough hydrated context
   - **NOT:** actor `plan_relocation` project passes `ready` due-state
+  - **NOT:** actor `recruit_ally` project passes `ready` due-state
   - **NOT:** actor is constrained or immobilized
   - **NOT:** actor has inbound `hunting` pair tag
   - **NOT:** actor has `grudge_active` ephemeral
@@ -1119,6 +1120,118 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 **Event:** `relocation_plan_progressed`
 
 > {actor} does the next small thing the move requires — a message, a form, a measured risk — work too ordinary to look like transformation until enough of it accumulates.
+
+---
+
+## ADVANCE_RECRUIT_ALLY — priority 47
+
+> A due recruitment sounds out its chosen candidate, earns trust, seals commitment, stalls, or ends.
+
+**Drive band:** project identity — A due recruitment shares relocation's vigilance-adjacent slot; SURVEIL yields to either due project while cadence and embodied guards preserve routine stability.
+**Slots:** ACTOR, TARGET
+
+**Gate:**
+
+- **AND:**
+  - actor `recruit_ally` project passes `ready` due-state
+  - advancing recruitment of target
+  - **NOT:** actor is in transit
+  - **NOT:** actor is constrained or immobilized
+  - **NOT:**
+    - **OR:**
+      - actor has `sleep` debt ≥ 8
+      - actor has `thirst` debt ≥ 2
+      - actor has `hunger` debt ≥ 4
+
+### Branch 1 — Seal the alliance  *(mag 0.4)* · **preemptive**
+
+**When:**
+
+- **AND:**
+  - actor `recruit_ally` project passes `completion` due-state
+  - **NOT:** target has any of [`hostile_to`, `hunting`] pair tags to actor
+  - **NOT:** trust target→actor < -2
+
+**Does:** applies project `complete` transition; adds outbound `ally` pair tag to target
+**Event:** `recruit_ally_completed`
+
+> {actor} and {target} stop speaking in contingencies. The understanding becomes a commitment: when the cost arrives, {actor} may call on {target} as an ally.
+
+### Branch 2 — Withdraw after a hostile turn  *(mag 0.4)* · **preemptive**
+
+**When:**
+
+- **OR:**
+  - target has any of [`hostile_to`, `hunting`] pair tags to actor
+  - trust target→actor < -2
+
+**Does:** applies project `abandon` transition
+**Event:** `recruit_ally_abandoned`
+
+> Whatever possibility {actor} saw in {target} has hardened into danger or contempt. {actor} ends the recruitment before hope becomes leverage in hostile hands.
+
+### Branch 3 — Let the recruitment go rather than force it  *(mag 0.4)* · **preemptive**
+
+**When:** actor `recruit_ally` project passes `abandon` due-state
+
+**Does:** applies project `abandon` transition
+**Event:** `recruit_ally_abandoned`
+
+> {actor} admits that the invitation has become a ritual of delay. They stop pressing {target} for a promise that is not coming and release the unfinished alliance.
+
+### Branch 4 — Turn interest into earned trust  *(mag 0.4)* · **preemptive**
+
+**When:** actor `recruit_ally` project passes `sounding_out_milestone` due-state
+
+**Does:** applies project `advance` transition
+**Event:** `recruit_ally_milestone`
+
+> {target} has heard enough to take the possibility seriously. Now {actor} must prove that the offered alliance is reliable, not merely attractive.
+
+### Branch 5 — Ask for a real commitment  *(mag 0.4)* · **preemptive**
+
+**When:** actor `recruit_ally` project passes `earning_trust_milestone` due-state
+
+**Does:** applies project `advance` transition
+**Event:** `recruit_ally_milestone`
+
+> The small proofs have accumulated. {actor} can finally ask {target} for the thing underneath them: a commitment that will still hold when cooperation becomes costly.
+
+### Branch 6 — Learn what the candidate actually wants  *(mag 0.18)* · **not promotable**
+
+**When:** actor `recruit_ally` project passes `sounding_out` due-state
+
+**Does:** applies project `advance` transition
+**Event:** `recruit_ally_progressed`
+
+> {actor} listens past {target}'s first answer and learns what would make an alliance matter to them, not merely to its would-be recruiter.
+
+### Branch 7 — Prove reliable in a small consequential way  *(mag 0.18)* · **not promotable**
+
+**When:** actor `recruit_ally` project passes `earning_trust` due-state
+
+**Does:** applies project `advance` transition
+**Event:** `recruit_ally_progressed`
+
+> {actor} gives {target} evidence instead of assurances: one promise kept where breaking it would have been easier.
+
+### Branch 8 — Lose ground through neglect  *(mag 0.1)* · **not promotable**
+
+**When:** actor `recruit_ally` project passes `neglected` due-state
+
+**Does:** applies project `stall` transition
+**Event:** `recruit_ally_stalled`
+
+> Silence does work of its own. A missed promise or unanswered opening leaves {target} less certain that {actor}'s proposed alliance deserves the risk.
+
+### Branch 9 — Make the next commitment concrete  *(mag 0.16)* · **not promotable**
+
+**When:** *(always)*
+
+**Does:** applies project `advance` transition
+**Event:** `recruit_ally_progressed`
+
+> {actor} and {target} make one more expectation explicit — who answers, what each protects, and what neither will ask the other to pretend away.
 
 ---
 
@@ -1961,6 +2074,49 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 **Event:** `relocation_plan_started`
 
 > {actor} stops treating departure as the thought that arrives after a bad day. They make a ledger, name what it would cost, and put the first real thing aside.
+
+---
+
+## START_RECRUIT_ALLY — priority 17
+
+> A plausible contact becomes the named target of a recruitment project.
+
+**Drive band:** project identity — A recruitment begins only for a known, warm, or trusted candidate; the narrow pair gate lets explicit positive intent rise above routine.
+**Slots:** ACTOR, TARGET
+
+**Gate:**
+
+- **AND:**
+  - actor `recruit_ally` project passes `start` due-state
+  - actor has enough hydrated context
+  - actor is at `home` anchor
+  - **NOT:** actor is constrained or immobilized
+  - **NOT:** actor is in transit
+  - **OR:**
+    - **AND:**
+      - actor has outbound `contact:social` pair tag
+      - actor has `contact:social` pair tag to target
+    - actor has `friend` relationship to target
+    - target has `friend` relationship to actor
+    - actor has `companion` relationship to target
+    - target has `companion` relationship to actor
+    - actor has `comrade` relationship to target
+    - target has `comrade` relationship to actor
+    - actor has `chosen_kin` relationship to target
+    - target has `chosen_kin` relationship to actor
+    - trust actor→target ≥ 1
+  - actor lacks `ally` pair tag to target
+  - **NOT:** actor has any of [`hostile_to`, `hunting`] pair tags to target
+  - **NOT:** target has any of [`hostile_to`, `hunting`] pair tags to actor
+
+### Branch 1 — Sound out a possible ally  *(mag 0.4)*
+
+**When:** *(always)*
+
+**Does:** applies project `start` transition
+**Event:** `recruit_ally_started`
+
+> {actor} stops treating {target} as merely useful company. A careful conversation tests whether shared concern might become a commitment both can name.
 
 ---
 
@@ -2832,9 +2988,11 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 
 ### Pair tags queried by directed predicates
 
+- `ally`
 - `contact:intimate`
 - `contact:lodging`
 - `contact:social`
+- `hostile_to`
 - `hunting`
 - `resides_at`
 
@@ -2871,6 +3029,12 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `protective_intervention`
 - `pursue_identity_lead`
 - `recreation_taken`
+- `recruit_ally_abandoned`
+- `recruit_ally_completed`
+- `recruit_ally_milestone`
+- `recruit_ally_progressed`
+- `recruit_ally_stalled`
+- `recruit_ally_started`
 - `relocation_plan_abandoned`
 - `relocation_plan_completed`
 - `relocation_plan_milestone`

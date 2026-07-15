@@ -213,6 +213,7 @@ class ProjectState:
     status: str
     stage: str
     target_place_id: Optional[int] = None
+    target_character_entity_id: Optional[int] = None
     progress: float = 0.0
     stall_count: int = 0
     next_eligible_at_world_time: Optional[datetime] = None
@@ -235,7 +236,7 @@ class ProjectPolicy:
         if self.advance_interval_hours <= 0:
             raise ValueError("Project advance_interval_hours must be > 0")
         if self.max_active_per_character != 1:
-            raise ValueError("PLAN_RELOCATION v1 requires max_active_per_character = 1")
+            raise ValueError("Orrery projects require max_active_per_character = 1")
         if self.stall_abandon_threshold < 1:
             raise ValueError("Project stall_abandon_threshold must be >= 1")
         if self.abandon_after_stalled_world_hours <= 0:
@@ -1122,8 +1123,18 @@ _PROJECT_DUE_MODES = frozenset(
         "scouting_milestone",
         "completion",
         "neglected",
+        "sounding_out",
+        "earning_trust",
+        "sealing_commitment",
+        "sounding_out_milestone",
+        "earning_trust_milestone",
     }
 )
+
+_PROJECT_STAGE_LADDERS = {
+    "plan_relocation": ("saving", "scouting", "committing"),
+    "recruit_ally": ("sounding_out", "earning_trust", "sealing_commitment"),
+}
 
 
 def project_due(
@@ -1147,10 +1158,10 @@ def project_due(
             f"Unsupported project_due mode {mode!r}; expected one of "
             f"{sorted(_PROJECT_DUE_MODES)}"
         )
-    if project_type != "plan_relocation":
+    if project_type not in _PROJECT_STAGE_LADDERS:
         raise ValueError(
             f"Unsupported project_due project type {project_type!r}; "
-            "expected 'plan_relocation'"
+            f"expected one of {sorted(_PROJECT_STAGE_LADDERS)}"
         )
 
     def _condition(state: WorldState, bindings: Bindings) -> bool:
@@ -1161,13 +1172,15 @@ def project_due(
         if entity_id is None:
             return False
         project = state.project_states.get(entity_id)
-        if project is not None and project.project_type != project_type:
+        if normalized_mode == "start":
+            return project is None
+        if project is not None and project.project_type not in _PROJECT_STAGE_LADDERS:
             raise ValueError(
                 f"Actor {entity_id} has unsupported open project type "
                 f"{project.project_type!r}"
             )
-        if normalized_mode == "start":
-            return project is None
+        if project is not None and project.project_type != project_type:
+            return False
         if normalized_mode == "exists":
             return project is not None
         if project is None:
@@ -1203,22 +1216,35 @@ def project_due(
             return due and overdue_hours >= policy.advance_interval_hours
         if not due:
             return False
-        if normalized_mode in {"saving", "scouting", "committing"}:
+        project_stages = _PROJECT_STAGE_LADDERS[project_type]
+        if normalized_mode in project_stages:
             return project.stage == normalized_mode
-        if normalized_mode == "saving_milestone":
-            return project.stage == "saving" and project.progress >= 1.0
+        if normalized_mode == f"{project_stages[0]}_milestone":
+            return project.stage == project_stages[0] and project.progress >= 1.0
         if normalized_mode == "scouting_without_target":
-            return project.stage == "scouting" and project.target_place_id is None
-        if normalized_mode == "scouting_milestone":
             return (
-                project.stage == "scouting"
-                and project.target_place_id is not None
+                project_type == "plan_relocation"
+                and project.stage == "scouting"
+                and project.target_place_id is None
+            )
+        if normalized_mode == f"{project_stages[1]}_milestone":
+            return (
+                project.stage == project_stages[1]
+                and (
+                    project.target_place_id is not None
+                    if project_type == "plan_relocation"
+                    else project.target_character_entity_id is not None
+                )
                 and project.progress >= 1.0
             )
         if normalized_mode == "completion":
             return (
-                project.stage == "committing"
-                and project.target_place_id is not None
+                project.stage == project_stages[2]
+                and (
+                    project.target_place_id is not None
+                    if project_type == "plan_relocation"
+                    else project.target_character_entity_id is not None
+                )
                 and project.progress >= 1.0
             )
         raise AssertionError(f"Unhandled project_due mode {normalized_mode!r}")
@@ -1227,6 +1253,23 @@ def project_due(
         _condition,
         f"project_due({project_type},{normalized_mode}@{slot.value})",
     )
+
+
+def project_target_is(slot: Slot = Slot.TARGET) -> Condition:
+    """Return whether ``slot`` is the actor's character-project target."""
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        actor_entity_id = _slot_entity(bindings, Slot.ACTOR)
+        target_entity_id = _slot_entity(bindings, slot)
+        if actor_entity_id is None or target_entity_id is None:
+            return False
+        project = state.project_states.get(actor_entity_id)
+        return bool(
+            project is not None
+            and project.target_character_entity_id == target_entity_id
+        )
+
+    return _named(_condition, f"project_target_is({slot.value})")
 
 
 def has_travel_destination(slot: Slot = Slot.ACTOR) -> Condition:
@@ -2033,6 +2076,11 @@ class Template:
     package_gate: Condition
     branches: Tuple[Branch, ...]
     present_target_policy: PresentTargetPolicy = PresentTargetPolicy.OFFSCREEN_ONLY
+    # Project-start packages may opt into directed contact:social edges in
+    # addition to the shared relationship-derived ACTOR/TARGET pool. Keeping
+    # this authoring metadata on Template prevents one package's broader
+    # starting substrate from changing every other two-party package.
+    starts_from_social_contact: bool = False
     priority_override_rationale: Optional[str] = None
     drive_band_priority_exempt: bool = False
 

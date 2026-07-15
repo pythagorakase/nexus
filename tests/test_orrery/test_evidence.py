@@ -78,6 +78,7 @@ from nexus.agents.orrery.substrate import (
     lacks_pair_tag,
     lacks_tag,
     project_due,
+    project_target_is,
     recent_event,
     relationship_is_asymmetric,
     relationship_is_mutual_warm,
@@ -220,6 +221,7 @@ FACTORY_SWEEP = [
     since_last_event_at_least("contact_made", 3),
     since_last_event_at_least("contact_made", 3, target_slot=Slot.TARGET),
     project_due("start"),
+    project_target_is(),
     count_recent_events_at_least("mourning_act", within_ticks=30, min_count=4),
     count_recent_events_at_least(
         "surveillance_performed",

@@ -657,6 +657,7 @@ def _load_project_states(session: Any) -> dict[int, ProjectState]:
                    cps.status,
                    cps.stage,
                    cps.target_place_id,
+                   cps.target_character_entity_id,
                    cps.progress,
                    cps.stall_count,
                    cps.next_eligible_at_world_time,
@@ -680,6 +681,7 @@ def _load_project_states(session: Any) -> dict[int, ProjectState]:
             status=str(row["status"]),
             stage=str(row["stage"]),
             target_place_id=row.get("target_place_id"),
+            target_character_entity_id=row.get("target_character_entity_id"),
             progress=float(row["progress"] or 0.0),
             stall_count=int(row["stall_count"] or 0),
             next_eligible_at_world_time=row.get("next_eligible_at_world_time"),
@@ -839,15 +841,18 @@ def compose_actor_target_bindings(
     window_chunks: int,
     actor_ids: Optional[Iterable[int]] = None,
     target_presence: str = "offscreen",
+    include_social_contacts: bool = False,
 ) -> Tuple[Bindings, ...]:
     """Compose ACTOR+TARGET bindings from actors' relational neighborhoods.
 
     Yields {Slot.ACTOR: a, Slot.TARGET: t} for each character-to-character
     relationship row where the actor side is in the recently-relevant set.
     Each stored relationship row produces up to two bindings (forward and
-    reverse) so templates with symmetric semantics see both orderings; gate
-    predicates with asymmetric semantics (handler/asset) filter via
-    role-explicit OR clauses.
+    reverse) so templates with symmetric semantics see both orderings. When
+    ``include_social_contacts`` is true, current directed ``contact:social``
+    edges are unioned into that base pool for templates that explicitly opt
+    into social-contact starts. Gate predicates with asymmetric semantics
+    (handler/asset) filter via role-explicit OR clauses.
 
     When actor_ids is provided (typical: resolve_dry_run threads through
     the actor set it already computed), this skips the redundant
@@ -883,6 +888,29 @@ def compose_actor_target_bindings(
         return ()
 
     pairs: set[Tuple[int, int]] = set()
+
+    def add_candidate(source: int, target: int, *, reverse: bool) -> None:
+        source_present = source in present_actor_ids
+        target_present = target in present_actor_ids
+        if (
+            source in actor_id_set
+            and not source_present
+            and (
+                (target_presence == "offscreen" and not target_present)
+                or (target_presence == "present" and target_present)
+            )
+        ):
+            pairs.add((source, target))
+        if reverse and (
+            target in actor_id_set
+            and not target_present
+            and (
+                (target_presence == "offscreen" and not source_present)
+                or (target_presence == "present" and source_present)
+            )
+        ):
+            pairs.add((target, source))
+
     for row in session.execute(
         text(
             """
@@ -901,28 +929,38 @@ def compose_actor_target_bindings(
             """
         )
     ).mappings():
-        source = row["source_entity_id"]
-        target = row["target_entity_id"]
-        source_present = source in present_actor_ids
-        target_present = target in present_actor_ids
-        if (
-            source in actor_id_set
-            and not source_present
-            and (
-                (target_presence == "offscreen" and not target_present)
-                or (target_presence == "present" and target_present)
+        add_candidate(
+            int(row["source_entity_id"]),
+            int(row["target_entity_id"]),
+            reverse=True,
+        )
+
+    if include_social_contacts:
+        for row in session.execute(
+            text(
+                """
+                /* orrery:actor_target_bindings_social_contacts */
+                SELECT ept.subject_entity_id AS source_entity_id,
+                       ept.object_entity_id AS target_entity_id
+                FROM entity_pair_tags ept
+                JOIN pair_tags pt ON pt.id = ept.pair_tag_id
+                JOIN entities es ON es.id = ept.subject_entity_id
+                JOIN entities et ON et.id = ept.object_entity_id
+                WHERE pt.tag = 'contact:social'
+                  AND NOT pt.deprecated
+                  AND ept.cleared_at IS NULL
+                  AND es.kind = 'character'
+                  AND et.kind = 'character'
+                  AND es.is_active = true
+                  AND et.is_active = true
+                """
             )
-        ):
-            pairs.add((source, target))
-        if (
-            target in actor_id_set
-            and not target_present
-            and (
-                (target_presence == "offscreen" and not source_present)
-                or (target_presence == "present" and source_present)
+        ).mappings():
+            add_candidate(
+                int(row["source_entity_id"]),
+                int(row["target_entity_id"]),
+                reverse=False,
             )
-        ):
-            pairs.add((target, source))
 
     return tuple(
         {Slot.ACTOR: actor_id, Slot.TARGET: target_id}
@@ -1092,26 +1130,62 @@ def resolve_dry_run(
             drafts.append(_draft_from_resolution(resolution, state=state))
 
     actor_target_bindings: Tuple[Bindings, ...] = ()
+    social_actor_target_bindings: Tuple[Bindings, ...] = ()
     present_target_bindings: Tuple[Bindings, ...] = ()
     if actor_target_templates:
-        actor_target_bindings = compose_actor_target_bindings(
-            session,
-            anchor_chunk_id=anchor_chunk_id,
-            window_chunks=window_chunks,
-            actor_ids={bindings[Slot.ACTOR] for bindings in actor_bindings},
-            target_presence="offscreen",
-        )
-        for bindings in actor_target_bindings:
-            resolution = evaluate_stack(
-                actor_target_templates,
-                state,
-                bindings,
-                selection,
-                habituation,
-                package_selection,
+        base_actor_target_templates = [
+            template
+            for template in actor_target_templates
+            if not template.starts_from_social_contact
+        ]
+        social_start_templates = [
+            template
+            for template in actor_target_templates
+            if template.starts_from_social_contact
+        ]
+        actor_ids = {bindings[Slot.ACTOR] for bindings in actor_bindings}
+
+        if base_actor_target_templates:
+            actor_target_bindings = compose_actor_target_bindings(
+                session,
+                anchor_chunk_id=anchor_chunk_id,
+                window_chunks=window_chunks,
+                actor_ids=actor_ids,
+                target_presence="offscreen",
+                include_social_contacts=False,
             )
-            if resolution is not None and resolution.passes:
-                drafts.append(_draft_from_resolution(resolution, state=state))
+            for bindings in actor_target_bindings:
+                resolution = evaluate_stack(
+                    base_actor_target_templates,
+                    state,
+                    bindings,
+                    selection,
+                    habituation,
+                    package_selection,
+                )
+                if resolution is not None and resolution.passes:
+                    drafts.append(_draft_from_resolution(resolution, state=state))
+
+        if social_start_templates:
+            social_actor_target_bindings = compose_actor_target_bindings(
+                session,
+                anchor_chunk_id=anchor_chunk_id,
+                window_chunks=window_chunks,
+                actor_ids=actor_ids,
+                target_presence="offscreen",
+                include_social_contacts=True,
+            )
+            for bindings in social_actor_target_bindings:
+                resolution = evaluate_stack(
+                    social_start_templates,
+                    state,
+                    bindings,
+                    selection,
+                    habituation,
+                    package_selection,
+                )
+                if resolution is not None and resolution.passes:
+                    drafts.append(_draft_from_resolution(resolution, state=state))
 
         pressure_templates = [
             template
@@ -1120,12 +1194,19 @@ def resolve_dry_run(
             is PresentTargetPolicy.STORYTELLER_PRESSURE
         ]
         if pressure_templates:
+            # Present-target pressure is a distinct target-presence pass. A
+            # future pressure template that starts from social contact keeps
+            # its opt-in here without broadening the base pressure stack.
+            include_social_pressure = any(
+                template.starts_from_social_contact for template in pressure_templates
+            )
             present_target_bindings = compose_actor_target_bindings(
                 session,
                 anchor_chunk_id=anchor_chunk_id,
                 window_chunks=window_chunks,
-                actor_ids={bindings[Slot.ACTOR] for bindings in actor_bindings},
+                actor_ids=actor_ids,
                 target_presence="present",
+                include_social_contacts=include_social_pressure,
             )
             for bindings in present_target_bindings:
                 resolution = evaluate_stack(
@@ -1421,9 +1502,21 @@ def _project_destination(
 def _materialize_project_delta(
     resolution: Resolution, state: WorldState
 ) -> Mapping[str, Any]:
-    """Persist any scouting choice into the resolution ledger before commit."""
+    """Persist bound or selected project targets in the ledger before commit."""
 
     delta = dict(resolution.state_delta)
+    raw_start = delta.get("project.start")
+    if (
+        isinstance(raw_start, Mapping)
+        and raw_start.get("project_type") == "recruit_ally"
+    ):
+        target = resolution.bindings.get(Slot.TARGET)
+        if not isinstance(target, int):
+            raise ValueError("recruit_ally project.start requires target binding")
+        start_payload = dict(raw_start)
+        start_payload["target_character_entity_id"] = target
+        delta["project.start"] = start_payload
+
     raw_advance = delta.get("project.advance")
     if not isinstance(raw_advance, Mapping) or not raw_advance.get("select_target"):
         return delta
