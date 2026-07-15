@@ -994,7 +994,11 @@ command = [
     # so it matches [global.model.api_models.local].models[].id.
     "--alias", "nousresearch/hermes-4-70b",
     "--host", "{host}", "--port", "{port}",
-    "--ctx-size", "32768", "-ngl", "999", "--jinja",
+    # Context must hold the full storyteller prompt (lore.token_budget
+    # apex_context_window = 75k ceiling; measured 36.8k at slot-5 depth ~75)
+    # PLUS generation headroom — 32768 rejected real turns with
+    # exceed_context_size_error. 98304 = 75k prompt ceiling + >20k output.
+    "--ctx-size", "98304", "-ngl", "999", "--jinja",
 ]
 host = "127.0.0.1"
 port = 1234  # must match [global.model.api_models.local] base_url (validated)
