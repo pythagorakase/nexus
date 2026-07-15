@@ -1431,7 +1431,6 @@ class SummaryGenerator:
         self.prompt_on_conflict = prompt_on_conflict
         self.last_error: Optional[str] = None
         self._providers: Dict[str, Any] = {}
-        self.provider: Optional[Any] = None
 
     @staticmethod
     def _model_rejects_temperature(model: str) -> bool:
@@ -1495,8 +1494,7 @@ class SummaryGenerator:
 
         if mode not in self._providers:
             self._providers[mode] = self._initialize_provider(mode)
-        self.provider = self._providers[mode]
-        return self.provider
+        return self._providers[mode]
 
     def _get_structured_summary(
         self,
