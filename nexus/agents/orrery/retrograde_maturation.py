@@ -50,6 +50,7 @@ from nexus.config import load_settings_as_dict
 from nexus.config.settings_models import (
     OrreryRetrogradeMaturationSettings,
     OrreryRetrogradeRetrievalSettings,
+    Settings,
 )
 
 logger = logging.getLogger("nexus.orrery.retrograde_maturation")
@@ -368,6 +369,13 @@ def drain_maturation_jobs_sync(
     cfg = _maturation_settings(settings_dict)
     if not cfg.enabled:
         return (0, 0)
+    typed_settings = Settings.model_validate(
+        {
+            key: value
+            for key, value in settings_dict.items()
+            if key not in {"Agent Settings", "API Settings"}
+        }
+    )
 
     owns_conn = conn is None
     conn = conn or _connect_for_slot(slot)
@@ -427,6 +435,7 @@ def drain_maturation_jobs_sync(
                     row=row,
                     cfg=cfg,
                     settings_dict=settings_dict,
+                    settings=typed_settings,
                     slot=slot,
                 )
                 matured += 1
@@ -459,6 +468,7 @@ def _mature_one(
     row: Mapping[str, Any],
     cfg: OrreryRetrogradeMaturationSettings,
     settings_dict: Mapping[str, Any],
+    settings: Settings,
     slot: Optional[int],
 ) -> dict[str, Any]:
     """Run the scoped Retrograde pipeline for one leased job."""
@@ -468,6 +478,8 @@ def _mature_one(
     started = time.monotonic()
     dbname = require_slot_dbname(slot=slot)
     retrieval = _retrieval_settings(settings_dict)
+    if settings.orrery is None:
+        raise ValueError("settings.orrery is required for Retrograde maturation")
 
     prior_manifest = row.get("result_manifest") or {}
     if prior_manifest.get("persisted"):
@@ -515,6 +527,7 @@ def _mature_one(
         cfg=cfg,
         dbname=dbname,
         setting=story_setting,
+        settings=settings,
     )
 
     from nexus.agents.orrery.retrograde_seed_candidates import run_seed_stage
@@ -586,6 +599,7 @@ def _mature_one(
                 create_missing_entities=True,
                 summaries_enabled=retrieval.summaries_enabled,
                 recorded_at_chunk_id=int(row["requesting_chunk_id"]),
+                epistemics_settings=settings.orrery.epistemics,
             )
             persistence_elapsed = time.monotonic() - persistence_started
             total_elapsed = time.monotonic() - started
@@ -717,6 +731,7 @@ def build_runtime_maturation_packet(
     cfg: OrreryRetrogradeMaturationSettings,
     dbname: str,
     setting: Mapping[str, Any],
+    settings: Optional[Settings] = None,
 ) -> dict[str, Any]:
     """Build a scoped single-entity packet for the runtime maturation pass.
 
@@ -770,13 +785,14 @@ def build_runtime_maturation_packet(
         },
     }
 
-    from nexus.config import load_settings
+    if settings is None:
+        from nexus.config import load_settings
 
-    _settings = load_settings()
-    if _settings.orrery is None:
+        settings = load_settings()
+    if settings.orrery is None:
         raise ValueError("settings.orrery is required for maturation weirdness")
     weird = _resolve_maturation_weird(
-        settings=_settings,
+        settings=settings,
         setting=setting,
         cfg=cfg,
     )
@@ -789,7 +805,7 @@ def build_runtime_maturation_packet(
             "select_target": cfg.select_target,
             "deferred_secret_cap": cfg.deferred_secret_cap,
         },
-        graph_settings=_settings.orrery.retrograde.graph,
+        graph_settings=settings.orrery.retrograde.graph,
     )
     request["stage"] = "runtime single-entity maturation (R4/R5)"
     request["budget"] = {

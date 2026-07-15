@@ -16,6 +16,7 @@ import pytest
 from psycopg2.extras import RealDictCursor
 from pydantic import ValidationError
 
+import nexus.agents.orrery.retrograde_maturation as retrograde_maturation
 from nexus.agents.logon.apex_schema import (
     NewEntityDeclaration,
     StorytellerResponseExtended,
@@ -23,6 +24,7 @@ from nexus.agents.logon.apex_schema import (
 from nexus.agents.orrery.retrograde_maturation import (
     MaturationEnqueueResult,
     RetrogradeMaturationVocabularyError,
+    _mature_one,
     _load_story_setting,
     _resolve_maturation_weird,
     _slot_label,
@@ -30,6 +32,7 @@ from nexus.agents.orrery.retrograde_maturation import (
     namespace_expansion_event_refs,
 )
 from nexus.api.lore_adapter import extract_new_entities
+from nexus.config.settings_models import OrreryRetrogradeMaturationSettings, Settings
 
 SAVE_02_DSN = "postgresql://pythagor@localhost:5432/save_02"
 
@@ -458,6 +461,145 @@ def test_load_story_setting_raises_on_missing_payload() -> None:
 
     with pytest.raises(ValueError, match="global_variables.setting"):
         _load_story_setting(_EmptySettingCursor())
+
+
+def test_maturation_persistence_uses_injected_epistemics_settings(
+    monkeypatch: Any,
+) -> None:
+    """One drain uses its settings snapshot instead of re-reading nexus.toml."""
+
+    class Cursor:
+        def __init__(self) -> None:
+            self.executed: list[tuple[str, Any]] = []
+
+        def __enter__(self) -> "Cursor":
+            return self
+
+        def __exit__(self, *_args: Any) -> bool:
+            return False
+
+        def execute(self, sql: str, params: Any = None) -> None:
+            self.executed.append((sql, params))
+
+    class Connection:
+        def __init__(self) -> None:
+            self.cursor_obj = Cursor()
+
+        def __enter__(self) -> "Connection":
+            return self
+
+        def __exit__(self, *_args: Any) -> bool:
+            return False
+
+        def cursor(self, *_args: Any, **_kwargs: Any) -> Cursor:
+            return self.cursor_obj
+
+    injected_policy = {
+        "enabled": True,
+        "claim_event_types": ["threat_issued"],
+        "aware_roles": ["actor", "target"],
+    }
+    settings = retrograde_maturation.load_settings_as_dict()
+    settings["orrery"]["epistemics"] = injected_policy
+    typed_settings = Settings.model_validate(
+        {
+            key: value
+            for key, value in settings.items()
+            if key not in {"Agent Settings", "API Settings"}
+        }
+    )
+    captured: dict[str, Any] = {}
+
+    monkeypatch.setattr(
+        retrograde_maturation,
+        "load_settings_as_dict",
+        lambda: (_ for _ in ()).throw(AssertionError("unexpected settings reload")),
+    )
+    monkeypatch.setattr(
+        "nexus.api.slot_utils.require_slot_dbname", lambda slot: "save_02"
+    )
+    monkeypatch.setattr(retrograde_maturation, "_entity_event_count", lambda *_: 0)
+    monkeypatch.setattr(
+        retrograde_maturation,
+        "_load_job_context",
+        lambda *_args, **_kwargs: {"entity_summary": "A fixer."},
+    )
+    monkeypatch.setattr(
+        retrograde_maturation,
+        "_load_story_setting",
+        lambda *_: {"genre": "noir"},
+    )
+    monkeypatch.setattr(
+        "nexus.agents.orrery.retrograde_vocabulary.enumerate_seed_eligible_vocabulary",
+        lambda _dbname: object(),
+    )
+    monkeypatch.setattr(
+        retrograde_maturation,
+        "build_runtime_maturation_packet",
+        lambda **_kwargs: {"packet": True},
+    )
+    monkeypatch.setattr(
+        "nexus.agents.orrery.retrograde_seed_candidates.run_seed_stage",
+        lambda **_kwargs: {
+            "model": "seed-model",
+            "seed_candidate_response": {"selected_seed_ids": ["seed_1"]},
+        },
+    )
+    monkeypatch.setattr(
+        "nexus.agents.orrery.retrograde_expansion.generate_expansion_with_skald",
+        lambda **_kwargs: {
+            "model": "expansion-model",
+            "retrograde_expansion_plan": {
+                "event_plan": [],
+                "thread_plan": [],
+                "entity_tag_plan": [],
+                "pair_tag_plan": [],
+                "relationship_plan": [],
+                "death_plan": [],
+            },
+        },
+    )
+
+    def persist(_cur: Any, **kwargs: Any) -> dict[str, Any]:
+        captured["epistemics_settings"] = kwargs["epistemics_settings"]
+        return {
+            "counters": {},
+            "commit_readiness": {"event_ref_to_id": {}},
+            "retrieval": {"embedding_pending_summary_ids": []},
+        }
+
+    monkeypatch.setattr(
+        "nexus.agents.orrery.retrograde_persistence.build_retrograde_persistence_plan",
+        persist,
+    )
+    monkeypatch.setattr(
+        retrograde_maturation,
+        "_finish_embedding",
+        lambda _conn, **kwargs: kwargs["manifest"],
+    )
+
+    manifest = _mature_one(
+        Connection(),
+        row={
+            "job_id": 7,
+            "entity_id": 77,
+            "entity_kind": "character",
+            "entity_subtype_id": 17,
+            "entity_name": "Vex",
+            "requesting_chunk_id": 101,
+            "declaration": {"summary": "A fixer."},
+            "result_manifest": {},
+            "slot": "2",
+        },
+        cfg=OrreryRetrogradeMaturationSettings(),
+        settings_dict=settings,
+        settings=typed_settings,
+        slot=2,
+    )
+
+    assert captured["epistemics_settings"] is typed_settings.orrery.epistemics
+    assert captured["epistemics_settings"].model_dump() == injected_policy
+    assert manifest["persisted"] is True
 
 
 # ============================================================================

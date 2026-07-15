@@ -706,6 +706,7 @@ def test_retrograde_apply_expansion_dry_runs_saved_artifacts(
         create_missing_entities: bool,
         summaries_enabled: bool,
         recorded_at_chunk_id: int,
+        epistemics_settings: Any,
     ) -> dict[str, Any]:
         calls.append(
             (
@@ -718,6 +719,7 @@ def test_retrograde_apply_expansion_dry_runs_saved_artifacts(
                 create_missing_entities,
                 summaries_enabled,
                 recorded_at_chunk_id,
+                epistemics_settings.enabled,
             )
         )
         return {
@@ -773,6 +775,7 @@ def test_retrograde_apply_expansion_dry_runs_saved_artifacts(
             True,
             True,
             147,
+            True,
         )
     ]
 

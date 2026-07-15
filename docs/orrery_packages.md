@@ -933,7 +933,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
     - actor has `guardian` relationship to target
     - actor has `handler` relationship to target
     - trust actor→target < -2
-    - recent `threat_issued` event targeting target in last 8 ticks
+    - actor knows recent `threat_issued` event targeting target in last 8 ticks
   - ≥ 6 ticks since last `surveillance_performed` event for (actor, target) pair
   - ≥ 6 ticks since last `intel_reviewed` event for (actor, target) pair
 

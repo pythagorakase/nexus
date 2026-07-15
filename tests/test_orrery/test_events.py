@@ -410,6 +410,51 @@ class AsyncRoutineConn:
         return self.zone_destination
 
 
+class SignalEventCursor:
+    """Focused cursor double for primary-plus-signal event emission."""
+
+    def __init__(self) -> None:
+        self.executed: list[tuple[str, Any]] = []
+        self._event_ids = iter((20, 21))
+        self._fetchone: Any = None
+
+    def execute(self, sql: str, params: Any = None) -> None:
+        self.executed.append((sql, params))
+        normalized = " ".join(str(sql).split())
+        self._fetchone = None
+        if "FROM event_types WHERE type" in normalized:
+            self._fetchone = {"type": params[0]}
+        elif "SELECT current_location FROM characters" in normalized:
+            self._fetchone = {"current_location": 99}
+        elif "INSERT INTO world_events" in normalized:
+            self._fetchone = {"id": next(self._event_ids)}
+
+    def fetchone(self) -> Any:
+        return self._fetchone
+
+
+class AsyncSignalEventConn:
+    """Async twin of :class:`SignalEventCursor`."""
+
+    def __init__(self) -> None:
+        self.executed: list[tuple[str, tuple[Any, ...]]] = []
+        self._event_ids = iter((20, 21))
+
+    async def fetchval(self, sql: str, *params: Any) -> Any:
+        self.executed.append((sql, params))
+        normalized = " ".join(str(sql).split())
+        if "FROM event_types WHERE type" in normalized:
+            return params[0]
+        if "SELECT current_location FROM characters" in normalized:
+            return 99
+        if "INSERT INTO world_events" in normalized:
+            return next(self._event_ids)
+        raise AssertionError(f"Unexpected fetchval SQL: {normalized}")
+
+    async def execute(self, sql: str, *params: Any) -> None:
+        self.executed.append((sql, params))
+
+
 class MinimalStoryResponse:
     """Tiny response object for lore_adapter serialization tests."""
 
@@ -733,6 +778,167 @@ def test_commit_orrery_tick_materializes_resolution_event_and_tags() -> None:
     assert "INSERT INTO world_event_entities" in statements
     assert "INSERT INTO tag_clearance_log" in statements
     assert resolution_params[-1] == "Mara vanishes into a maintenance corridor."
+
+
+def test_detected_signal_event_mints_and_ledgers_claim_sync(monkeypatch: Any) -> None:
+    """Primary and signal claims share one ordered, lossless applied ledger."""
+
+    cursor = SignalEventCursor()
+    mint_calls: list[tuple[int, str]] = []
+    ledgered: list[tuple[int, dict[str, Any]]] = []
+
+    def mint_claim(_cur: Any, **kwargs: Any) -> Any:
+        mint_calls.append((kwargs["event_id"], kwargs["event_type"]))
+        if kwargs["event_type"] == "threat_issued":
+            return orrery_events.MintResult(91, (101, 102))
+        return orrery_events.MintResult(90, (99, 100))
+
+    def ledger_claim(_cur: Any, **kwargs: Any) -> None:
+        ledgered.append(
+            (
+                kwargs["resolution_id"],
+                orrery_events._epistemics_applied(kwargs["mint_results"]),
+            )
+        )
+
+    monkeypatch.setattr(orrery_events, "_mint_live_event_claim_sync", mint_claim)
+    monkeypatch.setattr(
+        orrery_events, "_update_resolution_epistemics_applied_sync", ledger_claim
+    )
+    draft = OrreryResolutionDraft(
+        template_id="extract_vengeance",
+        priority=60,
+        binding_hash="signal-claim-sync",
+        bindings={"actor": 1, "target": 2},
+        branch_label="show the hand",
+        narrative_stub="{actor} lets {target} feel the pressure.",
+        event_type="retaliation_attempted",
+        signal_event_type="threat_issued",
+        magnitude=0.5,
+    )
+
+    event_id = orrery_events._emit_world_event_sync(
+        cursor,
+        draft,
+        tick_chunk_id=100,
+        resolution_id=10,
+        actor_entity_id=1,
+        target_entity_id=2,
+        world_layer="primary",
+        signal_detection=orrery_events.SignalDetection(),
+        epistemics_settings={"enabled": True},
+        entity_names={1: "Mara", 2: "Vale"},
+        entity_kinds={1: "character", 2: "character"},
+    )
+
+    assert event_id == 20
+    assert mint_calls == [(20, "retaliation_attempted"), (21, "threat_issued")]
+    assert ledgered == [
+        (
+            10,
+            {
+                "claim_id": 90,
+                "claim_awareness_ids": [99, 100],
+                "claims": [
+                    {"claim_id": 90, "claim_awareness_ids": [99, 100]},
+                    {"claim_id": 91, "claim_awareness_ids": [101, 102]},
+                ],
+            },
+        )
+    ]
+    signal_sql = [
+        sql for sql, _params in cursor.executed if "INSERT INTO world_events" in sql
+    ][1]
+    assert "RETURNING id" in signal_sql
+
+
+def test_detected_signal_event_mints_and_ledgers_claim_async(
+    monkeypatch: Any,
+) -> None:
+    """The async writer aggregates both claim results in emission order."""
+
+    import asyncio
+
+    conn = AsyncSignalEventConn()
+    mint_calls: list[tuple[int, str]] = []
+    ledgered: list[tuple[int, dict[str, Any]]] = []
+
+    async def mint_claim(_conn: Any, **kwargs: Any) -> Any:
+        mint_calls.append((kwargs["event_id"], kwargs["event_type"]))
+        if kwargs["event_type"] == "threat_issued":
+            return orrery_events.MintResult(92, (103, 104))
+        return orrery_events.MintResult(91, (101, 102))
+
+    async def ledger_claim(_conn: Any, **kwargs: Any) -> None:
+        ledgered.append(
+            (
+                kwargs["resolution_id"],
+                orrery_events._epistemics_applied(kwargs["mint_results"]),
+            )
+        )
+
+    monkeypatch.setattr(orrery_events, "_mint_live_event_claim_async", mint_claim)
+    monkeypatch.setattr(
+        orrery_events, "_update_resolution_epistemics_applied_async", ledger_claim
+    )
+    draft = OrreryResolutionDraft(
+        template_id="extract_vengeance",
+        priority=60,
+        binding_hash="signal-claim-async",
+        bindings={"actor": 1, "target": 2},
+        branch_label="show the hand",
+        narrative_stub="{actor} lets {target} feel the pressure.",
+        event_type="retaliation_attempted",
+        signal_event_type="threat_issued",
+        magnitude=0.5,
+    )
+
+    async def run() -> int | None:
+        return await orrery_events._emit_world_event_async(
+            conn,
+            draft,
+            tick_chunk_id=100,
+            resolution_id=10,
+            actor_entity_id=1,
+            target_entity_id=2,
+            world_layer="primary",
+            signal_detection=orrery_events.SignalDetection(),
+            epistemics_settings={"enabled": True},
+            entity_names={1: "Mara", 2: "Vale"},
+            entity_kinds={1: "character", 2: "character"},
+        )
+
+    assert asyncio.run(run()) == 20
+    assert mint_calls == [(20, "retaliation_attempted"), (21, "threat_issued")]
+    assert ledgered == [
+        (
+            10,
+            {
+                "claim_id": 91,
+                "claim_awareness_ids": [101, 102],
+                "claims": [
+                    {"claim_id": 91, "claim_awareness_ids": [101, 102]},
+                    {"claim_id": 92, "claim_awareness_ids": [103, 104]},
+                ],
+            },
+        )
+    ]
+    signal_sql = [
+        sql for sql, _params in conn.executed if "INSERT INTO world_events" in sql
+    ][1]
+    assert "RETURNING id" in signal_sql
+
+
+def test_epistemics_applied_preserves_single_claim_aliases() -> None:
+    """The canonical list extends rather than replaces the v1 ledger shape."""
+
+    assert orrery_events._epistemics_applied(
+        [orrery_events.MintResult(91, (101, 102))]
+    ) == {
+        "claim_id": 91,
+        "claim_awareness_ids": [101, 102],
+        "claims": [{"claim_id": 91, "claim_awareness_ids": [101, 102]}],
+    }
 
 
 def test_commit_orrery_tick_defers_explicit_adjudication() -> None:

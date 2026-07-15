@@ -245,6 +245,9 @@ def persist_retrograde_history(
     )
 
     wizard_settings, retrieval_settings = _require_retrograde_settings(settings)
+    if settings.orrery is None:
+        raise AssertionError("Retrograde settings validation did not require Orrery")
+    epistemics_settings = settings.orrery.epistemics
 
     _emit(progress, "persistence", {})
     dry_manifest = build_retrograde_persistence_plan(
@@ -258,6 +261,7 @@ def persist_retrograde_history(
         create_missing_entities=wizard_settings.create_entity_stubs,
         summaries_enabled=retrieval_settings.summaries_enabled,
         recorded_at_chunk_id=recorded_at_chunk_id,
+        epistemics_settings=epistemics_settings,
     )
 
     blockers = list(dry_manifest["execute_blockers"])
@@ -303,6 +307,7 @@ def persist_retrograde_history(
         create_missing_entities=wizard_settings.create_entity_stubs,
         summaries_enabled=retrieval_settings.summaries_enabled,
         recorded_at_chunk_id=recorded_at_chunk_id,
+        epistemics_settings=epistemics_settings,
     )
     logger.info(
         "Retrograde persistence executed for slot %s: %s",

@@ -9,6 +9,12 @@ import json
 import re
 from typing import Any, Mapping, Optional, Sequence
 
+from nexus.agents.orrery.epistemics import (
+    ClaimParticipant,
+    coerce_epistemics_policy,
+    mechanical_claim_summary,
+    mint_claim_for_event,
+)
 from nexus.agents.orrery.retrograde_expansion import (
     RetrogradeExpansionDeathPlan,
     RetrogradeExpansionEventPlan,
@@ -76,6 +82,7 @@ def build_retrograde_persistence_plan(
     create_missing_entities: bool = False,
     summaries_enabled: bool = True,
     recorded_at_chunk_id: Optional[int] = None,
+    epistemics_settings: Optional[Any] = None,
 ) -> dict[str, Any]:
     """Build or apply a canonical persistence plan for a Retrograde expansion.
 
@@ -123,6 +130,7 @@ def build_retrograde_persistence_plan(
         prologue_was_inserted=False,
         summaries_enabled=summaries_enabled,
         recorded_at_chunk_id=recorded_at_chunk_id,
+        epistemics_settings=epistemics_settings,
     )
     if dry_run:
         return manifest
@@ -143,6 +151,7 @@ def build_retrograde_persistence_plan(
     prologue_was_inserted = existing_prologue_id is None
     prologue_chunk_id = existing_prologue_id or _insert_prologue_chunk(cur)
     _ensure_prologue_metadata(cur, prologue_chunk_id=prologue_chunk_id)
+    effective_recorded_at_chunk_id = recorded_at_chunk_id or prologue_chunk_id
     return _build_plan(
         cur,
         expansion=expansion,
@@ -160,7 +169,8 @@ def build_retrograde_persistence_plan(
         inserted_stub_keys=inserted_stub_keys,
         prologue_was_inserted=prologue_was_inserted,
         summaries_enabled=summaries_enabled,
-        recorded_at_chunk_id=recorded_at_chunk_id or prologue_chunk_id,
+        recorded_at_chunk_id=effective_recorded_at_chunk_id,
+        epistemics_settings=epistemics_settings,
     )
 
 
@@ -183,6 +193,7 @@ def _build_plan(
     prologue_was_inserted: bool,
     summaries_enabled: bool,
     recorded_at_chunk_id: Optional[int],
+    epistemics_settings: Optional[Any],
 ) -> dict[str, Any]:
     counters: Counter[str] = Counter()
     reference_issues: list[dict[str, Any]] = []
@@ -218,6 +229,8 @@ def _build_plan(
             event_types=event_types,
             event_source_available=event_source_available,
             creatable_refs=creatable_refs,
+            recorded_at_chunk_id=recorded_at_chunk_id,
+            epistemics_settings=epistemics_settings,
         )
         event_rows.append(planned)
         counters[f"events_{planned['status']}"] += 1
@@ -403,12 +416,15 @@ def _plan_event_row(
     event_types: set[str],
     event_source_available: bool,
     creatable_refs: frozenset[tuple[str, str]],
+    recorded_at_chunk_id: Optional[int] = None,
+    epistemics_settings: Optional[Any] = None,
 ) -> dict[str, Any]:
     reference_issues: list[dict[str, Any]] = []
     vocabulary_issues: list[dict[str, Any]] = []
     participant_results = []
     actor_entity_id = None
     target_entity_id = None
+    claim_source_chunk_id = recorded_at_chunk_id or prologue_chunk_id
 
     for participant in event.participants:
         resolved = _resolve_participant(
@@ -482,7 +498,25 @@ def _plan_event_row(
         "_vocabulary_issues": vocabulary_issues,
     }
     if existing_id is not None:
-        return {**base, "status": "already_present", "world_event_id": existing_id}
+        claim_result = None
+        if not dry_run:
+            claim_result = _mint_retrograde_event_claim(
+                cur,
+                world_event_id=existing_id,
+                event_type=event.event_type,
+                participant_results=participant_results,
+                source_chunk_id=claim_source_chunk_id,
+                epistemics_settings=epistemics_settings,
+            )
+        return {
+            **base,
+            "status": "already_present",
+            "world_event_id": existing_id,
+            "claim_id": claim_result.claim_id if claim_result else None,
+            "claim_awareness_ids": (
+                list(claim_result.awareness_ids) if claim_result else []
+            ),
+        }
     if reference_issues or vocabulary_issues:
         return {**base, "status": "blocked", "world_event_id": None}
     if prologue_chunk_id is None:
@@ -500,7 +534,21 @@ def _plan_event_row(
         location_id=location_id,
         participant_results=participant_results,
     )
-    return {**base, "status": "inserted", "world_event_id": world_event_id}
+    claim_result = _mint_retrograde_event_claim(
+        cur,
+        world_event_id=world_event_id,
+        event_type=event.event_type,
+        participant_results=participant_results,
+        source_chunk_id=claim_source_chunk_id,
+        epistemics_settings=epistemics_settings,
+    )
+    return {
+        **base,
+        "status": "inserted",
+        "world_event_id": world_event_id,
+        "claim_id": claim_result.claim_id if claim_result else None,
+        "claim_awareness_ids": list(claim_result.awareness_ids) if claim_result else [],
+    }
 
 
 def _plan_entity_tag_row(
@@ -1306,6 +1354,45 @@ def _insert_retrograde_summary(
     return int(_row_value(cur.fetchone(), "id", 0))
 
 
+def _mint_retrograde_event_claim(
+    cur: Any,
+    *,
+    world_event_id: int,
+    event_type: str,
+    participant_results: Sequence[Mapping[str, Any]],
+    source_chunk_id: Optional[int],
+    epistemics_settings: Optional[Any],
+) -> Any:
+    policy = coerce_epistemics_policy(epistemics_settings)
+    if not policy.enabled or event_type not in policy.claim_event_types:
+        return None
+    participants = []
+    for result in participant_results:
+        if result.get("resolution") != "resolved":
+            continue
+        role = str(result["role"])
+        participants.append(
+            ClaimParticipant(
+                entity_id=int(result["entity_id"]),
+                role=role,
+                name=str(result["name"]),
+                entity_kind=str(result["entity_kind"]),
+            )
+        )
+    if not participants:
+        return None
+    return mint_claim_for_event(
+        cur,
+        world_event_id=world_event_id,
+        event_type=event_type,
+        summary=mechanical_claim_summary(event_type, participants),
+        participants=participants,
+        source_chunk_id=source_chunk_id,
+        source_resolution_id=None,
+        settings=policy,
+    )
+
+
 def _insert_world_event(
     cur: Any,
     *,
@@ -1499,7 +1586,7 @@ def _ensure_prologue_metadata(cur: Any, *, prologue_chunk_id: int) -> None:
     )
     if cur.fetchone() is not None:
         return
-    # slug and world_time are trigger-derived; see _insert_summary_metadata.
+    # slug and world_time are derived by the chunk metadata triggers.
     cur.execute(
         """
         /* orrery:retrograde:insert_prologue_metadata */

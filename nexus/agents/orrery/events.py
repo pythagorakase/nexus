@@ -13,6 +13,14 @@ from datetime import timedelta
 import json
 from typing import Any, Mapping, Optional
 
+from nexus.agents.orrery.epistemics import (
+    ClaimParticipant,
+    MintResult,
+    coerce_epistemics_policy,
+    mechanical_claim_summary,
+    mint_claim_for_event,
+    mint_claim_for_event_async,
+)
 from nexus.agents.orrery.needs import (
     NeedTuning,
     coerce_need_tuning,
@@ -337,12 +345,18 @@ def commit_orrery_tick_sync(
     prompt_settings: Optional[Any] = None,
     ecology_settings: Optional[Any] = None,
     project_settings: Optional[Any] = None,
+    epistemics_settings: Optional[Any] = None,
 ) -> CommitOrreryTickResult:
     """Materialize a preview proposal inside the accepted-chunk transaction."""
 
     signal_detection = coerce_signal_detection(ecology_settings)
     project_policy = coerce_project_policy(project_settings)
     coerced = coerce_proposal(proposal)
+    effective_epistemics_settings = epistemics_settings
+    if effective_epistemics_settings is None and coerced is not None:
+        # Preserve the exact preview-time policy snapshotted into the proposal.
+        effective_epistemics_settings = coerced.epistemics_settings
+    epistemics_policy = coerce_epistemics_policy(effective_epistemics_settings)
     has_resolutions = coerced is not None and bool(coerced.resolutions)
     if has_resolutions:
         adjudication_map = coerce_adjudications(adjudications)
@@ -384,6 +398,9 @@ def commit_orrery_tick_sync(
         entity_ids = _entity_ids_from_proposal(coerced)
         _validate_entity_ids_sync(cur, entity_ids)
         entity_names = _entity_names_sync(cur, entity_ids)
+        entity_kinds = (
+            _entity_kinds_sync(cur, entity_ids) if epistemics_policy.enabled else {}
+        )
         state_update_index = _state_update_index_sync(cur, storyteller_state_updates)
 
         resolution_count = 0
@@ -511,6 +528,9 @@ def commit_orrery_tick_sync(
                 target_entity_id=target_entity_id,
                 world_layer=world_layer,
                 signal_detection=signal_detection,
+                epistemics_settings=epistemics_policy,
+                entity_names=entity_names,
+                entity_kinds=entity_kinds,
             )
             if event_id is not None:
                 event_count += 1
@@ -552,12 +572,18 @@ async def commit_orrery_tick_async(
     prompt_settings: Optional[Any] = None,
     ecology_settings: Optional[Any] = None,
     project_settings: Optional[Any] = None,
+    epistemics_settings: Optional[Any] = None,
 ) -> CommitOrreryTickResult:
     """Async parity wrapper for tests and non-production commit callers."""
 
     signal_detection = coerce_signal_detection(ecology_settings)
     project_policy = coerce_project_policy(project_settings)
     coerced = coerce_proposal(proposal)
+    effective_epistemics_settings = epistemics_settings
+    if effective_epistemics_settings is None and coerced is not None:
+        # Preserve the exact preview-time policy snapshotted into the proposal.
+        effective_epistemics_settings = coerced.epistemics_settings
+    epistemics_policy = coerce_epistemics_policy(effective_epistemics_settings)
     has_resolutions = coerced is not None and bool(coerced.resolutions)
     if has_resolutions:
         adjudication_map = coerce_adjudications(adjudications)
@@ -598,6 +624,9 @@ async def commit_orrery_tick_async(
     entity_ids = _entity_ids_from_proposal(coerced)
     await _validate_entity_ids_async(conn, entity_ids)
     entity_names = await _entity_names_async(conn, entity_ids)
+    entity_kinds = (
+        await _entity_kinds_async(conn, entity_ids) if epistemics_policy.enabled else {}
+    )
     state_update_index = await _state_update_index_async(
         conn, storyteller_state_updates
     )
@@ -725,6 +754,9 @@ async def commit_orrery_tick_async(
             target_entity_id=target_entity_id,
             world_layer=world_layer,
             signal_detection=signal_detection,
+            epistemics_settings=epistemics_policy,
+            entity_names=entity_names,
+            entity_kinds=entity_kinds,
         )
         if event_id is not None:
             event_count += 1
@@ -1005,6 +1037,26 @@ async def _entity_names_async(conn: Any, entity_ids: set[int]) -> dict[int, str]
         sorted(entity_ids),
     )
     return {_row_get(row, "id", 0): _row_get(row, "name", 1) for row in rows}
+
+
+def _entity_kinds_sync(cur: Any, entity_ids: set[int]) -> dict[int, str]:
+    if not entity_ids:
+        return {}
+    cur.execute(
+        "SELECT id, kind::text FROM entities WHERE id = ANY(%s)",
+        (sorted(entity_ids),),
+    )
+    return {_row_get(row, "id", 0): _row_get(row, "kind", 1) for row in cur.fetchall()}
+
+
+async def _entity_kinds_async(conn: Any, entity_ids: set[int]) -> dict[int, str]:
+    if not entity_ids:
+        return {}
+    rows = await conn.fetch(
+        "SELECT id, kind::text FROM entities WHERE id = ANY($1::bigint[])",
+        sorted(entity_ids),
+    )
+    return {_row_get(row, "id", 0): _row_get(row, "kind", 1) for row in rows}
 
 
 def _render_brief(draft: OrreryResolutionDraft, entity_names: Mapping[int, str]) -> str:
@@ -3966,6 +4018,160 @@ async def _clear_outbound_pair_tag_async(
     return len(cleared_ids)
 
 
+def _live_event_claim_participants(
+    *,
+    actor_entity_id: Optional[int],
+    target_entity_id: Optional[int],
+    entity_names: Mapping[int, str],
+    entity_kinds: Mapping[int, str],
+) -> tuple[ClaimParticipant, ...]:
+    participants = []
+    for entity_id, role in (
+        (actor_entity_id, "actor"),
+        (target_entity_id, "target"),
+    ):
+        if entity_id is None:
+            continue
+        name = entity_names.get(entity_id)
+        if name is None:
+            raise ValueError(
+                f"Epistemics cannot mint awareness for unnamed entity {entity_id}"
+            )
+        entity_kind = entity_kinds.get(entity_id)
+        if entity_kind is None:
+            raise ValueError(
+                f"Epistemics cannot mint awareness for untyped entity {entity_id}"
+            )
+        participants.append(ClaimParticipant(entity_id, role, name, entity_kind))
+    return tuple(participants)
+
+
+def _mint_live_event_claim_sync(
+    cur: Any,
+    *,
+    event_id: int,
+    event_type: str,
+    actor_entity_id: Optional[int],
+    target_entity_id: Optional[int],
+    entity_names: Mapping[int, str],
+    entity_kinds: Mapping[int, str],
+    source_chunk_id: int,
+    source_resolution_id: int,
+    epistemics_settings: Optional[Any],
+) -> Optional[MintResult]:
+    policy = coerce_epistemics_policy(epistemics_settings)
+    if not policy.enabled or event_type not in policy.claim_event_types:
+        return None
+    participants = _live_event_claim_participants(
+        actor_entity_id=actor_entity_id,
+        target_entity_id=target_entity_id,
+        entity_names=entity_names,
+        entity_kinds=entity_kinds,
+    )
+    return mint_claim_for_event(
+        cur,
+        world_event_id=event_id,
+        event_type=event_type,
+        summary=mechanical_claim_summary(event_type, participants),
+        participants=participants,
+        source_chunk_id=source_chunk_id,
+        source_resolution_id=source_resolution_id,
+        settings=policy,
+    )
+
+
+async def _mint_live_event_claim_async(
+    conn: Any,
+    *,
+    event_id: int,
+    event_type: str,
+    actor_entity_id: Optional[int],
+    target_entity_id: Optional[int],
+    entity_names: Mapping[int, str],
+    entity_kinds: Mapping[int, str],
+    source_chunk_id: int,
+    source_resolution_id: int,
+    epistemics_settings: Optional[Any],
+) -> Optional[MintResult]:
+    policy = coerce_epistemics_policy(epistemics_settings)
+    if not policy.enabled or event_type not in policy.claim_event_types:
+        return None
+    participants = _live_event_claim_participants(
+        actor_entity_id=actor_entity_id,
+        target_entity_id=target_entity_id,
+        entity_names=entity_names,
+        entity_kinds=entity_kinds,
+    )
+    return await mint_claim_for_event_async(
+        conn,
+        world_event_id=event_id,
+        event_type=event_type,
+        summary=mechanical_claim_summary(event_type, participants),
+        participants=participants,
+        source_chunk_id=source_chunk_id,
+        source_resolution_id=source_resolution_id,
+        settings=policy,
+    )
+
+
+def _epistemics_claim_entry(mint_result: MintResult) -> dict[str, Any]:
+    return {
+        "claim_id": mint_result.claim_id,
+        "claim_awareness_ids": list(mint_result.awareness_ids),
+    }
+
+
+def _epistemics_applied(
+    mint_results: Iterable[MintResult],
+) -> dict[str, Any]:
+    entries = [_epistemics_claim_entry(result) for result in mint_results]
+    if not entries:
+        raise ValueError("Epistemics applied ledger requires at least one claim")
+    return {
+        # Backward-compatible aliases for consumers written when one Orrery
+        # resolution could mint only its primary event claim.
+        **entries[0],
+        # A detected signal is a second event and may mint a second claim.
+        # Preserve emission order (primary, then signal) for reconstruction.
+        "claims": entries,
+    }
+
+
+def _update_resolution_epistemics_applied_sync(
+    cur: Any, *, resolution_id: int, mint_results: Iterable[MintResult]
+) -> None:
+    cur.execute(
+        """
+        UPDATE orrery_resolutions
+        SET state_delta = state_delta || jsonb_build_object(
+            'applied',
+            COALESCE(state_delta -> 'applied', '{}'::jsonb)
+                || jsonb_build_object('epistemics', %s::jsonb)
+        )
+        WHERE id = %s
+        """,
+        (json.dumps(_epistemics_applied(mint_results)), resolution_id),
+    )
+
+
+async def _update_resolution_epistemics_applied_async(
+    conn: Any, *, resolution_id: int, mint_results: Iterable[MintResult]
+) -> None:
+    await conn.execute(
+        """
+        UPDATE orrery_resolutions
+        SET state_delta = state_delta || jsonb_build_object(
+            'applied',
+            COALESCE(state_delta -> 'applied', '{}'::jsonb)
+                || jsonb_build_object('epistemics', $1::jsonb)
+        )
+        WHERE id = $2
+        """,
+        json.dumps(_epistemics_applied(mint_results)),
+        resolution_id,
+    )
+
+
 def _emit_world_event_sync(
     cur: Any,
     draft: OrreryResolutionDraft,
@@ -3976,6 +4182,9 @@ def _emit_world_event_sync(
     target_entity_id: Optional[int],
     world_layer: Optional[str],
     signal_detection: SignalDetection,
+    epistemics_settings: Optional[Any],
+    entity_names: Mapping[int, str],
+    entity_kinds: Mapping[int, str],
 ) -> Optional[int]:
     if not draft.event_type:
         return None
@@ -4045,6 +4254,21 @@ def _emit_world_event_sync(
             """,
             (event_id, target_entity_id),
         )
+    mint_results: list[MintResult] = []
+    mint_result = _mint_live_event_claim_sync(
+        cur,
+        event_id=int(event_id),
+        event_type=str(draft.event_type),
+        actor_entity_id=actor_entity_id,
+        target_entity_id=target_entity_id,
+        entity_names=entity_names,
+        entity_kinds=entity_kinds,
+        source_chunk_id=tick_chunk_id,
+        source_resolution_id=resolution_id,
+        epistemics_settings=epistemics_settings,
+    )
+    if mint_result is not None:
+        mint_results.append(mint_result)
     if draft.signal_event_type and detection_outcome and detection_outcome["detected"]:
         # The act's signal: a second, additive emission with the same
         # bindings so other packages' gates can hear it (spec idea 7).
@@ -4055,6 +4279,7 @@ def _emit_world_event_sync(
                 location_id, world_layer, source, changed_fields, magnitude,
                 resolution_id, payload
             ) VALUES (%s, %s, %s, %s, %s, %s, 'resolver', %s, %s, %s, %s::jsonb)
+            RETURNING id
             """,
             (
                 draft.signal_event_type,
@@ -4069,6 +4294,27 @@ def _emit_world_event_sync(
                 json.dumps({**payload, "signal_of": draft.event_type}),
             ),
         )
+        signal_event_id = int(_row_get(cur.fetchone(), "id", 0))
+        signal_mint_result = _mint_live_event_claim_sync(
+            cur,
+            event_id=signal_event_id,
+            event_type=str(draft.signal_event_type),
+            actor_entity_id=actor_entity_id,
+            target_entity_id=target_entity_id,
+            entity_names=entity_names,
+            entity_kinds=entity_kinds,
+            source_chunk_id=tick_chunk_id,
+            source_resolution_id=resolution_id,
+            epistemics_settings=epistemics_settings,
+        )
+        if signal_mint_result is not None:
+            mint_results.append(signal_mint_result)
+    if mint_results:
+        _update_resolution_epistemics_applied_sync(
+            cur,
+            resolution_id=resolution_id,
+            mint_results=mint_results,
+        )
     return event_id
 
 
@@ -4082,6 +4328,9 @@ async def _emit_world_event_async(
     target_entity_id: Optional[int],
     world_layer: Optional[str],
     signal_detection: SignalDetection,
+    epistemics_settings: Optional[Any],
+    entity_names: Mapping[int, str],
+    entity_kinds: Mapping[int, str],
 ) -> Optional[int]:
     if not draft.event_type:
         return None
@@ -4151,9 +4400,24 @@ async def _emit_world_event_async(
             event_id,
             target_entity_id,
         )
+    mint_results: list[MintResult] = []
+    mint_result = await _mint_live_event_claim_async(
+        conn,
+        event_id=int(event_id),
+        event_type=str(draft.event_type),
+        actor_entity_id=actor_entity_id,
+        target_entity_id=target_entity_id,
+        entity_names=entity_names,
+        entity_kinds=entity_kinds,
+        source_chunk_id=tick_chunk_id,
+        source_resolution_id=resolution_id,
+        epistemics_settings=epistemics_settings,
+    )
+    if mint_result is not None:
+        mint_results.append(mint_result)
     if draft.signal_event_type and detection_outcome and detection_outcome["detected"]:
         # Same additive signal emission as the sync twin.
-        await conn.execute(
+        signal_event_id = await conn.fetchval(
             """
             INSERT INTO world_events (
                 event_type, tick_chunk_id, actor_entity_id, target_entity_id,
@@ -4163,6 +4427,7 @@ async def _emit_world_event_async(
                 $1, $2, $3, $4, $5, $6::world_layer_type, 'resolver',
                 $7::text[], $8, $9, $10::jsonb
             )
+            RETURNING id
             """,
             draft.signal_event_type,
             tick_chunk_id,
@@ -4174,6 +4439,26 @@ async def _emit_world_event_async(
             draft.magnitude,
             resolution_id,
             json.dumps({**payload, "signal_of": draft.event_type}),
+        )
+        signal_mint_result = await _mint_live_event_claim_async(
+            conn,
+            event_id=int(signal_event_id),
+            event_type=str(draft.signal_event_type),
+            actor_entity_id=actor_entity_id,
+            target_entity_id=target_entity_id,
+            entity_names=entity_names,
+            entity_kinds=entity_kinds,
+            source_chunk_id=tick_chunk_id,
+            source_resolution_id=resolution_id,
+            epistemics_settings=epistemics_settings,
+        )
+        if signal_mint_result is not None:
+            mint_results.append(signal_mint_result)
+    if mint_results:
+        await _update_resolution_epistemics_applied_async(
+            conn,
+            resolution_id=resolution_id,
+            mint_results=mint_results,
         )
     return event_id
 

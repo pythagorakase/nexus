@@ -386,6 +386,19 @@ def _render_recent_event(m: re.Match) -> str:
     return f"recent {' '.join(parts)} in last {n} ticks"
 
 
+def _render_knows_recent_event(m: re.Match) -> str:
+    event = m.group("event")
+    n = m.group("n")
+    actor = m.group("actor")
+    target = m.group("target")
+    parts = ["any event" if event == "*" else f"`{event}` event"]
+    if actor:
+        parts.append(f"with actor={_slot(actor)}")
+    if target:
+        parts.append(f"targeting {_slot(target)}")
+    return f"actor knows recent {' '.join(parts)} in last {n} ticks"
+
+
 def _render_since_last_event(m: re.Match) -> str:
     event = m.group("event")
     n = m.group("n")
@@ -402,6 +415,11 @@ _register(
     r"recent_event\((?P<event>[^,)]+),<=(?P<n>\d+)"
     r"(?:,actor=(?P<actor>\w+))?(?:,target=(?P<target>\w+))?(?:,fields)?\)",
     _render_recent_event,
+)
+_register(
+    r"knows_recent_event\((?P<event>[^,)]+),<=(?P<n>\d+),knower=actor"
+    r"(?:,actor=(?P<actor>\w+))?(?:,target=(?P<target>\w+))?(?:,fields)?\)",
+    _render_knows_recent_event,
 )
 _register(
     r"since_last_event_at_least\("
@@ -702,6 +720,7 @@ _VOCAB_PATTERNS: List[Tuple[str, re.Pattern]] = [
     ("pair_tag_list", re.compile(r"has_any_pair_tag\(([^@()]+)@")),
     ("contact_kind", re.compile(r"has_contact_of_kind\(([^@()]+)@")),
     ("event_type", re.compile(r"recent_event\(([^,*()]+),")),
+    ("event_type", re.compile(r"knows_recent_event\(([^,*()]+),")),
     ("event_type", re.compile(r"since_last_event_at_least\(([^,()]+),")),
     ("place_class", re.compile(r"in_location_class\(([^@()]+)@")),
     ("place_class_list", re.compile(r"has_location_class_destination\(([^@()]+)@")),

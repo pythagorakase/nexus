@@ -1373,6 +1373,7 @@ def _weather_is(match: re.Match, state: WorldState, bindings: Bindings) -> dict:
 
 def _event_payload(event: Any) -> dict[str, Any]:
     return {
+        "event_id": event.event_id,
         "event_type": event.event_type,
         "tick": event.tick,
         "actor_entity_id": event.actor_entity_id,
@@ -1425,6 +1426,103 @@ def _recent_event(match: re.Match, state: WorldState, bindings: Bindings) -> dic
         # The changed_fields filter set lives only inside the closure; with
         # the marker present the verdict is not recomputable from the name.
         result=None if fields_filter_active else bool(matched),
+    )
+
+
+@_resolver("knows_recent_event")
+def _knows_recent_event(match: re.Match, state: WorldState, bindings: Bindings) -> dict:
+    event_type = match["event"]
+    within_ticks = int(match["n"])
+    actor_slot = match["actor"]
+    target_slot = match["target"]
+    fields_filter_active = match.group(0).rstrip(")").endswith(",fields")
+    knower_id = _entity(bindings, "actor")
+    actor_id = _entity(bindings, actor_slot) if actor_slot else None
+    target_id = _entity(bindings, target_slot) if target_slot else None
+    cutoff = state.current_tick - within_ticks
+    slot_unbound = (actor_slot is not None and actor_id is None) or (
+        target_slot is not None and target_id is None
+    )
+    candidates: list[dict[str, Any]] = []
+    known_event_ids: frozenset[int] = frozenset()
+    if knower_id is not None:
+        known_event_ids = state.awareness_by_entity.get(knower_id, frozenset())
+    if not slot_unbound and (knower_id is not None or not state.epistemics_enabled):
+        for event in state.recent_events:
+            if event.tick < cutoff:
+                continue
+            if event_type != "*" and event.event_type != event_type:
+                continue
+            if actor_id is not None and event.actor_entity_id != actor_id:
+                continue
+            if target_id is not None and event.target_entity_id != target_id:
+                continue
+            scope = (
+                state.claimed_event_scopes.get(event.event_id)
+                if event.event_id is not None
+                else None
+            )
+            actor_holds_awareness = event.event_id in known_event_ids
+            visible_to_actor = (
+                not state.epistemics_enabled
+                or scope is None
+                or scope == "common"
+                or actor_holds_awareness
+            )
+            candidates.append(
+                {
+                    **_event_payload(event),
+                    "claim_scope": scope,
+                    "actor_holds_awareness": actor_holds_awareness,
+                    "visible_to_actor": visible_to_actor,
+                }
+            )
+    visible_candidates = [
+        candidate for candidate in candidates if candidate["visible_to_actor"]
+    ]
+    if visible_candidates:
+        selected = visible_candidates[0]
+        event_id = selected["event_id"]
+        if not state.epistemics_enabled:
+            reason = "eligible because Epistemics is disabled"
+        elif selected["claim_scope"] is None:
+            reason = f"eligible because event {event_id} has no claim"
+        elif selected["claim_scope"] == "common":
+            reason = f"eligible because claim on event {event_id} is common"
+        else:
+            reason = f"eligible because actor holds awareness of event {event_id}"
+    elif candidates:
+        reason = (
+            f"blocked: claim on event {candidates[0]['event_id']} not known to actor"
+        )
+    elif knower_id is None and state.epistemics_enabled:
+        reason = "blocked: actor slot has no bound knower"
+    else:
+        reason = "blocked: no matching recent event"
+    entities: dict[str, Optional[int]] = {"actor": knower_id}
+    if actor_slot:
+        entities[actor_slot] = actor_id
+    if target_slot:
+        entities[target_slot] = target_id
+    return _evidence(
+        "knows_recent_event",
+        params={
+            "event_type": None if event_type == "*" else event_type,
+            "within_ticks": within_ticks,
+            "knower_slot": "actor",
+            "actor_slot": actor_slot,
+            "target_slot": target_slot,
+            "changed_fields_filter": fields_filter_active,
+        },
+        entities=entities,
+        observed={
+            "current_tick": state.current_tick,
+            "cutoff_tick": cutoff,
+            "epistemics_enabled": state.epistemics_enabled,
+            "reason": reason,
+        },
+        matched=candidates,
+        result=None if fields_filter_active else bool(visible_candidates),
     )
 
 

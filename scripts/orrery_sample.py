@@ -674,6 +674,7 @@ def sample_anchor(
             window_chunks=window_chunks,
             need_tuning=None,
             project_settings=orrery_settings.get("projects"),
+            epistemics_settings=orrery_settings.get("epistemics"),
             world_time_override=world_time_override,
         )
         override_locations, override_labels = resolve_location_overrides(

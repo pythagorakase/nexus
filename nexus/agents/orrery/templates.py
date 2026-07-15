@@ -42,6 +42,7 @@ from nexus.agents.orrery.substrate import (
     is_constrained,
     is_hidden,
     is_in_transit,
+    knows_recent_event,
     project_due,
     recent_event,
     relationship_is_asymmetric,
@@ -1039,7 +1040,9 @@ SURVEIL = Template(
             has_relationship_of_type("guardian", Slot.ACTOR, Slot.TARGET),
             has_relationship_of_type("handler", Slot.ACTOR, Slot.TARGET),
             trust_below(-2),
-            recent_event("threat_issued", within_ticks=8, target_slot=Slot.TARGET),
+            knows_recent_event(
+                "threat_issued", within_ticks=8, target_slot=Slot.TARGET
+            ),
         ),
         since_last_event_at_least(
             "surveillance_performed", minimum_ticks=6, target_slot=Slot.TARGET

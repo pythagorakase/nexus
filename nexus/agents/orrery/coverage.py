@@ -7,11 +7,12 @@ actors no package ever fires for, packages that never (or always) win,
 branches never chosen, the statically dead gate arms, and slot data-quality
 findings (NULL bestowal world times, wall-clock backfill epochs).
 
-Honesty: hydration at a historical anchor rewinds only recent events, the
-clock, the actor roster, and the need-debt accrual tail; tags, pair tags,
-relationships, positions, travel, and routine anchors are **current
-projections**. Every payload carries :data:`HYDRATION_HONESTY` verbatim so
-the UI can render the per-axis label instead of implying a clean rewind.
+Honesty: hydration at a historical anchor rewinds only recent event ids, the
+clock, the actor roster, and the need-debt accrual tail; the claims/awareness
+overlay, tags, pair tags, relationships, positions, travel, and routine anchors
+are **current projections**. Every payload carries :data:`HYDRATION_HONESTY`
+verbatim so the UI can render the per-axis label instead of implying a clean
+rewind.
 
 Never-chosen branches here mean "never selected across the analyzed window."
 That is weaker than "dead behind its gate" (which needs exhaustive branch
@@ -57,6 +58,8 @@ HYDRATION_HONESTY: Mapping[str, Tuple[str, ...]] = {
         "routine_anchors",
         "faction_memberships",
         "weather",
+        "claimed_event_scopes",
+        "claim_awareness",
     ),
 }
 
@@ -329,6 +332,7 @@ def analyze_coverage(
     habituation_settings: Optional[Any] = None,
     package_selection_settings: Optional[Any] = None,
     project_settings: Optional[Any] = None,
+    epistemics_settings: Optional[Any] = None,
     fanout_settings: Optional[Any] = None,
 ) -> dict[str, Any]:
     """Aggregate explained resolution coverage across historical anchors.
@@ -372,6 +376,7 @@ def analyze_coverage(
             habituation_settings=habituation_settings,
             package_selection_settings=package_selection_settings,
             project_settings=project_settings,
+            epistemics_settings=epistemics_settings,
             fanout_settings=fanout_settings,
         )
         anchors.append(_tally_report(report, tallies, gap_counts))

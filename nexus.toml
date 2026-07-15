@@ -284,6 +284,14 @@ milestone_magnitude = 0.40
 # Acceptance guard for active-vs-inactive maintenance/routine winner shares.
 coverage_distribution_tolerance = 0.05
 
+[orrery.epistemics]
+enabled = true
+# Event types that mint a bounded claim at birth. Types absent from this list
+# remain implicitly common knowledge and create no epistemics rows.
+claim_event_types = ["threat_issued"]
+# Roles on world_event_entities that receive awareness at claim birth.
+aware_roles = ["actor", "target", "observer", "witness"]
+
 [orrery.reconstruction]
 # JSONB state checkpoint every N accepted chunks (0 disables); genesis and
 # manual snapshots via scripts/checkpoint_state.py.
