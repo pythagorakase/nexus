@@ -206,12 +206,22 @@ def test_probes_use_runtime_health_timeout(tmp_path: Path, monkeypatch) -> None:
 
 
 def test_deactivate_uses_runtime_poll_interval(tmp_path: Path, monkeypatch) -> None:
-    """Shutdown polling sleeps for the configured runtime interval."""
+    """Shutdown polling sleeps for the configured interval without live I/O."""
     settings = _settings_with_state_dir(tmp_path)
     assert settings.runtime is not None
     settings.runtime.health.poll_interval_seconds = 0.37
+    expected_host, expected_port, _ = local_inference._endpoint(settings)
     alive = iter([True, False, False])
     sleeps: list[float] = []
+    release_waits: list[tuple[str, int]] = []
+
+    def fake_await_port_release(value, host, port):
+        release_waits.append((host, port))
+        return True
+
+    def fail_on_port_probe(*args, **kwargs):
+        pytest.fail("poll-interval unit test attempted a real port probe")
+
     monkeypatch.setattr(
         local_inference,
         "_read_active",
@@ -229,12 +239,15 @@ def test_deactivate_uses_runtime_poll_interval(tmp_path: Path, monkeypatch) -> N
     )
     monkeypatch.setattr(local_inference, "_pid_alive", lambda pid: next(alive))
     monkeypatch.setattr(local_inference, "_signal_process_group", lambda pid, sig: None)
+    monkeypatch.setattr(local_inference, "_await_port_release", fake_await_port_release)
+    monkeypatch.setattr(local_inference, "_port_open", fail_on_port_probe)
     monkeypatch.setattr(local_inference.time, "sleep", sleeps.append)
 
     result = local_inference._deactivate_locked(settings)
 
     assert result == {"stopped": True, "pid": 43210}
     assert sleeps == [0.37]
+    assert release_waits == [(expected_host, expected_port)]
 
 
 def test_deactivate_does_not_signal_unverified_reused_pid(
