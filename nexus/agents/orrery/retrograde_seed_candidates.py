@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import json
-from typing import Annotated, Any, Literal, Mapping, Optional, cast
+from typing import Annotated, Any, Literal, Mapping, Optional, Sequence, cast
 
 from pydantic import BaseModel, ConfigDict, Field, create_model, model_validator
 
+from nexus.agents.orrery.retrograde_junctions import resolve_junctions
 from nexus.agents.orrery.retrograde_vocabulary import (
     ENTITY_REF_MAX_LENGTH,
     SeedEligibleVocabulary,
@@ -195,7 +196,10 @@ class RetrogradeWireClaimedEdge(BaseModel):
     """Provider-facing claimed dangling edge (issue #442)."""
 
     edge_id: str = Field(min_length=1)
-    open_endpoint_name: str = Field(min_length=1, max_length=120)
+    open_endpoint_name: str = Field(
+        min_length=1,
+        max_length=ENTITY_REF_MAX_LENGTH,
+    )
     open_endpoint_kind: str = Field(min_length=1)
 
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
@@ -241,7 +245,7 @@ class RetrogradeClaimedEdge(BaseModel):
     edge_id: str = Field(min_length=1, description="Dangling edge id claimed.")
     open_endpoint_name: str = Field(
         min_length=1,
-        max_length=120,
+        max_length=ENTITY_REF_MAX_LENGTH,
         description="Name for the edge's unknown endpoint (new or existing).",
     )
     open_endpoint_kind: str = Field(
@@ -500,6 +504,10 @@ def render_seed_generation_prompt(
         "choose: every candidate must claim 1-2 edge_ids via claimed_edges, "
         "name each claimed edge's open endpoint, and make the edge_type "
         "true in the seed's story. Reconcile the roll; do not ignore it.\n"
+        "candidate_graph.junctions are mandatory shared-entity constraints: "
+        "each junction's two edge_ids must be claimed exactly once by two "
+        "different candidates, and both claims must use the same endpoint "
+        "name and required kind.\n"
         "Keep summaries, rationales, and rejection conditions compact.\n"
         "If a mechanical hint cannot satisfy the hard validation rules, omit it.\n"
         "Return JSON only. Unknown mechanical primitives are invalid.\n\n"
@@ -794,13 +802,6 @@ def _response_contract_issues(
             f"{len(response.candidates)} candidates, exceeding budget "
             f"{generate_limit}"
         )
-    if select_limit is not None and len(response.selected_seed_ids) > select_limit:
-        issues.append(
-            "response selected "
-            f"{len(response.selected_seed_ids)} seeds, exceeding target "
-            f"{select_limit}"
-        )
-
     coverage_ids = {
         str(function.get("id"))
         for function in seed_generation_request.get("coverage_functions", [])
@@ -856,6 +857,26 @@ def _response_contract_issues(
                     claims_max=claims_max,
                 )
             )
+
+    resolved_junctions, junction_issues = resolve_junctions(
+        seed_generation_request=seed_generation_request,
+        candidates_payload=response.model_dump(mode="json"),
+    )
+    issues.extend(junction_issues)
+
+    selection_started = bool(response.selected_seed_ids or response.rejected_seed_ids)
+    if selection_started:
+        issues.extend(
+            _selection_contract_issues(
+                candidate_ids=[candidate.seed_id for candidate in response.candidates],
+                selected_seed_ids=response.selected_seed_ids,
+                rejected_seed_ids=response.rejected_seed_ids,
+                select_limit=select_limit,
+                resolved_junctions=resolved_junctions,
+                require_selected=True,
+                require_complete=True,
+            )
+        )
 
     return issues
 
@@ -1176,6 +1197,7 @@ def _prompt_response_contract() -> dict[str, Any]:
             "coverage_functions",
             "mechanical_hints",
             "defer_or_reject_if",
+            "claimed_edges",
         ],
         "mechanical_hint_fields": [
             "events",
@@ -1189,6 +1211,7 @@ def _prompt_response_contract() -> dict[str, Any]:
             "relationships.relationship_ref": (
                 "subject_kind|object_kind|relationship_type"
             ),
+            "claimed_edges": ("edge_id, open_endpoint_name, open_endpoint_kind"),
             "absence": "Use empty strings for absent supporting_event_ref/rationale.",
         },
     }
@@ -1226,6 +1249,11 @@ def _hard_validation_rules() -> list[str]:
             "selected_seed_ids and rejected_seed_ids must reference returned "
             "candidate seed_id values, and a seed cannot be both selected and "
             "rejected."
+        ),
+        (
+            "Every candidate_graph.junctions entry has exactly two edge legs. "
+            "Those legs must be claimed exactly once by two different "
+            "candidates using the same endpoint kind and normalized name."
         ),
         (
             "Entity refs (entity_ref, subject_ref, object_ref, "
@@ -1282,6 +1310,65 @@ def _seed_vocabulary(value: Any) -> SeedEligibleVocabulary:
     return cast(SeedEligibleVocabulary, vocabulary)
 
 
+def _selection_contract_issues(
+    *,
+    candidate_ids: list[str],
+    selected_seed_ids: list[str],
+    rejected_seed_ids: list[str],
+    select_limit: Optional[int],
+    resolved_junctions: Sequence[Mapping[str, Any]],
+    require_selected: bool,
+    require_complete: bool,
+) -> list[str]:
+    """Return ordinary R5 accounting and junction-atomicity violations."""
+
+    issues: list[str] = []
+    known = set(candidate_ids)
+    selected = set(selected_seed_ids)
+    rejected = set(rejected_seed_ids)
+    unknown = sorted((selected | rejected) - known)
+    if unknown:
+        issues.append(f"selection references unknown seed ids {unknown}")
+    if require_selected and not selected_seed_ids:
+        issues.append("selection must select at least one seed")
+    if select_limit is not None and len(selected_seed_ids) > select_limit:
+        issues.append(
+            f"response selected {len(selected_seed_ids)} seeds, exceeding "
+            f"target {select_limit}"
+        )
+    overlap = sorted(selected & rejected)
+    if overlap:
+        issues.append(f"seed ids both selected and rejected: {overlap}")
+    if require_complete:
+        unaccounted = sorted(known - selected - rejected)
+        if unaccounted:
+            issues.append(
+                "every candidate must be selected or rejected; missing "
+                f"{unaccounted}"
+            )
+
+    for junction in resolved_junctions:
+        junction_id = str(junction.get("junction_id") or "")
+        seed_ids = [str(seed_id) for seed_id in junction.get("seed_ids") or []]
+        dispositions = []
+        for seed_id in seed_ids:
+            if seed_id in selected and seed_id in rejected:
+                dispositions.append("both")
+            elif seed_id in selected:
+                dispositions.append("selected")
+            elif seed_id in rejected:
+                dispositions.append("rejected")
+            else:
+                dispositions.append("unaccounted")
+        if len(set(dispositions)) > 1:
+            issues.append(
+                f"junction {junction_id!r} seeds {seed_ids} must be selected "
+                "or rejected together"
+            )
+
+    return issues
+
+
 class RetrogradeSeedSelectionResponse(BaseModel):
     """Structured response from the decoupled R5 selection pass."""
 
@@ -1305,6 +1392,10 @@ def render_seed_selection_prompt(
     (issue #442).
     """
 
+    resolved_junctions, junction_issues = resolve_junctions(
+        seed_generation_request=seed_generation_request,
+        candidates_payload=candidates_payload,
+    )
     prompt_payload = {
         "task": (
             "Select the strongest subset of the candidate seeds below. "
@@ -1323,6 +1414,8 @@ def render_seed_selection_prompt(
         "dangling_edges": (
             seed_generation_request.get("candidate_graph", {}) or {}
         ).get("dangling_edges", []),
+        "resolved_junctions": resolved_junctions,
+        "junction_resolution_issues": junction_issues,
         "candidates": candidates_payload.get("candidates", []),
     }
     return (
@@ -1332,6 +1425,8 @@ def render_seed_selection_prompt(
         "conviction rather than lip service, and would take real creative "
         "work to weave into the story — merge-difficulty is value, not "
         "risk. Reject seeds that ignore their claimed edges.\n"
+        "Resolved junction seed pairs are atomic: select both member seeds "
+        "or reject both. A pair consumes two ordinary selection slots.\n"
         "Every non-selected candidate must appear in rejected_seed_ids.\n\n"
         "RETROGRADE_SEED_SELECTION_REQUEST:\n"
         f"{json.dumps(prompt_payload, indent=2, sort_keys=True)}"
@@ -1370,6 +1465,15 @@ def select_seed_candidates_with_skald(
 
     budget = _mapping(seed_generation_request.get("budget"))
     select_limit = _optional_positive_int(budget.get("select_target"))
+    resolved_junctions, junction_issues = resolve_junctions(
+        seed_generation_request=seed_generation_request,
+        candidates_payload=candidates_payload,
+    )
+    if junction_issues:
+        formatted = "\n".join(f"- {issue}" for issue in junction_issues)
+        raise RetrogradeSeedCandidateValidationError(
+            "Seed selection received unresolved R3 junctions:\n" + formatted
+        )
 
     prompt = render_seed_selection_prompt(
         seed_generation_request=seed_generation_request,
@@ -1407,34 +1511,15 @@ def select_seed_candidates_with_skald(
         selection = RetrogradeSeedSelectionResponse.model_validate(
             output.model_dump(mode="json")
         )
-        issues: list[str] = []
-        known = set(candidate_ids)
-        unknown = sorted(
-            (set(selection.selected_seed_ids) | set(selection.rejected_seed_ids))
-            - known
+        issues = _selection_contract_issues(
+            candidate_ids=candidate_ids,
+            selected_seed_ids=selection.selected_seed_ids,
+            rejected_seed_ids=selection.rejected_seed_ids,
+            select_limit=select_limit,
+            resolved_junctions=resolved_junctions,
+            require_selected=True,
+            require_complete=True,
         )
-        if unknown:
-            issues.append(f"selection references unknown seed ids {unknown}")
-        if not selection.selected_seed_ids:
-            issues.append("selection must select at least one seed")
-        if select_limit is not None and len(selection.selected_seed_ids) > select_limit:
-            issues.append(
-                f"selected {len(selection.selected_seed_ids)} seeds, "
-                f"exceeding select_target {select_limit}"
-            )
-        overlap = sorted(
-            set(selection.selected_seed_ids) & set(selection.rejected_seed_ids)
-        )
-        if overlap:
-            issues.append(f"seed ids both selected and rejected: {overlap}")
-        unaccounted = sorted(
-            known - set(selection.selected_seed_ids) - set(selection.rejected_seed_ids)
-        )
-        if unaccounted:
-            issues.append(
-                f"every candidate must be selected or rejected; missing "
-                f"{unaccounted}"
-            )
         if issues:
             raise ModelRetry(
                 "Retrograde seed selection failed validation:\n"

@@ -28,7 +28,7 @@ from nexus.agents.orrery.retrograde_vocabulary import SeedEligibleVocabulary
 if TYPE_CHECKING:
     from nexus.config.settings_models import OrreryRetrogradeGraphSettings
 
-GRAPH_SCHEMA_VERSION = 1
+GRAPH_SCHEMA_VERSION = 2
 
 
 def _coerce_graph_settings(raw: Any) -> "OrreryRetrogradeGraphSettings":
@@ -54,6 +54,15 @@ class DanglingEdge(TypedDict):
     open_endpoint_kind: str
     orthogonality: str
     guidance: str
+
+
+class SharedEntityJunction(TypedDict):
+    """Two independently rolled edges whose open endpoint must be one entity."""
+
+    junction_id: str
+    edge_ids: list[str]
+    open_endpoint_kind: str
+    resolution: str
 
 
 def _graph_rng(seed_material: str) -> random.Random:
@@ -82,6 +91,7 @@ def build_candidate_graph(
     generate_candidates: int,
     rng_seed_material: str,
     graph_settings: Any = None,
+    junction_count: int = 0,
 ) -> dict[str, Any]:
     """Build the R3 candidate graph: core nodes plus sampled dangling edges.
 
@@ -153,8 +163,17 @@ def build_candidate_graph(
             "edge pools (relationships, pair tags, events) are empty"
         )
 
+    if junction_count < 0:
+        raise ValueError("Retrograde graph junction_count must be non-negative")
+
     edge_count = max(2, ceil(generate_candidates * cfg.edges_per_candidate))
+    if junction_count * 2 > edge_count:
+        raise ValueError(
+            f"Retrograde graph cannot fit {junction_count} junctions into "
+            f"{edge_count} dangling-edge slots"
+        )
     edges: list[DanglingEdge] = []
+    junctions: list[SharedEntityJunction] = []
     used_edge_types: set[tuple[str, str]] = set()
 
     def _pick_anchor(kind_filter: Optional[str] = None) -> Optional[dict[str, Any]]:
@@ -171,7 +190,14 @@ def build_candidate_graph(
         ]
         return rng.choices(pool, weights=weights, k=1)[0]
 
-    for index in range(edge_count):
+    def _sample_edge(
+        *,
+        index: int,
+        blocked_edge_types: set[tuple[str, str]],
+        required_open_endpoint_kind: Optional[str] = None,
+    ) -> Optional[DanglingEdge]:
+        """Roll one legal edge, optionally constraining only its open kind."""
+
         edge: Optional[DanglingEdge] = None
         for _attempt in range(cfg.max_sample_retries):
             kind = _weighted_choice(rng, edge_kind_weights)
@@ -224,7 +250,11 @@ def build_candidate_graph(
                 open_kind = _weighted_choice(rng, event_endpoint_weights)
                 anchor_role = "participant"
 
-            if (kind, edge_type) in used_edge_types:
+            if required_open_endpoint_kind is not None and (
+                open_kind != required_open_endpoint_kind
+            ):
+                continue
+            if (kind, edge_type) in blocked_edge_types:
                 continue
 
             far = rng.random() < weird_roll
@@ -244,14 +274,62 @@ def build_candidate_graph(
                 ),
             }
             break
-        if edge is None:
+        return edge
+
+    next_index = 0
+    for junction_index in range(junction_count):
+        pair: Optional[tuple[DanglingEdge, DanglingEdge]] = None
+        for _attempt in range(cfg.max_sample_retries):
+            first = _sample_edge(
+                index=next_index,
+                blocked_edge_types=used_edge_types,
+            )
+            if first is None:
+                continue
+            first_key = (first["kind"], first["edge_type"])
+            second = _sample_edge(
+                index=next_index + 1,
+                blocked_edge_types=used_edge_types | {first_key},
+                required_open_endpoint_kind=first["open_endpoint_kind"],
+            )
+            if second is not None:
+                pair = (first, second)
+                break
+        if pair is None:
+            raise ValueError(
+                "Retrograde graph could not sample two distinct dangling edges "
+                f"for junction {junction_index + 1} with a shared open endpoint "
+                "kind; expand the eligible vocabulary or lower "
+                "junction_counts_by_weird"
+            )
+
+        first, second = pair
+        edges.extend(pair)
+        for edge in pair:
+            used_edge_types.add((edge["kind"], edge["edge_type"]))
+        junctions.append(
+            {
+                "junction_id": f"junction_{junction_index + 1:02d}",
+                "edge_ids": [first["edge_id"], second["edge_id"]],
+                "open_endpoint_kind": first["open_endpoint_kind"],
+                "resolution": "shared_entity",
+            }
+        )
+        next_index += 2
+
+    for index in range(next_index, edge_count):
+        sampled_edge = _sample_edge(
+            index=index,
+            blocked_edge_types=used_edge_types,
+        )
+        if sampled_edge is None:
             # Vocabulary too small to keep deduping within the retry
             # budget: under-build the menu rather than emit duplicate
             # ingredient types. Edge capacity already exceeds what
             # candidates can claim, so a short menu costs little.
             continue
-        used_edge_types.add((edge["kind"], edge["edge_type"]))
-        edges.append(edge)
+        used_edge_types.add((sampled_edge["kind"], sampled_edge["edge_type"]))
+        edges.append(sampled_edge)
 
     if not edges:
         raise ValueError(
@@ -277,6 +355,7 @@ def build_candidate_graph(
         },
         "nodes": nodes,
         "dangling_edges": list(edges),
+        "junctions": list(junctions),
         "attachment_contract": {
             "rule": (
                 "Every candidate seed must claim one or two edge_ids from "
@@ -285,6 +364,11 @@ def build_candidate_graph(
                 "open_endpoint_kind). Unclaimed edges are discarded free "
                 "of charge. The seed's story must make the claimed "
                 "edge_type true."
+            ),
+            "junction_rule": (
+                "Each junction's two edge_ids must be claimed by two distinct "
+                "candidate seeds that resolve the open endpoint to the same "
+                "named entity of open_endpoint_kind."
             ),
             "claims_per_seed_min": 1,
             "claims_per_seed_max": 2,

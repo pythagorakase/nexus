@@ -610,6 +610,125 @@ def test_expansion_prompt_states_death_contract() -> None:
     assert "must list the dying entity as a" in prompt
 
 
+def test_expansion_prompt_surfaces_selected_junction_contract() -> None:
+    vocabulary = _expansion_test_vocabulary()
+    packet, seed_response = _junction_inputs(vocabulary)
+
+    prompt = render_expansion_prompt(
+        packet=packet,
+        seed_candidate_response=seed_response,
+    )
+
+    assert '"selected_junctions"' in prompt
+    assert "junction_01" in prompt
+    assert "Junction members cannot be deferred or survive independently" in prompt
+
+
+def test_expansion_plan_accepts_woven_junction_with_shared_entity_evidence() -> None:
+    vocabulary = _expansion_test_vocabulary()
+    packet, seed_response = _junction_inputs(vocabulary)
+
+    response = validate_expansion_plan(
+        payload=_woven_junction_expansion(vocabulary),
+        packet=packet,
+        seed_candidate_response=seed_response,
+    )
+
+    assert [thread.status for thread in response.thread_plan] == ["woven", "woven"]
+
+
+def test_expansion_plan_accepts_joint_junction_rejection_without_events() -> None:
+    vocabulary = _expansion_test_vocabulary()
+    packet, seed_response = _junction_inputs(vocabulary)
+
+    response = validate_expansion_plan(
+        payload=_rejected_junction_expansion(vocabulary),
+        packet=packet,
+        seed_candidate_response=seed_response,
+    )
+
+    assert [thread.status for thread in response.thread_plan] == [
+        "rejected",
+        "rejected",
+    ]
+    assert response.event_plan == []
+
+
+@pytest.mark.parametrize("second_status", ["rejected", "deferred"])
+def test_expansion_plan_rejects_non_atomic_junction_statuses(
+    second_status: str,
+) -> None:
+    vocabulary = _expansion_test_vocabulary()
+    packet, seed_response = _junction_inputs(vocabulary)
+    payload = _woven_junction_expansion(vocabulary)
+    payload["thread_plan"][1]["status"] = second_status
+    if second_status == "rejected":
+        payload["thread_plan"][1]["event_refs"] = []
+
+    with pytest.raises(
+        RetrogradeExpansionValidationError,
+        match="members must be both woven or both rejected",
+    ):
+        validate_expansion_plan(
+            payload=payload,
+            packet=packet,
+            seed_candidate_response=seed_response,
+        )
+
+
+def test_expansion_plan_rejects_junction_with_partial_structured_evidence() -> None:
+    vocabulary = _expansion_test_vocabulary()
+    packet, seed_response = _junction_inputs(vocabulary)
+    payload = _separate_event_junction_expansion(vocabulary)
+    payload["event_plan"][1]["participants"] = []
+
+    with pytest.raises(
+        RetrogradeExpansionValidationError,
+        match="woven seed 'seed_002' lacks a thread event",
+    ):
+        validate_expansion_plan(
+            payload=payload,
+            packet=packet,
+            seed_candidate_response=seed_response,
+        )
+
+
+def test_expansion_plan_rejects_events_for_jointly_rejected_junction() -> None:
+    vocabulary = _expansion_test_vocabulary()
+    packet, seed_response = _junction_inputs(vocabulary)
+    payload = _woven_junction_expansion(vocabulary)
+    for thread in payload["thread_plan"]:
+        thread["status"] = "rejected"
+        thread["event_refs"] = []
+
+    with pytest.raises(
+        RetrogradeExpansionValidationError,
+        match="rejects both seeds but still plans or references events",
+    ):
+        validate_expansion_plan(
+            payload=payload,
+            packet=packet,
+            seed_candidate_response=seed_response,
+        )
+
+
+def test_expansion_plan_requires_thread_event_seed_ownership() -> None:
+    vocabulary = _expansion_test_vocabulary()
+    packet, seed_response = _junction_inputs(vocabulary)
+    payload = _separate_event_junction_expansion(vocabulary)
+    payload["thread_plan"][0]["event_refs"] = ["retro_event_002"]
+
+    with pytest.raises(
+        RetrogradeExpansionValidationError,
+        match="does not list the thread's seed_id",
+    ):
+        validate_expansion_plan(
+            payload=payload,
+            packet=packet,
+            seed_candidate_response=seed_response,
+        )
+
+
 def _expansion_test_vocabulary() -> SeedEligibleVocabulary:
     vocabulary = enumerate_seed_eligible_vocabulary()
     vocabulary["registered_single_entity_tags"] = [
@@ -709,6 +828,102 @@ def _seed_response_base(vocabulary: SeedEligibleVocabulary) -> dict[str, Any]:
         "selected_seed_ids": ["seed_001"],
         "rejected_seed_ids": [],
     }
+
+
+def _junction_inputs(
+    vocabulary: SeedEligibleVocabulary,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    packet = _packet(vocabulary)
+    graph = packet["seed_generation_request"]["candidate_graph"]
+    first_edge = graph["dangling_edges"][0]
+    second_edge = {**first_edge, "edge_id": "edge_junction_02"}
+    graph["schema_version"] = 2
+    graph["dangling_edges"].append(second_edge)
+    graph["junctions"] = [
+        {
+            "junction_id": "junction_01",
+            "edge_ids": [first_edge["edge_id"], second_edge["edge_id"]],
+            "open_endpoint_kind": first_edge["open_endpoint_kind"],
+            "resolution": "shared_entity",
+        }
+    ]
+
+    response = _seed_response_base(vocabulary)
+    first_candidate = response["candidates"][0]
+    first_candidate["claimed_edges"] = [
+        {
+            "edge_id": first_edge["edge_id"],
+            "open_endpoint_name": "Vale",
+            "open_endpoint_kind": first_edge["open_endpoint_kind"],
+        }
+    ]
+    second_candidate = copy.deepcopy(first_candidate)
+    second_candidate["seed_id"] = "seed_002"
+    second_candidate["summary"] = "Vale also betrayed Mara's former mentor."
+    second_candidate["claimed_edges"] = [
+        {
+            "edge_id": second_edge["edge_id"],
+            "open_endpoint_name": "vale",
+            "open_endpoint_kind": second_edge["open_endpoint_kind"],
+        }
+    ]
+    response["candidates"].append(second_candidate)
+    response["selected_seed_ids"] = ["seed_001", "seed_002"]
+    return packet, response
+
+
+def _woven_junction_expansion(
+    vocabulary: SeedEligibleVocabulary,
+) -> dict[str, Any]:
+    payload = _valid_expansion(vocabulary)
+    payload["selected_seed_ids"] = ["seed_001", "seed_002"]
+    event = payload["event_plan"][0]
+    event["seed_ids"] = ["seed_001", "seed_002"]
+    event["participants"].append(
+        {"entity_ref": "Vale", "entity_kind": "character", "role": "actor"}
+    )
+    second_thread = copy.deepcopy(payload["thread_plan"][0])
+    second_thread["seed_id"] = "seed_002"
+    second_thread["present_leaf_anchor"] = "Vale's betrayal pressures the opening."
+    payload["thread_plan"].append(second_thread)
+    return payload
+
+
+def _separate_event_junction_expansion(
+    vocabulary: SeedEligibleVocabulary,
+) -> dict[str, Any]:
+    payload = _woven_junction_expansion(vocabulary)
+    first_event = payload["event_plan"][0]
+    first_event["seed_ids"] = ["seed_001"]
+    second_event = copy.deepcopy(first_event)
+    second_event["event_ref"] = "retro_event_002"
+    second_event["seed_ids"] = ["seed_002"]
+    second_event["summary"] = "Vale betrayed Mara's former mentor."
+    payload["event_plan"].append(second_event)
+    payload["thread_plan"][1]["event_refs"] = ["retro_event_002"]
+    return payload
+
+
+def _rejected_junction_expansion(
+    vocabulary: SeedEligibleVocabulary,
+) -> dict[str, Any]:
+    payload = _valid_expansion(vocabulary)
+    payload["selected_seed_ids"] = ["seed_001", "seed_002"]
+    payload["event_plan"] = []
+    payload["entity_tag_plan"] = []
+    payload["pair_tag_plan"] = []
+    payload["relationship_plan"] = []
+    payload["death_plan"] = []
+    payload["thread_plan"] = [
+        {
+            "seed_id": seed_id,
+            "status": "rejected",
+            "event_refs": [],
+            "present_leaf_anchor": "Rejected as incoherent with present canon.",
+        }
+        for seed_id in ("seed_001", "seed_002")
+    ]
+    return payload
 
 
 def _valid_expansion(vocabulary: SeedEligibleVocabulary) -> dict[str, Any]:

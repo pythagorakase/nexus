@@ -173,6 +173,29 @@ def test_retrograde_packet_budget_carries_entity_stub_cap() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("weird_level", "expected_junctions"),
+    (("low", 0), ("medium", 1), ("high", 1)),
+)
+def test_wizard_packet_applies_configured_junction_count(
+    weird_level: str,
+    expected_junctions: int,
+) -> None:
+    """Cold-start R3 braiding follows the configured low/medium/high counts."""
+
+    packet = build_retrograde_dry_run_packet(
+        slot=5,
+        dbname="save_05",
+        cache=FakeRetrogradeCache(),
+        vocabulary=enumerate_seed_eligible_vocabulary(),
+        settings=load_settings(),
+        weird_level=weird_level,
+    )
+
+    graph = packet["seed_generation_request"]["candidate_graph"]
+    assert len(graph["junctions"]) == expected_junctions
+
+
 def test_retrograde_seed_request_respects_vocabulary_policy() -> None:
     """Registered categories are prompt-visible but not equally seed-writeable."""
 
