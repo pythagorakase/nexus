@@ -447,6 +447,7 @@ def test_anthropic_provider_uses_native_output_format() -> None:
         api_key="test-key",
         system_prompt="System prompt",
         max_tokens=5678,
+        reasoning_effort="high",
     )
     provider.client = SimpleNamespace(beta=SimpleNamespace(messages=FakeMessages()))
 
@@ -458,6 +459,7 @@ def test_anthropic_provider_uses_native_output_format() -> None:
     assert llm_response.input_tokens == 33
     assert llm_response.output_tokens == 44
     assert captured["output_config"]["format"]["type"] == "json_schema"
+    assert captured["output_config"]["effort"] == "high"
     assert (
         captured["output_config"]["format"]["schema"]["additionalProperties"] is False
     )

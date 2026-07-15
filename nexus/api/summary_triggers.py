@@ -157,16 +157,17 @@ def _run_summary_generation(
             )
 
 
-def _summaries_model_is_routable(model_name: str) -> bool:
+def _summary_model_is_registered(model_name: str) -> bool:
+    """Return whether a candidate has an authoritative registry route."""
+
     from nexus.config import load_settings
 
     settings = load_settings()
     try:
-        return settings.summaries_model_is_routable(model_name)
+        settings.provider_for_model(model_name)
     except ValueError:
-        # Not in the registry at all — the pre-#481 pipeline would have sent
-        # this id to api.openai.com and 404'd; unroutable is the honest verdict.
         return False
+    return True
 
 
 def _run_single_task(
@@ -220,17 +221,13 @@ def _run_single_task(
 
     failure_reasons: List[str] = []
     for index, model_name in enumerate(model_candidates):
-        if not _summaries_model_is_routable(model_name):
-            # A followed non-OpenAI storyteller lands here (config load
-            # deliberately allows it — the local-Skald path must stay
-            # selectable). Record the gap durably instead of calling a
-            # provider that would 404.
+        if not _summary_model_is_registered(model_name):
+            # Registry membership is the routing authority. Record a durable
+            # configuration error instead of guessing a provider endpoint.
             reason = (
-                f"{model_name}: the Responses-only summary pipeline cannot "
-                "route this model. Set [summaries].model to a routable model "
-                "(native OpenAI, or a registry provider with "
-                "structured_transport='responses') to decouple summaries "
-                "from the storyteller, or wait for the #481 routing work."
+                f"{model_name}: model is not declared in nexus.toml's "
+                "[global.model.api_models] registry. Add the model to the "
+                "registry or set [summaries].model to a registered model."
             )
             logger.error("Cannot generate %s summary: %s", target_label, reason)
             failure_reasons.append(reason)
@@ -328,6 +325,9 @@ def _coalesce_models(model_candidates: Optional[Sequence[str]]) -> List[str]:
     if not deduped:
         from nexus.config import load_settings
 
-        deduped.append(load_settings().summaries.model)
+        model = load_settings().summaries.model
+        if model is None:  # Defensive: Settings resolves the default from apex.
+            raise ValueError("No narrative summary model is configured")
+        deduped.append(model)
 
     return deduped

@@ -183,9 +183,30 @@ def test_schedule_summary_generation_skips_chunkless_episodes():
     assert recorder_calls == []
 
 
-def test_unroutable_storyteller_records_durable_marker_without_api_call(caplog):
-    """A followed non-OpenAI storyteller (the local-Skald path) must not
-    reach any provider: the scheduler records the instructive gap durably."""
+def test_local_storyteller_reaches_registry_routed_generator():
+    """A local Chat Completions model reaches summary generation."""
+    recorder_calls: List[str] = []
+
+    def generator_factory(**kwargs):
+        return _RecorderGenerator(calls=recorder_calls, **kwargs)
+
+    db = _FakeDB({}, {}, failure_records=[])
+    schedule_summary_generation(
+        [SummaryTask(kind="episode", season=7, episode=2)],
+        model_candidates=["nousresearch/hermes-4-70b"],
+        run_in_thread=False,
+        db_manager_factory=lambda: db,
+        generator_cls=generator_factory,
+    )
+
+    assert recorder_calls == [
+        "episode-7-2-nousresearch/hermes-4-70b",
+    ]
+    assert db.failure_records == []
+
+
+def test_unregistered_model_records_durable_marker_without_api_call(caplog):
+    """The scheduler never guesses an endpoint for an unknown model ID."""
     recorder_calls: List[str] = []
 
     def generator_factory(**kwargs):
@@ -195,7 +216,7 @@ def test_unroutable_storyteller_records_durable_marker_without_api_call(caplog):
     with caplog.at_level(logging.ERROR, logger="nexus.api.summary_triggers"):
         schedule_summary_generation(
             [SummaryTask(kind="episode", season=7, episode=2)],
-            model_candidates=["nousresearch/hermes-4-70b"],
+            model_candidates=["not-in-the-model-registry"],
             run_in_thread=False,
             db_manager_factory=lambda: db,
             generator_cls=generator_factory,
@@ -205,8 +226,8 @@ def test_unroutable_storyteller_records_durable_marker_without_api_call(caplog):
     assert len(db.failure_records) == 1
     marker = db.failure_records[0]
     assert marker["status"] == "error"
+    assert "not declared" in marker["error"]
     assert "[summaries].model" in marker["error"]
-    assert "#481" in marker["error"]
 
 
 def test_generation_failure_is_durable_visible_and_refireable(caplog):
@@ -243,8 +264,65 @@ def test_summary_generator_routes_test_model_to_registry_base_url():
 
     generator = SummaryGenerator(model="TEST", db_manager=_FakeDB({}, {}))
     expected = load_settings().global_.model.api_models["test"].base_url
+    provider = generator._provider_for_mode("episode")
 
-    assert str(generator.provider.client.base_url).rstrip("/") == expected
+    assert str(provider.client.base_url).rstrip("/") == expected
+
+
+def test_summary_token_check_uses_configured_request_budget():
+    """The retired legacy TPM dictionary is not a prerequisite for summaries."""
+    from scripts.summarize_narrative import SummaryGenerator
+
+    generator = SummaryGenerator(model="TEST", db_manager=_FakeDB({}, {}))
+
+    assert generator._token_check("A short narrative interval.", "episode") is True
+
+
+@pytest.mark.parametrize(
+    "model_ref,expected_provider,expected_transport",
+    [
+        ("@openai.default", "openai", "responses"),
+        ("@anthropic.default", "anthropic", None),
+        ("@local.default", "openai", "chat_completions"),
+    ],
+)
+def test_summary_generator_uses_registry_native_provider_contract(
+    monkeypatch,
+    model_ref: str,
+    expected_provider: str,
+    expected_transport: Optional[str],
+):
+    """OpenAI, Anthropic, and local summaries use their real provider wrappers."""
+    from nexus.config import load_settings, resolve_model_ref
+    from scripts.api_anthropic import AnthropicProvider
+    from scripts.api_openai import OpenAIProvider
+    from scripts.summarize_narrative import SummaryGenerator
+
+    monkeypatch.setattr(OpenAIProvider, "_get_api_key", lambda self: "test-openai")
+    monkeypatch.setattr(
+        AnthropicProvider,
+        "_get_api_key",
+        lambda self: "test-anthropic",
+    )
+
+    generator = SummaryGenerator(
+        model=resolve_model_ref(model_ref),
+        db_manager=_FakeDB({}, {}),
+    )
+    provider = generator._provider_for_mode("season")
+    settings = load_settings().summaries
+
+    assert provider.provider_name == expected_provider
+    assert provider.system_prompt.startswith("You are a narrative continuity AI")
+    assert generator._provider_for_mode("season") is provider
+    if isinstance(provider, OpenAIProvider):
+        assert provider.structured_transport == expected_transport
+        assert provider.max_output_tokens == settings.season_max_output_tokens
+    else:
+        assert isinstance(provider, AnthropicProvider)
+        assert expected_transport is None
+        assert provider.max_tokens == settings.season_max_output_tokens
+        assert provider.reasoning_effort == settings.reasoning_effort
 
 
 @pytest.mark.requires_postgres

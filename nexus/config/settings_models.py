@@ -1826,10 +1826,57 @@ class SummariesSettings(BaseModel):
         description=(
             "Registry model reference used for episode and season summaries. "
             "Absent (the default) follows the storyteller (apex.model); set "
-            "explicitly to decouple the summarizer from the storyteller. The "
-            "current summarizer requires the OpenAI Responses transport."
+            "explicitly to decouple the summarizer from the storyteller. All "
+            "registered native and OpenAI-compatible providers are routable."
         ),
     )
+    temperature: float = Field(
+        default=0.2,
+        ge=0.0,
+        le=2.0,
+        description="Sampling temperature for summary models that accept it.",
+    )
+    reasoning_effort: Literal["low", "medium", "high"] = Field(
+        default="medium",
+        description="Reasoning effort for summary models that reject temperature.",
+    )
+    episode_max_output_tokens: int = Field(
+        default=2500,
+        gt=0,
+        description="Maximum output tokens for episode summaries.",
+    )
+    season_max_output_tokens: int = Field(
+        default=4000,
+        gt=0,
+        description="Maximum output tokens for season summaries.",
+    )
+    request_token_budget: int = Field(
+        default=30000,
+        gt=0,
+        description=(
+            "Conservative combined input/output token budget for one summary request."
+        ),
+    )
+    structured_output_retries: int = Field(
+        default=0,
+        ge=0,
+        description="Validation retry budget for structured summary output.",
+    )
+
+    @model_validator(mode="after")
+    def _validate_request_budget(self) -> "SummariesSettings":
+        """Keep each output allowance below the combined request budget."""
+
+        largest_output = max(
+            self.episode_max_output_tokens,
+            self.season_max_output_tokens,
+        )
+        if self.request_token_budget <= largest_output:
+            raise ValueError(
+                "summaries.request_token_budget must exceed both summary "
+                "max-output-token settings"
+            )
+        return self
 
 
 # =============================================================================
@@ -2244,53 +2291,14 @@ class Settings(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def _validate_summaries_transport(self) -> "Settings":
-        """Reject summary models the current Responses-only pipeline cannot route.
+    def _resolve_summaries_model(self) -> "Settings":
+        """Make summaries follow the storyteller unless explicitly decoupled."""
 
-        Issue #481 deliberately decouples summary model selection without also
-        adding Anthropic-native or local Chat Completions routing. Fail at config
-        load so an unsupported selection cannot become a dropped background job.
-        """
-        followed = self.summaries.model is None
-        if followed:
-            # Owner decision (2026-07-14): summaries follow the storyteller
-            # unless explicitly decoupled — never a silently-cheaper model.
+        if self.summaries.model is None:
+            # Owner decision (2026-07-14): never choose a silently-cheaper
+            # summarizer. Provider routing is shared across every registry model.
             self.summaries.model = self.apex.model
-        if not self.summaries_model_is_routable(self.summaries.model):
-            model_id = self.summaries.model
-            provider = self.provider_for_model(model_id)
-            provider_config = self.global_.model.api_models[provider]
-            if followed:
-                # A non-OpenAI storyteller is a fully supported choice (the
-                # local-Skald path); refusing it here would block the apex
-                # picker. The summary pipeline records a durable, refireable
-                # error marker instead of silently losing summaries.
-                return self
-            raise ValueError(
-                "[summaries].model must resolve to the native OpenAI provider "
-                "or to an OpenAI-compatible registry provider with "
-                "structured_transport='responses'; "
-                f"'{model_id}' resolves to provider '{provider}' with "
-                f"structured_transport='{provider_config.structured_transport}'. "
-                "Anthropic-native and chat_completions summary routing are "
-                "deferred routing work tracked by #481."
-            )
         return self
-
-    def summaries_model_is_routable(self, model_id: str) -> bool:
-        """Whether the Responses-only summary pipeline can serve this model.
-
-        Shared by config validation (explicit [summaries].model choices fail
-        loudly) and the summary scheduler (a followed-but-unroutable
-        storyteller records a durable error marker instead of calling a
-        provider that would 404).
-        """
-        provider = self.provider_for_model(model_id)
-        provider_config = self.global_.model.api_models[provider]
-        return provider == "openai" or (
-            provider not in NATIVE_API_PROVIDERS
-            and provider_config.structured_transport == "responses"
-        )
 
     @model_validator(mode="after")
     def _validate_param_capabilities(self) -> "Settings":
