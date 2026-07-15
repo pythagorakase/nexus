@@ -17,6 +17,7 @@ from nexus.config.settings_models import (
     OrreryRetrogradeMaturationSettings,
     OrreryRetrogradeWeirdGenreBands,
     OrreryRetrogradeWeirdSettings,
+    OrrerySunhelmSettings,
 )
 
 
@@ -61,6 +62,7 @@ def test_orrery_settings_resolve_model_reference() -> None:
         "intimacy": 16,
     }
     assert settings.orrery.sunhelm.pressure.min_severity_level == 2
+    assert "min_accrual_hours_per_chunk" not in settings.orrery.sunhelm.model_dump()
     assert settings.orrery.package_selection.mode == "stochastic"
     assert settings.orrery.package_selection.window_points == 6.0
     assert settings.orrery.package_selection.temperature == 2.0
@@ -98,6 +100,15 @@ def test_orrery_settings_resolve_model_reference() -> None:
     assert set(weird.bands_by_genre) == {genre.value for genre in Genre}
     assert weird.bands_by_genre["cyberpunk"].medium.min == 0.36
     assert weird.bands_by_genre["historical"].medium.min == 0.12
+
+
+def test_sunhelm_rejects_retired_story_time_accrual_floor() -> None:
+    """Stale configs fail loudly instead of reviving narrative-clock accrual."""
+
+    with pytest.raises(ValidationError, match="min_accrual_hours_per_chunk"):
+        OrrerySunhelmSettings(
+            min_accrual_hours_per_chunk={"socialize": 0.5}  # type: ignore[call-arg]
+        )
 
 
 def test_project_milestones_cannot_fall_below_promotion_floor() -> None:
