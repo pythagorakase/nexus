@@ -73,7 +73,7 @@ def openai_response_text_format(
             "schema": schema,
         }
 
-    return type_to_text_format_param(schema_model)
+    return cast(Dict[str, Any], type_to_text_format_param(schema_model))
 
 
 def _strip_anthropic_unsupported_schema_keys(value: Any) -> Any:
@@ -159,8 +159,15 @@ def build_native_structured_provider(
     system_prompt: str,
     structured_output_retries: int,
     output_validator: Optional[Callable[..., Any]] = None,
+    temperature: Optional[float] = None,
+    reasoning_effort: Optional[str] = None,
 ) -> Any:
-    """Build the repo's native strict structured-output provider wrapper."""
+    """Build the repo's native strict structured-output provider wrapper.
+
+    ``temperature`` and ``reasoning_effort`` are optional so existing callers
+    retain each provider wrapper's defaults. Consumers that expose sampling
+    controls can pass them without reimplementing provider routing.
+    """
 
     from nexus.config import get_openai_compatible_endpoint
     from nexus.config.loader import get_provider_for_model
@@ -170,14 +177,23 @@ def build_native_structured_provider(
     endpoint = get_openai_compatible_endpoint(model)
     provider_type = get_provider_for_model(model)
     if provider_type == "anthropic" and endpoint is None:
+        anthropic_kwargs: Dict[str, Any] = {}
+        if temperature is not None:
+            anthropic_kwargs["temperature"] = temperature
         return AnthropicProvider(
             model=model,
             max_tokens=max_tokens,
             system_prompt=system_prompt,
             structured_output_retries=structured_output_retries,
             output_validator=output_validator,
+            **anthropic_kwargs,
         )
     if provider_type == "openai" or endpoint is not None:
+        openai_kwargs: Dict[str, Any] = {}
+        if temperature is not None:
+            openai_kwargs["temperature"] = temperature
+        if reasoning_effort is not None:
+            openai_kwargs["reasoning_effort"] = reasoning_effort
         return OpenAIProvider(
             model=model,
             max_output_tokens=max_tokens,
@@ -190,6 +206,7 @@ def build_native_structured_provider(
             request_timeout=(endpoint["request_timeout_seconds"] if endpoint else None),
             structured_output_retries=structured_output_retries,
             output_validator=output_validator,
+            **openai_kwargs,
         )
     raise ValueError(f"Unsupported provider type for model {model!r}: {provider_type}")
 

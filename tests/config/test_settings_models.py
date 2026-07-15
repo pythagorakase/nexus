@@ -83,18 +83,15 @@ def test_summaries_follow_the_storyteller_by_default():
     assert settings.summaries.model == settings.apex.model
 
 
-def test_summaries_follow_unroutable_storyteller_is_legal_but_flagged():
-    """A non-OpenAI storyteller stays selectable (the local-Skald path);
-    summaries follow it and the routability helper reports the gap for the
-    scheduler's durable error marker."""
+def test_summaries_follow_anthropic_storyteller_with_registry_route():
+    """A native Anthropic storyteller remains the default summarizer."""
     raw = _nexus_toml_dict()
     raw["apex"]["model"] = "@anthropic.default"
     raw.get("summaries", {}).pop("model", None)
 
     settings = Settings(**raw)
     assert settings.summaries.model == settings.apex.model
-    assert settings.summaries_model_is_routable(settings.summaries.model) is False
-    assert settings.summaries_model_is_routable("TEST") is True
+    assert settings.provider_for_model(settings.summaries.model) == "anthropic"
 
 
 def test_summaries_model_explicit_override_resolves_at_load():
@@ -118,28 +115,34 @@ def test_summaries_model_accepts_responses_compatible_test_provider():
     assert Settings(**raw).summaries.model == "TEST"
 
 
-def test_summaries_model_rejects_local_chat_completions_provider():
-    """Local Chat Completions routing remains outside the near-term fix."""
+def test_summaries_model_accepts_local_chat_completions_provider():
+    """An explicit local summary model resolves through the registry."""
     raw = _nexus_toml_dict()
     raw["summaries"]["model"] = "@local.default"
 
-    with pytest.raises(
-        ValidationError,
-        match="structured_transport='responses'.*deferred routing work.*#481",
-    ):
-        Settings(**raw)
+    settings = Settings(**raw)
+    assert settings.provider_for_model(settings.summaries.model) == "local"
 
 
-def test_summaries_model_rejects_anthropic_literal():
-    """A native Anthropic ID cannot silently enter the OpenAI-only pipeline."""
+def test_summaries_model_accepts_anthropic_literal():
+    """A native Anthropic summary model remains registry-validated."""
     raw = _nexus_toml_dict()
     anthropic_id = raw["global"]["model"]["api_models"]["anthropic"]["models"][0]["id"]
     raw["summaries"]["model"] = anthropic_id
 
-    with pytest.raises(
-        ValidationError,
-        match="native OpenAI provider.*deferred routing work.*#481",
-    ):
+    settings = Settings(**raw)
+    assert settings.summaries.model == anthropic_id
+    assert settings.provider_for_model(anthropic_id) == "anthropic"
+
+
+def test_summaries_request_budget_must_exceed_output_budgets():
+    """A typo cannot leave the input allowance zero or negative."""
+    raw = _nexus_toml_dict()
+    raw["summaries"]["request_token_budget"] = raw["summaries"][
+        "season_max_output_tokens"
+    ]
+
+    with pytest.raises(ValidationError, match="request_token_budget must exceed"):
         Settings(**raw)
 
 

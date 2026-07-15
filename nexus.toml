@@ -902,10 +902,16 @@ generation_timeout_seconds = 1200
 # Summaries follow the storyteller (apex.model) by default — summary quality
 # varies materially by model, so the default is never a cheaper model. Set
 # `model` explicitly (advanced) to decouple the summarizer from the
-# storyteller. The current pipeline accepts native OpenAI or
-# Responses-compatible OpenAI endpoints only; a storyteller outside that set
-# requires an explicit routable model here until #481's routing lands.
+# storyteller. Provider routing follows the model registry: native OpenAI,
+# native Anthropic, Responses-compatible endpoints, and local Chat Completions
+# endpoints all use their declared structured-output transport.
 # model = "@openai.default"
+temperature = 0.2
+reasoning_effort = "medium"
+episode_max_output_tokens = 2500
+season_max_output_tokens = 4000
+request_token_budget = 30000
+structured_output_retries = 0
 
 # =============================================================================
 # IR Evaluation V2 Settings

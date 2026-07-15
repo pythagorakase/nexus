@@ -3,15 +3,16 @@
 NEXUS Narrative Summary Generator
 
 This script generates comprehensive summaries of entire seasons or specific episodes
-using GPT-5.1 by default (with GPT-4.1 as a long-context fallback), saving the results
-to the appropriate tables in the PostgreSQL database.
+using the configured summary model, saving the results to the appropriate tables in
+the PostgreSQL database.
 
 Features:
 - Multi-mode support: season summaries or episode summaries
 - Episode range support: summarize multiple episodes in one run
-- Database integration: saves summaries as structured JSONB to seasons and episodes tables
+- Database integration: saves structured JSONB to seasons and episodes tables
 - Context-aware: includes padding chunks for better continuity
-- Structured output: Uses OpenAI's structured output mode with Pydantic models for consistent results
+- Structured output: Uses each registry provider's native structured-output transport
+  with Pydantic models for consistent results
 
 Usage:
     # Summarize an entire season
@@ -30,15 +31,16 @@ Usage:
     python summarize_narrative.py --season 3 --model @openai.default --dry-run
 """
 
-import os
-import sys
-import re
-import json
-import time
 import argparse
+import json
 import logging
+import os
+import re
+import sys
+import time
 from datetime import datetime, timezone
-from typing import Dict, List, Any, Tuple, Optional, Union, Set
+from typing import Any, Dict, List, Optional, Tuple, Type
+
 from pydantic import BaseModel, Field
 
 # Add parent directory to system path
@@ -46,14 +48,13 @@ parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
-# Import API OpenAI utilities
+# Import shared API utilities
+from nexus.api.native_structured_output import build_native_structured_provider
 from scripts.api_openai import (
-    OpenAIProvider,
     LLMResponse,
-    setup_abort_handler,
-    is_abort_requested,
-    reset_abort_flag,
     get_token_count,
+    is_abort_requested,
+    setup_abort_handler,
 )
 
 # Set up logging
@@ -69,18 +70,19 @@ def _resolve_default_summary_model() -> str:
     """Read the dedicated narrative-summary model from nexus.toml."""
     from nexus.config import load_settings
 
-    return load_settings().summaries.model
+    model = load_settings().summaries.model
+    if model is None:  # Defensive: Settings resolves follow-the-storyteller first.
+        raise ValueError("No narrative summary model is configured")
+    return model
 
 
 # Constants
-# DEFAULT_MODEL is resolved from nexus.toml on demand; see _resolve_default_summary_model.
+# DEFAULT_MODEL is resolved from nexus.toml on demand; see
+# _resolve_default_summary_model.
 # FALLBACK_MODEL is a CLI-only escape hatch for a one-off retry attempt — the user
 # must pass --fallback-model explicitly if they want to use it.
 DEFAULT_MODEL = None  # type: ignore[assignment]  # resolved at argparse time
 FALLBACK_MODEL = None  # type: ignore[assignment]
-DEFAULT_TEMPERATURE = 0.2
-MAX_TOKENS_SEASON = 4000
-MAX_TOKENS_EPISODE = 2500
 CONTEXT_CHUNK_BEFORE = 1  # Number of chunks to include before target for context
 CONTEXT_CHUNK_AFTER = 1  # Number of chunks to include after target for context
 SUMMARY_FAILURE_STATUS = "error"
@@ -1377,14 +1379,14 @@ class DatabaseManager:
 
 class SummaryGenerator:
     """
-    Main class to generate summaries using OpenAI's API.
+    Main class to generate summaries through the configured model provider.
     """
 
     def __init__(
         self,
         model: str,
-        temperature: float = DEFAULT_TEMPERATURE,
-        effort: str = "medium",
+        temperature: Optional[float] = None,
+        effort: Optional[str] = None,
         db_manager: Optional[DatabaseManager] = None,
         dry_run: bool = False,
         overwrite: bool = False,
@@ -1396,18 +1398,30 @@ class SummaryGenerator:
         Initialize the summary generator.
 
         Args:
-            model: OpenAI model to use
+            model: Registry model to use
             temperature: Temperature for generation (used for non-reasoning models)
             effort: Reasoning effort level (used for reasoning models)
             db_manager: Database manager instance
             dry_run: If True, don't save results
             verbose: If True, print detailed output
             save_prompt: If True, save prompts to files
-            prompt_on_conflict: If False, skip interactive overwrite prompts when summaries already exist
+            prompt_on_conflict: If False, skip interactive overwrite prompts
+                when summaries already exist
         """
+        from nexus.config import load_settings
+
+        summary_settings = load_settings().summaries
         self.model = model
-        self.temperature = temperature
-        self.effort = effort
+        self.temperature = (
+            summary_settings.temperature if temperature is None else temperature
+        )
+        self.effort = effort or summary_settings.reasoning_effort
+        self._max_output_tokens = {
+            "episode": summary_settings.episode_max_output_tokens,
+            "season": summary_settings.season_max_output_tokens,
+        }
+        self._request_token_budget = summary_settings.request_token_budget
+        self._structured_output_retries = summary_settings.structured_output_retries
         self.is_reasoning_model = self._model_rejects_temperature(model)
         self.db_manager = db_manager or DatabaseManager()
         self.dry_run = dry_run
@@ -1416,7 +1430,8 @@ class SummaryGenerator:
         self.save_prompt = save_prompt
         self.prompt_on_conflict = prompt_on_conflict
         self.last_error: Optional[str] = None
-        self.provider = self._initialize_provider()
+        self._providers: Dict[str, Any] = {}
+        self.provider: Optional[Any] = None
 
     @staticmethod
     def _model_rejects_temperature(model: str) -> bool:
@@ -1450,44 +1465,49 @@ class SummaryGenerator:
         )
         return "temperature" in entry.unsupported_params
 
-    def _initialize_provider(self) -> OpenAIProvider:
-        """Initialize the OpenAI provider."""
+    def _initialize_provider(self, mode: str) -> Any:
+        """Initialize the registry-routed provider for one summary mode."""
+
+        if mode not in self._max_output_tokens:
+            raise ValueError(f"Unsupported summary mode: {mode!r}")
         try:
-            from nexus.config import get_openai_compatible_endpoint
-
-            endpoint = get_openai_compatible_endpoint(self.model)
-            endpoint_kwargs: Dict[str, Any] = {}
-            if endpoint:
-                endpoint_kwargs = {
-                    "api_key": endpoint["api_key"],
-                    "base_url": endpoint["base_url"],
-                    "structured_transport": endpoint["structured_transport"],
-                    "request_timeout": endpoint["request_timeout_seconds"],
-                }
-            # Use the streamlined provider initialization
-            if self.is_reasoning_model:
-                provider = OpenAIProvider(
-                    model=self.model,
-                    reasoning_effort=self.effort,
-                    **endpoint_kwargs,
-                )
-                logger.info(
-                    f"Initialized OpenAI provider with reasoning model: {self.model}, effort: {self.effort}"
-                )
-            else:
-                provider = OpenAIProvider(
-                    model=self.model,
-                    temperature=self.temperature,
-                    **endpoint_kwargs,
-                )
-                logger.info(
-                    f"Initialized OpenAI provider with standard model: {self.model}, temperature: {self.temperature}"
-                )
-
+            provider = build_native_structured_provider(
+                model=self.model,
+                max_tokens=self._max_output_tokens[mode],
+                system_prompt=self._get_system_prompt(mode),
+                structured_output_retries=self._structured_output_retries,
+                temperature=(None if self.is_reasoning_model else self.temperature),
+                reasoning_effort=(self.effort if self.is_reasoning_model else None),
+            )
+            logger.info(
+                "Initialized %s summary provider for %s using %s",
+                provider.provider_name,
+                mode,
+                self.model,
+            )
             return provider
         except Exception as e:
-            logger.error(f"Error initializing OpenAI provider: {e}")
+            logger.error(f"Error initializing summary provider: {e}")
             raise
+
+    def _provider_for_mode(self, mode: str) -> Any:
+        """Return a cached provider configured for the mode's prompt and budget."""
+
+        if mode not in self._providers:
+            self._providers[mode] = self._initialize_provider(mode)
+        self.provider = self._providers[mode]
+        return self.provider
+
+    def _get_structured_summary(
+        self,
+        prompt: str,
+        mode: str,
+        schema_model: Type[BaseModel],
+    ) -> Tuple[Any, LLMResponse]:
+        """Generate one summary through the provider's native transport."""
+
+        provider = self._provider_for_mode(mode)
+        return provider.get_structured_completion(prompt, schema_model)
 
     def _get_system_prompt(self, mode: str) -> str:
         """
@@ -1595,23 +1615,11 @@ Your summaries will be accessed by another AI to maintain narrative consistency.
         """
         token_count = get_token_count(text, self.model)
 
-        # Load settings to get the TPM
-        from nexus.config import load_settings_as_dict
-
-        settings = load_settings_as_dict()
-
-        # Get the OpenAI TPM limit
-        openai_tpm = settings.get("API Settings", {}).get("TPM", {}).get("openai")
-        if not openai_tpm:
-            raise ValueError("Could not find OpenAI TPM limit in configuration")
-
         # Set output token limit based on mode
-        expected_output_tokens = (
-            MAX_TOKENS_SEASON if mode == "season" else MAX_TOKENS_EPISODE
-        )
+        expected_output_tokens = self._max_output_tokens[mode]
 
         # Calculate max input tokens (with a small buffer)
-        max_input_tokens = openai_tpm - expected_output_tokens
+        max_input_tokens = self._request_token_budget - expected_output_tokens
 
         if token_count > max_input_tokens:
             logger.warning(
@@ -1621,7 +1629,9 @@ Your summaries will be accessed by another AI to maintain narrative consistency.
             return False
 
         logger.info(
-            f"Token count: {token_count} (under limit of {max_input_tokens} from settings.json)"
+            "Token count: %s (under configured input limit of %s)",
+            token_count,
+            max_input_tokens,
         )
         return True
 
@@ -1699,7 +1709,6 @@ Your summaries will be accessed by another AI to maintain narrative consistency.
                 print("=" * 80 + "\n")
 
         # Prepare the prompt
-        system_prompt = self._get_system_prompt("season")
         chunks_text = self._prepare_chunks_text(chunks, "season")
 
         # Build the main prompt with previous summaries
@@ -1729,52 +1738,26 @@ I need a comprehensive, structured summary of Season {season} of the narrative. 
         self._save_prompt_to_file(prompt, f"season_{season}")
 
         try:
-            # Reuse the provider client so registry base_url/timeout routing is kept.
-            client = self.provider.client
-
-            # Prepare messages
-            messages = [{"role": "user", "content": prompt}]
-            if self.provider.system_prompt:
-                messages.insert(
-                    0, {"role": "system", "content": self.provider.system_prompt}
-                )
-
             # Create a simple Pydantic model for season summary
             class SeasonSummaryModel(BaseModel):
                 summary: str = Field(
                     description="A comprehensive, detailed narrative summary of the entire season capturing major plot developments, character arcs, key world-building elements, and themes."
                 )
 
-            logger.info(
-                f"Using OpenAI responses.parse with model {self.provider.model}"
+            parsed_summary, llm_response = self._get_structured_summary(
+                prompt,
+                "season",
+                SeasonSummaryModel,
             )
 
-            # Call the API with appropriate parameters based on model type
-            if self.is_reasoning_model:
-                response = client.responses.parse(
-                    model=self.provider.model,
-                    input=messages,
-                    reasoning={"effort": self.effort},
-                    text_format=SeasonSummaryModel,
-                )
-                logger.info(f"Used reasoning model with effort: {self.effort}")
-            else:
-                response = client.responses.parse(
-                    model=self.provider.model,
-                    input=messages,
-                    temperature=self.temperature,
-                    text_format=SeasonSummaryModel,
-                )
-                logger.info(f"Used standard model with temperature: {self.temperature}")
-
             # Create a summary dict that matches our expected format
-            summary_text = response.output_parsed.summary
+            summary_text = parsed_summary.summary
             summary_dict = {"summary": summary_text}
 
             # Log completion info
             logger.info(
-                f"Generated season summary with {response.usage.input_tokens} input tokens and "
-                f"{response.usage.output_tokens} output tokens"
+                f"Generated season summary with {llm_response.input_tokens} input tokens and "
+                f"{llm_response.output_tokens} output tokens"
             )
 
             # Print summary in verbose mode
@@ -1922,7 +1905,6 @@ I need a comprehensive, structured summary of Season {season} of the narrative. 
             print("=" * 80 + "\n")
 
         # Prepare the prompt
-        system_prompt = self._get_system_prompt("episode")
         chunks_text = self._prepare_chunks_text(chunks, "episode")
 
         # Build the main prompt with context
@@ -1961,52 +1943,26 @@ I need a comprehensive, structured summary of Season {season}, Episode {episode}
         self._save_prompt_to_file(prompt, f"s{season:02d}e{episode:02d}")
 
         try:
-            # Reuse the provider client so registry base_url/timeout routing is kept.
-            client = self.provider.client
-
-            # Prepare messages
-            messages = [{"role": "user", "content": prompt}]
-            if self.provider.system_prompt:
-                messages.insert(
-                    0, {"role": "system", "content": self.provider.system_prompt}
-                )
-
             # Create a simple Pydantic model for episode summary
             class EpisodeSummaryModel(BaseModel):
                 summary: str = Field(
                     description="A comprehensive, detailed narrative summary of the episode capturing key plot developments, character actions, revelations, and connections to larger season arcs."
                 )
 
-            logger.info(
-                f"Using OpenAI responses.parse with model {self.provider.model}"
+            parsed_summary, llm_response = self._get_structured_summary(
+                prompt,
+                "episode",
+                EpisodeSummaryModel,
             )
 
-            # Call the API with appropriate parameters based on model type
-            if self.is_reasoning_model:
-                response = client.responses.parse(
-                    model=self.provider.model,
-                    input=messages,
-                    reasoning={"effort": self.effort},
-                    text_format=EpisodeSummaryModel,
-                )
-                logger.info(f"Used reasoning model with effort: {self.effort}")
-            else:
-                response = client.responses.parse(
-                    model=self.provider.model,
-                    input=messages,
-                    temperature=self.temperature,
-                    text_format=EpisodeSummaryModel,
-                )
-                logger.info(f"Used standard model with temperature: {self.temperature}")
-
             # Create a summary dict that matches our expected format
-            summary_text = response.output_parsed.summary
+            summary_text = parsed_summary.summary
             summary_dict = {"summary": summary_text}
 
             # Log completion info
             logger.info(
-                f"Generated episode summary with {response.usage.input_tokens} input tokens and "
-                f"{response.usage.output_tokens} output tokens"
+                f"Generated episode summary with {llm_response.input_tokens} input tokens and "
+                f"{llm_response.output_tokens} output tokens"
             )
 
             # Print summary in verbose mode
@@ -2277,7 +2233,6 @@ I need a comprehensive, structured summary of Season {season}, Episode {episode}
         mode = "season" if len(seasons) == 1 and len(episodes) > 1 else "episode"
 
         # Prepare the prompt
-        system_prompt = self._get_system_prompt(mode)
         chunks_text = self._prepare_chunks_text(chunks, mode)
 
         # Build the main prompt
@@ -2331,16 +2286,6 @@ I need a comprehensive, structured summary of the provided narrative chunks (IDs
         self._save_prompt_to_file(prompt, f"chunks_{start_id}_{end_id}")
 
         try:
-            # Reuse the provider client so registry base_url/timeout routing is kept.
-            client = self.provider.client
-
-            # Prepare messages
-            messages = [{"role": "user", "content": prompt}]
-            if self.provider.system_prompt:
-                messages.insert(
-                    0, {"role": "system", "content": self.provider.system_prompt}
-                )
-
             # Choose the appropriate response model based on mode
             if mode == "season":
                 # Create a more simple Pydantic model for season summary
@@ -2349,32 +2294,7 @@ I need a comprehensive, structured summary of the provided narrative chunks (IDs
                         description="A comprehensive, detailed narrative summary of the entire season capturing major plot developments, character arcs, key world-building elements, and themes."
                     )
 
-                logger.info(f"Using season summary model")
-
-                # Call the API with appropriate parameters based on model type
-                if self.is_reasoning_model:
-                    response = client.responses.parse(
-                        model=self.provider.model,
-                        input=messages,
-                        reasoning={"effort": self.effort},
-                        text_format=SeasonSummaryModel,
-                    )
-                    logger.info(f"Used reasoning model with effort: {self.effort}")
-                else:
-                    response = client.responses.parse(
-                        model=self.provider.model,
-                        input=messages,
-                        temperature=self.temperature,
-                        text_format=SeasonSummaryModel,
-                    )
-                    logger.info(
-                        f"Used standard model with temperature: {self.temperature}"
-                    )
-
-                # Create a summary dict that matches our expected format
-                summary_text = response.output_parsed.summary
-                summary_dict = {"summary": summary_text}
-
+                schema_model: Type[BaseModel] = SeasonSummaryModel
             else:
                 # Create a more simple Pydantic model for episode summary
                 class EpisodeSummaryModel(BaseModel):
@@ -2382,36 +2302,19 @@ I need a comprehensive, structured summary of the provided narrative chunks (IDs
                         description="A comprehensive, detailed narrative summary of the episode capturing key plot developments, character actions, revelations, and connections to larger season arcs."
                     )
 
-                logger.info(f"Using episode summary model")
+                schema_model = EpisodeSummaryModel
 
-                # Call the API with appropriate parameters based on model type
-                if self.is_reasoning_model:
-                    response = client.responses.parse(
-                        model=self.provider.model,
-                        input=messages,
-                        reasoning={"effort": self.effort},
-                        text_format=EpisodeSummaryModel,
-                    )
-                    logger.info(f"Used reasoning model with effort: {self.effort}")
-                else:
-                    response = client.responses.parse(
-                        model=self.provider.model,
-                        input=messages,
-                        temperature=self.temperature,
-                        text_format=EpisodeSummaryModel,
-                    )
-                    logger.info(
-                        f"Used standard model with temperature: {self.temperature}"
-                    )
-
-                # Create a summary dict that matches our expected format
-                summary_text = response.output_parsed.summary
-                summary_dict = {"summary": summary_text}
+            parsed_summary, llm_response = self._get_structured_summary(
+                prompt,
+                mode,
+                schema_model,
+            )
+            summary_dict = {"summary": parsed_summary.summary}
 
             # Log completion info
             logger.info(
-                f"Generated chunk range summary with {response.usage.input_tokens} input tokens and "
-                f"{response.usage.output_tokens} output tokens"
+                f"Generated chunk range summary with {llm_response.input_tokens} input tokens and "
+                f"{llm_response.output_tokens} output tokens"
             )
 
             # Print summary in verbose mode
@@ -2518,16 +2421,19 @@ def main():
         help="Chunk ID range to summarize (manual fallback)",
     )
 
-    # OpenAI options. --model defaults to summaries.model when omitted.
+    # Provider options. --model defaults to summaries.model when omitted.
     parser.add_argument(
         "--model",
         default=None,
-        help="OpenAI model to use (default: resolved from nexus.toml [summaries].model)",
+        help="Registry model to use (default: nexus.toml [summaries].model)",
     )
     parser.add_argument(
         "--fallback-model",
         default=None,
-        help="Alternate model to try if the primary fails (no default; pass --disable-fallback to skip)",
+        help=(
+            "Alternate model to try if the primary fails "
+            "(no default; pass --disable-fallback to skip)"
+        ),
     )
     parser.add_argument(
         "--disable-fallback",
@@ -2537,14 +2443,20 @@ def main():
     parser.add_argument(
         "--temperature",
         type=float,
-        default=DEFAULT_TEMPERATURE,
-        help=f"Model temperature for standard models (default: {DEFAULT_TEMPERATURE})",
+        default=None,
+        help=(
+            "Model temperature override "
+            "(default: nexus.toml [summaries].temperature)"
+        ),
     )
     parser.add_argument(
         "--effort",
         choices=["low", "medium", "high"],
-        default="medium",
-        help="Reasoning effort level for reasoning models (default: medium)",
+        default=None,
+        help=(
+            "Reasoning effort override "
+            "(default: nexus.toml [summaries].reasoning_effort)"
+        ),
     )
 
     # Processing options
