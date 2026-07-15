@@ -133,9 +133,12 @@ def build_storyteller_tag_validator(dbname: Optional[str]) -> Optional[Any]:
             )
             raise ModelRetry(
                 "Your Orrery tags or new-entity declaration hints failed "
-                "closed-registry validation. Use bare registered tag names "
-                "only (e.g. 'comfortable'), never 'category:name' composites; "
-                "drop any tag with no registered equivalent. Fix every listed "
+                "closed-registry validation. For applied_tags and tag_hints, "
+                "use bare registered tag names only (e.g. 'comfortable'), never "
+                "'category:name' composites. For pair_tag_hints, use the exact "
+                "registered pair-tag name; pair tags may contain colons (e.g. "
+                "'contact:social'). Drop any tag with no registered equivalent. "
+                "Fix every listed "
                 f"path and resubmit the complete response:\n{formatted}"
             )
         return output

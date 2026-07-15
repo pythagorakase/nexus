@@ -46,6 +46,7 @@ class FakeRegistryCursor:
         # tag -> (id, subject_kinds, object_kinds)
         self.pair_tags = {
             "protects": (11, ["character", "faction"], ["place"]),
+            "contact:social": (12, ["character"], ["character"]),
         }
         self.categories_by_kind = {
             "character": {"bodyform", "disposition"},
@@ -274,10 +275,22 @@ async def test_storyteller_validator_attributes_declaration_failure_to_model_ret
     with pytest.raises(ModelRetry) as exc_info:
         await validator(
             SimpleNamespace(retry=0),
-            _storyteller_response(tag_hints=["invented:tag"]),
+            _storyteller_response(
+                tag_hints=["invented:tag"],
+                pair_tag_hints=[
+                    {
+                        "tag": "contact:social",
+                        "other_entity_name": "Brena Tideloft",
+                        "declared_entity_role": "subject",
+                    }
+                ],
+            ),
         )
 
     assert "new_entities[0].tag_hints" in exc_info.value.message
+    assert "For applied_tags and tag_hints" in exc_info.value.message
+    assert "pair tags may contain colons" in exc_info.value.message
+    assert "'contact:social'" in exc_info.value.message
     assert "resubmit the complete response" in exc_info.value.message
 
 
