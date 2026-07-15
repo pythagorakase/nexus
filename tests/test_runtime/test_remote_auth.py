@@ -306,6 +306,40 @@ def test_cli_uses_remote_profile_from_explicit_config(
     assert cli.get_api_url() == "https://nexus.pythagora.net"
 
 
+def test_cli_reuses_unchanged_validated_settings(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Polling requests pay full TOML validation once per file version."""
+    config = tmp_path / "nexus.toml"
+    config.write_text(Path("nexus.toml").read_text(encoding="utf-8"))
+    monkeypatch.setenv(RUNTIME_CONFIG_ENV, str(config))
+
+    first = cli._load_cli_settings()
+    second = cli._load_cli_settings()
+
+    assert first is second
+
+
+def test_cli_settings_cache_invalidates_after_config_edit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A changed config is reparsed instead of returning a stale tree."""
+    document = tomlkit.parse(Path("nexus.toml").read_text(encoding="utf-8"))
+    config = tmp_path / "nexus.toml"
+    config.write_text(tomlkit.dumps(document), encoding="utf-8")
+    monkeypatch.setenv(RUNTIME_CONFIG_ENV, str(config))
+    first = cli._load_cli_settings()
+
+    document["runtime"]["state_dir"] = ".nexus/runtime-cache-invalidation"
+    config.write_text(tomlkit.dumps(document), encoding="utf-8")
+    second = cli._load_cli_settings()
+
+    assert first is not second
+    assert second.runtime.state_dir == ".nexus/runtime-cache-invalidation"
+
+
 def test_cli_outside_checkout_preserves_local_default(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

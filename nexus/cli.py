@@ -29,6 +29,7 @@ all other state (wizard phase, current chunk, thread ID) automatically.
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import logging
 import os
@@ -69,16 +70,30 @@ def _load_cli_settings() -> Optional[Settings]:
     """Load explicit, working-directory, or checkout settings when available."""
     explicit = os.environ.get(RUNTIME_CONFIG_ENV)
     if explicit:
-        return load_settings(explicit)
+        return _load_cli_settings_file(Path(explicit))
 
     working_config = Path("nexus.toml")
     if working_config.exists():
-        return load_settings(working_config)
+        return _load_cli_settings_file(working_config)
 
     checkout_config = Path(__file__).resolve().parents[1] / "nexus.toml"
     if checkout_config.exists():
-        return load_settings(checkout_config)
+        return _load_cli_settings_file(checkout_config)
     return None
+
+
+def _load_cli_settings_file(path: Path) -> Settings:
+    """Load one config version once, invalidating when its file changes."""
+    resolved = path.resolve()
+    stat = resolved.stat()
+    return _load_cli_settings_version(str(resolved), stat.st_mtime_ns, stat.st_size)
+
+
+@functools.lru_cache(maxsize=8)
+def _load_cli_settings_version(path: str, modified_ns: int, size: int) -> Settings:
+    """Cache a validated settings tree for an exact on-disk file version."""
+    del modified_ns, size
+    return load_settings(path)
 
 
 def get_api_url() -> str:
