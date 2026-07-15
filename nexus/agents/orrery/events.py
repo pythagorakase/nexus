@@ -4114,15 +4114,31 @@ async def _mint_live_event_claim_async(
     )
 
 
-def _epistemics_applied(mint_result: MintResult) -> dict[str, Any]:
+def _epistemics_claim_entry(mint_result: MintResult) -> dict[str, Any]:
     return {
         "claim_id": mint_result.claim_id,
         "claim_awareness_ids": list(mint_result.awareness_ids),
     }
 
 
+def _epistemics_applied(
+    mint_results: Iterable[MintResult],
+) -> dict[str, Any]:
+    entries = [_epistemics_claim_entry(result) for result in mint_results]
+    if not entries:
+        raise ValueError("Epistemics applied ledger requires at least one claim")
+    return {
+        # Backward-compatible aliases for consumers written when one Orrery
+        # resolution could mint only its primary event claim.
+        **entries[0],
+        # A detected signal is a second event and may mint a second claim.
+        # Preserve emission order (primary, then signal) for reconstruction.
+        "claims": entries,
+    }
+
+
 def _update_resolution_epistemics_applied_sync(
-    cur: Any, *, resolution_id: int, mint_result: MintResult
+    cur: Any, *, resolution_id: int, mint_results: Iterable[MintResult]
 ) -> None:
     cur.execute(
         """
@@ -4134,12 +4150,12 @@ def _update_resolution_epistemics_applied_sync(
         )
         WHERE id = %s
         """,
-        (json.dumps(_epistemics_applied(mint_result)), resolution_id),
+        (json.dumps(_epistemics_applied(mint_results)), resolution_id),
     )
 
 
 async def _update_resolution_epistemics_applied_async(
-    conn: Any, *, resolution_id: int, mint_result: MintResult
+    conn: Any, *, resolution_id: int, mint_results: Iterable[MintResult]
 ) -> None:
     await conn.execute(
         """
@@ -4151,7 +4167,7 @@ async def _update_resolution_epistemics_applied_async(
         )
         WHERE id = $2
         """,
-        json.dumps(_epistemics_applied(mint_result)),
+        json.dumps(_epistemics_applied(mint_results)),
         resolution_id,
     )
 
@@ -4238,6 +4254,7 @@ def _emit_world_event_sync(
             """,
             (event_id, target_entity_id),
         )
+    mint_results: list[MintResult] = []
     mint_result = _mint_live_event_claim_sync(
         cur,
         event_id=int(event_id),
@@ -4251,9 +4268,7 @@ def _emit_world_event_sync(
         epistemics_settings=epistemics_settings,
     )
     if mint_result is not None:
-        _update_resolution_epistemics_applied_sync(
-            cur, resolution_id=resolution_id, mint_result=mint_result
-        )
+        mint_results.append(mint_result)
     if draft.signal_event_type and detection_outcome and detection_outcome["detected"]:
         # The act's signal: a second, additive emission with the same
         # bindings so other packages' gates can hear it (spec idea 7).
@@ -4264,6 +4279,7 @@ def _emit_world_event_sync(
                 location_id, world_layer, source, changed_fields, magnitude,
                 resolution_id, payload
             ) VALUES (%s, %s, %s, %s, %s, %s, 'resolver', %s, %s, %s, %s::jsonb)
+            RETURNING id
             """,
             (
                 draft.signal_event_type,
@@ -4277,6 +4293,27 @@ def _emit_world_event_sync(
                 resolution_id,
                 json.dumps({**payload, "signal_of": draft.event_type}),
             ),
+        )
+        signal_event_id = int(_row_get(cur.fetchone(), "id", 0))
+        signal_mint_result = _mint_live_event_claim_sync(
+            cur,
+            event_id=signal_event_id,
+            event_type=str(draft.signal_event_type),
+            actor_entity_id=actor_entity_id,
+            target_entity_id=target_entity_id,
+            entity_names=entity_names,
+            entity_kinds=entity_kinds,
+            source_chunk_id=tick_chunk_id,
+            source_resolution_id=resolution_id,
+            epistemics_settings=epistemics_settings,
+        )
+        if signal_mint_result is not None:
+            mint_results.append(signal_mint_result)
+    if mint_results:
+        _update_resolution_epistemics_applied_sync(
+            cur,
+            resolution_id=resolution_id,
+            mint_results=mint_results,
         )
     return event_id
 
@@ -4363,6 +4400,7 @@ async def _emit_world_event_async(
             event_id,
             target_entity_id,
         )
+    mint_results: list[MintResult] = []
     mint_result = await _mint_live_event_claim_async(
         conn,
         event_id=int(event_id),
@@ -4376,12 +4414,10 @@ async def _emit_world_event_async(
         epistemics_settings=epistemics_settings,
     )
     if mint_result is not None:
-        await _update_resolution_epistemics_applied_async(
-            conn, resolution_id=resolution_id, mint_result=mint_result
-        )
+        mint_results.append(mint_result)
     if draft.signal_event_type and detection_outcome and detection_outcome["detected"]:
         # Same additive signal emission as the sync twin.
-        await conn.execute(
+        signal_event_id = await conn.fetchval(
             """
             INSERT INTO world_events (
                 event_type, tick_chunk_id, actor_entity_id, target_entity_id,
@@ -4391,6 +4427,7 @@ async def _emit_world_event_async(
                 $1, $2, $3, $4, $5, $6::world_layer_type, 'resolver',
                 $7::text[], $8, $9, $10::jsonb
             )
+            RETURNING id
             """,
             draft.signal_event_type,
             tick_chunk_id,
@@ -4402,6 +4439,26 @@ async def _emit_world_event_async(
             draft.magnitude,
             resolution_id,
             json.dumps({**payload, "signal_of": draft.event_type}),
+        )
+        signal_mint_result = await _mint_live_event_claim_async(
+            conn,
+            event_id=int(signal_event_id),
+            event_type=str(draft.signal_event_type),
+            actor_entity_id=actor_entity_id,
+            target_entity_id=target_entity_id,
+            entity_names=entity_names,
+            entity_kinds=entity_kinds,
+            source_chunk_id=tick_chunk_id,
+            source_resolution_id=resolution_id,
+            epistemics_settings=epistemics_settings,
+        )
+        if signal_mint_result is not None:
+            mint_results.append(signal_mint_result)
+    if mint_results:
+        await _update_resolution_epistemics_applied_async(
+            conn,
+            resolution_id=resolution_id,
+            mint_results=mint_results,
         )
     return event_id
 
