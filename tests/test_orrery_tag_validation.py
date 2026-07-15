@@ -14,6 +14,7 @@ from nexus.agents.logon.apex_schema import (
     LocationStateUpdate,
     NewCharacter,
     NewEntityDeclaration,
+    NewEntityPairTagHint,
     ReferencedEntities,
     ReferenceType,
     StateUpdates,
@@ -255,6 +256,22 @@ def test_registered_new_entity_hints_produce_no_issues() -> None:
     )
 
     assert collect_orrery_tag_issues(response, FakeRegistryCursor()) == []
+
+
+def test_declaration_schema_describes_generation_and_commit_validation() -> None:
+    """Schema documentation matches the two validation boundaries."""
+
+    declaration_description = " ".join(
+        NewEntityDeclaration.model_json_schema()["description"].split()
+    )
+    pair_hint_description = " ".join(
+        NewEntityPairTagHint.model_json_schema()["description"].split()
+    )
+
+    assert "generation-time repair" in declaration_description
+    assert "commit-time validation" in declaration_description
+    assert "during generation" in pair_hint_description
+    assert "commit path revalidates" in pair_hint_description
 
 
 @pytest.mark.asyncio

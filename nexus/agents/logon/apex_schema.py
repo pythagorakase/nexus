@@ -463,10 +463,11 @@ class NewEntityPairTagHint(BaseModel):
     Optional registered pair-tag hint attached to a new-entity declaration.
 
     The declared entity is one endpoint; ``other_entity_name`` names the other.
-    Hints are validated against the live ``pair_tags`` registry at commit time
-    (unregistered or kind-incompatible tags are hard errors) and feed the
-    background maturation pass as prompt material — they are not written
-    directly at declaration time.
+    Hints are validated against the live ``pair_tags`` registry during
+    generation, where unregistered or kind-incompatible tags trigger a retry.
+    The commit path revalidates the complete declaration batch as a backstop.
+    Valid hints feed the background maturation pass as prompt material — they
+    are not written directly at declaration time.
     """
 
     tag: str = Field(
@@ -500,8 +501,9 @@ class NewEntityDeclaration(BaseModel):
 
     Declare SPARINGLY: only entities likely to recur or matter. Background
     crowds and genuinely mundane passersby exist in prose only and must not
-    be declared. Tag hints use registered vocabulary only; unregistered names
-    are hard errors at commit time.
+    be declared. Tag hints use registered vocabulary only; invalid hints
+    trigger generation-time repair, with whole-batch commit-time validation as
+    a mutation-safety backstop.
     """
 
     kind: Literal["character", "place", "faction"] = Field(
