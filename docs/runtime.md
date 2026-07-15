@@ -21,7 +21,8 @@ FastAPI gateway (`nexus.api.narrative:app`) is the entire serving surface.
 There is no Express layer, no sidecar API process, and no UNIX socket —
 everything a client needs is loopback or remote TCP against one base URL.
 A client that works against `http://127.0.0.1:8002` works against
-`https://nexus.example.com` by changing its base URL and nothing else.
+`https://nexus.example.com` by changing its base URL and, when the remote
+origin is Access-protected, configuring its edge-auth secret references.
 
 ## The Runtime Endpoint
 
@@ -77,10 +78,43 @@ Semantics, fixed now so clients never need retrofitting:
   the contract — a client built today must already have the plumbing.
 - **Hosted runtimes (future): the header is required.** Requests without a
   valid credential are rejected; `auth.enforced` will be `true`.
+- A non-empty credential is sent only over HTTPS, except for genuine loopback
+  HTTP targets used by local development. Credential-bearing requests never
+  follow redirects.
 - Browsers cannot attach custom headers to native `WebSocket` connects, so
   hosted runtimes will accept the same credential for the websocket via the
   first client message or a query token at connect time; the header remains
   authoritative for all HTTP routes.
+
+### Cloudflare Access edge authentication
+
+Cloudflare Access can protect a hosted origin without adding authentication
+code to NEXUS. It is an outer edge boundary, independent of
+`X-Nexus-Auth`. A service-token client sends both:
+
+```
+CF-Access-Client-Id: <service-token ID>
+CF-Access-Client-Secret: <service-token secret>
+```
+
+The remote configuration stores only secret-store account names:
+
+```toml
+[runtime.remote]
+base_url = "https://nexus.example.com"
+
+[runtime.remote.cloudflare_access]
+client_id_secret = "cloudflare_access_client_id"
+client_secret_secret = "cloudflare_access_client_secret"
+```
+
+The CLI and supervisor resolve those accounts only while making a request to
+the exact configured HTTPS origin. Configuration rejects plaintext or
+ambiguous credential-bearing URLs. Requests carrying any non-empty credential
+do not follow redirects, preventing custom headers from crossing to another
+origin. Both references are required when the block is present; missing
+credentials fail the request rather than falling back to interactive browser
+login.
 
 ## Profiles
 
@@ -91,7 +125,7 @@ The runtime is operated in one of three profiles, configured in
 |------------|------------------------|----------------------|--------------------------|
 | `local`    | The supervisor (`nexus/runtime/`): spawns services detached with pidfiles and captured logs under `[runtime].state_dir` | Spawns enabled services, waits for health, fails loud with log excerpts | Merges supervisor process state (pid, port, uptime) with `/runtime/status` |
 | `external` | You (or an IDE, a debugger, another orchestrator) | Health-checks the configured URLs; **spawns nothing**; nonzero exit if anything is down | Reads `/runtime/status` from `external.gateway_url` |
-| `remote`   | A hosted operator | Confirms `<remote.base_url>/runtime/status` answers | Reads the remote runtime's status |
+| `remote`   | A hosted operator | Confirms `<remote.base_url>/runtime/status` answers, using Access service auth when configured | Reads the remote runtime's status with the same authentication |
 
 `nexus down`, `restart`, and `logs` are local-profile verbs: they manage or
 read state that only exists when this machine's supervisor owns the
@@ -132,7 +166,11 @@ All verbs honor the global `--json` flag for machine-readable output.
 `--config` points at an alternate `nexus.toml` (test harnesses, parallel
 checkouts); spawned services receive its absolute path in the
 `NEXUS_RUNTIME_CONFIG` environment variable so their `/runtime/status`
-describes the config that actually launched them.
+describes the config that actually launched them. Story commands use
+`remote.base_url` when the config selected by `NEXUS_RUNTIME_CONFIG` (or the
+working-directory `nexus.toml`) has `profile = "remote"`; an explicit
+`NEXUS_API_URL` still overrides the base URL. Access credentials are attached
+only when that override has the same origin as `remote.base_url`.
 
 ## Model Backends Are Runtime Services
 
@@ -195,6 +233,11 @@ hosts. Consequences for deployment:
 - Keyless local model servers (mock, Ollama) need no secret; a base_url
   provider that does need one names its secret-store account via
   `api_key_secret`.
+- **Remote Access clients:** the `cloudflare_access_client_id` and
+  `cloudflare_access_client_secret` accounts live in the same `nexus-api`
+  platform store. With `NEXUS_KEYRING_DISABLE=1`, their environment fallbacks
+  are `CLOUDFLARE_ACCESS_CLIENT_ID_API_KEY` and
+  `CLOUDFLARE_ACCESS_CLIENT_SECRET_API_KEY`.
 
 ## Development Workflows (unchanged)
 
@@ -216,7 +259,9 @@ The entire integration surface for a macOS/Windows/Linux shell:
 2. Point a webview at the gateway origin.
 3. Poll `GET /runtime/status`; gate the UI on `ok`.
 4. Send `X-Nexus-Auth` on every request (empty locally is fine today).
-5. Run `nexus down` on quit.
+5. For an Access-protected remote, resolve and send the configured service
+   token headers without following redirects.
+6. Run `nexus down` on quit.
 
 Nothing else about NEXUS internals — slots, databases, model processes,
 embedders — leaks across this boundary.

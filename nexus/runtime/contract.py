@@ -14,6 +14,12 @@ from __future__ import annotations
 # not a code change. Hosted runtimes reject requests without it.
 NEXUS_AUTH_HEADER = "X-Nexus-Auth"
 
+# Cloudflare Access service-token headers. These are edge credentials, not
+# application authentication: clients add them only for a configured remote
+# origin, and the gateway remains unaware of their values.
+CF_ACCESS_CLIENT_ID_HEADER = "CF-Access-Client-Id"
+CF_ACCESS_CLIENT_SECRET_HEADER = "CF-Access-Client-Secret"
+
 # The runtime status endpoint, served by the gateway beside /health.
 RUNTIME_STATUS_PATH = "/runtime/status"
 
