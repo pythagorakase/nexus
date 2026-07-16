@@ -553,3 +553,84 @@ def test_declaration_status_hint_applies_and_hydrates_for_predicate(
         state,
         {Slot.ACTOR: subject_entity_id},
     )
+
+
+def test_declaration_status_hint_resolves_same_batch_faction(
+    live_transaction: tuple[Connection, Session, Any],
+) -> None:
+    """A hint may target a faction declared in the same batch.
+
+    The apply pass depends on the two-loop ordering in
+    enqueue_declared_entity_maturations (all stubs first, then hints); this
+    pins that contract end-to-end, not just at vocabulary validation.
+    """
+
+    _connection, session, raw_connection = live_transaction
+    chunk_id = int(
+        session.execute(text("SELECT max(id) FROM narrative_chunks")).scalar_one()
+    )
+    suffix = uuid4().hex[:12]
+    character_name = f"stage2a-batch-char-{suffix}"
+    faction_name = f"stage2a-batch-faction-{suffix}"
+    result = enqueue_declared_entity_maturations(
+        raw_connection,
+        declarations=[
+            {
+                "kind": "character",
+                "name": character_name,
+                "summary": "A junior sworn to a brand-new institution.",
+                "pair_tag_hints": [
+                    {
+                        "tag": "status:junior",
+                        "other_entity_name": faction_name,
+                        "declared_entity_role": "subject",
+                    }
+                ],
+            },
+            {
+                "kind": "faction",
+                "name": faction_name,
+                "summary": "An institution declared in the same storyteller turn.",
+            },
+        ],
+        chunk_id=chunk_id,
+        raw_text=f"{character_name} swears the oath of the {faction_name}.",
+        slot=LIVE_SLOT,
+        settings=ENABLED_MATURATION,
+    )
+    assert result.stubs_created == 2
+    subject_entity_id = int(
+        session.execute(
+            text("SELECT entity_id FROM characters WHERE name = :name"),
+            {"name": character_name},
+        ).scalar_one()
+    )
+    object_entity_id = int(
+        session.execute(
+            text("SELECT entity_id FROM factions WHERE name = :name"),
+            {"name": faction_name},
+        ).scalar_one()
+    )
+    edge = (
+        session.execute(
+            text(
+                """
+                SELECT ept.source_kind::text AS source_kind,
+                       ept.source_chunk_id
+                FROM entity_pair_tags ept
+                JOIN pair_tags pt ON pt.id = ept.pair_tag_id
+                WHERE ept.subject_entity_id = :subject
+                  AND ept.object_entity_id = :object
+                  AND pt.tag = 'status:junior'
+                  AND ept.cleared_at IS NULL
+                """
+            ),
+            {"subject": subject_entity_id, "object": object_entity_id},
+        )
+        .mappings()
+        .one()
+    )
+    assert dict(edge) == {
+        "source_kind": "skald_inline",
+        "source_chunk_id": chunk_id,
+    }

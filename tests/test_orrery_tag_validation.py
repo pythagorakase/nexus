@@ -354,7 +354,11 @@ def test_generation_rejects_status_hint_with_non_faction_scope() -> None:
 
     issues = collect_orrery_tag_issues(response, FakeRegistryCursor())
 
-    assert any("object endpoint to be a faction" in issue for issue in issues)
+    assert any(
+        "other_entity_name" in issue
+        and "does not allow object_kind='character'" in issue
+        for issue in issues
+    )
 
 
 def test_generation_accepts_same_batch_pair_hint_endpoint() -> None:

@@ -75,19 +75,6 @@ def collect_new_entity_declaration_vocabulary_issues(
                 except ValueError as exc:
                     issues.append(f"{hint_path}.other_entity_name: {exc}")
 
-            if hint.tag.startswith("status:"):
-                scope_kind = (
-                    endpoint_kind
-                    if hint.declared_entity_role == "subject"
-                    else declaration.kind
-                )
-                if scope_kind != "faction":
-                    issues.append(
-                        f"{hint_path}.other_entity_name: status pair-tag hints "
-                        "require the object endpoint to be a faction; "
-                        f"resolved object kind is {scope_kind!r}"
-                    )
-
     return issues
 
 
