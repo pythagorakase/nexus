@@ -9,6 +9,7 @@ from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
 from nexus.agents.orrery.resolver import (
     LOCATION_CLASS_TAG_CATEGORIES,
     OrreryResolutionDraft,
+    _compute_orbit_distances,
     _need_pressure_stub,
     compose_actor_target_bindings,
     compose_actor_target_routes,
@@ -63,6 +64,7 @@ class FakeSession:
         location_class_rows=None,
         activity_rows=None,
         relationship_rows=None,
+        orbit_rows=None,
         pair_tag_rows=None,
         faction_rows=None,
         event_rows=None,
@@ -93,6 +95,7 @@ class FakeSession:
             {"entity_id": 1, "current_activity": "idle"}
         ]
         self.relationship_rows = relationship_rows or []
+        self.orbit_rows = orbit_rows or []
         self.pair_tag_rows = pair_tag_rows or []
         self.faction_rows = faction_rows or []
         self.event_rows = event_rows or []
@@ -150,6 +153,14 @@ class FakeSession:
         if "/* orrery:relationship_types */" in sql:
             assert "valence_magnitude" in sql
             return FakeResult(self.relationship_rows)
+        if "/* orrery:orbit_distance_graph */" in sql:
+            assert "FROM entities" in sql
+            assert "kind = 'character'" in sql
+            assert "is_active = true" in sql
+            assert "relationship.relationship_scope = 'character'" in sql
+            assert "relationship_type" not in sql
+            assert "valence_magnitude" not in sql
+            return FakeResult(self.orbit_rows)
         if "/* orrery:pair_tags */" in sql:
             assert "ept.cleared_at IS NULL" in sql
             assert "NOT pt.deprecated" in sql
@@ -1153,6 +1164,78 @@ def test_hydrate_world_state_uses_stable_trust_magnitude_for_duplicate_pairs() -
     assert state.trust[(2, 1)] == -3
     assert state.relationship_types[(1, 2)] == frozenset({"comrade", "enemy"})
     assert state.relationship_types[(2, 1)] == frozenset({"ally", "rival"})
+
+
+def test_compute_orbit_distances_is_symmetric_deterministic_and_active_only() -> None:
+    """Narrative orbit ignores storage direction, duplicates, and inactive hops."""
+
+    expected = {
+        (1, 1): 0,
+        (1, 2): 1,
+        (1, 3): 2,
+        (2, 1): 1,
+        (2, 2): 0,
+        (2, 3): 1,
+        (3, 1): 2,
+        (3, 2): 1,
+        (3, 3): 0,
+        (4, 4): 0,
+    }
+
+    assert (
+        _compute_orbit_distances(
+            {1, 2, 3, 4},
+            [(1, 2), (3, 2), (2, 1), (1, 99), (99, 4)],
+        )
+        == expected
+    )
+    assert (
+        _compute_orbit_distances(
+            [4, 3, 2, 1],
+            [(99, 4), (1, 99), (2, 1), (3, 2), (1, 2)],
+        )
+        == expected
+    )
+
+
+def test_hydrate_world_state_populates_quality_neutral_orbit_distance() -> None:
+    """Hydration keeps directed trust while deriving neutral relationship hops."""
+
+    state = hydrate_world_state(
+        FakeSession(
+            relationship_rows=[
+                {
+                    "source_entity_id": 1,
+                    "target_entity_id": 2,
+                    "relationship_type": "enemy",
+                    "valence_magnitude": -5,
+                },
+                {
+                    "source_entity_id": 3,
+                    "target_entity_id": 2,
+                    "relationship_type": "friend",
+                    "valence_magnitude": 4,
+                },
+            ],
+            orbit_rows=[
+                {"source_entity_id": 1, "target_entity_id": None},
+                {"source_entity_id": 2, "target_entity_id": None},
+                {"source_entity_id": 3, "target_entity_id": None},
+                {"source_entity_id": 4, "target_entity_id": None},
+                {"source_entity_id": 1, "target_entity_id": 2},
+                {"source_entity_id": 3, "target_entity_id": 2},
+            ],
+        ),
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert state.trust == {(1, 2): -5, (3, 2): 4}
+    assert state.orbit_distance[(1, 3)] == 2
+    assert state.orbit_distance[(3, 1)] == 2
+    assert state.orbit_distance[(4, 4)] == 0
+    assert (1, 4) not in state.orbit_distance
+    assert (4, 1) not in state.orbit_distance
 
 
 def test_hydrate_world_state_loads_pair_tags() -> None:

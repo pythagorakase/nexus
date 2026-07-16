@@ -28,6 +28,9 @@ So the next step is not "invent explainability"; it is **connect the existing ex
 - tags from `entity_tags_current` (a `VIEW` of `entity_tags WHERE cleared_at IS NULL`)
 - locations/activities from `characters.current_location` / `current_activity` (scalars)
 - relationships/trust from `entity_relationships_v`
+- relationship `orbit_distance`, recomputed at hydration from the current
+  unversioned `character_relationships` projection after excluding inactive
+  character endpoints
 - pair tags from `entity_pair_tags WHERE cleared_at IS NULL`
 - travel states, routine anchors, faction memberships, weather (a static story-seed value) — all current, no as-of variant
 
@@ -49,7 +52,7 @@ The original caveat — "confirm rows carry a chunk-id bestowal key" — **resol
 | Recent events, world time, time-of-day, roster | Already honest |
 | Single-entity tags | Event reconstruction with gaps (bestowal-side filter works only where world time is populated; cleared/replaced rows partly unrecoverable) |
 | Pair tags | Same, worse (no clearance log exists) |
-| Relationships/trust | Impossible by schema; near-static in practice — label as unversioned |
+| Relationships/trust/orbit distance | Impossible by schema; near-static in practice — label as unversioned. Orbit distance is a derived current projection, not an independently versioned axis. |
 | Position/activity | Impossible for Skald-driven changes (no instrumentation); replayable for Orrery-driven changes via `orrery_resolutions.state_delta` |
 | Need debt | Fully replayable from `orrery_resolutions` deltas |
 | Travel state, routine anchors, faction membership, weather | No history; frozen in every mode |
