@@ -544,7 +544,13 @@ def _render_state_delta(delta: Mapping[str, Any]) -> str:
             continue
         if key == "entity_pair_tags.add_outbound":
             tags = ", ".join(f"`{t}`" for t in value)
-            parts.append(f"adds outbound {tags} pair tag to target")
+            if "project.complete" in delta and "ally" in value:
+                parts.append(
+                    f"adds outbound {tags} pair tag to target and upserts the "
+                    "actor→target `ally` relationship"
+                )
+            else:
+                parts.append(f"adds outbound {tags} pair tag to target")
             continue
         if key == "entity_pair_tags.clear_outbound":
             tags = ", ".join(f"`{t}`" for t in value)

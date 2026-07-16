@@ -1163,7 +1163,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
   - **NOT:** target has any of [`hostile_to`, `hunting`] pair tags to actor
   - **NOT:** trust target→actor < -2
 
-**Does:** applies project `complete` transition; adds outbound `ally` pair tag to target
+**Does:** applies project `complete` transition; adds outbound `ally` pair tag to target and upserts the actor→target `ally` relationship
 **Event:** `recruit_ally_completed`
 
 > {actor} and {target} stop speaking in contingencies. The understanding becomes a commitment: when the cost arrives, {actor} may call on {target} as an ally.

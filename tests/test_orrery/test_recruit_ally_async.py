@@ -16,6 +16,8 @@ from nexus.agents.orrery.substrate import ProjectPolicy
 
 ACTOR = 10
 TARGET = 20
+ACTOR_CHARACTER = 101
+TARGET_CHARACTER = 202
 SOURCE_CHUNK = 100
 WORLD_TIME = datetime(2073, 8, 2, 12, tzinfo=timezone.utc)
 POLICY = ProjectPolicy(enabled=True, advance_interval_hours=24.0)
@@ -29,6 +31,7 @@ class AsyncProjectConn:
         self.resolution_ledgers: dict[int, dict[str, Any]] = {}
         self.project_inserts: list[tuple[Any, ...]] = []
         self.pair_tag_inserts: list[tuple[Any, ...]] = []
+        self.relationship_upserts: list[tuple[Any, ...]] = []
         self.travel_write_seen = False
 
     async def fetch(self, sql: str, *params: Any) -> list[dict[str, Any]]:
@@ -60,6 +63,21 @@ class AsyncProjectConn:
         if "INSERT INTO entity_pair_tags" in normalized:
             self.pair_tag_inserts.append(params)
             return {"id": 88}
+        if "FROM characters actor" in normalized:
+            assert params == (ACTOR, TARGET)
+            return {
+                "character1_id": ACTOR_CHARACTER,
+                "character2_id": TARGET_CHARACTER,
+                "previous_relationship_type": None,
+                "extra_data": None,
+            }
+        if "INSERT INTO character_relationships" in normalized:
+            self.relationship_upserts.append(params)
+            return {
+                "character1_id": ACTOR_CHARACTER,
+                "character2_id": TARGET_CHARACTER,
+                "relationship_type": "ally",
+            }
         raise AssertionError(
             f"Unexpected fetchrow SQL: {normalized}; params={params!r}"
         )
@@ -190,6 +208,16 @@ async def test_async_recruit_ally_start_and_completion_match_sync_applier() -> N
     assert conn.pair_tag_inserts == [
         (ACTOR, TARGET, 77, WORLD_TIME, "advance_recruit_ally", SOURCE_CHUNK)
     ]
+    assert len(conn.relationship_upserts) == 1
+    character1_id, character2_id, raw_metadata = conn.relationship_upserts[0]
+    assert (character1_id, character2_id) == (ACTOR_CHARACTER, TARGET_CHARACTER)
+    assert json.loads(raw_metadata) == {
+        "orrery_recruit_ally": {
+            "template_id": "advance_recruit_ally",
+            "source_chunk_id": SOURCE_CHUNK,
+            "previous_relationship_type": None,
+        }
+    }
     complete_applied = conn.resolution_ledgers[102]["project.complete"]["applied"]
     assert complete_applied["status"] == "completed"
     assert complete_applied["target_character_entity_id"] == TARGET
@@ -202,4 +230,14 @@ async def test_async_recruit_ally_start_and_completion_match_sync_applier() -> N
             "changed": True,
         }
     ]
+    assert complete_applied["relationship_mutation"] == {
+        "operation": "insert",
+        "subject_entity_id": ACTOR,
+        "object_entity_id": TARGET,
+        "character1_id": ACTOR_CHARACTER,
+        "character2_id": TARGET_CHARACTER,
+        "previous_relationship_type": None,
+        "relationship_type": "ally",
+        "relationship_type_changed": True,
+    }
     assert conn.travel_write_seen is False

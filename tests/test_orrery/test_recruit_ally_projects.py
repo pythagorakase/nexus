@@ -29,6 +29,7 @@ from nexus.agents.orrery.substrate import (
     TravelState,
     WorldState,
     evaluate,
+    has_symmetric_relationship_of_type,
     project_due,
     project_target_is,
     project_target_is_active,
@@ -37,6 +38,7 @@ from nexus.agents.orrery.templates import (
     ADVANCE_RECRUIT_ALLY,
     START_RECRUIT_ALLY,
 )
+from nexus.api.trait_compiler import reconcile_trait_relationship_pair_tags
 from nexus.api.slot_utils import get_slot_db_url
 
 
@@ -286,6 +288,15 @@ def test_hostile_turn_chooses_abandonment_path() -> None:
     assert "project.abandon" in abandoned.state_delta
 
 
+def test_canonical_ally_relationship_satisfies_existing_ally_gate() -> None:
+    """Recruitment's durable relationship unlocks ally-typed packages."""
+
+    state = WorldState(relationship_types={(ACTOR, TARGET): frozenset({"ally"})})
+    predicate = has_symmetric_relationship_of_type("ally")
+
+    assert predicate(state, BINDINGS) is True
+
+
 @pytest.fixture
 def live_project_db() -> Iterator[dict[str, Any]]:
     conn = psycopg2.connect(get_slot_db_url(slot=2))
@@ -436,6 +447,29 @@ def test_live_stage_ladder_completion_and_applied_ledger(
     db = live_project_db
     actor = int(db["actor"])
     target = int(db["target"])
+    with db["conn"].cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO character_relationships (
+                character1_id, character2_id, relationship_type,
+                emotional_valence, dynamic, recent_events, history, extra_data
+            )
+            SELECT actor.id, target.id, 'friend', '+2|friendly',
+                   'Preserved recruitment-test dynamic.',
+                   'Preserved recruitment-test recent events.',
+                   'Preserved recruitment-test history.',
+                   '{"test_fixture": true}'::jsonb
+            FROM characters actor
+            JOIN characters target ON target.entity_id = %s
+            WHERE actor.entity_id = %s
+            ON CONFLICT (character1_id, character2_id) DO UPDATE SET
+                relationship_type = 'friend'
+            RETURNING emotional_valence, dynamic, recent_events, history
+            """,
+            (target, actor),
+        )
+        preserved_relationship_fields = cur.fetchone()
+    assert preserved_relationship_fields is not None
     start = OrreryResolutionDraft(
         template_id="start_recruit_ally",
         priority=17,
@@ -547,6 +581,43 @@ def test_live_stage_ladder_completion_and_applied_ledger(
         )
         assert cur.fetchone()[0] == 1
         cur.execute(
+            """
+            SELECT cr.relationship_type, cr.extra_data
+            FROM character_relationships cr
+            JOIN characters actor ON actor.id = cr.character1_id
+            JOIN characters target ON target.id = cr.character2_id
+            WHERE actor.entity_id = %s
+              AND target.entity_id = %s
+            """,
+            (actor, target),
+        )
+        relationship_type, extra_data = cur.fetchone()
+        assert relationship_type == "ally"
+        assert extra_data["orrery_recruit_ally"]["template_id"] == (
+            "advance_recruit_ally"
+        )
+        assert extra_data["orrery_recruit_ally"]["source_chunk_id"] == db["chunk_id"]
+        cur.execute(
+            """
+            SELECT cr.emotional_valence, cr.dynamic, cr.recent_events, cr.history
+            FROM character_relationships cr
+            JOIN characters actor ON actor.id = cr.character1_id
+            JOIN characters target ON target.id = cr.character2_id
+            WHERE actor.entity_id = %s
+              AND target.entity_id = %s
+            """,
+            (actor, target),
+        )
+        assert cur.fetchone() == preserved_relationship_fields
+        relevant_drift = [
+            item
+            for item in reconcile_trait_relationship_pair_tags(cur)
+            if item.subject_entity_id == actor
+            and item.object_entity_id == target
+            and item.pair_tag == "ally"
+        ]
+        assert relevant_drift == []
+        cur.execute(
             "SELECT state_delta FROM orrery_resolutions WHERE id = %s",
             (resolution_id,),
         )
@@ -563,6 +634,11 @@ def test_live_stage_ladder_completion_and_applied_ledger(
             "changed": True,
         }
     ]
+    assert applied["relationship_mutation"]["subject_entity_id"] == actor
+    assert applied["relationship_mutation"]["object_entity_id"] == target
+    assert applied["relationship_mutation"]["previous_relationship_type"] == "friend"
+    assert applied["relationship_mutation"]["relationship_type"] == "ally"
+    assert applied["relationship_mutation"]["relationship_type_changed"] is True
 
 
 @pytest.mark.requires_postgres

@@ -1661,6 +1661,7 @@ def _apply_state_delta_sync(
             payload=draft.state_delta["project.complete"],
             source_chunk_id=source_chunk_id,
             policy=project_policy,
+            template_id=draft.template_id,
             target_entity_id=target_entity_id,
         )
     if project_keys:
@@ -1895,6 +1896,7 @@ async def _apply_state_delta_async(
             payload=draft.state_delta["project.complete"],
             source_chunk_id=source_chunk_id,
             policy=project_policy,
+            template_id=draft.template_id,
             target_entity_id=target_entity_id,
         )
     if project_keys:
@@ -2716,6 +2718,185 @@ def _validate_project_completion(
             )
 
 
+def _recruit_ally_relationship_metadata(
+    *,
+    template_id: str,
+    source_chunk_id: int,
+    previous_relationship_type: Optional[str],
+    existing_extra_data: Any,
+) -> dict[str, Any]:
+    """Return durable provenance for the canonical recruited-ally relation."""
+
+    original_type = previous_relationship_type
+    if isinstance(existing_extra_data, Mapping):
+        prior = existing_extra_data.get("orrery_recruit_ally")
+        if isinstance(prior, Mapping):
+            original_type = prior.get("previous_relationship_type", original_type)
+    return {
+        "orrery_recruit_ally": {
+            "template_id": template_id,
+            "source_chunk_id": source_chunk_id,
+            "previous_relationship_type": original_type,
+        }
+    }
+
+
+def _upsert_recruited_ally_relationship_sync(
+    cur: Any,
+    *,
+    actor_entity_id: int,
+    target_entity_id: int,
+    template_id: str,
+    source_chunk_id: int,
+) -> dict[str, Any]:
+    """Persist actor->target as the canonical ally relationship."""
+
+    cur.execute(
+        """
+        SELECT actor.id AS character1_id,
+               target.id AS character2_id,
+               existing.relationship_type AS previous_relationship_type,
+               existing.extra_data
+        FROM characters actor
+        JOIN characters target ON target.entity_id = %s
+        LEFT JOIN character_relationships existing
+          ON existing.character1_id = actor.id
+         AND existing.character2_id = target.id
+        WHERE actor.entity_id = %s
+        """,
+        (target_entity_id, actor_entity_id),
+    )
+    row = cur.fetchone()
+    if row is None:
+        raise ValueError(
+            "recruit_ally completion requires actor and target character rows"
+        )
+    character1_id = int(_row_get(row, "character1_id", 0))
+    character2_id = int(_row_get(row, "character2_id", 1))
+    if character1_id == character2_id:
+        raise ValueError("recruit_ally completion cannot recruit the actor")
+    previous = _row_get(row, "previous_relationship_type", 2)
+    previous_type = str(previous) if previous is not None else None
+    metadata = _recruit_ally_relationship_metadata(
+        template_id=template_id,
+        source_chunk_id=source_chunk_id,
+        previous_relationship_type=previous_type,
+        existing_extra_data=_row_get(row, "extra_data", 3),
+    )
+    cur.execute(
+        """
+        INSERT INTO character_relationships (
+            character1_id, character2_id, relationship_type,
+            emotional_valence, dynamic, recent_events, history, extra_data
+        ) VALUES (
+            %s, %s, 'ally', '+3|trusting',
+            'Allies by earned commitment.',
+            'A sustained recruitment concluded in a named alliance.',
+            'Alliance established through the RECRUIT_ALLY project.',
+            %s::jsonb
+        )
+        ON CONFLICT (character1_id, character2_id) DO UPDATE SET
+            relationship_type = EXCLUDED.relationship_type,
+            extra_data = COALESCE(character_relationships.extra_data, '{}'::jsonb)
+                         || EXCLUDED.extra_data,
+            updated_at = now()
+        RETURNING character1_id, character2_id, relationship_type
+        """,
+        (character1_id, character2_id, json.dumps(metadata)),
+    )
+    if cur.fetchone() is None:
+        raise RuntimeError("recruit_ally relationship upsert returned no row")
+    return {
+        "operation": "insert" if previous_type is None else "update",
+        "subject_entity_id": actor_entity_id,
+        "object_entity_id": target_entity_id,
+        "character1_id": character1_id,
+        "character2_id": character2_id,
+        "previous_relationship_type": previous_type,
+        "relationship_type": "ally",
+        "relationship_type_changed": previous_type != "ally",
+    }
+
+
+async def _upsert_recruited_ally_relationship_async(
+    conn: Any,
+    *,
+    actor_entity_id: int,
+    target_entity_id: int,
+    template_id: str,
+    source_chunk_id: int,
+) -> dict[str, Any]:
+    """Async twin of _upsert_recruited_ally_relationship_sync."""
+
+    row = await conn.fetchrow(
+        """
+        SELECT actor.id AS character1_id,
+               target.id AS character2_id,
+               existing.relationship_type AS previous_relationship_type,
+               existing.extra_data
+        FROM characters actor
+        JOIN characters target ON target.entity_id = $2
+        LEFT JOIN character_relationships existing
+          ON existing.character1_id = actor.id
+         AND existing.character2_id = target.id
+        WHERE actor.entity_id = $1
+        """,
+        actor_entity_id,
+        target_entity_id,
+    )
+    if row is None:
+        raise ValueError(
+            "recruit_ally completion requires actor and target character rows"
+        )
+    character1_id = int(_row_get(row, "character1_id", 0))
+    character2_id = int(_row_get(row, "character2_id", 1))
+    if character1_id == character2_id:
+        raise ValueError("recruit_ally completion cannot recruit the actor")
+    previous = _row_get(row, "previous_relationship_type", 2)
+    previous_type = str(previous) if previous is not None else None
+    metadata = _recruit_ally_relationship_metadata(
+        template_id=template_id,
+        source_chunk_id=source_chunk_id,
+        previous_relationship_type=previous_type,
+        existing_extra_data=_row_get(row, "extra_data", 3),
+    )
+    written = await conn.fetchrow(
+        """
+        INSERT INTO character_relationships (
+            character1_id, character2_id, relationship_type,
+            emotional_valence, dynamic, recent_events, history, extra_data
+        ) VALUES (
+            $1, $2, 'ally', '+3|trusting',
+            'Allies by earned commitment.',
+            'A sustained recruitment concluded in a named alliance.',
+            'Alliance established through the RECRUIT_ALLY project.',
+            $3::jsonb
+        )
+        ON CONFLICT (character1_id, character2_id) DO UPDATE SET
+            relationship_type = EXCLUDED.relationship_type,
+            extra_data = COALESCE(character_relationships.extra_data, '{}'::jsonb)
+                         || EXCLUDED.extra_data,
+            updated_at = now()
+        RETURNING character1_id, character2_id, relationship_type
+        """,
+        character1_id,
+        character2_id,
+        json.dumps(metadata),
+    )
+    if written is None:
+        raise RuntimeError("recruit_ally relationship upsert returned no row")
+    return {
+        "operation": "insert" if previous_type is None else "update",
+        "subject_entity_id": actor_entity_id,
+        "object_entity_id": target_entity_id,
+        "character1_id": character1_id,
+        "character2_id": character2_id,
+        "previous_relationship_type": previous_type,
+        "relationship_type": "ally",
+        "relationship_type_changed": previous_type != "ally",
+    }
+
+
 def _apply_project_complete_sync(
     cur: Any,
     *,
@@ -2723,6 +2904,7 @@ def _apply_project_complete_sync(
     payload: Any,
     source_chunk_id: int,
     policy: ProjectPolicy,
+    template_id: str,
     target_entity_id: Optional[int] = None,
 ) -> dict[str, Any]:
     _require_project_policy(policy)
@@ -2739,6 +2921,7 @@ def _apply_project_complete_sync(
         """,
         (source_chunk_id, project["id"]),
     )
+    relationship_mutation: Optional[dict[str, Any]] = None
     if project["project_type"] == "plan_relocation":
         _apply_travel_start_sync(
             cur,
@@ -2746,9 +2929,21 @@ def _apply_project_complete_sync(
             payload=_project_completion_travel_payload(project, payload),
             source_chunk_id=source_chunk_id,
         )
-    else:
+    elif project["project_type"] == "recruit_ally":
         _coerce_project_payload(payload)
-    return _project_applied_snapshot(
+        assert target_entity_id is not None
+        relationship_mutation = _upsert_recruited_ally_relationship_sync(
+            cur,
+            actor_entity_id=actor_entity_id,
+            target_entity_id=target_entity_id,
+            template_id=template_id,
+            source_chunk_id=source_chunk_id,
+        )
+    else:
+        raise ValueError(
+            f"Unsupported project completion type: {project['project_type']!r}"
+        )
+    applied = _project_applied_snapshot(
         project_type=str(project["project_type"]),
         status="completed",
         stage=str(project["stage"]),
@@ -2759,6 +2954,9 @@ def _apply_project_complete_sync(
         source_chunk_id=source_chunk_id,
         target_character_entity_id=project["target_character_entity_id"],
     )
+    if relationship_mutation is not None:
+        applied["relationship_mutation"] = relationship_mutation
+    return applied
 
 
 async def _apply_project_complete_async(
@@ -2768,6 +2966,7 @@ async def _apply_project_complete_async(
     payload: Any,
     source_chunk_id: int,
     policy: ProjectPolicy,
+    template_id: str,
     target_entity_id: Optional[int] = None,
 ) -> dict[str, Any]:
     _require_project_policy(policy)
@@ -2785,6 +2984,7 @@ async def _apply_project_complete_async(
         source_chunk_id,
         project["id"],
     )
+    relationship_mutation: Optional[dict[str, Any]] = None
     if project["project_type"] == "plan_relocation":
         await _apply_travel_start_async(
             conn,
@@ -2792,9 +2992,21 @@ async def _apply_project_complete_async(
             payload=_project_completion_travel_payload(project, payload),
             source_chunk_id=source_chunk_id,
         )
-    else:
+    elif project["project_type"] == "recruit_ally":
         _coerce_project_payload(payload)
-    return _project_applied_snapshot(
+        assert target_entity_id is not None
+        relationship_mutation = await _upsert_recruited_ally_relationship_async(
+            conn,
+            actor_entity_id=actor_entity_id,
+            target_entity_id=target_entity_id,
+            template_id=template_id,
+            source_chunk_id=source_chunk_id,
+        )
+    else:
+        raise ValueError(
+            f"Unsupported project completion type: {project['project_type']!r}"
+        )
+    applied = _project_applied_snapshot(
         project_type=str(project["project_type"]),
         status="completed",
         stage=str(project["stage"]),
@@ -2805,6 +3017,9 @@ async def _apply_project_complete_async(
         source_chunk_id=source_chunk_id,
         target_character_entity_id=project["target_character_entity_id"],
     )
+    if relationship_mutation is not None:
+        applied["relationship_mutation"] = relationship_mutation
+    return applied
 
 
 def _coerce_travel_payload(raw: Any) -> dict[str, Any]:

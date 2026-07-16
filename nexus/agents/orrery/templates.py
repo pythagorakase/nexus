@@ -4782,6 +4782,7 @@ ADVANCE_RECRUIT_ALLY = Template(
             changed_fields=(
                 "character_project_states.status",
                 "entity_pair_tags",
+                "character_relationships.relationship_type",
             ),
             magnitude=0.40,
             preemptive=True,

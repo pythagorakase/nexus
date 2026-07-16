@@ -8,13 +8,52 @@ ALTER TABLE character_project_states
     ADD COLUMN IF NOT EXISTS target_character_entity_id bigint NULL
         REFERENCES entities(id);
 
--- Migration 074 created these three constraints from inline CHECK clauses.
--- Drop them by their stable generated names before replacing them with named,
--- per-type constraints that can be documented and extended deliberately.
+-- Migration 074 created the vocabulary constraints from inline column CHECKs,
+-- whose generated names are stable. Its table-level completed-target CHECK is
+-- deliberately discovered by definition: generated names for multiple
+-- anonymous table CHECKs can vary with PostgreSQL/schema history, and dropping
+-- a guessed suffix risks removing the independent progress-range guard.
 ALTER TABLE character_project_states
     DROP CONSTRAINT IF EXISTS character_project_states_project_type_check,
-    DROP CONSTRAINT IF EXISTS character_project_states_stage_check,
-    DROP CONSTRAINT IF EXISTS character_project_states_check;
+    DROP CONSTRAINT IF EXISTS character_project_states_stage_check;
+
+DO $$
+DECLARE
+    completed_target_constraints text[];
+BEGIN
+    SELECT array_agg(conname ORDER BY conname)
+    INTO completed_target_constraints
+    FROM pg_constraint
+    WHERE conrelid = 'character_project_states'::regclass
+      AND contype = 'c'
+      AND position(
+          'status' IN pg_get_constraintdef(oid, true)
+      ) > 0
+      AND position(
+          'completed' IN pg_get_constraintdef(oid, true)
+      ) > 0
+      AND position(
+          'target_place_id' IN pg_get_constraintdef(oid, true)
+      ) > 0
+      AND position(
+          'project_type' IN pg_get_constraintdef(oid, true)
+      ) = 0
+      AND position(
+          'target_character_entity_id' IN pg_get_constraintdef(oid, true)
+      ) = 0;
+
+    IF COALESCE(array_length(completed_target_constraints, 1), 0) <> 1 THEN
+        RAISE EXCEPTION
+            'Expected exactly one migration-074 completed-target CHECK; found %',
+            completed_target_constraints;
+    END IF;
+
+    EXECUTE format(
+        'ALTER TABLE character_project_states DROP CONSTRAINT %I',
+        completed_target_constraints[1]
+    );
+END
+$$;
 
 ALTER TABLE character_project_states
     ADD CONSTRAINT character_project_states_project_type_check
@@ -55,7 +94,7 @@ ALTER TABLE character_project_states
 COMMENT ON COLUMN character_project_states.target_character_entity_id IS
     'Character entity chosen when a character-targeted project starts; required for RECRUIT_ALLY and forbidden for PLAN_RELOCATION.';
 COMMENT ON TABLE character_project_states IS
-    'Additive Orrery project lifecycle projection. Supports PLAN_RELOCATION and RECRUIT_ALLY with a one-open-project-per-character budget; completed relocation hands off to character_travel_states while completed recruitment bestows an outbound ally tag.';
+    'Additive Orrery project lifecycle projection. Supports PLAN_RELOCATION and RECRUIT_ALLY with a one-open-project-per-character budget; completed relocation hands off to character_travel_states while completed recruitment bestows an outbound ally tag and canonical actor-to-target ally relationship.';
 COMMENT ON COLUMN character_project_states.project_type IS
     'Locked project vocabulary. Permits plan_relocation and recruit_ally; each type has an explicit stage ladder and target discipline.';
 COMMENT ON COLUMN character_project_states.stage IS

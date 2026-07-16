@@ -80,6 +80,22 @@ def test_need_state_chunk_stamp_comment_describes_provenance() -> None:
     assert "min_accrual_hours_per_chunk" not in migration_sql
 
 
+def test_recruit_ally_migration_discovers_legacy_completion_check() -> None:
+    """Migration 077 must never guess an anonymous CHECK constraint suffix."""
+
+    migration_sql = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "077_recruit_ally_projects.sql"
+    ).read_text()
+
+    assert "pg_get_constraintdef" in migration_sql
+    assert "Expected exactly one migration-074 completed-target CHECK" in migration_sql
+    assert "DROP CONSTRAINT IF EXISTS character_project_states_check" not in (
+        migration_sql
+    )
+
+
 def test_retrograde_persistence_migration_adds_distinct_sources() -> None:
     """Retrograde canonical writes need explicit event and tag provenance."""
 

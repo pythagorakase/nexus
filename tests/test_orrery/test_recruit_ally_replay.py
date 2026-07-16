@@ -13,7 +13,10 @@ from nexus.agents.orrery.events import (
     _insert_resolution_sync,
 )
 from nexus.agents.orrery.needs import load_need_tuning
-from nexus.agents.orrery.reconstruction import capture_state_checkpoint_sync
+from nexus.agents.orrery.reconstruction import (
+    capture_state_checkpoint_sync,
+    set_commit_chunk_attribution_sync,
+)
 from nexus.agents.orrery.replay import (
     reconstruct_state_at_sync,
     verify_checkpoints_sync,
@@ -115,6 +118,7 @@ def _apply_transition(
     target_entity_id: int,
     state_delta: dict[str, Any],
 ) -> None:
+    set_commit_chunk_attribution_sync(cur, chunk_id)
     draft = OrreryResolutionDraft(
         template_id="recruit_ally_replay_probe",
         priority=47,
@@ -167,10 +171,25 @@ def test_recruit_ally_lifecycle_replays_between_checkpoints_without_drift(
 
     with db["conn"].cursor() as cur:
         base_time = _next_world_time(cur)
+        cur.execute(
+            """
+            SELECT actor.id, target.id, relationship.relationship_type
+            FROM characters actor
+            JOIN characters target ON target.entity_id = %s
+            LEFT JOIN character_relationships relationship
+              ON relationship.character1_id = actor.id
+             AND relationship.character2_id = target.id
+            WHERE actor.entity_id = %s
+            """,
+            (target, actor),
+        )
+        actor_character_id, target_character_id, prior_relationship_type = (
+            cur.fetchone()
+        )
         base_chunk = _fabricate_chunk(
             cur,
             base_time,
-            created_offset_minutes=1,
+            created_offset_minutes=-4,
         )
         base_id = capture_state_checkpoint_sync(
             cur,
@@ -179,7 +198,7 @@ def test_recruit_ally_lifecycle_replays_between_checkpoints_without_drift(
         )
         assert base_id is not None
 
-        transitions = (
+        transitions: tuple[dict[str, Any], ...] = (
             {
                 "project.start": {
                     "project_type": "recruit_ally",
@@ -208,11 +227,11 @@ def test_recruit_ally_lifecycle_replays_between_checkpoints_without_drift(
             },
         )
         transition_chunks: list[int] = []
-        for offset, state_delta in enumerate(transitions, start=2):
+        for step, state_delta in enumerate(transitions, start=1):
             chunk_id = _fabricate_chunk(
                 cur,
-                base_time + timedelta(hours=24 * (offset - 1)),
-                created_offset_minutes=offset,
+                base_time + timedelta(hours=24 * step),
+                created_offset_minutes=step - len(transitions),
             )
             _apply_transition(
                 cur,
@@ -245,6 +264,23 @@ def test_recruit_ally_lifecycle_replays_between_checkpoints_without_drift(
         assert float(project["progress"]) == 1.0
         assert project["source_chunk_id"] == complete_chunk
 
+        before_completion = reconstruct_state_at_sync(
+            cur,
+            transition_chunks[-2],
+            base_checkpoint_id=int(base_id),
+        )
+        prior_rows = [
+            row
+            for row in before_completion.state["character_relationships"]
+            if row["character1_id"] == actor_character_id
+            and row["character2_id"] == target_character_id
+        ]
+        if prior_relationship_type is None:
+            assert prior_rows == []
+        else:
+            assert len(prior_rows) == 1
+            assert prior_rows[0]["relationship_type"] == prior_relationship_type
+
         cur.execute("SELECT id FROM pair_tags WHERE tag = 'ally'")
         ally_tag_id = int(cur.fetchone()[0])
         assert any(
@@ -252,6 +288,12 @@ def test_recruit_ally_lifecycle_replays_between_checkpoints_without_drift(
             and row["object_entity_id"] == target
             and row["pair_tag_id"] == ally_tag_id
             for row in reconstructed.state["entity_pair_tags"]
+        )
+        assert any(
+            row["character1_id"] == actor_character_id
+            and row["character2_id"] == target_character_id
+            and row["relationship_type"] == "ally"
+            for row in reconstructed.state["character_relationships"]
         )
 
         pair = next(
