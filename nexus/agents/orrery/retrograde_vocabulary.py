@@ -6,6 +6,7 @@ from typing import Iterable, Literal, TypedDict
 
 from nexus.agents.orrery.catalog import collect_template_vocabulary
 from nexus.agents.orrery.pair_tag_registry import PAIR_TAG_SEED
+from nexus.agents.orrery.status_family import STATUS_LEVELS, status_tag_for_level
 from nexus.agents.orrery.substrate import EntityKind, Slot
 from nexus.agents.orrery.tag_library import (
     read_event_type_categories,
@@ -341,6 +342,15 @@ def _load_pair_tag_definitions() -> list[PairTagPrimitive]:
                 "is_ephemeral": bool(is_ephemeral),
             }
         )
+    definitions.extend(
+        {
+            "tag": status_tag_for_level(level),
+            "subject_kinds": ["character", "faction"],
+            "object_kinds": ["faction"],
+            "is_ephemeral": False,
+        }
+        for level in STATUS_LEVELS
+    )
     return sorted(definitions, key=lambda item: item["tag"])
 
 

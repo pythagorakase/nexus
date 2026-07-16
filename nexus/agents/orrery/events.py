@@ -4076,6 +4076,11 @@ def _add_outbound_pair_tag_sync(
     so re-fires while the edge is live are no-ops.
     """
 
+    if tag.startswith("status:"):
+        raise ValueError(
+            f"pair_tag {tag!r} belongs to the exclusive status ladder and "
+            "cannot be added by a template outbound-pair state delta"
+        )
     pair_tag_id = _registered_pair_tag_id_sync(cur, tag)
     cur.execute(
         """
@@ -4261,6 +4266,11 @@ async def _add_outbound_pair_tag_async(
 ) -> bool:
     """Async twin of _add_outbound_pair_tag_sync."""
 
+    if tag.startswith("status:"):
+        raise ValueError(
+            f"pair_tag {tag!r} belongs to the exclusive status ladder and "
+            "cannot be added by a template outbound-pair state delta"
+        )
     pair_tag_id = await _registered_pair_tag_id_async(conn, tag)
     world_time = await _chunk_world_time_async(conn, source_chunk_id)
     row = await conn.fetchrow(

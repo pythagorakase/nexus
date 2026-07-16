@@ -23,7 +23,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, Literal, Optional, TypeAlias
+from typing import AbstractSet, Any, Literal, Optional, TypeAlias
 
 from nexus.agents.orrery.status_family import STATUS_TAGS, status_tag_for_level
 from nexus.agents.orrery.tag_constants import CANONICAL_TAGS
@@ -1034,6 +1034,11 @@ def apply_pair_tag_bestowal(
     """
 
     _validate_source_kind(source_kind)
+    if tag.startswith("status:"):
+        raise ValueError(
+            f"pair_tag {tag!r} belongs to the exclusive status ladder; "
+            "use apply_status_pair_tag_bestowal"
+        )
     if subject_entity_id == object_entity_id:
         raise ValueError(
             f"pair_tag {tag!r} requires distinct subject and object; "
@@ -1148,14 +1153,15 @@ def _insert_pair_tag_row(
     source_kind: str,
     world_time: Optional[datetime],
     source_chunk_id: Optional[int] = None,
+    template_id: Optional[str] = None,
 ) -> bool:
     cur.execute(
         """
         INSERT INTO entity_pair_tags (
             subject_entity_id, object_entity_id, pair_tag_id,
-            applied_at_world_time, source_kind, source_chunk_id
+            applied_at_world_time, source_kind, source_chunk_id, template_id
         )
-        VALUES (%s, %s, %s, %s, %s::entity_tag_source_kind, %s)
+        VALUES (%s, %s, %s, %s, %s::entity_tag_source_kind, %s, %s)
         ON CONFLICT (subject_entity_id, object_entity_id, pair_tag_id)
           WHERE cleared_at IS NULL
           DO NOTHING
@@ -1167,6 +1173,7 @@ def _insert_pair_tag_row(
             world_time,
             source_kind,
             source_chunk_id,
+            template_id,
         ),
     )
     return bool(cur.rowcount)
@@ -1182,6 +1189,7 @@ def apply_status_pair_tag_bestowal(
     source_kind: str = "skald_inline",
     world_time: Optional[datetime] = None,
     source_chunk_id: Optional[int] = None,
+    template_id: Optional[str] = None,
 ) -> bool:
     """Replace the active ``status:*`` level for one subject→faction edge.
 
@@ -1200,6 +1208,23 @@ def apply_status_pair_tag_bestowal(
         )
     row = _lookup_pair_tag_row(cur, tag)
     pair_tag_id = _row_value(row, "id", 0)
+    cur.execute(
+        "SELECT kind::text AS kind FROM entities WHERE id = %s",
+        (scope_faction_entity_id,),
+    )
+    scope_row = cur.fetchone()
+    if scope_row is None:
+        raise ValueError(
+            "Status scope_faction_entity_id="
+            f"{scope_faction_entity_id} does not resolve on the entities spine"
+        )
+    actual_scope_kind = str(_row_value(scope_row, "kind", 0))
+    if actual_scope_kind != "faction":
+        raise ValueError(
+            "Status scope_faction_entity_id="
+            f"{scope_faction_entity_id} has actual kind {actual_scope_kind!r}; "
+            "expected 'faction'"
+        )
     _validate_pair_tag_kinds(
         tag=tag,
         subject_kind=subject_kind,
@@ -1233,6 +1258,7 @@ def apply_status_pair_tag_bestowal(
         source_kind=source_kind,
         world_time=world_time,
         source_chunk_id=source_chunk_id,
+        template_id=template_id,
     )
 
 
@@ -1294,7 +1320,7 @@ def _clear_pair_tags_by_name(
     *,
     subject_entity_id: int,
     object_entity_id: int,
-    tags: set[str],
+    tags: AbstractSet[str],
     world_time: Optional[datetime] = None,
     source_chunk_id: Optional[int] = None,
     reason: str = "clear_pair_tags_by_name",

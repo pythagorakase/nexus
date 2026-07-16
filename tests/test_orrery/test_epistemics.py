@@ -256,16 +256,15 @@ def test_retrograde_producer_mints_role_correct_awareness(save_02_conn: Any) -> 
         assert configured["claim_id"] is not None
         cur.execute(
             """
-            SELECT character_entity_id, source_tier
+            SELECT knower_entity_id, source_tier
             FROM claim_awareness
             WHERE claim_id = %s
-            ORDER BY character_entity_id
+            ORDER BY knower_entity_id
             """,
             (configured["claim_id"],),
         )
         awareness = {
-            int(row["character_entity_id"]): row["source_tier"]
-            for row in cur.fetchall()
+            int(row["knower_entity_id"]): row["source_tier"] for row in cur.fetchall()
         }
         assert awareness == {
             records[0].entity_id: "participant",
@@ -283,10 +282,10 @@ def test_retrograde_producer_mints_role_correct_awareness(save_02_conn: Any) -> 
 
 
 @pytest.mark.requires_postgres
-def test_retrograde_faction_actor_mints_without_faction_awareness(
+def test_retrograde_faction_actor_mints_faction_awareness(
     save_02_conn: Any,
 ) -> None:
-    """A faction can act in claim prose but cannot hold awareness in v1."""
+    """A faction participant receives the same role-based awareness as others."""
 
     with save_02_conn.cursor(cursor_factory=RealDictCursor) as cur:
         anchor, characters = _anchor_and_characters(cur, 2)
@@ -365,11 +364,12 @@ def test_retrograde_faction_actor_mints_without_faction_awareness(
         assert result["claim_id"] is not None
         cur.execute(
             """
-            SELECT c.summary, ca.character_entity_id, ca.source_tier
+            SELECT c.summary, ca.knower_entity_id, ca.source_tier,
+                   ca.acquired_at_world_time
             FROM claims c
             LEFT JOIN claim_awareness ca ON ca.claim_id = c.id
             WHERE c.id = %s
-            ORDER BY ca.character_entity_id
+            ORDER BY ca.knower_entity_id
             """,
             (result["claim_id"],),
         )
@@ -378,14 +378,18 @@ def test_retrograde_faction_actor_mints_without_faction_awareness(
             f"Threat issued: actor {records[0].name}, target {records[1].name}, "
             f"witness {records[2].name}."
         )
-        awareness = {
-            int(row["character_entity_id"]): row["source_tier"] for row in rows
-        }
-        assert records[0].entity_id not in awareness
+        awareness = {int(row["knower_entity_id"]): row["source_tier"] for row in rows}
         assert awareness == {
+            records[0].entity_id: "participant",
             records[1].entity_id: "participant",
             records[2].entity_id: "witness",
         }
+        cur.execute(
+            "SELECT world_time FROM chunk_metadata WHERE chunk_id = %s",
+            (anchor,),
+        )
+        source_world_time = cur.fetchone()["world_time"]
+        assert all(row["acquired_at_world_time"] == source_world_time for row in rows)
 
 
 @pytest.mark.requires_postgres
@@ -473,15 +477,14 @@ def test_retrograde_already_present_event_backfills_claim(
         assert backfilled["claim_id"] is not None
         cur.execute(
             """
-            SELECT character_entity_id, source_tier
+            SELECT knower_entity_id, source_tier
             FROM claim_awareness WHERE claim_id = %s
-            ORDER BY character_entity_id
+            ORDER BY knower_entity_id
             """,
             (backfilled["claim_id"],),
         )
         assert {
-            int(row["character_entity_id"]): row["source_tier"]
-            for row in cur.fetchall()
+            int(row["knower_entity_id"]): row["source_tier"] for row in cur.fetchall()
         } == {
             records[0].entity_id: "participant",
             records[1].entity_id: "participant",
@@ -683,22 +686,31 @@ def test_async_live_applier_has_epistemics_parity() -> None:
             assert claim["source_resolution_id"] == resolution["id"]
             awareness_rows = await conn.fetch(
                 """
-                SELECT id, character_entity_id, source_tier, source_chunk_id,
+                SELECT id, knower_entity_id, source_tier, source_chunk_id,
+                       acquired_at_world_time,
                        immediate_source_entity_id, root_source_entity_id
                 FROM claim_awareness
                 WHERE claim_id = $1
-                ORDER BY character_entity_id
+                ORDER BY knower_entity_id
                 """,
                 applied["claim_id"],
             )
             assert {
-                int(row["character_entity_id"]): row["source_tier"]
+                int(row["knower_entity_id"]): row["source_tier"]
                 for row in awareness_rows
             } == {actor: "participant", target: "participant"}
             assert [int(row["id"]) for row in awareness_rows] == sorted(
                 applied["claim_awareness_ids"]
             )
             assert all(row["source_chunk_id"] == anchor for row in awareness_rows)
+            source_world_time = await conn.fetchval(
+                "SELECT world_time FROM chunk_metadata WHERE chunk_id = $1",
+                anchor,
+            )
+            assert all(
+                row["acquired_at_world_time"] == source_world_time
+                for row in awareness_rows
+            )
             assert all(
                 row["immediate_source_entity_id"] is None
                 and row["root_source_entity_id"] is None
@@ -771,7 +783,7 @@ def test_resolver_hydrates_scopes_and_awareness_in_recent_window() -> None:
             text(
                 """
                 INSERT INTO claim_awareness (
-                    claim_id, character_entity_id, source_tier, source_chunk_id
+                    claim_id, knower_entity_id, source_tier, source_chunk_id
                 ) VALUES (:claim_id, :actor, 'participant', :anchor)
                 """
             ),
@@ -863,11 +875,11 @@ def test_unclaimed_event_is_implicitly_common_with_epistemics_enabled() -> None:
 
 @pytest.mark.requires_postgres
 def test_revelation_scope_and_common_semantics(save_02_conn: Any) -> None:
-    """Revelations deduplicate; common works row-free; illegal narrowing raises."""
+    """Revelations thread provenance and reject tellers without awareness."""
 
     with save_02_conn.cursor(cursor_factory=RealDictCursor) as cur:
-        anchor, characters = _anchor_and_characters(cur, 3)
-        source, knower, target = [
+        anchor, characters = _anchor_and_characters(cur, 4)
+        source, knower, target, unpossessed = [
             int(character["entity_id"]) for character in characters
         ]
         event_id = _insert_event(
@@ -914,42 +926,60 @@ def test_revelation_scope_and_common_semantics(save_02_conn: Any) -> None:
             promote_claim_scope(cur, claim_id=claim_id, new_scope="common")
 
         world_time = datetime(2099, 1, 2, 3, tzinfo=timezone.utc)
+        cur.execute(
+            """
+            INSERT INTO claim_awareness (
+                claim_id, knower_entity_id, source_tier, source_chunk_id,
+                acquired_at_world_time
+            ) VALUES (%s, %s, 'participant', %s, %s)
+            """,
+            (claim_id, source, anchor, world_time),
+        )
         first = record_revelation(
             cur,
             claim_id=claim_id,
-            character_entity_id=knower,
+            knower_entity_id=knower,
             source_entity_id=source,
             channel="message",
             world_time=world_time,
             source_chunk_id=anchor,
         )
-        duplicate = record_revelation(
+        second_hop = record_revelation(
             cur,
             claim_id=claim_id,
-            character_entity_id=knower,
-            source_entity_id=source,
+            knower_entity_id=target,
+            source_entity_id=knower,
             channel="message",
             world_time=world_time,
             source_chunk_id=anchor,
         )
         assert first.inserted is True
-        assert duplicate.inserted is False
-        assert duplicate.awareness_id == first.awareness_id
-        assert duplicate.source_tier == first.source_tier == "told"
+        assert second_hop.inserted is True
+        assert second_hop.source_tier == first.source_tier == "told"
         cur.execute(
             """
             SELECT source_tier, immediate_source_entity_id,
                    root_source_entity_id, channel, acquired_at_world_time
             FROM claim_awareness WHERE id = %s
             """,
-            (first.awareness_id,),
+            (second_hop.awareness_id,),
         )
         awareness = cur.fetchone()
         assert awareness["source_tier"] == "told"
-        assert awareness["immediate_source_entity_id"] == source
-        assert awareness["root_source_entity_id"] is None
+        assert awareness["immediate_source_entity_id"] == knower
+        assert awareness["root_source_entity_id"] == source
         assert awareness["channel"] == "message"
         assert awareness["acquired_at_world_time"] == world_time
+        with pytest.raises(ValueError, match="teller does not possess"):
+            record_revelation(
+                cur,
+                claim_id=claim_id,
+                knower_entity_id=target,
+                source_entity_id=unpossessed,
+                channel="message",
+                world_time=world_time,
+                source_chunk_id=anchor,
+            )
 
 
 @pytest.mark.requires_postgres
@@ -1109,7 +1139,7 @@ def test_record_revelation_cli_handler_reports_insert_and_dedupe(
             "2",
             "--claim-id",
             str(claim_id),
-            "--character-entity-id",
+            "--knower",
             str(knower),
             "--source-chunk-id",
             str(anchor),
@@ -1129,12 +1159,8 @@ def test_record_revelation_cli_handler_reports_insert_and_dedupe(
             "2",
             "--claim-id",
             str(claim_id),
-            "--character-entity-id",
+            "--knower",
             str(knower),
-            "--source-entity-id",
-            str(source),
-            "--channel",
-            "message",
         ]
     )
     duplicate = run_record_revelation(duplicate_args, connection=save_02_conn)
@@ -1188,3 +1214,42 @@ def test_migration_documents_every_new_table_and_column() -> None:
         assert f"COMMENT ON TABLE {table}" in migration
         for column in columns:
             assert f"COMMENT ON COLUMN {table}.{column}" in migration
+
+
+def test_epistemics_knower_migration_renames_column_and_constraints() -> None:
+    migration = Path("migrations/080_epistemics_knowers.sql").read_text()
+    assert "RENAME COLUMN character_entity_id TO knower_entity_id" in migration
+    assert "claim_awareness_knower_entity_id_fkey" in migration
+    assert "claim_awareness_claim_id_knower_entity_id_key" in migration
+    assert "COMMENT ON COLUMN claim_awareness.knower_entity_id" in migration
+    assert "any entity that can participate in a world event" in migration
+
+
+def test_record_revelation_cli_requires_knower_flag_without_legacy_alias() -> None:
+    from nexus.cli import build_parser
+
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "record-revelation",
+            "--slot",
+            "2",
+            "--claim-id",
+            "7",
+            "--knower",
+            "42",
+        ]
+    )
+    assert args.knower == 42
+    with pytest.raises(SystemExit):
+        parser.parse_args(
+            [
+                "record-revelation",
+                "--slot",
+                "2",
+                "--claim-id",
+                "7",
+                "--character-entity-id",
+                "42",
+            ]
+        )

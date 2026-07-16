@@ -20,6 +20,35 @@ from nexus.agents.logon.apex_schema import OrreryAdjudication
 from nexus.api.lore_adapter import response_to_incubator
 
 
+def test_template_outbound_pair_writer_rejects_status_ladder() -> None:
+    """Template state deltas cannot bypass the exclusive status writer."""
+
+    with pytest.raises(ValueError, match="exclusive status ladder"):
+        orrery_events._add_outbound_pair_tag_sync(
+            object(),
+            subject_entity_id=1,
+            object_entity_id=2,
+            tag="status:junior",
+            template_id="fixture",
+            source_chunk_id=3,
+        )
+
+
+@pytest.mark.asyncio
+async def test_template_outbound_pair_writer_async_rejects_status_ladder() -> None:
+    """The async template path enforces the same status doctrine."""
+
+    with pytest.raises(ValueError, match="exclusive status ladder"):
+        await orrery_events._add_outbound_pair_tag_async(
+            object(),
+            subject_entity_id=1,
+            object_entity_id=2,
+            tag="status:junior",
+            template_id="fixture",
+            source_chunk_id=3,
+        )
+
+
 class RecordingCursor:
     """Small psycopg cursor stand-in keyed by the Orrery writer's SQL."""
 

@@ -15,7 +15,10 @@ from nexus.agents.orrery.status_family import (
     status_at_or_above_level,
     status_tag_for_level,
 )
-from nexus.agents.orrery.tag_writer import apply_status_pair_tag_bestowal
+from nexus.agents.orrery.tag_writer import (
+    apply_pair_tag_bestowal,
+    apply_status_pair_tag_bestowal,
+)
 
 
 _WORLD_TIME = datetime(2073, 10, 31, 9, 44, tzinfo=timezone.utc)
@@ -41,9 +44,15 @@ class _PairCursor:
         *,
         pair_tags: Optional[dict[str, dict[str, Any]]] = None,
         entity_pair_tags: Optional[list[dict[str, Any]]] = None,
+        entity_kinds: Optional[dict[int, str]] = None,
     ):
         self.pair_tags = pair_tags or _status_pair_tags()
         self.entity_pair_tags = list(entity_pair_tags or [])
+        self.entity_kinds = entity_kinds or {
+            100: "faction",
+            101: "faction",
+            102: "faction",
+        }
         self.rowcount = 0
         self._next_row: Any = None
         self._next_rows: list[Any] = []
@@ -63,6 +72,13 @@ class _PairCursor:
         if sql_upper.startswith("SELECT WORLD_TIME FROM CHUNK_METADATA"):
             self._next_row = None
             self.rowcount = 0
+            return
+        if sql_upper.startswith("SELECT KIND::TEXT AS KIND FROM ENTITIES"):
+            kind = self.entity_kinds.get(int(params[0]))
+            self._next_row = (
+                _FakeRow({"kind": kind}, ["kind"]) if kind is not None else None
+            )
+            self.rowcount = int(kind is not None)
             return
         if sql_upper.startswith("INSERT INTO TAG_CLEARANCE_LOG"):
             entity_pair_tag_id, world_time, justification, source_chunk_id = params
@@ -122,6 +138,7 @@ class _PairCursor:
                 world_time,
                 source_kind,
                 source_chunk_id,
+                template_id,
             ) = params
             for row in self.entity_pair_tags:
                 if (
@@ -141,6 +158,7 @@ class _PairCursor:
                     "applied_at_world_time": world_time,
                     "source_kind": source_kind,
                     "source_chunk_id": source_chunk_id,
+                    "template_id": template_id,
                     "cleared_at": None,
                 }
             )
@@ -330,3 +348,50 @@ def test_status_bestowal_self_scope_error_uses_scope_parameter_name() -> None:
             subject_kind="character",
             level="senior",
         )
+
+
+def test_status_bestowal_rejects_non_faction_scope_entity() -> None:
+    cur = _PairCursor(entity_kinds={100: "character"})
+
+    with pytest.raises(ValueError, match="actual kind 'character'.*expected 'faction'"):
+        apply_status_pair_tag_bestowal(
+            cur,
+            subject_entity_id=10,
+            scope_faction_entity_id=100,
+            subject_kind="character",
+            level="junior",
+        )
+
+
+def test_generic_pair_writer_rejects_status_family() -> None:
+    cur = _PairCursor()
+
+    with pytest.raises(ValueError, match="use apply_status_pair_tag_bestowal"):
+        apply_pair_tag_bestowal(
+            cur,
+            subject_entity_id=10,
+            object_entity_id=100,
+            subject_kind="character",
+            object_kind="faction",
+            tag="status:junior",
+        )
+
+
+def test_status_bestowal_persists_template_and_clearance_chunk_provenance() -> None:
+    cur = _PairCursor(
+        entity_pair_tags=[_active(10, 100, "status:junior")],
+    )
+
+    assert apply_status_pair_tag_bestowal(
+        cur,
+        subject_entity_id=10,
+        scope_faction_entity_id=100,
+        subject_kind="character",
+        level="senior",
+        source_chunk_id=73,
+        template_id="retrograde:maturation_job_1_event_1",
+    )
+
+    active = [row for row in cur.entity_pair_tags if row["cleared_at"] is None]
+    assert active[0]["template_id"] == "retrograde:maturation_job_1_event_1"
+    assert cur.clearance_log_rows[0]["source_chunk_id"] == 73

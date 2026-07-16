@@ -37,7 +37,11 @@ from scripts.api_openai import OpenAIProvider
 class FakeRegistryCursor:
     """Cursor stand-in serving a tiny in-memory tag registry."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        entities_by_name: Optional[dict[str, list[str]]] = None,
+    ) -> None:
         # tag -> (id, category, is_ephemeral, reapplication_policy)
         self.tags = {
             "human": (1, "bodyform", False, None),
@@ -48,7 +52,17 @@ class FakeRegistryCursor:
         self.pair_tags = {
             "protects": (11, ["character", "faction"], ["place"]),
             "contact:social": (12, ["character"], ["character"]),
+            "status:junior": (13, ["character", "faction"], ["faction"]),
         }
+        self.entities_by_name = (
+            {
+                "Brena Tideloft": ["character"],
+                "The Lower Sluice": ["place"],
+                "The Sluice Guild": ["faction"],
+            }
+            if entities_by_name is None
+            else entities_by_name
+        )
         self.categories_by_kind = {
             "character": {"bodyform", "disposition"},
             "place": {"place_class"},
@@ -64,7 +78,12 @@ class FakeRegistryCursor:
         return False
 
     def execute(self, sql: str, params: Tuple[Any, ...] = ()) -> None:
-        if "tag_category_registry" in sql:
+        if "SELECT entity_kind" in sql:
+            self._result = [
+                (kind,) for kind in self.entities_by_name.get(str(params[0]), [])
+            ]
+            self._one = self._result[0] if self._result else None
+        elif "tag_category_registry" in sql:
             kind = params[0]
             self._result = [
                 (category,) for category in sorted(self.categories_by_kind[kind])
@@ -256,6 +275,91 @@ def test_registered_new_entity_hints_produce_no_issues() -> None:
     )
 
     assert collect_orrery_tag_issues(response, FakeRegistryCursor()) == []
+
+
+@pytest.mark.parametrize(
+    ("other_entity_name", "entities_by_name", "message"),
+    [
+        ("Nobody There", {}, "does not resolve"),
+        (
+            "Shared Name",
+            {"Shared Name": ["character", "faction"]},
+            "is ambiguous",
+        ),
+        ("Marra Kest", {}, "cannot name the declared entity itself"),
+    ],
+)
+def test_generation_rejects_unusable_pair_hint_endpoints(
+    other_entity_name: str,
+    entities_by_name: dict[str, list[str]],
+    message: str,
+) -> None:
+    response = _storyteller_response(
+        pair_tag_hints=[
+            {
+                "tag": "contact:social",
+                "other_entity_name": other_entity_name,
+                "declared_entity_role": "subject",
+            }
+        ]
+    )
+
+    issues = collect_orrery_tag_issues(
+        response,
+        FakeRegistryCursor(entities_by_name=entities_by_name),
+    )
+
+    assert any("other_entity_name" in issue and message in issue for issue in issues)
+
+
+def test_generation_rejects_status_hint_with_non_faction_scope() -> None:
+    response = _storyteller_response(
+        pair_tag_hints=[
+            {
+                "tag": "status:junior",
+                "other_entity_name": "Brena Tideloft",
+                "declared_entity_role": "subject",
+            }
+        ]
+    )
+
+    issues = collect_orrery_tag_issues(response, FakeRegistryCursor())
+
+    assert any("object endpoint to be a faction" in issue for issue in issues)
+
+
+def test_generation_accepts_same_batch_pair_hint_endpoint() -> None:
+    declarations = [
+        NewEntityDeclaration.model_validate(
+            {
+                "kind": "character",
+                "name": "Marra Kest",
+                "summary": "A sluice keeper with divided loyalties.",
+                "pair_tag_hints": [
+                    {
+                        "tag": "status:junior",
+                        "other_entity_name": "The New Assembly",
+                        "declared_entity_role": "subject",
+                    }
+                ],
+            }
+        ),
+        NewEntityDeclaration.model_validate(
+            {
+                "kind": "faction",
+                "name": "The New Assembly",
+                "summary": "A newly chartered institution.",
+            }
+        ),
+    ]
+
+    assert (
+        collect_orrery_tag_issues(
+            _response(new_entities=declarations),
+            FakeRegistryCursor(entities_by_name={}),
+        )
+        == []
+    )
 
 
 def test_declaration_schema_describes_generation_and_commit_validation() -> None:
