@@ -39,6 +39,7 @@ def collect_new_entity_declaration_vocabulary_issues(
 
         for hint_index, hint in enumerate(declaration.pair_tag_hints):
             hint_path = f"{path}.pair_tag_hints[{hint_index}]"
+            tag_is_valid = True
             try:
                 validate_pair_tag_endpoint(
                     cur,
@@ -47,6 +48,7 @@ def collect_new_entity_declaration_vocabulary_issues(
                     role=hint.declared_entity_role,
                 )
             except ValueError as exc:
+                tag_is_valid = False
                 issues.append(f"{hint_path}.tag: {exc}")
 
             endpoint_kind, endpoint_issue = _resolve_hint_endpoint_kind(
@@ -58,6 +60,20 @@ def collect_new_entity_declaration_vocabulary_issues(
             if endpoint_issue is not None:
                 issues.append(f"{hint_path}.other_entity_name: {endpoint_issue}")
                 continue
+
+            if endpoint_kind is not None and tag_is_valid:
+                other_role = (
+                    "object" if hint.declared_entity_role == "subject" else "subject"
+                )
+                try:
+                    validate_pair_tag_endpoint(
+                        cur,
+                        tag=hint.tag,
+                        entity_kind=endpoint_kind,
+                        role=other_role,
+                    )
+                except ValueError as exc:
+                    issues.append(f"{hint_path}.other_entity_name: {exc}")
 
             if hint.tag.startswith("status:"):
                 scope_kind = (

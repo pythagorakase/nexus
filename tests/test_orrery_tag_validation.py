@@ -312,6 +312,35 @@ def test_generation_rejects_unusable_pair_hint_endpoints(
     assert any("other_entity_name" in issue and message in issue for issue in issues)
 
 
+def test_generation_rejects_wrong_kind_resolved_endpoint() -> None:
+    """A resolvable endpoint whose kind the registry forbids fails at generation.
+
+    Regression for PR #515 review: contact:social (character->character) with a
+    place endpoint previously passed generation and wedged the accept
+    transaction inside apply_pair_tag_bestowal.
+    """
+
+    response = _storyteller_response(
+        pair_tag_hints=[
+            {
+                "tag": "contact:social",
+                "other_entity_name": "Gullwharf Market",
+                "declared_entity_role": "subject",
+            }
+        ]
+    )
+
+    issues = collect_orrery_tag_issues(
+        response,
+        FakeRegistryCursor(entities_by_name={"Gullwharf Market": ["place"]}),
+    )
+
+    assert any(
+        "other_entity_name" in issue and "does not allow object_kind='place'" in issue
+        for issue in issues
+    )
+
+
 def test_generation_rejects_status_hint_with_non_faction_scope() -> None:
     response = _storyteller_response(
         pair_tag_hints=[
