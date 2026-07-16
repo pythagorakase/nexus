@@ -4,8 +4,8 @@ This module is the read-only bridge between the explain layer
 (:mod:`nexus.agents.orrery.explain`) and real slot databases. It mirrors
 :func:`nexus.agents.orrery.resolver.resolve_dry_run` **exactly** — the same
 hydration, the same actor-only / two-party stack split, the same binding
-composition (including threading the actor set through
-``compose_actor_target_bindings``), and the same present-target pressure pass —
+composition (including source-aware routing through
+``compose_actor_target_routes``), and the same present-target pressure pass —
 but runs :func:`explain_stack` per binding set so every template's gate and
 branch trace is retained, not just the winner.
 
@@ -68,10 +68,11 @@ from nexus.agents.orrery.resolver import (
     _render_bound_text,
     _scene_pressure_from_need_spec,
     compose_actor_bindings,
-    compose_actor_target_bindings,
+    compose_actor_target_routes,
     hydrate_world_state,
 )
 from nexus.agents.orrery.substrate import (
+    Bindings,
     coerce_branch_selection,
     coerce_habituation,
     coerce_package_selection,
@@ -557,19 +558,23 @@ def explain_dry_run(
         for template in actor_target_templates
         if template.present_target_policy is PresentTargetPolicy.STORYTELLER_PRESSURE
     ]
-    offscreen_pair_bindings: Sequence[dict[Slot, Any]] = ()
-    present_pair_bindings: Sequence[dict[Slot, Any]] = ()
+    offscreen_pair_routes: Tuple[Tuple[Bindings, Tuple[Template, ...]], ...] = ()
+    present_pair_routes: Tuple[Tuple[Bindings, Tuple[Template, ...]], ...] = ()
     if actor_target_templates:
-        offscreen_pair_bindings = compose_actor_target_bindings(
+        offscreen_pair_routes = compose_actor_target_routes(
             session,
+            state=state,
+            templates=actor_target_templates,
             anchor_chunk_id=anchor_chunk_id,
             window_chunks=window_chunks,
             actor_ids=actor_ids,
             target_presence="offscreen",
         )
         if pressure_templates:
-            present_pair_bindings = compose_actor_target_bindings(
+            present_pair_routes = compose_actor_target_routes(
                 session,
+                state=state,
+                templates=pressure_templates,
                 anchor_chunk_id=anchor_chunk_id,
                 window_chunks=window_chunks,
                 actor_ids=actor_ids,
@@ -594,10 +599,10 @@ def explain_dry_run(
                 package_selection,
             )
         two_party_stacks: dict[int, List[StackExplanation]] = {}
-        for pair_bindings in offscreen_pair_bindings:
+        for pair_bindings, routed_templates in offscreen_pair_routes:
             two_party_stacks.setdefault(pair_bindings[Slot.ACTOR], []).append(
                 explain_stack(
-                    actor_target_templates,
+                    routed_templates,
                     tick_state,
                     pair_bindings,
                     selection,
@@ -606,10 +611,10 @@ def explain_dry_run(
                 )
             )
         pressure_stacks: dict[int, List[StackExplanation]] = {}
-        for pair_bindings in present_pair_bindings:
+        for pair_bindings, routed_templates in present_pair_routes:
             pressure_stacks.setdefault(pair_bindings[Slot.ACTOR], []).append(
                 explain_stack(
-                    pressure_templates,
+                    routed_templates,
                     tick_state,
                     pair_bindings,
                     selection,

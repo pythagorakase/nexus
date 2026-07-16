@@ -214,6 +214,7 @@ class ProjectState:
     stage: str
     target_place_id: Optional[int] = None
     target_character_entity_id: Optional[int] = None
+    target_character_is_active: bool = False
     progress: float = 0.0
     stall_count: int = 0
     next_eligible_at_world_time: Optional[datetime] = None
@@ -1163,6 +1164,24 @@ def project_due(
             f"Unsupported project_due project type {project_type!r}; "
             f"expected one of {sorted(_PROJECT_STAGE_LADDERS)}"
         )
+    project_stages = _PROJECT_STAGE_LADDERS[project_type]
+    type_modes = {
+        "start",
+        "exists",
+        "ready",
+        "abandon",
+        "completion",
+        "neglected",
+        *project_stages,
+        *(f"{stage}_milestone" for stage in project_stages[:-1]),
+    }
+    if project_type == "plan_relocation":
+        type_modes.add("scouting_without_target")
+    if normalized_mode not in type_modes:
+        raise ValueError(
+            f"project_due mode {normalized_mode!r} is not valid for project "
+            f"type {project_type!r}; expected one of {sorted(type_modes)}"
+        )
 
     def _condition(state: WorldState, bindings: Bindings) -> bool:
         policy = state.project_policy
@@ -1216,7 +1235,6 @@ def project_due(
             return due and overdue_hours >= policy.advance_interval_hours
         if not due:
             return False
-        project_stages = _PROJECT_STAGE_LADDERS[project_type]
         if normalized_mode in project_stages:
             return project.stage == normalized_mode
         if normalized_mode == f"{project_stages[0]}_milestone":
@@ -1270,6 +1288,30 @@ def project_target_is(slot: Slot = Slot.TARGET) -> Condition:
         )
 
     return _named(_condition, f"project_target_is({slot.value})")
+
+
+def project_target_is_active(slot: Slot = Slot.TARGET) -> Condition:
+    """Return whether the bound project target is an active character.
+
+    Target identity and availability are separate predicates so a durable
+    project can keep binding its original target after that entity retires or
+    changes kind, then deterministically abandon instead of stranding the
+    actor's one-open-project budget.
+    """
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        actor_entity_id = _slot_entity(bindings, Slot.ACTOR)
+        target_entity_id = _slot_entity(bindings, slot)
+        if actor_entity_id is None or target_entity_id is None:
+            return False
+        project = state.project_states.get(actor_entity_id)
+        return bool(
+            project is not None
+            and project.target_character_entity_id == target_entity_id
+            and project.target_character_is_active
+        )
+
+    return _named(_condition, f"project_target_is_active({slot.value})")
 
 
 def has_travel_destination(slot: Slot = Slot.ACTOR) -> Condition:
@@ -2081,6 +2123,10 @@ class Template:
     # this authoring metadata on Template prevents one package's broader
     # starting substrate from changing every other two-party package.
     starts_from_social_contact: bool = False
+    # Character-targeted project continuations bind TARGET from the durable
+    # open-project projection. This remains valid if the contact or
+    # relationship edge that originally sourced the project later clears.
+    binds_project_target: bool = False
     priority_override_rationale: Optional[str] = None
     drive_band_priority_exempt: bool = False
 

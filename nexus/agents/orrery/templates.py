@@ -47,6 +47,7 @@ from nexus.agents.orrery.substrate import (
     lacks_pair_tag,
     project_due,
     project_target_is,
+    project_target_is_active,
     recent_event,
     relationship_is_asymmetric,
     relationship_is_mutual_warm,
@@ -4717,6 +4718,7 @@ ADVANCE_RECRUIT_ALLY = Template(
         "seals commitment, stalls, or ends."
     ),
     required_slots=(Slot.ACTOR, Slot.TARGET),
+    binds_project_target=True,
     package_gate=AND(
         project_due("ready", project_type="recruit_ally"),
         project_target_is(Slot.TARGET),
@@ -4731,6 +4733,28 @@ ADVANCE_RECRUIT_ALLY = Template(
         ),
     ),
     branches=(
+        Branch(
+            label="End a recruitment whose candidate is no longer available",
+            conditions=NOT(project_target_is_active(Slot.TARGET)),
+            narrative_stub=(
+                "{actor}'s intended recruit is no longer someone an alliance "
+                "can be made with. The project ends cleanly rather than "
+                "holding open a promise that cannot be answered."
+            ),
+            state_delta={
+                "project.abandon": {
+                    "reason": "target_inactive_or_non_character",
+                    "milestone": True,
+                }
+            },
+            event_type="recruit_ally_abandoned",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.source_chunk_id",
+            ),
+            magnitude=0.40,
+            preemptive=True,
+        ),
         Branch(
             label="Seal the alliance",
             conditions=AND(
@@ -4867,6 +4891,25 @@ ADVANCE_RECRUIT_ALLY = Template(
             preemptive=True,
         ),
         Branch(
+            label="Lose ground through neglect",
+            conditions=project_due("neglected", project_type="recruit_ally"),
+            narrative_stub=(
+                "Silence does work of its own. A missed promise or unanswered "
+                "opening leaves {target} less certain that {actor}'s proposed "
+                "alliance deserves the risk."
+            ),
+            state_delta={"project.stall": {"increment": 1}},
+            event_type="recruit_ally_stalled",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.stall_count",
+                "character_project_states.next_eligible_at_world_time",
+            ),
+            magnitude=0.10,
+            promotable=False,
+            preemptive=True,
+        ),
+        Branch(
             label="Learn what the candidate actually wants",
             conditions=project_due("sounding_out", project_type="recruit_ally"),
             narrative_stub=(
@@ -4899,24 +4942,6 @@ ADVANCE_RECRUIT_ALLY = Template(
                 "character_project_states.next_eligible_at_world_time",
             ),
             magnitude=0.18,
-            promotable=False,
-        ),
-        Branch(
-            label="Lose ground through neglect",
-            conditions=project_due("neglected", project_type="recruit_ally"),
-            narrative_stub=(
-                "Silence does work of its own. A missed promise or unanswered "
-                "opening leaves {target} less certain that {actor}'s proposed "
-                "alliance deserves the risk."
-            ),
-            state_delta={"project.stall": {"increment": 1}},
-            event_type="recruit_ally_stalled",
-            changed_fields=(
-                "character_project_states.status",
-                "character_project_states.stall_count",
-                "character_project_states.next_eligible_at_world_time",
-            ),
-            magnitude=0.10,
             promotable=False,
         ),
         Branch(

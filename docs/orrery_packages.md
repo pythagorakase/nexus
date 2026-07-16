@@ -1143,7 +1143,18 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
       - actor has `thirst` debt ≥ 2
       - actor has `hunger` debt ≥ 4
 
-### Branch 1 — Seal the alliance  *(mag 0.4)* · **preemptive**
+### Branch 1 — End a recruitment whose candidate is no longer available  *(mag 0.4)* · **preemptive**
+
+**When:**
+
+- **NOT:** target is the project's active-character recruit
+
+**Does:** applies project `abandon` transition
+**Event:** `recruit_ally_abandoned`
+
+> {actor}'s intended recruit is no longer someone an alliance can be made with. The project ends cleanly rather than holding open a promise that cannot be answered.
+
+### Branch 2 — Seal the alliance  *(mag 0.4)* · **preemptive**
 
 **When:**
 
@@ -1157,7 +1168,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} and {target} stop speaking in contingencies. The understanding becomes a commitment: when the cost arrives, {actor} may call on {target} as an ally.
 
-### Branch 2 — Withdraw after a hostile turn  *(mag 0.4)* · **preemptive**
+### Branch 3 — Withdraw after a hostile turn  *(mag 0.4)* · **preemptive**
 
 **When:**
 
@@ -1170,7 +1181,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > Whatever possibility {actor} saw in {target} has hardened into danger or contempt. {actor} ends the recruitment before hope becomes leverage in hostile hands.
 
-### Branch 3 — Let the recruitment go rather than force it  *(mag 0.4)* · **preemptive**
+### Branch 4 — Let the recruitment go rather than force it  *(mag 0.4)* · **preemptive**
 
 **When:** actor `recruit_ally` project passes `abandon` due-state
 
@@ -1179,7 +1190,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} admits that the invitation has become a ritual of delay. They stop pressing {target} for a promise that is not coming and release the unfinished alliance.
 
-### Branch 4 — Turn interest into earned trust  *(mag 0.4)* · **preemptive**
+### Branch 5 — Turn interest into earned trust  *(mag 0.4)* · **preemptive**
 
 **When:** actor `recruit_ally` project passes `sounding_out_milestone` due-state
 
@@ -1188,7 +1199,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {target} has heard enough to take the possibility seriously. Now {actor} must prove that the offered alliance is reliable, not merely attractive.
 
-### Branch 5 — Ask for a real commitment  *(mag 0.4)* · **preemptive**
+### Branch 6 — Ask for a real commitment  *(mag 0.4)* · **preemptive**
 
 **When:** actor `recruit_ally` project passes `earning_trust_milestone` due-state
 
@@ -1197,25 +1208,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > The small proofs have accumulated. {actor} can finally ask {target} for the thing underneath them: a commitment that will still hold when cooperation becomes costly.
 
-### Branch 6 — Learn what the candidate actually wants  *(mag 0.18)* · **not promotable**
-
-**When:** actor `recruit_ally` project passes `sounding_out` due-state
-
-**Does:** applies project `advance` transition
-**Event:** `recruit_ally_progressed`
-
-> {actor} listens past {target}'s first answer and learns what would make an alliance matter to them, not merely to its would-be recruiter.
-
-### Branch 7 — Prove reliable in a small consequential way  *(mag 0.18)* · **not promotable**
-
-**When:** actor `recruit_ally` project passes `earning_trust` due-state
-
-**Does:** applies project `advance` transition
-**Event:** `recruit_ally_progressed`
-
-> {actor} gives {target} evidence instead of assurances: one promise kept where breaking it would have been easier.
-
-### Branch 8 — Lose ground through neglect  *(mag 0.1)* · **not promotable**
+### Branch 7 — Lose ground through neglect  *(mag 0.1)* · **preemptive** · **not promotable**
 
 **When:** actor `recruit_ally` project passes `neglected` due-state
 
@@ -1224,7 +1217,25 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > Silence does work of its own. A missed promise or unanswered opening leaves {target} less certain that {actor}'s proposed alliance deserves the risk.
 
-### Branch 9 — Make the next commitment concrete  *(mag 0.16)* · **not promotable**
+### Branch 8 — Learn what the candidate actually wants  *(mag 0.18)* · **not promotable**
+
+**When:** actor `recruit_ally` project passes `sounding_out` due-state
+
+**Does:** applies project `advance` transition
+**Event:** `recruit_ally_progressed`
+
+> {actor} listens past {target}'s first answer and learns what would make an alliance matter to them, not merely to its would-be recruiter.
+
+### Branch 9 — Prove reliable in a small consequential way  *(mag 0.18)* · **not promotable**
+
+**When:** actor `recruit_ally` project passes `earning_trust` due-state
+
+**Does:** applies project `advance` transition
+**Event:** `recruit_ally_progressed`
+
+> {actor} gives {target} evidence instead of assurances: one promise kept where breaking it would have been easier.
+
+### Branch 10 — Make the next commitment concrete  *(mag 0.16)* · **not promotable**
 
 **When:** *(always)*
 

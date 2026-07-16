@@ -11,6 +11,7 @@ from nexus.agents.orrery.resolver import (
     OrreryResolutionDraft,
     _need_pressure_stub,
     compose_actor_target_bindings,
+    compose_actor_target_routes,
     hydrate_world_state,
     resolve_dry_run,
 )
@@ -20,12 +21,19 @@ from nexus.agents.orrery.substrate import (
     Branch,
     DriveBand,
     PresentTargetPolicy,
+    ProjectPolicy,
+    ProjectState,
     Slot,
     Template,
+    WorldState,
     trust_at_least,
     trust_below,
 )
-from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
+from nexus.agents.orrery.templates import (
+    ADVANCE_RECRUIT_ALLY,
+    BUILTIN_TEMPLATES,
+    START_RECRUIT_ALLY,
+)
 
 
 class FakeResult:
@@ -197,6 +205,8 @@ class FakeSession:
         if "/* orrery:project_states */" in sql:
             assert "JOIN entities e" in sql
             assert "e.is_active = true" in sql
+            assert "target_entity.kind = 'character'" in sql
+            assert "target_entity.is_active" in sql
             return FakeResult(self.project_state_rows)
         if "/* orrery:win_history */" in sql:
             return FakeResult(self.win_history_rows)
@@ -1208,6 +1218,39 @@ def test_hydrate_world_state_loads_travel_states() -> None:
     assert travel.estimated_duration_minutes == pytest.approx(18.6)
 
 
+def test_hydrate_world_state_retains_project_with_inactive_target() -> None:
+    """Hydration retains an inactive recruit so its project can abandon."""
+
+    state = hydrate_world_state(
+        FakeSession(
+            project_state_rows=[
+                {
+                    "id": 7,
+                    "character_entity_id": 1,
+                    "project_type": "recruit_ally",
+                    "status": "active",
+                    "stage": "earning_trust",
+                    "target_place_id": None,
+                    "target_character_entity_id": 2,
+                    "target_character_is_active": False,
+                    "progress": 0.5,
+                    "stall_count": 0,
+                    "next_eligible_at_world_time": None,
+                    "source_chunk_id": 99,
+                }
+            ]
+        ),
+        anchor_chunk_id=100,
+        window_chunks=30,
+        project_settings=ProjectPolicy(enabled=True),
+    )
+
+    project = state.project_states[1]
+    assert project.target_character_entity_id == 2
+    assert project.target_character_is_active is False
+    assert project.status == "active"
+
+
 def test_hydrate_world_state_loads_semantic_place_classes() -> None:
     """Place tags supplement structural place types for location predicates."""
 
@@ -1826,6 +1869,92 @@ def test_compose_actor_target_bindings_includes_directed_social_contacts() -> No
 
     pairs = {(b[Slot.ACTOR], b[Slot.TARGET]) for b in bindings}
     assert pairs == {(1, 2)}
+
+
+def test_actor_target_routes_preserve_contact_only_recruitment_continuity() -> None:
+    """A cleared contact cannot strand its durable RECRUIT_ALLY project."""
+
+    templates = (START_RECRUIT_ALLY, ADVANCE_RECRUIT_ALLY)
+    social_session = FakeSession(
+        actor_target_social_contact_rows=[
+            {"source_entity_id": 1, "target_entity_id": 2},
+        ],
+    )
+    social_routes = compose_actor_target_routes(
+        social_session,
+        state=WorldState(),
+        templates=templates,
+        anchor_chunk_id=100,
+        window_chunks=30,
+        actor_ids={1},
+    )
+    assert [
+        (
+            route[0][Slot.ACTOR],
+            route[0][Slot.TARGET],
+            tuple(template.id for template in route[1]),
+        )
+        for route in social_routes
+    ] == [(1, 2, ("start_recruit_ally",))]
+
+    project_state = WorldState(
+        project_states={
+            1: ProjectState(
+                id=7,
+                project_type="recruit_ally",
+                status="active",
+                stage="sounding_out",
+                target_character_entity_id=2,
+                target_character_is_active=True,
+            )
+        }
+    )
+    project_routes = compose_actor_target_routes(
+        FakeSession(),
+        state=project_state,
+        templates=templates,
+        anchor_chunk_id=100,
+        window_chunks=30,
+        actor_ids={1},
+    )
+    assert [
+        (
+            route[0][Slot.ACTOR],
+            route[0][Slot.TARGET],
+            tuple(template.id for template in route[1]),
+        )
+        for route in project_routes
+    ] == [(1, 2, ("advance_recruit_ally",))]
+
+    unavailable_state = WorldState(
+        project_states={
+            1: ProjectState(
+                id=7,
+                project_type="recruit_ally",
+                status="active",
+                stage="sounding_out",
+                target_character_entity_id=2,
+                target_character_is_active=False,
+            )
+        }
+    )
+    unavailable_routes = compose_actor_target_routes(
+        FakeSession(),
+        state=unavailable_state,
+        templates=templates,
+        anchor_chunk_id=100,
+        window_chunks=30,
+        actor_ids={1},
+    )
+    assert [
+        (
+            route[0][Slot.ACTOR],
+            route[0][Slot.TARGET],
+            tuple(template.id for template in route[1]),
+        )
+        for route in unavailable_routes
+    ] == [(1, 2, ("advance_recruit_ally",))]
+    assert unavailable_state.project_states[1].status == "active"
 
 
 def test_compose_actor_target_bindings_filters_to_recently_relevant_actors() -> None:

@@ -29,7 +29,9 @@ from nexus.agents.orrery.substrate import (
     TravelState,
     WorldState,
     evaluate,
+    project_due,
     project_target_is,
+    project_target_is_active,
 )
 from nexus.agents.orrery.templates import (
     ADVANCE_RECRUIT_ALLY,
@@ -88,6 +90,7 @@ def _project(
         status="active",
         stage=stage,
         target_character_entity_id=target,
+        target_character_is_active=True,
         progress=progress,
         stall_count=stall_count,
         next_eligible_at_world_time=due_at,
@@ -171,10 +174,89 @@ def test_project_target_predicate_and_explain_enforce_continuity() -> None:
     )
 
 
-def test_neglect_and_hostile_turn_choose_abandonment_paths() -> None:
+def test_inactive_project_target_preemptively_abandons_without_mutation() -> None:
+    """A dead or retired recruit releases the budget without other writes."""
+
+    project = replace(_project(), target_character_is_active=False)
+    state = _advance_state(project)
+
+    resolution = evaluate(ADVANCE_RECRUIT_ALLY, state, BINDINGS)
+    trace = explain_stack((ADVANCE_RECRUIT_ALLY,), state, BINDINGS).to_dict()[
+        "templates"
+    ][0]
+    evidence = next(
+        leaf["evidence"]
+        for leaf in _leaves(trace["gate_trace"])
+        if leaf["raw"] == "project_target_is(target)"
+    )
+
+    active_evidence = next(
+        leaf["evidence"]
+        for leaf in _leaves(trace["branches"][0]["trace"])
+        if leaf["raw"] == "project_target_is_active(target)"
+    )
+
+    assert project_target_is(Slot.TARGET)(state, BINDINGS) is True
+    assert project_target_is_active(Slot.TARGET)(state, BINDINGS) is False
+    assert resolution.passes is True
+    assert resolution.branch_label == (
+        "End a recruitment whose candidate is no longer available"
+    )
+    assert resolution.state_delta == {
+        "project.abandon": {
+            "reason": "target_inactive_or_non_character",
+            "milestone": True,
+        }
+    }
+    assert "entity_pair_tags.add_outbound" not in resolution.state_delta
+    assert "project.advance" not in resolution.state_delta
+    assert state.project_states[ACTOR] is project
+    assert project.status == "active"
+    assert evidence["result"] is True
+    assert active_evidence["observed"]["project_target_is_active"] is False
+    assert active_evidence["observed"]["explanation"] == (
+        "project's recruit is inactive or not a character"
+    )
+
+
+@pytest.mark.parametrize(
+    ("mode", "project_type"),
+    [
+        ("saving", "recruit_ally"),
+        ("sounding_out", "plan_relocation"),
+    ],
+)
+def test_project_due_rejects_modes_from_another_project_ladder(
+    mode: str, project_type: str
+) -> None:
+    with pytest.raises(ValueError, match="is not valid for project type"):
+        project_due(mode, project_type=project_type)
+
+
+@pytest.mark.parametrize(
+    "stage", ("sounding_out", "earning_trust", "sealing_commitment")
+)
+@pytest.mark.parametrize(
+    "selection",
+    (
+        BranchSelection(mode="authored_order"),
+        BranchSelection(mode="stochastic", temperature=0.25, seed_salt=""),
+        BranchSelection(mode="stochastic", temperature=0.25, seed_salt="alpha"),
+        BranchSelection(mode="stochastic", temperature=0.25, seed_salt="omega"),
+    ),
+    ids=(
+        "authored-order",
+        "configured-stochastic",
+        "stochastic-alpha",
+        "stochastic-omega",
+    ),
+)
+def test_neglect_preempts_routine_progress_at_every_stage(
+    stage: str, selection: BranchSelection
+) -> None:
     neglected = _advance_state(
         _project(
-            stage="sealing_commitment",
+            stage=stage,
             progress=0.5,
             due_at=NOW - timedelta(hours=POLICY.advance_interval_hours),
         )
@@ -183,11 +265,13 @@ def test_neglect_and_hostile_turn_choose_abandonment_paths() -> None:
         ADVANCE_RECRUIT_ALLY,
         neglected,
         BINDINGS,
-        BranchSelection(mode="authored_order"),
+        selection,
     )
     assert setback.branch_label == "Lose ground through neglect"
     assert setback.state_delta == {"project.stall": {"increment": 1}}
 
+
+def test_hostile_turn_chooses_abandonment_path() -> None:
     hostile = replace(
         _advance_state(_project(stage="earning_trust", progress=0.5)),
         pair_tags={(TARGET, ACTOR): frozenset({"hostile_to"})},
@@ -282,12 +366,17 @@ def _live_project_row(db: dict[str, Any]) -> ProjectState:
     with db["conn"].cursor() as cur:
         cur.execute(
             """
-            SELECT id, project_type, status, stage, target_place_id,
-                   target_character_entity_id, progress, stall_count,
-                   next_eligible_at_world_time, source_chunk_id
-            FROM character_project_states
-            WHERE character_entity_id = %s
-            ORDER BY id DESC LIMIT 1
+            SELECT cps.id, cps.project_type, cps.status, cps.stage,
+                   cps.target_place_id, cps.target_character_entity_id,
+                   COALESCE(target_entity.is_active, false), cps.progress,
+                   cps.stall_count, cps.next_eligible_at_world_time,
+                   cps.source_chunk_id
+            FROM character_project_states cps
+            LEFT JOIN entities target_entity
+              ON target_entity.id = cps.target_character_entity_id
+             AND target_entity.kind = 'character'
+            WHERE cps.character_entity_id = %s
+            ORDER BY cps.id DESC LIMIT 1
             """,
             (db["actor"],),
         )
@@ -300,10 +389,11 @@ def _live_project_row(db: dict[str, Any]) -> ProjectState:
         stage=str(row[3]),
         target_place_id=row[4],
         target_character_entity_id=row[5],
-        progress=float(row[6]),
-        stall_count=int(row[7]),
-        next_eligible_at_world_time=row[8],
-        source_chunk_id=row[9],
+        target_character_is_active=bool(row[6]),
+        progress=float(row[7]),
+        stall_count=int(row[8]),
+        next_eligible_at_world_time=row[9],
+        source_chunk_id=row[10],
     )
 
 
@@ -476,6 +566,59 @@ def test_live_stage_ladder_completion_and_applied_ledger(
 
 
 @pytest.mark.requires_postgres
+def test_live_neglect_applies_recruitment_setback(
+    live_project_db: dict[str, Any],
+) -> None:
+    """A neglected recruitment persists its stalled projection and ledger."""
+
+    db = live_project_db
+    actor = int(db["actor"])
+    target = int(db["target"])
+    with db["conn"].cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO character_project_states (
+                character_entity_id, project_type, status, stage,
+                target_character_entity_id, progress, stall_count,
+                next_eligible_at_world_time, source_chunk_id
+            ) VALUES (
+                %s, 'recruit_ally', 'active', 'sealing_commitment',
+                %s, 0.5, 0, %s, %s
+            )
+            """,
+            (
+                actor,
+                target,
+                NOW - timedelta(hours=POLICY.advance_interval_hours),
+                int(db["chunk_id"]),
+            ),
+        )
+    project = _live_project_row(db)
+    state = _advance_state(project, actor=actor, world_time=NOW)
+    setback = evaluate(
+        ADVANCE_RECRUIT_ALLY,
+        state,
+        {Slot.ACTOR: actor, Slot.TARGET: target},
+        BranchSelection(mode="authored_order"),
+    )
+    assert setback.branch_label == "Lose ground through neglect"
+    resolution_id = _apply_draft(db, _draft_from_resolution(setback, state=state))
+
+    stalled = _live_project_row(db)
+    assert stalled.status == "stalled"
+    assert stalled.stall_count == 1
+    with db["conn"].cursor() as cur:
+        cur.execute(
+            "SELECT state_delta FROM orrery_resolutions WHERE id = %s",
+            (resolution_id,),
+        )
+        applied = cur.fetchone()[0]["project.stall"]["applied"]
+    assert applied["status"] == "stalled"
+    assert applied["stall_count"] == 1
+    assert applied["target_character_entity_id"] == target
+
+
+@pytest.mark.requires_postgres
 def test_live_schema_target_discipline_and_one_project_budget(
     live_project_db: dict[str, Any],
 ) -> None:
@@ -544,3 +687,261 @@ def test_live_schema_target_discipline_and_one_project_budget(
         },
     )
     assert evaluate(START_RECRUIT_ALLY, blocked, BINDINGS).passes is False
+
+
+@pytest.mark.requires_postgres
+def test_slot2_recruitment_routes_persisted_target_without_routine_drift() -> None:
+    """A 35-anchor run keeps recruitment routable after its contact clears."""
+
+    from sqlalchemy import create_engine, text
+    from sqlalchemy.orm import Session
+
+    from nexus.agents.orrery.coverage import analyze_coverage, sample_anchor_ids
+    from nexus.agents.orrery.resolver import resolve_dry_run
+    from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
+    from nexus.config import load_settings_as_dict
+
+    orrery = load_settings_as_dict()["orrery"]
+    engine = create_engine(get_slot_db_url(slot=2))
+    connection = engine.connect()
+    transaction = connection.begin()
+    session = Session(bind=connection)
+    try:
+        anchors = sample_anchor_ids(session, count=35, stride=1)
+        assert len(anchors) == 35, "save_02 must provide 35 coverage anchors"
+        kwargs = {
+            "anchor_chunk_ids": anchors,
+            "window_chunks": int(orrery["binding"]["window_chunks"]),
+            "sunhelm_settings": orrery.get("sunhelm"),
+            "epoch_min_world_times": int(
+                orrery["dashboard"]["coverage_epoch_min_world_times"]
+            ),
+            "selection_settings": orrery.get("selection"),
+            "habituation_settings": orrery.get("habituation"),
+            "package_selection_settings": orrery.get("package_selection"),
+            "project_settings": orrery.get("projects"),
+            "epistemics_settings": orrery.get("epistemics"),
+            "fanout_settings": orrery.get("fanout"),
+        }
+        baseline = analyze_coverage(session, BUILTIN_TEMPLATES, **kwargs)
+        surveil_rows = [
+            winner
+            for anchor in baseline["anchors"]
+            for winner in anchor["resolution_winners"]
+            if winner["template_id"] == "surveil"
+            and winner["target_entity_id"] is not None
+        ]
+        open_project_actor_ids = set(
+            session.execute(
+                text(
+                    """
+                    SELECT character_entity_id
+                    FROM character_project_states
+                    WHERE status IN ('active', 'paused', 'stalled')
+                    """
+                )
+            ).scalars()
+        )
+        surveil_rows = [
+            winner
+            for winner in surveil_rows
+            if int(winner["actor_entity_id"]) not in open_project_actor_ids
+        ]
+        assert surveil_rows, (
+            "slot 2 anchors must include a surveillance actor without an "
+            "open project"
+        )
+        actor = int(surveil_rows[0]["actor_entity_id"])
+        assert actor not in open_project_actor_ids
+        target = session.execute(
+            text(
+                """
+                SELECT e.id
+                FROM entities e
+                WHERE e.kind = 'character'
+                  AND e.is_active = true
+                  AND e.id <> :actor
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM entity_relationships_v er
+                      WHERE er.relationship_scope = 'character'
+                        AND (
+                            (er.source_entity_id = :actor
+                             AND er.target_entity_id = e.id)
+                            OR
+                            (er.source_entity_id = e.id
+                             AND er.target_entity_id = :actor)
+                        )
+                  )
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM chunk_character_references ccr
+                      JOIN characters c ON c.id = ccr.character_id
+                      WHERE c.entity_id = e.id
+                        AND ccr.chunk_id = :anchor
+                        AND ccr.reference = 'present'
+                  )
+                ORDER BY e.id
+                LIMIT 1
+                """
+            ),
+            {"actor": actor, "anchor": anchors[0]},
+        ).scalar_one_or_none()
+        if target is None:
+            pytest.skip("slot 2 needs an unrelated off-screen recruit target")
+        target = int(target)
+        earliest_world_time = session.execute(
+            text(
+                """
+                SELECT min(cm.world_time)
+                FROM chunk_metadata cm
+                WHERE cm.chunk_id = ANY(:anchors)
+                """
+            ),
+            {"anchors": anchors},
+        ).scalar_one()
+        assert earliest_world_time is not None
+        session.execute(
+            text(
+                """
+                INSERT INTO character_project_states (
+                    character_entity_id, project_type, status, stage,
+                    target_character_entity_id, progress, stall_count,
+                    next_eligible_at_world_time, source_chunk_id
+                ) VALUES (
+                    :actor, 'recruit_ally', 'active', 'sounding_out',
+                    :target, 0.25, 0, :due_at, :source_chunk_id
+                )
+                """
+            ),
+            {
+                "actor": actor,
+                "target": target,
+                "due_at": earliest_world_time - timedelta(hours=1),
+                "source_chunk_id": anchors[0],
+            },
+        )
+        session.execute(
+            text(
+                """
+                UPDATE entity_pair_tags ept
+                SET cleared_at = now()
+                FROM pair_tags pt
+                WHERE ept.pair_tag_id = pt.id
+                  AND ept.subject_entity_id = :actor
+                  AND ept.object_entity_id = :target
+                  AND pt.tag = 'contact:social'
+                  AND ept.cleared_at IS NULL
+                """
+            ),
+            {"actor": actor, "target": target},
+        )
+        active = analyze_coverage(session, BUILTIN_TEMPLATES, **kwargs)
+
+        advance_gates = [
+            gate
+            for anchor in active["anchors"]
+            for gate in anchor["project_gates"]
+            if gate["actor_entity_id"] == actor
+            and gate["target_entity_id"] == target
+            and gate["template_id"] == "advance_recruit_ally"
+        ]
+        assert advance_gates
+        assert any(gate["gate_passed"] for gate in advance_gates)
+        assert active["templates"]["advance_recruit_ally"]["won"] > 0
+
+        proposal = resolve_dry_run(
+            session,
+            BUILTIN_TEMPLATES,
+            anchor_chunk_id=anchors[0],
+            window_chunks=kwargs["window_chunks"],
+            sunhelm_settings=kwargs["sunhelm_settings"],
+            selection_settings=kwargs["selection_settings"],
+            habituation_settings=kwargs["habituation_settings"],
+            package_selection_settings=kwargs["package_selection_settings"],
+            project_settings=kwargs["project_settings"],
+            epistemics_settings=kwargs["epistemics_settings"],
+            fanout_settings=kwargs["fanout_settings"],
+        )
+        assert any(
+            resolution.template_id == "advance_recruit_ally"
+            and resolution.bindings.get("actor") == actor
+            and resolution.bindings.get("target") == target
+            for resolution in proposal.resolutions
+        )
+
+        routine_ids = {
+            template.id
+            for template in BUILTIN_TEMPLATES
+            if template.drive_band.value in {"embodied_maintenance", "anchored_routine"}
+        }
+
+        def winner_shares(report: dict[str, Any]) -> dict[str, float]:
+            total = sum(payload["won"] for payload in report["templates"].values())
+            assert total > 0
+            return {
+                template_id: report["templates"][template_id]["won"] / total
+                for template_id in routine_ids
+            }
+
+        baseline_shares = winner_shares(baseline)
+        active_shares = winner_shares(active)
+        max_shift = max(
+            abs(active_shares[key] - baseline_shares[key]) for key in routine_ids
+        )
+        tolerance = float(orrery["projects"]["coverage_distribution_tolerance"])
+        assert max_shift < tolerance, (max_shift, tolerance)
+
+        session.execute(
+            text("UPDATE entities SET is_active = false WHERE id = :target"),
+            {"target": target},
+        )
+        inactive_target = resolve_dry_run(
+            session,
+            BUILTIN_TEMPLATES,
+            anchor_chunk_id=anchors[0],
+            window_chunks=kwargs["window_chunks"],
+            sunhelm_settings=kwargs["sunhelm_settings"],
+            selection_settings=kwargs["selection_settings"],
+            habituation_settings=kwargs["habituation_settings"],
+            package_selection_settings=kwargs["package_selection_settings"],
+            project_settings=kwargs["project_settings"],
+            epistemics_settings=kwargs["epistemics_settings"],
+            fanout_settings=kwargs["fanout_settings"],
+        )
+        abandonment = next(
+            resolution
+            for resolution in inactive_target.resolutions
+            if resolution.template_id == "advance_recruit_ally"
+            and resolution.bindings.get("actor") == actor
+            and resolution.bindings.get("target") == target
+        )
+        assert abandonment.branch_label == (
+            "End a recruitment whose candidate is no longer available"
+        )
+        assert abandonment.state_delta == {
+            "project.abandon": {
+                "reason": "target_inactive_or_non_character",
+                "milestone": True,
+            }
+        }
+        assert "entity_pair_tags.add_outbound" not in abandonment.state_delta
+        assert "project.advance" not in abandonment.state_delta
+        project_status = session.execute(
+            text(
+                """
+                SELECT status
+                FROM character_project_states
+                WHERE character_entity_id = :actor
+                  AND project_type = 'recruit_ally'
+                  AND status IN ('active', 'paused', 'stalled')
+                """
+            ),
+            {"actor": actor},
+        ).scalar_one()
+        assert project_status == "active"
+    finally:
+        session.close()
+        transaction.rollback()
+        connection.close()
+        engine.dispose()

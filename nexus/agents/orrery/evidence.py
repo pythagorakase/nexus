@@ -73,6 +73,7 @@ from nexus.agents.orrery.substrate import (
     project_due,
     project_overdue_hours,
     project_target_is,
+    project_target_is_active,
 )
 
 
@@ -1642,8 +1643,15 @@ def _project_target_is(
     project_target_entity_id = (
         project.target_character_entity_id if project is not None else None
     )
+    project_target_active = (
+        project.target_character_is_active if project is not None else None
+    )
     condition = project_target_is(Slot(slot))
     result = condition(state, bindings)
+    if result:
+        explanation = f"advancing recruitment of {slot}"
+    else:
+        explanation = "blocked: bound target is not the project's recruit"
     return _evidence(
         "project_target_is",
         params={"slot": slot},
@@ -1652,12 +1660,55 @@ def _project_target_is(
             "project_id": project.id if project is not None else None,
             "project_type": project.project_type if project is not None else None,
             "project_target_entity_id": project_target_entity_id,
+            "project_target_is_active": project_target_active,
             "bound_target_entity_id": bound_target_entity_id,
-            "explanation": (
-                f"advancing recruitment of {slot}"
-                if result
-                else "blocked: bound target is not the project's recruit"
-            ),
+            "explanation": explanation,
+        },
+        result=result,
+        matched=[bound_target_entity_id] if result else [],
+    )
+
+
+@_resolver("project_target_is_active")
+def _project_target_is_active(
+    match: re.Match, state: WorldState, bindings: Bindings
+) -> dict[str, Any]:
+    slot = match["slot"]
+    actor_entity_id = _entity(bindings, Slot.ACTOR.value)
+    bound_target_entity_id = _entity(bindings, slot)
+    project = (
+        state.project_states.get(actor_entity_id)
+        if actor_entity_id is not None
+        else None
+    )
+    project_target_entity_id = (
+        project.target_character_entity_id if project is not None else None
+    )
+    project_target_active = (
+        project.target_character_is_active if project is not None else None
+    )
+    condition = project_target_is_active(Slot(slot))
+    result = condition(state, bindings)
+    if result:
+        explanation = "project's recruit is an active character"
+    elif (
+        project_target_entity_id == bound_target_entity_id
+        and project_target_entity_id is not None
+    ):
+        explanation = "project's recruit is inactive or not a character"
+    else:
+        explanation = "blocked: bound target is not the project's recruit"
+    return _evidence(
+        "project_target_is_active",
+        params={"slot": slot},
+        entities={"actor": actor_entity_id, slot: bound_target_entity_id},
+        observed={
+            "project_id": project.id if project is not None else None,
+            "project_type": project.project_type if project is not None else None,
+            "project_target_entity_id": project_target_entity_id,
+            "project_target_is_active": project_target_active,
+            "bound_target_entity_id": bound_target_entity_id,
+            "explanation": explanation,
         },
         result=result,
         matched=[bound_target_entity_id] if result else [],

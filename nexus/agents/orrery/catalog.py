@@ -439,6 +439,10 @@ _register(
     r"project_target_is\((?P<slot>\w+)\)",
     lambda m: f"advancing recruitment of {_slot(m.group('slot'))}",
 )
+_register(
+    r"project_target_is_active\((?P<slot>\w+)\)",
+    lambda m: f"{_slot(m.group('slot'))} is the project's active-character recruit",
+)
 
 
 def _render_count_recent_events(m: re.Match) -> str:
