@@ -143,6 +143,14 @@ def _tally_report(
     tallies: dict[str, _TemplateTally],
     gap_counts: dict[int, dict[str, int]],
 ) -> dict[str, Any]:
+    fanout_trimmed = {
+        (
+            item["actor_entity_id"],
+            item["target_entity_id"],
+            item["template_id"],
+        )
+        for item in report.fanout_trimmed
+    }
     winners_by_band: dict[str, int] = {}
     gap_actor_ids: list[int] = []
     project_gates: list[dict[str, Any]] = []
@@ -160,7 +168,15 @@ def _tally_report(
                     tally.fired += 1
                     if item.chosen_branch is not None:
                         tally.branch_chosen[item.chosen_branch] += 1
-                if item.template_id == stack.winner_id:
+                winner_key = (
+                    stack.bindings.get("actor"),
+                    stack.bindings.get("target"),
+                    item.template_id,
+                )
+                if (
+                    item.template_id == stack.winner_id
+                    and winner_key not in fanout_trimmed
+                ):
                     tally.won += 1
                     winners_by_band[item.drive_band] = (
                         winners_by_band.get(item.drive_band, 0) + 1
@@ -438,7 +454,9 @@ def analyze_coverage(
         "anchors": anchors,
         "templates": template_payloads,
         "never_fired": sorted(
-            template_id for template_id, tally in tallies.items() if tally.fired == 0
+            template_id
+            for template_id, tally in tallies.items()
+            if tally.fired == 0 and tally.pressure_fired == 0
         ),
         "fired_never_won": sorted(
             template_id
