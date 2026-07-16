@@ -959,7 +959,7 @@ def test_cli_faction_manifest_returns_live_slot2_payload() -> None:
     """The faction manifest CLI should build from the real slot 2 audit."""
 
     try:
-        result = cli.run_faction_manifest(Namespace(slot=2))
+        result = cli.run_faction_manifest(Namespace(slot=2, output=None))
     except psycopg2.Error as exc:
         pytest.skip(f"{TEST_DBNAME} PostgreSQL test database unavailable: {exc}")
     finally:

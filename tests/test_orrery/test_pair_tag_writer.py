@@ -435,9 +435,16 @@ def test_polymorphic_object_kind_faction_path(
 
     if test_entities.faction is None:
         pytest.skip(
-            f"{TEST_DBNAME} has no faction entities; skipping faction polymorphism case."
+            f"{TEST_DBNAME} has no faction entities; "
+            "skipping faction polymorphism case."
         )
 
+    active_before = _count_active_pair_tags(
+        slot_connection,
+        subject_id=test_entities.char_a,
+        object_id=test_entities.faction,
+        tag="obligation",
+    )
     with slot_connection:
         with slot_connection.cursor() as cur:
             inserted = apply_pair_tag_bestowal(
@@ -448,4 +455,14 @@ def test_polymorphic_object_kind_faction_path(
                 object_kind="faction",
                 tag="obligation",
             )
-            assert inserted is True
+            assert inserted is (active_before == 0)
+
+    assert (
+        _count_active_pair_tags(
+            slot_connection,
+            subject_id=test_entities.char_a,
+            object_id=test_entities.faction,
+            tag="obligation",
+        )
+        == 1
+    )
