@@ -72,6 +72,11 @@ from nexus.agents.orrery.needs import (
 from nexus.agents.orrery.reconstruction import CHECKPOINT_SECTIONS
 from nexus.agents.orrery.substrate import ProjectPolicy, coerce_project_policy
 
+PROJECT_STAGE_LADDERS = {
+    "plan_relocation": ("saving", "scouting", "committing"),
+    "recruit_ally": ("sounding_out", "earning_trust", "sealing_commitment"),
+}
+
 # Composite natural keys, verbatim column order (faction_relationships
 # enforces faction1_id < faction2_id; character_relationships only c1 <> c2
 # — never re-canonicalize when re-inserting delete pre-images).
@@ -405,6 +410,8 @@ class _Replayer:
         projects: dict[Any, dict[str, Any]] = {
             row["id"]: dict(row) for row in base_state["character_project_states"]
         }
+        for project in projects.values():
+            project.setdefault("target_character_entity_id", None)
 
         born_entities = self._seed_window_births(characters, places, result)
 
@@ -678,7 +685,7 @@ class _Replayer:
                 "in replay working state"
             )
         key, row = matches[0]
-        if row["project_type"] != "plan_relocation":
+        if row["project_type"] not in PROJECT_STAGE_LADDERS:
             raise ValueError(
                 f"Actor {actor_entity_id} has unsupported replay project "
                 f"type {row['project_type']!r}"
@@ -724,9 +731,9 @@ class _Replayer:
             )
         project_type = str(applied["project_type"])
         stage = str(applied["stage"])
-        if project_type != "plan_relocation":
+        if project_type not in PROJECT_STAGE_LADDERS:
             raise ValueError(f"Unsupported replay project type {project_type!r}")
-        if stage not in {"saving", "scouting", "committing"}:
+        if stage not in PROJECT_STAGE_LADDERS[project_type]:
             raise ValueError(f"Unsupported replay project stage {stage!r}")
         expected_status = {
             "project.start": "active",
@@ -746,11 +753,26 @@ class _Replayer:
             "status": expected_status,
             "stage": stage,
             "target_place_id": applied["target_place_id"],
+            # Historical PLAN_RELOCATION ledgers predate migration 077. Their
+            # missing character-target field is truthfully NULL.
+            "target_character_entity_id": applied.get("target_character_entity_id"),
             "progress": _pg_round(float(applied["progress"]), 4),
             "stall_count": int(applied["stall_count"]),
             "next_eligible_at_world_time": applied["next_eligible_at_world_time"],
             "source_chunk_id": int(applied["source_chunk_id"]),
         }
+        if project_type == "plan_relocation":
+            if applied_row["target_character_entity_id"] is not None:
+                raise ValueError(
+                    "plan_relocation replay projection forbids character target"
+                )
+        elif (
+            applied_row["target_place_id"] is not None
+            or applied_row["target_character_entity_id"] is None
+        ):
+            raise ValueError(
+                "recruit_ally replay projection requires only a character target"
+            )
         if applied_row["source_chunk_id"] != chunk_id:
             raise ValueError(
                 f"{delta_key} at chunk {chunk_id} applied source_chunk_id is "
@@ -789,16 +811,25 @@ class _Replayer:
             row.update(applied_row)
             return
         if delta_key == "project.complete":
-            if applied_row["stage"] != "committing":
-                raise ValueError("project.complete replay requires committing stage")
+            final_stage = PROJECT_STAGE_LADDERS[project_type][2]
+            if applied_row["stage"] != final_stage:
+                raise ValueError(
+                    f"project.complete replay requires {final_stage} stage"
+                )
             if float(applied_row["progress"] or 0.0) < 1.0:
                 raise ValueError("project.complete replay requires full progress")
+            row.update(applied_row)
+            if project_type == "recruit_ally":
+                if applied_row["target_character_entity_id"] is None:
+                    raise ValueError(
+                        "recruit_ally completion replay requires character target"
+                    )
+                return
             destination = applied_row["target_place_id"]
             if destination is None:
                 raise ValueError(
                     "project.complete replay requires project target_place_id"
                 )
-            row.update(applied_row)
             travel_payload = {
                 key: value
                 for key, value in payload.items()

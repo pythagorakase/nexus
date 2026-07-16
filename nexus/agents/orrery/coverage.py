@@ -177,10 +177,13 @@ def _tally_report(
                 if item.template_id in {
                     "start_relocation_plan",
                     "advance_relocation_plan",
+                    "start_recruit_ally",
+                    "advance_recruit_ally",
                 }:
                     project_gates.append(
                         {
                             "actor_entity_id": group.actor_entity_id,
+                            "target_entity_id": stack.bindings.get("target"),
                             "template_id": item.template_id,
                             "gate_passed": item.gate_passed,
                             "stack_winner_id": stack.winner_id,

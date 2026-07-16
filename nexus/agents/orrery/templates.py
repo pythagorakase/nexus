@@ -21,6 +21,7 @@ from nexus.agents.orrery.substrate import (
     fame_below,
     has_any_intimacy_suppressor,
     has_any_current_tag,
+    has_any_pair_tag,
     has_any_status_at_or_above,
     has_any_tag,
     has_contact_of_kind,
@@ -43,7 +44,10 @@ from nexus.agents.orrery.substrate import (
     is_hidden,
     is_in_transit,
     knows_recent_event,
+    lacks_pair_tag,
     project_due,
+    project_target_is,
+    project_target_is_active,
     recent_event,
     relationship_is_asymmetric,
     relationship_is_mutual_warm,
@@ -1020,6 +1024,7 @@ SURVEIL = Template(
     package_gate=AND(
         has_minimal_context(),
         NOT(project_due("ready")),
+        NOT(project_due("ready", project_type="recruit_ally")),
         NOT(is_constrained()),
         NOT(has_inbound_pair_tag("hunting")),
         NOT(has_ephemeral("grudge_active")),
@@ -4620,6 +4625,348 @@ ADVANCE_RELOCATION_PLAN = Template(
 )
 
 
+START_RECRUIT_ALLY = Template(
+    id="start_recruit_ally",
+    priority=17,
+    drive_band=DriveBand.PROJECT_IDENTITY,
+    priority_override_rationale=(
+        "A recruitment begins only for a known, warm, or trusted candidate; "
+        "the narrow pair gate lets explicit positive intent rise above routine."
+    ),
+    blurb="A plausible contact becomes the named target of a recruitment project.",
+    required_slots=(Slot.ACTOR, Slot.TARGET),
+    starts_from_social_contact=True,
+    package_gate=AND(
+        project_due("start", project_type="recruit_ally"),
+        has_minimal_context(),
+        at_routine_anchor("home"),
+        NOT(is_constrained()),
+        NOT(is_in_transit()),
+        OR(
+            AND(
+                has_contact_of_kind("social"),
+                has_pair_tag("contact:social"),
+            ),
+            has_relationship_of_type("friend", Slot.ACTOR, Slot.TARGET),
+            has_relationship_of_type("friend", Slot.TARGET, Slot.ACTOR),
+            has_relationship_of_type("companion", Slot.ACTOR, Slot.TARGET),
+            has_relationship_of_type("companion", Slot.TARGET, Slot.ACTOR),
+            has_relationship_of_type("comrade", Slot.ACTOR, Slot.TARGET),
+            has_relationship_of_type("comrade", Slot.TARGET, Slot.ACTOR),
+            has_relationship_of_type("chosen_kin", Slot.ACTOR, Slot.TARGET),
+            has_relationship_of_type("chosen_kin", Slot.TARGET, Slot.ACTOR),
+            trust_at_least(1),
+        ),
+        lacks_pair_tag("ally", Slot.ACTOR, Slot.TARGET),
+        NOT(
+            has_any_pair_tag(
+                "hostile_to",
+                "hunting",
+                subject_slot=Slot.ACTOR,
+                object_slot=Slot.TARGET,
+            )
+        ),
+        NOT(
+            has_any_pair_tag(
+                "hostile_to",
+                "hunting",
+                subject_slot=Slot.TARGET,
+                object_slot=Slot.ACTOR,
+            )
+        ),
+    ),
+    branches=(
+        Branch(
+            label="Sound out a possible ally",
+            conditions=ALWAYS,
+            narrative_stub=(
+                "{actor} stops treating {target} as merely useful company. "
+                "A careful conversation tests whether shared concern might "
+                "become a commitment both can name."
+            ),
+            state_delta={
+                "project.start": {
+                    "project_type": "recruit_ally",
+                    "stage": "sounding_out",
+                    "milestone": True,
+                }
+            },
+            event_type="recruit_ally_started",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.stage",
+                "character_project_states.target_character_entity_id",
+                "character_project_states.next_eligible_at_world_time",
+            ),
+            magnitude=0.40,
+        ),
+    ),
+)
+
+
+ADVANCE_RECRUIT_ALLY = Template(
+    id="advance_recruit_ally",
+    priority=47,
+    drive_band=DriveBand.PROJECT_IDENTITY,
+    priority_override_rationale=(
+        "A due recruitment shares relocation's vigilance-adjacent slot; "
+        "SURVEIL yields to either due project while cadence and embodied "
+        "guards preserve routine stability."
+    ),
+    blurb=(
+        "A due recruitment sounds out its chosen candidate, earns trust, "
+        "seals commitment, stalls, or ends."
+    ),
+    required_slots=(Slot.ACTOR, Slot.TARGET),
+    binds_project_target=True,
+    package_gate=AND(
+        project_due("ready", project_type="recruit_ally"),
+        project_target_is(Slot.TARGET),
+        NOT(is_in_transit()),
+        NOT(is_constrained()),
+        NOT(
+            OR(
+                has_need_debt_at_or_above("sleep", 8),
+                has_need_debt_at_or_above("thirst", 2),
+                has_need_debt_at_or_above("hunger", 4),
+            )
+        ),
+    ),
+    branches=(
+        Branch(
+            label="End a recruitment whose candidate is no longer available",
+            conditions=NOT(project_target_is_active(Slot.TARGET)),
+            narrative_stub=(
+                "{actor}'s intended recruit is no longer someone an alliance "
+                "can be made with. The project ends cleanly rather than "
+                "holding open a promise that cannot be answered."
+            ),
+            state_delta={
+                "project.abandon": {
+                    "reason": "target_inactive_or_non_character",
+                    "milestone": True,
+                }
+            },
+            event_type="recruit_ally_abandoned",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.source_chunk_id",
+            ),
+            magnitude=0.40,
+            preemptive=True,
+        ),
+        Branch(
+            label="Seal the alliance",
+            conditions=AND(
+                project_due("completion", project_type="recruit_ally"),
+                NOT(
+                    has_any_pair_tag(
+                        "hostile_to",
+                        "hunting",
+                        subject_slot=Slot.TARGET,
+                        object_slot=Slot.ACTOR,
+                    )
+                ),
+                NOT(trust_below(-2, Slot.TARGET, Slot.ACTOR)),
+            ),
+            narrative_stub=(
+                "{actor} and {target} stop speaking in contingencies. The "
+                "understanding becomes a commitment: when the cost arrives, "
+                "{actor} may call on {target} as an ally."
+            ),
+            state_delta={
+                "project.complete": {"milestone": True},
+                "entity_pair_tags.add_outbound": ["ally"],
+            },
+            event_type="recruit_ally_completed",
+            changed_fields=(
+                "character_project_states.status",
+                "entity_pair_tags",
+                "character_relationships.relationship_type",
+            ),
+            magnitude=0.40,
+            preemptive=True,
+        ),
+        Branch(
+            label="Withdraw after a hostile turn",
+            conditions=OR(
+                has_any_pair_tag(
+                    "hostile_to",
+                    "hunting",
+                    subject_slot=Slot.TARGET,
+                    object_slot=Slot.ACTOR,
+                ),
+                trust_below(-2, Slot.TARGET, Slot.ACTOR),
+            ),
+            narrative_stub=(
+                "Whatever possibility {actor} saw in {target} has hardened "
+                "into danger or contempt. {actor} ends the recruitment before "
+                "hope becomes leverage in hostile hands."
+            ),
+            state_delta={
+                "project.abandon": {
+                    "reason": "target_hostile_or_trust_collapsed",
+                    "milestone": True,
+                }
+            },
+            event_type="recruit_ally_abandoned",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.source_chunk_id",
+            ),
+            magnitude=0.40,
+            preemptive=True,
+        ),
+        Branch(
+            label="Let the recruitment go rather than force it",
+            conditions=project_due("abandon", project_type="recruit_ally"),
+            narrative_stub=(
+                "{actor} admits that the invitation has become a ritual of "
+                "delay. They stop pressing {target} for a promise that is not "
+                "coming and release the unfinished alliance."
+            ),
+            state_delta={
+                "project.abandon": {
+                    "reason": "stalled_or_overdue",
+                    "milestone": True,
+                }
+            },
+            event_type="recruit_ally_abandoned",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.source_chunk_id",
+            ),
+            magnitude=0.40,
+            preemptive=True,
+        ),
+        Branch(
+            label="Turn interest into earned trust",
+            conditions=project_due(
+                "sounding_out_milestone", project_type="recruit_ally"
+            ),
+            narrative_stub=(
+                "{target} has heard enough to take the possibility seriously. "
+                "Now {actor} must prove that the offered alliance is reliable, "
+                "not merely attractive."
+            ),
+            state_delta={
+                "project.advance": {
+                    "stage": "earning_trust",
+                    "set_progress": 0.0,
+                    "milestone": True,
+                }
+            },
+            event_type="recruit_ally_milestone",
+            changed_fields=(
+                "character_project_states.stage",
+                "character_project_states.progress",
+                "character_project_states.stall_count",
+            ),
+            magnitude=0.40,
+            preemptive=True,
+        ),
+        Branch(
+            label="Ask for a real commitment",
+            conditions=project_due(
+                "earning_trust_milestone", project_type="recruit_ally"
+            ),
+            narrative_stub=(
+                "The small proofs have accumulated. {actor} can finally ask "
+                "{target} for the thing underneath them: a commitment that "
+                "will still hold when cooperation becomes costly."
+            ),
+            state_delta={
+                "project.advance": {
+                    "stage": "sealing_commitment",
+                    "set_progress": 0.0,
+                    "milestone": True,
+                }
+            },
+            event_type="recruit_ally_milestone",
+            changed_fields=(
+                "character_project_states.stage",
+                "character_project_states.progress",
+                "character_project_states.stall_count",
+            ),
+            magnitude=0.40,
+            preemptive=True,
+        ),
+        Branch(
+            label="Lose ground through neglect",
+            conditions=project_due("neglected", project_type="recruit_ally"),
+            narrative_stub=(
+                "Silence does work of its own. A missed promise or unanswered "
+                "opening leaves {target} less certain that {actor}'s proposed "
+                "alliance deserves the risk."
+            ),
+            state_delta={"project.stall": {"increment": 1}},
+            event_type="recruit_ally_stalled",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.stall_count",
+                "character_project_states.next_eligible_at_world_time",
+            ),
+            magnitude=0.10,
+            promotable=False,
+            preemptive=True,
+        ),
+        Branch(
+            label="Learn what the candidate actually wants",
+            conditions=project_due("sounding_out", project_type="recruit_ally"),
+            narrative_stub=(
+                "{actor} listens past {target}'s first answer and learns what "
+                "would make an alliance matter to them, not merely to its "
+                "would-be recruiter."
+            ),
+            state_delta={"project.advance": {"progress_delta": 0.35}},
+            event_type="recruit_ally_progressed",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.progress",
+                "character_project_states.next_eligible_at_world_time",
+            ),
+            magnitude=0.18,
+            promotable=False,
+        ),
+        Branch(
+            label="Prove reliable in a small consequential way",
+            conditions=project_due("earning_trust", project_type="recruit_ally"),
+            narrative_stub=(
+                "{actor} gives {target} evidence instead of assurances: one "
+                "promise kept where breaking it would have been easier."
+            ),
+            state_delta={"project.advance": {"progress_delta": 0.35}},
+            event_type="recruit_ally_progressed",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.progress",
+                "character_project_states.next_eligible_at_world_time",
+            ),
+            magnitude=0.18,
+            promotable=False,
+        ),
+        Branch(
+            label="Make the next commitment concrete",
+            conditions=ALWAYS,
+            narrative_stub=(
+                "{actor} and {target} make one more expectation explicit — "
+                "who answers, what each protects, and what neither will ask "
+                "the other to pretend away."
+            ),
+            state_delta={"project.advance": {"progress_delta": 0.25}},
+            event_type="recruit_ally_progressed",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.progress",
+                "character_project_states.next_eligible_at_world_time",
+            ),
+            magnitude=0.16,
+            promotable=False,
+        ),
+    ),
+)
+
+
 BUILTIN_TEMPLATES = (
     EVADE_PURSUERS,
     PROTECT_KIN,
@@ -4630,6 +4977,7 @@ BUILTIN_TEMPLATES = (
     WARN_ALLY,
     SURVEIL,
     ADVANCE_RELOCATION_PLAN,
+    ADVANCE_RECRUIT_ALLY,
     ACT_ON_INTEL,
     UNCOVER_PAST,
     CHECK_ON_DEPENDENT,
@@ -4653,6 +5001,7 @@ BUILTIN_TEMPLATES = (
     UPKEEP,
     RECREATE,
     START_RELOCATION_PLAN,
+    START_RECRUIT_ALLY,
     MAINTAIN_COVER,
 )
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable as IterableABC
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
-from typing import Any, Iterable, Mapping, Optional, Tuple
+from typing import Any, Iterable, Mapping, Optional, Sequence, Tuple
 
 from sqlalchemy import text
 
@@ -657,6 +657,9 @@ def _load_project_states(session: Any) -> dict[int, ProjectState]:
                    cps.status,
                    cps.stage,
                    cps.target_place_id,
+                   cps.target_character_entity_id,
+                   COALESCE(target_entity.is_active, false)
+                       AS target_character_is_active,
                    cps.progress,
                    cps.stall_count,
                    cps.next_eligible_at_world_time,
@@ -666,6 +669,9 @@ def _load_project_states(session: Any) -> dict[int, ProjectState]:
               ON e.id = cps.character_entity_id
              AND e.kind = 'character'
              AND e.is_active = true
+            LEFT JOIN entities target_entity
+              ON target_entity.id = cps.target_character_entity_id
+             AND target_entity.kind = 'character'
             WHERE cps.status IN ('active', 'paused', 'stalled')
             ORDER BY cps.id
             """
@@ -680,6 +686,10 @@ def _load_project_states(session: Any) -> dict[int, ProjectState]:
             status=str(row["status"]),
             stage=str(row["stage"]),
             target_place_id=row.get("target_place_id"),
+            target_character_entity_id=row.get("target_character_entity_id"),
+            target_character_is_active=bool(
+                row.get("target_character_is_active", False)
+            ),
             progress=float(row["progress"] or 0.0),
             stall_count=int(row["stall_count"] or 0),
             next_eligible_at_world_time=row.get("next_eligible_at_world_time"),
@@ -839,15 +849,18 @@ def compose_actor_target_bindings(
     window_chunks: int,
     actor_ids: Optional[Iterable[int]] = None,
     target_presence: str = "offscreen",
+    include_social_contacts: bool = False,
 ) -> Tuple[Bindings, ...]:
     """Compose ACTOR+TARGET bindings from actors' relational neighborhoods.
 
     Yields {Slot.ACTOR: a, Slot.TARGET: t} for each character-to-character
     relationship row where the actor side is in the recently-relevant set.
     Each stored relationship row produces up to two bindings (forward and
-    reverse) so templates with symmetric semantics see both orderings; gate
-    predicates with asymmetric semantics (handler/asset) filter via
-    role-explicit OR clauses.
+    reverse) so templates with symmetric semantics see both orderings. When
+    ``include_social_contacts`` is true, current directed ``contact:social``
+    edges are unioned into that base pool for templates that explicitly opt
+    into social-contact starts. Gate predicates with asymmetric semantics
+    (handler/asset) filter via role-explicit OR clauses.
 
     When actor_ids is provided (typical: resolve_dry_run threads through
     the actor set it already computed), this skips the redundant
@@ -883,6 +896,29 @@ def compose_actor_target_bindings(
         return ()
 
     pairs: set[Tuple[int, int]] = set()
+
+    def add_candidate(source: int, target: int, *, reverse: bool) -> None:
+        source_present = source in present_actor_ids
+        target_present = target in present_actor_ids
+        if (
+            source in actor_id_set
+            and not source_present
+            and (
+                (target_presence == "offscreen" and not target_present)
+                or (target_presence == "present" and target_present)
+            )
+        ):
+            pairs.add((source, target))
+        if reverse and (
+            target in actor_id_set
+            and not target_present
+            and (
+                (target_presence == "offscreen" and not source_present)
+                or (target_presence == "present" and source_present)
+            )
+        ):
+            pairs.add((target, source))
+
     for row in session.execute(
         text(
             """
@@ -901,32 +937,162 @@ def compose_actor_target_bindings(
             """
         )
     ).mappings():
-        source = row["source_entity_id"]
-        target = row["target_entity_id"]
-        source_present = source in present_actor_ids
-        target_present = target in present_actor_ids
-        if (
-            source in actor_id_set
-            and not source_present
-            and (
-                (target_presence == "offscreen" and not target_present)
-                or (target_presence == "present" and target_present)
+        add_candidate(
+            int(row["source_entity_id"]),
+            int(row["target_entity_id"]),
+            reverse=True,
+        )
+
+    if include_social_contacts:
+        for row in session.execute(
+            text(
+                """
+                /* orrery:actor_target_bindings_social_contacts */
+                SELECT ept.subject_entity_id AS source_entity_id,
+                       ept.object_entity_id AS target_entity_id
+                FROM entity_pair_tags ept
+                JOIN pair_tags pt ON pt.id = ept.pair_tag_id
+                JOIN entities es ON es.id = ept.subject_entity_id
+                JOIN entities et ON et.id = ept.object_entity_id
+                WHERE pt.tag = 'contact:social'
+                  AND NOT pt.deprecated
+                  AND ept.cleared_at IS NULL
+                  AND es.kind = 'character'
+                  AND et.kind = 'character'
+                  AND es.is_active = true
+                  AND et.is_active = true
+                """
             )
-        ):
-            pairs.add((source, target))
-        if (
-            target in actor_id_set
-            and not target_present
-            and (
-                (target_presence == "offscreen" and not source_present)
-                or (target_presence == "present" and source_present)
+        ).mappings():
+            add_candidate(
+                int(row["source_entity_id"]),
+                int(row["target_entity_id"]),
+                reverse=False,
             )
-        ):
-            pairs.add((target, source))
 
     return tuple(
         {Slot.ACTOR: actor_id, Slot.TARGET: target_id}
         for actor_id, target_id in sorted(pairs)
+    )
+
+
+def compose_project_target_bindings(
+    session: Any,
+    *,
+    state: WorldState,
+    anchor_chunk_id: Optional[int],
+    actor_ids: Iterable[int],
+    target_presence: str = "offscreen",
+) -> Tuple[Bindings, ...]:
+    """Bind character-project actors to their durable project target.
+
+    Inactive or non-character targets remain bound by identity so the project
+    package can select its deterministic abandonment arm. Availability stays
+    in hydrated state and is never inferred from the binding itself.
+    """
+
+    if target_presence not in {"offscreen", "present"}:
+        raise ValueError("target_presence must be 'offscreen' or 'present'")
+    present_actor_ids = _present_actor_ids_at_anchor(
+        session, anchor_chunk_id=anchor_chunk_id
+    )
+    actor_id_set = set(actor_ids) - present_actor_ids
+    pairs: list[tuple[int, int]] = []
+    for actor_id in sorted(actor_id_set):
+        project = state.project_states.get(actor_id)
+        if project is None:
+            continue
+        target_id = project.target_character_entity_id
+        if target_id is None:
+            continue
+        target_present = target_id in present_actor_ids
+        if (target_presence == "offscreen" and not target_present) or (
+            target_presence == "present" and target_present
+        ):
+            pairs.append((actor_id, target_id))
+    return tuple(
+        {Slot.ACTOR: actor_id, Slot.TARGET: target_id} for actor_id, target_id in pairs
+    )
+
+
+def compose_actor_target_routes(
+    session: Any,
+    *,
+    state: WorldState,
+    templates: Sequence[Template],
+    anchor_chunk_id: Optional[int],
+    window_chunks: int,
+    actor_ids: Iterable[int],
+    target_presence: str = "offscreen",
+) -> Tuple[tuple[Bindings, Tuple[Template, ...]], ...]:
+    """Route each ACTOR/TARGET binding to its authorized template stack.
+
+    Relationship-backed pairs retain the complete two-party stack and its
+    normal priority competition. Social-contact-only and project-target-only
+    pairs admit only templates that explicitly opt into those broader binding
+    sources. When sources overlap, their template sets are unioned and
+    evaluated once in original stack order.
+    """
+
+    templates_tuple = tuple(templates)
+    if not templates_tuple:
+        return ()
+    actor_id_set = set(actor_ids)
+    template_ids_by_pair: dict[tuple[int, int], set[str]] = {}
+
+    def add_routes(bindings: Iterable[Bindings], allowed: Sequence[Template]) -> None:
+        allowed_ids = {template.id for template in allowed}
+        for binding in bindings:
+            key = (binding[Slot.ACTOR], binding[Slot.TARGET])
+            template_ids_by_pair.setdefault(key, set()).update(allowed_ids)
+
+    relationship_bindings = compose_actor_target_bindings(
+        session,
+        anchor_chunk_id=anchor_chunk_id,
+        window_chunks=window_chunks,
+        actor_ids=actor_id_set,
+        target_presence=target_presence,
+        include_social_contacts=False,
+    )
+    add_routes(relationship_bindings, templates_tuple)
+
+    social_templates = tuple(
+        template for template in templates_tuple if template.starts_from_social_contact
+    )
+    if social_templates:
+        social_bindings = compose_actor_target_bindings(
+            session,
+            anchor_chunk_id=anchor_chunk_id,
+            window_chunks=window_chunks,
+            actor_ids=actor_id_set,
+            target_presence=target_presence,
+            include_social_contacts=True,
+        )
+        add_routes(social_bindings, social_templates)
+
+    project_templates = tuple(
+        template for template in templates_tuple if template.binds_project_target
+    )
+    if project_templates:
+        project_bindings = compose_project_target_bindings(
+            session,
+            state=state,
+            anchor_chunk_id=anchor_chunk_id,
+            actor_ids=actor_id_set,
+            target_presence=target_presence,
+        )
+        add_routes(project_bindings, project_templates)
+
+    return tuple(
+        (
+            {Slot.ACTOR: actor_id, Slot.TARGET: target_id},
+            tuple(
+                template
+                for template in templates_tuple
+                if template.id in template_ids_by_pair[(actor_id, target_id)]
+            ),
+        )
+        for actor_id, target_id in sorted(template_ids_by_pair)
     )
 
 
@@ -1091,19 +1257,22 @@ def resolve_dry_run(
         if resolution is not None and resolution.passes:
             drafts.append(_draft_from_resolution(resolution, state=state))
 
-    actor_target_bindings: Tuple[Bindings, ...] = ()
-    present_target_bindings: Tuple[Bindings, ...] = ()
+    offscreen_routes: Tuple[Tuple[Bindings, Tuple[Template, ...]], ...] = ()
+    present_routes: Tuple[Tuple[Bindings, Tuple[Template, ...]], ...] = ()
     if actor_target_templates:
-        actor_target_bindings = compose_actor_target_bindings(
+        actor_ids = {bindings[Slot.ACTOR] for bindings in actor_bindings}
+        offscreen_routes = compose_actor_target_routes(
             session,
+            state=state,
+            templates=actor_target_templates,
             anchor_chunk_id=anchor_chunk_id,
             window_chunks=window_chunks,
-            actor_ids={bindings[Slot.ACTOR] for bindings in actor_bindings},
+            actor_ids=actor_ids,
             target_presence="offscreen",
         )
-        for bindings in actor_target_bindings:
+        for bindings, routed_templates in offscreen_routes:
             resolution = evaluate_stack(
-                actor_target_templates,
+                routed_templates,
                 state,
                 bindings,
                 selection,
@@ -1120,16 +1289,18 @@ def resolve_dry_run(
             is PresentTargetPolicy.STORYTELLER_PRESSURE
         ]
         if pressure_templates:
-            present_target_bindings = compose_actor_target_bindings(
+            present_routes = compose_actor_target_routes(
                 session,
+                state=state,
+                templates=pressure_templates,
                 anchor_chunk_id=anchor_chunk_id,
                 window_chunks=window_chunks,
-                actor_ids={bindings[Slot.ACTOR] for bindings in actor_bindings},
+                actor_ids=actor_ids,
                 target_presence="present",
             )
-            for bindings in present_target_bindings:
+            for bindings, routed_templates in present_routes:
                 resolution = evaluate_stack(
-                    pressure_templates,
+                    routed_templates,
                     state,
                     bindings,
                     selection,
@@ -1197,8 +1368,8 @@ def resolve_dry_run(
 
     unique_actors = (
         {bindings[Slot.ACTOR] for bindings in actor_bindings}
-        | {bindings[Slot.ACTOR] for bindings in actor_target_bindings}
-        | {bindings[Slot.ACTOR] for bindings in present_target_bindings}
+        | {bindings[Slot.ACTOR] for bindings, _templates in offscreen_routes}
+        | {bindings[Slot.ACTOR] for bindings, _templates in present_routes}
     )
 
     return OrreryTickProposal(
@@ -1421,9 +1592,21 @@ def _project_destination(
 def _materialize_project_delta(
     resolution: Resolution, state: WorldState
 ) -> Mapping[str, Any]:
-    """Persist any scouting choice into the resolution ledger before commit."""
+    """Persist bound or selected project targets in the ledger before commit."""
 
     delta = dict(resolution.state_delta)
+    raw_start = delta.get("project.start")
+    if (
+        isinstance(raw_start, Mapping)
+        and raw_start.get("project_type") == "recruit_ally"
+    ):
+        target = resolution.bindings.get(Slot.TARGET)
+        if not isinstance(target, int):
+            raise ValueError("recruit_ally project.start requires target binding")
+        start_payload = dict(raw_start)
+        start_payload["target_character_entity_id"] = target
+        delta["project.start"] = start_payload
+
     raw_advance = delta.get("project.advance")
     if not isinstance(raw_advance, Mapping) or not raw_advance.get("select_target"):
         return delta

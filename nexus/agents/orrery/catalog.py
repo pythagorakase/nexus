@@ -435,6 +435,14 @@ _register(
         f"passes `{m.group('mode')}` due-state"
     ),
 )
+_register(
+    r"project_target_is\((?P<slot>\w+)\)",
+    lambda m: f"advancing recruitment of {_slot(m.group('slot'))}",
+)
+_register(
+    r"project_target_is_active\((?P<slot>\w+)\)",
+    lambda m: f"{_slot(m.group('slot'))} is the project's active-character recruit",
+)
 
 
 def _render_count_recent_events(m: re.Match) -> str:
@@ -536,7 +544,13 @@ def _render_state_delta(delta: Mapping[str, Any]) -> str:
             continue
         if key == "entity_pair_tags.add_outbound":
             tags = ", ".join(f"`{t}`" for t in value)
-            parts.append(f"adds outbound {tags} pair tag to target")
+            if "project.complete" in delta and "ally" in value:
+                parts.append(
+                    f"adds outbound {tags} pair tag to target and upserts the "
+                    "actor→target `ally` relationship"
+                )
+            else:
+                parts.append(f"adds outbound {tags} pair tag to target")
             continue
         if key == "entity_pair_tags.clear_outbound":
             tags = ", ".join(f"`{t}`" for t in value)

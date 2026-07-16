@@ -73,6 +73,11 @@ def _production_proposal(slot: int) -> tuple[Optional[int], OrreryTickProposal]:
                 window_chunks=int(orrery["binding"]["window_chunks"]),
                 sunhelm_settings=orrery.get("sunhelm"),
                 selection_settings=orrery.get("selection"),
+                habituation_settings=orrery.get("habituation"),
+                package_selection_settings=orrery.get("package_selection"),
+                project_settings=orrery.get("projects"),
+                epistemics_settings=orrery.get("epistemics"),
+                fanout_settings=orrery.get("fanout"),
             )
     finally:
         engine.dispose()
@@ -147,12 +152,26 @@ def test_resolve_parity_with_production_resolver(
     assert len(payload["actors"]) == proposal.actor_count
 
     # --- Resolution parity: actor-only + off-screen two-party stacks -------
+    fanout_trimmed = {
+        (
+            item["actor_entity_id"],
+            item["target_entity_id"],
+            item["template_id"],
+        )
+        for item in payload["fanout_trimmed"]
+    }
     endpoint_winners: dict[tuple[str, str], dict] = {}
     for group in payload["actors"]:
         for stack in [group["actor_stack"], *group["two_party_stacks"]]:
             if stack["winner_id"] is None:
                 continue
             winner = _winner(stack)
+            if (
+                group["actor_entity_id"],
+                stack["bindings"].get("target"),
+                winner["template_id"],
+            ) in fanout_trimmed:
+                continue
             key = (winner["template_id"], winner["binding_hash"])
             assert key not in endpoint_winners, "duplicate winner stack"
             endpoint_winners[key] = winner
