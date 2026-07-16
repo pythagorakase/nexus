@@ -529,6 +529,21 @@ If a template package gate includes `since_last_event_at_least(...)` cooldowns, 
 
 The binding composer filters to recently-relevant entities: `(referenced in chunk_character_references in last N chunks) ∪ (has an active ephemeral tag) ∪ (has un-superseded world_events in last N chunks) ∪ (has an active routine anchor)`. Routine anchors are deliberately outside the recency window so boring off-screen citizens can still tick through work/home/needs cycles when the story camera has not looked at them recently. N is config-tunable via `[orrery.binding] window_chunks`; default is 30.
 
+### Relationship Orbit Contract
+
+`WorldState.orbit_distance` is the quality-neutral narrative relationship
+topology used by Orrery package predicates. Every hydration recomputes shortest
+hop counts from the current unversioned `character_relationships` projection,
+using only active character endpoints. The graph is undirected and unweighted:
+stored edge direction, relationship type, valence, and trust do not change its
+hops. Each active character is distance 0 from itself, direct neighbors are 1,
+transitive distance is the shortest path, and disconnected pairs are absent.
+
+This base metric does not model claim contagion, awareness, or Bleed reach.
+Future trust-, hostility-, intimacy-, or salience-aware routing must use a
+separate purpose-specific topology and predicate rather than silently changing
+the meaning of `orbit_distance`.
+
 ---
 
 ## Configuration

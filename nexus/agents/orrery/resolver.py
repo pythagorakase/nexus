@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import deque
 from collections.abc import Iterable as IterableABC
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
@@ -270,6 +271,89 @@ def _should_replace_trust_magnitude(current: Optional[int], candidate: int) -> b
     return candidate < current
 
 
+def _compute_orbit_distances(
+    active_character_ids: Iterable[int],
+    relationship_edges: Iterable[Tuple[int, int]],
+) -> dict[Tuple[int, int], int]:
+    """Return deterministic all-pairs hop counts for the active cast graph.
+
+    Relationship rows are a directed storage detail. Narrative orbit is the
+    shortest path through the same edges treated as undirected and unweighted;
+    type, valence, and duplicate reciprocal rows therefore cannot change the
+    result. Every active character has a self distance of zero, while
+    disconnected pairs are omitted.
+    """
+
+    active_ids = frozenset(int(entity_id) for entity_id in active_character_ids)
+    adjacency: dict[int, set[int]] = {entity_id: set() for entity_id in active_ids}
+    for source_id, target_id in relationship_edges:
+        source = int(source_id)
+        target = int(target_id)
+        if source not in active_ids or target not in active_ids or source == target:
+            continue
+        adjacency[source].add(target)
+        adjacency[target].add(source)
+
+    orbit_distances: dict[Tuple[int, int], int] = {}
+    for source in sorted(active_ids):
+        distances = {source: 0}
+        pending = deque([source])
+        while pending:
+            current = pending.popleft()
+            for neighbor in sorted(adjacency[current]):
+                if neighbor in distances:
+                    continue
+                distances[neighbor] = distances[current] + 1
+                pending.append(neighbor)
+        for target in sorted(distances):
+            orbit_distances[(source, target)] = distances[target]
+    return orbit_distances
+
+
+def _load_orbit_distances(session: Any) -> dict[Tuple[int, int], int]:
+    """Hydrate neutral narrative-orbit hops from the current cast graph."""
+
+    active_character_ids: set[int] = set()
+    relationship_edges: list[Tuple[int, int]] = []
+    for row in session.execute(
+        text(
+            """
+            /* orrery:orbit_distance_graph */
+            WITH active_character_entities AS (
+                SELECT id
+                FROM entities
+                WHERE kind = 'character'
+                  AND is_active = true
+            )
+            SELECT active.id AS source_entity_id,
+                   NULL::bigint AS target_entity_id
+            FROM active_character_entities active
+            UNION ALL
+            SELECT relationship.source_entity_id,
+                   relationship.target_entity_id
+            FROM entity_relationships_v relationship
+            JOIN active_character_entities source
+              ON source.id = relationship.source_entity_id
+            JOIN active_character_entities target
+              ON target.id = relationship.target_entity_id
+            WHERE relationship.relationship_scope = 'character'
+              AND relationship.source_entity_id IS NOT NULL
+              AND relationship.target_entity_id IS NOT NULL
+            ORDER BY source_entity_id, target_entity_id NULLS FIRST
+            """
+        )
+    ).mappings():
+        source = int(row["source_entity_id"])
+        active_character_ids.add(source)
+        target = row.get("target_entity_id")
+        if target is not None:
+            target_id = int(target)
+            active_character_ids.add(target_id)
+            relationship_edges.append((source, target_id))
+
+    return _compute_orbit_distances(active_character_ids, relationship_edges)
+
+
 def hydrate_world_state(
     session: Any,
     *,
@@ -480,6 +564,7 @@ def hydrate_world_state(
         anchor_chunk_id=anchor_chunk_id,
         win_history_window=win_history_window,
     )
+    orbit_distance = _load_orbit_distances(session)
 
     return WorldState(
         tags={entity_id: frozenset(values) for entity_id, values in tags.items()},
@@ -489,8 +574,7 @@ def hydrate_world_state(
         locations=locations,
         activities=activities,
         trust=trust,
-        # TODO: Hydrate orbit_distance when the resolver has an authoritative
-        # source. Relationship trust is hydrated from entity_relationships_v.
+        orbit_distance=orbit_distance,
         relationship_types={
             key: frozenset(values) for key, values in relationship_types.items()
         },

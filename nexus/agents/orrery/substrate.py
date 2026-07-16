@@ -345,6 +345,9 @@ class WorldState:
     location_classes: Mapping[int, frozenset[str]] = field(default_factory=dict)
     location_entity_ids: Mapping[int, int] = field(default_factory=dict)
     location_zones: Mapping[int, int] = field(default_factory=dict)
+    # Neutral narrative proximity: shortest unweighted hop count through the
+    # current active-character relationship graph, treated as undirected.
+    # Quality- or direction-sensitive routing belongs in separate projections.
     orbit_distance: Mapping[Tuple[int, int], int] = field(default_factory=dict)
     need_debt_scores: Mapping[Tuple[int, str], float] = field(default_factory=dict)
     travel_states: Mapping[int, TravelState] = field(default_factory=dict)
@@ -1769,7 +1772,11 @@ def relative_orbit_distance(
     slot_from: Slot = Slot.ACTOR,
     slot_to: Slot = Slot.TARGET,
 ) -> Condition:
-    """Return whether two entities are within an abstract social orbit distance."""
+    """Return whether two entities are within the neutral narrative orbit.
+
+    The hydrated distance is an undirected, unweighted relationship-graph hop
+    count. Relationship quality and direction do not affect this base metric.
+    """
 
     def _condition(state: WorldState, bindings: Bindings) -> bool:
         source = _slot_entity(bindings, slot_from)

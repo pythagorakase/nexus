@@ -10,9 +10,10 @@ findings (NULL bestowal world times, wall-clock backfill epochs).
 Honesty: hydration at a historical anchor rewinds only recent event ids, the
 clock, the actor roster, and the need-debt accrual tail; the claims/awareness
 overlay, tags, pair tags, relationships, positions, travel, and routine anchors
-are **current projections**. Every payload carries :data:`HYDRATION_HONESTY`
-verbatim so the UI can render the per-axis label instead of implying a clean
-rewind.
+are **current projections**. Relationship orbit distance is likewise derived
+from that current relationship projection at hydration time. Every payload
+carries :data:`HYDRATION_HONESTY` verbatim so the UI can render the per-axis
+label instead of implying a clean rewind.
 
 Never-chosen branches here mean "never selected across the analyzed window."
 That is weaker than "dead behind its gate" (which needs exhaustive branch
@@ -51,6 +52,7 @@ HYDRATION_HONESTY: Mapping[str, Tuple[str, ...]] = {
         "pair_tags",
         "relationships",
         "trust",
+        "orbit_distance",
         "positions",
         "activities",
         "travel_states",
