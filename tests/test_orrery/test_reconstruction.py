@@ -1,6 +1,6 @@
 """Live tests for the reconstruction-sufficiency layer (migration 065).
 
-Real writers and real triggers against save_02 inside always-rolled-back
+Real writers and real triggers against save_05 inside always-rolled-back
 transactions — zero persistent writes. Pins the issue #426 decisions:
 
 - 7b: every Skald-side scalar write lands in ``state_delta_log``, chunk-keyed.
@@ -35,7 +35,7 @@ from nexus.api.commit_handler_sync import apply_state_updates_sync
 
 pytestmark = pytest.mark.requires_postgres
 
-WRITE_SLOT = 2
+WRITE_SLOT = 5
 
 
 def _connect() -> Any:
@@ -73,7 +73,7 @@ def test_checkpoint_captures_every_section_and_is_idempotent() -> None:
             cur.execute("SELECT count(*) FROM entity_tags WHERE cleared_at IS NULL")
             active_tags = cur.fetchone()[0]
             assert len(state["entity_tags"]) == active_tags
-            assert active_tags > 0, "save_02 must carry active tags"
+            assert active_tags > 0, "save_05 must carry active tags"
             assert state["characters"], "character scalars must be captured"
 
             # Idempotent per (chunk, label): re-commit of the same tick

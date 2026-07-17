@@ -7,12 +7,10 @@ exactly the winners the production ``resolve_dry_run`` selects, stack by
 stack, including branch, magnitude, event type, binding hash, and the
 rendered narrative stub.
 
-save_02 is the dense retrograde-backfilled audit target; save_05 is the
-small live-runtime slot exhibiting the NULL-world-time bestowal pathology —
-running parity on both catches data-shape assumptions the other slot would
-hide, and a joint non-vacuity test guards against both slots drifting into
-a state where a parity block silently runs zero iterations. All endpoints
-are read-only, so no cleanup is needed.
+save_05 is the Orrery-native live-runtime audit target. A module-wide
+non-vacuity test guards against it drifting into a state where a parity block
+silently runs zero iterations. All endpoints are read-only, so no cleanup is
+needed.
 """
 
 from __future__ import annotations
@@ -38,7 +36,8 @@ from nexus.api.orrery_dev_endpoints import router as orrery_dev_router
 from nexus.api.slot_utils import get_slot_db_url
 from nexus.config import load_settings, load_settings_as_dict
 
-AUDIT_SLOTS = (2, 5)
+LIVE_SLOT = 5
+AUDIT_SLOTS = (LIVE_SLOT,)
 
 TWO_PARTY_TEMPLATE_IDS = {t.id for t in BUILTIN_TEMPLATES if len(t.required_slots) == 2}
 ACTOR_ONLY_TEMPLATE_IDS = {
@@ -224,10 +223,10 @@ def test_resolve_four_template_states_are_distinguishable(
 ) -> None:
     """Winner / shadowed / gate-failed / not-applicable must never blur."""
 
-    response = client.post("/api/dev/orrery/resolve", json={"slot": 2})
+    response = client.post("/api/dev/orrery/resolve", json={"slot": LIVE_SLOT})
     assert response.status_code == 200
     payload = response.json()
-    assert payload["actors"], "save_02 is expected to bind off-screen actors"
+    assert payload["actors"], "save_05 is expected to bind off-screen actors"
 
     for group in payload["actors"]:
         # Stack composition respects arity — the stack-split trap guard.
@@ -270,7 +269,7 @@ def test_resolve_four_template_states_are_distinguishable(
 
 @pytest.mark.requires_postgres
 def test_entity_context_hover_payload(client: TestClient) -> None:
-    resolve = client.post("/api/dev/orrery/resolve", json={"slot": 2})
+    resolve = client.post("/api/dev/orrery/resolve", json={"slot": LIVE_SLOT})
     assert resolve.status_code == 200
     groups = resolve.json()["actors"]
     assert groups
@@ -278,7 +277,11 @@ def test_entity_context_hover_payload(client: TestClient) -> None:
 
     response = client.post(
         "/api/dev/orrery/context/entities",
-        json={"slot": 2, "entity_ids": entity_ids, "recent_events_limit": 3},
+        json={
+            "slot": LIVE_SLOT,
+            "entity_ids": entity_ids,
+            "recent_events_limit": 3,
+        },
     )
     assert response.status_code == 200
     payload = response.json()
@@ -318,7 +321,7 @@ def test_entity_context_hover_payload(client: TestClient) -> None:
 def test_entity_context_recent_events_respect_anchor(client: TestClient) -> None:
     """A historical anchor must not surface events from its own future."""
 
-    resolve = client.post("/api/dev/orrery/resolve", json={"slot": 2})
+    resolve = client.post("/api/dev/orrery/resolve", json={"slot": LIVE_SLOT})
     assert resolve.status_code == 200
     resolved = resolve.json()
     head_anchor = resolved["anchor_chunk_id"]
@@ -326,7 +329,11 @@ def test_entity_context_recent_events_respect_anchor(client: TestClient) -> None
 
     at_head = client.post(
         "/api/dev/orrery/context/entities",
-        json={"slot": 2, "entity_ids": entity_ids, "anchor_chunk_id": head_anchor},
+        json={
+            "slot": LIVE_SLOT,
+            "entity_ids": entity_ids,
+            "anchor_chunk_id": head_anchor,
+        },
     )
     assert at_head.status_code == 200
     for entity in at_head.json()["entities"]:
@@ -336,7 +343,7 @@ def test_entity_context_recent_events_respect_anchor(client: TestClient) -> None
     # Anchor 0 predates every event; the honest answer is "none yet".
     at_genesis = client.post(
         "/api/dev/orrery/context/entities",
-        json={"slot": 2, "entity_ids": entity_ids, "anchor_chunk_id": 0},
+        json={"slot": LIVE_SLOT, "entity_ids": entity_ids, "anchor_chunk_id": 0},
     )
     assert at_genesis.status_code == 200
     for entity in at_genesis.json()["entities"]:
@@ -380,7 +387,7 @@ def _not_hunted_winners(payload: dict) -> Iterator[tuple[int, dict]]:
 
 @pytest.mark.requires_postgres
 def test_current_mode_carries_no_what_if_payload(client: TestClient) -> None:
-    payload = _resolve(client, 2)
+    payload = _resolve(client, LIVE_SLOT)
     assert payload["mode"] == "current"
     assert payload["overrides"] is None
     assert payload["need_pressures_diff"] is None
@@ -388,7 +395,7 @@ def test_current_mode_carries_no_what_if_payload(client: TestClient) -> None:
         assert stack["diff"] is None
 
     # An explicitly empty override set is still current mode.
-    empty = _resolve(client, 2, overrides={})
+    empty = _resolve(client, LIVE_SLOT, overrides={})
     assert empty["mode"] == "current"
     assert empty["overrides"] is None
 
@@ -503,12 +510,13 @@ def test_what_if_need_override_reaches_stacks_and_pressures(
 
 @pytest.mark.requires_postgres
 def test_what_if_validation_rejections(client: TestClient) -> None:
-    payload = _resolve(client, 2)
+    payload = _resolve(client, LIVE_SLOT)
     actor_id = payload["actors"][0]["actor_entity_id"]
 
     def _post(overrides: dict) -> tuple[int, str]:
         response = client.post(
-            "/api/dev/orrery/resolve", json={"slot": 2, "overrides": overrides}
+            "/api/dev/orrery/resolve",
+            json={"slot": LIVE_SLOT, "overrides": overrides},
         )
         return response.status_code, response.json().get("detail", "")
 
@@ -548,7 +556,7 @@ def test_what_if_validation_rejections(client: TestClient) -> None:
     context = client.post(
         "/api/dev/orrery/context/entities",
         json={
-            "slot": 2,
+            "slot": LIVE_SLOT,
             "entity_ids": [g["actor_entity_id"] for g in payload["actors"]],
         },
     ).json()
@@ -561,7 +569,7 @@ def test_what_if_validation_rejections(client: TestClient) -> None:
         None,
     )
     assert carried is not None, (
-        "no audited actor on save_02 carries a durable tag — layer-mismatch "
+        "no audited actor on save_05 carries a durable tag — layer-mismatch "
         "and no-op rejection checks are vacuous; repoint the test"
     )
     tagged_entity, durable_tag = carried
@@ -589,7 +597,7 @@ def test_what_if_validation_rejections(client: TestClient) -> None:
     response = client.post(
         "/api/dev/orrery/resolve",
         json={
-            "slot": 2,
+            "slot": LIVE_SLOT,
             "overrides": {
                 "tags": [{"entity_id": actor_id, "tag": "x", "op": "toggle"}]
             },
@@ -789,19 +797,23 @@ def test_coverage_anchor_cap_and_sampling(client: TestClient) -> None:
     max_anchors = load_settings_as_dict()["orrery"]["dashboard"]["coverage_max_anchors"]
 
     over = client.post(
-        "/api/dev/orrery/coverage", json={"slot": 2, "count": max_anchors + 1}
+        "/api/dev/orrery/coverage",
+        json={"slot": LIVE_SLOT, "count": max_anchors + 1},
     )
     assert over.status_code == 400
     assert "coverage_max_anchors" in over.json()["detail"]
 
     over_explicit = client.post(
         "/api/dev/orrery/coverage",
-        json={"slot": 2, "anchor_chunk_ids": list(range(1, max_anchors + 2))},
+        json={
+            "slot": LIVE_SLOT,
+            "anchor_chunk_ids": list(range(1, max_anchors + 2)),
+        },
     )
     assert over_explicit.status_code == 400
 
     # Stride sampling walks real chunk ids backward from the head.
-    engine = create_engine(get_slot_db_url(slot=2))
+    engine = create_engine(get_slot_db_url(slot=LIVE_SLOT))
     try:
         with Session(engine) as session:
             ids_desc = list(
@@ -818,7 +830,8 @@ def test_coverage_anchor_cap_and_sampling(client: TestClient) -> None:
     expected = sorted(ids_desc[::3][:3])
 
     response = client.post(
-        "/api/dev/orrery/coverage", json={"slot": 2, "count": 3, "stride": 3}
+        "/api/dev/orrery/coverage",
+        json={"slot": LIVE_SLOT, "count": 3, "stride": 3},
     )
     assert response.status_code == 200
     assert response.json()["anchor_chunk_ids"] == expected
@@ -877,7 +890,7 @@ def test_joint_beats_parity_with_production(
 def test_vocab_endpoint_serves_picker_vocabularies(client: TestClient) -> None:
     """The what-if drawer's pickers read slot-scoped vocab from one call."""
 
-    response = client.get("/api/dev/orrery/vocab?slot=2")
+    response = client.get(f"/api/dev/orrery/vocab?slot={LIVE_SLOT}")
     assert response.status_code == 200
     payload = response.json()
     assert set(payload) == {"tags", "pair_tags", "event_types", "places"}

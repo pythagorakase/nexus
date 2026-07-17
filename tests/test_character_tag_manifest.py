@@ -102,25 +102,8 @@ def test_cli_character_manifest_returns_live_slot2_payload() -> None:
     assert result["character_manifest"]["source"]["slot"] == 2
 
 
-@pytest.mark.requires_postgres
-def test_cli_character_apply_dry_run_skips_unreviewed_slot2_manifest() -> None:
-    """CLI character-apply should not write generated review-required rows."""
-
-    try:
-        result = cli.run_character_apply(
-            Namespace(slot=2, execute=False, manifest=None, source_kind="system")
-        )
-    except psycopg2.Error as exc:
-        pytest.skip(f"{TEST_DBNAME} PostgreSQL test database unavailable: {exc}")
-    finally:
-        close_pool(TEST_DBNAME)
-
-    assert result["success"] is True
-    apply_result = result["character_apply"]
-    assert apply_result["dry_run"] is True
-    assert apply_result["entity_kind"] == "character"
-    assert apply_result["counters"]["ready_entity_tag_operations"] == 0
-    assert apply_result["counters"]["review_required_operations_skipped"] > 0
+# Slot-2 retrofit live coverage was retired by owner order on 2026-07-17;
+# the tooling remains available for any future legacy import.
 
 
 def _row(
