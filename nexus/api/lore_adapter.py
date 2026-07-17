@@ -146,8 +146,6 @@ def response_to_incubator(
         raise ValueError("No narrative text in LORE response")
 
     generation_model = getattr(response, "generation_model", None)
-    if not isinstance(generation_model, str) or not generation_model.strip():
-        raise ValueError("LORE response is missing its resolved generation model id")
 
     # Extract choice object (presented choices, no selection yet)
     choice_obj = extract_choice_object(response)

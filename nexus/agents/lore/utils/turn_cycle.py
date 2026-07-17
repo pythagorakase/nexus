@@ -999,10 +999,6 @@ class TurnCycleManager:
             turn_context.apex_response = story_response
 
             generation_model = getattr(story_response, "generation_model", None)
-            if not isinstance(generation_model, str) or not generation_model.strip():
-                raise RuntimeError(
-                    "Successful APEX response is missing its generation model id"
-                )
 
             # Extract narrative text for backward compatibility
             narrative_text = story_response.narrative
