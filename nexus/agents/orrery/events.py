@@ -13,6 +13,7 @@ from datetime import timedelta
 import json
 from typing import Any, Mapping, Optional
 
+from nexus.agents.orrery.db_rows import row_get as _row_get
 from nexus.agents.orrery.epistemics import (
     ClaimParticipant,
     MintResult,
@@ -29,6 +30,10 @@ from nexus.agents.orrery.needs import (
     normalize_need_type,
     severity_tag_for_debt,
     severity_tags_for_need,
+)
+from nexus.agents.orrery.propagation import (
+    drain_claim_propagation_async,
+    drain_claim_propagation_sync,
 )
 from nexus.agents.orrery.resolver import (
     LOCATION_CLASS_TAG_CATEGORIES,
@@ -176,6 +181,7 @@ class CommitOrreryTickResult:
     replaced_count: int = 0
     scene_pressure_count: int = 0
     prompt_exposure_count: int = 0
+    propagation_count: int = 0
 
 
 def _coerce_prompt_limits(prompt_settings: Any) -> tuple[int, int]:
@@ -346,6 +352,7 @@ def commit_orrery_tick_sync(
     ecology_settings: Optional[Any] = None,
     project_settings: Optional[Any] = None,
     epistemics_settings: Optional[Any] = None,
+    contagion_settings: Optional[Any] = None,
 ) -> CommitOrreryTickResult:
     """Materialize a preview proposal inside the accepted-chunk transaction."""
 
@@ -388,11 +395,18 @@ def commit_orrery_tick_sync(
                 max_proposals=max_proposals,
                 max_pressures=max_pressures,
             )
+        propagation_result = drain_claim_propagation_sync(
+            cur,
+            tick_chunk_id=tick_chunk_id,
+            settings=contagion_settings,
+        )
+        propagation_count = propagation_result.minted_count
         if not has_resolutions:
             return CommitOrreryTickResult(
                 cleared_tag_count=expired_tag_count,
                 scene_pressure_count=scene_pressure_count,
                 prompt_exposure_count=prompt_exposure_count,
+                propagation_count=propagation_count,
             )
 
         assert coerced is not None
@@ -557,6 +571,7 @@ def commit_orrery_tick_sync(
         replaced_count=replaced_count,
         scene_pressure_count=scene_pressure_count,
         prompt_exposure_count=prompt_exposure_count,
+        propagation_count=propagation_count,
     )
 
 
@@ -574,6 +589,7 @@ async def commit_orrery_tick_async(
     ecology_settings: Optional[Any] = None,
     project_settings: Optional[Any] = None,
     epistemics_settings: Optional[Any] = None,
+    contagion_settings: Optional[Any] = None,
 ) -> CommitOrreryTickResult:
     """Async parity wrapper for tests and non-production commit callers."""
 
@@ -615,11 +631,18 @@ async def commit_orrery_tick_async(
             max_proposals=max_proposals,
             max_pressures=max_pressures,
         )
+    propagation_result = await drain_claim_propagation_async(
+        conn,
+        tick_chunk_id=tick_chunk_id,
+        settings=contagion_settings,
+    )
+    propagation_count = propagation_result.minted_count
     if not has_resolutions:
         return CommitOrreryTickResult(
             cleared_tag_count=expired_tag_count,
             scene_pressure_count=scene_pressure_count,
             prompt_exposure_count=prompt_exposure_count,
+            propagation_count=propagation_count,
         )
 
     assert coerced is not None
@@ -784,6 +807,7 @@ async def commit_orrery_tick_async(
         replaced_count=replaced_count,
         scene_pressure_count=scene_pressure_count,
         prompt_exposure_count=prompt_exposure_count,
+        propagation_count=propagation_count,
     )
 
 
@@ -6062,12 +6086,6 @@ def _coerce_int(value: Any, *, label: str) -> int:
         return int(value)
     except (TypeError, ValueError) as exc:
         raise ValueError(f"Orrery {label} must be an integer entity id") from exc
-
-
-def _row_get(row: Any, key: str, index: int) -> Any:
-    if isinstance(row, Mapping):
-        return row[key]
-    return row[index]
 
 
 def _row_get_optional(row: Any, key: str, index: int, default: Any = None) -> Any:

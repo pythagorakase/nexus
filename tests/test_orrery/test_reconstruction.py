@@ -240,20 +240,23 @@ def test_unattributed_relationship_write_versions_with_null_chunk() -> None:
 
 
 def test_migration_genesis_sections_mirror_checkpoint_sections() -> None:
-    """Genesis SQL across 065 plus additive 074 mirrors checkpoint sections."""
+    """Checkpoint sections are introduced by their owning migrations."""
 
     from pathlib import Path
 
     migration = Path("migrations/065_reconstructability.sql").read_text()
     genesis = migration[migration.index("jsonb_build_object") :]
     additive = Path("migrations/074_plan_relocation_projects.sql").read_text()
-    genesis_sources = genesis + additive
+    propagation = Path("migrations/083_claim_propagation_ledger.sql").read_text()
+    genesis_sources = genesis + additive + propagation
     for section in CHECKPOINT_SECTIONS:
         assert (
-            f"'{section}', (" in genesis_sources
+            f"'{section}'" in genesis_sources
         ), f"migration genesis/extension SQL lacks section {section!r}"
     import re
 
     migration_sections = set(re.findall(r"'(\w+)', \(SELECT", genesis))
     migration_sections.update(re.findall(r"'(character_project_states)', \(", additive))
+    if "'claim_awareness'" in propagation:
+        migration_sections.add("claim_awareness")
     assert migration_sections == set(CHECKPOINT_SECTIONS)

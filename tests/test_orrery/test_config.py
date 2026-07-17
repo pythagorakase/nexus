@@ -14,6 +14,7 @@ from nexus.config.settings_models import (
     OrreryBleedSettings,
     OrreryContagionSettings,
     OrreryDashboardSettings,
+    OrreryEpistemicsSettings,
     OrreryPromoteSettings,
     OrrerySettings,
     OrreryRetrogradeMaturationSettings,
@@ -141,6 +142,13 @@ def test_contagion_rejects_nonpositive_culture_multiplier() -> None:
 
     with pytest.raises(ValidationError, match="greater than zero"):
         OrreryContagionSettings(culture_profiles={"covert": 0.0})
+
+
+def test_epistemics_rejects_claim_propagated_as_claim_producer() -> None:
+    """The propagation ledger cannot recursively create a new claim."""
+
+    with pytest.raises(ValidationError, match="claim_propagated cannot appear"):
+        OrreryEpistemicsSettings(claim_event_types=["claim_propagated"])
 
 
 def test_project_milestones_cannot_fall_below_promotion_floor() -> None:

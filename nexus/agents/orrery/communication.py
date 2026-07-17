@@ -20,6 +20,57 @@ from nexus.config.settings_models import OrreryContagionSettings
 CommunicationEdgeKind = Literal["dyad", "channel"]
 _VALENCE_RE = re.compile(r"^(?P<magnitude>[+-]?\d+)\|[^|]+$")
 _CULTURE_CATEGORIES = frozenset({"operational_secrecy", "operational_mode"})
+_DYAD_SQL = """
+    /* orrery:communication_dyads */
+    SELECT c1.entity_id AS teller_entity_id,
+           c2.entity_id AS listener_entity_id,
+           cr.relationship_type::text AS relationship_type,
+           cr.emotional_valence::text AS emotional_valence
+    FROM character_relationships cr
+    JOIN characters c1 ON c1.id = cr.character1_id
+    JOIN characters c2 ON c2.id = cr.character2_id
+    JOIN entities teller ON teller.id = c1.entity_id
+    JOIN entities listener ON listener.id = c2.entity_id
+    WHERE teller.kind = 'character'
+      AND listener.kind = 'character'
+      AND teller.is_active = true
+      AND listener.is_active = true
+    ORDER BY c1.entity_id, c2.entity_id, cr.relationship_type::text
+"""
+_REGISTERED_PAIR_TAGS_SQL = """
+    /* orrery:communication_registered_pair_tags */
+    SELECT tag
+    FROM pair_tags
+    WHERE NOT deprecated
+    ORDER BY tag
+"""
+_CHANNEL_SQL = """
+    /* orrery:communication_channels */
+    SELECT ept.subject_entity_id,
+           subject.kind::text AS subject_kind,
+           ept.object_entity_id,
+           object.kind::text AS object_kind,
+           pt.tag
+    FROM entity_pair_tags ept
+    JOIN pair_tags pt ON pt.id = ept.pair_tag_id
+    JOIN entities subject ON subject.id = ept.subject_entity_id
+    JOIN entities object ON object.id = ept.object_entity_id
+    WHERE ept.cleared_at IS NULL
+      AND NOT pt.deprecated
+      AND subject.is_active = true
+      AND object.is_active = true
+    ORDER BY ept.subject_entity_id, ept.object_entity_id, pt.tag
+"""
+_CULTURE_TAGS_SQL = """
+    /* orrery:communication_culture_tags */
+    SELECT etc.entity_id, etc.category, etc.tag
+    FROM entity_tags_current etc
+    JOIN entities institution ON institution.id = etc.entity_id
+    WHERE institution.kind = 'faction'
+      AND institution.is_active = true
+      AND etc.category IN ('operational_secrecy', 'operational_mode')
+    ORDER BY etc.entity_id, etc.category, etc.tag
+"""
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,10 +146,17 @@ def _fetch_mappings(session_or_cur: Any, sql: str) -> list[dict[str, Any]]:
         raise TypeError(
             "session_or_cur must be a SQLAlchemy session/connection or DB-API cursor"
         )
+    rows = session_or_cur.fetchall()
+    if rows and isinstance(rows[0], Mapping):
+        return [dict(row) for row in rows]
     column_names = [column[0] for column in description]
-    return [
-        dict(zip(column_names, row, strict=True)) for row in session_or_cur.fetchall()
-    ]
+    return [dict(zip(column_names, row, strict=True)) for row in rows]
+
+
+async def _fetch_mappings_async(conn: Any, sql: str) -> list[dict[str, Any]]:
+    """Execute read SQL through the asyncpg commit connection."""
+
+    return [dict(row) for row in await conn.fetch(sql)]
 
 
 def _valence_tier(emotional_valence: Any) -> Literal["trusting", "neutral", "hostile"]:
@@ -136,16 +194,12 @@ def _edge_sort_key(edge: CommunicationEdge) -> tuple[Any, ...]:
 
 
 def _registered_channel_tags(session_or_cur: Any) -> frozenset[str]:
-    rows = _fetch_mappings(
-        session_or_cur,
-        """
-        /* orrery:communication_registered_pair_tags */
-        SELECT tag
-        FROM pair_tags
-        WHERE NOT deprecated
-        ORDER BY tag
-        """,
-    )
+    rows = _fetch_mappings(session_or_cur, _REGISTERED_PAIR_TAGS_SQL)
+    return frozenset(str(row["tag"]) for row in rows)
+
+
+async def _registered_channel_tags_async(conn: Any) -> frozenset[str]:
+    rows = await _fetch_mappings_async(conn, _REGISTERED_PAIR_TAGS_SQL)
     return frozenset(str(row["tag"]) for row in rows)
 
 
@@ -169,26 +223,18 @@ def _validate_channel_registry(
 def _dyad_edges(
     session_or_cur: Any, settings: OrreryContagionSettings
 ) -> list[CommunicationEdge]:
-    rows = _fetch_mappings(
-        session_or_cur,
-        """
-        /* orrery:communication_dyads */
-        SELECT c1.entity_id AS teller_entity_id,
-               c2.entity_id AS listener_entity_id,
-               cr.relationship_type::text AS relationship_type,
-               cr.emotional_valence::text AS emotional_valence
-        FROM character_relationships cr
-        JOIN characters c1 ON c1.id = cr.character1_id
-        JOIN characters c2 ON c2.id = cr.character2_id
-        JOIN entities teller ON teller.id = c1.entity_id
-        JOIN entities listener ON listener.id = c2.entity_id
-        WHERE teller.kind = 'character'
-          AND listener.kind = 'character'
-          AND teller.is_active = true
-          AND listener.is_active = true
-        ORDER BY c1.entity_id, c2.entity_id, cr.relationship_type::text
-        """,
-    )
+    return _dyad_edges_from_rows(_fetch_mappings(session_or_cur, _DYAD_SQL), settings)
+
+
+async def _dyad_edges_async(
+    conn: Any, settings: OrreryContagionSettings
+) -> list[CommunicationEdge]:
+    return _dyad_edges_from_rows(await _fetch_mappings_async(conn, _DYAD_SQL), settings)
+
+
+def _dyad_edges_from_rows(
+    rows: Sequence[Mapping[str, Any]], settings: OrreryContagionSettings
+) -> list[CommunicationEdge]:
     row_keys = {
         (
             int(row["teller_entity_id"]),
@@ -231,42 +277,26 @@ def _dyad_edges(
 
 
 def _channel_rows(session_or_cur: Any) -> list[dict[str, Any]]:
-    return _fetch_mappings(
-        session_or_cur,
-        """
-        /* orrery:communication_channels */
-        SELECT ept.subject_entity_id,
-               subject.kind::text AS subject_kind,
-               ept.object_entity_id,
-               object.kind::text AS object_kind,
-               pt.tag
-        FROM entity_pair_tags ept
-        JOIN pair_tags pt ON pt.id = ept.pair_tag_id
-        JOIN entities subject ON subject.id = ept.subject_entity_id
-        JOIN entities object ON object.id = ept.object_entity_id
-        WHERE ept.cleared_at IS NULL
-          AND NOT pt.deprecated
-          AND subject.is_active = true
-          AND object.is_active = true
-        ORDER BY ept.subject_entity_id, ept.object_entity_id, pt.tag
-        """,
-    )
+    return _fetch_mappings(session_or_cur, _CHANNEL_SQL)
+
+
+async def _channel_rows_async(conn: Any) -> list[dict[str, Any]]:
+    return await _fetch_mappings_async(conn, _CHANNEL_SQL)
 
 
 def _culture_tags_by_institution(session_or_cur: Any) -> dict[int, Tuple[str, ...]]:
-    rows = _fetch_mappings(
-        session_or_cur,
-        """
-        /* orrery:communication_culture_tags */
-        SELECT etc.entity_id, etc.category, etc.tag
-        FROM entity_tags_current etc
-        JOIN entities institution ON institution.id = etc.entity_id
-        WHERE institution.kind = 'faction'
-          AND institution.is_active = true
-          AND etc.category IN ('operational_secrecy', 'operational_mode')
-        ORDER BY etc.entity_id, etc.category, etc.tag
-        """,
-    )
+    return _culture_tags_from_rows(_fetch_mappings(session_or_cur, _CULTURE_TAGS_SQL))
+
+
+async def _culture_tags_by_institution_async(
+    conn: Any,
+) -> dict[int, Tuple[str, ...]]:
+    return _culture_tags_from_rows(await _fetch_mappings_async(conn, _CULTURE_TAGS_SQL))
+
+
+def _culture_tags_from_rows(
+    rows: Sequence[Mapping[str, Any]],
+) -> dict[int, Tuple[str, ...]]:
     tags: dict[int, list[str]] = {}
     for row in rows:
         category = str(row["category"])
@@ -346,10 +376,31 @@ def _channel_edges(
     session_or_cur: Any, settings: OrreryContagionSettings
 ) -> list[CommunicationEdge]:
     registered_tags = _registered_channel_tags(session_or_cur)
-    _validate_channel_registry(settings.channels, registered_tags)
     culture_tags = _culture_tags_by_institution(session_or_cur)
+    return _channel_edges_from_rows(
+        _channel_rows(session_or_cur), registered_tags, culture_tags, settings
+    )
+
+
+async def _channel_edges_async(
+    conn: Any, settings: OrreryContagionSettings
+) -> list[CommunicationEdge]:
+    registered_tags = await _registered_channel_tags_async(conn)
+    culture_tags = await _culture_tags_by_institution_async(conn)
+    return _channel_edges_from_rows(
+        await _channel_rows_async(conn), registered_tags, culture_tags, settings
+    )
+
+
+def _channel_edges_from_rows(
+    rows: Sequence[Mapping[str, Any]],
+    registered_tags: frozenset[str],
+    culture_tags: Mapping[int, Sequence[str]],
+    settings: OrreryContagionSettings,
+) -> list[CommunicationEdge]:
+    _validate_channel_registry(settings.channels, registered_tags)
     edges: list[CommunicationEdge] = []
-    for row in _channel_rows(session_or_cur):
+    for row in rows:
         tag = str(row["tag"])
         channel_key = "status:*" if tag.startswith("status:") else tag
         channel = settings.channels.get(channel_key)
@@ -403,6 +454,24 @@ def assemble_communication_graph(
     return CommunicationGraph(edges=tuple(sorted(edges, key=_edge_sort_key)))
 
 
+async def assemble_communication_graph_async(
+    conn: Any,
+    *,
+    settings: Any,
+    world_time: Optional[datetime],
+) -> CommunicationGraph:
+    """Asyncpg twin of :func:`assemble_communication_graph`."""
+
+    del world_time
+    config = coerce_contagion_settings(settings)
+    if not config.enabled:
+        return CommunicationGraph()
+    await _validate_dyad_overrides_async(conn, config.dyad_overrides)
+    edges = await _dyad_edges_async(conn, config)
+    edges.extend(await _channel_edges_async(conn, config))
+    return CommunicationGraph(edges=tuple(sorted(edges, key=_edge_sort_key)))
+
+
 def communication_graph_for_settings(
     session_or_cur: Any,
     settings: Any,
@@ -434,12 +503,7 @@ def _validate_dyad_overrides(session_or_cur: Any, overrides: Mapping[str, Any]) 
 
     if not overrides:
         return
-    from nexus.agents.logon.apex_enums import RelationshipType
-    from nexus.agents.orrery.catalog import collect_template_vocabulary
-    from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
-
-    valid = {member.value for member in RelationshipType}
-    valid.update(collect_template_vocabulary(BUILTIN_TEMPLATES)["relationship_types"])
+    valid = _known_relationship_types()
     valid.update(
         str(row["relationship_type"])
         for row in _fetch_mappings(
@@ -453,3 +517,33 @@ def _validate_dyad_overrides(session_or_cur: Any, overrides: Mapping[str, Any]) 
             "orrery.contagion dyad_overrides reference unknown relationship "
             f"types {unknown}; known types: {sorted(valid)}"
         )
+
+
+async def _validate_dyad_overrides_async(
+    conn: Any, overrides: Mapping[str, Any]
+) -> None:
+    if not overrides:
+        return
+    valid = _known_relationship_types()
+    valid.update(
+        str(row["relationship_type"])
+        for row in await _fetch_mappings_async(
+            conn, "SELECT DISTINCT relationship_type FROM character_relationships"
+        )
+    )
+    unknown = sorted(set(overrides) - valid)
+    if unknown:
+        raise ValueError(
+            "orrery.contagion dyad_overrides reference unknown relationship "
+            f"types {unknown}; known types: {sorted(valid)}"
+        )
+
+
+def _known_relationship_types() -> set[str]:
+    from nexus.agents.logon.apex_enums import RelationshipType
+    from nexus.agents.orrery.catalog import collect_template_vocabulary
+    from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
+
+    valid = {member.value for member in RelationshipType}
+    valid.update(collect_template_vocabulary(BUILTIN_TEMPLATES)["relationship_types"])
+    return valid

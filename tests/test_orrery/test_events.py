@@ -734,6 +734,34 @@ def test_commit_orrery_tick_ignores_scene_pressures() -> None:
     assert "INSERT INTO world_events" not in statements
 
 
+def test_propagation_count_does_not_inflate_resolution_event_count(
+    monkeypatch: Any,
+) -> None:
+    """Passive acquisitions have a dedicated tick-result counter."""
+
+    from nexus.agents.orrery.propagation import PropagationDrainResult
+
+    monkeypatch.setattr(
+        orrery_events,
+        "drain_claim_propagation_sync",
+        lambda *_args, **_kwargs: PropagationDrainResult(
+            awareness_ids=(701,), event_ids=(801,)
+        ),
+    )
+
+    result = commit_orrery_tick_sync(
+        RecordingConn(RecordingCursor()),
+        None,
+        tick_chunk_id=100,
+        slot=5,
+        world_layer="primary",
+        contagion_settings={"enabled": True},
+    )
+
+    assert result.event_count == 0
+    assert result.propagation_count == 1
+
+
 def test_commit_orrery_tick_sweeps_expired_entity_tags_without_resolution() -> None:
     """Accepted ticks clear elapsed-time tags even when no package commits."""
 

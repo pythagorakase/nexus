@@ -1952,6 +1952,7 @@ def _load_recent_events(
                    payload
             FROM world_events
             WHERE tick_chunk_id BETWEEN :lower_bound AND :anchor_chunk_id
+              AND event_type <> 'claim_propagated'
               AND (world_layer IS NULL OR world_layer = 'primary')
               AND superseded_by_event_id IS NULL
             ORDER BY tick_chunk_id DESC, id DESC
