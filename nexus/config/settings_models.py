@@ -6,6 +6,8 @@ All models use `extra='forbid'` to catch typos in configuration keys.
 """
 
 from dataclasses import dataclass
+from datetime import timedelta
+import re
 from typing import Any, Dict, List, Literal, Optional, Tuple
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -674,6 +676,239 @@ class OrreryBindingSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     window_chunks: int = Field(default=30, ge=1)
+
+
+_CONTAGION_DURATION_RE = re.compile(r"^(?P<amount>\d+(?:\.\d+)?)(?P<unit>[smhdw])$")
+_CONTAGION_DURATION_SECONDS = {
+    "s": 1,
+    "m": 60,
+    "h": 60 * 60,
+    "d": 24 * 60 * 60,
+    "w": 7 * 24 * 60 * 60,
+}
+
+
+def _parse_contagion_duration(value: Any, *, allow_never: bool) -> Optional[timedelta]:
+    """Parse one strict world-time duration used by Social Contagion."""
+
+    if isinstance(value, timedelta):
+        if value <= timedelta(0):
+            raise ValueError("duration must be greater than zero")
+        return value
+    if allow_never and value is None:
+        return None
+    if allow_never and value == "never":
+        return None
+    if not isinstance(value, str):
+        expected = (
+            "a duration string or 'never'" if allow_never else "a duration string"
+        )
+        raise ValueError(f"expected {expected}")
+    match = _CONTAGION_DURATION_RE.fullmatch(value.strip())
+    if match is None:
+        expected = "<number><s|m|h|d|w>"
+        if allow_never:
+            expected += " or 'never'"
+        raise ValueError(f"malformed duration {value!r}; expected {expected}")
+    seconds = (
+        float(match.group("amount")) * _CONTAGION_DURATION_SECONDS[match.group("unit")]
+    )
+    if seconds <= 0:
+        raise ValueError("duration must be greater than zero")
+    return timedelta(seconds=seconds)
+
+
+class OrreryContagionDyadTierSettings(BaseModel):
+    """Outbound-valence latency defaults for character dyads."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    trusting: Optional[timedelta] = timedelta(hours=24)
+    neutral: Optional[timedelta] = timedelta(hours=96)
+    hostile: Optional[timedelta] = None
+
+    @field_validator("trusting", "neutral", "hostile", mode="before")
+    @classmethod
+    def _parse_latency(cls, value: Any) -> Optional[timedelta]:
+        return _parse_contagion_duration(value, allow_never=True)
+
+
+class OrreryContagionDyadOverrideSettings(BaseModel):
+    """Directional latency override for one relationship type."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    forward: Optional[timedelta]
+    reverse: Optional[timedelta]
+
+    @field_validator("forward", "reverse", mode="before")
+    @classmethod
+    def _parse_latency(cls, value: Any) -> Optional[timedelta]:
+        return _parse_contagion_duration(value, allow_never=True)
+
+
+class OrreryContagionChannelSettings(BaseModel):
+    """Direction and base latency for one institutional conduit."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    direction: Literal[
+        "both",
+        "subject_to_object",
+        "object_to_subject",
+        "faction_to_member",
+    ]
+    latency: Optional[timedelta]
+    min_level: Optional[str] = None
+
+    @field_validator("latency", mode="before")
+    @classmethod
+    def _parse_latency(cls, value: Any) -> Optional[timedelta]:
+        return _parse_contagion_duration(value, allow_never=True)
+
+    @field_validator("min_level")
+    @classmethod
+    def _validate_min_level(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        from nexus.agents.orrery.status_family import normalize_status_level
+
+        return normalize_status_level(value)
+
+
+class OrreryContagionGuardSettings(BaseModel):
+    """Validated Stage 2c traversal guards shipped ahead of propagation."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    depth_cap: int = Field(default=4, ge=1)
+    age_horizon: timedelta = timedelta(days=14)
+    fan_out_cap: int = Field(default=6, ge=1)
+
+    @field_validator("age_horizon", mode="before")
+    @classmethod
+    def _parse_age_horizon(cls, value: Any) -> timedelta:
+        parsed = _parse_contagion_duration(value, allow_never=False)
+        assert parsed is not None
+        return parsed
+
+
+def _default_contagion_dyad_overrides() -> (
+    Dict[str, OrreryContagionDyadOverrideSettings]
+):
+    return {
+        "handler": OrreryContagionDyadOverrideSettings(
+            forward=timedelta(hours=12), reverse=timedelta(hours=12)
+        ),
+        "captor": OrreryContagionDyadOverrideSettings(
+            forward=None, reverse=timedelta(hours=24)
+        ),
+    }
+
+
+def _default_contagion_channels() -> Dict[str, OrreryContagionChannelSettings]:
+    return {
+        "handles": OrreryContagionChannelSettings(
+            direction="both", latency=timedelta(hours=12)
+        ),
+        "obligation": OrreryContagionChannelSettings(
+            direction="object_to_subject", latency=timedelta(hours=48)
+        ),
+        "authority_over": OrreryContagionChannelSettings(
+            direction="subject_to_object", latency=timedelta(hours=24)
+        ),
+        "mentors": OrreryContagionChannelSettings(
+            direction="both", latency=timedelta(hours=24)
+        ),
+        "contact:social": OrreryContagionChannelSettings(
+            direction="both", latency=timedelta(hours=72)
+        ),
+        "status:*": OrreryContagionChannelSettings(
+            direction="faction_to_member",
+            latency=timedelta(hours=48),
+            min_level="junior",
+        ),
+    }
+
+
+def _default_contagion_culture_profiles() -> Dict[str, float]:
+    return {
+        "cellular_clandestine": 4.0,
+        "compartmented": 2.0,
+        "covert": 2.0,
+        "hybrid": 1.0,
+        "overt": 0.5,
+    }
+
+
+class OrreryContagionSettings(BaseModel):
+    """Deterministic read-side communication graph configuration."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = True
+    dyad_tiers: OrreryContagionDyadTierSettings = Field(
+        default_factory=OrreryContagionDyadTierSettings
+    )
+    dyad_overrides: Dict[str, OrreryContagionDyadOverrideSettings] = Field(
+        default_factory=_default_contagion_dyad_overrides
+    )
+    channels: Dict[str, OrreryContagionChannelSettings] = Field(
+        default_factory=_default_contagion_channels
+    )
+    culture_profiles: Dict[str, float] = Field(
+        default_factory=_default_contagion_culture_profiles
+    )
+    guards: OrreryContagionGuardSettings = Field(
+        default_factory=OrreryContagionGuardSettings
+    )
+
+    @field_validator("dyad_overrides")
+    @classmethod
+    def _validate_override_keys(
+        cls,
+        values: Dict[str, OrreryContagionDyadOverrideSettings],
+    ) -> Dict[str, OrreryContagionDyadOverrideSettings]:
+        if any(not key.strip() for key in values):
+            raise ValueError("dyad_overrides keys must be non-empty")
+        return values
+
+    @field_validator("culture_profiles")
+    @classmethod
+    def _validate_culture_profiles(cls, values: Dict[str, float]) -> Dict[str, float]:
+        blank = [key for key in values if not key.strip()]
+        if blank:
+            raise ValueError("culture_profiles keys must be non-empty")
+        invalid = {key: value for key, value in values.items() if value <= 0}
+        if invalid:
+            raise ValueError(
+                "culture profile multipliers must be greater than zero: " f"{invalid}"
+            )
+        return values
+
+    @model_validator(mode="after")
+    def _validate_channel_shapes(self) -> "OrreryContagionSettings":
+        for key, channel in self.channels.items():
+            if not key.strip():
+                raise ValueError("channel keys must be non-empty")
+            if key == "status:*":
+                if channel.direction != "faction_to_member":
+                    raise ValueError(
+                        "orrery.contagion.channels.'status:*' must use "
+                        "direction='faction_to_member'"
+                    )
+                if channel.min_level is None:
+                    raise ValueError(
+                        "orrery.contagion.channels.'status:*' requires min_level"
+                    )
+            elif channel.direction == "faction_to_member":
+                raise ValueError(
+                    "direction='faction_to_member' is reserved for the "
+                    "'status:*' channel"
+                )
+            elif channel.min_level is not None:
+                raise ValueError("min_level is only valid for the 'status:*' channel")
+        return self
 
 
 class OrreryRouteGraphSettings(BaseModel):
@@ -1638,6 +1873,7 @@ class OrrerySettings(BaseModel):
 
     enabled: bool = True
     binding: OrreryBindingSettings = Field(default_factory=OrreryBindingSettings)
+    contagion: OrreryContagionSettings = Field(default_factory=OrreryContagionSettings)
     route_graph: OrreryRouteGraphSettings = Field(
         default_factory=OrreryRouteGraphSettings
     )

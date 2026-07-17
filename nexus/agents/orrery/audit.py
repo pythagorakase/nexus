@@ -36,6 +36,10 @@ from typing import Any, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from sqlalchemy import text
 
+from nexus.agents.orrery.communication import (
+    CommunicationGraph,
+    communication_graph_for_settings,
+)
 from nexus.agents.orrery.epistemics import (
     coerce_epistemics_policy,
     load_epistemics_policy,
@@ -142,6 +146,7 @@ class ExplainedTickReport:
     locations: Mapping[int, Any]
     location_names: Mapping[int, str]
     activities: Mapping[int, str]
+    communication_graph: CommunicationGraph
     joint_beats: Tuple[OrreryJointBeat, ...] = ()
     fanout_trimmed: Tuple[Mapping[str, Any], ...] = ()
     mode: str = "current"
@@ -199,6 +204,9 @@ class ExplainedTickReport:
             "actor_name": _entity_label(actor_id, self.entity_names),
             "location": location,
             "activity": self.activities.get(actor_id),
+            "communication_edges": [
+                edge.to_dict() for edge in self.communication_graph.outbound(actor_id)
+            ],
             "actor_stack": self._stack_payload(
                 group.actor_stack, group.actor_stack_diff
             ),
@@ -497,6 +505,7 @@ def explain_dry_run(
     project_settings: Optional[Any] = None,
     epistemics_settings: Optional[Any] = None,
     fanout_settings: Optional[Any] = None,
+    contagion_settings: Optional[Any] = None,
 ) -> ExplainedTickReport:
     """Hydrate, bind, and explain Orrery packages without database writes.
 
@@ -530,6 +539,7 @@ def explain_dry_run(
         win_history_window=habituation.window_ticks if habituation.enabled else 0,
         project_settings=project_settings,
         epistemics_settings=epistemics_policy,
+        contagion_settings=contagion_settings,
     )
 
     templates_list = list(configure_project_magnitudes(templates, project_policy))
@@ -859,6 +869,7 @@ def explain_dry_run(
         locations=dict(active_state.locations),
         location_names=location_names,
         activities=dict(active_state.activities),
+        communication_graph=active_state.communication_graph,
         joint_beats=joint_beats,
         fanout_trimmed=fanout_trimmed,
         mode="what_if" if what_if else "current",
@@ -1104,6 +1115,7 @@ def entity_context(
     anchor_chunk_id: Optional[int],
     recent_events_limit: int = 5,
     sunhelm_settings: Optional[Any] = None,
+    contagion_settings: Optional[Any] = None,
 ) -> dict[str, Any]:
     """Return the hover-audit payload for a set of entity ids.
 
@@ -1119,6 +1131,9 @@ def entity_context(
 
     need_tuning = coerce_need_tuning(sunhelm_settings)
     world_time = _load_world_time(session, anchor_chunk_id=anchor_chunk_id)
+    communication_graph = communication_graph_for_settings(
+        session, contagion_settings, world_time=world_time
+    )
 
     kinds = {
         row["id"]: row["kind"]
@@ -1440,6 +1455,9 @@ def entity_context(
                 },
                 "pair_tags": _named(pair_tags_by_entity.get(entity_id, [])),
                 "relationships": _named(relationships_by_entity.get(entity_id, [])),
+                "communication_edges": [
+                    edge.to_dict() for edge in communication_graph.outbound(entity_id)
+                ],
                 "travel_state": asdict(travel) if travel is not None else None,
                 "routine_anchors": anchors,
                 "recent_events": events_by_entity.get(entity_id, []),

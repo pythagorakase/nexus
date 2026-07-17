@@ -10,6 +10,10 @@ from typing import Any, Iterable, Mapping, Optional, Protocol, Sequence, Tuple, 
 
 from sqlalchemy import text
 
+from nexus.agents.orrery.communication import (
+    CommunicationGraph,
+    communication_graph_for_settings,
+)
 from nexus.agents.orrery.epistemics import (
     coerce_epistemics_policy,
     load_epistemics_policy,
@@ -204,6 +208,11 @@ class OrreryTickProposal:
     resolutions: Tuple[OrreryResolutionDraft, ...]
     scene_pressures: Tuple[OrreryScenePressureDraft, ...] = ()
     joint_beats: Tuple[OrreryJointBeat, ...] = ()
+    # Transient read-side projection. Intentionally omitted from to_dict():
+    # incubator persistence stores decisions, not a hydration-time graph.
+    communication_graph: CommunicationGraph = field(
+        default_factory=CommunicationGraph, compare=False
+    )
     epistemics_settings: Mapping[str, Any] = field(
         default_factory=lambda: {"enabled": False}
     )
@@ -364,6 +373,7 @@ def hydrate_world_state(
     win_history_window: int = 0,
     project_settings: Optional[Any] = None,
     epistemics_settings: Optional[Any] = None,
+    contagion_settings: Optional[Any] = None,
 ) -> WorldState:
     """Hydrate the read-side Orrery state snapshot from database tables.
 
@@ -546,6 +556,9 @@ def hydrate_world_state(
     world_time = world_time_override or _load_world_time(
         session, anchor_chunk_id=anchor_chunk_id
     )
+    communication_graph = communication_graph_for_settings(
+        session, contagion_settings, world_time=world_time
+    )
     time_of_day = _load_time_of_day(world_time)
     weather = _load_weather(session)
     need_debt_scores = _load_need_debt_scores(
@@ -575,6 +588,7 @@ def hydrate_world_state(
         activities=activities,
         trust=trust,
         orbit_distance=orbit_distance,
+        communication_graph=communication_graph,
         relationship_types={
             key: frozenset(values) for key, values in relationship_types.items()
         },
@@ -1628,6 +1642,7 @@ def resolve_dry_run(
     project_settings: Optional[Any] = None,
     epistemics_settings: Optional[Any] = None,
     fanout_settings: Optional[Any] = None,
+    contagion_settings: Optional[Any] = None,
 ) -> OrreryTickProposal:
     """Hydrate, bind, and evaluate Orrery packages without database writes."""
 
@@ -1653,6 +1668,7 @@ def resolve_dry_run(
         win_history_window=habituation.window_ticks if habituation.enabled else 0,
         project_settings=project_settings,
         epistemics_settings=epistemics_policy,
+        contagion_settings=contagion_settings,
     )
 
     templates_list = list(configure_project_magnitudes(templates, project_policy))
@@ -1901,6 +1917,7 @@ def resolve_dry_run(
         resolutions=tuple(drafts),
         scene_pressures=scene_pressures,
         joint_beats=detect_joint_beats(drafts, draft_entity_names),
+        communication_graph=state.communication_graph,
         epistemics_settings={
             "enabled": epistemics_policy.enabled,
             "claim_event_types": sorted(epistemics_policy.claim_event_types),

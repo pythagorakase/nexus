@@ -3,6 +3,7 @@
 import subprocess
 import tomllib
 from copy import deepcopy
+from datetime import timedelta
 
 import pytest
 from pydantic import ValidationError
@@ -11,6 +12,7 @@ from nexus.config import load_settings
 from nexus.api.new_story_schemas import Genre
 from nexus.config.settings_models import (
     OrreryBleedSettings,
+    OrreryContagionSettings,
     OrreryDashboardSettings,
     OrreryPromoteSettings,
     OrrerySettings,
@@ -38,6 +40,16 @@ def test_orrery_settings_resolve_model_reference() -> None:
     assert settings.orrery is not None
     assert settings.orrery.enabled is True
     assert settings.orrery.binding.window_chunks == 30
+    assert settings.orrery.contagion.dyad_tiers.trusting == timedelta(hours=24)
+    assert settings.orrery.contagion.dyad_tiers.neutral == timedelta(hours=96)
+    assert settings.orrery.contagion.dyad_tiers.hostile is None
+    assert settings.orrery.contagion.dyad_overrides["captor"].forward is None
+    assert settings.orrery.contagion.dyad_overrides["captor"].reverse == timedelta(
+        hours=24
+    )
+    assert settings.orrery.contagion.channels["status:*"].min_level == "junior"
+    assert settings.orrery.contagion.culture_profiles["cellular_clandestine"] == 4.0
+    assert settings.orrery.contagion.guards.age_horizon == timedelta(days=14)
     expected_model = settings.global_.model.api_models["anthropic"].roles["default"]
     assert settings.orrery.narration.model_ref == expected_model
     assert settings.orrery.promote.provider is None
@@ -109,6 +121,26 @@ def test_sunhelm_rejects_retired_story_time_accrual_floor() -> None:
         OrrerySunhelmSettings(
             min_accrual_hours_per_chunk={"socialize": 0.5}  # type: ignore[call-arg]
         )
+
+
+def test_contagion_rejects_malformed_duration() -> None:
+    """World-time latencies fail at settings validation, never at traversal."""
+
+    with pytest.raises(ValidationError, match="malformed duration"):
+        OrreryContagionSettings(
+            dyad_tiers={
+                "trusting": "tomorrow",
+                "neutral": "96h",
+                "hostile": "never",
+            }
+        )
+
+
+def test_contagion_rejects_nonpositive_culture_multiplier() -> None:
+    """Culture profiles may slow or accelerate channels but never erase them."""
+
+    with pytest.raises(ValidationError, match="greater than zero"):
+        OrreryContagionSettings(culture_profiles={"covert": 0.0})
 
 
 def test_project_milestones_cannot_fall_below_promotion_floor() -> None:

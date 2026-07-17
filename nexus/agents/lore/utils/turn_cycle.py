@@ -664,6 +664,7 @@ class TurnCycleManager:
                 project_settings=orrery_settings.get("projects"),
                 epistemics_settings=orrery_settings.get("epistemics"),
                 fanout_settings=orrery_settings.get("fanout"),
+                contagion_settings=orrery_settings.get("contagion"),
             )
 
         turn_context.orrery_proposal = proposal

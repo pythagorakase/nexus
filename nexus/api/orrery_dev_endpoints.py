@@ -321,6 +321,7 @@ async def post_resolve(request: OrreryResolveRequest) -> dict[str, Any]:
                 project_settings=orrery.get("projects"),
                 epistemics_settings=orrery.get("epistemics"),
                 fanout_settings=orrery.get("fanout"),
+                contagion_settings=orrery.get("contagion"),
             )
         except OverrideValidationError as exc:
             # Override validation (unknown vocab, no-op toggles) is caller
@@ -348,6 +349,7 @@ async def post_entity_context(
             anchor_chunk_id=anchor_chunk_id,
             recent_events_limit=request.recent_events_limit,
             sunhelm_settings=orrery.get("sunhelm"),
+            contagion_settings=orrery.get("contagion"),
         )
 
 
@@ -410,6 +412,7 @@ async def post_coverage(request: OrreryCoverageRequest) -> dict[str, Any]:
             project_settings=orrery.get("projects"),
             epistemics_settings=orrery.get("epistemics"),
             fanout_settings=orrery.get("fanout"),
+            contagion_settings=orrery.get("contagion"),
         )
 
 

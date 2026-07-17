@@ -253,6 +253,38 @@ enabled = true
 [orrery.binding]
 window_chunks = 30
 
+[orrery.contagion]
+enabled = true
+
+[orrery.contagion.dyad_tiers]
+trusting = "24h"
+neutral = "96h"
+hostile = "never"
+
+[orrery.contagion.dyad_overrides]
+handler = { forward = "12h", reverse = "12h" }
+captor = { forward = "never", reverse = "24h" }
+
+[orrery.contagion.channels]
+handles = { direction = "both", latency = "12h" }
+obligation = { direction = "object_to_subject", latency = "48h" }
+authority_over = { direction = "subject_to_object", latency = "24h" }
+mentors = { direction = "both", latency = "24h" }
+"contact:social" = { direction = "both", latency = "72h" }
+"status:*" = { direction = "faction_to_member", latency = "48h", min_level = "junior" }
+
+[orrery.contagion.culture_profiles]
+cellular_clandestine = 4.0
+compartmented = 2.0
+covert = 2.0
+hybrid = 1.0
+overt = 0.5
+
+[orrery.contagion.guards]
+depth_cap = 4
+age_horizon = "14d"
+fan_out_cap = 6
+
 [orrery.selection]
 # Branch selection inside a fired package: "stochastic" softmax-samples all
 # passing branches by magnitude (PRNG seeded on per-resolution persisted
