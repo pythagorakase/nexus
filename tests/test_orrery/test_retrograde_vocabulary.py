@@ -10,6 +10,7 @@ from nexus.agents.orrery.retrograde_vocabulary import (
     category_seed_policy,
     enumerate_seed_eligible_vocabulary,
 )
+from nexus.agents.orrery.status_family import STATUS_TAGS
 
 
 def test_seed_eligible_vocabulary_includes_template_primitives() -> None:
@@ -87,6 +88,11 @@ def test_seed_eligible_vocabulary_includes_pair_tag_kind_constraints() -> None:
     assert definitions["hunting"]["subject_kinds"] == ["character", "faction"]
     assert definitions["hunting"]["object_kinds"] == ["character"]
     assert definitions["hunting"]["is_ephemeral"] is True
+    assert STATUS_TAGS <= set(definitions)
+    for tag in STATUS_TAGS:
+        assert definitions[tag]["subject_kinds"] == ["character", "faction"]
+        assert definitions[tag]["object_kinds"] == ["faction"]
+        assert definitions[tag]["is_ephemeral"] is False
 
 
 def test_seed_eligible_vocabulary_classifies_registered_categories(

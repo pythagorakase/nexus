@@ -466,8 +466,8 @@ class NewEntityPairTagHint(BaseModel):
     Hints are validated against the live ``pair_tags`` registry during
     generation, where unregistered or kind-incompatible tags trigger a retry.
     The commit path revalidates the complete declaration batch as a backstop.
-    Valid hints feed the background maturation pass as prompt material — they
-    are not written directly at declaration time.
+    Valid hints are applied when the declaration is accepted and also feed the
+    background maturation pass as prompt material.
     """
 
     tag: str = Field(

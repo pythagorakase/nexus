@@ -236,6 +236,34 @@ def test_expansion_plan_validates_pair_tag_kinds() -> None:
         )
 
 
+def test_expansion_plan_rejects_multiple_status_rows_for_one_edge() -> None:
+    """A status ladder records final standing, not a plan-order history."""
+
+    vocabulary = _expansion_test_vocabulary()
+    payload = _valid_expansion(vocabulary)
+    status_base = {
+        "subject_ref": "Mara",
+        "subject_kind": "character",
+        "object_ref": "The Assembly",
+        "object_kind": "faction",
+        "source_event_ref": "retro_event_001",
+    }
+    payload["pair_tag_plan"] = [
+        {**status_base, "tag": "status:junior"},
+        {**status_base, "tag": "status:senior"},
+    ]
+
+    with pytest.raises(
+        RetrogradeExpansionValidationError,
+        match="duplicates a status ladder row.*plan only the final standing",
+    ):
+        validate_expansion_plan(
+            payload=payload,
+            packet=_packet(vocabulary),
+            seed_candidate_response=_seed_response(vocabulary),
+        )
+
+
 def test_expansion_plan_rejects_cross_kind_relationships() -> None:
     """R6 relationship writes are limited to character-character rows."""
 
@@ -879,8 +907,15 @@ def _woven_junction_expansion(
     payload["selected_seed_ids"] = ["seed_001", "seed_002"]
     event = payload["event_plan"][0]
     event["seed_ids"] = ["seed_001", "seed_002"]
+    junction_entity_kind = _packet(vocabulary)["seed_generation_request"][
+        "candidate_graph"
+    ]["dangling_edges"][0]["open_endpoint_kind"]
     event["participants"].append(
-        {"entity_ref": "Vale", "entity_kind": "character", "role": "actor"}
+        {
+            "entity_ref": "Vale",
+            "entity_kind": junction_entity_kind,
+            "role": "actor",
+        }
     )
     second_thread = copy.deepcopy(payload["thread_plan"][0])
     second_thread["seed_id"] = "seed_002"

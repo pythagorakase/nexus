@@ -27,6 +27,8 @@ from nexus.agents.orrery.retrograde_markers import (
     RETROGRADE_PROLOGUE_MARKER,
 )
 from nexus.agents.orrery.retrograde_vocabulary import normalize_entity_ref
+from nexus.agents.orrery.status_family import STATUS_TAGS, level_from_status_tag
+from nexus.agents.orrery.tag_writer import apply_status_pair_tag_bestowal
 
 RETROGRADE_PERSISTENCE_SCHEMA_VERSION = "orrery_retrograde_persistence_plan.v1"
 RETROGRADE_SOURCE_KIND = "retrograde"
@@ -130,6 +132,7 @@ def build_retrograde_persistence_plan(
         prologue_was_inserted=False,
         summaries_enabled=summaries_enabled,
         recorded_at_chunk_id=recorded_at_chunk_id,
+        pair_tag_source_chunk_id=recorded_at_chunk_id,
         epistemics_settings=epistemics_settings,
     )
     if dry_run:
@@ -170,6 +173,7 @@ def build_retrograde_persistence_plan(
         prologue_was_inserted=prologue_was_inserted,
         summaries_enabled=summaries_enabled,
         recorded_at_chunk_id=effective_recorded_at_chunk_id,
+        pair_tag_source_chunk_id=recorded_at_chunk_id,
         epistemics_settings=epistemics_settings,
     )
 
@@ -193,6 +197,7 @@ def _build_plan(
     prologue_was_inserted: bool,
     summaries_enabled: bool,
     recorded_at_chunk_id: Optional[int],
+    pair_tag_source_chunk_id: Optional[int],
     epistemics_settings: Optional[Any],
 ) -> dict[str, Any]:
     counters: Counter[str] = Counter()
@@ -265,6 +270,7 @@ def _build_plan(
             pair_tag_ids=pair_tag_ids,
             world_time=world_time,
             creatable_refs=creatable_refs,
+            recorded_at_chunk_id=pair_tag_source_chunk_id,
         )
         pair_tag_rows.append(planned)
         counters[f"pair_tags_{planned['status']}"] += 1
@@ -341,6 +347,8 @@ def _build_plan(
         "pair_tags_would_insert",
         "pair_tags_inserted",
         "pair_tags_already_present",
+        "pair_tags_would_skip_existing_active_status",
+        "pair_tags_skipped_existing_active_status",
         "pair_tags_blocked",
         "relationships_would_insert",
         "relationships_inserted",
@@ -646,6 +654,7 @@ def _plan_pair_tag_row(
     pair_tag_ids: Mapping[str, int],
     world_time: Any,
     creatable_refs: frozenset[tuple[str, str]],
+    recorded_at_chunk_id: Optional[int],
 ) -> dict[str, Any]:
     reference_issues: list[dict[str, Any]] = []
     vocabulary_issues: list[dict[str, Any]] = []
@@ -717,6 +726,23 @@ def _plan_pair_tag_row(
             return {**base, "status": "would_insert", "entity_pair_tag_id": None}
         raise AssertionError("stub_pending must be resolved before execute writes")
 
+    if tag in STATUS_TAGS:
+        active_status_id = _active_status_pair_tag_id(
+            cur,
+            subject_entity_id=int(subject["entity_id"]),
+            object_entity_id=int(object_entity["entity_id"]),
+        )
+        if active_status_id is not None:
+            return {
+                **base,
+                "status": (
+                    "would_skip_existing_active_status"
+                    if dry_run
+                    else "skipped_existing_active_status"
+                ),
+                "entity_pair_tag_id": active_status_id,
+            }
+
     existing_id = _active_pair_tag_id(
         cur,
         subject_entity_id=int(subject["entity_id"]),
@@ -732,14 +758,37 @@ def _plan_pair_tag_row(
     if dry_run:
         return {**base, "status": "would_insert", "entity_pair_tag_id": None}
 
-    entity_pair_tag_id = _insert_pair_tag(
-        cur,
-        subject_entity_id=int(subject["entity_id"]),
-        object_entity_id=int(object_entity["entity_id"]),
-        pair_tag_id=int(pair_tag_id),
-        template_id=base["template_id"],
-        world_time=world_time,
-    )
+    if tag in STATUS_TAGS:
+        inserted = apply_status_pair_tag_bestowal(
+            cur,
+            subject_entity_id=int(subject["entity_id"]),
+            scope_faction_entity_id=int(object_entity["entity_id"]),
+            subject_kind=str(pair_plan["subject_kind"]),
+            level=level_from_status_tag(tag),
+            source_kind=RETROGRADE_SOURCE_KIND,
+            world_time=world_time,
+            source_chunk_id=recorded_at_chunk_id,
+            template_id=base["template_id"],
+        )
+        entity_pair_tag_id = _active_pair_tag_id(
+            cur,
+            subject_entity_id=int(subject["entity_id"]),
+            object_entity_id=int(object_entity["entity_id"]),
+            pair_tag_id=int(pair_tag_id),
+        )
+        if inserted and entity_pair_tag_id is None:
+            raise RuntimeError(
+                "Retrograde status bestowal inserted no discoverable active row"
+            )
+    else:
+        entity_pair_tag_id = _insert_pair_tag(
+            cur,
+            subject_entity_id=int(subject["entity_id"]),
+            object_entity_id=int(object_entity["entity_id"]),
+            pair_tag_id=int(pair_tag_id),
+            template_id=base["template_id"],
+            world_time=world_time,
+        )
     if entity_pair_tag_id is None:
         existing_id = _active_pair_tag_id(
             cur,
@@ -1678,6 +1727,33 @@ def _active_pair_tag_id(
         LIMIT 1
         """,
         (subject_entity_id, object_entity_id, pair_tag_id),
+    )
+    row = cur.fetchone()
+    if row is None:
+        return None
+    return int(_row_value(row, "id", 0))
+
+
+def _active_status_pair_tag_id(
+    cur: Any,
+    *,
+    subject_entity_id: int,
+    object_entity_id: int,
+) -> Optional[int]:
+    cur.execute(
+        """
+        /* orrery:retrograde:active_status_pair_tag */
+        SELECT ept.id
+        FROM entity_pair_tags ept
+        JOIN pair_tags pt ON pt.id = ept.pair_tag_id
+        WHERE ept.subject_entity_id = %s
+          AND ept.object_entity_id = %s
+          AND pt.tag LIKE 'status:%%'
+          AND ept.cleared_at IS NULL
+        ORDER BY ept.id
+        LIMIT 1
+        """,
+        (subject_entity_id, object_entity_id),
     )
     row = cur.fetchone()
     if row is None:

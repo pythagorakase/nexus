@@ -2093,7 +2093,7 @@ def run_record_revelation(
             return record_revelation(
                 cur,
                 claim_id=args.claim_id,
-                character_entity_id=args.character_entity_id,
+                knower_entity_id=args.knower,
                 source_entity_id=args.source_entity_id,
                 channel=args.channel,
                 world_time=world_time,
@@ -2111,7 +2111,7 @@ def run_record_revelation(
         if revelation.inserted
         else (
             f"Claim {args.claim_id} is already known by entity "
-            f"{args.character_entity_id}; unchanged."
+            f"{args.knower}; unchanged."
         )
     )
     return {
@@ -2120,7 +2120,7 @@ def run_record_revelation(
         "slot": args.slot,
         "dbname": dbname,
         "claim_id": args.claim_id,
-        "character_entity_id": args.character_entity_id,
+        "knower_entity_id": args.knower,
         "claim_awareness_id": revelation.awareness_id,
         "source_tier": revelation.source_tier,
         "inserted": revelation.inserted,
@@ -2931,7 +2931,7 @@ Examples:
   nexus retrograde-apply-expansion --slot 5 --packet packet.json ...
   nexus retrograde-embed-history --slot 5  Dry-run Retrograde retrieval sync
   nexus retrograde-embed-history --slot 5 --execute
-  nexus record-revelation --slot 2 --claim-id 7 --character-entity-id 42
+  nexus record-revelation --slot 2 --claim-id 7 --knower 42
   nexus faction-audit --slot 2  Dry-run faction column migration audit
   nexus faction-manifest --slot 2  Build faction migration manifest
   nexus faction-apply --slot 2  Dry-run ready faction manifest operations
@@ -3305,7 +3305,12 @@ Examples:
         "--slot", type=int, required=True, help="Slot number (1-5)"
     )
     revelation_parser.add_argument("--claim-id", type=int, required=True)
-    revelation_parser.add_argument("--character-entity-id", type=int, required=True)
+    revelation_parser.add_argument(
+        "--knower",
+        type=int,
+        required=True,
+        help="Entity spine id receiving awareness.",
+    )
     revelation_parser.add_argument(
         "--source-entity-id",
         type=int,

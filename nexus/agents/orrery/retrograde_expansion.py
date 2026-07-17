@@ -760,6 +760,17 @@ def _expansion_contract_issues(
         kind: set(tags)
         for kind, tags in vocabulary["registered_tags_by_entity_kind"].items()
     }
+    status_edge_counts: dict[tuple[str, str, str, str], int] = {}
+    for pair_plan in response.pair_tag_plan:
+        if not pair_plan.tag.startswith("status:"):
+            continue
+        edge = (
+            pair_plan.subject_kind,
+            normalize_entity_ref(pair_plan.subject_ref),
+            pair_plan.object_kind,
+            normalize_entity_ref(pair_plan.object_ref),
+        )
+        status_edge_counts[edge] = status_edge_counts.get(edge, 0) + 1
 
     for event in response.event_plan:
         issues.extend(
@@ -790,6 +801,7 @@ def _expansion_contract_issues(
                 entity_kinds=entity_kinds,
                 pair_definitions=pair_definitions,
                 event_refs=event_refs,
+                status_edge_counts=status_edge_counts,
             )
         )
 
@@ -1017,6 +1029,7 @@ def _pair_tag_plan_issues(
     entity_kinds: set[str],
     pair_definitions: Mapping[str, Mapping[str, Any]],
     event_refs: set[str],
+    status_edge_counts: Mapping[tuple[str, str, str, str], int],
 ) -> list[str]:
     issues: list[str] = []
     prefix = f"pair tag {pair_plan.tag!r}"
@@ -1038,6 +1051,21 @@ def _pair_tag_plan_issues(
         issues.append(
             f"{prefix} references unknown source_event_ref "
             f"{pair_plan.source_event_ref!r}"
+        )
+    status_edge = (
+        pair_plan.subject_kind,
+        normalize_entity_ref(pair_plan.subject_ref),
+        pair_plan.object_kind,
+        normalize_entity_ref(pair_plan.object_ref),
+    )
+    if (
+        pair_plan.tag.startswith("status:")
+        and status_edge_counts.get(status_edge, 0) > 1
+    ):
+        issues.append(
+            f"{prefix} duplicates a status ladder row for edge "
+            f"{pair_plan.subject_ref!r} -> {pair_plan.object_ref!r}; plan only "
+            "the final standing and express the status arc in event_plan"
         )
     return issues
 
@@ -1300,6 +1328,10 @@ def _hard_validation_rules() -> list[str]:
         ),
         "Prompt-visible-only tags must not appear in mechanical_plan.",
         "Pair tags must obey registered subject/object kind constraints.",
+        (
+            "Plan at most one status:* pair tag per subject/object edge; it "
+            "records final standing, while the arc belongs in event_plan."
+        ),
         (
             "Single-entity tags must be registered for the tagged entity_kind "
             "in registered_tags_by_entity_kind; a tag listed only under another "

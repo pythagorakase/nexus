@@ -44,8 +44,13 @@ from nexus.agents.orrery.declaration_validation import (
     collect_new_entity_declaration_vocabulary_issues,
 )
 from nexus.agents.orrery.retrograde_vocabulary import SeedEligibleVocabulary
+from nexus.agents.orrery.status_family import STATUS_TAGS, level_from_status_tag
 from nexus.agents.orrery.tag_schemas import OrreryTagBestowal
-from nexus.agents.orrery.tag_writer import apply_tag_bestowal
+from nexus.agents.orrery.tag_writer import (
+    apply_pair_tag_bestowal,
+    apply_status_pair_tag_bestowal,
+    apply_tag_bestowal,
+)
 from nexus.config import load_settings_as_dict
 from nexus.config.settings_models import (
     OrreryRetrogradeMaturationSettings,
@@ -148,11 +153,22 @@ def enqueue_declared_entity_maturations(
                 f"New-entity declaration vocabulary validation failed:\n{formatted}"
             )
 
+        declaration_records = []
         for declaration in parsed:
             record = _resolve_or_create_stub(cur, declaration)
+            declaration_records.append((declaration, record))
             if record.created:
                 result.stubs_created += 1
 
+        for declaration, record in declaration_records:
+            _apply_declared_pair_tag_hints(
+                cur,
+                declaration=declaration,
+                record=record,
+                source_chunk_id=chunk_id,
+            )
+
+        for declaration, record in declaration_records:
             if declaration.name.lower() not in lowered_text:
                 result.signal_absent += 1
                 logger.info(
@@ -231,6 +247,90 @@ def _resolve_or_create_stub(
         )
 
     return record
+
+
+def _apply_declared_pair_tag_hints(
+    cur: Any,
+    *,
+    declaration: NewEntityDeclaration,
+    record: _DeclaredEntityRecord,
+    source_chunk_id: int,
+) -> None:
+    """Apply accepted declaration edges after every batch stub exists."""
+
+    for hint in declaration.pair_tag_hints:
+        other = _resolve_pair_hint_entity(cur, hint.other_entity_name)
+        if hint.declared_entity_role == "subject":
+            subject = record
+            object_entity = other
+        else:
+            subject = other
+            object_entity = record
+
+        if hint.tag in STATUS_TAGS:
+            apply_status_pair_tag_bestowal(
+                cur,
+                subject_entity_id=subject.entity_id,
+                scope_faction_entity_id=object_entity.entity_id,
+                subject_kind=subject.entity_kind,
+                level=level_from_status_tag(hint.tag),
+                source_kind="skald_inline",
+                source_chunk_id=source_chunk_id,
+            )
+        else:
+            apply_pair_tag_bestowal(
+                cur,
+                subject_entity_id=subject.entity_id,
+                object_entity_id=object_entity.entity_id,
+                subject_kind=subject.entity_kind,
+                object_kind=object_entity.entity_kind,
+                tag=hint.tag,
+                source_kind="skald_inline",
+                source_chunk_id=source_chunk_id,
+            )
+
+
+def _resolve_pair_hint_entity(cur: Any, name: str) -> _DeclaredEntityRecord:
+    """Resolve one exact, globally unambiguous declaration-hint endpoint."""
+
+    cur.execute(
+        """
+        SELECT entity_kind, subtype_id, entity_id
+        FROM (
+            SELECT 'character' AS entity_kind, id AS subtype_id, entity_id
+            FROM characters WHERE name = %s
+            UNION ALL
+            SELECT 'place' AS entity_kind, id AS subtype_id, entity_id
+            FROM places WHERE name = %s
+            UNION ALL
+            SELECT 'faction' AS entity_kind, id AS subtype_id, entity_id
+            FROM factions WHERE name = %s
+        ) AS matches
+        ORDER BY entity_kind, subtype_id
+        """,
+        (name, name, name),
+    )
+    rows = cur.fetchall()
+    if not rows:
+        raise ValueError(
+            f"Pair-tag hint endpoint {name!r} does not resolve to an entity"
+        )
+    if len(rows) > 1:
+        raise ValueError(
+            f"Pair-tag hint endpoint {name!r} is ambiguous: "
+            f"{len(rows)} entities match"
+        )
+    row = rows[0]
+    entity_id = _row_value(row, "entity_id", 2)
+    if entity_id is None:
+        raise ValueError(f"Pair-tag hint endpoint {name!r} has no entity spine id")
+    return _DeclaredEntityRecord(
+        entity_kind=str(_row_value(row, "entity_kind", 0)),
+        subtype_id=int(_row_value(row, "subtype_id", 1)),
+        entity_id=int(entity_id),
+        name=name,
+        created=False,
+    )
 
 
 def _insert_declared_stub(

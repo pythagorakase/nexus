@@ -200,6 +200,24 @@ class TraitCompilerCursor:
             self.rowcount = len(self._next_rows)
             return
 
+        if normalized.startswith("SELECT KIND::TEXT AS KIND FROM ENTITIES"):
+            entity_id = int(params[0])
+            kind = next(
+                (
+                    entity_kind
+                    for table, entity_kind in (
+                        (self.characters, "character"),
+                        (self.places, "place"),
+                        (self.factions, "faction"),
+                    )
+                    if any(int(row["entity_id"]) == entity_id for row in table.values())
+                ),
+                None,
+            )
+            self._next_row = (kind,) if kind is not None else None
+            self.rowcount = int(kind is not None)
+            return
+
         if "TRAIT_COMPILER:INSERT_CHARACTER_STUB" in normalized:
             name, _summary, _background, _activity, extra_data = params
             row_id = max(self.characters, default=0) + 1
@@ -375,6 +393,7 @@ class TraitCompilerCursor:
                 _world_time,
                 source_kind,
                 _source_chunk_id,
+                _template_id,
             ) = params
             active = [
                 row

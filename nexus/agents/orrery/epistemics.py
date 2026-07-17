@@ -1,4 +1,4 @@
-"""Event-anchored claims and character awareness for Orrery Epistemics v1."""
+"""Event-anchored claims and entity awareness for Orrery Epistemics v1."""
 
 from __future__ import annotations
 
@@ -53,7 +53,7 @@ class RevelationResult:
 
 @dataclass(frozen=True, slots=True)
 class AwarenessHydration:
-    """Claim scopes and per-character awareness for one recent-event window."""
+    """Claim scopes and per-entity awareness for one recent-event window."""
 
     claimed_event_scopes: Mapping[int, str]
     awareness_by_entity: Mapping[int, frozenset[int]]
@@ -218,7 +218,7 @@ def record_revelation(
     cur: Any,
     *,
     claim_id: int,
-    character_entity_id: int,
+    knower_entity_id: int,
     source_entity_id: Optional[int] = None,
     channel: Optional[str] = None,
     world_time: Optional[datetime] = None,
@@ -227,22 +227,49 @@ def record_revelation(
     """Idempotently grant told or manual awareness of an existing claim."""
 
     source_tier = "told" if source_entity_id is not None else "granted"
+    root_source_entity_id = None
+    if source_entity_id is not None:
+        cur.execute("SELECT scope FROM claims WHERE id = %s", (claim_id,))
+        claim_row = cur.fetchone()
+        if claim_row is None:
+            raise ValueError(f"Claim {claim_id} does not exist")
+        if str(_row_value(claim_row, "scope", 0)) == "common":
+            root_source_entity_id = source_entity_id
+        else:
+            cur.execute(
+                """
+                SELECT root_source_entity_id
+                FROM claim_awareness
+                WHERE claim_id = %s AND knower_entity_id = %s
+                """,
+                (claim_id, source_entity_id),
+            )
+            source_awareness = cur.fetchone()
+            if source_awareness is None:
+                raise ValueError(
+                    f"Entity {source_entity_id} cannot reveal claim {claim_id}: "
+                    "the teller does not possess it"
+                )
+            inherited_root = _row_value(source_awareness, "root_source_entity_id", 0)
+            root_source_entity_id = (
+                int(inherited_root) if inherited_root is not None else source_entity_id
+            )
     cur.execute(
         """
         INSERT INTO claim_awareness (
-            claim_id, character_entity_id, source_tier,
+            claim_id, knower_entity_id, source_tier,
             immediate_source_entity_id, root_source_entity_id, channel,
             acquired_at_world_time, source_chunk_id
         ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-        ON CONFLICT (claim_id, character_entity_id) DO NOTHING
+        ON CONFLICT (claim_id, knower_entity_id) DO NOTHING
         RETURNING id
         """,
         (
             claim_id,
-            character_entity_id,
+            knower_entity_id,
             source_tier,
             source_entity_id,
-            None,
+            root_source_entity_id,
             channel,
             world_time,
             source_chunk_id,
@@ -254,15 +281,15 @@ def record_revelation(
         cur.execute(
             """
             SELECT id, source_tier FROM claim_awareness
-            WHERE claim_id = %s AND character_entity_id = %s
+            WHERE claim_id = %s AND knower_entity_id = %s
             """,
-            (claim_id, character_entity_id),
+            (claim_id, knower_entity_id),
         )
         row = cur.fetchone()
         if row is None:
             raise RuntimeError(
                 "Awareness conflict did not resolve to an existing row for "
-                f"claim {claim_id}, entity {character_entity_id}"
+                f"claim {claim_id}, entity {knower_entity_id}"
             )
     return RevelationResult(
         awareness_id=int(_row_value(row, "id", 0)),
@@ -303,11 +330,11 @@ def load_awareness_for_events(
     query = text(
         """
         /* orrery:epistemics_awareness */
-        SELECT c.world_event_id, c.scope, ca.character_entity_id
+        SELECT c.world_event_id, c.scope, ca.knower_entity_id
         FROM claims c
         LEFT JOIN claim_awareness ca ON ca.claim_id = c.id
         WHERE c.world_event_id IN :world_event_ids
-        ORDER BY c.world_event_id, ca.character_entity_id
+        ORDER BY c.world_event_id, ca.knower_entity_id
         """
     ).bindparams(bindparam("world_event_ids", expanding=True))
     scopes: dict[int, str] = {}
@@ -318,9 +345,9 @@ def load_awareness_for_events(
         if scope not in CLAIM_SCOPES:
             raise ValueError(f"Claim on event {event_id} has unknown scope {scope!r}")
         scopes[event_id] = scope
-        character_entity_id = row["character_entity_id"]
-        if character_entity_id is not None:
-            awareness.setdefault(int(character_entity_id), set()).add(event_id)
+        knower_entity_id = row["knower_entity_id"]
+        if knower_entity_id is not None:
+            awareness.setdefault(int(knower_entity_id), set()).add(event_id)
     return AwarenessHydration(
         claimed_event_scopes=scopes,
         awareness_by_entity={
@@ -368,8 +395,6 @@ def _aware_participants(
 ) -> tuple[tuple[int, str], ...]:
     by_entity: dict[int, str] = {}
     for participant in participants:
-        if participant.entity_kind != "character":
-            continue
         if participant.role not in policy.aware_roles:
             continue
         tier = _tier_for_role(participant.role)
@@ -388,23 +413,25 @@ def _mint_awareness_sync(
     source_chunk_id: Optional[int],
 ) -> tuple[int, ...]:
     awareness_ids = []
+    world_time = _acquisition_world_time_sync(cur, source_chunk_id)
     for entity_id, tier in _aware_participants(participants, policy):
         cur.execute(
             """
             INSERT INTO claim_awareness (
-                claim_id, character_entity_id, source_tier, source_chunk_id
-            ) VALUES (%s, %s, %s, %s)
-            ON CONFLICT (claim_id, character_entity_id) DO NOTHING
+                claim_id, knower_entity_id, source_tier, source_chunk_id,
+                acquired_at_world_time
+            ) VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (claim_id, knower_entity_id) DO NOTHING
             RETURNING id
             """,
-            (claim_id, entity_id, tier, source_chunk_id),
+            (claim_id, entity_id, tier, source_chunk_id, world_time),
         )
         row = cur.fetchone()
         if row is None:
             cur.execute(
                 """
                 SELECT id FROM claim_awareness
-                WHERE claim_id = %s AND character_entity_id = %s
+                WHERE claim_id = %s AND knower_entity_id = %s
                 """,
                 (claim_id, entity_id),
             )
@@ -427,25 +454,28 @@ async def _mint_awareness_async(
     source_chunk_id: Optional[int],
 ) -> tuple[int, ...]:
     awareness_ids = []
+    world_time = await _acquisition_world_time_async(conn, source_chunk_id)
     for entity_id, tier in _aware_participants(participants, policy):
         awareness_id = await conn.fetchval(
             """
             INSERT INTO claim_awareness (
-                claim_id, character_entity_id, source_tier, source_chunk_id
-            ) VALUES ($1, $2, $3, $4)
-            ON CONFLICT (claim_id, character_entity_id) DO NOTHING
+                claim_id, knower_entity_id, source_tier, source_chunk_id,
+                acquired_at_world_time
+            ) VALUES ($1, $2, $3, $4, $5)
+            ON CONFLICT (claim_id, knower_entity_id) DO NOTHING
             RETURNING id
             """,
             claim_id,
             entity_id,
             tier,
             source_chunk_id,
+            world_time,
         )
         if awareness_id is None:
             awareness_id = await conn.fetchval(
                 """
                 SELECT id FROM claim_awareness
-                WHERE claim_id = $1 AND character_entity_id = $2
+                WHERE claim_id = $1 AND knower_entity_id = $2
                 """,
                 claim_id,
                 entity_id,
@@ -457,6 +487,35 @@ async def _mint_awareness_async(
                 )
         awareness_ids.append(int(awareness_id))
     return tuple(awareness_ids)
+
+
+def _acquisition_world_time_sync(
+    cur: Any, source_chunk_id: Optional[int]
+) -> Optional[datetime]:
+    """Load the acquisition's diegetic clock without a wall-time fallback."""
+
+    if source_chunk_id is not None:
+        cur.execute(
+            "SELECT world_time FROM chunk_metadata WHERE chunk_id = %s",
+            (source_chunk_id,),
+        )
+    else:
+        cur.execute("SELECT max(world_time) AS world_time FROM chunk_metadata")
+    row = cur.fetchone()
+    return _row_value(row, "world_time", 0) if row else None
+
+
+async def _acquisition_world_time_async(
+    conn: Any, source_chunk_id: Optional[int]
+) -> Optional[datetime]:
+    """Async twin of :func:`_acquisition_world_time_sync`."""
+
+    if source_chunk_id is not None:
+        return await conn.fetchval(
+            "SELECT world_time FROM chunk_metadata WHERE chunk_id = $1",
+            source_chunk_id,
+        )
+    return await conn.fetchval("SELECT max(world_time) FROM chunk_metadata")
 
 
 def _row_value(row: Any, key: str, index: int) -> Any:
