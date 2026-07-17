@@ -123,6 +123,19 @@ def _leaf_evidence(trace: ConditionTrace, kind: str) -> list[dict[str, Any]]:
     ]
 
 
+def test_runtime_epistemics_guard_rejects_claim_propagated_policy() -> None:
+    """Mapping callers cannot bypass the load-time recursion guard."""
+
+    with pytest.raises(ValueError, match="claim_propagated cannot appear"):
+        coerce_epistemics_policy(
+            {
+                "enabled": True,
+                "claim_event_types": ["claim_propagated"],
+                "aware_roles": ["actor"],
+            }
+        )
+
+
 @pytest.mark.requires_postgres
 def test_two_similar_actors_are_separated_only_by_awareness(save_02_conn: Any) -> None:
     """A bounded threat opens SURVEIL only for the actor who knows it."""
@@ -898,7 +911,6 @@ def test_revelation_scope_and_common_semantics(save_02_conn: Any) -> None:
             (event_id, anchor),
         )
         claim_id = int(cur.fetchone()["id"])
-
         state = WorldState(
             recent_events=(
                 EventRecord(
@@ -1130,6 +1142,9 @@ def test_record_revelation_cli_handler_reports_insert_and_dedupe(
             (event_id, anchor),
         )
         claim_id = int(cur.fetchone()["id"])
+        cur.execute("SELECT max(world_time) AS world_time FROM chunk_metadata")
+        expected_world_time = cur.fetchone()["world_time"]
+        assert expected_world_time is not None
 
     parser = build_parser()
     first_args = parser.parse_args(
@@ -1173,7 +1188,8 @@ def test_record_revelation_cli_handler_reports_insert_and_dedupe(
     with save_02_conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             """
-            SELECT source_tier, immediate_source_entity_id, root_source_entity_id
+            SELECT source_tier, immediate_source_entity_id, root_source_entity_id,
+                   acquired_at_world_time
             FROM claim_awareness WHERE id = %s
             """,
             (first["claim_awareness_id"],),
@@ -1183,6 +1199,7 @@ def test_record_revelation_cli_handler_reports_insert_and_dedupe(
             "source_tier": "granted",
             "immediate_source_entity_id": None,
             "root_source_entity_id": None,
+            "acquired_at_world_time": expected_world_time,
         }
 
 

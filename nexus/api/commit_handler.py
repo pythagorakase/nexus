@@ -563,6 +563,7 @@ async def commit_incubator_to_database(
                 prompt_settings=_orrery_prompt_settings(),
                 ecology_settings=_orrery_ecology_settings(),
                 project_settings=_orrery_project_settings(),
+                contagion_settings=_orrery_contagion_settings(),
             )
             if (
                 orrery_result.resolution_count
@@ -571,12 +572,13 @@ async def commit_incubator_to_database(
                 or orrery_result.cleared_tag_count
                 or orrery_result.scene_pressure_count
                 or orrery_result.prompt_exposure_count
+                or orrery_result.propagation_count
             ):
                 logger.info(
                     "Committed Orrery tick for chunk %s: %s resolutions, %s events, "
                     "%s tag mutations, %s cleared tags, %s existing skipped, "
                     "%s adjudications (%s deferred, %s voided, %s replaced), "
-                    "%s scene pressures, %s prompt exposures",
+                    "%s scene pressures, %s prompt exposures, %s propagations",
                     chunk_id,
                     orrery_result.resolution_count,
                     orrery_result.event_count,
@@ -589,6 +591,7 @@ async def commit_incubator_to_database(
                     orrery_result.replaced_count,
                     orrery_result.scene_pressure_count,
                     orrery_result.prompt_exposure_count,
+                    orrery_result.propagation_count,
                 )
 
             # Step 8.55: interval state checkpoint (reconstruction bar 7c)
@@ -653,6 +656,14 @@ def _orrery_project_settings() -> Any:
     from nexus.config import load_settings_as_dict
 
     return (load_settings_as_dict().get("orrery") or {}).get("projects")
+
+
+def _orrery_contagion_settings() -> Any:
+    """[orrery.contagion] frontier and communication policy."""
+
+    from nexus.config import load_settings_as_dict
+
+    return (load_settings_as_dict().get("orrery") or {}).get("contagion")
 
 
 def _orrery_checkpoint_interval() -> int:

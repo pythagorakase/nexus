@@ -18,6 +18,7 @@ import json
 import re
 from typing import Any, Optional
 
+from nexus.agents.orrery.db_rows import row_get
 from nexus.agents.orrery.retrograde_markers import RETROGRADE_PROLOGUE_MARKER
 
 
@@ -135,6 +136,9 @@ CHECKPOINT_SECTIONS: dict[str, str] = {
         "SELECT coalesce(jsonb_agg(to_jsonb(t)), '[]'::jsonb) "
         "FROM character_routine_anchors t"
     ),
+    "claim_awareness": (
+        "SELECT coalesce(jsonb_agg(to_jsonb(t)), '[]'::jsonb) " "FROM claim_awareness t"
+    ),
 }
 
 CHECKPOINT_LABELS = ("genesis", "interval", "manual")
@@ -174,7 +178,7 @@ def capture_state_checkpoint_sync(
         (chunk_id, label, json.dumps(state)),
     )
     row = cur.fetchone()
-    return row[0] if row else None
+    return row_get(row, "id", 0) if row else None
 
 
 async def capture_state_checkpoint_async(

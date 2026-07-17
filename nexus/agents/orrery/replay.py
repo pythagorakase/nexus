@@ -38,6 +38,9 @@ produces. Sections and their replay sources:
   project.complete also replays its explicit-destination travel.start handoff.
 - ``character_routine_anchors`` — checkpoint pass-through (no runtime
   writer; offline seed scripts mutate it invisibly between checkpoints).
+- ``claim_awareness`` — append-only participant/witness/granted/deliberate-
+  told rows from their chunk provenance, while passive told rows are rebuilt
+  from ``claim_propagated`` world events rather than trusted from projection.
 
 Known undetectable gaps: (1) reapplication policies ``replace`` and
 ``extend_expiry`` overwrite a live tag row's ``source_chunk_id`` in place
@@ -364,7 +367,7 @@ class _Replayer:
                 f"base for reconstruction at chunk {self.target_chunk_id}"
             )
         missing = set(CHECKPOINT_SECTIONS) - set(state)
-        allowed_missing = {"character_project_states"}
+        allowed_missing = {"character_project_states", "claim_awareness"}
         unexpected_missing = missing - allowed_missing
         if unexpected_missing:
             raise ValueError(
@@ -374,6 +377,9 @@ class _Replayer:
         if "character_project_states" in missing:
             state["character_project_states"] = []
             self.missing_base_sections.add("character_project_states")
+        if "claim_awareness" in missing:
+            state["claim_awareness"] = []
+            self.missing_base_sections.add("claim_awareness")
         return checkpoint_id, chunk_id, created_at, state
 
     # -- forward scalar replay ----------------------------------------------
@@ -394,6 +400,13 @@ class _Replayer:
                 "base checkpoint predates migration 074 and lacks the project "
                 "section; treated as empty because no project table/writer "
                 "existed at that checkpoint",
+                approximate=True,
+            )
+        if "claim_awareness" in self.missing_base_sections:
+            result.add_note(
+                "claim_awareness",
+                "base checkpoint predates the claim-awareness checkpoint section; "
+                "pre-checkpoint possession is unreproducible",
                 approximate=True,
             )
 
@@ -464,10 +477,221 @@ class _Replayer:
             "offline seed/backfill scripts are invisible between checkpoints",
             approximate=False,
         )
+        self._replay_claim_awareness(
+            result,
+            base_state=base_state,
+            base_chunk=base_chunk,
+            base_created_at=base_created_at,
+        )
 
         for table in RELATIONSHIP_KEY_COLUMNS:
             self._unwind_relationships(table, result)
         return result
+
+    def _replay_claim_awareness(
+        self,
+        result: ReplayResult,
+        *,
+        base_state: dict[str, Any],
+        base_chunk: int,
+        base_created_at: datetime,
+    ) -> None:
+        """Rebuild awareness from producer provenance and propagation events."""
+
+        working = {
+            (int(row["claim_id"]), int(row["knower_entity_id"])): dict(row)
+            for row in base_state["claim_awareness"]
+        }
+
+        # Participant/witness rows are admitted only when the claim's minting
+        # event names that knower in the corresponding role. This keeps an
+        # arbitrary projection INSERT from masquerading as a producer mint.
+        self.cur.execute(
+            """
+            SELECT DISTINCT ON (ca.id) to_jsonb(ca)
+            FROM claim_awareness ca
+            JOIN claims c ON c.id = ca.claim_id
+            JOIN world_events mint_event ON mint_event.id = c.world_event_id
+            WHERE (
+                  (ca.source_tier = 'participant' AND (
+                      mint_event.actor_entity_id = ca.knower_entity_id
+                      OR mint_event.target_entity_id = ca.knower_entity_id
+                      OR EXISTS (
+                          SELECT 1 FROM world_event_entities participant
+                          WHERE participant.event_id = mint_event.id
+                            AND participant.entity_id = ca.knower_entity_id
+                            AND participant.role::text IN ('actor', 'target')
+                      )
+                  ))
+                  OR
+                  (ca.source_tier = 'witness' AND EXISTS (
+                      SELECT 1 FROM world_event_entities witness
+                      WHERE witness.event_id = mint_event.id
+                        AND witness.entity_id = ca.knower_entity_id
+                        AND witness.role::text IN ('observer', 'witness')
+                  ))
+              )
+              AND (
+                  (ca.source_chunk_id IS NOT NULL
+                   AND ca.source_chunk_id > %s
+                   AND ca.source_chunk_id <= %s)
+                  OR
+                  (ca.source_chunk_id IS NULL
+                   AND ca.created_at > %s
+                   AND ca.created_at <= %s)
+              )
+            ORDER BY ca.id
+            """,
+            (
+                base_chunk,
+                self.target_chunk_id,
+                base_created_at,
+                self.target_created_at,
+            ),
+        )
+        mint_count = 0
+        for (raw,) in self.cur.fetchall():
+            row = dict(_as_document(raw))
+            working[(int(row["claim_id"]), int(row["knower_entity_id"]))] = row
+            mint_count += 1
+
+        # Explicit record-revelation rows are their own append-only
+        # provenance. Passive told rows are excluded by awareness id and are
+        # rebuilt exclusively from claim_propagated events below.
+        self.cur.execute(
+            """
+            SELECT to_jsonb(ca)
+            FROM claim_awareness ca
+            WHERE ca.source_tier IN ('granted', 'told')
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM world_events propagated
+                  WHERE propagated.event_type = 'claim_propagated'
+                    AND (propagated.payload ->> 'awareness_id')::bigint = ca.id
+              )
+              AND (
+                  (ca.source_chunk_id IS NOT NULL
+                   AND ca.source_chunk_id > %s
+                   AND ca.source_chunk_id <= %s)
+                  OR
+                  (ca.source_chunk_id IS NULL
+                   AND ca.created_at > %s
+                   AND ca.created_at <= %s)
+              )
+            ORDER BY ca.id
+            """,
+            (
+                base_chunk,
+                self.target_chunk_id,
+                base_created_at,
+                self.target_created_at,
+            ),
+        )
+        revelation_count = 0
+        for (raw,) in self.cur.fetchall():
+            row = dict(_as_document(raw))
+            working[(int(row["claim_id"]), int(row["knower_entity_id"]))] = row
+            revelation_count += 1
+
+        self.cur.execute(
+            """
+            SELECT EXISTS (
+                       SELECT 1 FROM event_types
+                       WHERE type = 'claim_propagated'
+                   ),
+                   EXISTS (
+                       SELECT 1
+                       FROM information_schema.columns
+                       WHERE table_schema = ANY(current_schemas(false))
+                         AND table_name = 'world_events'
+                         AND column_name = 'world_time'
+                   )
+            """
+        )
+        event_registered, world_time_column = self.cur.fetchone()
+        if event_registered and not world_time_column:
+            raise RuntimeError(
+                "Claim propagation requires migration 083; apply migration 083 "
+                "before replaying claim_propagated events."
+            )
+        if event_registered:
+            self.cur.execute(
+                """
+                SELECT we.id, we.tick_chunk_id, we.world_time,
+                       we.payload, we.created_at
+                FROM world_events we
+                WHERE we.event_type = 'claim_propagated'
+                  AND we.tick_chunk_id > %s
+                  AND we.tick_chunk_id <= %s
+                ORDER BY we.tick_chunk_id, we.id
+                """,
+                (base_chunk, self.target_chunk_id),
+            )
+            event_rows = self.cur.fetchall()
+        else:
+            event_rows = []
+        event_count = 0
+        for (
+            event_id,
+            tick_chunk_id,
+            world_time,
+            raw_payload,
+            created_at,
+        ) in event_rows:
+            payload = _as_document(raw_payload)
+            if not isinstance(payload, dict):
+                raise ValueError(
+                    f"claim_propagated event {event_id} payload is not an object"
+                )
+            required = {
+                "awareness_id",
+                "claim_id",
+                "knower_entity_id",
+                "immediate_source_entity_id",
+                "root_source_entity_id",
+                "channel",
+                "depth",
+                "latency_seconds",
+                "policy_digest",
+            }
+            missing = sorted(required - set(payload))
+            if missing:
+                raise ValueError(
+                    f"claim_propagated event {event_id} lacks payload fields {missing}"
+                )
+            if world_time is None:
+                raise ValueError(
+                    f"claim_propagated event {event_id} has NULL world_time"
+                )
+            if int(payload["depth"]) < 1:
+                raise ValueError(f"claim_propagated event {event_id} has invalid depth")
+            claim_id = int(payload["claim_id"])
+            knower = int(payload["knower_entity_id"])
+            working[(claim_id, knower)] = {
+                "id": int(payload["awareness_id"]),
+                "claim_id": claim_id,
+                "knower_entity_id": knower,
+                "source_tier": "told",
+                "immediate_source_entity_id": int(
+                    payload["immediate_source_entity_id"]
+                ),
+                "root_source_entity_id": int(payload["root_source_entity_id"]),
+                "channel": str(payload["channel"]),
+                "acquired_at_world_time": world_time,
+                "source_chunk_id": int(tick_chunk_id),
+                "created_at": created_at,
+            }
+            event_count += 1
+        result.state["claim_awareness"] = sorted(
+            working.values(), key=lambda row: row["id"]
+        )
+        result.add_note(
+            "claim_awareness",
+            f"rebuilt {mint_count} mint row(s), {revelation_count} explicit "
+            f"revelation row(s), and {event_count} passive row(s) from "
+            "producer provenance",
+            approximate=False,
+        )
 
     def _window_chunks(self, base_chunk: int) -> list[int]:
         self.cur.execute(
@@ -1580,7 +1804,14 @@ def _load_checkpoint_state(cur: Any, checkpoint_id: int) -> dict[str, Any]:
     cur.execute("SELECT state FROM state_checkpoints WHERE id = %s", (checkpoint_id,))
     state = _as_document(_row_value(cur.fetchone(), 0))
     state.setdefault("character_project_states", [])
+    state.setdefault("claim_awareness", [])
     return state
+
+
+def _missing_checkpoint_sections(cur: Any, checkpoint_id: int) -> set[str]:
+    cur.execute("SELECT state FROM state_checkpoints WHERE id = %s", (checkpoint_id,))
+    state = _as_document(_row_value(cur.fetchone(), 0))
+    return set(CHECKPOINT_SECTIONS) - set(state)
 
 
 def verify_checkpoints_sync(cur: Any) -> list[CheckpointPairVerdict]:
@@ -1615,8 +1846,17 @@ def verify_checkpoints_sync(cur: Any) -> list[CheckpointPairVerdict]:
             # directly, no replay involved.
             base_stored = _load_checkpoint_state(cur, base_id)
             target_stored = _load_checkpoint_state(cur, target_id)
+            missing_sections = _missing_checkpoint_sections(
+                cur, base_id
+            ) | _missing_checkpoint_sections(cur, target_id)
             drifts = []
+            skipped = 0
             for section in CHECKPOINT_SECTIONS:
+                if section in missing_sections:
+                    skipped += max(
+                        len(base_stored[section]), len(target_stored[section]), 1
+                    )
+                    continue
                 section_drifts, _ = _diff_section(
                     section,
                     base_stored[section],
@@ -1633,12 +1873,22 @@ def verify_checkpoints_sync(cur: Any) -> list[CheckpointPairVerdict]:
                     target_checkpoint_id=target_id,
                     target_chunk_id=target_chunk,
                     drifts=drifts,
-                    skipped_unreproducible=0,
+                    skipped_unreproducible=skipped,
                     notes={
                         "_pair": [
                             "same-chunk captures compared directly "
                             "(stored vs stored)"
-                        ]
+                        ],
+                        **(
+                            {
+                                "claim_awareness": [
+                                    "checkpoint predates the claim-awareness "
+                                    "section; comparison skipped"
+                                ]
+                            }
+                            if "claim_awareness" in missing_sections
+                            else {}
+                        ),
                     },
                 )
             )
@@ -1647,9 +1897,21 @@ def verify_checkpoints_sync(cur: Any) -> list[CheckpointPairVerdict]:
             cur, target_chunk, base_checkpoint_id=base_id
         )
         stored = _load_checkpoint_state(cur, target_id)
+        missing_sections = _missing_checkpoint_sections(
+            cur, base_id
+        ) | _missing_checkpoint_sections(cur, target_id)
         drifts = []
         skipped = 0
         for section in CHECKPOINT_SECTIONS:
+            if section in missing_sections:
+                skipped += max(len(stored[section]), len(result.state[section]), 1)
+                result.add_note(
+                    section,
+                    "checkpoint pair predates this section on at least one side; "
+                    "comparison skipped",
+                    approximate=True,
+                )
+                continue
             section_drifts, section_skipped = _diff_section(
                 section,
                 stored[section],

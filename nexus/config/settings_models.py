@@ -1239,6 +1239,11 @@ class OrreryEpistemicsSettings(BaseModel):
             raise ValueError("claim_event_types entries must be non-empty")
         if len(set(normalized)) != len(normalized):
             raise ValueError("claim_event_types entries must be unique")
+        if "claim_propagated" in normalized:
+            raise ValueError(
+                "claim_propagated cannot appear in claim_event_types; "
+                "propagation ledger events never mint claims"
+            )
         return normalized
 
     @field_validator("aware_roles")

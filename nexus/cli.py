@@ -2077,7 +2077,10 @@ def run_record_revelation(
 ) -> Dict[str, Any]:
     """Record an explicit told or manual claim-awareness grant."""
 
-    from nexus.agents.orrery.epistemics import record_revelation
+    from nexus.agents.orrery.epistemics import (
+        current_world_time_sync,
+        record_revelation,
+    )
     from nexus.api.db_pool import get_connection
     from nexus.api.slot_utils import slot_dbname
 
@@ -2090,13 +2093,16 @@ def run_record_revelation(
 
     def apply(conn: Any) -> Any:
         with conn.cursor() as cur:
+            resolved_world_time = world_time
+            if resolved_world_time is None:
+                resolved_world_time = current_world_time_sync(cur)
             return record_revelation(
                 cur,
                 claim_id=args.claim_id,
                 knower_entity_id=args.knower,
                 source_entity_id=args.source_entity_id,
                 channel=args.channel,
-                world_time=world_time,
+                world_time=resolved_world_time,
                 source_chunk_id=args.source_chunk_id,
             )
 

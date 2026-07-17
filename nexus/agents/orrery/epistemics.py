@@ -10,6 +10,7 @@ from sqlalchemy import bindparam, text
 
 
 CLAIM_SCOPES = frozenset({"common", "bounded", "private"})
+CLAIM_PROPAGATED_EVENT_TYPE = "claim_propagated"
 EVENT_ROLES = frozenset({"actor", "target", "observer", "witness", "beneficiary"})
 PARTICIPANT_ROLES = frozenset({"actor", "target", "beneficiary"})
 WITNESS_ROLES = frozenset({"observer", "witness"})
@@ -65,7 +66,12 @@ def coerce_epistemics_policy(raw: Any) -> EpistemicsPolicy:
     if raw is None:
         return EpistemicsPolicy()
     if isinstance(raw, EpistemicsPolicy):
-        return raw
+        policy = raw
+        if CLAIM_PROPAGATED_EVENT_TYPE in policy.claim_event_types:
+            raise ValueError(
+                "claim_propagated cannot appear in Epistemics claim_event_types"
+            )
+        return policy
     if hasattr(raw, "model_dump"):
         raw = raw.model_dump()
     if not isinstance(raw, Mapping):
@@ -74,6 +80,10 @@ def coerce_epistemics_policy(raw: Any) -> EpistemicsPolicy:
     aware_roles = [str(value).strip() for value in raw.get("aware_roles", ())]
     if any(not value for value in event_types):
         raise ValueError("Epistemics claim_event_types entries must be non-empty")
+    if CLAIM_PROPAGATED_EVENT_TYPE in event_types:
+        raise ValueError(
+            "claim_propagated cannot appear in Epistemics claim_event_types"
+        )
     unknown_roles = set(aware_roles) - EVENT_ROLES
     if unknown_roles:
         raise ValueError(f"Unknown Epistemics aware roles: {sorted(unknown_roles)}")
@@ -125,6 +135,8 @@ def mint_claim_for_event(
 ) -> Optional[MintResult]:
     """Mint or recover one event claim and its configured awareness rows."""
 
+    if event_type == CLAIM_PROPAGATED_EVENT_TYPE:
+        return None
     policy = coerce_epistemics_policy(settings)
     if not policy.enabled or event_type not in policy.claim_event_types:
         return None
@@ -176,6 +188,8 @@ async def mint_claim_for_event_async(
 ) -> Optional[MintResult]:
     """Async twin of :func:`mint_claim_for_event` for asyncpg appliers."""
 
+    if event_type == CLAIM_PROPAGATED_EVENT_TYPE:
+        return None
     policy = coerce_epistemics_policy(settings)
     if not policy.enabled or event_type not in policy.claim_event_types:
         return None
@@ -500,7 +514,15 @@ def _acquisition_world_time_sync(
             (source_chunk_id,),
         )
     else:
-        cur.execute("SELECT max(world_time) AS world_time FROM chunk_metadata")
+        return current_world_time_sync(cur)
+    row = cur.fetchone()
+    return _row_value(row, "world_time", 0) if row else None
+
+
+def current_world_time_sync(cur: Any) -> Optional[datetime]:
+    """Return the current diegetic clock, or ``None`` in a clockless world."""
+
+    cur.execute("SELECT max(world_time) AS world_time FROM chunk_metadata")
     row = cur.fetchone()
     return _row_value(row, "world_time", 0) if row else None
 
