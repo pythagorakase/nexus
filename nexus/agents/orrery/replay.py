@@ -64,6 +64,7 @@ from datetime import datetime, timezone
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Optional
 
+from nexus.agents.orrery.epistemics import PARTICIPANT_ROLES, WITNESS_ROLES
 from nexus.agents.orrery.needs import (
     NEED_IMMUNITY_TAGS,
     NEED_TYPES,
@@ -520,7 +521,7 @@ class _Replayer:
                           SELECT 1 FROM world_event_entities participant
                           WHERE participant.event_id = mint_event.id
                             AND participant.entity_id = ca.knower_entity_id
-                            AND participant.role::text IN ('actor', 'target')
+                            AND participant.role::text = ANY(%s)
                       )
                   ))
                   OR
@@ -528,7 +529,7 @@ class _Replayer:
                       SELECT 1 FROM world_event_entities witness
                       WHERE witness.event_id = mint_event.id
                         AND witness.entity_id = ca.knower_entity_id
-                        AND witness.role::text IN ('observer', 'witness')
+                        AND witness.role::text = ANY(%s)
                   ))
               )
               AND (
@@ -543,6 +544,8 @@ class _Replayer:
             ORDER BY ca.id
             """,
             (
+                sorted(PARTICIPANT_ROLES),
+                sorted(WITNESS_ROLES),
                 base_chunk,
                 self.target_chunk_id,
                 base_created_at,

@@ -879,6 +879,80 @@ def test_resolution_free_commit_still_drains(live_conn: Any) -> None:
     assert len(rows) == 2
 
 
+def test_replay_readmits_beneficiary_participant_awareness(
+    live_conn: Any,
+) -> None:
+    """PR #520 review: beneficiary-role mints must survive reconstruction.
+
+    PARTICIPANT_ROLES includes beneficiary; the readmission query must accept
+    every role minting accepts, or valid rows reconstruct as drift.
+    """
+
+    beneficiary_settings = {**EPISTEMICS, "aware_roles": ["actor", "beneficiary"]}
+    with live_conn.cursor(cursor_factory=RealDictCursor) as cur:
+        entities, _ = _chain(cur, 2)
+        actor_id, beneficiary_id = entities[0], entities[1]
+        base_chunk, _ = _insert_chunk(cur)
+        with live_conn.cursor() as checkpoint_cur:
+            checkpoint_id = capture_state_checkpoint_sync(
+                checkpoint_cur, chunk_id=base_chunk, label="manual"
+            )
+        assert checkpoint_id is not None
+        mint_chunk, birth_world_time = _insert_chunk(cur, time_delta=timedelta(hours=2))
+        cur.execute(
+            """
+            INSERT INTO world_events (
+                event_type, tick_chunk_id, actor_entity_id, world_layer,
+                source, changed_fields, payload
+            ) VALUES (
+                'threat_issued', %s, %s, 'primary', 'resolver', '{}', '{}'::jsonb
+            )
+            RETURNING id
+            """,
+            (mint_chunk, actor_id),
+        )
+        event_id = int(cur.fetchone()["id"])
+        cur.execute(
+            """
+            INSERT INTO world_event_entities (event_id, role, entity_id)
+            VALUES (%s, 'actor', %s), (%s, 'beneficiary', %s)
+            """,
+            (event_id, actor_id, event_id, beneficiary_id),
+        )
+        minted = mint_claim_for_event(
+            cur,
+            world_event_id=event_id,
+            event_type="threat_issued",
+            summary="Rollback-only beneficiary claim.",
+            participants=(
+                ClaimParticipant(actor_id, "actor", "Actor", "character"),
+                ClaimParticipant(
+                    beneficiary_id, "beneficiary", "Beneficiary", "character"
+                ),
+            ),
+            source_chunk_id=mint_chunk,
+            source_resolution_id=None,
+            settings=beneficiary_settings,
+        )
+        assert minted is not None
+        live_rows = _awareness(cur, minted.claim_id)
+        assert {int(r["knower_entity_id"]) for r in live_rows} == {
+            actor_id,
+            beneficiary_id,
+        }
+        with live_conn.cursor() as replay_cur:
+            replay = reconstruct_state_at_sync(
+                replay_cur, mint_chunk, base_checkpoint_id=checkpoint_id
+            )
+
+    replayed_rows = [
+        row
+        for row in replay.state["claim_awareness"]
+        if row["claim_id"] == minted.claim_id
+    ]
+    assert _canonical_rows(replayed_rows) == _canonical_rows(live_rows)
+
+
 def test_replay_reconstructs_propagated_awareness_from_event(
     live_conn: Any,
 ) -> None:
