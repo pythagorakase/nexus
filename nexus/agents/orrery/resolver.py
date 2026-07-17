@@ -16,8 +16,8 @@ from nexus.agents.orrery.communication import (
 )
 from nexus.agents.orrery.epistemics import (
     coerce_epistemics_policy,
+    load_epistemics_hydration,
     load_epistemics_policy,
-    load_awareness_for_events,
 )
 from nexus.agents.orrery.reciprocal import (
     OrreryJointBeat,
@@ -363,6 +363,25 @@ def _load_orbit_distances(session: Any) -> dict[Tuple[int, int], int]:
     return _compute_orbit_distances(active_character_ids, relationship_edges)
 
 
+def _load_active_entity_ids(session: Any) -> tuple[int, ...]:
+    """Return the deterministic active entity universe hydrated this tick."""
+
+    return tuple(
+        int(row["id"])
+        for row in session.execute(
+            text(
+                """
+                /* orrery:active_entity_ids */
+                SELECT id
+                FROM entities
+                WHERE is_active = true
+                ORDER BY id
+                """
+            )
+        ).mappings()
+    )
+
+
 def hydrate_world_state(
     session: Any,
     *,
@@ -543,16 +562,16 @@ def hydrate_world_state(
         anchor_chunk_id=anchor_chunk_id,
         window_chunks=window_chunks,
     )
-    awareness = (
-        load_awareness_for_events(
+    epistemics = None
+    if epistemics_policy.enabled:
+        epistemics = load_epistemics_hydration(
             session,
-            world_event_ids=[
+            entity_ids=_load_active_entity_ids(session),
+            recent_event_ids=(
                 event.event_id for event in recent_events if event.event_id is not None
-            ],
+            ),
+            anchor_chunk_id=anchor_chunk_id,
         )
-        if epistemics_policy.enabled
-        else None
-    )
     world_time = world_time_override or _load_world_time(
         session, anchor_chunk_id=anchor_chunk_id
     )
@@ -611,10 +630,21 @@ def hydrate_world_state(
         routine_anchors=routine_anchors,
         recent_events=recent_events,
         claimed_event_scopes=(
-            awareness.claimed_event_scopes if awareness is not None else {}
+            epistemics.claimed_event_scopes if epistemics is not None else {}
         ),
         awareness_by_entity=(
-            awareness.awareness_by_entity if awareness is not None else {}
+            epistemics.awareness_by_entity if epistemics is not None else {}
+        ),
+        claim_knowledge_by_entity=(
+            epistemics.claim_knowledge_by_entity if epistemics is not None else {}
+        ),
+        common_claim_knowledge=(
+            epistemics.common_claim_knowledge if epistemics is not None else ()
+        ),
+        possessed_claim_knowledge_by_entity=(
+            epistemics.possessed_claim_knowledge_by_entity
+            if epistemics is not None
+            else {}
         ),
         epistemics_enabled=epistemics_policy.enabled,
         win_history=win_history,

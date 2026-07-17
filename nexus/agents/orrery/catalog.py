@@ -360,6 +360,17 @@ _register(
         f" ≤ {m.group('n')}"
     ),
 )
+_register(
+    r"knows_claim_about\((?P<subject>\w+)->(?P<about>\w+)\)",
+    lambda m: (
+        f"{_slot(m.group('subject'))} possesses a claim about "
+        f"{_slot(m.group('about'))}"
+    ),
+)
+_register(
+    r"heard_secondhand\((?P<subject>\w+)\)",
+    lambda m: f"{_slot(m.group('subject'))} has heard a claim secondhand",
+)
 
 # Time / weather predicates
 _register(

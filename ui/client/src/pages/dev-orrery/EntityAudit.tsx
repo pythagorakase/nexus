@@ -291,6 +291,57 @@ export default function EntityAudit({ ent }: { ent: EntityAuditVM }) {
         </div>
       )}
 
+      {ent.hasKnowledge && (
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 5,
+            borderTop: "1px solid hsl(var(--border))",
+            paddingTop: 6,
+          }}
+        >
+          <span className="font-mono" style={SECTION_LABEL}>
+            Knowledge
+          </span>
+          {ent.knowledge.map((claim) => (
+            <div
+              key={claim.key}
+              style={{ display: "flex", flexDirection: "column", gap: 1 }}
+            >
+              <span
+                className="font-mono"
+                style={{
+                  fontSize: 8,
+                  color: "hsl(var(--chart-5))",
+                  letterSpacing: "0.03em",
+                }}
+              >
+                {claim.meta}
+              </span>
+              <span
+                style={{
+                  fontSize: 10.5,
+                  lineHeight: 1.3,
+                  color: "hsl(var(--foreground) / 0.9)",
+                }}
+              >
+                {claim.summary}
+              </span>
+              <span
+                className="font-mono"
+                style={{
+                  fontSize: 7.5,
+                  color: "hsl(var(--muted-foreground))",
+                }}
+              >
+                {claim.provenance} · {claim.acquired}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
       {ent.hasEvents && (
         <div
           style={{

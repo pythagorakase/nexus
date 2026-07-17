@@ -312,6 +312,22 @@ def test_entity_context_hover_payload(client: TestClient) -> None:
             assert relationship["other_name"]
         for need in entity["needs"]:
             assert need["need_type"] in set(NEED_SEVERITY_PREFIX)
+        assert [claim["claim_id"] for claim in entity["knowledge"]] == sorted(
+            claim["claim_id"] for claim in entity["knowledge"]
+        )
+        for claim in entity["knowledge"]:
+            assert claim["tier"] in {
+                "common",
+                "participant",
+                "witness",
+                "told",
+                "granted",
+            }
+            for source_key in ("immediate_source", "root_source"):
+                source = claim[source_key]
+                if source is not None:
+                    assert source["entity_id"] > 0
+                    assert source["name"]
         assert len(entity["recent_events"]) <= 3
         if entity["place"] is not None:
             assert isinstance(entity["place"]["classes"], list)

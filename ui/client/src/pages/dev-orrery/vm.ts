@@ -831,6 +831,28 @@ export function buildEntityAudit(
         ? "—"
         : `${r.valence_magnitude >= 0 ? "+" : ""}${r.valence_magnitude}`,
   }));
+  const knowledge = ent.knowledge.map((claim) => {
+    const detail = [
+      `#${claim.claim_id}`,
+      claim.scope,
+      claim.tier,
+      claim.channel,
+      claim.depth == null ? null : `depth ${claim.depth}`,
+    ].filter((value): value is string => value != null);
+    const immediate = claim.immediate_source?.name;
+    const root = claim.root_source?.name;
+    const provenance =
+      immediate && root && immediate !== root
+        ? `${immediate} ← root ${root}`
+        : immediate ?? (root ? `root ${root}` : "universal / direct");
+    return {
+      key: String(claim.claim_id),
+      summary: claim.summary,
+      meta: detail.join(" · "),
+      provenance,
+      acquired: claim.acquired_at_world_time ?? "world time unstamped",
+    };
+  });
   const events = ent.recent_events.map((ev) => ({
     t: `t${String(ev.tick_chunk_id).padStart(4, "0")}`,
     type: ev.event_type,
@@ -847,6 +869,8 @@ export function buildEntityAudit(
     hasEphemeral: ent.tags.ephemeral.length > 0,
     rels,
     hasRels: rels.length > 0,
+    knowledge,
+    hasKnowledge: knowledge.length > 0,
     events,
     hasEvents: events.length > 0,
   };
