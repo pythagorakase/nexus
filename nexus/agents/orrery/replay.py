@@ -412,6 +412,7 @@ class _Replayer:
         }
         for project in projects.values():
             project.setdefault("target_character_entity_id", None)
+            project.setdefault("target_faction_entity_id", None)
 
         born_entities = self._seed_window_births(characters, places, result)
 
@@ -756,6 +757,9 @@ class _Replayer:
             # Historical PLAN_RELOCATION ledgers predate migration 077. Their
             # missing character-target field is truthfully NULL.
             "target_character_entity_id": applied.get("target_character_entity_id"),
+            # Historical project ledgers predate migration 081. Their missing
+            # faction binding is truthfully NULL.
+            "target_faction_entity_id": applied.get("target_faction_entity_id"),
             "progress": _pg_round(float(applied["progress"]), 4),
             "stall_count": int(applied["stall_count"]),
             "next_eligible_at_world_time": applied["next_eligible_at_world_time"],
@@ -800,6 +804,13 @@ class _Replayer:
             raise ValueError(
                 f"{delta_key} at chunk {chunk_id} changes project type from "
                 f"{row['project_type']!r} to {project_type!r}"
+            )
+        stored_faction = row.get("target_faction_entity_id")
+        if applied_row["target_faction_entity_id"] != stored_faction:
+            raise ValueError(
+                f"{delta_key} at chunk {chunk_id} changes immutable project "
+                f"faction from {stored_faction!r} to "
+                f"{applied_row['target_faction_entity_id']!r}"
             )
         if delta_key == "project.advance":
             row.update(applied_row)

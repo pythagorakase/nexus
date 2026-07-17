@@ -16,6 +16,7 @@ from nexus.agents.orrery.substrate import ProjectPolicy
 
 ACTOR = 10
 TARGET = 20
+FACTION = 30
 ACTOR_CHARACTER = 101
 TARGET_CHARACTER = 202
 SOURCE_CHUNK = 100
@@ -92,6 +93,7 @@ class AsyncProjectConn:
                 stage,
                 target_place_id,
                 target_character_entity_id,
+                target_faction_entity_id,
                 progress,
                 next_eligible_at_world_time,
                 source_chunk_id,
@@ -104,6 +106,7 @@ class AsyncProjectConn:
                 "stage": stage,
                 "target_place_id": target_place_id,
                 "target_character_entity_id": target_character_entity_id,
+                "target_faction_entity_id": target_faction_entity_id,
                 "progress": progress,
                 "stall_count": 0,
                 "next_eligible_at_world_time": next_eligible_at_world_time,
@@ -123,6 +126,43 @@ class AsyncProjectConn:
             self.travel_write_seen = True
             return "UPDATE 1"
         raise AssertionError(f"Unexpected execute SQL: {normalized}; params={params!r}")
+
+
+@pytest.mark.asyncio
+async def test_async_project_start_persists_bound_faction() -> None:
+    """The async applier mirrors sync entry-time faction persistence."""
+
+    conn = AsyncProjectConn()
+    draft = OrreryResolutionDraft(
+        template_id="test_start_faction_project",
+        priority=10,
+        binding_hash="async-faction-start",
+        bindings={"actor": ACTOR, "faction": FACTION},
+        branch_label="Bind the institution",
+        narrative_stub="start",
+        state_delta={
+            "project.start": {
+                "project_type": "plan_relocation",
+                "stage": "saving",
+            }
+        },
+    )
+
+    await _apply_state_delta_async(
+        conn,
+        draft,
+        resolution_id=100,
+        actor_entity_id=ACTOR,
+        target_entity_id=None,
+        source_chunk_id=SOURCE_CHUNK,
+        need_tuning=NeedTuning.default(),
+        project_policy=POLICY,
+    )
+
+    assert conn.project is not None
+    assert conn.project["target_faction_entity_id"] == FACTION
+    applied = conn.resolution_ledgers[100]["project.start"]["applied"]
+    assert applied["target_faction_entity_id"] == FACTION
 
 
 @pytest.mark.asyncio
@@ -167,6 +207,7 @@ async def test_async_recruit_ally_start_and_completion_match_sync_applier() -> N
             "sounding_out",
             None,
             TARGET,
+            None,
             0.0,
             WORLD_TIME.replace(day=3),
             SOURCE_CHUNK,

@@ -149,6 +149,7 @@ def _tally_report(
         (
             item["actor_entity_id"],
             item["target_entity_id"],
+            item.get("faction_entity_id"),
             item["template_id"],
         )
         for item in report.fanout_trimmed
@@ -173,6 +174,7 @@ def _tally_report(
                 winner_key = (
                     stack.bindings.get("actor"),
                     stack.bindings.get("target"),
+                    stack.bindings.get("faction"),
                     item.template_id,
                 )
                 if (

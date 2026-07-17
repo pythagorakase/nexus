@@ -359,6 +359,7 @@ def commit_orrery_tick_sync(
     epistemics_policy = coerce_epistemics_policy(effective_epistemics_settings)
     has_resolutions = coerced is not None and bool(coerced.resolutions)
     if has_resolutions:
+        assert coerced is not None
         adjudication_map = coerce_adjudications(adjudications)
         need_tuning = coerce_need_tuning(sunhelm_settings)
         _validate_proposal(coerced)
@@ -586,6 +587,7 @@ async def commit_orrery_tick_async(
     epistemics_policy = coerce_epistemics_policy(effective_epistemics_settings)
     has_resolutions = coerced is not None and bool(coerced.resolutions)
     if has_resolutions:
+        assert coerced is not None
         adjudication_map = coerce_adjudications(adjudications)
         need_tuning = coerce_need_tuning(sunhelm_settings)
         _validate_proposal(coerced)
@@ -1470,6 +1472,34 @@ async def _insert_resolution_async(
     )
 
 
+def _project_payload_with_bound_faction(
+    draft: OrreryResolutionDraft, project_key: str
+) -> dict[str, Any]:
+    """Carry the adjudicated draft's immutable faction into a transition."""
+
+    data = _coerce_project_payload(draft.state_delta[project_key])
+    bound_faction = draft.bindings.get("faction")
+    has_faction_binding = "faction" in draft.bindings
+    if has_faction_binding and not isinstance(bound_faction, int):
+        raise ValueError(
+            f"Orrery draft {draft.template_id} has a non-entity faction binding"
+        )
+    if "target_faction_entity_id" in data:
+        if not has_faction_binding:
+            raise ValueError(
+                f"Orrery draft {draft.template_id} carries a faction project "
+                "target without a faction binding"
+            )
+        if data["target_faction_entity_id"] != bound_faction:
+            raise ValueError(
+                f"Orrery draft {draft.template_id} project faction target does "
+                "not match its immutable faction binding"
+            )
+    if has_faction_binding:
+        data["target_faction_entity_id"] = bound_faction
+    return data
+
+
 def _apply_state_delta_sync(
     cur: Any,
     draft: OrreryResolutionDraft,
@@ -1626,7 +1656,7 @@ def _apply_state_delta_sync(
         project_applied = _apply_project_start_sync(
             cur,
             actor_entity_id=actor_entity_id,
-            payload=draft.state_delta["project.start"],
+            payload=_project_payload_with_bound_faction(draft, "project.start"),
             source_chunk_id=source_chunk_id,
             policy=project_policy,
         )
@@ -1634,7 +1664,7 @@ def _apply_state_delta_sync(
         project_applied = _apply_project_advance_sync(
             cur,
             actor_entity_id=actor_entity_id,
-            payload=draft.state_delta["project.advance"],
+            payload=_project_payload_with_bound_faction(draft, "project.advance"),
             source_chunk_id=source_chunk_id,
             policy=project_policy,
         )
@@ -1642,7 +1672,7 @@ def _apply_state_delta_sync(
         project_applied = _apply_project_stall_sync(
             cur,
             actor_entity_id=actor_entity_id,
-            payload=draft.state_delta["project.stall"],
+            payload=_project_payload_with_bound_faction(draft, "project.stall"),
             source_chunk_id=source_chunk_id,
             policy=project_policy,
         )
@@ -1650,7 +1680,7 @@ def _apply_state_delta_sync(
         project_applied = _apply_project_abandon_sync(
             cur,
             actor_entity_id=actor_entity_id,
-            payload=draft.state_delta["project.abandon"],
+            payload=_project_payload_with_bound_faction(draft, "project.abandon"),
             source_chunk_id=source_chunk_id,
             policy=project_policy,
         )
@@ -1658,7 +1688,7 @@ def _apply_state_delta_sync(
         project_applied = _apply_project_complete_sync(
             cur,
             actor_entity_id=actor_entity_id,
-            payload=draft.state_delta["project.complete"],
+            payload=_project_payload_with_bound_faction(draft, "project.complete"),
             source_chunk_id=source_chunk_id,
             policy=project_policy,
             template_id=draft.template_id,
@@ -1861,7 +1891,7 @@ async def _apply_state_delta_async(
         project_applied = await _apply_project_start_async(
             conn,
             actor_entity_id=actor_entity_id,
-            payload=draft.state_delta["project.start"],
+            payload=_project_payload_with_bound_faction(draft, "project.start"),
             source_chunk_id=source_chunk_id,
             policy=project_policy,
         )
@@ -1869,7 +1899,7 @@ async def _apply_state_delta_async(
         project_applied = await _apply_project_advance_async(
             conn,
             actor_entity_id=actor_entity_id,
-            payload=draft.state_delta["project.advance"],
+            payload=_project_payload_with_bound_faction(draft, "project.advance"),
             source_chunk_id=source_chunk_id,
             policy=project_policy,
         )
@@ -1877,7 +1907,7 @@ async def _apply_state_delta_async(
         project_applied = await _apply_project_stall_async(
             conn,
             actor_entity_id=actor_entity_id,
-            payload=draft.state_delta["project.stall"],
+            payload=_project_payload_with_bound_faction(draft, "project.stall"),
             source_chunk_id=source_chunk_id,
             policy=project_policy,
         )
@@ -1885,7 +1915,7 @@ async def _apply_state_delta_async(
         project_applied = await _apply_project_abandon_async(
             conn,
             actor_entity_id=actor_entity_id,
-            payload=draft.state_delta["project.abandon"],
+            payload=_project_payload_with_bound_faction(draft, "project.abandon"),
             source_chunk_id=source_chunk_id,
             policy=project_policy,
         )
@@ -1893,7 +1923,7 @@ async def _apply_state_delta_async(
         project_applied = await _apply_project_complete_async(
             conn,
             actor_entity_id=actor_entity_id,
-            payload=draft.state_delta["project.complete"],
+            payload=_project_payload_with_bound_faction(draft, "project.complete"),
             source_chunk_id=source_chunk_id,
             policy=project_policy,
             template_id=draft.template_id,
@@ -2119,6 +2149,7 @@ def _project_applied_snapshot(
     next_eligible_at_world_time: Any,
     source_chunk_id: int,
     target_character_entity_id: Optional[int] = None,
+    target_faction_entity_id: Optional[int] = None,
 ) -> dict[str, Any]:
     """Return the exact project projection values persisted by one transition."""
 
@@ -2128,6 +2159,7 @@ def _project_applied_snapshot(
         "stage": stage,
         "target_place_id": target_place_id,
         "target_character_entity_id": target_character_entity_id,
+        "target_faction_entity_id": target_faction_entity_id,
         "progress": float(progress),
         "stall_count": int(stall_count),
         "next_eligible_at_world_time": (
@@ -2189,7 +2221,7 @@ def _current_project_sync(cur: Any, actor_entity_id: int) -> Optional[dict[str, 
     cur.execute(
         """
         SELECT id, project_type, status, stage, target_place_id,
-               target_character_entity_id,
+               target_character_entity_id, target_faction_entity_id,
                progress, stall_count, next_eligible_at_world_time,
                source_chunk_id
         FROM character_project_states
@@ -2215,6 +2247,7 @@ def _current_project_sync(cur: Any, actor_entity_id: int) -> Optional[dict[str, 
         "stage",
         "target_place_id",
         "target_character_entity_id",
+        "target_faction_entity_id",
         "progress",
         "stall_count",
         "next_eligible_at_world_time",
@@ -2229,7 +2262,7 @@ async def _current_project_async(
     rows = await conn.fetch(
         """
         SELECT id, project_type, status, stage, target_place_id,
-               target_character_entity_id,
+               target_character_entity_id, target_faction_entity_id,
                progress, stall_count, next_eligible_at_world_time,
                source_chunk_id
         FROM character_project_states
@@ -2262,6 +2295,28 @@ def _require_open_project(
     return project
 
 
+def _validate_project_faction_binding(
+    project: Mapping[str, Any], data: Mapping[str, Any]
+) -> None:
+    """Reject any transition payload that tries to rebind project faction.
+
+    An absent key is always legal: the stored entry-time binding governs, and
+    actor-only continuation templates legitimately carry no faction slot.
+    """
+
+    stored = project["target_faction_entity_id"]
+    if "target_faction_entity_id" not in data:
+        return
+    requested = data["target_faction_entity_id"]
+    if requested is not None and not isinstance(requested, int):
+        raise ValueError("project faction target must be an entity id or null")
+    if requested != stored:
+        raise ValueError(
+            f"Project {project['id']} faction binding is immutable: "
+            f"stored {stored}, requested {requested}"
+        )
+
+
 def _apply_project_start_sync(
     cur: Any,
     *,
@@ -2284,6 +2339,11 @@ def _apply_project_start_sync(
     next_eligible = _project_next_eligible(world_time, policy)
     target_place_id = data.get("target_place_id")
     target_character_entity_id = data.get("target_character_entity_id")
+    target_faction_entity_id = data.get("target_faction_entity_id")
+    if target_faction_entity_id is not None and not isinstance(
+        target_faction_entity_id, int
+    ):
+        raise ValueError("project.start faction target must be an entity id")
     if project_type == "plan_relocation" and target_character_entity_id is not None:
         raise ValueError("plan_relocation project.start forbids a character target")
     if project_type == "recruit_ally":
@@ -2296,9 +2356,10 @@ def _apply_project_start_sync(
         """
         INSERT INTO character_project_states (
             character_entity_id, project_type, status, stage,
-            target_place_id, target_character_entity_id, progress, stall_count,
+            target_place_id, target_character_entity_id,
+            target_faction_entity_id, progress, stall_count,
             next_eligible_at_world_time, source_chunk_id
-        ) VALUES (%s, %s, 'active', %s, %s, %s, %s, 0, %s, %s)
+        ) VALUES (%s, %s, 'active', %s, %s, %s, %s, %s, 0, %s, %s)
         """,
         (
             actor_entity_id,
@@ -2306,6 +2367,7 @@ def _apply_project_start_sync(
             stage,
             target_place_id,
             target_character_entity_id,
+            target_faction_entity_id,
             progress,
             next_eligible,
             source_chunk_id,
@@ -2321,6 +2383,7 @@ def _apply_project_start_sync(
         next_eligible_at_world_time=next_eligible,
         source_chunk_id=source_chunk_id,
         target_character_entity_id=target_character_entity_id,
+        target_faction_entity_id=target_faction_entity_id,
     )
 
 
@@ -2346,6 +2409,11 @@ async def _apply_project_start_async(
     next_eligible = _project_next_eligible(world_time, policy)
     target_place_id = data.get("target_place_id")
     target_character_entity_id = data.get("target_character_entity_id")
+    target_faction_entity_id = data.get("target_faction_entity_id")
+    if target_faction_entity_id is not None and not isinstance(
+        target_faction_entity_id, int
+    ):
+        raise ValueError("project.start faction target must be an entity id")
     if project_type == "plan_relocation" and target_character_entity_id is not None:
         raise ValueError("plan_relocation project.start forbids a character target")
     if project_type == "recruit_ally":
@@ -2358,15 +2426,17 @@ async def _apply_project_start_async(
         """
         INSERT INTO character_project_states (
             character_entity_id, project_type, status, stage,
-            target_place_id, target_character_entity_id, progress, stall_count,
+            target_place_id, target_character_entity_id,
+            target_faction_entity_id, progress, stall_count,
             next_eligible_at_world_time, source_chunk_id
-        ) VALUES ($1, $2, 'active', $3, $4, $5, $6, 0, $7, $8)
+        ) VALUES ($1, $2, 'active', $3, $4, $5, $6, $7, 0, $8, $9)
         """,
         actor_entity_id,
         project_type,
         stage,
         target_place_id,
         target_character_entity_id,
+        target_faction_entity_id,
         progress,
         next_eligible,
         source_chunk_id,
@@ -2381,12 +2451,14 @@ async def _apply_project_start_async(
         next_eligible_at_world_time=next_eligible,
         source_chunk_id=source_chunk_id,
         target_character_entity_id=target_character_entity_id,
+        target_faction_entity_id=target_faction_entity_id,
     )
 
 
 def _project_advance_values(
     project: Mapping[str, Any], data: Mapping[str, Any]
 ) -> tuple[str, Optional[int], float]:
+    _validate_project_faction_binding(project, data)
     stage = str(data.get("stage") or project["stage"])
     if stage not in PROJECT_STAGE_LADDERS[str(project["project_type"])]:
         raise ValueError(f"Unsupported project.advance stage {stage!r}")
@@ -2458,6 +2530,7 @@ def _apply_project_advance_sync(
         next_eligible_at_world_time=next_eligible,
         source_chunk_id=source_chunk_id,
         target_character_entity_id=project["target_character_entity_id"],
+        target_faction_entity_id=project["target_faction_entity_id"],
     )
 
 
@@ -2513,6 +2586,7 @@ async def _apply_project_advance_async(
         next_eligible_at_world_time=next_eligible,
         source_chunk_id=source_chunk_id,
         target_character_entity_id=project["target_character_entity_id"],
+        target_faction_entity_id=project["target_faction_entity_id"],
     )
 
 
@@ -2529,6 +2603,7 @@ def _apply_project_stall_sync(
     project = _require_open_project(
         _current_project_sync(cur, actor_entity_id), actor_entity_id
     )
+    _validate_project_faction_binding(project, data)
     increment = int(data.get("increment", 1))
     if increment < 1:
         raise ValueError("project.stall increment must be >= 1")
@@ -2560,6 +2635,7 @@ def _apply_project_stall_sync(
         next_eligible_at_world_time=next_eligible,
         source_chunk_id=source_chunk_id,
         target_character_entity_id=project["target_character_entity_id"],
+        target_faction_entity_id=project["target_faction_entity_id"],
     )
 
 
@@ -2576,6 +2652,7 @@ async def _apply_project_stall_async(
     project = _require_open_project(
         await _current_project_async(conn, actor_entity_id), actor_entity_id
     )
+    _validate_project_faction_binding(project, data)
     increment = int(data.get("increment", 1))
     if increment < 1:
         raise ValueError("project.stall increment must be >= 1")
@@ -2605,6 +2682,7 @@ async def _apply_project_stall_async(
         next_eligible_at_world_time=next_eligible,
         source_chunk_id=source_chunk_id,
         target_character_entity_id=project["target_character_entity_id"],
+        target_faction_entity_id=project["target_faction_entity_id"],
     )
 
 
@@ -2617,10 +2695,11 @@ def _apply_project_abandon_sync(
     policy: ProjectPolicy,
 ) -> dict[str, Any]:
     _require_project_policy(policy)
-    _coerce_project_payload(payload)
+    data = _coerce_project_payload(payload)
     project = _require_open_project(
         _current_project_sync(cur, actor_entity_id), actor_entity_id
     )
+    _validate_project_faction_binding(project, data)
     cur.execute(
         """
         UPDATE character_project_states
@@ -2640,6 +2719,7 @@ def _apply_project_abandon_sync(
         next_eligible_at_world_time=None,
         source_chunk_id=source_chunk_id,
         target_character_entity_id=project["target_character_entity_id"],
+        target_faction_entity_id=project["target_faction_entity_id"],
     )
 
 
@@ -2652,10 +2732,11 @@ async def _apply_project_abandon_async(
     policy: ProjectPolicy,
 ) -> dict[str, Any]:
     _require_project_policy(policy)
-    _coerce_project_payload(payload)
+    data = _coerce_project_payload(payload)
     project = _require_open_project(
         await _current_project_async(conn, actor_entity_id), actor_entity_id
     )
+    _validate_project_faction_binding(project, data)
     await conn.execute(
         """
         UPDATE character_project_states
@@ -2676,6 +2757,7 @@ async def _apply_project_abandon_async(
         next_eligible_at_world_time=None,
         source_chunk_id=source_chunk_id,
         target_character_entity_id=project["target_character_entity_id"],
+        target_faction_entity_id=project["target_faction_entity_id"],
     )
 
 
@@ -2691,7 +2773,9 @@ def _project_completion_travel_payload(
     if target_place_id is None:
         raise ValueError("project.complete requires target_place_id")
     travel = {
-        key: value for key, value in data.items() if key not in {"milestone", "reason"}
+        key: value
+        for key, value in data.items()
+        if key not in {"milestone", "reason", "target_faction_entity_id"}
     }
     travel["destination_place_id"] = target_place_id
     return travel
@@ -2908,9 +2992,11 @@ def _apply_project_complete_sync(
     target_entity_id: Optional[int] = None,
 ) -> dict[str, Any]:
     _require_project_policy(policy)
+    data = _coerce_project_payload(payload)
     project = _require_open_project(
         _current_project_sync(cur, actor_entity_id), actor_entity_id
     )
+    _validate_project_faction_binding(project, data)
     _validate_project_completion(project, target_entity_id)
     cur.execute(
         """
@@ -2930,7 +3016,6 @@ def _apply_project_complete_sync(
             source_chunk_id=source_chunk_id,
         )
     elif project["project_type"] == "recruit_ally":
-        _coerce_project_payload(payload)
         assert target_entity_id is not None
         relationship_mutation = _upsert_recruited_ally_relationship_sync(
             cur,
@@ -2953,6 +3038,7 @@ def _apply_project_complete_sync(
         next_eligible_at_world_time=None,
         source_chunk_id=source_chunk_id,
         target_character_entity_id=project["target_character_entity_id"],
+        target_faction_entity_id=project["target_faction_entity_id"],
     )
     if relationship_mutation is not None:
         applied["relationship_mutation"] = relationship_mutation
@@ -2970,9 +3056,11 @@ async def _apply_project_complete_async(
     target_entity_id: Optional[int] = None,
 ) -> dict[str, Any]:
     _require_project_policy(policy)
+    data = _coerce_project_payload(payload)
     project = _require_open_project(
         await _current_project_async(conn, actor_entity_id), actor_entity_id
     )
+    _validate_project_faction_binding(project, data)
     _validate_project_completion(project, target_entity_id)
     await conn.execute(
         """
@@ -2993,7 +3081,6 @@ async def _apply_project_complete_async(
             source_chunk_id=source_chunk_id,
         )
     elif project["project_type"] == "recruit_ally":
-        _coerce_project_payload(payload)
         assert target_entity_id is not None
         relationship_mutation = await _upsert_recruited_ally_relationship_async(
             conn,
@@ -3016,6 +3103,7 @@ async def _apply_project_complete_async(
         next_eligible_at_world_time=None,
         source_chunk_id=source_chunk_id,
         target_character_entity_id=project["target_character_entity_id"],
+        target_faction_entity_id=project["target_faction_entity_id"],
     )
     if relationship_mutation is not None:
         applied["relationship_mutation"] = relationship_mutation
