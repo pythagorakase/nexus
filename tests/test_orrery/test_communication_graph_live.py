@@ -591,6 +591,30 @@ def test_assembly_is_deterministic_and_unknown_configured_channel_is_loud(
         )
 
 
+def test_unknown_dyad_override_key_is_loud(
+    communication_db: dict[str, Any],
+) -> None:
+    """PR #517 review: a typo'd or retired override key raises, never falls back.
+
+    Valid keys are the union of the apex RelationshipType enum, template-
+    referenced relationship types, and types present in the live data — so
+    the shipped captor/handler defaults validate while drift screams.
+    """
+
+    payload = communication_db["settings"].model_dump()
+    payload["dyad_overrides"]["handeler"] = {
+        "forward": "1h",
+        "reverse": "1h",
+    }
+    drifted = OrreryContagionSettings.model_validate(payload)
+    with pytest.raises(ValueError, match="unknown relationship types.*handeler"):
+        assemble_communication_graph(
+            communication_db["session"],
+            settings=drifted,
+            world_time=WORLD_TIME,
+        )
+
+
 def test_unparseable_relationship_valence_is_loud(
     communication_db: dict[str, Any],
 ) -> None:

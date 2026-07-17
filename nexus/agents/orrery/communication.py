@@ -397,6 +397,59 @@ def assemble_communication_graph(
     config = coerce_contagion_settings(settings)
     if not config.enabled:
         return CommunicationGraph()
+    _validate_dyad_overrides(session_or_cur, config.dyad_overrides)
     edges = _dyad_edges(session_or_cur, config)
     edges.extend(_channel_edges(session_or_cur, config))
     return CommunicationGraph(edges=tuple(sorted(edges, key=_edge_sort_key)))
+
+
+def communication_graph_for_settings(
+    session_or_cur: Any,
+    settings: Any,
+    *,
+    world_time: Optional[datetime] = None,
+) -> CommunicationGraph:
+    """Assemble the graph, or return an empty one when settings are absent.
+
+    The single home for the "no contagion settings -> empty graph" convention
+    shared by production hydration, audit, and future Stage 2c callers.
+    """
+
+    if settings is None:
+        return CommunicationGraph()
+    return assemble_communication_graph(
+        session_or_cur, settings=settings, world_time=world_time
+    )
+
+
+def _validate_dyad_overrides(session_or_cur: Any, overrides: Mapping[str, Any]) -> None:
+    """Reject override keys outside every known relationship vocabulary.
+
+    Valid keys are the union of the apex RelationshipType enum, relationship
+    types referenced by shipped package templates, and types present in the
+    live data — so shipped defaults (captor, handler) validate on a fresh
+    slot while a typo'd or retired key fails loudly instead of silently
+    falling back to its valence tier.
+    """
+
+    if not overrides:
+        return
+    from nexus.agents.logon.apex_enums import RelationshipType
+    from nexus.agents.orrery.catalog import collect_template_vocabulary
+    from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
+
+    valid = {member.value for member in RelationshipType}
+    valid.update(collect_template_vocabulary(BUILTIN_TEMPLATES)["relationship_types"])
+    valid.update(
+        str(row["relationship_type"])
+        for row in _fetch_mappings(
+            session_or_cur,
+            "SELECT DISTINCT relationship_type FROM character_relationships",
+        )
+    )
+    unknown = sorted(set(overrides) - valid)
+    if unknown:
+        raise ValueError(
+            "orrery.contagion dyad_overrides reference unknown relationship "
+            f"types {unknown}; known types: {sorted(valid)}"
+        )

@@ -12,7 +12,7 @@ from sqlalchemy import text
 
 from nexus.agents.orrery.communication import (
     CommunicationGraph,
-    assemble_communication_graph,
+    communication_graph_for_settings,
 )
 from nexus.agents.orrery.epistemics import (
     coerce_epistemics_policy,
@@ -556,14 +556,8 @@ def hydrate_world_state(
     world_time = world_time_override or _load_world_time(
         session, anchor_chunk_id=anchor_chunk_id
     )
-    communication_graph = (
-        assemble_communication_graph(
-            session,
-            settings=contagion_settings,
-            world_time=world_time,
-        )
-        if contagion_settings is not None
-        else CommunicationGraph()
+    communication_graph = communication_graph_for_settings(
+        session, contagion_settings, world_time=world_time
     )
     time_of_day = _load_time_of_day(world_time)
     weather = _load_weather(session)

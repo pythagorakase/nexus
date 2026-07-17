@@ -38,7 +38,7 @@ from sqlalchemy import text
 
 from nexus.agents.orrery.communication import (
     CommunicationGraph,
-    assemble_communication_graph,
+    communication_graph_for_settings,
 )
 from nexus.agents.orrery.epistemics import (
     coerce_epistemics_policy,
@@ -1131,14 +1131,8 @@ def entity_context(
 
     need_tuning = coerce_need_tuning(sunhelm_settings)
     world_time = _load_world_time(session, anchor_chunk_id=anchor_chunk_id)
-    communication_graph = (
-        assemble_communication_graph(
-            session,
-            settings=contagion_settings,
-            world_time=world_time,
-        )
-        if contagion_settings is not None
-        else CommunicationGraph()
+    communication_graph = communication_graph_for_settings(
+        session, contagion_settings, world_time=world_time
     )
 
     kinds = {
