@@ -324,8 +324,16 @@ def _channel_directions(
         return ((object_, subject),)
     if direction != "faction_to_member":
         raise ValueError(f"Unknown channel direction {direction!r}")
-    if row["subject_kind"] != "character" or row["object_kind"] != "faction":
-        return ()
+    if row["subject_kind"] not in ("character", "faction"):
+        raise ValueError(
+            f"status pair tag {row['tag']!r} has subject kind "
+            f"{row['subject_kind']!r}; the registry allows character or faction"
+        )
+    if row["object_kind"] != "faction":
+        raise ValueError(
+            f"status pair tag {row['tag']!r} has object kind "
+            f"{row['object_kind']!r}; the scope must be a faction"
+        )
     if min_level is None:
         raise ValueError("faction_to_member channel requires min_level")
     level = level_from_status_tag(str(row["tag"]))

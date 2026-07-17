@@ -486,6 +486,53 @@ def test_channel_directionality_and_status_minimum(
     assert _between(graph, faction, entities["outcast_member"], kind="channel") == ()
 
 
+def test_faction_subject_status_yields_parent_to_member_faction_edge(
+    communication_db: dict[str, Any],
+) -> None:
+    """PR #517 review: the registry allows faction-subject status standing.
+
+    A member faction holding status toward a parent faction is a legal
+    institutional conduit; faction_to_member must emit parent -> member.
+    """
+
+    session = communication_db["session"]
+    parent_faction = communication_db["faction_entity_id"]
+    member_entity_id = int(
+        session.execute(
+            text(
+                """
+                INSERT INTO entities (kind, is_active)
+                VALUES ('faction', true)
+                RETURNING id
+                """
+            )
+        ).scalar_one()
+    )
+    session.execute(
+        text(
+            """
+            INSERT INTO factions (id, name, entity_id)
+            VALUES ((SELECT coalesce(max(id), 0) + 1 FROM factions), :name, :entity_id)
+            """
+        ),
+        {
+            "name": f"comm-graph-member-{uuid4().hex[:12]}",
+            "entity_id": member_entity_id,
+        },
+    )
+    _insert_pair_tag(
+        session,
+        subject_entity_id=member_entity_id,
+        object_entity_id=parent_faction,
+        tag="status:senior",
+    )
+
+    graph = _assemble(communication_db)
+    edges = _between(graph, parent_faction, member_entity_id, kind="channel")
+    assert len(edges) == 1
+    assert edges[0].label == "status:senior"
+
+
 def test_culture_profiles_multiply_and_record_provenance(
     communication_db: dict[str, Any],
 ) -> None:
