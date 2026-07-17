@@ -12,6 +12,9 @@ from nexus.agents.orrery.resolver import (
     _compute_orbit_distances,
     _need_pressure_stub,
     compose_actor_target_bindings,
+    compose_actor_faction_bindings,
+    compose_actor_faction_routes,
+    compose_actor_target_faction_bindings,
     compose_actor_target_routes,
     hydrate_world_state,
     resolve_dry_run,
@@ -75,6 +78,7 @@ class FakeSession:
         present_actor_rows=None,
         actor_target_relationship_rows=None,
         actor_target_social_contact_rows=None,
+        actor_faction_pair_tag_rows=None,
         entity_name_rows=None,
         need_debt_rows=None,
         travel_state_rows=None,
@@ -106,6 +110,7 @@ class FakeSession:
         self.present_actor_rows = present_actor_rows or []
         self.actor_target_relationship_rows = actor_target_relationship_rows or []
         self.actor_target_social_contact_rows = actor_target_social_contact_rows or []
+        self.actor_faction_pair_tag_rows = actor_faction_pair_tag_rows or []
         self.entity_name_rows = entity_name_rows or [
             {"id": 1, "name": "Mara"},
             {"id": 2, "name": "Vale"},
@@ -203,6 +208,12 @@ class FakeSession:
             assert "pt.tag = 'contact:social'" in sql
             assert "ept.cleared_at IS NULL" in sql
             return FakeResult(self.actor_target_social_contact_rows)
+        if "/* orrery:actor_faction_bindings_institutional_pair_tags */" in sql:
+            assert "pt.tag LIKE 'status:%'" in sql
+            assert "'obligation', 'handles', 'authority_over'" in sql
+            assert "ept.cleared_at IS NULL" in sql
+            assert "NOT pt.deprecated" in sql
+            return FakeResult(self.actor_faction_pair_tag_rows)
         if "/* orrery:entity_names */" in sql:
             return FakeResult(self.entity_name_rows)
         if "/* orrery:need_debt_scores */" in sql:
@@ -218,6 +229,8 @@ class FakeSession:
             assert "e.is_active = true" in sql
             assert "target_entity.kind = 'character'" in sql
             assert "target_entity.is_active" in sql
+            assert "target_faction.kind = 'faction'" in sql
+            assert "target_faction.is_active" in sql
             return FakeResult(self.project_state_rows)
         if "/* orrery:win_history */" in sql:
             return FakeResult(self.win_history_rows)
@@ -1933,6 +1946,173 @@ def test_compose_actor_target_bindings_yields_both_directions() -> None:
     assert pairs == {(1, 2), (2, 1)}
 
 
+def test_compose_actor_faction_bindings_is_distinct_and_ordered() -> None:
+    """Institutional edges are direction-agnostic, distinct, and ID-sorted."""
+
+    bindings = compose_actor_faction_bindings(
+        FakeSession(
+            chunk_ref_actor_rows=[{"entity_id": 1}],
+            actor_faction_pair_tag_rows=[
+                {
+                    "subject_entity_id": 10,
+                    "object_entity_id": 1,
+                    "subject_kind": "faction",
+                    "object_kind": "character",
+                },
+                {
+                    "subject_entity_id": 1,
+                    "object_entity_id": 9,
+                    "subject_kind": "character",
+                    "object_kind": "faction",
+                },
+                {
+                    "subject_entity_id": 1,
+                    "object_entity_id": 9,
+                    "subject_kind": "character",
+                    "object_kind": "faction",
+                },
+            ],
+        ),
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert bindings == (
+        {Slot.ACTOR: 1, Slot.FACTION: 9},
+        {Slot.ACTOR: 1, Slot.FACTION: 10},
+    )
+
+
+def test_compose_actor_target_faction_bindings_is_cartesian_product() -> None:
+    """Triple composition reuses target candidates and products factions."""
+
+    bindings = compose_actor_target_faction_bindings(
+        FakeSession(
+            chunk_ref_actor_rows=[{"entity_id": 1}],
+            actor_target_relationship_rows=[
+                {"source_entity_id": 1, "target_entity_id": 3},
+                {"source_entity_id": 1, "target_entity_id": 2},
+            ],
+            actor_faction_pair_tag_rows=[
+                {
+                    "subject_entity_id": 1,
+                    "object_entity_id": 10,
+                    "subject_kind": "character",
+                    "object_kind": "faction",
+                },
+                {
+                    "subject_entity_id": 1,
+                    "object_entity_id": 9,
+                    "subject_kind": "character",
+                    "object_kind": "faction",
+                },
+            ],
+        ),
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert bindings == tuple(
+        {
+            Slot.ACTOR: 1,
+            Slot.TARGET: target,
+            Slot.FACTION: faction,
+        }
+        for target in (2, 3)
+        for faction in (9, 10)
+    )
+
+
+def test_faction_templates_do_not_change_other_signature_composition() -> None:
+    """A zero-edge actor gets no faction draft while other stacks still fire."""
+
+    actor_only = Template(
+        id="actor_only_fixture",
+        priority=10,
+        drive_band=DriveBand.PROJECT_IDENTITY,
+        blurb="actor fixture",
+        required_slots=(Slot.ACTOR,),
+        package_gate=ALWAYS,
+        branches=(Branch("act", ALWAYS, "{actor} acts."),),
+    )
+    actor_target = Template(
+        id="actor_target_fixture",
+        priority=10,
+        drive_band=DriveBand.PROJECT_IDENTITY,
+        blurb="target fixture",
+        required_slots=(Slot.ACTOR, Slot.TARGET),
+        package_gate=ALWAYS,
+        branches=(Branch("act", ALWAYS, "{actor} meets {target}."),),
+    )
+    actor_faction = Template(
+        id="actor_faction_fixture",
+        priority=10,
+        drive_band=DriveBand.PROJECT_IDENTITY,
+        blurb="faction fixture",
+        required_slots=(Slot.ACTOR, Slot.FACTION),
+        package_gate=ALWAYS,
+        branches=(Branch("act", ALWAYS, "{actor} petitions {faction}."),),
+    )
+
+    proposal = resolve_dry_run(
+        FakeSession(
+            chunk_ref_actor_rows=[{"entity_id": 1}],
+            actor_target_relationship_rows=[
+                {"source_entity_id": 1, "target_entity_id": 2}
+            ],
+        ),
+        (actor_only, actor_target, actor_faction),
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert [draft.template_id for draft in proposal.resolutions] == [
+        "actor_only_fixture",
+        "actor_target_fixture",
+    ]
+
+
+def test_project_faction_route_survives_source_edge_removal() -> None:
+    """Continuation routing reads the stored project faction, not live edges."""
+
+    continuation = Template(
+        id="faction_project_continuation",
+        priority=10,
+        drive_band=DriveBand.PROJECT_IDENTITY,
+        blurb="faction project fixture",
+        required_slots=(Slot.ACTOR, Slot.FACTION),
+        package_gate=ALWAYS,
+        branches=(Branch("advance", ALWAYS, "{actor} advances {faction}."),),
+        binds_project_faction=True,
+    )
+    routes = compose_actor_faction_routes(
+        FakeSession(),
+        state=WorldState(
+            project_states={
+                1: ProjectState(
+                    id=7,
+                    project_type="plan_relocation",
+                    status="active",
+                    stage="saving",
+                    target_faction_entity_id=9,
+                    target_faction_is_active=True,
+                )
+            }
+        ),
+        templates=(continuation,),
+        anchor_chunk_id=100,
+        window_chunks=30,
+        actor_ids={1},
+    )
+
+    assert routes == (
+        (
+            {Slot.ACTOR: 1, Slot.FACTION: 9},
+            (continuation,),
+        ),
+    )
+
+
 def test_compose_actor_target_bindings_includes_directed_social_contacts() -> None:
     """A social-contact edge can source RECRUIT_ALLY without a relationship."""
 
@@ -2399,14 +2579,14 @@ def test_pressure_templates_still_commit_for_offscreen_targets() -> None:
 
 
 def test_resolve_dry_run_rejects_unsupported_slot_signatures() -> None:
-    """Templates with non-(ACTOR,)/non-(ACTOR,TARGET) slot tuples fail loud."""
+    """Templates outside the four supported slot signatures fail loud."""
 
     weird_template = Template(
         id="weird",
         priority=1,
         drive_band=DriveBand.PROJECT_IDENTITY,
         blurb="declares an unsupported slot signature",
-        required_slots=(Slot.ACTOR, Slot.FACTION),
+        required_slots=(Slot.ACTOR, Slot.LOCATION),
         package_gate=ALWAYS,
         branches=(Branch("fallback", ALWAYS, "{actor} acts."),),
     )

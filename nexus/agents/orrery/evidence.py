@@ -70,6 +70,8 @@ from nexus.agents.orrery.substrate import (
     _routine_anchor_destination_available,
     _routine_schedule_due,
     _trust_values_are_asymmetric,
+    project_faction_is,
+    project_faction_is_active,
     project_due,
     project_overdue_hours,
     project_target_is,
@@ -1712,6 +1714,95 @@ def _project_target_is_active(
         },
         result=result,
         matched=[bound_target_entity_id] if result else [],
+    )
+
+
+@_resolver("project_faction_is")
+def _project_faction_is(
+    match: re.Match, state: WorldState, bindings: Bindings
+) -> dict[str, Any]:
+    slot = match["slot"]
+    actor_entity_id = _entity(bindings, Slot.ACTOR.value)
+    bound_faction_entity_id = _entity(bindings, slot)
+    project = (
+        state.project_states.get(actor_entity_id)
+        if actor_entity_id is not None
+        else None
+    )
+    project_faction_entity_id = (
+        project.target_faction_entity_id if project is not None else None
+    )
+    project_faction_active = (
+        project.target_faction_is_active if project is not None else None
+    )
+    condition = project_faction_is(Slot(slot))
+    result = condition(state, bindings)
+    return _evidence(
+        "project_faction_is",
+        params={"slot": slot},
+        entities={"actor": actor_entity_id, slot: bound_faction_entity_id},
+        observed={
+            "project_id": project.id if project is not None else None,
+            "project_type": project.project_type if project is not None else None,
+            "project_faction_entity_id": project_faction_entity_id,
+            "project_faction_is_active": project_faction_active,
+            "bound_faction_entity_id": bound_faction_entity_id,
+            "explanation": (
+                "advancing the stored institutional counterparty"
+                if result
+                else "blocked: bound faction is not the project's counterparty"
+            ),
+        },
+        result=result,
+        matched=[bound_faction_entity_id] if result else [],
+    )
+
+
+@_resolver("project_faction_is_active")
+def _project_faction_is_active(
+    match: re.Match, state: WorldState, bindings: Bindings
+) -> dict[str, Any]:
+    slot = match["slot"]
+    actor_entity_id = _entity(bindings, Slot.ACTOR.value)
+    bound_faction_entity_id = _entity(bindings, slot)
+    project = (
+        state.project_states.get(actor_entity_id)
+        if actor_entity_id is not None
+        else None
+    )
+    project_faction_entity_id = (
+        project.target_faction_entity_id if project is not None else None
+    )
+    project_faction_active = (
+        project.target_faction_is_active if project is not None else None
+    )
+    condition = project_faction_is_active(Slot(slot))
+    result = condition(state, bindings)
+    if result:
+        explanation = "project's institutional counterparty is an active faction"
+    elif (
+        project_faction_entity_id == bound_faction_entity_id
+        and project_faction_entity_id is not None
+    ):
+        explanation = (
+            "project's institutional counterparty is inactive or not a faction"
+        )
+    else:
+        explanation = "blocked: bound faction is not the project's counterparty"
+    return _evidence(
+        "project_faction_is_active",
+        params={"slot": slot},
+        entities={"actor": actor_entity_id, slot: bound_faction_entity_id},
+        observed={
+            "project_id": project.id if project is not None else None,
+            "project_type": project.project_type if project is not None else None,
+            "project_faction_entity_id": project_faction_entity_id,
+            "project_faction_is_active": project_faction_active,
+            "bound_faction_entity_id": bound_faction_entity_id,
+            "explanation": explanation,
+        },
+        result=result,
+        matched=[bound_faction_entity_id] if result else [],
     )
 
 

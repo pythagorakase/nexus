@@ -68,6 +68,8 @@ from nexus.agents.orrery.resolver import (
     _render_bound_text,
     _scene_pressure_from_need_spec,
     compose_actor_bindings,
+    compose_actor_faction_routes,
+    compose_actor_target_faction_routes,
     compose_actor_target_routes,
     hydrate_world_state,
 )
@@ -95,6 +97,12 @@ from nexus.agents.orrery.substrate import (
 
 _ACTOR_ONLY_SLOTS: Tuple[Slot, ...] = (Slot.ACTOR,)
 _ACTOR_TARGET_SLOTS: Tuple[Slot, ...] = (Slot.ACTOR, Slot.TARGET)
+_ACTOR_FACTION_SLOTS: Tuple[Slot, ...] = (Slot.ACTOR, Slot.FACTION)
+_ACTOR_TARGET_FACTION_SLOTS: Tuple[Slot, ...] = (
+    Slot.ACTOR,
+    Slot.TARGET,
+    Slot.FACTION,
+)
 
 NOT_APPLICABLE_REASON = "no_target_bound"
 
@@ -531,10 +539,20 @@ def explain_dry_run(
     actor_target_templates = [
         t for t in templates_list if t.required_slots == _ACTOR_TARGET_SLOTS
     ]
+    actor_faction_templates = [
+        t for t in templates_list if t.required_slots == _ACTOR_FACTION_SLOTS
+    ]
+    actor_target_faction_templates = [
+        t for t in templates_list if t.required_slots == _ACTOR_TARGET_FACTION_SLOTS
+    ]
+    supported_slot_signatures = (
+        _ACTOR_ONLY_SLOTS,
+        _ACTOR_TARGET_SLOTS,
+        _ACTOR_FACTION_SLOTS,
+        _ACTOR_TARGET_FACTION_SLOTS,
+    )
     unsupported = [
-        t
-        for t in templates_list
-        if t.required_slots not in (_ACTOR_ONLY_SLOTS, _ACTOR_TARGET_SLOTS)
+        t for t in templates_list if t.required_slots not in supported_slot_signatures
     ]
     if unsupported:
         raise ValueError(
@@ -575,6 +593,43 @@ def explain_dry_run(
                 session,
                 state=state,
                 templates=pressure_templates,
+                anchor_chunk_id=anchor_chunk_id,
+                window_chunks=window_chunks,
+                actor_ids=actor_ids,
+                target_presence="present",
+            )
+
+    if actor_faction_templates:
+        offscreen_pair_routes += compose_actor_faction_routes(
+            session,
+            state=state,
+            templates=actor_faction_templates,
+            anchor_chunk_id=anchor_chunk_id,
+            window_chunks=window_chunks,
+            actor_ids=actor_ids,
+        )
+
+    if actor_target_faction_templates:
+        offscreen_pair_routes += compose_actor_target_faction_routes(
+            session,
+            state=state,
+            templates=actor_target_faction_templates,
+            anchor_chunk_id=anchor_chunk_id,
+            window_chunks=window_chunks,
+            actor_ids=actor_ids,
+            target_presence="offscreen",
+        )
+        triple_pressure_templates = [
+            template
+            for template in actor_target_faction_templates
+            if template.present_target_policy
+            is PresentTargetPolicy.STORYTELLER_PRESSURE
+        ]
+        if triple_pressure_templates:
+            present_pair_routes += compose_actor_target_faction_routes(
+                session,
+                state=state,
+                templates=triple_pressure_templates,
                 anchor_chunk_id=anchor_chunk_id,
                 window_chunks=window_chunks,
                 actor_ids=actor_ids,
@@ -729,6 +784,7 @@ def explain_dry_run(
         {
             "actor_entity_id": shim.bindings.get("actor"),
             "target_entity_id": shim.bindings.get("target"),
+            "faction_entity_id": shim.bindings.get("faction"),
             "template_id": shim.template_id,
             "magnitude": shim.magnitude,
         }
@@ -744,7 +800,11 @@ def explain_dry_run(
             "drive_band": template.drive_band.value,
             "reason": NOT_APPLICABLE_REASON,
         }
-        for template in actor_target_templates
+        for template in (
+            actor_target_templates
+            + actor_faction_templates
+            + actor_target_faction_templates
+        )
     )
 
     def _group(actor_id: int) -> ActorGroupExplanation:
@@ -914,11 +974,12 @@ def build_catalog(
         for event_type in sorted(emitted):
             _event_entry(event_type)["emitted_by"].append(template.id)
 
-        arity = (
-            "two_party"
-            if template.required_slots == _ACTOR_TARGET_SLOTS
-            else "actor_only"
-        )
+        arity = {
+            _ACTOR_ONLY_SLOTS: "actor_only",
+            _ACTOR_TARGET_SLOTS: "two_party",
+            _ACTOR_FACTION_SLOTS: "actor_faction",
+            _ACTOR_TARGET_FACTION_SLOTS: "actor_target_faction",
+        }.get(template.required_slots, "unsupported")
         template_payloads.append(
             {
                 "template_id": template.id,
@@ -974,6 +1035,8 @@ def build_catalog(
     for arity, slots in (
         ("actor_only", _ACTOR_ONLY_SLOTS),
         ("two_party", _ACTOR_TARGET_SLOTS),
+        ("actor_faction", _ACTOR_FACTION_SLOTS),
+        ("actor_target_faction", _ACTOR_TARGET_FACTION_SLOTS),
     ):
         partition = [t for t in templates_tuple if t.required_slots == slots]
         by_priority: dict[int, list[str]] = {}

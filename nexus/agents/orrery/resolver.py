@@ -6,7 +6,7 @@ from collections import deque
 from collections.abc import Iterable as IterableABC
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
-from typing import Any, Iterable, Mapping, Optional, Sequence, Tuple
+from typing import Any, Iterable, Mapping, Optional, Protocol, Sequence, Tuple, TypeVar
 
 from sqlalchemy import text
 
@@ -742,8 +742,11 @@ def _load_project_states(session: Any) -> dict[int, ProjectState]:
                    cps.stage,
                    cps.target_place_id,
                    cps.target_character_entity_id,
+                   cps.target_faction_entity_id,
                    COALESCE(target_entity.is_active, false)
                        AS target_character_is_active,
+                   COALESCE(target_faction.is_active, false)
+                       AS target_faction_is_active,
                    cps.progress,
                    cps.stall_count,
                    cps.next_eligible_at_world_time,
@@ -756,6 +759,9 @@ def _load_project_states(session: Any) -> dict[int, ProjectState]:
             LEFT JOIN entities target_entity
               ON target_entity.id = cps.target_character_entity_id
              AND target_entity.kind = 'character'
+            LEFT JOIN entities target_faction
+              ON target_faction.id = cps.target_faction_entity_id
+             AND target_faction.kind = 'faction'
             WHERE cps.status IN ('active', 'paused', 'stalled')
             ORDER BY cps.id
             """
@@ -774,6 +780,8 @@ def _load_project_states(session: Any) -> dict[int, ProjectState]:
             target_character_is_active=bool(
                 row.get("target_character_is_active", False)
             ),
+            target_faction_entity_id=row.get("target_faction_entity_id"),
+            target_faction_is_active=bool(row.get("target_faction_is_active", False)),
             progress=float(row["progress"] or 0.0),
             stall_count=int(row["stall_count"] or 0),
             next_eligible_at_world_time=row.get("next_eligible_at_world_time"),
@@ -1060,6 +1068,141 @@ def compose_actor_target_bindings(
     )
 
 
+def compose_actor_faction_bindings(
+    session: Any,
+    *,
+    anchor_chunk_id: Optional[int],
+    window_chunks: int,
+    actor_ids: Optional[Iterable[int]] = None,
+) -> Tuple[Bindings, ...]:
+    """Compose ACTOR+FACTION bindings from active institutional pair tags.
+
+    A faction is a truthful candidate when it is the other endpoint of an
+    actor's current ``status:*``, ``obligation``, ``handles``, or
+    ``authority_over`` edge. Direction and standing polarity do not filter
+    enumeration; template entry predicates own those semantic choices.
+    """
+
+    if actor_ids is None:
+        actor_only = compose_actor_bindings(
+            session,
+            anchor_chunk_id=anchor_chunk_id,
+            window_chunks=window_chunks,
+        )
+        actor_id_set = {bindings[Slot.ACTOR] for bindings in actor_only}
+    else:
+        actor_id_set = set(actor_ids)
+    actor_id_set -= _present_actor_ids_at_anchor(
+        session, anchor_chunk_id=anchor_chunk_id
+    )
+    if not actor_id_set:
+        return ()
+
+    pairs: set[tuple[int, int]] = set()
+    for row in session.execute(
+        text(
+            """
+            /* orrery:actor_faction_bindings_institutional_pair_tags */
+            SELECT DISTINCT
+                   ept.subject_entity_id,
+                   ept.object_entity_id,
+                   subject_entity.kind AS subject_kind,
+                   object_entity.kind AS object_kind
+            FROM entity_pair_tags ept
+            JOIN pair_tags pt ON pt.id = ept.pair_tag_id
+            JOIN entities subject_entity
+              ON subject_entity.id = ept.subject_entity_id
+            JOIN entities object_entity
+              ON object_entity.id = ept.object_entity_id
+            WHERE ept.cleared_at IS NULL
+              AND NOT pt.deprecated
+              AND (
+                    pt.tag LIKE 'status:%'
+                    OR pt.tag IN ('obligation', 'handles', 'authority_over')
+                  )
+              AND (
+                    ept.subject_entity_id = ANY(:actor_ids)
+                    OR ept.object_entity_id = ANY(:actor_ids)
+                  )
+            """
+        ),
+        {"actor_ids": sorted(actor_id_set)},
+    ).mappings():
+        subject_id = int(row["subject_entity_id"])
+        object_id = int(row["object_entity_id"])
+        if subject_id in actor_id_set and row["object_kind"] == "faction":
+            pairs.add((subject_id, object_id))
+        if object_id in actor_id_set and row["subject_kind"] == "faction":
+            pairs.add((object_id, subject_id))
+
+    return tuple(
+        {Slot.ACTOR: actor_id, Slot.FACTION: faction_id}
+        for actor_id, faction_id in sorted(pairs)
+    )
+
+
+def compose_actor_target_faction_bindings(
+    session: Any,
+    *,
+    anchor_chunk_id: Optional[int],
+    window_chunks: int,
+    actor_ids: Optional[Iterable[int]] = None,
+    target_presence: str = "offscreen",
+    include_social_contacts: bool = False,
+) -> Tuple[Bindings, ...]:
+    """Compose the deterministic product of target and faction candidates."""
+
+    if actor_ids is None:
+        actor_id_set = {
+            binding[Slot.ACTOR]
+            for binding in compose_actor_bindings(
+                session,
+                anchor_chunk_id=anchor_chunk_id,
+                window_chunks=window_chunks,
+            )
+        }
+    else:
+        actor_id_set = set(actor_ids)
+    target_bindings = compose_actor_target_bindings(
+        session,
+        anchor_chunk_id=anchor_chunk_id,
+        window_chunks=window_chunks,
+        actor_ids=actor_id_set,
+        target_presence=target_presence,
+        include_social_contacts=include_social_contacts,
+    )
+    faction_bindings = compose_actor_faction_bindings(
+        session,
+        anchor_chunk_id=anchor_chunk_id,
+        window_chunks=window_chunks,
+        actor_ids=actor_id_set,
+    )
+    targets_by_actor: dict[int, set[int]] = {}
+    for binding in target_bindings:
+        targets_by_actor.setdefault(binding[Slot.ACTOR], set()).add(
+            binding[Slot.TARGET]
+        )
+    factions_by_actor: dict[int, set[int]] = {}
+    for binding in faction_bindings:
+        factions_by_actor.setdefault(binding[Slot.ACTOR], set()).add(
+            binding[Slot.FACTION]
+        )
+    triples = {
+        (actor_id, target_id, faction_id)
+        for actor_id in targets_by_actor.keys() & factions_by_actor.keys()
+        for target_id in targets_by_actor[actor_id]
+        for faction_id in factions_by_actor[actor_id]
+    }
+    return tuple(
+        {
+            Slot.ACTOR: actor_id,
+            Slot.TARGET: target_id,
+            Slot.FACTION: faction_id,
+        }
+        for actor_id, target_id, faction_id in sorted(triples)
+    )
+
+
 def compose_project_target_bindings(
     session: Any,
     *,
@@ -1096,6 +1239,193 @@ def compose_project_target_bindings(
             pairs.append((actor_id, target_id))
     return tuple(
         {Slot.ACTOR: actor_id, Slot.TARGET: target_id} for actor_id, target_id in pairs
+    )
+
+
+def compose_project_faction_bindings(
+    session: Any,
+    *,
+    state: WorldState,
+    anchor_chunk_id: Optional[int],
+    actor_ids: Iterable[int],
+) -> Tuple[Bindings, ...]:
+    """Bind project actors to their immutable stored faction counterparty."""
+
+    present_actor_ids = _present_actor_ids_at_anchor(
+        session, anchor_chunk_id=anchor_chunk_id
+    )
+    pairs: list[tuple[int, int]] = []
+    for actor_id in sorted(set(actor_ids) - present_actor_ids):
+        project = state.project_states.get(actor_id)
+        if project is not None and project.target_faction_entity_id is not None:
+            pairs.append((actor_id, project.target_faction_entity_id))
+    return tuple(
+        {Slot.ACTOR: actor_id, Slot.FACTION: faction_id}
+        for actor_id, faction_id in pairs
+    )
+
+
+def compose_actor_faction_routes(
+    session: Any,
+    *,
+    state: WorldState,
+    templates: Sequence[Template],
+    anchor_chunk_id: Optional[int],
+    window_chunks: int,
+    actor_ids: Iterable[int],
+) -> Tuple[tuple[Bindings, Tuple[Template, ...]], ...]:
+    """Route institutional and stored-project faction bindings by template."""
+
+    templates_tuple = tuple(templates)
+    if not templates_tuple:
+        return ()
+    actor_id_set = set(actor_ids)
+    institutional = compose_actor_faction_bindings(
+        session,
+        anchor_chunk_id=anchor_chunk_id,
+        window_chunks=window_chunks,
+        actor_ids=actor_id_set,
+    )
+    project = compose_project_faction_bindings(
+        session,
+        state=state,
+        anchor_chunk_id=anchor_chunk_id,
+        actor_ids=actor_id_set,
+    )
+    institutional_pairs = {
+        (binding[Slot.ACTOR], binding[Slot.FACTION]) for binding in institutional
+    }
+    project_pairs = {
+        (binding[Slot.ACTOR], binding[Slot.FACTION]) for binding in project
+    }
+    template_ids_by_pair: dict[tuple[int, int], set[str]] = {}
+    for template in templates_tuple:
+        allowed = set(institutional_pairs)
+        if template.binds_project_faction:
+            allowed.update(project_pairs)
+        for pair in allowed:
+            template_ids_by_pair.setdefault(pair, set()).add(template.id)
+    return tuple(
+        (
+            {Slot.ACTOR: actor_id, Slot.FACTION: faction_id},
+            tuple(
+                template
+                for template in templates_tuple
+                if template.id in template_ids_by_pair[(actor_id, faction_id)]
+            ),
+        )
+        for actor_id, faction_id in sorted(template_ids_by_pair)
+    )
+
+
+def compose_actor_target_faction_routes(
+    session: Any,
+    *,
+    state: WorldState,
+    templates: Sequence[Template],
+    anchor_chunk_id: Optional[int],
+    window_chunks: int,
+    actor_ids: Iterable[int],
+    target_presence: str = "offscreen",
+) -> Tuple[tuple[Bindings, Tuple[Template, ...]], ...]:
+    """Route target-candidate products with institutional/project factions."""
+
+    templates_tuple = tuple(templates)
+    if not templates_tuple:
+        return ()
+    actor_id_set = set(actor_ids)
+    relationship_targets = compose_actor_target_bindings(
+        session,
+        anchor_chunk_id=anchor_chunk_id,
+        window_chunks=window_chunks,
+        actor_ids=actor_id_set,
+        target_presence=target_presence,
+    )
+    social_targets = (
+        compose_actor_target_bindings(
+            session,
+            anchor_chunk_id=anchor_chunk_id,
+            window_chunks=window_chunks,
+            actor_ids=actor_id_set,
+            target_presence=target_presence,
+            include_social_contacts=True,
+        )
+        if any(template.starts_from_social_contact for template in templates_tuple)
+        else ()
+    )
+    project_targets = (
+        compose_project_target_bindings(
+            session,
+            state=state,
+            anchor_chunk_id=anchor_chunk_id,
+            actor_ids=actor_id_set,
+            target_presence=target_presence,
+        )
+        if any(template.binds_project_target for template in templates_tuple)
+        else ()
+    )
+    institutional_factions = compose_actor_faction_bindings(
+        session,
+        anchor_chunk_id=anchor_chunk_id,
+        window_chunks=window_chunks,
+        actor_ids=actor_id_set,
+    )
+    project_factions = (
+        compose_project_faction_bindings(
+            session,
+            state=state,
+            anchor_chunk_id=anchor_chunk_id,
+            actor_ids=actor_id_set,
+        )
+        if any(template.binds_project_faction for template in templates_tuple)
+        else ()
+    )
+
+    def candidates_by_actor(
+        bindings: Iterable[Bindings], slot: Slot
+    ) -> dict[int, set[int]]:
+        grouped: dict[int, set[int]] = {}
+        for binding in bindings:
+            grouped.setdefault(binding[Slot.ACTOR], set()).add(binding[slot])
+        return grouped
+
+    relationship_by_actor = candidates_by_actor(relationship_targets, Slot.TARGET)
+    social_by_actor = candidates_by_actor(social_targets, Slot.TARGET)
+    project_target_by_actor = candidates_by_actor(project_targets, Slot.TARGET)
+    institutional_by_actor = candidates_by_actor(institutional_factions, Slot.FACTION)
+    project_faction_by_actor = candidates_by_actor(project_factions, Slot.FACTION)
+
+    template_ids_by_triple: dict[tuple[int, int, int], set[str]] = {}
+    for template in templates_tuple:
+        for actor_id in sorted(actor_id_set):
+            targets = set(relationship_by_actor.get(actor_id, ()))
+            if template.starts_from_social_contact:
+                targets.update(social_by_actor.get(actor_id, ()))
+            if template.binds_project_target:
+                targets.update(project_target_by_actor.get(actor_id, ()))
+            factions = set(institutional_by_actor.get(actor_id, ()))
+            if template.binds_project_faction:
+                factions.update(project_faction_by_actor.get(actor_id, ()))
+            for target_id in targets:
+                for faction_id in factions:
+                    template_ids_by_triple.setdefault(
+                        (actor_id, target_id, faction_id), set()
+                    ).add(template.id)
+    return tuple(
+        (
+            {
+                Slot.ACTOR: actor_id,
+                Slot.TARGET: target_id,
+                Slot.FACTION: faction_id,
+            },
+            tuple(
+                template
+                for template in templates_tuple
+                if template.id
+                in template_ids_by_triple[(actor_id, target_id, faction_id)]
+            ),
+        )
+        for actor_id, target_id, faction_id in sorted(template_ids_by_triple)
     )
 
 
@@ -1182,6 +1512,12 @@ def compose_actor_target_routes(
 
 _ACTOR_ONLY_SLOTS: Tuple[Slot, ...] = (Slot.ACTOR,)
 _ACTOR_TARGET_SLOTS: Tuple[Slot, ...] = (Slot.ACTOR, Slot.TARGET)
+_ACTOR_FACTION_SLOTS: Tuple[Slot, ...] = (Slot.ACTOR, Slot.FACTION)
+_ACTOR_TARGET_FACTION_SLOTS: Tuple[Slot, ...] = (
+    Slot.ACTOR,
+    Slot.TARGET,
+    Slot.FACTION,
+)
 
 
 @dataclass(frozen=True)
@@ -1201,6 +1537,25 @@ class FanoutPolicy:
     exempt_bands: frozenset[str] = frozenset({"crisis_constraint"})
 
 
+class _FanoutDraft(Protocol):
+    """Structural surface shared by production drafts and audit winner shims."""
+
+    @property
+    def template_id(self) -> str: ...
+
+    @property
+    def binding_hash(self) -> str: ...
+
+    @property
+    def bindings(self) -> Mapping[str, Any]: ...
+
+    @property
+    def magnitude(self) -> float: ...
+
+
+_FanoutDraftT = TypeVar("_FanoutDraftT", bound=_FanoutDraft)
+
+
 def _coerce_fanout(raw: Any) -> FanoutPolicy:
     if raw is None:
         return FanoutPolicy()
@@ -1218,21 +1573,21 @@ def _coerce_fanout(raw: Any) -> FanoutPolicy:
 
 
 def _apply_pair_fanout_quota(
-    drafts: list[OrreryResolutionDraft],
+    drafts: list[_FanoutDraftT],
     templates_list: list[Template],
     *,
     max_pair_drafts_per_actor: int,
     exempt_bands: frozenset[str],
-) -> list[OrreryResolutionDraft]:
+) -> list[_FanoutDraftT]:
     if max_pair_drafts_per_actor <= 0:
         return drafts
     band_by_template = {t.id: t.drive_band.value for t in templates_list}
 
-    def is_pair(draft: OrreryResolutionDraft) -> bool:
-        return "target" in draft.bindings
+    def is_pair(draft: _FanoutDraftT) -> bool:
+        return "target" in draft.bindings or "faction" in draft.bindings
 
-    kept: list[OrreryResolutionDraft] = []
-    per_actor: dict[Any, list[OrreryResolutionDraft]] = {}
+    kept: list[_FanoutDraftT] = []
+    per_actor: dict[Any, list[_FanoutDraftT]] = {}
     for draft in drafts:
         if (
             not is_pair(draft)
@@ -1244,8 +1599,8 @@ def _apply_pair_fanout_quota(
 
     for actor, pair_drafts in per_actor.items():
         seen_templates: set[str] = set()
-        first_of_template: list[OrreryResolutionDraft] = []
-        repeats: list[OrreryResolutionDraft] = []
+        first_of_template: list[_FanoutDraftT] = []
+        repeats: list[_FanoutDraftT] = []
         for draft in sorted(pair_drafts, key=lambda d: (-d.magnitude, d.binding_hash)):
             if draft.template_id in seen_templates:
                 repeats.append(draft)
@@ -1307,10 +1662,20 @@ def resolve_dry_run(
     actor_target_templates = [
         t for t in templates_list if t.required_slots == _ACTOR_TARGET_SLOTS
     ]
+    actor_faction_templates = [
+        t for t in templates_list if t.required_slots == _ACTOR_FACTION_SLOTS
+    ]
+    actor_target_faction_templates = [
+        t for t in templates_list if t.required_slots == _ACTOR_TARGET_FACTION_SLOTS
+    ]
+    supported_slot_signatures = (
+        _ACTOR_ONLY_SLOTS,
+        _ACTOR_TARGET_SLOTS,
+        _ACTOR_FACTION_SLOTS,
+        _ACTOR_TARGET_FACTION_SLOTS,
+    )
     unsupported = [
-        t
-        for t in templates_list
-        if t.required_slots not in (_ACTOR_ONLY_SLOTS, _ACTOR_TARGET_SLOTS)
+        t for t in templates_list if t.required_slots not in supported_slot_signatures
     ]
     if unsupported:
         raise ValueError(
@@ -1329,6 +1694,7 @@ def resolve_dry_run(
         anchor_chunk_id=anchor_chunk_id,
         window_chunks=window_chunks,
     )
+    actor_ids = {bindings[Slot.ACTOR] for bindings in actor_bindings}
     for bindings in actor_bindings:
         resolution = evaluate_stack(
             actor_only_templates,
@@ -1344,7 +1710,6 @@ def resolve_dry_run(
     offscreen_routes: Tuple[Tuple[Bindings, Tuple[Template, ...]], ...] = ()
     present_routes: Tuple[Tuple[Bindings, Tuple[Template, ...]], ...] = ()
     if actor_target_templates:
-        actor_ids = {bindings[Slot.ACTOR] for bindings in actor_bindings}
         offscreen_routes = compose_actor_target_routes(
             session,
             state=state,
@@ -1383,6 +1748,80 @@ def resolve_dry_run(
                 target_presence="present",
             )
             for bindings, routed_templates in present_routes:
+                resolution = evaluate_stack(
+                    routed_templates,
+                    state,
+                    bindings,
+                    selection,
+                    habituation,
+                    package_selection,
+                )
+                if resolution is not None and resolution.passes:
+                    scene_pressure_results.append(resolution)
+
+    if actor_faction_templates:
+        faction_routes = compose_actor_faction_routes(
+            session,
+            state=state,
+            templates=actor_faction_templates,
+            anchor_chunk_id=anchor_chunk_id,
+            window_chunks=window_chunks,
+            actor_ids=actor_ids,
+        )
+        offscreen_routes += faction_routes
+        for bindings, routed_templates in faction_routes:
+            resolution = evaluate_stack(
+                routed_templates,
+                state,
+                bindings,
+                selection,
+                habituation,
+                package_selection,
+            )
+            if resolution is not None and resolution.passes:
+                drafts.append(_draft_from_resolution(resolution, state=state))
+
+    if actor_target_faction_templates:
+        triple_routes = compose_actor_target_faction_routes(
+            session,
+            state=state,
+            templates=actor_target_faction_templates,
+            anchor_chunk_id=anchor_chunk_id,
+            window_chunks=window_chunks,
+            actor_ids=actor_ids,
+            target_presence="offscreen",
+        )
+        offscreen_routes += triple_routes
+        for bindings, routed_templates in triple_routes:
+            resolution = evaluate_stack(
+                routed_templates,
+                state,
+                bindings,
+                selection,
+                habituation,
+                package_selection,
+            )
+            if resolution is not None and resolution.passes:
+                drafts.append(_draft_from_resolution(resolution, state=state))
+
+        triple_pressure_templates = [
+            template
+            for template in actor_target_faction_templates
+            if template.present_target_policy
+            is PresentTargetPolicy.STORYTELLER_PRESSURE
+        ]
+        if triple_pressure_templates:
+            triple_pressure_routes = compose_actor_target_faction_routes(
+                session,
+                state=state,
+                templates=triple_pressure_templates,
+                anchor_chunk_id=anchor_chunk_id,
+                window_chunks=window_chunks,
+                actor_ids=actor_ids,
+                target_presence="present",
+            )
+            present_routes += triple_pressure_routes
+            for bindings, routed_templates in triple_pressure_routes:
                 resolution = evaluate_stack(
                     routed_templates,
                     state,
@@ -1680,29 +2119,52 @@ def _materialize_project_delta(
 
     delta = dict(resolution.state_delta)
     raw_start = delta.get("project.start")
-    if (
-        isinstance(raw_start, Mapping)
-        and raw_start.get("project_type") == "recruit_ally"
-    ):
-        target = resolution.bindings.get(Slot.TARGET)
-        if not isinstance(target, int):
-            raise ValueError("recruit_ally project.start requires target binding")
-        start_payload = dict(raw_start)
-        start_payload["target_character_entity_id"] = target
+    if raw_start is not None:
+        start_payload = dict(raw_start) if isinstance(raw_start, Mapping) else {}
+        if start_payload.get("project_type") == "recruit_ally":
+            target = resolution.bindings.get(Slot.TARGET)
+            if not isinstance(target, int):
+                raise ValueError("recruit_ally project.start requires target binding")
+            start_payload["target_character_entity_id"] = target
+        if Slot.FACTION in resolution.bindings:
+            faction = resolution.bindings[Slot.FACTION]
+            if not isinstance(faction, int):
+                raise ValueError("faction-bound project.start requires faction binding")
+            start_payload["target_faction_entity_id"] = faction
         delta["project.start"] = start_payload
 
     raw_advance = delta.get("project.advance")
-    if not isinstance(raw_advance, Mapping) or not raw_advance.get("select_target"):
+    if raw_advance is None:
         return delta
+    payload = dict(raw_advance) if isinstance(raw_advance, Mapping) else {}
     actor = resolution.bindings.get(Slot.ACTOR)
+    if Slot.FACTION in resolution.bindings:
+        faction = resolution.bindings[Slot.FACTION]
+        if not isinstance(actor, int) or not isinstance(faction, int):
+            raise ValueError(
+                "faction-bound project.advance requires actor and faction bindings"
+            )
+        project = state.project_states.get(actor)
+        if project is None or project.target_faction_entity_id is None:
+            raise ValueError(
+                f"Actor {actor} has no stored faction-bound project to advance"
+            )
+        if project.target_faction_entity_id != faction:
+            raise ValueError(
+                f"Actor {actor} project faction binding is immutable: "
+                f"stored {project.target_faction_entity_id}, bound {faction}"
+            )
+        payload["target_faction_entity_id"] = project.target_faction_entity_id
+    if not payload.get("select_target"):
+        delta["project.advance"] = payload
+        return delta
     if not isinstance(actor, int):
         raise ValueError("project.advance target selection requires actor binding")
-    classes = raw_advance.get("destination_place_classes")
+    classes = payload.get("destination_place_classes")
     if not isinstance(classes, (list, tuple)) or not classes:
         raise ValueError(
             "project.advance select_target requires destination_place_classes"
         )
-    payload = dict(raw_advance)
     payload["target_place_id"] = _project_destination(
         state,
         actor_entity_id=actor,

@@ -215,6 +215,8 @@ class ProjectState:
     target_place_id: Optional[int] = None
     target_character_entity_id: Optional[int] = None
     target_character_is_active: bool = False
+    target_faction_entity_id: Optional[int] = None
+    target_faction_is_active: bool = False
     progress: float = 0.0
     stall_count: int = 0
     next_eligible_at_world_time: Optional[datetime] = None
@@ -1317,6 +1319,46 @@ def project_target_is_active(slot: Slot = Slot.TARGET) -> Condition:
     return _named(_condition, f"project_target_is_active({slot.value})")
 
 
+def project_faction_is(slot: Slot = Slot.FACTION) -> Condition:
+    """Return whether ``slot`` is the actor's stored project faction."""
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        actor_entity_id = _slot_entity(bindings, Slot.ACTOR)
+        faction_entity_id = _slot_entity(bindings, slot)
+        if actor_entity_id is None or faction_entity_id is None:
+            return False
+        project = state.project_states.get(actor_entity_id)
+        return bool(
+            project is not None
+            and project.target_faction_entity_id == faction_entity_id
+        )
+
+    return _named(_condition, f"project_faction_is({slot.value})")
+
+
+def project_faction_is_active(slot: Slot = Slot.FACTION) -> Condition:
+    """Return whether the stored project faction is still an active faction.
+
+    Identity and availability remain separate so project stages can retain the
+    immutable institutional counterparty while choosing an explicit response
+    if that entity retires or changes kind.
+    """
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        actor_entity_id = _slot_entity(bindings, Slot.ACTOR)
+        faction_entity_id = _slot_entity(bindings, slot)
+        if actor_entity_id is None or faction_entity_id is None:
+            return False
+        project = state.project_states.get(actor_entity_id)
+        return bool(
+            project is not None
+            and project.target_faction_entity_id == faction_entity_id
+            and project.target_faction_is_active
+        )
+
+    return _named(_condition, f"project_faction_is_active({slot.value})")
+
+
 def has_travel_destination(slot: Slot = Slot.ACTOR) -> Condition:
     """Return whether a slot-bound character has a planned destination."""
 
@@ -2134,6 +2176,10 @@ class Template:
     # open-project projection. This remains valid if the contact or
     # relationship edge that originally sourced the project later clears.
     binds_project_target: bool = False
+    # Faction-targeted project continuations bind FACTION from the durable
+    # open-project projection. This remains valid if the institutional edge
+    # that originally sourced the project later clears.
+    binds_project_faction: bool = False
     priority_override_rationale: Optional[str] = None
     drive_band_priority_exempt: bool = False
 
