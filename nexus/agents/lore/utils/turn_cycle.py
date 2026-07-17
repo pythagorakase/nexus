@@ -998,6 +998,12 @@ class TurnCycleManager:
             # Store the full structured response
             turn_context.apex_response = story_response
 
+            generation_model = getattr(story_response, "generation_model", None)
+            if not isinstance(generation_model, str) or not generation_model.strip():
+                raise RuntimeError(
+                    "Successful APEX response is missing its generation model id"
+                )
+
             # Extract narrative text for backward compatibility
             narrative_text = story_response.narrative
 
@@ -1011,6 +1017,7 @@ class TurnCycleManager:
                 "has_entities": referenced_entities is not None,
                 "has_state_updates": state_updates is not None,
                 "narrative_length": len(narrative_text),
+                "generation_model": generation_model,
             }
 
             self.record_orrery_bleed_offers(turn_context)

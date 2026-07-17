@@ -270,6 +270,10 @@ async def get_chunk_info(conn, chunk_id: int) -> Dict[str, Any]:
 
 async def write_to_incubator(conn, data: Dict[str, Any]):
     """Write data to the incubator table."""
+    generation_model = data["generation_model"]
+    if not isinstance(generation_model, str) or not generation_model.strip():
+        raise ValueError("Generated incubator payload is missing its model id")
+
     with conn.cursor() as cur:
         # Clear any existing incubator entry (singleton table)
         cur.execute("DELETE FROM incubator WHERE id = TRUE")
@@ -278,12 +282,13 @@ async def write_to_incubator(conn, data: Dict[str, Any]):
         query = """
         INSERT INTO incubator (
             id, chunk_id, parent_chunk_id, user_text, storyteller_text,
+            generation_model,
             choice_object, choice_text,
             metadata_updates, entity_updates, reference_updates,
             orrery_proposal, orrery_adjudications,
             new_entities, session_id, llm_response_id, status
         ) VALUES (
-            TRUE, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+            TRUE, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
         )
         """
 
@@ -294,6 +299,7 @@ async def write_to_incubator(conn, data: Dict[str, Any]):
                 data["parent_chunk_id"],
                 data["user_text"],
                 data["storyteller_text"],
+                generation_model,
                 (
                     json.dumps(data.get("choice_object"))
                     if data.get("choice_object")
@@ -489,6 +495,7 @@ async def generate_bootstrap_narrative(
         "parent_chunk_id": 0,  # No parent
         "user_text": user_text,
         "storyteller_text": narrative_text,
+        "generation_model": story_response.generation_model,
         "choice_object": None,  # Will be populated if response includes choices
         "choice_text": None,
         "metadata_updates": {

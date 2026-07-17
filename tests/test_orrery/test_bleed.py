@@ -78,6 +78,7 @@ class FakeStoryResponse:
     """Minimal structured response stand-in for LOGON."""
 
     narrative = "Rain ticks against the glass."
+    generation_model = "resolved-bleed-test-model"
     chunk_metadata = None
     referenced_entities = None
     state_updates = None
@@ -314,6 +315,12 @@ async def test_call_apex_ai_records_bleed_offers_after_generation_success() -> N
     )
 
     assert response.narrative == "Rain ticks against the glass."
+    assert response.generation_model == "resolved-bleed-test-model"
+    assert context.apex_response is response
+    assert (
+        context.phase_states["apex_generation"]["generation_model"]
+        == "resolved-bleed-test-model"
+    )
     assert session.commits == 1
     assert update_params["resolution_ids"] == [10]
     assert context.phase_states["orrery_bleed"]["offers_recorded"] == 1

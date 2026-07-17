@@ -42,6 +42,23 @@ def test_bootstrap_response_schema_rejects_legacy_directives_and_metadata() -> N
         )
 
 
+def test_generation_model_is_internal_provenance_not_storyteller_output() -> None:
+    """The provider stamp stays typed without entering the LLM or API schema."""
+
+    response = StorytellerResponseBootstrap(
+        generation_model="gpt-5.6-storyteller",
+        narrative="The story begins.",
+        choices=["Step forward.", "Look around."],
+    )
+
+    assert response.generation_model == "gpt-5.6-storyteller"
+    assert "generation_model" not in response.model_dump()
+    assert (
+        "generation_model"
+        not in StorytellerResponseBootstrap.model_json_schema()["properties"]
+    )
+
+
 def test_create_minimal_response_includes_valid_choices() -> None:
     """Minimal fallback responses should satisfy the response schema."""
 

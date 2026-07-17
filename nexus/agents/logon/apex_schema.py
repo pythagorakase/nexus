@@ -19,6 +19,7 @@ import json
 import logging
 from typing import List, Optional, Dict, Any, Union, Literal
 from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
+from pydantic.json_schema import SkipJsonSchema
 from datetime import datetime
 
 # Import all database ENUMs
@@ -1176,7 +1177,21 @@ class Operations(BaseModel):
 # ============================================================================
 
 
-class StorytellerResponseBootstrap(BaseModel):
+class StorytellerResponseBase(BaseModel):
+    """Provider-enriched response fields excluded from the storyteller wire schema."""
+
+    generation_model: SkipJsonSchema[Optional[str]] = Field(
+        default=None,
+        exclude=True,
+        description=(
+            "Concrete registry model id used for the successful generation call"
+        ),
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class StorytellerResponseBootstrap(StorytellerResponseBase):
     """Bootstrap response for first-chunk narrative generation."""
 
     narrative: str = Field(description="The opening narrative prose")
@@ -1189,7 +1204,7 @@ class StorytellerResponseBootstrap(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-class StorytellerResponseMinimal(BaseModel):
+class StorytellerResponseMinimal(StorytellerResponseBase):
     """Minimal response for quick narrative generation."""
 
     narrative: str = Field(description="The narrative prose (500-1500 words)")
@@ -1217,7 +1232,7 @@ class StorytellerResponseMinimal(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-class StorytellerResponseStandard(BaseModel):
+class StorytellerResponseStandard(StorytellerResponseBase):
     """Standard response with narrative and essential metadata."""
 
     narrative: str = Field(description="The narrative prose (500-1500 words)")
@@ -1249,7 +1264,7 @@ class StorytellerResponseStandard(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-class StorytellerResponseExtended(BaseModel):
+class StorytellerResponseExtended(StorytellerResponseBase):
     """Extended response with all features including operations."""
 
     narrative: str = Field(description="The narrative prose (500-1500 words)")
