@@ -176,9 +176,45 @@ def test_orrery_bleed_accepts_deprecated_selection_keys() -> None:
     )
 
     assert settings.max_candidates == 3
+    assert settings.near_distance_max == 2
+    assert settings.reserved_remote_slots == 1
     dumped = settings.model_dump()
     assert "latency_budget_ms" not in dumped
     assert "candidate_pool_multiplier" not in dumped
+
+
+def test_orrery_bleed_reserved_remote_slots_must_fit_menu() -> None:
+    """A remote reservation cannot consume the entire Bleed menu."""
+
+    with pytest.raises(ValidationError, match="must be < max_candidates"):
+        OrreryBleedSettings(max_candidates=2, reserved_remote_slots=2)
+
+
+def test_disabled_orrery_bleed_requires_zero_remote_reservation() -> None:
+    """Implicit defaults adapt to small menus; explicit contradictions raise.
+
+    PR #522 review: a legacy config setting only max_candidates must stay
+    bootable — the DEFAULT reservation clamps — while an explicitly
+    contradictory reservation still fails loudly.
+    """
+
+    adapted = OrreryBleedSettings(max_candidates=0)
+    assert adapted.reserved_remote_slots == 0
+
+    single = OrreryBleedSettings(max_candidates=1)
+    assert single.reserved_remote_slots == 0
+
+    with pytest.raises(ValidationError, match="must be 0"):
+        OrreryBleedSettings(max_candidates=0, reserved_remote_slots=1)
+
+    with pytest.raises(ValidationError, match="must be < max_candidates"):
+        OrreryBleedSettings(max_candidates=1, reserved_remote_slots=1)
+
+    settings = OrreryBleedSettings(
+        max_candidates=0,
+        reserved_remote_slots=0,
+    )
+    assert settings.max_candidates == 0
 
 
 def test_orrery_promote_accepts_deprecated_provider_key() -> None:

@@ -964,9 +964,52 @@ class OrreryBleedSettings(BaseModel):
         default=None,
         ge=1,
         exclude=True,
-        description="Deprecated and ignored; Bleed fetches max_candidates.",
+        description="Deprecated and ignored; Bleed scans the eligible ordered pool.",
     )
     max_candidates: int = Field(default=3, ge=0)
+    near_distance_max: int = Field(default=2, ge=0)
+    reserved_remote_slots: int = Field(default=1, ge=0)
+    scan_limit: int = Field(
+        default=24,
+        ge=1,
+        description=(
+            "Upper bound on eligible candidates fetched per anchored menu "
+            "selection; the partition sees at most this many rows."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _validate_reserved_remote_slots(self) -> "OrreryBleedSettings":
+        """The remote reservation must fit inside an enabled menu.
+
+        The default reservation adapts to small menus (a legacy
+        ``max_candidates = 1`` config stays bootable); an EXPLICIT
+        contradictory reservation still fails loudly.
+        """
+
+        implicit = "reserved_remote_slots" not in self.model_fields_set
+        if self.max_candidates == 0:
+            if self.reserved_remote_slots != 0:
+                if implicit:
+                    object.__setattr__(self, "reserved_remote_slots", 0)
+                    return self
+                raise ValueError(
+                    "orrery.bleed.reserved_remote_slots must be 0 when "
+                    "max_candidates is 0"
+                )
+            return self
+        if self.reserved_remote_slots >= self.max_candidates:
+            if implicit:
+                object.__setattr__(
+                    self, "reserved_remote_slots", self.max_candidates - 1
+                )
+            else:
+                raise ValueError(
+                    "orrery.bleed.reserved_remote_slots must be < max_candidates"
+                )
+        if self.scan_limit < self.max_candidates:
+            raise ValueError("orrery.bleed.scan_limit must be >= max_candidates")
+        return self
 
 
 class OrreryPromoteSettings(BaseModel):

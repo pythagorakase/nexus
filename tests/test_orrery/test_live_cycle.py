@@ -25,7 +25,10 @@ from psycopg2.extras import RealDictCursor
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
-from nexus.agents.orrery.bleed import select_bleed_menu
+from nexus.agents.orrery.bleed import (
+    load_bleed_anchor_entity_ids,
+    select_bleed_menu,
+)
 from nexus.agents.orrery.events import commit_orrery_tick_sync
 from nexus.agents.orrery.resolver import (
     OrreryResolutionDraft,
@@ -242,10 +245,18 @@ def test_live_orrery_cycle_resolve_commit_promote_narrate_bleed() -> None:
         # Stage 6 - Bleed: the synthetic narrated resolution must propagate
         # into the deterministic ambient menu for the next turn.
         with session_factory() as session:
+            bleed_settings = orrery_settings["bleed"]
             menu = select_bleed_menu(
                 session,
                 anchor_chunk_id=anchor_chunk_id,
-                max_candidates=int(orrery_settings["bleed"]["max_candidates"]),
+                anchor_entity_ids=load_bleed_anchor_entity_ids(
+                    session,
+                    anchor_chunk_id=anchor_chunk_id,
+                ),
+                max_candidates=int(bleed_settings["max_candidates"]),
+                near_distance_max=int(bleed_settings["near_distance_max"]),
+                reserved_remote_slots=int(bleed_settings["reserved_remote_slots"]),
+                scan_limit=24,
             )
         selected_resolution_ids = {
             candidate.resolution_id for candidate in menu.selected
