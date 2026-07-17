@@ -930,6 +930,7 @@ class TurnCycleManager:
                 max_candidates=max_candidates,
                 near_distance_max=bleed_settings.near_distance_max,
                 reserved_remote_slots=bleed_settings.reserved_remote_slots,
+                scan_limit=bleed_settings.scan_limit,
             )
 
         turn_context.bleed_menu = result.selected

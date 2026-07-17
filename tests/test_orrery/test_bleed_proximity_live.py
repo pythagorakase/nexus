@@ -384,6 +384,7 @@ def _select(
     max_candidates: int,
     near_distance_max: int = 2,
     reserved_remote_slots: int = 1,
+    scan_limit: int = 24,
 ):
     return select_bleed_menu(
         db["session"],
@@ -392,6 +393,7 @@ def _select(
         max_candidates=max_candidates,
         near_distance_max=near_distance_max,
         reserved_remote_slots=reserved_remote_slots,
+        scan_limit=scan_limit,
     )
 
 

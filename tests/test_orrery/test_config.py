@@ -191,10 +191,24 @@ def test_orrery_bleed_reserved_remote_slots_must_fit_menu() -> None:
 
 
 def test_disabled_orrery_bleed_requires_zero_remote_reservation() -> None:
-    """A disabled menu cannot retain a non-zero slot reservation."""
+    """Implicit defaults adapt to small menus; explicit contradictions raise.
+
+    PR #522 review: a legacy config setting only max_candidates must stay
+    bootable — the DEFAULT reservation clamps — while an explicitly
+    contradictory reservation still fails loudly.
+    """
+
+    adapted = OrreryBleedSettings(max_candidates=0)
+    assert adapted.reserved_remote_slots == 0
+
+    single = OrreryBleedSettings(max_candidates=1)
+    assert single.reserved_remote_slots == 0
 
     with pytest.raises(ValidationError, match="must be 0"):
-        OrreryBleedSettings(max_candidates=0)
+        OrreryBleedSettings(max_candidates=0, reserved_remote_slots=1)
+
+    with pytest.raises(ValidationError, match="must be < max_candidates"):
+        OrreryBleedSettings(max_candidates=1, reserved_remote_slots=1)
 
     settings = OrreryBleedSettings(
         max_candidates=0,

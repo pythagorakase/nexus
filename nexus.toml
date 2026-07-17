@@ -401,6 +401,8 @@ model_ref = "@anthropic.default"
 max_candidates = 3
 near_distance_max = 2
 reserved_remote_slots = 1
+# Upper bound on eligible candidates fetched per anchored menu selection.
+scan_limit = 24
 
 [orrery.promote]
 # Calibrated against the 106-resolution corpus on save_05 (39 ticks, 2026-06).

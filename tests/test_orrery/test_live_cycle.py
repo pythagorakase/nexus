@@ -256,6 +256,7 @@ def test_live_orrery_cycle_resolve_commit_promote_narrate_bleed() -> None:
                 max_candidates=int(bleed_settings["max_candidates"]),
                 near_distance_max=int(bleed_settings["near_distance_max"]),
                 reserved_remote_slots=int(bleed_settings["reserved_remote_slots"]),
+                scan_limit=24,
             )
         selected_resolution_ids = {
             candidate.resolution_id for candidate in menu.selected

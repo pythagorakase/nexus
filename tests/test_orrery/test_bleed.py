@@ -171,6 +171,7 @@ def _select(
     max_candidates=3,
     near_distance_max=2,
     reserved_remote_slots=1,
+    scan_limit=24,
 ):
     return select_bleed_menu(
         session,
@@ -179,6 +180,7 @@ def _select(
         max_candidates=max_candidates,
         near_distance_max=near_distance_max,
         reserved_remote_slots=reserved_remote_slots,
+        scan_limit=scan_limit,
     )
 
 

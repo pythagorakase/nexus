@@ -283,6 +283,7 @@ def select_bleed_menu(
     max_candidates: int,
     near_distance_max: int,
     reserved_remote_slots: int,
+    scan_limit: int,
 ) -> BleedSelectorResult:
     """Select a proximity-balanced ambient menu from eligible candidates."""
 
@@ -296,8 +297,8 @@ def select_bleed_menu(
         session,
         anchor_chunk_id=anchor_chunk_id,
         # The empty-anchor fallback needs only the top of the pure ordering;
-        # the proximity path needs the full pool to partition.
-        limit=max_candidates if not anchors else None,
+        # the proximity path partitions a bounded scan window (scan_limit).
+        limit=max_candidates if not anchors else scan_limit,
     )
     if not candidate_pool:
         return BleedSelectorResult()
