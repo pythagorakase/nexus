@@ -964,9 +964,28 @@ class OrreryBleedSettings(BaseModel):
         default=None,
         ge=1,
         exclude=True,
-        description="Deprecated and ignored; Bleed fetches max_candidates.",
+        description="Deprecated and ignored; Bleed scans the eligible ordered pool.",
     )
     max_candidates: int = Field(default=3, ge=0)
+    near_distance_max: int = Field(default=2, ge=0)
+    reserved_remote_slots: int = Field(default=1, ge=0)
+
+    @model_validator(mode="after")
+    def _validate_reserved_remote_slots(self) -> "OrreryBleedSettings":
+        """The remote reservation must fit inside an enabled menu."""
+
+        if self.max_candidates == 0:
+            if self.reserved_remote_slots != 0:
+                raise ValueError(
+                    "orrery.bleed.reserved_remote_slots must be 0 when "
+                    "max_candidates is 0"
+                )
+            return self
+        if self.reserved_remote_slots >= self.max_candidates:
+            raise ValueError(
+                "orrery.bleed.reserved_remote_slots must be < max_candidates"
+            )
+        return self
 
 
 class OrreryPromoteSettings(BaseModel):

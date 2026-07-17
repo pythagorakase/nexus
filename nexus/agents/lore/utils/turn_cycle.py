@@ -30,10 +30,11 @@ try:
     from nexus.agents.orrery.resolver import resolve_dry_run
     from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
     from nexus.agents.orrery.bleed import (
+        load_bleed_anchor_entity_ids,
         record_bleed_offers,
         select_bleed_menu,
     )
-    from nexus.config.settings_models import LORERetrievalSettings
+    from nexus.config.settings_models import LORERetrievalSettings, OrreryBleedSettings
 except ImportError:
     # If relative import fails, try absolute
     from nexus.agents.lore.utils.turn_context import TurnContext
@@ -52,10 +53,11 @@ except ImportError:
     from nexus.agents.orrery.resolver import resolve_dry_run
     from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
     from nexus.agents.orrery.bleed import (
+        load_bleed_anchor_entity_ids,
         record_bleed_offers,
         select_bleed_menu,
     )
-    from nexus.config.settings_models import LORERetrievalSettings
+    from nexus.config.settings_models import LORERetrievalSettings, OrreryBleedSettings
 
 try:
     from nexus.agents.memnon.utils.query_analysis import QueryAnalyzer
@@ -885,13 +887,17 @@ class TurnCycleManager:
         if not orrery_settings.get("enabled", False):
             return
 
-        bleed_settings = orrery_settings.get("bleed", {})
-        max_candidates = int(bleed_settings.get("max_candidates", 3))
+        bleed_settings = OrreryBleedSettings.model_validate(
+            orrery_settings.get("bleed", {})
+        )
+        max_candidates = bleed_settings.max_candidates
         if max_candidates <= 0:
             turn_context.phase_states["orrery_bleed"] = {
                 "enabled": True,
                 "skipped": True,
                 "reason": "max_candidates_zero",
+                "near_count": 0,
+                "remote_count": 0,
             }
             return
 
@@ -908,13 +914,22 @@ class TurnCycleManager:
                     "enabled": True,
                     "skipped": True,
                     "reason": "no_anchor_chunk",
+                    "near_count": 0,
+                    "remote_count": 0,
                 }
                 return
 
+            anchor_entity_ids = load_bleed_anchor_entity_ids(
+                session,
+                anchor_chunk_id=anchor_chunk_id,
+            )
             result = select_bleed_menu(
                 session,
                 anchor_chunk_id=anchor_chunk_id,
+                anchor_entity_ids=anchor_entity_ids,
                 max_candidates=max_candidates,
+                near_distance_max=bleed_settings.near_distance_max,
+                reserved_remote_slots=bleed_settings.reserved_remote_slots,
             )
 
         turn_context.bleed_menu = result.selected
@@ -923,6 +938,8 @@ class TurnCycleManager:
             "anchor_chunk_id": anchor_chunk_id,
             "candidate_count": result.candidates_considered,
             "selected_count": len(result.selected),
+            "near_count": result.near_count,
+            "remote_count": result.remote_count,
             "offers_recorded": 0,
         }
 
