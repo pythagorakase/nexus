@@ -63,6 +63,7 @@ START_FACTION_PROJECT = Template(
             },
         ),
     ),
+    binds_project_faction=True,
 )
 ADVANCE_FACTION_PROJECT = Template(
     id="test_advance_faction_project",
@@ -93,6 +94,38 @@ ADVANCE_ACTOR_ONLY = Template(
             label="Advance alone",
             conditions=ALWAYS,
             narrative_stub="{actor} pushes the project forward alone.",
+            state_delta={"project.advance": {"progress_delta": 0.25}},
+        ),
+    ),
+)
+STALL_ACTOR_ONLY = Template(
+    id="test_stall_actor_only_continuation",
+    priority=10,
+    drive_band=DriveBand.PROJECT_IDENTITY,
+    blurb="Rollback-only actor-only stall for a faction-bound project.",
+    required_slots=(Slot.ACTOR,),
+    package_gate=ALWAYS,
+    branches=(
+        Branch(
+            label="Lose ground",
+            conditions=ALWAYS,
+            narrative_stub="{actor} loses ground to a setback.",
+            state_delta={"project.stall": {}},
+        ),
+    ),
+)
+GATING_ONLY_FACTION_ADVANCE = Template(
+    id="test_gating_only_faction_advance",
+    priority=10,
+    drive_band=DriveBand.PROJECT_IDENTITY,
+    blurb="Faction bound for flavor only; the project binding is untouched.",
+    required_slots=(Slot.ACTOR, Slot.FACTION),
+    package_gate=ALWAYS,
+    branches=(
+        Branch(
+            label="Advance on institutional gossip",
+            conditions=ALWAYS,
+            narrative_stub="{actor} leans on {faction} gossip to push forward.",
             state_delta={"project.advance": {"progress_delta": 0.25}},
         ),
     ),
@@ -483,6 +516,98 @@ def test_live_actor_only_continuation_preserves_stored_faction(
     )
     advance_draft = _actor_drafts(continuation, actor_id, ADVANCE_ACTOR_ONLY.id)[0]
     assert "faction" not in advance_draft.bindings
+    assert (
+        "target_faction_entity_id" not in advance_draft.state_delta["project.advance"]
+    )
+    _accepted_draft(db, advance_draft)
+
+    row = (
+        session.execute(
+            text(
+                """
+            SELECT target_faction_entity_id, progress
+            FROM character_project_states
+            WHERE character_entity_id = :actor AND status = 'active'
+            """
+            ),
+            {"actor": actor_id},
+        )
+        .mappings()
+        .one()
+    )
+    assert row["target_faction_entity_id"] == faction_id
+    assert float(row["progress"]) == 0.25
+
+    stall = resolve_dry_run(
+        session,
+        (STALL_ACTOR_ONLY,),
+        anchor_chunk_id=int(db["chunk_id"]),
+        window_chunks=30,
+        project_settings=project_settings,
+    )
+    stall_draft = _actor_drafts(stall, actor_id, STALL_ACTOR_ONLY.id)[0]
+    assert "target_faction_entity_id" not in stall_draft.state_delta["project.stall"]
+    _accepted_draft(db, stall_draft)
+
+    stalled = (
+        session.execute(
+            text(
+                """
+            SELECT target_faction_entity_id, status, stall_count
+            FROM character_project_states
+            WHERE character_entity_id = :actor
+            ORDER BY id DESC LIMIT 1
+            """
+            ),
+            {"actor": actor_id},
+        )
+        .mappings()
+        .one()
+    )
+    assert stalled["target_faction_entity_id"] == faction_id
+    assert stalled["status"] == "stalled"
+    assert int(stalled["stall_count"]) == 1
+
+
+def test_live_gating_only_faction_template_leaves_binding_untouched(
+    faction_context_db: dict[str, Any],
+) -> None:
+    """PR #516 review: FACTION bound for gating flavor must not bind projects.
+
+    A template that binds Slot.FACTION without declaring binds_project_faction
+    neither injects the faction into project deltas nor trips the stored-
+    faction materialization check.
+    """
+
+    db = faction_context_db
+    session = db["session"]
+    actor_id = int(db["actors"]["bound"])
+    faction_id = int(min(db["factions"]))
+    project_settings = POLICY
+
+    entry = resolve_dry_run(
+        session,
+        (START_FACTION_PROJECT,),
+        anchor_chunk_id=int(db["chunk_id"]),
+        window_chunks=30,
+        project_settings=project_settings,
+    )
+    entry_draft = next(
+        draft
+        for draft in _actor_drafts(entry, actor_id, START_FACTION_PROJECT.id)
+        if draft.bindings["faction"] == faction_id
+    )
+    _accepted_draft(db, entry_draft)
+
+    flavored = resolve_dry_run(
+        session,
+        (GATING_ONLY_FACTION_ADVANCE,),
+        anchor_chunk_id=int(db["chunk_id"]),
+        window_chunks=30,
+        project_settings=project_settings,
+    )
+    advance_draft = _actor_drafts(flavored, actor_id, GATING_ONLY_FACTION_ADVANCE.id)[0]
+    assert advance_draft.bindings["faction"] == faction_id
     assert (
         "target_faction_entity_id" not in advance_draft.state_delta["project.advance"]
     )

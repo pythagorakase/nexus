@@ -2126,8 +2126,8 @@ def _materialize_project_delta(
             if not isinstance(target, int):
                 raise ValueError("recruit_ally project.start requires target binding")
             start_payload["target_character_entity_id"] = target
-        if Slot.FACTION in resolution.bindings:
-            faction = resolution.bindings[Slot.FACTION]
+        if resolution.binds_project_faction:
+            faction = resolution.bindings.get(Slot.FACTION)
             if not isinstance(faction, int):
                 raise ValueError("faction-bound project.start requires faction binding")
             start_payload["target_faction_entity_id"] = faction
@@ -2138,8 +2138,8 @@ def _materialize_project_delta(
         return delta
     payload = dict(raw_advance) if isinstance(raw_advance, Mapping) else {}
     actor = resolution.bindings.get(Slot.ACTOR)
-    if Slot.FACTION in resolution.bindings:
-        faction = resolution.bindings[Slot.FACTION]
+    if resolution.binds_project_faction:
+        faction = resolution.bindings.get(Slot.FACTION)
         if not isinstance(actor, int) or not isinstance(faction, int):
             raise ValueError(
                 "faction-bound project.advance requires actor and faction bindings"

@@ -2176,9 +2176,14 @@ class Template:
     # open-project projection. This remains valid if the contact or
     # relationship edge that originally sourced the project later clears.
     binds_project_target: bool = False
-    # Faction-targeted project continuations bind FACTION from the durable
-    # open-project projection. This remains valid if the institutional edge
-    # that originally sourced the project later clears.
+    # Declares that this template's FACTION binding IS the project's
+    # institutional counterparty. It is the single signal for both directions:
+    # entry templates inject the bound faction into project.start, and
+    # continuations bind FACTION from the durable open-project projection
+    # (valid even if the sourcing institutional edge later clears). Templates
+    # that bind FACTION merely for gating/flavor leave this False and never
+    # touch the stored binding; actor-only continuations transition
+    # faction-bound projects freely (the stored entry-time binding governs).
     binds_project_faction: bool = False
     priority_override_rationale: Optional[str] = None
     drive_band_priority_exempt: bool = False
@@ -2258,6 +2263,7 @@ class Resolution:
     scene_pressure_stub: Optional[str] = None
     signal_event_type: Optional[str] = None
     promotable: bool = True
+    binds_project_faction: bool = False
 
 
 def binding_hash(bindings: Bindings) -> str:
@@ -2442,6 +2448,7 @@ def evaluate(
             scene_pressure_stub=branch.scene_pressure_stub,
             signal_event_type=branch.signal_event_type,
             promotable=branch.promotable,
+            binds_project_faction=template.binds_project_faction,
         )
 
     return Resolution(
