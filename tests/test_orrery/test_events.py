@@ -488,6 +488,7 @@ class MinimalStoryResponse:
     """Tiny response object for lore_adapter serialization tests."""
 
     narrative = "The corridor hums."
+    generation_model = "test-storyteller-model"
     response_id = "resp-1"
     chunk_metadata = None
     metadata = None

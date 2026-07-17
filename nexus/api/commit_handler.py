@@ -64,7 +64,7 @@ async def fetch_incubator_data(
                choice_object, choice_text, orrery_proposal,
                COALESCE(orrery_adjudications, '[]'::jsonb) AS orrery_adjudications,
                metadata_updates, entity_updates, reference_updates,
-               llm_response_id, status
+               llm_response_id, generation_model, status
         FROM incubator
         WHERE session_id = $1
         """,
@@ -144,6 +144,7 @@ async def insert_chunk_metadata(
     world_layer: str,
     time_delta: Optional[Any],
     generation_date: Optional[datetime] = None,
+    generation_model: Optional[str] = None,
 ) -> None:
     """
     Insert metadata for a chunk.
@@ -156,8 +157,8 @@ async def insert_chunk_metadata(
         """
         INSERT INTO chunk_metadata (
             chunk_id, season, episode, scene, world_layer,
-            time_delta, generation_date, slug
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            time_delta, generation_date, slug, generation_model
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         """,
         chunk_id,
         season,
@@ -167,6 +168,7 @@ async def insert_chunk_metadata(
         time_delta,
         generation_timestamp,
         slug,
+        generation_model,
     )
     logger.info(f"Created metadata for chunk {chunk_id}: {slug}")
 
@@ -536,6 +538,7 @@ async def commit_incubator_to_database(
                 scene=db_meta["scene"],
                 world_layer=world_layer,
                 time_delta=db_meta["time_delta"],
+                generation_model=incubator.get("generation_model"),
             )
 
             # Step 7: Insert junction table references

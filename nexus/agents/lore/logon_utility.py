@@ -23,7 +23,7 @@ from nexus.agents.logon.apex_schema import (
     StorytellerResponseExtended,
 )
 from nexus.agents.orrery.tag_library import format_tag_library_for_prompt
-from nexus.config.loader import get_provider_for_model
+from nexus.config.loader import get_provider_for_model, resolve_model_ref
 from nexus.memory.context_state import is_retrograde_summary
 from nexus.memory.retrieval_coverage import coerce_chunk_id
 
@@ -261,6 +261,11 @@ class LogonUtility:
             logger.warning(f"Failed to get slot model: {e}")
             return None
 
+    @staticmethod
+    def _resolve_generation_model(model: str) -> str:
+        """Resolve a runtime roster reference before constructing the provider."""
+        return resolve_model_ref(model) if model.startswith("@") else model
+
     def _initialize_provider(self, is_bootstrap: Optional[bool] = None) -> None:
         """Initialize the appropriate API provider based on settings and slot config."""
         apex_settings = self.settings.get("API Settings", {}).get("apex", {})
@@ -274,6 +279,9 @@ class LogonUtility:
             model = self._get_slot_model()
         if not model:
             model = apex_settings.get("model", "gpt-4o")
+        if not isinstance(model, str) or not model.strip():
+            raise RuntimeError("LOGON could not resolve a storyteller model id")
+        model = self._resolve_generation_model(model)
 
         provider_type = get_provider_for_model(model) or apex_settings.get(
             "provider", "openai"
@@ -370,6 +378,8 @@ class LogonUtility:
             return
 
         resolved_model = self.model_override or self._get_slot_model()
+        if resolved_model:
+            resolved_model = self._resolve_generation_model(resolved_model)
         model_changed = bool(
             resolved_model and getattr(self.provider, "model", None) != resolved_model
         )
@@ -386,6 +396,16 @@ class LogonUtility:
     def ensure_provider(self) -> None:
         """Public wrapper for provider initialization."""
         self._ensure_provider()
+
+    def _stamp_generation_model(self, response: StoryTurnResponse) -> StoryTurnResponse:
+        """Attach the concrete model used by the successful provider call."""
+        generation_model = getattr(self.provider, "model", None)
+        if not isinstance(generation_model, str) or not generation_model.strip():
+            raise RuntimeError(
+                "Successful LOGON generation did not expose the provider model id"
+            )
+        response.generation_model = generation_model
+        return response
 
     def generate_narrative(self, context_payload: Dict[str, Any]) -> StoryTurnResponse:
         """Generate narrative from context payload with structured output."""
@@ -407,7 +427,7 @@ class LogonUtility:
                 "Received structured response with narrative length: %s",
                 len(parsed_response.narrative),
             )
-            return parsed_response  # Return the StoryTurnResponse object
+            return self._stamp_generation_model(parsed_response)
         except Exception:
             logger.exception("Failed to get structured response")
             raise
@@ -433,7 +453,7 @@ class LogonUtility:
                 "Received structured response with narrative length: %s",
                 len(parsed_response.narrative),
             )
-            return parsed_response
+            return self._stamp_generation_model(parsed_response)
         except Exception:
             logger.exception("Failed to get structured response")
             raise

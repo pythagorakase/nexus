@@ -145,6 +145,8 @@ def response_to_incubator(
     if not storyteller_text:
         raise ValueError("No narrative text in LORE response")
 
+    generation_model = getattr(response, "generation_model", None)
+
     # Extract choice object (presented choices, no selection yet)
     choice_obj = extract_choice_object(response)
     # Convert to dict for database JSONB storage (None if no choices)
@@ -158,6 +160,7 @@ def response_to_incubator(
         "parent_chunk_id": parent_chunk_id,
         "user_text": user_text,
         "storyteller_text": storyteller_text,
+        "generation_model": generation_model,
         "choice_object": choice_object_dict,  # Structured choices data
         "choice_text": None,  # Generated when user makes selection
         "metadata_updates": extract_metadata_updates(response),

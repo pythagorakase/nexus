@@ -336,7 +336,7 @@ def commit_incubator_to_database_sync(
                                AS orrery_adjudications,
                            COALESCE(new_entities, '[]'::jsonb) AS new_entities,
                            metadata_updates, entity_updates, reference_updates,
-                           llm_response_id, status
+                           llm_response_id, generation_model, status
                     FROM incubator
                     WHERE session_id = %s
                 """,
@@ -465,8 +465,8 @@ def commit_incubator_to_database_sync(
                     """
                     INSERT INTO chunk_metadata (
                         chunk_id, season, episode, scene, world_layer,
-                        time_delta, generation_date, slug
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                        time_delta, generation_date, slug, generation_model
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                     (
                         chunk_id,
@@ -477,6 +477,7 @@ def commit_incubator_to_database_sync(
                         db_meta["time_delta"],
                         datetime.utcnow(),
                         slug,
+                        incubator.get("generation_model"),
                     ),
                 )
                 logger.info("Created metadata for chunk %s: %s", chunk_id, slug)

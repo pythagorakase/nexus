@@ -7,7 +7,7 @@ import pytest
 
 from nexus.agents.logon.apex_schema import FactionStateUpdate, NewFaction, StateUpdates
 from nexus.agents.orrery.tag_schemas import OrreryTagBestowal
-from nexus.api.commit_handler import apply_state_updates
+from nexus.api.commit_handler import apply_state_updates, insert_chunk_metadata
 from nexus.api.db_converters import create_new_faction
 from nexus.api.slot_utils import get_slot_db_url
 
@@ -19,7 +19,7 @@ class RecordingAsyncConnection:
         self.statements = []
 
     async def execute(self, sql, *args):
-        self.statements.append(" ".join(sql.split()))
+        self.statements.append((" ".join(sql.split()), args))
 
 
 @pytest.mark.asyncio
@@ -40,7 +40,29 @@ async def test_async_faction_state_updates_do_not_write_legacy_activity():
         ),
     )
 
-    assert all("UPDATE factions" not in sql for sql in conn.statements)
+    assert all("UPDATE factions" not in sql for sql, _args in conn.statements)
+
+
+@pytest.mark.asyncio
+async def test_async_chunk_metadata_insert_carries_generation_model():
+    """The async commit helper writes the incubator's provenance value."""
+
+    conn = RecordingAsyncConnection()
+
+    await insert_chunk_metadata(
+        conn,
+        chunk_id=42,
+        season=1,
+        episode=2,
+        scene=3,
+        world_layer="primary",
+        time_delta=60,
+        generation_model="resolved-async-model",
+    )
+
+    sql, args = conn.statements[-1]
+    assert "generation_model" in sql
+    assert args[-1] == "resolved-async-model"
 
 
 @pytest.mark.requires_postgres

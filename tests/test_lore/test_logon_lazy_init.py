@@ -113,6 +113,28 @@ def _minimal_payload(*, is_bootstrap: bool = False) -> Dict[str, Any]:
     return payload
 
 
+def test_runtime_roster_reference_resolves_before_provider_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A @provider.role selection becomes the concrete provider model id."""
+
+    seen: list[str] = []
+
+    def fake_resolve(model_ref: str) -> str:
+        seen.append(model_ref)
+        return "resolved-roster-model"
+
+    monkeypatch.setattr(
+        "nexus.agents.lore.logon_utility.resolve_model_ref", fake_resolve
+    )
+
+    assert (
+        LogonUtility._resolve_generation_model("@openai.storyteller")
+        == "resolved-roster-model"
+    )
+    assert seen == ["@openai.storyteller"]
+
+
 @pytest.mark.requires_postgres
 def test_lore_keeps_logon_lazy(patched_provider: Dict[str, int]) -> None:
     """LORE should not initialize LOGON on construction when lazy mode is enabled."""
@@ -137,6 +159,7 @@ def test_logon_initializes_on_first_use(patched_provider: Dict[str, int]) -> Non
     assert lore.logon.provider.calls == 1
     assert lore.logon.provider.schema_models == [StorytellerResponseExtended]
     assert response.narrative.startswith("dummy:")
+    assert response.generation_model == "dummy-model"
 
 
 @pytest.mark.asyncio
@@ -155,6 +178,7 @@ async def test_logon_async_generation_uses_structured_provider() -> None:
     assert provider.schema_models == [StorytellerResponseExtended]
     assert response.narrative.startswith("dummy:")
     assert len(response.choices) == 2
+    assert response.generation_model == "dummy-model"
 
 
 @pytest.mark.asyncio
@@ -173,6 +197,30 @@ async def test_logon_async_generation_uses_bootstrap_schema_for_bootstrap() -> N
     # _DummyProvider always returns Minimal; this test verifies schema selection.
     assert provider.schema_models == [StorytellerResponseBootstrap]
     assert response.narrative.startswith("dummy:")
+    assert response.generation_model == "dummy-model"
+
+
+@pytest.mark.asyncio
+async def test_logon_stamps_model_exposed_by_last_successful_attempt() -> None:
+    """Provider state after a successful retry is the provenance ground truth."""
+
+    class RetrySwitchingProvider(_DummyProvider):
+        model = "first-attempt-model"
+
+        async def get_structured_completion_async(
+            self, prompt: str, schema_model: type
+        ) -> tuple[StorytellerResponseMinimal, _DummyResponse]:
+            self.model = "successful-attempt-model"
+            return await super().get_structured_completion_async(prompt, schema_model)
+
+    provider = RetrySwitchingProvider()
+    logon = LogonUtility({}, model_override="first-attempt-model")
+    logon.provider = provider
+    logon._provider_bootstrap_mode = False
+
+    response = await logon.generate_narrative_async(_minimal_payload())
+
+    assert response.generation_model == "successful-attempt-model"
 
 
 @pytest.mark.asyncio
