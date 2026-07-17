@@ -71,6 +71,9 @@ class FakeSession:
         pair_tag_rows=None,
         faction_rows=None,
         event_rows=None,
+        active_entity_rows=None,
+        epistemics_rows=None,
+        epistemics_awareness_rows=None,
         chunk_ref_actor_rows=None,
         event_actor_rows=None,
         ephemeral_actor_rows=None,
@@ -103,6 +106,11 @@ class FakeSession:
         self.pair_tag_rows = pair_tag_rows or []
         self.faction_rows = faction_rows or []
         self.event_rows = event_rows or []
+        self.active_entity_rows = (
+            [{"id": 1}] if active_entity_rows is None else active_entity_rows
+        )
+        self.epistemics_rows = epistemics_rows or []
+        self.epistemics_awareness_rows = epistemics_awareness_rows or []
         self.chunk_ref_actor_rows = chunk_ref_actor_rows or [{"entity_id": 1}]
         self.event_actor_rows = event_actor_rows or []
         self.ephemeral_actor_rows = ephemeral_actor_rows or []
@@ -175,6 +183,20 @@ class FakeSession:
         if "/* orrery:recent_events */" in sql:
             assert "superseded_by_event_id IS NULL" in sql
             return FakeResult(self.event_rows)
+        if "/* orrery:active_entity_ids */" in sql:
+            assert "is_active = true" in sql
+            assert "ORDER BY id" in sql
+            return FakeResult(self.active_entity_rows)
+        if "/* orrery:epistemics_hydration:claims */" in sql:
+            assert "world_event_entities" in sql
+            assert "ca.knower_entity_id" in sql
+            assert "array_agg(entity_id ORDER BY entity_id)" in sql
+            assert "LEFT JOIN claim_awareness" not in sql
+            return FakeResult(self.epistemics_rows)
+        if "/* orrery:epistemics_hydration:awareness */" in sql:
+            assert "ca.claim_id = ANY(:claim_ids)" in sql
+            assert "ca.knower_entity_id = ANY(:entity_ids)" in sql
+            return FakeResult(self.epistemics_awareness_rows)
         if "/* orrery:actor_bindings_chunk_refs */" in sql:
             assert "reference_type IS DISTINCT FROM 'present'" in sql
             return FakeResult(self.chunk_ref_actor_rows)

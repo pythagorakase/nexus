@@ -41,6 +41,8 @@ from nexus.agents.orrery.communication import (
     communication_graph_for_settings,
 )
 from nexus.agents.orrery.epistemics import (
+    CLAIM_SCOPES,
+    SOURCE_TIERS,
     coerce_epistemics_policy,
     load_epistemics_policy,
 )
@@ -1122,7 +1124,8 @@ def entity_context(
     Everything the dashboard's HoverCard renders: name, place (with classes),
     activity, effective need debt, tags with per-row provenance and family
     membership, pair tags, relationships (explicitly labeled unversioned),
-    travel state, routine anchors, and recent events. Read-only.
+    possessed claims with acquisition provenance, travel state, routine
+    anchors, and recent events. Read-only.
     """
 
     ids = sorted(set(entity_ids))
@@ -1279,6 +1282,115 @@ def entity_context(
                 {**base, "direction": "inbound", "other_entity_id": source_id}
             )
 
+    common_claims: dict[int, dict[str, Any]] = {}
+    explicit_claims_by_entity: dict[int, dict[int, dict[str, Any]]] = {}
+    for row in session.execute(
+        text(
+            """
+            /* orrery_audit:entity_claim_knowledge */
+            WITH requested_awareness AS (
+                SELECT id,
+                       claim_id,
+                       knower_entity_id,
+                       source_tier,
+                       channel,
+                       immediate_source_entity_id,
+                       root_source_entity_id,
+                       acquired_at_world_time
+                FROM claim_awareness
+                WHERE knower_entity_id = ANY(:ids)
+            ),
+            propagated AS (
+                SELECT requested.id AS awareness_id,
+                       (event.payload ->> 'depth')::integer AS depth
+                FROM requested_awareness requested
+                JOIN world_events event
+                  ON event.event_type = 'claim_propagated'
+                 AND (event.payload ->> 'claim_id')::bigint = requested.claim_id
+                 AND (event.payload ->> 'awareness_id')::bigint = requested.id
+                WHERE event.payload ? 'claim_id'
+                  AND event.payload ? 'awareness_id'
+            )
+            SELECT c.id AS claim_id,
+                   c.summary,
+                   c.scope,
+                   ca.id AS awareness_id,
+                   ca.knower_entity_id,
+                   ca.source_tier,
+                   ca.channel,
+                   ca.immediate_source_entity_id,
+                   ca.root_source_entity_id,
+                   ca.acquired_at_world_time,
+                   propagated.depth
+            FROM claims c
+            LEFT JOIN requested_awareness ca ON ca.claim_id = c.id
+            LEFT JOIN propagated ON propagated.awareness_id = ca.id
+            WHERE c.scope = 'common' OR ca.id IS NOT NULL
+            ORDER BY c.id, ca.knower_entity_id NULLS FIRST
+            """
+        ),
+        {"ids": ids},
+    ).mappings():
+        claim_id = int(row["claim_id"])
+        scope = str(row["scope"])
+        if scope not in CLAIM_SCOPES:
+            raise ValueError(f"Claim {claim_id} has unknown scope {scope!r}")
+        base_claim = {
+            "claim_id": claim_id,
+            "summary": str(row["summary"]),
+            "scope": scope,
+        }
+        if scope == "common":
+            common_claims[claim_id] = {
+                **base_claim,
+                "tier": "common",
+                "channel": None,
+                "immediate_source_entity_id": None,
+                "root_source_entity_id": None,
+                "acquired_at_world_time": None,
+                "depth": None,
+            }
+        knower_entity_id = row["knower_entity_id"]
+        if knower_entity_id is None:
+            continue
+        knower_id = int(knower_entity_id)
+        immediate_source = row["immediate_source_entity_id"]
+        root_source = row["root_source_entity_id"]
+        if immediate_source is not None:
+            referenced_ids.add(int(immediate_source))
+        if root_source is not None:
+            referenced_ids.add(int(root_source))
+        by_claim = explicit_claims_by_entity.setdefault(knower_id, {})
+        if claim_id in by_claim:
+            raise RuntimeError(
+                "Duplicate claim_propagated audit ledger entries for awareness "
+                f"{row['awareness_id']}"
+            )
+        source_tier = str(row["source_tier"])
+        if source_tier not in SOURCE_TIERS:
+            raise ValueError(
+                f"Claim {claim_id} has unknown awareness tier {source_tier!r}"
+            )
+        depth = int(row["depth"]) if row["depth"] is not None else None
+        if depth is not None and depth < 1:
+            raise ValueError(
+                f"Claim {claim_id} awareness {row['awareness_id']} has invalid "
+                f"propagation depth {depth}"
+            )
+        by_claim[claim_id] = {
+            **base_claim,
+            "tier": source_tier,
+            "channel": row["channel"],
+            "immediate_source_entity_id": (
+                int(immediate_source) if immediate_source is not None else None
+            ),
+            "root_source_entity_id": (
+                int(root_source) if root_source is not None else None
+            ),
+            "acquired_at_world_time": _iso(row["acquired_at_world_time"]),
+            "depth": depth,
+        }
+
     place_rows = {
         row["entity_id"]: row
         for row in session.execute(
@@ -1418,6 +1530,37 @@ def entity_context(
                     else None
                 )
 
+    def _knowledge(entity_id: int) -> list[dict[str, Any]]:
+        possessed = dict(common_claims)
+        possessed.update(explicit_claims_by_entity.get(entity_id, {}))
+        rows = []
+        for claim_id in sorted(possessed):
+            claim = possessed[claim_id]
+
+            def source_payload(key: str) -> Optional[dict[str, Any]]:
+                source_id = claim[key]
+                if source_id is None:
+                    return None
+                return {
+                    "entity_id": source_id,
+                    "name": _entity_label(source_id, entity_names),
+                }
+
+            rows.append(
+                {
+                    "claim_id": claim["claim_id"],
+                    "summary": claim["summary"],
+                    "scope": claim["scope"],
+                    "tier": claim["tier"],
+                    "channel": claim["channel"],
+                    "immediate_source": source_payload("immediate_source_entity_id"),
+                    "root_source": source_payload("root_source_entity_id"),
+                    "acquired_at_world_time": claim["acquired_at_world_time"],
+                    "depth": claim["depth"],
+                }
+            )
+        return rows
+
     entities: list[dict[str, Any]] = []
     for entity_id in ids:
         place_row = place_rows.get(entity_id)
@@ -1458,6 +1601,7 @@ def entity_context(
                 "communication_edges": [
                     edge.to_dict() for edge in communication_graph.outbound(entity_id)
                 ],
+                "knowledge": _knowledge(entity_id),
                 "travel_state": asdict(travel) if travel is not None else None,
                 "routine_anchors": anchors,
                 "recent_events": events_by_entity.get(entity_id, []),

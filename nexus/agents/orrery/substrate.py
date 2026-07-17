@@ -12,6 +12,7 @@ import random
 from typing import Any, Callable, Dict, Iterable, Literal, Mapping, Optional, Tuple
 
 from nexus.agents.orrery.communication import CommunicationGraph
+from nexus.agents.orrery.epistemics import ClaimKnowledge
 from nexus.agents.orrery.needs import normalize_need_type
 from nexus.agents.orrery.status_family import (
     STATUS_LEVEL_RANKS,
@@ -363,11 +364,35 @@ class WorldState:
     recent_events: Tuple[EventRecord, ...] = ()
     claimed_event_scopes: Mapping[int, str] = field(default_factory=dict)
     awareness_by_entity: Mapping[int, frozenset[int]] = field(default_factory=dict)
+    claim_knowledge_by_entity: Mapping[int, Tuple[ClaimKnowledge, ...]] = field(
+        default_factory=dict
+    )
+    common_claim_knowledge: Tuple[ClaimKnowledge, ...] = ()
+    possessed_claim_knowledge_by_entity: Mapping[int, Tuple[ClaimKnowledge, ...]] = (
+        field(default_factory=dict)
+    )
     epistemics_enabled: bool = False
     time_of_day: str = "midday"
     world_time: Optional[datetime] = None
     weather: str = "clear"
     current_tick: int = 0
+
+    def __post_init__(self) -> None:
+        """Premerge common possession for directly constructed test states."""
+
+        if self.possessed_claim_knowledge_by_entity:
+            return
+        common_by_claim_id = {
+            record.claim_id: record for record in self.common_claim_knowledge
+        }
+        possessed: dict[int, Tuple[ClaimKnowledge, ...]] = {}
+        for entity_id, explicit_records in self.claim_knowledge_by_entity.items():
+            by_claim_id = dict(common_by_claim_id)
+            by_claim_id.update({record.claim_id: record for record in explicit_records})
+            possessed[entity_id] = tuple(
+                by_claim_id[claim_id] for claim_id in sorted(by_claim_id)
+            )
+        object.__setattr__(self, "possessed_claim_knowledge_by_entity", possessed)
 
 
 def _slot_entity(bindings: Bindings, slot: Slot) -> Optional[int]:
@@ -396,6 +421,21 @@ def _has_inbound_pair_tag(state: WorldState, entity_id: int, pair_tag: str) -> b
     return any(
         object_id == entity_id and pair_tag in tags
         for (_subject_id, object_id), tags in state.pair_tags.items()
+    )
+
+
+def _possessed_claim_knowledge(
+    state: WorldState, entity_id: int
+) -> Tuple[ClaimKnowledge, ...]:
+    """Look up premerged possession for one entity.
+
+    Common-scope claims supply universal possession. When the entity also has
+    an explicit awareness row, its actual acquisition tier and provenance win
+    over the synthetic ``common`` tier used for universal possession.
+    """
+
+    return state.possessed_claim_knowledge_by_entity.get(
+        entity_id, state.common_claim_knowledge
     )
 
 
@@ -1836,6 +1876,48 @@ def relative_orbit_distance(
     )
 
 
+def knows_claim_about(
+    subject_slot: Slot = Slot.ACTOR,
+    about_slot: Slot = Slot.TARGET,
+) -> Condition:
+    """Return whether one slot-bound knower possesses a claim about another.
+
+    A claim is about every entity named by its minting world's actor, target,
+    or ``world_event_entities`` rows. Possession comes from an awareness row
+    at any tier or from the claim's common scope.
+    """
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        subject_id = _slot_entity(bindings, subject_slot)
+        about_id = _slot_entity(bindings, about_slot)
+        if subject_id is None or about_id is None:
+            return False
+        return any(
+            about_id in record.about_entity_ids
+            for record in _possessed_claim_knowledge(state, subject_id)
+        )
+
+    return _named(
+        _condition,
+        f"knows_claim_about({subject_slot.value}->{about_slot.value})",
+    )
+
+
+def heard_secondhand(subject_slot: Slot = Slot.ACTOR) -> Condition:
+    """Return whether a slot-bound knower has any told-tier awareness."""
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        subject_id = _slot_entity(bindings, subject_slot)
+        if subject_id is None:
+            return False
+        return any(
+            record.source_tier == "told"
+            for record in _possessed_claim_knowledge(state, subject_id)
+        )
+
+    return _named(_condition, f"heard_secondhand({subject_slot.value})")
+
+
 def time_of_day_in(*times: str) -> Condition:
     """Return whether current in-world time of day is in the given set."""
 
@@ -2645,17 +2727,16 @@ def select_package(
     stochastic = (
         package_selection is not None and package_selection.mode == "stochastic"
     )
-
     window: list[tuple[Template, Resolution, float]] = []
     peak: Optional[float] = None
     for template in ordered:
         effective_priority = habituation_policy.effective_priority(
             template, state, bindings
         )
-        if peak is not None and (
-            effective_priority < peak - package_selection.window_points
-        ):
-            break  # ordered descending: nothing below the floor can win
+        if peak is not None:
+            assert package_selection is not None
+            if effective_priority < peak - package_selection.window_points:
+                break  # ordered descending: nothing below the floor can win
         resolution = evaluate(template, state, bindings, branch_selection)
         if not resolution.passes:
             continue
@@ -2672,6 +2753,7 @@ def select_package(
     if not window:
         return PackageSelectionOutcome(winner=None)
 
+    assert package_selection is not None  # a non-empty window requires stochastic mode
     argmax = window[0]
     if any(
         template.drive_band.value in package_selection.exempt_bands

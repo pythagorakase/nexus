@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Iterable, Mapping, Optional, Sequence
 
-from sqlalchemy import bindparam, text
+from sqlalchemy import text
 
 
 CLAIM_SCOPES = frozenset({"common", "bounded", "private"})
@@ -14,6 +14,7 @@ CLAIM_PROPAGATED_EVENT_TYPE = "claim_propagated"
 EVENT_ROLES = frozenset({"actor", "target", "observer", "witness", "beneficiary"})
 PARTICIPANT_ROLES = frozenset({"actor", "target", "beneficiary"})
 WITNESS_ROLES = frozenset({"observer", "witness"})
+SOURCE_TIERS = frozenset({"participant", "witness", "told", "granted"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,11 +54,27 @@ class RevelationResult:
 
 
 @dataclass(frozen=True, slots=True)
-class AwarenessHydration:
-    """Claim scopes and per-entity awareness for one recent-event window."""
+class ClaimKnowledge:
+    """One hydrated claim-possession record consumed by package predicates."""
+
+    claim_id: int
+    world_event_id: int
+    scope: str
+    source_tier: str
+    about_entity_ids: frozenset[int]
+    channel: Optional[str] = None
+    immediate_source_entity_id: Optional[int] = None
+
+
+@dataclass(frozen=True, slots=True)
+class EpistemicsHydration:
+    """Complete claim projection plus the legacy recent-event lookup shapes."""
 
     claimed_event_scopes: Mapping[int, str]
     awareness_by_entity: Mapping[int, frozenset[int]]
+    claim_knowledge_by_entity: Mapping[int, tuple[ClaimKnowledge, ...]]
+    common_claim_knowledge: tuple[ClaimKnowledge, ...]
+    possessed_claim_knowledge_by_entity: Mapping[int, tuple[ClaimKnowledge, ...]]
 
 
 def coerce_epistemics_policy(raw: Any) -> EpistemicsPolicy:
@@ -333,41 +350,220 @@ def promote_claim_scope(cur: Any, *, claim_id: int, new_scope: str) -> None:
     cur.execute("UPDATE claims SET scope = %s WHERE id = %s", (new_scope, claim_id))
 
 
-def load_awareness_for_events(
-    session: Any, *, world_event_ids: Sequence[int]
-) -> AwarenessHydration:
-    """Hydrate claim scopes and awareness in one query for selected events."""
+def load_epistemics_hydration(
+    session: Any, *, entity_ids: Iterable[int]
+) -> EpistemicsHydration:
+    """Hydrate claim possession relevant to an explicit entity universe.
 
-    event_ids = sorted(set(int(event_id) for event_id in world_event_ids))
-    if not event_ids:
-        return AwarenessHydration({}, {})
-    query = text(
+    ``knows_recent_event`` still reads the event-id maps this returns. Claim
+    predicates additionally need time-unbounded possession and every entity
+    involved in the minting event. A non-common claim is relevant when either
+    an active knower or an about-entity intersects ``entity_ids``; common
+    claims are relevant only through their about-entities. Claim subjects and
+    awareness are loaded on separate axes, so neither can multiply the other.
+    No predicate performs follow-up SQL.
+    """
+
+    universe = tuple(sorted({int(entity_id) for entity_id in entity_ids}))
+    if not universe:
+        return EpistemicsHydration(
+            claimed_event_scopes={},
+            awareness_by_entity={},
+            claim_knowledge_by_entity={},
+            common_claim_knowledge=(),
+            possessed_claim_knowledge_by_entity={},
+        )
+
+    claims_query = text(
         """
-        /* orrery:epistemics_awareness */
-        SELECT c.world_event_id, c.scope, ca.knower_entity_id
-        FROM claims c
-        LEFT JOIN claim_awareness ca ON ca.claim_id = c.id
-        WHERE c.world_event_id IN :world_event_ids
-        ORDER BY c.world_event_id, ca.knower_entity_id
+        /* orrery:epistemics_hydration:claims */
+        WITH relevant_claim_ids AS (
+            SELECT c.id AS claim_id
+            FROM claims c
+            JOIN world_events we ON we.id = c.world_event_id
+            WHERE we.actor_entity_id = ANY(:entity_ids)
+               OR we.target_entity_id = ANY(:entity_ids)
+            UNION
+            SELECT c.id AS claim_id
+            FROM claims c
+            JOIN world_event_entities wee ON wee.event_id = c.world_event_id
+            WHERE wee.entity_id = ANY(:entity_ids)
+            UNION
+            SELECT ca.claim_id
+            FROM claim_awareness ca
+            JOIN claims c ON c.id = ca.claim_id
+            WHERE c.scope <> 'common'
+              AND ca.knower_entity_id = ANY(:entity_ids)
+        ),
+        claim_entities AS (
+            SELECT relevant.claim_id, subjects.entity_id
+            FROM relevant_claim_ids relevant
+            JOIN claims c ON c.id = relevant.claim_id
+            JOIN world_events we ON we.id = c.world_event_id
+            JOIN LATERAL (
+                SELECT we.actor_entity_id AS entity_id
+                WHERE we.actor_entity_id IS NOT NULL
+                UNION
+                SELECT we.target_entity_id AS entity_id
+                WHERE we.target_entity_id IS NOT NULL
+                UNION
+                SELECT wee.entity_id
+                FROM world_event_entities wee
+                WHERE wee.event_id = we.id
+            ) subjects ON true
+        ),
+        about_by_claim AS (
+            SELECT claim_id,
+                   array_agg(entity_id ORDER BY entity_id) AS about_entity_ids
+            FROM claim_entities
+            GROUP BY claim_id
+        )
+        SELECT c.id AS claim_id,
+               c.world_event_id,
+               c.scope,
+               COALESCE(
+                   about.about_entity_ids,
+                   ARRAY[]::bigint[]
+               ) AS about_entity_ids
+        FROM relevant_claim_ids relevant
+        JOIN claims c ON c.id = relevant.claim_id
+        LEFT JOIN about_by_claim about ON about.claim_id = c.id
+        WHERE c.scope <> 'common'
+           OR COALESCE(about.about_entity_ids, ARRAY[]::bigint[])
+              && CAST(:entity_ids AS bigint[])
+        ORDER BY c.id
         """
-    ).bindparams(bindparam("world_event_ids", expanding=True))
+    )
     scopes: dict[int, str] = {}
-    awareness: dict[int, set[int]] = {}
-    for row in session.execute(query, {"world_event_ids": event_ids}).mappings():
+    claims: dict[int, dict[str, Any]] = {}
+    for row in session.execute(claims_query, {"entity_ids": list(universe)}).mappings():
+        claim_id = int(row["claim_id"])
         event_id = int(row["world_event_id"])
         scope = str(row["scope"])
         if scope not in CLAIM_SCOPES:
             raise ValueError(f"Claim on event {event_id} has unknown scope {scope!r}")
         scopes[event_id] = scope
+        claims[claim_id] = {
+            "world_event_id": event_id,
+            "scope": scope,
+            "about_entity_ids": frozenset(
+                int(entity_id) for entity_id in (row["about_entity_ids"] or ())
+            ),
+        }
+
+    awareness: dict[int, set[int]] = {}
+    awareness_rows: dict[tuple[int, int], dict[str, Any]] = {}
+    if claims:
+        awareness_query = text(
+            """
+            /* orrery:epistemics_hydration:awareness */
+            SELECT ca.claim_id,
+                   ca.knower_entity_id,
+                   ca.source_tier,
+                   ca.channel,
+                   ca.immediate_source_entity_id
+            FROM claim_awareness ca
+            WHERE ca.claim_id = ANY(:claim_ids)
+              AND ca.knower_entity_id = ANY(:entity_ids)
+            ORDER BY ca.claim_id, ca.knower_entity_id
+            """
+        )
+        awareness_results = session.execute(
+            awareness_query,
+            {
+                "claim_ids": sorted(claims),
+                "entity_ids": list(universe),
+            },
+        ).mappings()
+    else:
+        awareness_results = ()
+
+    for row in awareness_results:
+        claim_id = int(row["claim_id"])
+        event_id = int(claims[claim_id]["world_event_id"])
         knower_entity_id = row["knower_entity_id"]
-        if knower_entity_id is not None:
-            awareness.setdefault(int(knower_entity_id), set()).add(event_id)
-    return AwarenessHydration(
+        knower_id = int(knower_entity_id)
+        source_tier = str(row["source_tier"])
+        if source_tier not in SOURCE_TIERS:
+            raise ValueError(
+                f"Claim {claim_id} has unknown awareness tier {source_tier!r}"
+            )
+        awareness.setdefault(knower_id, set()).add(event_id)
+        awareness_rows.setdefault(
+            (claim_id, knower_id),
+            {
+                "source_tier": source_tier,
+                "channel": row["channel"],
+                "immediate_source_entity_id": row["immediate_source_entity_id"],
+            },
+        )
+
+    claim_knowledge: dict[int, list[ClaimKnowledge]] = {}
+    for (claim_id, knower_id), row in sorted(awareness_rows.items()):
+        claim = claims[claim_id]
+        immediate_source = row["immediate_source_entity_id"]
+        claim_knowledge.setdefault(knower_id, []).append(
+            ClaimKnowledge(
+                claim_id=claim_id,
+                world_event_id=int(claim["world_event_id"]),
+                scope=str(claim["scope"]),
+                source_tier=str(row["source_tier"]),
+                about_entity_ids=frozenset(claim["about_entity_ids"]),
+                channel=(str(row["channel"]) if row["channel"] is not None else None),
+                immediate_source_entity_id=(
+                    int(immediate_source) if immediate_source is not None else None
+                ),
+            )
+        )
+
+    common_claims = tuple(
+        ClaimKnowledge(
+            claim_id=claim_id,
+            world_event_id=int(claim["world_event_id"]),
+            scope="common",
+            source_tier="common",
+            about_entity_ids=frozenset(claim["about_entity_ids"]),
+        )
+        for claim_id, claim in sorted(claims.items())
+        if claim["scope"] == "common"
+    )
+    explicit_claims = {
+        entity_id: tuple(records) for entity_id, records in claim_knowledge.items()
+    }
+    return EpistemicsHydration(
         claimed_event_scopes=scopes,
         awareness_by_entity={
             entity_id: frozenset(events) for entity_id, events in awareness.items()
         },
+        claim_knowledge_by_entity=explicit_claims,
+        common_claim_knowledge=common_claims,
+        possessed_claim_knowledge_by_entity=_merge_possessed_claim_knowledge(
+            universe,
+            explicit_claims=explicit_claims,
+            common_claims=common_claims,
+        ),
     )
+
+
+def _merge_possessed_claim_knowledge(
+    entity_ids: Iterable[int],
+    *,
+    explicit_claims: Mapping[int, tuple[ClaimKnowledge, ...]],
+    common_claims: tuple[ClaimKnowledge, ...],
+) -> dict[int, tuple[ClaimKnowledge, ...]]:
+    """Precompute deterministic universal-plus-explicit possession by entity."""
+
+    common_by_claim_id = {record.claim_id: record for record in common_claims}
+    possessed: dict[int, tuple[ClaimKnowledge, ...]] = {}
+    for entity_id in sorted({int(value) for value in entity_ids}):
+        by_claim_id = dict(common_by_claim_id)
+        by_claim_id.update(
+            {record.claim_id: record for record in explicit_claims.get(entity_id, ())}
+        )
+        possessed[entity_id] = tuple(
+            by_claim_id[claim_id] for claim_id in sorted(by_claim_id)
+        )
+    return possessed
 
 
 def _normalize_participants(

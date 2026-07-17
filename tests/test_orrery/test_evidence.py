@@ -29,6 +29,7 @@ from nexus.agents.orrery.evidence import (
     EvidenceResolutionError,
     resolve_evidence,
 )
+from nexus.agents.orrery.epistemics import ClaimKnowledge
 from nexus.agents.orrery.explain import explain_stack
 from nexus.agents.orrery.substrate import (
     ALWAYS,
@@ -57,6 +58,7 @@ from nexus.agents.orrery.substrate import (
     has_contact_of_kind,
     has_ephemeral,
     has_established_partner_co_located,
+    heard_secondhand,
     has_inbound_pair_tag,
     has_location_class_destination,
     has_minimal_context,
@@ -75,6 +77,7 @@ from nexus.agents.orrery.substrate import (
     is_constrained,
     is_hidden,
     is_in_transit,
+    knows_claim_about,
     knows_recent_event,
     lacks_pair_tag,
     lacks_tag,
@@ -157,6 +160,26 @@ RICH_STATE = WorldState(
         EventRecord(event_type="threat_issued", tick=99, target_entity_id=ACTOR),
         EventRecord(event_type="contact_made", tick=95, actor_entity_id=ACTOR),
     ),
+    claim_knowledge_by_entity={
+        ACTOR: (
+            ClaimKnowledge(
+                claim_id=71,
+                world_event_id=81,
+                scope="bounded",
+                source_tier="participant",
+                about_entity_ids=frozenset({TARGET}),
+            ),
+            ClaimKnowledge(
+                claim_id=72,
+                world_event_id=82,
+                scope="bounded",
+                source_tier="told",
+                about_entity_ids=frozenset({3}),
+                channel="dyad:associate",
+                immediate_source_entity_id=TARGET,
+            ),
+        )
+    },
     time_of_day="night",
     world_time=datetime(2073, 5, 3, 11, 30),
     weather="rain",
@@ -218,6 +241,8 @@ FACTORY_SWEEP = [
     has_symmetric_relationship_of_type("romantic", Slot.TARGET, Slot.ACTOR),
     faction_member(),
     relative_orbit_distance(2),
+    knows_claim_about(),
+    heard_secondhand(),
     time_of_day_in("night", "evening"),
     weather_is("clear"),
     recent_event("threat_issued", within_ticks=5, target_slot=Slot.ACTOR),

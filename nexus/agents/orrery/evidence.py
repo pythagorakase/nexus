@@ -66,6 +66,7 @@ from nexus.agents.orrery.substrate import (
     WorldState,
     _at_routine_anchor,
     _is_in_transit,
+    _possessed_claim_knowledge,
     _routine_anchor,
     _routine_anchor_destination_available,
     _routine_schedule_due,
@@ -1527,6 +1528,66 @@ def _knows_recent_event(match: re.Match, state: WorldState, bindings: Bindings) 
         },
         matched=candidates,
         result=None if fields_filter_active else bool(visible_candidates),
+    )
+
+
+@_resolver("knows_claim_about")
+def _knows_claim_about(match: re.Match, state: WorldState, bindings: Bindings) -> dict:
+    subject_slot = match["subject"]
+    about_slot = match["about"]
+    subject_id = _entity(bindings, subject_slot)
+    about_id = _entity(bindings, about_slot)
+    possessed = (
+        _possessed_claim_knowledge(state, subject_id) if subject_id is not None else ()
+    )
+    matched = [
+        {
+            "claim_id": record.claim_id,
+            "tier": record.source_tier,
+            "scope": record.scope,
+        }
+        for record in possessed
+        if about_id is not None and about_id in record.about_entity_ids
+    ]
+    return _evidence(
+        "knows_claim_about",
+        params={"subject_slot": subject_slot, "about_slot": about_slot},
+        entities={subject_slot: subject_id, about_slot: about_id},
+        observed={
+            "possessed_claims": [
+                {"claim_id": record.claim_id, "tier": record.source_tier}
+                for record in possessed
+            ]
+        },
+        matched=matched,
+        result=bool(matched),
+    )
+
+
+@_resolver("heard_secondhand")
+def _heard_secondhand(match: re.Match, state: WorldState, bindings: Bindings) -> dict:
+    subject_slot = match["subject"]
+    subject_id = _entity(bindings, subject_slot)
+    records = (
+        _possessed_claim_knowledge(state, subject_id) if subject_id is not None else ()
+    )
+    matched = [
+        {
+            "claim_id": record.claim_id,
+            "tier": record.source_tier,
+            "channel": record.channel,
+            "immediate_source_entity_id": record.immediate_source_entity_id,
+        }
+        for record in records
+        if record.source_tier == "told"
+    ]
+    return _evidence(
+        "heard_secondhand",
+        params={"subject_slot": subject_slot},
+        entities={subject_slot: subject_id},
+        observed={"awareness_count": len(records)},
+        matched=matched,
+        result=bool(matched),
     )
 
 

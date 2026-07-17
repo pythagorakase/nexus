@@ -266,6 +266,17 @@ export interface ContextEntity {
     other_name?: string;
     versioned: boolean;
   }[];
+  knowledge: {
+    claim_id: number;
+    summary: string;
+    scope: "common" | "bounded" | "private";
+    tier: "common" | "participant" | "witness" | "told" | "granted";
+    channel: string | null;
+    immediate_source: { entity_id: number; name: string } | null;
+    root_source: { entity_id: number; name: string } | null;
+    acquired_at_world_time: string | null;
+    depth: number | null;
+  }[];
   recent_events: {
     event_type: string;
     tick_chunk_id: number;
@@ -401,6 +412,14 @@ export interface EntityAuditVM {
   hasEphemeral: boolean;
   rels: { types: string; other: string; trust: string }[];
   hasRels: boolean;
+  knowledge: {
+    key: string;
+    summary: string;
+    meta: string;
+    provenance: string;
+    acquired: string;
+  }[];
+  hasKnowledge: boolean;
   events: { t: string; type: string }[];
   hasEvents: boolean;
 }
