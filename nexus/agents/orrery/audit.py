@@ -1282,13 +1282,18 @@ def entity_context(
                 {**base, "direction": "inbound", "other_entity_id": source_id}
             )
 
-    common_claims: dict[int, dict[str, Any]] = {}
+    common_claims_by_entity: dict[int, dict[int, dict[str, Any]]] = {}
     explicit_claims_by_entity: dict[int, dict[int, dict[str, Any]]] = {}
     for row in session.execute(
         text(
             """
             /* orrery_audit:entity_claim_knowledge */
-            WITH requested_awareness AS (
+            WITH anchor AS (
+                SELECT created_at
+                FROM narrative_chunks
+                WHERE id = :anchor_chunk_id
+            ),
+            requested_awareness AS (
                 SELECT id,
                        claim_id,
                        knower_entity_id,
@@ -1299,6 +1304,38 @@ def entity_context(
                        acquired_at_world_time
                 FROM claim_awareness
                 WHERE knower_entity_id = ANY(:ids)
+                  -- Mirror replay.py's claim-awareness readmission visibility.
+                  AND (
+                      :anchor_chunk_id IS NULL
+                      OR (source_chunk_id IS NOT NULL
+                          AND source_chunk_id <= :anchor_chunk_id)
+                      OR (source_chunk_id IS NULL
+                          AND created_at <= (SELECT created_at FROM anchor))
+                  )
+            ),
+            requested_common_claims AS (
+                SELECT c.id AS claim_id,
+                       array_agg(
+                           DISTINCT about.entity_id ORDER BY about.entity_id
+                       ) AS about_entity_ids
+                FROM claims c
+                JOIN world_events mint_event
+                  ON mint_event.id = c.world_event_id
+                JOIN LATERAL (
+                    SELECT mint_event.actor_entity_id AS entity_id
+                    WHERE mint_event.actor_entity_id IS NOT NULL
+                    UNION
+                    SELECT mint_event.target_entity_id AS entity_id
+                    WHERE mint_event.target_entity_id IS NOT NULL
+                    UNION
+                    SELECT wee.entity_id
+                    FROM world_event_entities wee
+                    WHERE wee.event_id = mint_event.id
+                ) about ON about.entity_id = ANY(:ids)
+                WHERE c.scope = 'common'
+                  AND (:anchor_chunk_id IS NULL
+                       OR mint_event.tick_chunk_id <= :anchor_chunk_id)
+                GROUP BY c.id
             ),
             propagated AS (
                 SELECT requested.id AS awareness_id,
@@ -1314,6 +1351,7 @@ def entity_context(
             SELECT c.id AS claim_id,
                    c.summary,
                    c.scope,
+                   requested_common.about_entity_ids AS common_about_entity_ids,
                    ca.id AS awareness_id,
                    ca.knower_entity_id,
                    ca.source_tier,
@@ -1323,13 +1361,18 @@ def entity_context(
                    ca.acquired_at_world_time,
                    propagated.depth
             FROM claims c
+            JOIN world_events mint_event ON mint_event.id = c.world_event_id
+            LEFT JOIN requested_common_claims requested_common
+              ON requested_common.claim_id = c.id
             LEFT JOIN requested_awareness ca ON ca.claim_id = c.id
             LEFT JOIN propagated ON propagated.awareness_id = ca.id
-            WHERE c.scope = 'common' OR ca.id IS NOT NULL
+            WHERE (:anchor_chunk_id IS NULL
+                   OR mint_event.tick_chunk_id <= :anchor_chunk_id)
+              AND (requested_common.claim_id IS NOT NULL OR ca.id IS NOT NULL)
             ORDER BY c.id, ca.knower_entity_id NULLS FIRST
             """
         ),
-        {"ids": ids},
+        {"ids": ids, "anchor_chunk_id": anchor_chunk_id},
     ).mappings():
         claim_id = int(row["claim_id"])
         scope = str(row["scope"])
@@ -1341,7 +1384,7 @@ def entity_context(
             "scope": scope,
         }
         if scope == "common":
-            common_claims[claim_id] = {
+            common_claim = {
                 **base_claim,
                 "tier": "common",
                 "channel": None,
@@ -1350,6 +1393,10 @@ def entity_context(
                 "acquired_at_world_time": None,
                 "depth": None,
             }
+            for about_entity_id in row["common_about_entity_ids"] or ():
+                common_claims_by_entity.setdefault(int(about_entity_id), {})[
+                    claim_id
+                ] = common_claim
         knower_entity_id = row["knower_entity_id"]
         if knower_entity_id is None:
             continue
@@ -1531,7 +1578,7 @@ def entity_context(
                 )
 
     def _knowledge(entity_id: int) -> list[dict[str, Any]]:
-        possessed = dict(common_claims)
+        possessed = dict(common_claims_by_entity.get(entity_id, {}))
         possessed.update(explicit_claims_by_entity.get(entity_id, {}))
         rows = []
         for claim_id in sorted(possessed):

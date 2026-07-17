@@ -27,6 +27,7 @@ from nexus.agents.orrery.substrate import (
     Template,
     heard_secondhand,
     knows_claim_about,
+    knows_recent_event,
 )
 from nexus.api.slot_utils import get_slot_db_url
 from tests.test_orrery.test_claim_propagation_live import (
@@ -236,12 +237,111 @@ def test_hydration_excludes_irrelevant_history_and_empty_universe_issues_no_sql(
 
     event.listen(live_connection, "before_cursor_execute", count_claim_queries)
     try:
-        hydration = load_epistemics_hydration(live_connection, entity_ids=())
+        hydration = load_epistemics_hydration(
+            live_connection,
+            entity_ids=(),
+            recent_event_ids=(),
+            anchor_chunk_id=chunk_id,
+        )
     finally:
         event.remove(live_connection, "before_cursor_execute", count_claim_queries)
 
     assert hydration.claimed_event_scopes == {}
     assert claim_queries == []
+
+
+def test_entity_audit_common_claims_are_bounded_to_their_about_entities(
+    live_connection: Any,
+) -> None:
+    """The knowledge panel excludes unrelated common-claim history."""
+
+    raw_connection = live_connection.connection.driver_connection
+    with raw_connection.cursor(cursor_factory=RealDictCursor) as cur:
+        audited, _ = _insert_character(cur, "audit-common-subject")
+        relevant_source, _ = _insert_character(cur, "audit-common-source")
+        unrelated_source, _ = _insert_character(cur, "audit-unrelated-source")
+        unrelated_subject, _ = _insert_character(cur, "audit-unrelated-subject")
+        chunk_id, _ = _insert_chunk(cur)
+        relevant_claim_id = _insert_claim_about(
+            cur,
+            chunk_id=chunk_id,
+            source_entity_id=relevant_source,
+            about_entity_id=audited,
+            scope="common",
+        )
+        unrelated_claim_id = _insert_claim_about(
+            cur,
+            chunk_id=chunk_id,
+            source_entity_id=unrelated_source,
+            about_entity_id=unrelated_subject,
+            scope="common",
+        )
+        cur.execute(
+            "DELETE FROM claim_awareness WHERE claim_id IN (%s, %s)",
+            (relevant_claim_id, unrelated_claim_id),
+        )
+
+    context = entity_context(
+        live_connection,
+        [audited, unrelated_subject],
+        anchor_chunk_id=chunk_id,
+    )
+    knowledge_by_entity = {
+        entity["entity_id"]: {row["claim_id"]: row for row in entity["knowledge"]}
+        for entity in context["entities"]
+    }
+    audited_knowledge = knowledge_by_entity[audited]
+    unrelated_knowledge = knowledge_by_entity[unrelated_subject]
+
+    assert relevant_claim_id in audited_knowledge
+    assert audited_knowledge[relevant_claim_id]["tier"] == "common"
+    assert unrelated_claim_id not in audited_knowledge
+    assert unrelated_claim_id in unrelated_knowledge
+    assert relevant_claim_id not in unrelated_knowledge
+
+
+def test_recent_claim_scope_survives_inactive_endpoints(
+    live_connection: Any,
+) -> None:
+    """Recent bounded claims still gate actors when their endpoints go inactive."""
+
+    raw_connection = live_connection.connection.driver_connection
+    with raw_connection.cursor(cursor_factory=RealDictCursor) as cur:
+        source, _ = _insert_character(cur, "scope-inactive-source")
+        target, _ = _insert_character(cur, "scope-inactive-target")
+        non_knower, _ = _insert_character(cur, "scope-active-non-knower")
+        chunk_id, _ = _insert_chunk(cur)
+        claim_id = _insert_claim_about(
+            cur,
+            chunk_id=chunk_id,
+            source_entity_id=source,
+            about_entity_id=target,
+        )
+        cur.execute(
+            "SELECT world_event_id FROM claims WHERE id = %s",
+            (claim_id,),
+        )
+        event_id = int(cur.fetchone()["world_event_id"])
+        cur.execute(
+            "UPDATE entities SET is_active = false WHERE id IN (%s, %s)",
+            (source, target),
+        )
+
+    state = hydrate_world_state(
+        live_connection,
+        anchor_chunk_id=chunk_id,
+        window_chunks=1,
+        epistemics_settings=EPISTEMICS,
+    )
+
+    assert any(event.event_id == event_id for event in state.recent_events)
+    assert state.claimed_event_scopes[event_id] == "bounded"
+    assert event_id not in state.awareness_by_entity.get(non_knower, frozenset())
+    assert not knows_recent_event(
+        "threat_issued",
+        within_ticks=1,
+        target_slot=Slot.TARGET,
+    )(state, {Slot.ACTOR: non_knower, Slot.TARGET: target})
 
 
 def test_live_predicates_cover_participant_told_common_false_and_faction(
@@ -330,6 +430,95 @@ def test_live_predicates_cover_participant_told_common_false_and_faction(
         state, {Slot.FACTION: faction, Slot.TARGET: about}
     )
     assert heard_secondhand(Slot.FACTION)(state, {Slot.FACTION: faction})
+
+
+def test_historical_anchor_excludes_future_claim_and_awareness(
+    live_connection: Any,
+) -> None:
+    """Hydration and audit reads cannot acquire knowledge from their future."""
+
+    settings = _settings()
+    raw_connection = live_connection.connection.driver_connection
+    with raw_connection.cursor(cursor_factory=RealDictCursor) as cur:
+        source, source_character = _insert_character(cur, "anchor-source")
+        listener, listener_character = _insert_character(cur, "anchor-listener")
+        about, _ = _insert_character(cur, "anchor-about")
+        _insert_relationship(cur, source_character, listener_character)
+        historical_anchor, _ = _insert_chunk(cur)
+        mint_chunk, _ = _insert_chunk(cur, time_delta=timedelta(hours=2))
+        claim_id = _insert_claim_about(
+            cur,
+            chunk_id=mint_chunk,
+            source_entity_id=source,
+            about_entity_id=about,
+        )
+        head_anchor, _ = _insert_chunk(cur, time_delta=timedelta(hours=8))
+        drained = drain_claim_propagation_sync(
+            cur, tick_chunk_id=head_anchor, settings=settings
+        )
+        cur.execute("SELECT max(id) AS id FROM narrative_chunks")
+        assert int(cur.fetchone()["id"]) == head_anchor
+
+    historical = hydrate_world_state(
+        live_connection,
+        anchor_chunk_id=historical_anchor,
+        window_chunks=10,
+        epistemics_settings=EPISTEMICS,
+        contagion_settings=settings,
+    )
+    head = hydrate_world_state(
+        live_connection,
+        anchor_chunk_id=head_anchor,
+        window_chunks=10,
+        epistemics_settings=EPISTEMICS,
+        contagion_settings=settings,
+    )
+    bindings = {Slot.ACTOR: listener, Slot.TARGET: about}
+
+    assert drained.minted_count >= 1
+    assert not knows_claim_about()(historical, bindings)
+    assert not heard_secondhand()(historical, {Slot.ACTOR: listener})
+    assert knows_claim_about()(head, bindings)
+    assert heard_secondhand()(head, {Slot.ACTOR: listener})
+
+    historical_context = entity_context(
+        live_connection,
+        [listener],
+        anchor_chunk_id=historical_anchor,
+        contagion_settings=settings,
+    )
+    head_context = entity_context(
+        live_connection,
+        [listener],
+        anchor_chunk_id=head_anchor,
+        contagion_settings=settings,
+    )
+    historical_claim_ids = {
+        row["claim_id"] for row in historical_context["entities"][0]["knowledge"]
+    }
+    head_claim_ids = {
+        row["claim_id"] for row in head_context["entities"][0]["knowledge"]
+    }
+    assert claim_id not in historical_claim_ids
+    assert claim_id in head_claim_ids
+
+    entity_ids = (source, listener, about)
+    recent_event_ids = tuple(
+        event.event_id for event in head.recent_events if event.event_id is not None
+    )
+    anchored_head = load_epistemics_hydration(
+        live_connection,
+        entity_ids=entity_ids,
+        recent_event_ids=recent_event_ids,
+        anchor_chunk_id=head_anchor,
+    )
+    legacy_unbounded_head = load_epistemics_hydration(
+        live_connection,
+        entity_ids=entity_ids,
+        recent_event_ids=recent_event_ids,
+        anchor_chunk_id=None,
+    )
+    assert anchored_head == legacy_unbounded_head
 
 
 def test_template_gate_flips_on_drain_with_production_explain_parity(

@@ -351,23 +351,69 @@ def promote_claim_scope(cur: Any, *, claim_id: int, new_scope: str) -> None:
 
 
 def load_epistemics_hydration(
-    session: Any, *, entity_ids: Iterable[int]
+    session: Any,
+    *,
+    entity_ids: Iterable[int],
+    recent_event_ids: Iterable[int],
+    anchor_chunk_id: Optional[int],
 ) -> EpistemicsHydration:
-    """Hydrate claim possession relevant to an explicit entity universe.
+    """Hydrate anchor-visible claim possession for an explicit entity universe.
 
-    ``knows_recent_event`` still reads the event-id maps this returns. Claim
-    predicates additionally need time-unbounded possession and every entity
-    involved in the minting event. A non-common claim is relevant when either
-    an active knower or an about-entity intersects ``entity_ids``; common
-    claims are relevant only through their about-entities. Claim subjects and
-    awareness are loaded on separate axes, so neither can multiply the other.
-    No predicate performs follow-up SQL.
+    ``knows_recent_event`` receives scope existence for every recent event,
+    independent of whether its participants remain active. Claim predicates
+    additionally need time-unbounded possession and every entity involved in
+    the minting event. A non-common claim is relevant when either an active
+    knower or an about-entity intersects ``entity_ids``; common claims are
+    relevant only through their about-entities. Claim subjects and awareness
+    are loaded on separate axes, so neither can multiply the other. No
+    predicate performs follow-up SQL. ``None`` retains the unbounded
+    current-table view for direct callers without a historical anchor.
     """
 
     universe = tuple(sorted({int(entity_id) for entity_id in entity_ids}))
-    if not universe:
+    recent_events = tuple(sorted({int(event_id) for event_id in recent_event_ids}))
+    if not universe and not recent_events:
         return EpistemicsHydration(
             claimed_event_scopes={},
+            awareness_by_entity={},
+            claim_knowledge_by_entity={},
+            common_claim_knowledge=(),
+            possessed_claim_knowledge_by_entity={},
+        )
+
+    scopes: dict[int, str] = {}
+    if recent_events:
+        scope_query = text(
+            """
+            /* orrery:epistemics_hydration:recent_event_scopes */
+            SELECT c.world_event_id,
+                   c.scope
+            FROM claims c
+            JOIN world_events we ON we.id = c.world_event_id
+            WHERE c.world_event_id = ANY(:recent_event_ids)
+              AND (:anchor_chunk_id IS NULL
+                   OR we.tick_chunk_id <= :anchor_chunk_id)
+            ORDER BY c.world_event_id
+            """
+        )
+        for row in session.execute(
+            scope_query,
+            {
+                "recent_event_ids": list(recent_events),
+                "anchor_chunk_id": anchor_chunk_id,
+            },
+        ).mappings():
+            event_id = int(row["world_event_id"])
+            scope = str(row["scope"])
+            if scope not in CLAIM_SCOPES:
+                raise ValueError(
+                    f"Claim on event {event_id} has unknown scope {scope!r}"
+                )
+            scopes[event_id] = scope
+
+    if not universe:
+        return EpistemicsHydration(
+            claimed_event_scopes=scopes,
             awareness_by_entity={},
             claim_knowledge_by_entity={},
             common_claim_knowledge=(),
@@ -377,23 +423,44 @@ def load_epistemics_hydration(
     claims_query = text(
         """
         /* orrery:epistemics_hydration:claims */
-        WITH relevant_claim_ids AS (
+        WITH anchor AS (
+            SELECT created_at
+            FROM narrative_chunks
+            WHERE id = :anchor_chunk_id
+        ),
+        relevant_claim_ids AS (
             SELECT c.id AS claim_id
             FROM claims c
             JOIN world_events we ON we.id = c.world_event_id
-            WHERE we.actor_entity_id = ANY(:entity_ids)
-               OR we.target_entity_id = ANY(:entity_ids)
+            WHERE (:anchor_chunk_id IS NULL
+                   OR we.tick_chunk_id <= :anchor_chunk_id)
+              AND (we.actor_entity_id = ANY(:entity_ids)
+                   OR we.target_entity_id = ANY(:entity_ids))
             UNION
             SELECT c.id AS claim_id
             FROM claims c
             JOIN world_event_entities wee ON wee.event_id = c.world_event_id
-            WHERE wee.entity_id = ANY(:entity_ids)
+            JOIN world_events we ON we.id = c.world_event_id
+            WHERE (:anchor_chunk_id IS NULL
+                   OR we.tick_chunk_id <= :anchor_chunk_id)
+              AND wee.entity_id = ANY(:entity_ids)
             UNION
             SELECT ca.claim_id
             FROM claim_awareness ca
             JOIN claims c ON c.id = ca.claim_id
+            JOIN world_events we ON we.id = c.world_event_id
             WHERE c.scope <> 'common'
               AND ca.knower_entity_id = ANY(:entity_ids)
+              AND (:anchor_chunk_id IS NULL
+                   OR we.tick_chunk_id <= :anchor_chunk_id)
+              -- Mirror replay.py's claim-awareness readmission visibility.
+              AND (
+                  :anchor_chunk_id IS NULL
+                  OR (ca.source_chunk_id IS NOT NULL
+                      AND ca.source_chunk_id <= :anchor_chunk_id)
+                  OR (ca.source_chunk_id IS NULL
+                      AND ca.created_at <= (SELECT created_at FROM anchor))
+              )
         ),
         claim_entities AS (
             SELECT relevant.claim_id, subjects.entity_id
@@ -434,15 +501,19 @@ def load_epistemics_hydration(
         ORDER BY c.id
         """
     )
-    scopes: dict[int, str] = {}
     claims: dict[int, dict[str, Any]] = {}
-    for row in session.execute(claims_query, {"entity_ids": list(universe)}).mappings():
+    for row in session.execute(
+        claims_query,
+        {
+            "entity_ids": list(universe),
+            "anchor_chunk_id": anchor_chunk_id,
+        },
+    ).mappings():
         claim_id = int(row["claim_id"])
         event_id = int(row["world_event_id"])
         scope = str(row["scope"])
         if scope not in CLAIM_SCOPES:
             raise ValueError(f"Claim on event {event_id} has unknown scope {scope!r}")
-        scopes[event_id] = scope
         claims[claim_id] = {
             "world_event_id": event_id,
             "scope": scope,
@@ -457,6 +528,11 @@ def load_epistemics_hydration(
         awareness_query = text(
             """
             /* orrery:epistemics_hydration:awareness */
+            WITH anchor AS (
+                SELECT created_at
+                FROM narrative_chunks
+                WHERE id = :anchor_chunk_id
+            )
             SELECT ca.claim_id,
                    ca.knower_entity_id,
                    ca.source_tier,
@@ -465,6 +541,14 @@ def load_epistemics_hydration(
             FROM claim_awareness ca
             WHERE ca.claim_id = ANY(:claim_ids)
               AND ca.knower_entity_id = ANY(:entity_ids)
+              -- Mirror replay.py's claim-awareness readmission visibility.
+              AND (
+                  :anchor_chunk_id IS NULL
+                  OR (ca.source_chunk_id IS NOT NULL
+                      AND ca.source_chunk_id <= :anchor_chunk_id)
+                  OR (ca.source_chunk_id IS NULL
+                      AND ca.created_at <= (SELECT created_at FROM anchor))
+              )
             ORDER BY ca.claim_id, ca.knower_entity_id
             """
         )
@@ -473,6 +557,7 @@ def load_epistemics_hydration(
             {
                 "claim_ids": sorted(claims),
                 "entity_ids": list(universe),
+                "anchor_chunk_id": anchor_chunk_id,
             },
         ).mappings()
     else:

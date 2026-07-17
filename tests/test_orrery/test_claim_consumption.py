@@ -8,6 +8,7 @@ from nexus.agents.orrery.substrate import (
     WorldState,
     heard_secondhand,
     knows_claim_about,
+    knows_recent_event,
 )
 from tests.test_orrery.test_resolver import FakeSession
 
@@ -109,6 +110,30 @@ def test_hydration_projects_event_subjects_and_awareness_without_predicate_sql()
             {"id": FACTION},
             {"id": UNRELATED},
         ],
+        event_rows=[
+            {
+                "id": 140,
+                "event_type": "threat_issued",
+                "tick_chunk_id": 100,
+                "actor_entity_id": ACTOR,
+                "target_entity_id": TARGET,
+                "location_id": None,
+                "changed_fields": [],
+                "world_layer": "primary",
+                "payload": {},
+            },
+            {
+                "id": 141,
+                "event_type": "threat_issued",
+                "tick_chunk_id": 100,
+                "actor_entity_id": ACTOR,
+                "target_entity_id": FACTION,
+                "location_id": None,
+                "changed_fields": [],
+                "world_layer": "primary",
+                "payload": {},
+            },
+        ],
         epistemics_rows=[
             {
                 "claim_id": 40,
@@ -151,6 +176,40 @@ def test_hydration_projects_event_subjects_and_awareness_without_predicate_sql()
     ] == [40, 41]
 
 
+def test_recent_claim_scope_is_independent_of_entity_claim_universe() -> None:
+    """A recent claim remains gated when its endpoints are outside the universe."""
+
+    event_id = 142
+    state = hydrate_world_state(
+        FakeSession(
+            active_entity_rows=[{"id": ACTOR}],
+            event_rows=[
+                {
+                    "id": event_id,
+                    "event_type": "threat_issued",
+                    "tick_chunk_id": 100,
+                    "actor_entity_id": 50,
+                    "target_entity_id": 51,
+                    "location_id": None,
+                    "changed_fields": [],
+                    "world_layer": "primary",
+                    "payload": {},
+                }
+            ],
+            epistemics_scope_rows=[{"world_event_id": event_id, "scope": "bounded"}],
+        ),
+        anchor_chunk_id=100,
+        window_chunks=1,
+        epistemics_settings={"enabled": True},
+    )
+
+    assert state.claimed_event_scopes == {event_id: "bounded"}
+    assert state.claim_knowledge_by_entity == {}
+    assert not knows_recent_event("threat_issued", within_ticks=1)(
+        state, {Slot.ACTOR: ACTOR}
+    )
+
+
 def test_empty_entity_universe_skips_all_claim_queries() -> None:
     """An empty hydration universe returns before touching the database."""
 
@@ -162,7 +221,12 @@ def test_empty_entity_universe_skips_all_claim_queries() -> None:
             raise AssertionError("empty Epistemics hydration must not issue SQL")
 
     session = QueryCountingSession()
-    hydration = load_epistemics_hydration(session, entity_ids=())
+    hydration = load_epistemics_hydration(
+        session,
+        entity_ids=(),
+        recent_event_ids=(),
+        anchor_chunk_id=100,
+    )
 
     assert session.calls == 0
     assert hydration.claimed_event_scopes == {}

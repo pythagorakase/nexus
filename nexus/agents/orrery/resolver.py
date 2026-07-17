@@ -565,7 +565,12 @@ def hydrate_world_state(
     epistemics = None
     if epistemics_policy.enabled:
         epistemics = load_epistemics_hydration(
-            session, entity_ids=_load_active_entity_ids(session)
+            session,
+            entity_ids=_load_active_entity_ids(session),
+            recent_event_ids=(
+                event.event_id for event in recent_events if event.event_id is not None
+            ),
+            anchor_chunk_id=anchor_chunk_id,
         )
     world_time = world_time_override or _load_world_time(
         session, anchor_chunk_id=anchor_chunk_id

@@ -72,6 +72,7 @@ class FakeSession:
         faction_rows=None,
         event_rows=None,
         active_entity_rows=None,
+        epistemics_scope_rows=None,
         epistemics_rows=None,
         epistemics_awareness_rows=None,
         chunk_ref_actor_rows=None,
@@ -110,6 +111,11 @@ class FakeSession:
             [{"id": 1}] if active_entity_rows is None else active_entity_rows
         )
         self.epistemics_rows = epistemics_rows or []
+        self.epistemics_scope_rows = (
+            self.epistemics_rows
+            if epistemics_scope_rows is None
+            else epistemics_scope_rows
+        )
         self.epistemics_awareness_rows = epistemics_awareness_rows or []
         self.chunk_ref_actor_rows = chunk_ref_actor_rows or [{"entity_id": 1}]
         self.event_actor_rows = event_actor_rows or []
@@ -187,15 +193,28 @@ class FakeSession:
             assert "is_active = true" in sql
             assert "ORDER BY id" in sql
             return FakeResult(self.active_entity_rows)
+        if "/* orrery:epistemics_hydration:recent_event_scopes */" in sql:
+            assert "c.world_event_id = ANY(:recent_event_ids)" in sql
+            assert "we.tick_chunk_id <= :anchor_chunk_id" in sql
+            assert "recent_event_ids" in _params
+            assert "anchor_chunk_id" in _params
+            return FakeResult(self.epistemics_scope_rows)
         if "/* orrery:epistemics_hydration:claims */" in sql:
             assert "world_event_entities" in sql
             assert "ca.knower_entity_id" in sql
             assert "array_agg(entity_id ORDER BY entity_id)" in sql
             assert "LEFT JOIN claim_awareness" not in sql
+            assert "we.tick_chunk_id <= :anchor_chunk_id" in sql
+            assert "ca.source_chunk_id <= :anchor_chunk_id" in sql
+            assert "ca.created_at <= (SELECT created_at FROM anchor)" in sql
+            assert "anchor_chunk_id" in _params
             return FakeResult(self.epistemics_rows)
         if "/* orrery:epistemics_hydration:awareness */" in sql:
             assert "ca.claim_id = ANY(:claim_ids)" in sql
             assert "ca.knower_entity_id = ANY(:entity_ids)" in sql
+            assert "ca.source_chunk_id <= :anchor_chunk_id" in sql
+            assert "ca.created_at <= (SELECT created_at FROM anchor)" in sql
+            assert "anchor_chunk_id" in _params
             return FakeResult(self.epistemics_awareness_rows)
         if "/* orrery:actor_bindings_chunk_refs */" in sql:
             assert "reference_type IS DISTINCT FROM 'present'" in sql
