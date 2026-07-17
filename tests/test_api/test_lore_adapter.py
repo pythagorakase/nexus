@@ -85,8 +85,13 @@ def test_response_to_incubator_serializes_current_reference_schema() -> None:
     assert reparsed.characters[1].new_character.name == "Jonas Vale"
 
 
-def test_response_to_incubator_rejects_missing_generation_model() -> None:
-    """Generated responses may not silently reread or omit model provenance."""
+def test_response_to_incubator_threads_generation_model_verbatim() -> None:
+    """The adapter threads provenance without validating it.
+
+    Validation lives only at the boundaries (the LOGON stamp and
+    write_to_incubator); the adapter passes the stamp through, or None for
+    responses that never had one — the DB boundary rejects those downstream.
+    """
 
     response = StorytellerResponseExtended(
         narrative="The unmarked door opens.",
@@ -107,10 +112,19 @@ def test_response_to_incubator_rejects_missing_generation_model() -> None:
         },
     )
 
-    with pytest.raises(ValueError, match="resolved generation model"):
-        response_to_incubator(
-            response=response,
-            parent_chunk_id=1,
-            user_text="Continue.",
-            session_id="session-missing-model",
-        )
+    unstamped = response_to_incubator(
+        response=response,
+        parent_chunk_id=1,
+        user_text="Continue.",
+        session_id="session-missing-model",
+    )
+    assert unstamped["generation_model"] is None
+
+    response.generation_model = "gpt-5.6-terra"
+    stamped = response_to_incubator(
+        response=response,
+        parent_chunk_id=1,
+        user_text="Continue.",
+        session_id="session-stamped-model",
+    )
+    assert stamped["generation_model"] == "gpt-5.6-terra"
