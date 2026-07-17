@@ -1,6 +1,6 @@
 """Live tests for the replay consumer (nexus/agents/orrery/replay.py).
 
-Real writers, real triggers, real ledgers against save_02 inside
+Real writers, real triggers, real ledgers against save_05 inside
 always-rolled-back transactions — the #428 test pattern. Each test
 fabricates post-checkpoint history through the same code paths production
 uses, then proves the replayer inverts it:
@@ -53,7 +53,7 @@ from nexus.api.commit_handler_sync import apply_state_updates_sync
 
 pytestmark = pytest.mark.requires_postgres
 
-WRITE_SLOT = 2
+WRITE_SLOT = 5
 
 
 def _connect() -> Any:
@@ -166,7 +166,7 @@ PROJECT_POLICY = ProjectPolicy(
 
 
 def _apply_migration_074(cur: Any) -> None:
-    """Create the pilot table only inside this rolled-back save_02 transaction."""
+    """Create the pilot table only inside this rolled-back save_05 transaction."""
 
     cur.execute(Path("migrations/074_plan_relocation_projects.sql").read_text())
 
@@ -364,7 +364,7 @@ def test_relationship_unwind_restores_updates_deletes_and_drops_inserts() -> Non
         with conn.cursor() as cur:
             # Reconstruct at a fabricated pre-chunk, not the historical head:
             # anchoring at head would unwind any unattributed version rows
-            # accumulated on slot 2 since May, making the assertions hostage
+            # accumulated on native slot 5, making the assertions hostage
             # to unrelated history.
             head = _fabricate_chunk(cur, None)
             cur.execute(
@@ -547,7 +547,7 @@ def test_reconstruction_refuses_pre_instrumentation_chunks() -> None:
                 "WHERE chunk_id IS NOT NULL"
             )
             earliest = cur.fetchone()[0]
-            assert earliest is not None, "save_02 must carry a genesis checkpoint"
+            assert earliest is not None, "save_05 must carry a genesis checkpoint"
             cur.execute(
                 "SELECT max(id) FROM narrative_chunks WHERE id < %s", (earliest,)
             )

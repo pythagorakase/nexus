@@ -954,24 +954,8 @@ def test_cli_faction_apply_rejects_manifest_slot_mismatch(tmp_path) -> None:
     assert "does not match --slot" in result["error"]
 
 
-@pytest.mark.requires_postgres
-def test_cli_faction_manifest_returns_live_slot2_payload() -> None:
-    """The faction manifest CLI should build from the real slot 2 audit."""
-
-    try:
-        result = cli.run_faction_manifest(Namespace(slot=2, output=None))
-    except psycopg2.Error as exc:
-        pytest.skip(f"{TEST_DBNAME} PostgreSQL test database unavailable: {exc}")
-    finally:
-        close_pool(TEST_DBNAME)
-
-    manifest = result["faction_manifest"]
-
-    assert result["success"] is True
-    assert result["slot"] == 2
-    assert manifest["dry_run"] is True
-    assert manifest["counters"]["operation_items"] >= 1
-    assert manifest["counters"]["operation_items"] == len(manifest["operations"])
+# Slot-2 retrofit live coverage was retired by owner order on 2026-07-17;
+# the tooling remains available for any future legacy import.
 
 
 @pytest.mark.requires_postgres
@@ -1077,37 +1061,6 @@ def test_live_faction_apply_execute_inserts_and_rolls_back() -> None:
         if conn is not None:
             conn.rollback()
             conn.close()
-
-
-@pytest.mark.requires_postgres
-def test_cli_faction_apply_dry_run_returns_live_slot2_payload() -> None:
-    """The faction apply CLI should validate ready writes without mutating."""
-
-    try:
-        result = cli.run_faction_apply(
-            Namespace(slot=2, execute=False, source_kind="system")
-        )
-    except psycopg2.Error as exc:
-        pytest.skip(f"{TEST_DBNAME} PostgreSQL test database unavailable: {exc}")
-    except ValueError as exc:
-        message = str(exc)
-        if (
-            "Unknown or deprecated faction tag" in message
-            or "No Orrery tag categories registered" in message
-            or "not registered for factions" in message
-        ):
-            pytest.skip(f"{TEST_DBNAME} faction vocabulary not seeded: {exc}")
-        raise
-    finally:
-        close_pool(TEST_DBNAME)
-
-    apply_result = result["faction_apply"]
-
-    assert result["success"] is True
-    assert result["slot"] == 2
-    assert apply_result["dry_run"] is True
-    assert apply_result["counters"]["operation_items"] >= 1
-    assert apply_result["counters"]["ready_entity_tag_operations"] >= 0
 
 
 def test_cli_prints_faction_manifest_summary(capsys) -> None:

@@ -19,6 +19,7 @@ every explain, so the whole explain test suite doubles as a drift tripwire.
 from __future__ import annotations
 
 import json
+from datetime import datetime
 
 import pytest
 
@@ -100,7 +101,8 @@ from nexus.agents.orrery.substrate import (
     weather_is,
 )
 from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
-from datetime import datetime
+
+LIVE_SLOT = 5
 
 ACTOR, TARGET, FACTION_ID = 1, 2, 9
 PLACE_ENTITY = 501
@@ -403,7 +405,7 @@ def test_slot_backed_explain_carries_evidence_end_to_end() -> None:
     from nexus.config import load_settings_as_dict
 
     orrery = load_settings_as_dict()["orrery"]
-    engine = create_engine(get_slot_db_url(slot=2))
+    engine = create_engine(get_slot_db_url(slot=LIVE_SLOT))
     try:
         with Session(engine) as session:
             report = explain_dry_run(
@@ -417,7 +419,7 @@ def test_slot_backed_explain_carries_evidence_end_to_end() -> None:
         engine.dispose()
 
     payload = json.loads(json.dumps(report.to_dict()))
-    assert payload["actors"], "save_02 is expected to bind off-screen actors"
+    assert payload["actors"], "save_05 is expected to bind off-screen actors"
 
     def _leaves(node: dict):
         if "children" in node:

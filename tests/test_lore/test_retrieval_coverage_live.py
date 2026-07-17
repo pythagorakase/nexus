@@ -1,4 +1,4 @@
-"""Rolled-back save_02 proof for retrieval coverage instrumentation."""
+"""Rolled-back save_05 proof for retrieval coverage instrumentation."""
 
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ from nexus.memory import ContextMemoryManager
 from scripts.report_retrieval_coverage import format_retrieval_coverage_report
 
 pytestmark = pytest.mark.requires_postgres
+LIVE_SLOT = 5
 
 
 class LiveReferenceMemnon:
@@ -37,7 +38,7 @@ class LiveReferenceMemnon:
 
 
 def test_handle_user_input_writes_exact_coverage_and_empty_detection() -> None:
-    engine = create_engine(get_slot_db_url(slot=2))
+    engine = create_engine(get_slot_db_url(slot=LIVE_SLOT))
     migration_path = (
         Path(__file__).resolve().parents[2]
         / "migrations"
@@ -51,31 +52,43 @@ def test_handle_user_input_writes_exact_coverage_and_empty_detection() -> None:
             covered = connection.execute(
                 text(
                     """
-                    SELECT c.id, c.name, ccr.chunk_id
-                    FROM characters c
-                    JOIN chunk_character_references ccr
-                      ON ccr.character_id = c.id
-                    WHERE lower(c.name) = 'alex'
-                    ORDER BY ccr.chunk_id DESC
-                    LIMIT 1
+                    WITH entity_row AS (
+                        INSERT INTO entities (kind, is_active)
+                        VALUES ('character', true)
+                        RETURNING id
+                    ), character_row AS (
+                        INSERT INTO characters (name, entity_id)
+                        SELECT 'Coverage Hit Probe', id FROM entity_row
+                        RETURNING id, name
+                    ), reference_row AS (
+                        INSERT INTO chunk_character_references (
+                            chunk_id, character_id, reference
+                        )
+                        SELECT max(nc.id), cr.id, 'present'
+                        FROM narrative_chunks nc
+                        CROSS JOIN character_row cr
+                        GROUP BY cr.id
+                        RETURNING chunk_id
+                    )
+                    SELECT cr.id, cr.name, rr.chunk_id
+                    FROM character_row cr
+                    CROSS JOIN reference_row rr
                     """
                 )
             ).one()
             gap = connection.execute(
                 text(
                     """
-                    SELECT c.id, c.name
-                    FROM characters c
-                    WHERE lower(c.name) = 'wren'
-                      AND NOT EXISTS (
-                          SELECT 1
-                          FROM chunk_character_references ccr
-                          WHERE ccr.character_id = c.id
-                            AND ccr.chunk_id = :chunk_id
-                      )
+                    WITH entity_row AS (
+                        INSERT INTO entities (kind, is_active)
+                        VALUES ('character', true)
+                        RETURNING id
+                    )
+                    INSERT INTO characters (name, entity_id)
+                    SELECT 'Coverage Gap Probe', id FROM entity_row
+                    RETURNING id, name
                     """
-                ),
-                {"chunk_id": covered.chunk_id},
+                )
             ).one()
 
             manager = ContextMemoryManager(
@@ -101,8 +114,9 @@ def test_handle_user_input_writes_exact_coverage_and_empty_detection() -> None:
                 turn_id="coverage-live-empty",
             )
 
-            rows = (
-                connection.execute(
+            rows = [
+                dict(row)
+                for row in connection.execute(
                     text(
                         """
                     SELECT turn_id, user_input, detected_entities,
@@ -119,7 +133,7 @@ def test_handle_user_input_writes_exact_coverage_and_empty_detection() -> None:
                 )
                 .mappings()
                 .all()
-            )
+            ]
             assert len(rows) == 2
 
             hit_gap_row = rows[0]
@@ -160,7 +174,7 @@ def test_handle_user_input_writes_exact_coverage_and_empty_detection() -> None:
             assert empty_row["gap_entities"] == []
 
             print()
-            print(format_retrieval_coverage_report(2, rows))
+            print(format_retrieval_coverage_report(LIVE_SLOT, rows))
         finally:
             transaction.rollback()
     engine.dispose()
