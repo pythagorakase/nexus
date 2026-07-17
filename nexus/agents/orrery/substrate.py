@@ -11,6 +11,7 @@ import math
 import random
 from typing import Any, Callable, Dict, Iterable, Literal, Mapping, Optional, Tuple
 
+from nexus.agents.orrery.communication import CommunicationGraph
 from nexus.agents.orrery.needs import normalize_need_type
 from nexus.agents.orrery.status_family import (
     STATUS_LEVEL_RANKS,
@@ -351,6 +352,7 @@ class WorldState:
     # current active-character relationship graph, treated as undirected.
     # Quality- or direction-sensitive routing belongs in separate projections.
     orbit_distance: Mapping[Tuple[int, int], int] = field(default_factory=dict)
+    communication_graph: CommunicationGraph = field(default_factory=CommunicationGraph)
     need_debt_scores: Mapping[Tuple[int, str], float] = field(default_factory=dict)
     travel_states: Mapping[int, TravelState] = field(default_factory=dict)
     project_states: Mapping[int, ProjectState] = field(default_factory=dict)

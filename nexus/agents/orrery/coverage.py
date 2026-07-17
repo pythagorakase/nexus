@@ -357,6 +357,7 @@ def analyze_coverage(
     project_settings: Optional[Any] = None,
     epistemics_settings: Optional[Any] = None,
     fanout_settings: Optional[Any] = None,
+    contagion_settings: Optional[Any] = None,
 ) -> dict[str, Any]:
     """Aggregate explained resolution coverage across historical anchors.
 
@@ -401,6 +402,7 @@ def analyze_coverage(
             project_settings=project_settings,
             epistemics_settings=epistemics_settings,
             fanout_settings=fanout_settings,
+            contagion_settings=contagion_settings,
         )
         anchors.append(_tally_report(report, tallies, gap_counts))
         entity_names.update(report.entity_names)

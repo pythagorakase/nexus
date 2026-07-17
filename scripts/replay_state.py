@@ -18,17 +18,24 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 import sys
 from dataclasses import asdict
 from typing import Any
 
 import psycopg2
 
-from nexus.agents.orrery.replay import (
+# Resolve imports against this checkout, not the shared Poetry environment's
+# editable-install target. Worktrees can carry a settings model and nexus.toml
+# change together, so importing another checkout makes the replay gate lie.
+REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT))
+
+from nexus.agents.orrery.replay import (  # noqa: E402
     reconstruct_state_at_sync,
     verify_checkpoints_sync,
 )
-from nexus.api.slot_utils import slot_dbname
+from nexus.api.slot_utils import slot_dbname  # noqa: E402
 
 
 def _connect(slot: int) -> Any:
