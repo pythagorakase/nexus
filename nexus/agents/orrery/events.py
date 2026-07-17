@@ -2298,15 +2298,14 @@ def _require_open_project(
 def _validate_project_faction_binding(
     project: Mapping[str, Any], data: Mapping[str, Any]
 ) -> None:
-    """Reject any transition payload that tries to rebind project faction."""
+    """Reject any transition payload that tries to rebind project faction.
+
+    An absent key is always legal: the stored entry-time binding governs, and
+    actor-only continuation templates legitimately carry no faction slot.
+    """
 
     stored = project["target_faction_entity_id"]
     if "target_faction_entity_id" not in data:
-        if stored is not None:
-            raise ValueError(
-                f"Project {project['id']} is faction-bound; every transition "
-                "must carry its stored faction binding"
-            )
         return
     requested = data["target_faction_entity_id"]
     if requested is not None and not isinstance(requested, int):
