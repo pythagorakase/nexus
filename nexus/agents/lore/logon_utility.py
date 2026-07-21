@@ -15,17 +15,19 @@ import psycopg2
 # Add scripts directory to path for API imports
 sys.path.append(str(Path(__file__).parent.parent.parent.parent))
 
-from scripts.api_openai import OpenAIProvider
-from scripts.api_anthropic import AnthropicProvider
-from nexus.agents.logon.apex_schema import (
+from scripts.api_openai import OpenAIProvider  # noqa: E402
+from scripts.api_anthropic import AnthropicProvider  # noqa: E402
+from nexus.agents.logon.apex_schema import (  # noqa: E402
     StoryTurnResponse,
     StorytellerResponseBootstrap,
     StorytellerResponseExtended,
 )
-from nexus.agents.orrery.tag_library import format_tag_library_for_prompt
-from nexus.config.loader import get_provider_for_model, resolve_model_ref
-from nexus.memory.context_state import is_retrograde_summary
-from nexus.memory.retrieval_coverage import coerce_chunk_id
+from nexus.agents.orrery.tag_library import (  # noqa: E402
+    format_tag_library_for_prompt,
+)
+from nexus.config.loader import get_provider_for_model, resolve_model_ref  # noqa: E402
+from nexus.memory.context_state import is_retrograde_summary  # noqa: E402
+from nexus.memory.retrieval_coverage import coerce_chunk_id  # noqa: E402
 
 logger = logging.getLogger("nexus.lore.logon")
 
@@ -139,7 +141,10 @@ class LogonUtility:
             logger.warning(
                 f"Core prompt not found at {core_prompt_path}, using minimal fallback"
             )
-            core_prompt = "You are a narrative intelligence system generating interactive fiction."
+            core_prompt = (
+                "You are a narrative intelligence system generating interactive "
+                "fiction."
+            )
 
         system_prompt = core_prompt
         if is_bootstrap:
@@ -179,19 +184,22 @@ class LogonUtility:
                     setting_content = self._format_setting_context(result[0])
                     if not setting_content:
                         logger.warning(
-                            "Setting data found in global_variables but no promptable fields were present"
+                            "Setting data found in global_variables but no "
+                            "promptable fields were present"
                         )
                         return system_prompt
 
                     # Combine core prompt with setting
                     combined_prompt = f"{system_prompt}\n\n{setting_content}"
                     logger.info(
-                        f"Combined prompt with setting context ({len(setting_content)} chars)"
+                        "Combined prompt with setting context (%s chars)",
+                        len(setting_content),
                     )
                     return combined_prompt
                 else:
                     logger.warning(
-                        "No setting data found in global_variables, using core prompt only"
+                        "No setting data found in global_variables, using core "
+                        "prompt only"
                     )
                     return system_prompt
 
@@ -711,6 +719,29 @@ class LogonUtility:
                     f"{passage.get('text', '')}"
                 )
 
+        world_knowledge = context.get("world_knowledge") or []
+        if world_knowledge:
+            sections.append("\n=== WORLD KNOWLEDGE ===")
+            for item in world_knowledge:
+                if not isinstance(item, dict):
+                    continue
+                acquisition = item.get("acquisition") or {}
+                acquisition_kind = acquisition.get("kind") or "granted"
+                if acquisition_kind == "told" and acquisition.get("source_name"):
+                    acquisition_kind = f"told by {acquisition['source_name']}"
+                qualifiers = [str(acquisition_kind)]
+                if item.get("freshly_revealed"):
+                    qualifiers.append("freshly revealed")
+                character_name = item.get("character_name") or (
+                    f"entity {item.get('character_entity_id')}"
+                )
+                sections.append(
+                    f"- {character_name} [{'; '.join(qualifiers)}]: "
+                    f"{item.get('summary', '')}"
+                )
+            if context.get("world_knowledge_truncated"):
+                sections.append("(older knowledge omitted)")
+
         # Render caps shared with the commit-time prompt-exposure log
         # (orrery_prompt_exposures): both sides must slice identically or the
         # recorded "shown set" lies. Model defaults keep a single source when
@@ -822,8 +853,9 @@ class LogonUtility:
         if note:
             sections.append("\n=== AUTHOR'S NOTE ===")
             sections.append(
-                "The player is also leaving a soft, out-of-character suggestion for this "
-                "generation — treat it as authorial intent, not a hard constraint. It may "
+                "The player is also leaving a soft, out-of-character suggestion "
+                "for this generation — treat it as authorial intent, not a hard "
+                "constraint. It may "
                 "be a tonal nudge, a continuity correction, or an outcome preference:"
             )
             sections.append(note)

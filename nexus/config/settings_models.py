@@ -1423,6 +1423,16 @@ class OrreryRevealSettings(BaseModel):
     enabled: bool = False
 
 
+class OrreryKnowledgeSettings(BaseModel):
+    """Storyteller knowledge-context policy for ``[orrery.knowledge]``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    max_entries: int = Field(default=12, ge=1)
+    recent_reveal_window_chunks: int = Field(default=5, ge=1)
+
+
 class OrreryReconstructionSettings(BaseModel):
     """Reconstruction-sufficiency knobs (issue #426)."""
 
@@ -2059,6 +2069,7 @@ class OrrerySettings(BaseModel):
     projects: OrreryProjectSettings = Field(default_factory=OrreryProjectSettings)
     drift: OrreryDriftSettings = Field(default_factory=OrreryDriftSettings)
     reveal: OrreryRevealSettings = Field(default_factory=OrreryRevealSettings)
+    knowledge: OrreryKnowledgeSettings = Field(default_factory=OrreryKnowledgeSettings)
     epistemics: OrreryEpistemicsSettings = Field(
         default_factory=OrreryEpistemicsSettings
     )

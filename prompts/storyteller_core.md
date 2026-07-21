@@ -141,6 +141,15 @@ Each turn provides:
 
 Each input type arrives in clearly labeled sections.
 
+### World Knowledge
+
+`WORLD KNOWLEDGE` contains only accounts actually possessed by characters in
+the current scene. Entries are each character's sincere knowledge, not
+omniscient statements of fact. They may contradict one another — play the
+contradiction, never adjudicate which is true. Freshly revealed entries are
+scene-relevant beats worth considering now, without requiring immediate
+exposition. If older knowledge was omitted, treat the digest as incomplete.
+
 ---
 
 ## Output: Narrative and State
