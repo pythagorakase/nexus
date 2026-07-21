@@ -568,6 +568,11 @@ def _render_state_delta(delta: Mapping[str, Any]) -> str:
                     f"adds outbound {tags} pair tag to target and upserts the "
                     "actor→target `ally` relationship"
                 )
+            elif "project.complete" in delta and "contact:intimate" in value:
+                parts.append(
+                    f"adds outbound {tags} pair tag to target and upserts the "
+                    "actor→target `romantic` relationship"
+                )
             else:
                 parts.append(f"adds outbound {tags} pair tag to target")
             continue

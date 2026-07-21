@@ -628,6 +628,14 @@ def test_catalog_endpoint_over_http(client: TestClient) -> None:
     response = client.get("/api/dev/orrery/catalog")
     assert response.status_code == 200
     payload = response.json()
+    assert set(payload["event_map"]) >= {
+        "pursue_romance_started",
+        "pursue_romance_progressed",
+        "pursue_romance_milestone",
+        "pursue_romance_stalled",
+        "pursue_romance_abandoned",
+        "pursue_romance_completed",
+    }
     assert {band["band"] for band in payload["drive_bands"]} == {
         "crisis_constraint",
         "embodied_maintenance",

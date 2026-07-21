@@ -72,6 +72,17 @@ def test_catalog_renders_build_venture_completion_vocabulary() -> None:
     assert "- `proprietor`" in content
 
 
+def test_catalog_renders_pursue_romance_completion_vocabulary() -> None:
+    """Courtship gates and its relationship seal stay discoverable."""
+
+    content = render_catalog(BUILTIN_TEMPLATES)
+    assert "## START_PURSUE_ROMANCE — priority 17" in content
+    assert "## ADVANCE_PURSUE_ROMANCE — priority 47" in content
+    assert "actor `pursue_romance` project passes `completion` due-state" in content
+    assert "actor→target `romantic` relationship" in content
+    assert "- `contact:intimate`" in content
+
+
 def test_catalog_renders_compound_structure() -> None:
     """AND / OR / NOT compositions appear as labeled nested bullets."""
 

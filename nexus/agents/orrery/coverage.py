@@ -201,6 +201,8 @@ def _tally_report(
                     "advance_recruit_ally",
                     "start_build_venture",
                     "advance_build_venture",
+                    "start_pursue_romance",
+                    "advance_pursue_romance",
                 }:
                     project_gates.append(
                         {
