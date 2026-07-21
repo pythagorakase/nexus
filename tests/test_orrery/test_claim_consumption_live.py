@@ -15,6 +15,7 @@ from nexus.agents.orrery.epistemics import (
     ClaimParticipant,
     load_epistemics_hydration,
     mechanical_claim_summary,
+    mint_account_variant_sync,
     mint_claim_for_event,
 )
 from nexus.agents.orrery.propagation import drain_claim_propagation_sync
@@ -679,3 +680,51 @@ def test_entity_audit_renders_two_hop_provenance_and_ledger_depth(
     assert [item["claim_id"] for item in entity["knowledge"]] == sorted(
         item["claim_id"] for item in entity["knowledge"]
     )
+
+
+def test_entity_audit_joins_distorted_delivery_to_real_depth(
+    live_connection: Any,
+) -> None:
+    """A distorted recipient retains propagation depth in entity context."""
+
+    settings = _settings()
+    raw_connection = live_connection.connection.driver_connection
+    with raw_connection.cursor(cursor_factory=RealDictCursor) as cur:
+        entities, _ = _chain(cur, 2)
+        source, recipient = entities
+        about, _ = _insert_character(cur, "audit-distortion-about")
+        birth_chunk, birth_world_time = _insert_chunk(cur)
+        canonical_claim_id = _insert_claim_about(
+            cur,
+            chunk_id=birth_chunk,
+            source_entity_id=source,
+            about_entity_id=about,
+        )
+        delivered_claim_id = mint_account_variant_sync(
+            cur,
+            source_claim_id=canonical_claim_id,
+            account_label="audit-distorted-delivery",
+            summary="A distorted account delivered to the audit recipient.",
+            source_chunk_id=birth_chunk,
+            distortion_min_depth=1,
+        )
+        drain_chunk, _ = _insert_chunk(cur, time_delta=timedelta(hours=2))
+        drained = drain_claim_propagation_sync(
+            cur,
+            tick_chunk_id=drain_chunk,
+            settings=settings,
+            distortion_settings={"enabled": True},
+        )
+
+    assert drained.minted_count == 1
+    context = entity_context(
+        live_connection,
+        [recipient],
+        anchor_chunk_id=drain_chunk,
+        contagion_settings=settings,
+    )
+    knowledge = {row["claim_id"]: row for row in context["entities"][0]["knowledge"]}
+
+    assert delivered_claim_id in knowledge
+    assert canonical_claim_id not in knowledge
+    assert knowledge[delivered_claim_id]["depth"] == 1

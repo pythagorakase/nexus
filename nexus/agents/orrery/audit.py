@@ -1381,7 +1381,10 @@ def entity_context(
                 FROM requested_awareness requested
                 JOIN world_events event
                   ON event.event_type = 'claim_propagated'
-                 AND (event.payload ->> 'claim_id')::bigint = requested.claim_id
+                 AND COALESCE(
+                         (event.payload ->> 'delivered_claim_id')::bigint,
+                         (event.payload ->> 'claim_id')::bigint
+                     ) = requested.claim_id
                  AND (event.payload ->> 'awareness_id')::bigint = requested.id
                 WHERE event.payload ? 'claim_id'
                   AND event.payload ? 'awareness_id'

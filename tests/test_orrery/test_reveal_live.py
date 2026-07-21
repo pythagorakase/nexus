@@ -26,6 +26,11 @@ from nexus.api.slot_utils import get_slot_db_url
 from tests.test_orrery.claim_accounts_test_support import (
     install_claim_accounts_shadow_async,
 )
+from tests.test_orrery.test_claim_propagation_live import (
+    _install_valence_shadow,
+    _insert_relationship,
+    _settings,
+)
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -109,6 +114,7 @@ def live_conn() -> Iterator[Any]:
             cur.execute(f'SET LOCAL search_path = "{schema}", public')
             _install_claim_schema(cur)
             cur.execute(MIGRATION_SQL)
+            _install_valence_shadow(cur)
         yield conn
     finally:
         conn.rollback()
@@ -226,7 +232,7 @@ def test_authoring_rejects_non_private_and_unregistered_gate(
     live_conn: Any,
 ) -> None:
     with live_conn.cursor() as cur:
-        source_chunk_id, _ = _insert_chunk(cur)
+        source_chunk_id, source_world_time = _insert_chunk(cur)
         _, bounded_claim, participants, _ = _insert_private_incident(
             cur, source_chunk_id=source_chunk_id, scope="bounded"
         )
@@ -541,6 +547,129 @@ def test_commit_reveals_promotes_grants_once_and_redrain_is_noop(
         authored = cur.fetchone()
         assert authored["world_time"] == source_world_time
         assert authored["payload"]["claim_id"] == claim_id
+
+
+def test_same_tick_reveal_waits_until_next_tick_to_propagate(
+    live_conn: Any,
+) -> None:
+    """Reveal promotion misses this tick's snapshot and enters the next."""
+
+    with live_conn.cursor() as cur:
+        source_chunk_id, source_world_time = _insert_chunk(cur)
+        incident_id, claim_id, participants, place_id = _insert_private_incident(
+            cur, source_chunk_id=source_chunk_id
+        )
+        holder, same_tick_recipient, _ = participants
+        cur.execute(
+            """
+            UPDATE claim_awareness
+            SET acquired_at_world_time = %s
+            WHERE claim_id = %s AND knower_entity_id = %s
+            """,
+            (source_world_time, claim_id, holder),
+        )
+        variant_id = mint_account_variant_sync(
+            cur,
+            source_claim_id=claim_id,
+            account_label=f"next-scene-gossip-{uuid4().hex[:8]}",
+            summary="The next-scene distorted account.",
+            source_chunk_id=source_chunk_id,
+            distortion_min_depth=1,
+        )
+        author_backstory_secret_sync(
+            cur,
+            claim_id=claim_id,
+            gate_template_id="participants_reunited",
+            holder_entity_id=holder,
+            source_chunk_id=source_chunk_id,
+        )
+        outsider = _insert_character(cur, "next-tick-recipient", place_id)
+        cur.execute(
+            "SELECT id FROM characters WHERE entity_id = ANY(%s) ORDER BY entity_id",
+            ([holder, outsider],),
+        )
+        character_ids = [int(row["id"]) for row in cur.fetchall()]
+        _insert_relationship(cur, character_ids[0], character_ids[1])
+        reveal_chunk_id, reveal_world_time = _insert_chunk(
+            cur, time_delta=timedelta(hours=2)
+        )
+
+    reveal_state = WorldState(
+        is_active={entity_id: True for entity_id in (*participants, outsider)},
+        locations={entity_id: place_id for entity_id in (*participants, outsider)},
+        world_time=reveal_world_time,
+    )
+    same_tick = commit_orrery_tick_sync(
+        live_conn,
+        None,
+        tick_chunk_id=reveal_chunk_id,
+        contagion_settings=_settings(),
+        distortion_settings={"enabled": True},
+        reveal_settings={"enabled": True},
+        reveal_state=reveal_state,
+    )
+
+    with live_conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT claim_id, knower_entity_id
+            FROM claim_awareness
+            WHERE claim_id IN (%s, %s)
+            ORDER BY claim_id, knower_entity_id
+            """,
+            (claim_id, variant_id),
+        )
+        same_tick_awareness = {
+            (int(row["claim_id"]), int(row["knower_entity_id"]))
+            for row in cur.fetchall()
+        }
+        cur.execute(
+            """
+            SELECT count(*) AS count
+            FROM world_events
+            WHERE event_type = 'claim_propagated'
+              AND tick_chunk_id = %s
+              AND (payload ->> 'incident_world_event_id')::bigint = %s
+            """,
+            (reveal_chunk_id, incident_id),
+        )
+        same_tick_event_count = int(cur.fetchone()["count"])
+        next_chunk_id, _ = _insert_chunk(cur, time_delta=timedelta(hours=1))
+
+    assert same_tick.reveal_count == 1
+    assert same_tick.propagation_count == 0
+    assert same_tick_event_count == 0
+    assert (claim_id, same_tick_recipient) in same_tick_awareness
+    assert (claim_id, outsider) not in same_tick_awareness
+    assert (variant_id, outsider) not in same_tick_awareness
+
+    next_tick = commit_orrery_tick_sync(
+        live_conn,
+        None,
+        tick_chunk_id=next_chunk_id,
+        contagion_settings=_settings(),
+        distortion_settings={"enabled": True},
+    )
+    with live_conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT claim_id, knower_entity_id
+            FROM claim_awareness
+            WHERE claim_id IN (%s, %s)
+            ORDER BY claim_id, knower_entity_id
+            """,
+            (claim_id, variant_id),
+        )
+        next_tick_awareness = {
+            (int(row["claim_id"]), int(row["knower_entity_id"]))
+            for row in cur.fetchall()
+        }
+
+    assert next_tick.propagation_count == 1
+    assert (variant_id, outsider) in next_tick_awareness
+    # Suppression contract: hearing any incident sibling blocks every later
+    # account, so this same-tick canonical recipient never receives the variant.
+    assert (variant_id, same_tick_recipient) not in next_tick_awareness
 
 
 def test_unregistered_gate_in_latent_row_raises_loudly(live_conn: Any) -> None:

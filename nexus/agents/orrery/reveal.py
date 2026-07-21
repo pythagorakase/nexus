@@ -1,4 +1,11 @@
-"""Commit-time draining for template-gated durable backstory secrets."""
+"""Commit-time draining for template-gated durable backstory secrets.
+
+The accepted-tick commit invokes :mod:`nexus.agents.orrery.propagation` before
+this reveal drain. Consequently, a private incident promoted to bounded here
+cannot enter the same tick's propagation snapshot; its first eligible gossip
+drain is the next accepted tick. The secret comes out this scene, and gossip
+starts the next scene.
+"""
 
 from __future__ import annotations
 

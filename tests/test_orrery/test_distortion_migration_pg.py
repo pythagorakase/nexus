@@ -173,6 +173,25 @@ def test_migration_092_adds_nullable_positive_documented_depth(
         cur.execute("ROLLBACK TO SAVEPOINT invalid_depth")
 
 
+def test_migration_092_rejects_canonical_account_with_depth(
+    migration_091_schema: Any,
+) -> None:
+    """A direct update cannot turn the canonical account into a variant."""
+
+    with migration_091_schema.cursor() as cur:
+        cur.execute(MIGRATION_SQL)
+        cur.execute("SAVEPOINT canonical_depth")
+        with pytest.raises(psycopg2.errors.CheckViolation):
+            cur.execute(
+                """
+                UPDATE claims
+                SET distortion_min_depth = 1
+                WHERE id = 1
+                """
+            )
+        cur.execute("ROLLBACK TO SAVEPOINT canonical_depth")
+
+
 @pytest.mark.parametrize("invalid_depth", [0, -1, True, 1.5])
 def test_variant_mint_rejects_invalid_distortion_depth_before_sql(
     migration_091_schema: Any,

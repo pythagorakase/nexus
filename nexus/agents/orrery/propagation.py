@@ -4,6 +4,12 @@ The append-only ``claim_awareness`` projection is the only durable frontier.
 This module derives every eligible transmission from that table plus the
 current Stage 2b communication graph, then double-enters each new awareness
 row as a ``claim_propagated`` world event.
+
+The accepted-tick commit drains propagation before
+:mod:`nexus.agents.orrery.reveal`. A reveal that promotes a private incident
+to bounded during that same tick is therefore absent from this drain's
+snapshot and first becomes propagatable on the next accepted tick. This pins
+the scene boundary: the secret comes out now; gossip starts next scene.
 """
 
 from __future__ import annotations

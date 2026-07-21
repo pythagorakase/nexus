@@ -339,6 +339,8 @@ def test_claim_distortion_migration_installs_depth_contract() -> None:
 
     assert "ADD COLUMN distortion_min_depth integer" in migration_sql
     assert "CHECK (distortion_min_depth >= 1)" in migration_sql
+    assert "claims_canonical_distortion_depth_check" in migration_sql
+    assert "account_label <> 'canonical'" in migration_sql
     assert "COMMENT ON COLUMN claims.distortion_min_depth" in migration_sql
     assert "largest distortion_min_depth wins" in migration_sql
     assert "lowest claim id" in migration_sql
