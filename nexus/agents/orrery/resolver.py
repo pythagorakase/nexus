@@ -2217,6 +2217,7 @@ def _materialize_project_delta(
             "recruit_ally",
             "pursue_romance",
             "court_patron",
+            "seek_redemption",
         }:
             target = resolution.bindings.get(Slot.TARGET)
             if not isinstance(target, int):

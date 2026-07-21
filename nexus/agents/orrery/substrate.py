@@ -1191,6 +1191,11 @@ _PROJECT_DUE_MODES = frozenset(
         "securing_favor",
         "gaining_notice_milestone",
         "proving_worth_milestone",
+        "owning_the_wrong",
+        "making_amends",
+        "earning_forgiveness",
+        "owning_the_wrong_milestone",
+        "making_amends_milestone",
     }
 )
 
@@ -1208,6 +1213,11 @@ _PROJECT_STAGE_LADDERS = {
         "declaring_intentions",
     ),
     "court_patron": ("gaining_notice", "proving_worth", "securing_favor"),
+    "seek_redemption": (
+        "owning_the_wrong",
+        "making_amends",
+        "earning_forgiveness",
+    ),
 }
 
 
@@ -1341,6 +1351,7 @@ def project_due(
                         "recruit_ally",
                         "pursue_romance",
                         "court_patron",
+                        "seek_redemption",
                     }
                     else True
                 )
@@ -1361,6 +1372,7 @@ def project_due(
                         "recruit_ally",
                         "pursue_romance",
                         "court_patron",
+                        "seek_redemption",
                     }
                     else True
                 )

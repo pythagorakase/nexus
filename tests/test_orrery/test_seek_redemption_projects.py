@@ -1,4 +1,4 @@
-"""COURT_PATRON character-targeted project acceptance coverage."""
+"""SEEK_REDEMPTION character-targeted project acceptance coverage."""
 
 from __future__ import annotations
 
@@ -13,7 +13,10 @@ import psycopg2
 import psycopg2.extras
 import pytest
 
-from nexus.agents.orrery.events import _apply_state_delta_sync
+from nexus.agents.orrery.events import (
+    _apply_state_delta_sync,
+    _upsert_reconciled_relationship_sync,
+)
 from nexus.agents.orrery.needs import load_need_tuning
 from nexus.agents.orrery.resolver import OrreryResolutionDraft
 from nexus.agents.orrery.substrate import (
@@ -26,12 +29,11 @@ from nexus.agents.orrery.substrate import (
     WorldState,
     evaluate,
 )
-from nexus.agents.orrery.templates import ADVANCE_COURT_PATRON, START_COURT_PATRON
+from nexus.agents.orrery.templates import ADVANCE_SEEK_REDEMPTION, START_SEEK_REDEMPTION
 from nexus.api.slot_utils import get_slot_db_url
 
 ACTOR = 10
 TARGET = 20
-FACTION = 30
 NOW = datetime(2073, 8, 2, 12, tzinfo=timezone.utc)
 POLICY = ProjectPolicy(
     enabled=True,
@@ -45,10 +47,7 @@ BINDINGS = {Slot.ACTOR: ACTOR, Slot.TARGET: TARGET}
 def _start_state(**changes: Any) -> WorldState:
     values: dict[str, Any] = {
         "locations": {ACTOR: 1},
-        "pair_tags": {
-            (ACTOR, TARGET): frozenset({"contact:social"}),
-            (TARGET, ACTOR): frozenset({"authority_over"}),
-        },
+        "trust": {(TARGET, ACTOR): -1},
         "travel_states": {ACTOR: TravelState(status="at_place")},
         "project_policy": POLICY,
         "routine_anchors": {
@@ -64,7 +63,7 @@ def _start_state(**changes: Any) -> WorldState:
 
 def _project(
     *,
-    stage: str = "gaining_notice",
+    stage: str = "owning_the_wrong",
     progress: float = 0.0,
     stall_count: int = 0,
     due_at: datetime = NOW,
@@ -72,7 +71,7 @@ def _project(
 ) -> ProjectState:
     return ProjectState(
         id=7,
-        project_type="court_patron",
+        project_type="seek_redemption",
         status="active",
         stage=stage,
         target_character_entity_id=TARGET,
@@ -95,68 +94,53 @@ def _advance_state(project: ProjectState, **changes: Any) -> WorldState:
     return WorldState(**values)
 
 
-def test_entry_gate_power_marker_or_clause_and_contract() -> None:
+def test_entry_gate_wronged_party_evidence_or_clause_and_contract() -> None:
     arms = (
-        _start_state(
-            pair_tags={
-                (ACTOR, TARGET): frozenset({"contact:social"}),
-                (TARGET, FACTION): frozenset({"status:senior"}),
-            }
-        ),
-        _start_state(
-            pair_tags={(ACTOR, TARGET): frozenset({"contact:social"})},
-            tags={TARGET: frozenset({"leader"})},
-        ),
         _start_state(),
+        _start_state(
+            trust={},
+            relationship_types={(ACTOR, TARGET): frozenset({"enemy"})},
+        ),
+        _start_state(
+            trust={},
+            relationship_types={(TARGET, ACTOR): frozenset({"rival"})},
+        ),
+        _start_state(
+            trust={},
+            pair_tags={(TARGET, ACTOR): frozenset({"hostile_to"})},
+        ),
     )
     for state in arms:
-        assert evaluate(START_COURT_PATRON, state, BINDINGS).passes is True
-    result = evaluate(START_COURT_PATRON, arms[0], BINDINGS)
-    assert START_COURT_PATRON.required_slots == (Slot.ACTOR, Slot.TARGET)
-    assert START_COURT_PATRON.starts_from_social_contact is True
+        assert evaluate(START_SEEK_REDEMPTION, state, BINDINGS).passes is True
+    result = evaluate(START_SEEK_REDEMPTION, arms[0], BINDINGS)
+    assert START_SEEK_REDEMPTION.required_slots == (Slot.ACTOR, Slot.TARGET)
+    assert START_SEEK_REDEMPTION.starts_from_social_contact is True
     assert result.state_delta["project.start"] == {
-        "project_type": "court_patron",
-        "stage": "gaining_notice",
+        "project_type": "seek_redemption",
+        "stage": "owning_the_wrong",
         "milestone": True,
     }
 
 
-def test_entry_gate_requires_social_base_and_power_and_blocks_redundancy() -> None:
+def test_entry_gate_requires_wronged_party_evidence_and_blocks_actor_hostility() -> (
+    None
+):
     assert (
         evaluate(
-            START_COURT_PATRON,
-            _start_state(pair_tags={(ACTOR, TARGET): frozenset({"contact:social"})}),
+            START_SEEK_REDEMPTION,
+            _start_state(trust={}),
             BINDINGS,
         ).passes
         is False
     )
     assert (
         evaluate(
-            START_COURT_PATRON,
-            _start_state(pair_tags={(TARGET, ACTOR): frozenset({"authority_over"})}),
+            START_SEEK_REDEMPTION,
+            _start_state(pair_tags={(ACTOR, TARGET): frozenset({"hostile_to"})}),
             BINDINGS,
         ).passes
         is False
     )
-    for changes in (
-        {
-            "pair_tags": {
-                (ACTOR, TARGET): frozenset({"contact:social"}),
-                (TARGET, ACTOR): frozenset({"authority_over", "sponsors"}),
-            }
-        },
-        {"relationship_types": {(ACTOR, TARGET): frozenset({"patron"})}},
-        {
-            "pair_tags": {
-                (ACTOR, TARGET): frozenset({"contact:social", "hostile_to"}),
-                (TARGET, ACTOR): frozenset({"authority_over"}),
-            }
-        },
-    ):
-        assert (
-            evaluate(START_COURT_PATRON, _start_state(**changes), BINDINGS).passes
-            is False
-        )
 
 
 @pytest.mark.parametrize(
@@ -164,76 +148,73 @@ def test_entry_gate_requires_social_base_and_power_and_blocks_redundancy() -> No
     (
         (
             _advance_state(_project(target_active=False)),
-            "End a patronage effort whose target is no longer available",
+            "End amends whose wronged party is no longer available",
             "project.abandon",
         ),
         (
             _advance_state(
-                _project(stage="securing_favor", progress=1.0),
-                trust={(TARGET, ACTOR): 2},
+                _project(stage="earning_forgiveness", progress=1.0),
             ),
-            "Secure the patron's favor",
+            "Have the amends accepted",
             "project.complete",
         ),
         (
-            _advance_state(_project(), trust={(TARGET, ACTOR): -2}),
-            "Withdraw after being spurned",
+            _advance_state(_project(), trust={(TARGET, ACTOR): -3}),
+            "Abandon amends that are thrown back",
             "project.abandon",
         ),
         (
-            # Strict boundary: a merely wary patron (-1) does NOT spurn —
-            # trust_below(-1) means strictly worse than wary; the courtship
-            # keeps making routine progress instead.
-            _advance_state(_project(), trust={(TARGET, ACTOR): -1}),
-            "Make useful work visible",
+            # Strict boundary: trust_below(-2) does not spurn at exactly -2.
+            _advance_state(_project(), trust={(TARGET, ACTOR): -2}),
+            "Name the wrong without self-exoneration",
             "project.advance",
         ),
         (
             _advance_state(_project(stall_count=3)),
-            "Let the bid for patronage go",
+            "Let the attempt at redemption go",
             "project.abandon",
         ),
         (
             _advance_state(_project(progress=1.0)),
-            "Turn notice into a chance to prove worth",
+            "Turn ownership into amends",
             "project.advance",
         ),
         (
-            _advance_state(_project(stage="proving_worth", progress=1.0)),
-            "Ask proven worth to become favor",
+            _advance_state(_project(stage="making_amends", progress=1.0)),
+            "Let amends ask for forgiveness",
             "project.advance",
         ),
         (
             _advance_state(
                 _project(
-                    stage="securing_favor",
+                    stage="earning_forgiveness",
                     progress=0.5,
                     due_at=NOW - timedelta(hours=24),
                 )
             ),
-            "Lose ground through neglect",
+            "Lose ground through neglected amends",
             "project.stall",
         ),
         (
             _advance_state(_project(progress=0.2)),
-            "Make useful work visible",
+            "Name the wrong without self-exoneration",
             "project.advance",
         ),
         (
-            _advance_state(_project(stage="proving_worth", progress=0.2)),
-            "Prove reliable under scrutiny",
+            _advance_state(_project(stage="making_amends", progress=0.2)),
+            "Make one concrete repair",
             "project.advance",
         ),
         (
-            _advance_state(_project(stage="securing_favor", progress=0.2)),
-            "Make the next claim on favor legible",
+            _advance_state(_project(stage="earning_forgiveness", progress=0.2)),
+            "Leave forgiveness in the wronged party's hands",
             "project.advance",
         ),
     ),
 )
 def test_full_ladder(state: WorldState, label: str, delta_key: str) -> None:
     result = evaluate(
-        ADVANCE_COURT_PATRON,
+        ADVANCE_SEEK_REDEMPTION,
         state,
         BINDINGS,
         BranchSelection(mode="authored_order"),
@@ -243,35 +224,33 @@ def test_full_ladder(state: WorldState, label: str, delta_key: str) -> None:
     if delta_key == "project.complete":
         assert result.state_delta == {
             "project.complete": {"milestone": True},
-            "entity_pair_tags.add_inbound": ["sponsors"],
-            "entity_pair_tags.add_outbound": ["obligation"],
+            "entity_tags_target.remove": ["grudge_active"],
         }
 
 
-def test_completion_uses_patron_reverse_trust_and_yields_to_hostility() -> None:
-    project = _project(stage="securing_favor", progress=1.0)
-    reverse = evaluate(
-        ADVANCE_COURT_PATRON,
-        _advance_state(project, trust={(TARGET, ACTOR): 2}),
+def test_completion_needs_no_trust_recovery_and_yields_to_hostility() -> None:
+    project = _project(stage="earning_forgiveness", progress=1.0)
+    no_trust = evaluate(
+        ADVANCE_SEEK_REDEMPTION,
+        _advance_state(project),
         BINDINGS,
     )
-    forward_only = evaluate(
-        ADVANCE_COURT_PATRON,
-        _advance_state(project, trust={(ACTOR, TARGET): 2}),
+    actor_hostile = evaluate(
+        ADVANCE_SEEK_REDEMPTION,
+        _advance_state(project, pair_tags={(ACTOR, TARGET): frozenset({"hostile_to"})}),
         BINDINGS,
     )
-    hostile = evaluate(
-        ADVANCE_COURT_PATRON,
+    target_hostile = evaluate(
+        ADVANCE_SEEK_REDEMPTION,
         _advance_state(
             project,
-            trust={(TARGET, ACTOR): 2},
-            pair_tags={(ACTOR, TARGET): frozenset({"hostile_to"})},
+            pair_tags={(TARGET, ACTOR): frozenset({"hunting"})},
         ),
         BINDINGS,
     )
-    assert "project.complete" in reverse.state_delta
-    assert "project.complete" not in forward_only.state_delta
-    assert "project.abandon" in hostile.state_delta
+    assert "project.complete" in no_trust.state_delta
+    assert "project.abandon" in actor_hostile.state_delta
+    assert "project.abandon" in target_hostile.state_delta
 
 
 def _create_schema(cur: Any, schema: str) -> None:
@@ -345,17 +324,17 @@ def _create_schema(cur: Any, schema: str) -> None:
     )
     cur.execute(
         (
-            Path(__file__).parents[2] / "migrations/086_court_patron_projects.sql"
+            Path(__file__).parents[2] / "migrations/087_seek_redemption_projects.sql"
         ).read_text()
     )
 
 
 @pytest.fixture()
-def live_patron_db() -> Iterator[dict[str, Any]]:
+def live_redemption_db() -> Iterator[dict[str, Any]]:
     conn = psycopg2.connect(get_slot_db_url(slot=2))
     try:
         with conn.cursor() as cur:
-            _create_schema(cur, f"court_patron_{uuid4().hex[:12]}")
+            _create_schema(cur, f"seek_redemption_{uuid4().hex[:12]}")
             cur.execute(
                 "SELECT entity_id FROM characters WHERE entity_id IS NOT NULL "
                 "ORDER BY id LIMIT 2"
@@ -372,6 +351,12 @@ def live_patron_db() -> Iterator[dict[str, Any]]:
                 "AND character_relationships.character2_id=t.id "
                 "AND a.entity_id=%s AND t.entity_id=%s",
                 (actor, target),
+            )
+            cur.execute(
+                "UPDATE entity_tags et SET cleared_at=now() FROM tags t "
+                "WHERE et.tag_id=t.id AND et.entity_id=%s "
+                "AND t.tag='grudge_active' AND et.cleared_at IS NULL",
+                (target,),
             )
         yield {
             "conn": conn,
@@ -408,13 +393,9 @@ def _apply(db: dict[str, Any], draft: OrreryResolutionDraft) -> dict[str, Any]:
         return cur.fetchone()[0]
 
 
-@pytest.mark.requires_postgres
-def test_completion_applies_inbound_outbound_and_patron_relationship(
-    live_patron_db: dict[str, Any],
-) -> None:
-    db = live_patron_db
+def _start_and_ready_for_completion(db: dict[str, Any]) -> OrreryResolutionDraft:
     base = OrreryResolutionDraft(
-        template_id="start_court_patron",
+        template_id="start_seek_redemption",
         priority=17,
         binding_hash="start",
         bindings={"actor": db["actor"], "target": db["target"]},
@@ -422,8 +403,8 @@ def test_completion_applies_inbound_outbound_and_patron_relationship(
         narrative_stub="start",
         state_delta={
             "project.start": {
-                "project_type": "court_patron",
-                "stage": "gaining_notice",
+                "project_type": "seek_redemption",
+                "stage": "owning_the_wrong",
                 "target_character_entity_id": db["target"],
                 "milestone": True,
             }
@@ -434,37 +415,43 @@ def test_completion_applies_inbound_outbound_and_patron_relationship(
     with db["conn"].cursor() as cur:
         cur.execute(
             "UPDATE character_project_states "
-            "SET stage='securing_favor',progress=1 "
+            "SET stage='earning_forgiveness',progress=1 "
             "WHERE character_entity_id=%s",
             (db["actor"],),
         )
+    return base
+
+
+def _completion_delta() -> dict[str, Any]:
+    return {
+        "project.complete": {"milestone": True},
+        "entity_tags_target.remove": ["grudge_active"],
+    }
+
+
+@pytest.mark.requires_postgres
+def test_fresh_completion_inserts_reconciliation_and_absent_grudge_is_noop(
+    live_redemption_db: dict[str, Any],
+) -> None:
+    db = live_redemption_db
+    base = _start_and_ready_for_completion(db)
     ledger = _apply(
         db,
         replace(
             base,
-            template_id="advance_court_patron",
+            template_id="advance_seek_redemption",
             binding_hash="complete",
-            state_delta={
-                "project.complete": {"milestone": True},
-                "entity_pair_tags.add_inbound": ["sponsors"],
-                "entity_pair_tags.add_outbound": ["obligation"],
-            },
+            state_delta=_completion_delta(),
         ),
     )
     with db["conn"].cursor() as cur:
         cur.execute(
-            "SELECT ept.subject_entity_id,ept.object_entity_id,pt.tag "
-            "FROM entity_pair_tags ept "
-            "JOIN pair_tags pt ON pt.id=ept.pair_tag_id WHERE ept.cleared_at IS NULL "
-            "AND ((ept.subject_entity_id=%s AND ept.object_entity_id=%s "
-            "AND pt.tag='sponsors') OR (ept.subject_entity_id=%s "
-            "AND ept.object_entity_id=%s AND pt.tag='obligation')) ORDER BY pt.tag",
-            (db["target"], db["actor"], db["actor"], db["target"]),
+            "SELECT count(*) FROM entity_tags et JOIN tags t ON t.id=et.tag_id "
+            "WHERE et.entity_id=%s AND t.tag='grudge_active' "
+            "AND et.cleared_at IS NULL",
+            (db["target"],),
         )
-        assert cur.fetchall() == [
-            (db["actor"], db["target"], "obligation"),
-            (db["target"], db["actor"], "sponsors"),
-        ]
+        assert cur.fetchone()[0] == 0
         cur.execute(
             "SELECT cr.relationship_type,cr.emotional_valence,cr.extra_data "
             "FROM character_relationships cr "
@@ -474,74 +461,54 @@ def test_completion_applies_inbound_outbound_and_patron_relationship(
             (db["actor"], db["target"]),
         )
         relationship_type, valence, extra = cur.fetchone()
-    assert (relationship_type, valence) == ("patron", "+2|friendly")
-    assert extra["orrery_court_patron"]["template_id"] == "advance_court_patron"
+    assert (relationship_type, valence) == ("complex", "+1|favorable")
+    assert extra["orrery_seek_redemption"]["template_id"] == "advance_seek_redemption"
+    assert extra["orrery_seek_redemption"]["previous_relationship_type"] is None
+    assert extra["orrery_seek_redemption"]["previous_emotional_valence"] is None
     applied = ledger["project.complete"]["applied"]
-    assert applied["relationship_mutation"]["relationship_type"] == "patron"
-    assert {mutation["operation"] for mutation in applied["pair_tag_mutations"]} == {
-        "add_inbound",
-        "add_outbound",
-    }
+    assert applied["relationship_mutation"]["relationship_type"] == "complex"
+    assert applied["relationship_mutation"]["emotional_valence"] == "+1|favorable"
 
 
 @pytest.mark.requires_postgres
-def test_completion_preserves_existing_relationship_valence(
-    live_patron_db: dict[str, Any],
+def test_existing_negative_relationship_is_repaired_and_originals_survive_rewrite(
+    live_redemption_db: dict[str, Any],
 ) -> None:
-    """The conflict arm updates the type but never the valence — the family
-    convention (recruit_ally, pursue_romance); valence movement on existing
-    rows is seek_redemption's deliberate innovation, not patron's."""
-
-    db = live_patron_db
+    db = live_redemption_db
     with db["conn"].cursor() as cur:
         cur.execute(
             "INSERT INTO character_relationships "
             "(character1_id, character2_id, relationship_type, "
             " emotional_valence, dynamic, recent_events, history) "
-            "SELECT a.id, t.id, 'mentor', '+4|admiring', 'd', 'r', 'h' "
+            "SELECT a.id, t.id, 'enemy', '-4|hostile', 'd', 'r', 'h' "
             "FROM characters a, characters t "
             "WHERE a.entity_id=%s AND t.entity_id=%s",
             (db["actor"], db["target"]),
         )
-    base = OrreryResolutionDraft(
-        template_id="start_court_patron",
-        priority=17,
-        binding_hash="start-preserve",
-        bindings={"actor": db["actor"], "target": db["target"]},
-        branch_label="start",
-        narrative_stub="start",
-        state_delta={
-            "project.start": {
-                "project_type": "court_patron",
-                "stage": "gaining_notice",
-                "target_character_entity_id": db["target"],
-                "milestone": True,
-            }
-        },
-        magnitude=0.4,
-    )
-    _apply(db, base)
-    with db["conn"].cursor() as cur:
         cur.execute(
-            "UPDATE character_project_states "
-            "SET stage='securing_favor',progress=1 "
-            "WHERE character_entity_id=%s",
-            (db["actor"],),
+            "INSERT INTO entity_tags (entity_id,tag_id,source_kind,template_id) "
+            "SELECT %s,id,'template','test_seek_redemption' FROM tags "
+            "WHERE tag='grudge_active'",
+            (db["target"],),
         )
+    base = _start_and_ready_for_completion(db)
     _apply(
         db,
         replace(
             base,
-            template_id="advance_court_patron",
+            template_id="advance_seek_redemption",
             binding_hash="complete-preserve",
-            state_delta={
-                "project.complete": {"milestone": True},
-                "entity_pair_tags.add_inbound": ["sponsors"],
-                "entity_pair_tags.add_outbound": ["obligation"],
-            },
+            state_delta=_completion_delta(),
         ),
     )
     with db["conn"].cursor() as cur:
+        second = _upsert_reconciled_relationship_sync(
+            cur,
+            actor_entity_id=db["actor"],
+            target_entity_id=db["target"],
+            template_id="advance_seek_redemption",
+            source_chunk_id=db["chunk"],
+        )
         cur.execute(
             "SELECT cr.relationship_type,cr.emotional_valence,cr.extra_data "
             "FROM character_relationships cr "
@@ -551,6 +518,17 @@ def test_completion_preserves_existing_relationship_valence(
             (db["actor"], db["target"]),
         )
         relationship_type, valence, extra = cur.fetchone()
-    assert relationship_type == "patron"
-    assert valence == "+4|admiring"
-    assert extra["orrery_court_patron"]["previous_relationship_type"] == "mentor"
+        cur.execute(
+            "SELECT count(*) FROM entity_tags et JOIN tags t ON t.id=et.tag_id "
+            "WHERE et.entity_id=%s AND t.tag='grudge_active' "
+            "AND et.cleared_at IS NULL",
+            (db["target"],),
+        )
+        assert cur.fetchone()[0] == 0
+    assert relationship_type == "complex"
+    assert valence == "+1|favorable"
+    provenance = extra["orrery_seek_redemption"]
+    assert provenance["previous_relationship_type"] == "enemy"
+    assert provenance["previous_emotional_valence"] == "-4|hostile"
+    assert second["previous_relationship_type"] == "complex"
+    assert second["previous_emotional_valence"] == "+1|favorable"

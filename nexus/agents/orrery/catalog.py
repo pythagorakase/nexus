@@ -644,7 +644,16 @@ def _render_state_delta(delta: Mapping[str, Any]) -> str:
             continue
         if key.startswith("project."):
             transition = key.removeprefix("project.")
-            parts.append(f"applies project `{transition}` transition")
+            if key == "project.complete" and "grudge_active" in (
+                delta.get("entity_tags_target.remove") or ()
+            ):
+                parts.append(
+                    "applies project `complete` transition and upserts the "
+                    "actor→target `complex` relationship with "
+                    "`+1|favorable` valence"
+                )
+            else:
+                parts.append(f"applies project `{transition}` transition")
             continue
         parts.append(f"`{key}` = `{value}`")
     return "; ".join(parts)
