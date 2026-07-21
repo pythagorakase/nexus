@@ -62,6 +62,7 @@ from nexus.agents.orrery.resolver import (
     _LOCATION_CLASS_CATEGORY_SQL,
     OrreryScenePressureDraft,
     _apply_pair_fanout_quota,
+    _arbitrate_project_starts,
     _coerce_fanout,
     _entity_label,
     _load_entity_names,
@@ -151,6 +152,7 @@ class ExplainedTickReport:
     communication_graph: CommunicationGraph
     joint_beats: Tuple[OrreryJointBeat, ...] = ()
     fanout_trimmed: Tuple[Mapping[str, Any], ...] = ()
+    project_start_arbitration_trimmed: Tuple[Mapping[str, Any], ...] = ()
     mode: str = "current"
     overrides: Optional[Mapping[str, Any]] = None
     need_pressures_diff: Optional[Mapping[str, Any]] = None
@@ -174,6 +176,9 @@ class ExplainedTickReport:
             "actors": [self._group_payload(group) for group in self.actors],
             "joint_beats": [beat.to_dict() for beat in self.joint_beats],
             "fanout_trimmed": [dict(item) for item in self.fanout_trimmed],
+            "project_start_arbitration_trimmed": [
+                dict(item) for item in self.project_start_arbitration_trimmed
+            ],
             "need_pressures": [draft.to_dict() for draft in self.need_pressures],
             "need_pressures_diff": (
                 dict(self.need_pressures_diff)
@@ -803,7 +808,39 @@ def explain_dry_run(
         for shim in joint_beat_inputs
         if id(shim) not in kept_ids
     )
-    joint_beats = detect_joint_beats(kept_inputs, entity_names)
+    # Production arbitrates project starts AFTER the fan-out quota
+    # (resolver.resolve_dry_run: _apply_pair_fanout_quota then
+    # _arbitrate_project_starts, then joint beats over the survivors).
+    # Mirror both steps in that order and report what was dropped instead
+    # of silently hiding it. Per-actor precedence is what matters: the
+    # actor-only stack's winner precedes routed pair stacks, as it does in
+    # production draft assembly.
+    solo_winner_shims = [
+        _WinnerShim(stack, item)
+        for _actor_id, stack in sorted(active.actor_stacks.items())
+        if stack.winner_id is not None
+        for item in stack.templates
+        if item.template_id == stack.winner_id
+    ]
+    arbitration_inputs = solo_winner_shims + kept_inputs
+    arbitration_kept_ids = {
+        id(shim)
+        for shim in _arbitrate_project_starts(arbitration_inputs, templates_list)
+    }
+    project_start_arbitration_trimmed = tuple(
+        {
+            "actor_entity_id": shim.bindings.get("actor"),
+            "target_entity_id": shim.bindings.get("target"),
+            "faction_entity_id": shim.bindings.get("faction"),
+            "template_id": shim.template_id,
+        }
+        for shim in arbitration_inputs
+        if id(shim) not in arbitration_kept_ids
+    )
+    joint_beats = detect_joint_beats(
+        [shim for shim in kept_inputs if id(shim) in arbitration_kept_ids],
+        entity_names,
+    )
 
     not_applicable_markers = tuple(
         {
@@ -874,6 +911,7 @@ def explain_dry_run(
         communication_graph=active_state.communication_graph,
         joint_beats=joint_beats,
         fanout_trimmed=fanout_trimmed,
+        project_start_arbitration_trimmed=project_start_arbitration_trimmed,
         mode="what_if" if what_if else "current",
         overrides=overrides.to_dict() if what_if and overrides is not None else None,
         need_pressures_diff=need_pressures_diff,

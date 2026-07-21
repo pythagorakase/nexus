@@ -783,4 +783,29 @@ def test_live_production_and_explain_compose_same_faction_bindings(
         tuple(sorted(stack.bindings.items())) for stack in actor_group.two_party_stacks
     }
 
-    assert explained_bindings == production_bindings
+    # Production arbitrates project starts to one per actor
+    # (resolver._arbitrate_project_starts); the audit explains every
+    # evaluated stack and reports the arbitrated drops explicitly. The
+    # parity contract is therefore: explained stacks minus the reported
+    # trims equals the production draft set.
+    trimmed_bindings = {
+        tuple(
+            sorted(
+                (slot, entity_id)
+                for slot, entity_id in (
+                    ("actor", item["actor_entity_id"]),
+                    ("target", item["target_entity_id"]),
+                    ("faction", item["faction_entity_id"]),
+                )
+                if entity_id is not None
+            )
+        )
+        for item in explained.project_start_arbitration_trimmed
+        if item["template_id"] == START_FACTION_PROJECT.id
+        and item["actor_entity_id"] == actor_id
+    }
+    assert explained_bindings - trimmed_bindings == production_bindings
+    # Two composable factions, one open-project budget: exactly one start
+    # survives and exactly one is reported trimmed.
+    assert len(production_bindings) == 1
+    assert len(trimmed_bindings) == 1
