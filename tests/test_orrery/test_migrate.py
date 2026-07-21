@@ -149,6 +149,34 @@ def test_pursue_romance_migration_replaces_named_four_type_constraints() -> None
     assert migration_sql.count("pursue_romance_") >= 6
 
 
+def test_court_patron_migration_replaces_named_five_type_constraints() -> None:
+    """Migration 086 preserves 085 and adds strict character patron targeting."""
+
+    migration_sql = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "086_court_patron_projects.sql"
+    ).read_text()
+    for name in (
+        "character_project_states_project_type_check",
+        "character_project_states_stage_by_type_check",
+        "character_project_states_target_by_type_check",
+        "character_project_states_completed_target_check",
+    ):
+        assert f"DROP CONSTRAINT IF EXISTS {name}" in migration_sql
+        assert f"ADD CONSTRAINT {name}" in migration_sql
+        assert f"COMMENT ON CONSTRAINT {name}" in migration_sql
+    for project_type in (
+        "plan_relocation",
+        "recruit_ally",
+        "build_venture",
+        "pursue_romance",
+        "court_patron",
+    ):
+        assert migration_sql.count(f"project_type = '{project_type}'") >= 3
+    assert migration_sql.count("court_patron_") >= 6
+
+
 def test_retrograde_persistence_migration_adds_distinct_sources() -> None:
     """Retrograde canonical writes need explicit event and tag provenance."""
 

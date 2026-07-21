@@ -635,6 +635,12 @@ def test_catalog_endpoint_over_http(client: TestClient) -> None:
         "pursue_romance_stalled",
         "pursue_romance_abandoned",
         "pursue_romance_completed",
+        "court_patron_started",
+        "court_patron_progressed",
+        "court_patron_milestone",
+        "court_patron_stalled",
+        "court_patron_abandoned",
+        "court_patron_completed",
     }
     assert {band["band"] for band in payload["drive_bands"]} == {
         "crisis_constraint",

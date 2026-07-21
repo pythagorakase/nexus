@@ -924,6 +924,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
   - **NOT:** actor `plan_relocation` project passes `ready` due-state
   - **NOT:** actor `recruit_ally` project passes `ready` due-state
   - **NOT:** actor `pursue_romance` project passes `ready` due-state
+  - **NOT:** actor `court_patron` project passes `ready` due-state
   - **NOT:** actor is constrained or immobilized
   - **NOT:** actor has inbound `hunting` pair tag
   - **NOT:** actor has `grudge_active` ephemeral
@@ -1462,6 +1463,131 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 **Event:** `pursue_romance_progressed`
 
 > {actor} makes one more part of their intention legible, leaving {target} room for an answer that is genuinely theirs.
+
+---
+
+## ADVANCE_COURT_PATRON — priority 47
+
+> A due patronage effort gains notice, proves worth, secures favor, stalls, is spurned, or ends.
+
+**Drive band:** project identity — A due patronage effort shares the established project-continuation slot while SURVEIL yields to its bound two-party work.
+**Slots:** ACTOR, TARGET
+
+**Gate:**
+
+- **AND:**
+  - actor `court_patron` project passes `ready` due-state
+  - target is the project's bound target
+  - **NOT:** actor is in transit
+  - **NOT:** actor is constrained or immobilized
+  - **NOT:**
+    - **OR:**
+      - actor has `sleep` debt ≥ 8
+      - actor has `thirst` debt ≥ 2
+      - actor has `hunger` debt ≥ 4
+
+### Branch 1 — End a patronage effort whose target is no longer available  *(mag 0.4)* · **preemptive**
+
+**When:**
+
+- **NOT:** target is the project's target and still an active character
+
+**Does:** applies project `abandon` transition
+**Event:** `court_patron_abandoned`
+
+> {target} is no longer someone whose favor can be won. {actor} closes the effort rather than courting a power that cannot answer.
+
+### Branch 2 — Secure the patron's favor  *(mag 0.4)* · **preemptive**
+
+**When:**
+
+- **AND:**
+  - actor `court_patron` project passes `completion` due-state
+  - trust target→actor ≥ 2
+  - **NOT:** actor has any of [`hostile_to`, `hunting`] pair tags to target
+  - **NOT:** target has any of [`hostile_to`, `hunting`] pair tags to actor
+
+**Does:** applies project `complete` transition; adds inbound `sponsors` pair tag from target to actor and upserts the actor→target `patron` relationship; adds outbound `obligation` pair tag to target
+**Event:** `court_patron_completed`
+
+> {target} finally answers {actor}'s service with public favor. The protection is real, and so is the obligation attached to it.
+
+### Branch 3 — Withdraw after being spurned  *(mag 0.4)* · **preemptive**
+
+**When:**
+
+- **OR:**
+  - actor has any of [`hostile_to`, `hunting`] pair tags to target
+  - target has any of [`hostile_to`, `hunting`] pair tags to actor
+  - trust target→actor < -1
+
+**Does:** applies project `abandon` transition
+**Event:** `court_patron_abandoned`
+
+> {target}'s answer is rejection, contempt, or danger. {actor} abandons the bid for favor before deference becomes humiliation.
+
+### Branch 4 — Let the bid for patronage go  *(mag 0.4)* · **preemptive**
+
+**When:** actor `court_patron` project passes `abandon` due-state
+
+**Does:** applies project `abandon` transition
+**Event:** `court_patron_abandoned`
+
+> Delay has become its own refusal. {actor} stops spending effort on favor that never comes within reach.
+
+### Branch 5 — Turn notice into a chance to prove worth  *(mag 0.4)* · **preemptive**
+
+**When:** actor `court_patron` project passes `gaining_notice_milestone` due-state
+
+**Does:** applies project `advance` transition
+**Event:** `court_patron_milestone`
+
+> {target} has noticed {actor}. Attention now becomes a test: whether usefulness survives scrutiny and inconvenience.
+
+### Branch 6 — Ask proven worth to become favor  *(mag 0.4)* · **preemptive**
+
+**When:** actor `court_patron` project passes `proving_worth_milestone` due-state
+
+**Does:** applies project `advance` transition
+**Event:** `court_patron_milestone`
+
+> {actor} has supplied proof instead of promises. The remaining question is whether {target} will convert approval into favor.
+
+### Branch 7 — Lose ground through neglect  *(mag 0.1)* · **preemptive** · **not promotable**
+
+**When:** actor `court_patron` project passes `neglected` due-state
+
+**Does:** applies project `stall` transition
+**Event:** `court_patron_stalled`
+
+> Inattention erodes the impression {actor} worked to create. The bid for patronage stalls and must recover its momentum.
+
+### Branch 8 — Make useful work visible  *(mag 0.18)* · **not promotable**
+
+**When:** actor `court_patron` project passes `gaining_notice` due-state
+
+**Does:** applies project `advance` transition
+**Event:** `court_patron_progressed`
+
+> {actor} places one useful act where {target} can see both its value and the judgment behind it.
+
+### Branch 9 — Prove reliable under scrutiny  *(mag 0.18)* · **not promotable**
+
+**When:** actor `court_patron` project passes `proving_worth` due-state
+
+**Does:** applies project `advance` transition
+**Event:** `court_patron_progressed`
+
+> {actor} accepts a consequential task and performs it cleanly, giving {target} evidence that usefulness is not a pose.
+
+### Branch 10 — Make the next claim on favor legible  *(mag 0.16)* · **not promotable**
+
+**When:** *(always)*
+
+**Does:** applies project `advance` transition
+**Event:** `court_patron_progressed`
+
+> {actor} makes one more service, request, or allegiance explicit, bringing {target}'s answer closer without pretending it is owed.
 
 ---
 
@@ -2440,6 +2566,59 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 ---
 
+## START_COURT_PATRON — priority 17
+
+> An off-screen character begins working to win a named power's favor.
+
+**Drive band:** project identity — Courting a patron requires both a plausible social opening and a specific marker of the target's power.
+**Slots:** ACTOR, TARGET
+
+**Gate:**
+
+- **AND:**
+  - actor `court_patron` project passes `start` due-state
+  - actor has enough hydrated context
+  - actor is at `home` anchor
+  - **NOT:** actor is in transit
+  - **NOT:** actor is constrained or immobilized
+  - **NOT:**
+    - **OR:**
+      - actor has `sleep` debt ≥ 8
+      - actor has `thirst` debt ≥ 2
+      - actor has `hunger` debt ≥ 4
+  - **OR:**
+    - **AND:**
+      - actor has outbound `contact:social` pair tag
+      - actor has `contact:social` pair tag to target
+    - actor has `friend` relationship to target
+    - target has `friend` relationship to actor
+    - actor has `companion` relationship to target
+    - target has `companion` relationship to actor
+    - actor has `comrade` relationship to target
+    - target has `comrade` relationship to actor
+    - actor has `chosen_kin` relationship to target
+    - target has `chosen_kin` relationship to actor
+    - trust actor→target ≥ 1
+  - **OR:**
+    - target holds `status:senior`+ toward any faction
+    - target has `leader` tag
+    - target has `authority_over` pair tag to actor
+  - target lacks `sponsors` pair tag to actor
+  - **NOT:** actor has `patron` relationship to target
+  - **NOT:** actor has any of [`hostile_to`, `hunting`] pair tags to target
+  - **NOT:** target has any of [`hostile_to`, `hunting`] pair tags to actor
+
+### Branch 1 — Begin seeking the patron's notice  *(mag 0.4)*
+
+**When:** *(always)*
+
+**Does:** applies project `start` transition
+**Event:** `court_patron_started`
+
+> {actor} stops hoping that {target} will notice them by accident. They choose a first gesture calculated to be useful, visible, and difficult to mistake for idle flattery.
+
+---
+
 ## INTIMACY — priority 16
 
 > The body asks for the kind of connection that is not conversation.
@@ -3215,6 +3394,7 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `innkeeper`
 - `investigator`
 - `keeps_shop`
+- `leader`
 - `loremaster`
 - `magical_healing`
 - `married`
@@ -3310,12 +3490,15 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 ### Pair tags queried by directed predicates
 
 - `ally`
+- `authority_over`
 - `contact:intimate`
 - `contact:lodging`
 - `contact:social`
 - `hostile_to`
 - `hunting`
+- `obligation`
 - `resides_at`
+- `sponsors`
 
 ### Event types
 
@@ -3330,6 +3513,12 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `contact_deferred`
 - `contact_made`
 - `counter_surveillance_sweep`
+- `court_patron_abandoned`
+- `court_patron_completed`
+- `court_patron_milestone`
+- `court_patron_progressed`
+- `court_patron_stalled`
+- `court_patron_started`
 - `craft_tended`
 - `drank`
 - `encoded_message`
