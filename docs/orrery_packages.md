@@ -923,6 +923,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
   - actor has enough hydrated context
   - **NOT:** actor `plan_relocation` project passes `ready` due-state
   - **NOT:** actor `recruit_ally` project passes `ready` due-state
+  - **NOT:** actor `pursue_romance` project passes `ready` due-state
   - **NOT:** actor is constrained or immobilized
   - **NOT:** actor has inbound `hunting` pair tag
   - **NOT:** actor has `grudge_active` ephemeral
@@ -1134,7 +1135,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 - **AND:**
   - actor `recruit_ally` project passes `ready` due-state
-  - advancing recruitment of target
+  - target is the project's bound target
   - **NOT:** actor is in transit
   - **NOT:** actor is constrained or immobilized
   - **NOT:**
@@ -1147,7 +1148,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 **When:**
 
-- **NOT:** target is the project's active-character recruit
+- **NOT:** target is the project's target and still an active character
 
 **Does:** applies project `abandon` transition
 **Event:** `recruit_ally_abandoned`
@@ -1350,7 +1351,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 - **AND:**
   - actor `pursue_romance` project passes `ready` due-state
-  - advancing recruitment of target
+  - target is the project's bound target
   - **NOT:** actor is in transit
   - **NOT:** actor is constrained or immobilized
   - **NOT:**
@@ -1363,7 +1364,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 **When:**
 
-- **NOT:** target is the project's active-character recruit
+- **NOT:** target is the project's target and still an active character
 
 **Does:** applies project `abandon` transition
 **Event:** `pursue_romance_abandoned`
@@ -1377,6 +1378,8 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 - **AND:**
   - actor `pursue_romance` project passes `completion` due-state
   - actor and target have mutual warm trust
+  - **NOT:** actor has any of [`hostile_to`, `hunting`] pair tags to target
+  - **NOT:** target has any of [`hostile_to`, `hunting`] pair tags to actor
 
 **Does:** applies project `complete` transition; adds outbound `contact:intimate` pair tag to target and upserts the actor→target `romantic` relationship
 **Event:** `pursue_romance_completed`

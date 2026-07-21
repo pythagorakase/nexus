@@ -38,23 +38,43 @@ def migration_084_schema() -> Iterator[Any]:
                     stall_count integer NOT NULL DEFAULT 0,
                     next_eligible_at_world_time timestamptz, source_chunk_id bigint,
                     CONSTRAINT character_project_states_project_type_check CHECK (
-                        project_type IN ('plan_relocation','recruit_ally','build_venture')),
+                        project_type IN (
+                            'plan_relocation', 'recruit_ally', 'build_venture'
+                        )),
                     CONSTRAINT character_project_states_stage_by_type_check CHECK (
-                        (project_type='plan_relocation' AND stage IN ('saving','scouting','committing')) OR
-                        (project_type='recruit_ally' AND stage IN ('sounding_out','earning_trust','sealing_commitment')) OR
-                        (project_type='build_venture' AND stage IN ('laying_groundwork','securing_backing','opening_doors'))),
+                        (project_type = 'plan_relocation'
+                            AND stage IN ('saving', 'scouting', 'committing')) OR
+                        (project_type = 'recruit_ally'
+                            AND stage IN (
+                                'sounding_out', 'earning_trust',
+                                'sealing_commitment'
+                            )) OR
+                        (project_type = 'build_venture'
+                            AND stage IN (
+                                'laying_groundwork', 'securing_backing',
+                                'opening_doors'
+                            ))),
                     CONSTRAINT character_project_states_target_by_type_check CHECK (
-                        (project_type='plan_relocation' AND target_character_entity_id IS NULL) OR
-                        (project_type='recruit_ally' AND target_place_id IS NULL AND target_character_entity_id IS NOT NULL) OR
-                        (project_type='build_venture' AND target_place_id IS NULL AND target_character_entity_id IS NULL AND target_faction_entity_id IS NULL)),
+                        (project_type = 'plan_relocation'
+                            AND target_character_entity_id IS NULL) OR
+                        (project_type = 'recruit_ally'
+                            AND target_place_id IS NULL
+                            AND target_character_entity_id IS NOT NULL) OR
+                        (project_type = 'build_venture'
+                            AND target_place_id IS NULL
+                            AND target_character_entity_id IS NULL
+                            AND target_faction_entity_id IS NULL)),
                     CONSTRAINT character_project_states_completed_target_check CHECK (
                         status <> 'completed' OR
-                        (project_type='plan_relocation' AND target_place_id IS NOT NULL) OR
-                        (project_type='recruit_ally' AND target_character_entity_id IS NOT NULL) OR
+                        (project_type = 'plan_relocation'
+                            AND target_place_id IS NOT NULL) OR
+                        (project_type = 'recruit_ally'
+                            AND target_character_entity_id IS NOT NULL) OR
                         project_type='build_venture')
                 );
                 INSERT INTO character_project_states
-                    (character_entity_id,project_type,status,stage,target_character_entity_id,target_faction_entity_id)
+                    (character_entity_id, project_type, status, stage,
+                     target_character_entity_id, target_faction_entity_id)
                     VALUES (1,'recruit_ally','active','sounding_out',2,9);
                 INSERT INTO character_project_states
                     (character_entity_id,project_type,status,stage)
@@ -88,7 +108,8 @@ def test_migration_085_widens_constraints_and_seeds_events(
         assert all(comment for _, comment in constraints.values())
         cur.execute(
             "INSERT INTO character_project_states "
-            "(character_entity_id,project_type,status,stage,target_character_entity_id) "
+            "(character_entity_id,project_type,status,stage,"
+            "target_character_entity_id) "
             "VALUES (4,'pursue_romance','completed','declaring_intentions',5)"
         )
         for columns, values in (
@@ -105,7 +126,8 @@ def test_migration_085_widens_constraints_and_seeds_events(
                 )
             cur.execute("ROLLBACK TO SAVEPOINT invalid_romance")
         cur.execute(
-            "SELECT project_type,target_faction_entity_id FROM character_project_states "
+            "SELECT project_type,target_faction_entity_id "
+            "FROM character_project_states "
             "WHERE character_entity_id IN (1,3) ORDER BY character_entity_id"
         )
         assert cur.fetchall() == [("recruit_ally", 9), ("build_venture", None)]

@@ -44,17 +44,31 @@ async def _create_schema(conn: asyncpg.Connection) -> None:
             CONSTRAINT character_project_states_project_type_check CHECK (
                 project_type IN ('plan_relocation','recruit_ally','build_venture')),
             CONSTRAINT character_project_states_stage_by_type_check CHECK (
-                (project_type='plan_relocation' AND stage IN ('saving','scouting','committing')) OR
-                (project_type='recruit_ally' AND stage IN ('sounding_out','earning_trust','sealing_commitment')) OR
-                (project_type='build_venture' AND stage IN ('laying_groundwork','securing_backing','opening_doors'))),
+                (project_type = 'plan_relocation'
+                    AND stage IN ('saving', 'scouting', 'committing')) OR
+                (project_type = 'recruit_ally'
+                    AND stage IN (
+                        'sounding_out', 'earning_trust', 'sealing_commitment'
+                    )) OR
+                (project_type = 'build_venture'
+                    AND stage IN (
+                        'laying_groundwork', 'securing_backing', 'opening_doors'
+                    ))),
             CONSTRAINT character_project_states_target_by_type_check CHECK (
-                (project_type='plan_relocation' AND target_character_entity_id IS NULL) OR
-                (project_type='recruit_ally' AND target_place_id IS NULL AND target_character_entity_id IS NOT NULL) OR
-                (project_type='build_venture' AND target_place_id IS NULL AND target_character_entity_id IS NULL AND target_faction_entity_id IS NULL)),
+                (project_type = 'plan_relocation'
+                    AND target_character_entity_id IS NULL) OR
+                (project_type = 'recruit_ally'
+                    AND target_place_id IS NULL
+                    AND target_character_entity_id IS NOT NULL) OR
+                (project_type = 'build_venture'
+                    AND target_place_id IS NULL
+                    AND target_character_entity_id IS NULL
+                    AND target_faction_entity_id IS NULL)),
             CONSTRAINT character_project_states_completed_target_check CHECK (
                 status <> 'completed' OR
                 (project_type='plan_relocation' AND target_place_id IS NOT NULL) OR
-                (project_type='recruit_ally' AND target_character_entity_id IS NOT NULL) OR
+                (project_type = 'recruit_ally'
+                    AND target_character_entity_id IS NOT NULL) OR
                 project_type='build_venture')
         );
         CREATE UNIQUE INDEX ux_character_project_states_open_budget
@@ -77,7 +91,8 @@ async def test_async_pursue_romance_start_and_completion() -> None:
     try:
         await _create_schema(conn)
         entities = await conn.fetch(
-            "SELECT entity_id FROM characters WHERE entity_id IS NOT NULL ORDER BY id LIMIT 2"
+            "SELECT entity_id FROM characters WHERE entity_id IS NOT NULL "
+            "ORDER BY id LIMIT 2"
         )
         actor, target = (int(row["entity_id"]) for row in entities)
         chunk_id = int(
@@ -89,7 +104,8 @@ async def test_async_pursue_romance_start_and_completion() -> None:
         await conn.execute(
             "DELETE FROM character_relationships USING characters a, characters t "
             "WHERE character_relationships.character1_id=a.id AND "
-            "character_relationships.character2_id=t.id AND a.entity_id=$1 AND t.entity_id=$2",
+            "character_relationships.character2_id=t.id "
+            "AND a.entity_id=$1 AND t.entity_id=$2",
             actor,
             target,
         )
@@ -125,7 +141,8 @@ async def test_async_pursue_romance_start_and_completion() -> None:
             == 0
         )
         await conn.execute(
-            "UPDATE character_project_states SET stage='declaring_intentions',progress=1 "
+            "UPDATE character_project_states "
+            "SET stage='declaring_intentions',progress=1 "
             "WHERE character_entity_id=$1",
             actor,
         )
@@ -158,8 +175,10 @@ async def test_async_pursue_romance_start_and_completion() -> None:
         )
         row = await conn.fetchrow(
             "SELECT cr.relationship_type,cr.emotional_valence,cr.extra_data "
-            "FROM character_relationships cr JOIN characters a ON a.id=cr.character1_id "
-            "JOIN characters t ON t.id=cr.character2_id WHERE a.entity_id=$1 AND t.entity_id=$2",
+            "FROM character_relationships cr "
+            "JOIN characters a ON a.id=cr.character1_id "
+            "JOIN characters t ON t.id=cr.character2_id "
+            "WHERE a.entity_id=$1 AND t.entity_id=$2",
             actor,
             target,
         )

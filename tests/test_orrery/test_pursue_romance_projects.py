@@ -236,8 +236,40 @@ def test_completion_requires_mutual_warmth() -> None:
         _advance_state(project, trust={(ACTOR, TARGET): 2, (TARGET, ACTOR): 1}),
         BINDINGS,
     )
+    # One-sided warmth must NOT complete: forward-only (the actor is smitten,
+    # the target neutral) and reverse-only (the target warm, the actor cooled).
+    forward_only = evaluate(
+        ADVANCE_PURSUE_ROMANCE,
+        _advance_state(project, trust={(ACTOR, TARGET): 2, (TARGET, ACTOR): 0}),
+        BINDINGS,
+    )
+    reverse_only = evaluate(
+        ADVANCE_PURSUE_ROMANCE,
+        _advance_state(project, trust={(ACTOR, TARGET): 0, (TARGET, ACTOR): 1}),
+        BINDINGS,
+    )
     assert "project.complete" not in cold.state_delta
     assert "project.complete" in warm.state_delta
+    assert "project.complete" not in forward_only.state_delta
+    assert "project.complete" not in reverse_only.state_delta
+
+
+def test_completion_yields_to_hostility_despite_mutual_warmth() -> None:
+    """An active hostile edge routes a warm, due courtship to the rebuffed
+    arm instead of completing it (the completion arm's hostility exclusion)."""
+
+    project = _project(stage="declaring_intentions", progress=1.0)
+    hostile = evaluate(
+        ADVANCE_PURSUE_ROMANCE,
+        _advance_state(
+            project,
+            trust={(ACTOR, TARGET): 2, (TARGET, ACTOR): 1},
+            pair_tags={(TARGET, ACTOR): frozenset({"hunting"})},
+        ),
+        BINDINGS,
+    )
+    assert "project.complete" not in hostile.state_delta
+    assert "project.abandon" in hostile.state_delta
 
 
 def _create_schema(cur: Any, schema: str) -> None:
@@ -262,20 +294,37 @@ def _create_schema(cur: Any, schema: str) -> None:
             created_at timestamptz NOT NULL DEFAULT now(),
             updated_at timestamptz NOT NULL DEFAULT now(),
             CONSTRAINT character_project_states_project_type_check CHECK (
-                project_type IN ('plan_relocation','recruit_ally','build_venture')),
+                project_type IN (
+                    'plan_relocation', 'recruit_ally', 'build_venture'
+                )),
             CONSTRAINT character_project_states_stage_by_type_check CHECK (
-                (project_type='plan_relocation' AND stage IN ('saving','scouting','committing')) OR
-                (project_type='recruit_ally' AND stage IN ('sounding_out','earning_trust','sealing_commitment')) OR
-                (project_type='build_venture' AND stage IN ('laying_groundwork','securing_backing','opening_doors'))),
+                (project_type = 'plan_relocation'
+                    AND stage IN ('saving', 'scouting', 'committing')) OR
+                (project_type = 'recruit_ally'
+                    AND stage IN (
+                        'sounding_out', 'earning_trust', 'sealing_commitment'
+                    )) OR
+                (project_type = 'build_venture'
+                    AND stage IN (
+                        'laying_groundwork', 'securing_backing', 'opening_doors'
+                    ))),
             CONSTRAINT character_project_states_target_by_type_check CHECK (
-                (project_type='plan_relocation' AND target_character_entity_id IS NULL) OR
-                (project_type='recruit_ally' AND target_place_id IS NULL AND target_character_entity_id IS NOT NULL) OR
-                (project_type='build_venture' AND target_place_id IS NULL AND target_character_entity_id IS NULL AND target_faction_entity_id IS NULL)),
+                (project_type = 'plan_relocation'
+                    AND target_character_entity_id IS NULL) OR
+                (project_type = 'recruit_ally'
+                    AND target_place_id IS NULL
+                    AND target_character_entity_id IS NOT NULL) OR
+                (project_type = 'build_venture'
+                    AND target_place_id IS NULL
+                    AND target_character_entity_id IS NULL
+                    AND target_faction_entity_id IS NULL)),
             CONSTRAINT character_project_states_completed_target_check CHECK (
                 status <> 'completed' OR
-                (project_type='plan_relocation' AND target_place_id IS NOT NULL) OR
-                (project_type='recruit_ally' AND target_character_entity_id IS NOT NULL) OR
-                project_type='build_venture')
+                (project_type = 'plan_relocation'
+                    AND target_place_id IS NOT NULL) OR
+                (project_type = 'recruit_ally'
+                    AND target_character_entity_id IS NOT NULL) OR
+                project_type = 'build_venture')
         );
         CREATE UNIQUE INDEX ux_character_project_states_open_budget
             ON character_project_states(character_entity_id)
@@ -308,7 +357,8 @@ def live_romance_db() -> Iterator[dict[str, Any]]:
             cur.execute(
                 "DELETE FROM character_relationships USING characters a, characters t "
                 "WHERE character_relationships.character1_id=a.id AND "
-                "character_relationships.character2_id=t.id AND a.entity_id=%s AND t.entity_id=%s",
+                "character_relationships.character2_id=t.id "
+                "AND a.entity_id=%s AND t.entity_id=%s",
                 (actor, target),
             )
         yield {
@@ -371,7 +421,8 @@ def test_sync_applier_fresh_romance_and_overwrite_preserve_first_provenance(
     _apply(db, base)
     with db["conn"].cursor() as cur:
         cur.execute(
-            "UPDATE character_project_states SET stage='declaring_intentions', progress=1 "
+            "UPDATE character_project_states "
+            "SET stage='declaring_intentions', progress=1 "
             "WHERE character_entity_id=%s",
             (db["actor"],),
         )
@@ -388,8 +439,10 @@ def test_sync_applier_fresh_romance_and_overwrite_preserve_first_provenance(
     with db["conn"].cursor() as cur:
         cur.execute(
             "SELECT cr.relationship_type, cr.emotional_valence, cr.extra_data "
-            "FROM character_relationships cr JOIN characters a ON a.id=cr.character1_id "
-            "JOIN characters t ON t.id=cr.character2_id WHERE a.entity_id=%s AND t.entity_id=%s",
+            "FROM character_relationships cr "
+            "JOIN characters a ON a.id=cr.character1_id "
+            "JOIN characters t ON t.id=cr.character2_id "
+            "WHERE a.entity_id=%s AND t.entity_id=%s",
             (db["actor"], db["target"]),
         )
         relationship_type, valence, extra = cur.fetchone()
@@ -411,15 +464,18 @@ def test_sync_applier_fresh_romance_and_overwrite_preserve_first_provenance(
             (db["actor"], db["target"]),
         )
         cur.execute(
-            "UPDATE character_project_states SET status='active', stage='declaring_intentions', progress=1 "
+            "UPDATE character_project_states "
+            "SET status='active', stage='declaring_intentions', progress=1 "
             "WHERE character_entity_id=%s",
             (db["actor"],),
         )
     _apply(db, replace(complete, binding_hash="complete-again"))
     with db["conn"].cursor() as cur:
         cur.execute(
-            "SELECT cr.relationship_type, cr.extra_data FROM character_relationships cr "
-            "JOIN characters a ON a.id=cr.character1_id JOIN characters t ON t.id=cr.character2_id "
+            "SELECT cr.relationship_type, cr.extra_data "
+            "FROM character_relationships cr "
+            "JOIN characters a ON a.id=cr.character1_id "
+            "JOIN characters t ON t.id=cr.character2_id "
             "WHERE a.entity_id=%s AND t.entity_id=%s",
             (db["actor"], db["target"]),
         )

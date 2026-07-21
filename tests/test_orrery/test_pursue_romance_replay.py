@@ -67,19 +67,38 @@ def replay_project_db() -> Iterator[dict[str, Any]]:
                     created_at timestamptz NOT NULL DEFAULT now(),
                     updated_at timestamptz NOT NULL DEFAULT now(),
                     CONSTRAINT character_project_states_project_type_check CHECK (
-                        project_type IN ('plan_relocation','recruit_ally','build_venture')),
+                        project_type IN (
+                            'plan_relocation', 'recruit_ally', 'build_venture'
+                        )),
                     CONSTRAINT character_project_states_stage_by_type_check CHECK (
-                        (project_type='plan_relocation' AND stage IN ('saving','scouting','committing')) OR
-                        (project_type='recruit_ally' AND stage IN ('sounding_out','earning_trust','sealing_commitment')) OR
-                        (project_type='build_venture' AND stage IN ('laying_groundwork','securing_backing','opening_doors'))),
+                        (project_type = 'plan_relocation'
+                            AND stage IN ('saving', 'scouting', 'committing')) OR
+                        (project_type = 'recruit_ally'
+                            AND stage IN (
+                                'sounding_out', 'earning_trust',
+                                'sealing_commitment'
+                            )) OR
+                        (project_type = 'build_venture'
+                            AND stage IN (
+                                'laying_groundwork', 'securing_backing',
+                                'opening_doors'
+                            ))),
                     CONSTRAINT character_project_states_target_by_type_check CHECK (
-                        (project_type='plan_relocation' AND target_character_entity_id IS NULL) OR
-                        (project_type='recruit_ally' AND target_place_id IS NULL AND target_character_entity_id IS NOT NULL) OR
-                        (project_type='build_venture' AND target_place_id IS NULL AND target_character_entity_id IS NULL AND target_faction_entity_id IS NULL)),
+                        (project_type = 'plan_relocation'
+                            AND target_character_entity_id IS NULL) OR
+                        (project_type = 'recruit_ally'
+                            AND target_place_id IS NULL
+                            AND target_character_entity_id IS NOT NULL) OR
+                        (project_type = 'build_venture'
+                            AND target_place_id IS NULL
+                            AND target_character_entity_id IS NULL
+                            AND target_faction_entity_id IS NULL)),
                     CONSTRAINT character_project_states_completed_target_check CHECK (
                         status <> 'completed' OR
-                        (project_type='plan_relocation' AND target_place_id IS NOT NULL) OR
-                        (project_type='recruit_ally' AND target_character_entity_id IS NOT NULL) OR
+                        (project_type = 'plan_relocation'
+                            AND target_place_id IS NOT NULL) OR
+                        (project_type = 'recruit_ally'
+                            AND target_character_entity_id IS NOT NULL) OR
                         project_type='build_venture')
                 );
                 CREATE UNIQUE INDEX ux_character_project_states_open_budget

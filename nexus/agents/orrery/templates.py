@@ -1026,6 +1026,7 @@ SURVEIL = Template(
         has_minimal_context(),
         NOT(project_due("ready")),
         NOT(project_due("ready", project_type="recruit_ally")),
+        NOT(project_due("ready", project_type="pursue_romance")),
         NOT(is_constrained()),
         NOT(has_inbound_pair_tag("hunting")),
         NOT(has_ephemeral("grudge_active")),
@@ -5119,6 +5120,26 @@ ADVANCE_PURSUE_ROMANCE = Template(
             conditions=AND(
                 project_due("completion", project_type="pursue_romance"),
                 relationship_is_mutual_warm(Slot.ACTOR, Slot.TARGET),
+                # Trust is valence-derived while hostility is a pair tag, so
+                # the two can coexist; without this exclusion the completion
+                # arm outruns the rebuffed arm (recruit_ally's seal carries
+                # the same guard).
+                NOT(
+                    has_any_pair_tag(
+                        "hostile_to",
+                        "hunting",
+                        subject_slot=Slot.ACTOR,
+                        object_slot=Slot.TARGET,
+                    )
+                ),
+                NOT(
+                    has_any_pair_tag(
+                        "hostile_to",
+                        "hunting",
+                        subject_slot=Slot.TARGET,
+                        object_slot=Slot.ACTOR,
+                    )
+                ),
             ),
             narrative_stub=(
                 "{actor} finally names what has grown between them, and "
