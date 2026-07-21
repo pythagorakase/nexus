@@ -730,8 +730,6 @@ class LogonUtility:
                 if acquisition_kind == "told" and acquisition.get("source_name"):
                     acquisition_kind = f"told by {acquisition['source_name']}"
                 qualifiers = [str(acquisition_kind)]
-                if item.get("account_label"):
-                    qualifiers.append(f"belief: {item['account_label']}")
                 if item.get("freshly_revealed"):
                     qualifiers.append("freshly revealed")
                 character_name = item.get("character_name") or (
@@ -741,6 +739,8 @@ class LogonUtility:
                     f"- {character_name} [{'; '.join(qualifiers)}]: "
                     f"{item.get('summary', '')}"
                 )
+            if context.get("world_knowledge_truncated"):
+                sections.append("(older knowledge omitted)")
 
         # Render caps shared with the commit-time prompt-exposure log
         # (orrery_prompt_exposures): both sides must slice identically or the

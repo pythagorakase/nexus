@@ -485,8 +485,10 @@ def test_digest_surfaces_only_possessed_safe_accounts(
     assert told["source_name"].startswith("knowledge-source-")
     assert by_claim[claims["granted"]]["acquisition"] == {"kind": "granted"}
     assert by_claim[claims["granted_with_source"]]["acquisition"]["kind"] == ("told")
-    assert by_claim[claims["variant"]]["account_label"] == "dockside-rumor"
-    assert "account_label" not in by_claim[claims["participant"]]
+    assert all(
+        all("label" not in field and "belief" not in field for field in entry)
+        for entry in digest
+    )
 
     assert claims["canonical_unpossessed"] not in by_claim
     assert claims["latent"] not in by_claim

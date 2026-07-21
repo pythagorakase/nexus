@@ -348,6 +348,21 @@ def test_claim_distortion_migration_installs_depth_contract() -> None:
     assert "CREATE UNIQUE INDEX" not in migration_sql
 
 
+def test_claim_awareness_knower_index_supports_per_turn_digest() -> None:
+    """Migration 093 indexes the knower-led Storyteller digest lookup."""
+
+    migration_sql = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "093_claim_awareness_knower_index.sql"
+    ).read_text()
+
+    assert "CREATE INDEX ix_claim_awareness_knower_entity_id" in migration_sql
+    assert "ON claim_awareness USING btree (knower_entity_id)" in migration_sql
+    assert "COMMENT ON INDEX ix_claim_awareness_knower_entity_id" in migration_sql
+    assert "per-turn Storyteller knowledge digest" in migration_sql
+
+
 def test_retrograde_persistence_migration_adds_distinct_sources() -> None:
     """Retrograde canonical writes need explicit event and tag provenance."""
 

@@ -74,7 +74,6 @@ def _query_rows(
                present_character.name AS character_name,
                claim.id AS claim_id,
                claim.summary,
-               claim.account_label,
                awareness.source_tier,
                awareness.immediate_source_entity_id,
                COALESCE(
@@ -227,8 +226,6 @@ def _entry(row: Mapping[str, Any]) -> dict[str, Any]:
             acquired.isoformat() if isinstance(acquired, datetime) else None
         ),
     }
-    if row["account_label"] != "canonical":
-        entry["account_label"] = str(row["account_label"])
     if bool(row["freshly_revealed"]):
         entry["freshly_revealed"] = True
     return entry
