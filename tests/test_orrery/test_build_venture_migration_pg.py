@@ -107,7 +107,12 @@ def migration_083_schema() -> Iterator[Any]:
                 INSERT INTO character_project_states (
                     character_entity_id, project_type, status, stage,
                     target_character_entity_id, progress
-                ) VALUES (2, 'recruit_ally', 'active', 'earning_trust', 3, 0.5)
+                ) VALUES (2, 'recruit_ally', 'active', 'earning_trust', 3, 0.5);
+                INSERT INTO character_project_states (
+                    character_entity_id, project_type, status, stage,
+                    target_character_entity_id, target_faction_entity_id,
+                    progress
+                ) VALUES (6, 'recruit_ally', 'active', 'sounding_out', 7, 11, 0.1)
                 """
             )
         yield conn
@@ -170,12 +175,16 @@ def test_migration_084_widens_projects_and_registers_vocabulary(
         cur.execute("ROLLBACK TO SAVEPOINT build_target")
 
         cur.execute(
-            "SELECT project_type, stage FROM character_project_states "
-            "WHERE character_entity_id IN (1, 2) ORDER BY character_entity_id"
+            "SELECT project_type, stage, target_faction_entity_id "
+            "FROM character_project_states "
+            "WHERE character_entity_id IN (1, 2, 6) ORDER BY character_entity_id"
         )
+        # The faction-bound recruitment row (migration-081 context) must
+        # survive the constraint replacement untouched.
         assert cur.fetchall() == [
-            ("plan_relocation", "saving"),
-            ("recruit_ally", "earning_trust"),
+            ("plan_relocation", "saving", None),
+            ("recruit_ally", "earning_trust", None),
+            ("recruit_ally", "sounding_out", 11),
         ]
         cur.execute(
             "SELECT type FROM event_types WHERE type LIKE 'build_venture_%' "

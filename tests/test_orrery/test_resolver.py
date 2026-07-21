@@ -2886,3 +2886,43 @@ def test_pair_fanout_quota_prefers_template_diversity() -> None:
     assert ("surveil", 3) in kept
     assert ("reach_out", 5) in kept
     assert len(kept) == 4
+
+
+def test_project_start_arbitration_keeps_one_start_per_actor() -> None:
+    """Cross-stack assembly keeps at most one project.start draft per actor."""
+
+    from nexus.agents.orrery.resolver import _arbitrate_project_starts
+    from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
+
+    def draft(template_id: str, actor: int, target: int | None = None):
+        bindings: dict[str, int] = {"actor": actor}
+        if target is not None:
+            bindings["target"] = target
+        return OrreryResolutionDraft(
+            template_id=template_id,
+            priority=17,
+            binding_hash=f"hash-{template_id}-{actor}-{target}",
+            bindings=bindings,
+            branch_label="x",
+            narrative_stub="{actor} acts.",
+            magnitude=0.4,
+        )
+
+    drafts = [
+        # Assembly order: the actor-only stack precedes routed pair stacks.
+        draft("start_build_venture", actor=1),
+        draft("surveil", actor=1, target=9),
+        draft("start_recruit_ally", actor=1, target=2),
+        draft("start_recruit_ally", actor=1, target=3),
+        draft("start_recruit_ally", actor=5, target=2),
+    ]
+    kept = [
+        (d.template_id, d.bindings.get("actor"), d.bindings.get("target"))
+        for d in _arbitrate_project_starts(drafts, list(BUILTIN_TEMPLATES))
+    ]
+    # Actor 1 keeps its first start (the venture) and loses both recruit
+    # starts; non-start drafts and other actors are untouched.
+    assert ("start_build_venture", 1, None) in kept
+    assert ("surveil", 1, 9) in kept
+    assert ("start_recruit_ally", 5, 2) in kept
+    assert len(kept) == 3
