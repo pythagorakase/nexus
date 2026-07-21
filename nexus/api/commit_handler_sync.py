@@ -9,8 +9,7 @@ with the existing narrative API.
 import json
 import logging
 from datetime import datetime
-from typing import Optional, Dict, Any, List
-import psycopg2
+from typing import Optional, Any, List
 from psycopg2.extras import RealDictCursor
 
 from nexus.agents.logon.apex_schema import (
@@ -269,7 +268,8 @@ def create_new_faction_sync(cur, new_faction):
         )
         if not cur.fetchone():
             raise ValueError(
-                f"Place ID {new_faction.primary_location} not found for faction location"
+                f"Place ID {new_faction.primary_location} not found for "
+                "faction location"
             )
 
     cur.execute("LOCK TABLE factions IN SHARE ROW EXCLUSIVE MODE")
@@ -377,7 +377,8 @@ def commit_incubator_to_database_sync(
 
                     if not parent_meta:
                         raise ValueError(
-                            f"No metadata found for parent chunk {incubator['parent_chunk_id']}"
+                            "No metadata found for parent chunk "
+                            f"{incubator['parent_chunk_id']}"
                         )
 
                     logger.info(
@@ -459,7 +460,10 @@ def commit_incubator_to_database_sync(
             # Step 6: Insert chunk metadata
             with conn.cursor() as cur:
                 # Generate slug (e.g., "S05E06_001")
-                slug = f"S{db_meta['season']:02d}E{db_meta['episode']:02d}_{db_meta['scene']:03d}"
+                slug = (
+                    f"S{db_meta['season']:02d}E{db_meta['episode']:02d}_"
+                    f"{db_meta['scene']:03d}"
+                )
 
                 cur.execute(
                     """
@@ -489,7 +493,9 @@ def commit_incubator_to_database_sync(
                     for ref in place_refs:
                         cur.execute(
                             """
-                            INSERT INTO place_chunk_references (place_id, chunk_id, reference_type, evidence)
+                            INSERT INTO place_chunk_references (
+                                place_id, chunk_id, reference_type, evidence
+                            )
                             VALUES (%s, %s, %s, %s)
                         """,
                             (
@@ -500,7 +506,9 @@ def commit_incubator_to_database_sync(
                             ),
                         )
                     logger.info(
-                        f"Inserted {len(place_refs)} place references for chunk {chunk_id}"
+                        "Inserted %s place references for chunk %s",
+                        len(place_refs),
+                        chunk_id,
                     )
 
             # Insert character references
@@ -509,7 +517,9 @@ def commit_incubator_to_database_sync(
                     for ref in character_refs:
                         cur.execute(
                             """
-                            INSERT INTO chunk_character_references (chunk_id, character_id, reference)
+                            INSERT INTO chunk_character_references (
+                                chunk_id, character_id, reference
+                            )
                             VALUES (%s, %s, %s)
                             ON CONFLICT (chunk_id, character_id) DO UPDATE
                             SET reference = 'present'
@@ -521,7 +531,9 @@ def commit_incubator_to_database_sync(
                             (chunk_id, ref["character_id"], ref["reference"]),
                         )
                     logger.info(
-                        f"Inserted {len(character_refs)} character references for chunk {chunk_id}"
+                        "Inserted %s character references for chunk %s",
+                        len(character_refs),
+                        chunk_id,
                     )
 
             # Insert faction references
@@ -537,7 +549,9 @@ def commit_incubator_to_database_sync(
                             (chunk_id, ref["faction_id"]),
                         )
                     logger.info(
-                        f"Inserted {len(faction_refs)} faction references for chunk {chunk_id}"
+                        "Inserted %s faction references for chunk %s",
+                        len(faction_refs),
+                        chunk_id,
                     )
 
             # Step 8: Update entity states (if provided)
@@ -558,6 +572,7 @@ def commit_incubator_to_database_sync(
                 ecology_settings=_orrery_ecology_settings(),
                 project_settings=_orrery_project_settings(),
                 contagion_settings=_orrery_contagion_settings(),
+                drift_settings=_orrery_drift_settings(),
             )
             if (
                 orrery_result.resolution_count
@@ -843,6 +858,14 @@ def _orrery_contagion_settings() -> Any:
     from nexus.config import load_settings_as_dict
 
     return (load_settings_as_dict().get("orrery") or {}).get("contagion")
+
+
+def _orrery_drift_settings() -> Any:
+    """[orrery.drift] continuous relationship-valence policy."""
+
+    from nexus.config import load_settings_as_dict
+
+    return (load_settings_as_dict().get("orrery") or {}).get("drift")
 
 
 def _orrery_checkpoint_interval() -> int:

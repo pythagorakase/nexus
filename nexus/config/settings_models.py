@@ -7,6 +7,7 @@ All models use `extra='forbid'` to catch typos in configuration keys.
 
 from dataclasses import dataclass
 from datetime import timedelta
+from decimal import Decimal
 import re
 from typing import Any, Dict, List, Literal, Optional, Tuple
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -1252,6 +1253,67 @@ class OrreryProjectSettings(BaseModel):
     )
 
 
+class OrreryDriftSettings(BaseModel):
+    """Continuous relationship-valence policy for ``[orrery.drift]``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = True
+    copresence_rate_per_hour: Decimal = Field(default=Decimal("0.001"), gt=0)
+    copresence_max_hours_per_tick: Decimal = Field(default=Decimal("12.0"), gt=0)
+    project_milestone_delta: Decimal = Field(default=Decimal("0.03"), gt=0)
+    hostile_events: Dict[str, Decimal] = Field(
+        default_factory=lambda: {
+            "threat_issued": Decimal("-0.02"),
+            "retaliation_attempted": Decimal("-0.04"),
+            "retaliation_executed": Decimal("-0.06"),
+        }
+    )
+    cooperative_events: Dict[str, Decimal] = Field(
+        default_factory=lambda: {
+            "protective_intervention": Decimal("0.04"),
+            "warning_delivered": Decimal("0.02"),
+            "welfare_check": Decimal("0.02"),
+            "kin_visit": Decimal("0.02"),
+            "confrontation_resolved": Decimal("0.03"),
+        }
+    )
+
+    @field_validator("hostile_events")
+    @classmethod
+    def _validate_hostile_events(cls, values: Dict[str, Decimal]) -> Dict[str, Decimal]:
+        """Require named, strictly negative hostile-event deltas."""
+
+        if any(not event_type.strip() for event_type in values):
+            raise ValueError("hostile_events keys must be non-empty")
+        nonnegative = sorted(
+            event_type for event_type, delta in values.items() if delta >= 0
+        )
+        if nonnegative:
+            raise ValueError(
+                f"hostile_events deltas must be strictly negative: {nonnegative}"
+            )
+        return values
+
+    @field_validator("cooperative_events")
+    @classmethod
+    def _validate_cooperative_events(
+        cls, values: Dict[str, Decimal]
+    ) -> Dict[str, Decimal]:
+        """Require named, strictly positive cooperative-event deltas."""
+
+        if any(not event_type.strip() for event_type in values):
+            raise ValueError("cooperative_events keys must be non-empty")
+        nonpositive = sorted(
+            event_type for event_type, delta in values.items() if delta <= 0
+        )
+        if nonpositive:
+            raise ValueError(
+                f"cooperative_events deltas must be strictly positive: {nonpositive}"
+            )
+        return values
+
+
 class OrreryEpistemicsSettings(BaseModel):
     """Claim minting and awareness policy for [orrery.epistemics]."""
 
@@ -1262,7 +1324,10 @@ class OrreryEpistemicsSettings(BaseModel):
         description="Enable claim producers and knower-gated predicates.",
     )
     claim_event_types: List[str] = Field(
-        default_factory=lambda: ["threat_issued"],
+        default_factory=lambda: [
+            "threat_issued",
+            "relationship_drift_milestone",
+        ],
         description="World event types that mint bounded claims at birth.",
     )
     aware_roles: List[str] = Field(
@@ -1934,6 +1999,7 @@ class OrrerySettings(BaseModel):
         default_factory=OrreryPackageSelectionSettings
     )
     projects: OrreryProjectSettings = Field(default_factory=OrreryProjectSettings)
+    drift: OrreryDriftSettings = Field(default_factory=OrreryDriftSettings)
     epistemics: OrreryEpistemicsSettings = Field(
         default_factory=OrreryEpistemicsSettings
     )

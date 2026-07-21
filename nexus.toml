@@ -316,11 +316,29 @@ milestone_magnitude = 0.40
 # Acceptance guard for active-vs-inactive maintenance/routine winner shares.
 coverage_distribution_tolerance = 0.05
 
+[orrery.drift]
+enabled = true
+copresence_rate_per_hour = 0.001
+copresence_max_hours_per_tick = 12.0
+project_milestone_delta = 0.03
+
+[orrery.drift.hostile_events]
+threat_issued = -0.02
+retaliation_attempted = -0.04
+retaliation_executed = -0.06
+
+[orrery.drift.cooperative_events]
+protective_intervention = 0.04
+warning_delivered = 0.02
+welfare_check = 0.02
+kin_visit = 0.02
+confrontation_resolved = 0.03
+
 [orrery.epistemics]
 enabled = true
 # Event types that mint a bounded claim at birth. Types absent from this list
 # remain implicitly common knowledge and create no epistemics rows.
-claim_event_types = ["threat_issued"]
+claim_event_types = ["threat_issued", "relationship_drift_milestone"]
 # Roles on world_event_entities that receive awareness at claim birth.
 aware_roles = ["actor", "target", "observer", "witness"]
 

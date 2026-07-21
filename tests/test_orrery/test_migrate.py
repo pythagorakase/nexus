@@ -246,6 +246,25 @@ def test_valence_float_migration_installs_one_canonical_boundary() -> None:
         assert literal in migration_sql
 
 
+def test_relationship_drift_migration_registers_visibility_event_only() -> None:
+    """Migration 089 adds the drift event vocabulary without schema changes."""
+
+    migration_sql = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "089_relationship_drift_milestone.sql"
+    ).read_text()
+
+    assert "INSERT INTO event_types" in migration_sql
+    assert "'relationship_drift_milestone'" in migration_sql
+    assert "'emotional'" in migration_sql
+    assert "'minor'" in migration_sql
+    assert "ON CONFLICT (type) DO NOTHING" in migration_sql
+    assert "COMMENT ON" in migration_sql
+    assert "CREATE TABLE" not in migration_sql
+    assert "ALTER TABLE" not in migration_sql
+
+
 def test_retrograde_persistence_migration_adds_distinct_sources() -> None:
     """Retrograde canonical writes need explicit event and tag provenance."""
 

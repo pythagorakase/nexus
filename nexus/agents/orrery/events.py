@@ -14,6 +14,10 @@ import json
 from typing import Any, Mapping, Optional
 
 from nexus.agents.orrery.db_rows import row_get as _row_get
+from nexus.agents.orrery.drift import (
+    drain_relationship_drift_async,
+    drain_relationship_drift_sync,
+)
 from nexus.agents.orrery.epistemics import (
     ClaimParticipant,
     MintResult,
@@ -355,6 +359,7 @@ def commit_orrery_tick_sync(
     project_settings: Optional[Any] = None,
     epistemics_settings: Optional[Any] = None,
     contagion_settings: Optional[Any] = None,
+    drift_settings: Optional[Any] = None,
 ) -> CommitOrreryTickResult:
     """Materialize a preview proposal inside the accepted-chunk transaction."""
 
@@ -404,6 +409,12 @@ def commit_orrery_tick_sync(
         )
         propagation_count = propagation_result.minted_count
         if not has_resolutions:
+            drain_relationship_drift_sync(
+                cur,
+                tick_chunk_id=tick_chunk_id,
+                settings=drift_settings,
+                epistemics_settings=epistemics_policy,
+            )
             return CommitOrreryTickResult(
                 cleared_tag_count=expired_tag_count,
                 scene_pressure_count=scene_pressure_count,
@@ -561,6 +572,17 @@ def commit_orrery_tick_sync(
                         source_chunk_id=tick_chunk_id,
                     )
 
+        # Project milestone snapshots and resolver events are durable only
+        # after the loop above. Draining here preserves the specified producer
+        # order while the resolution-free path drains directly after
+        # propagation.
+        drain_relationship_drift_sync(
+            cur,
+            tick_chunk_id=tick_chunk_id,
+            settings=drift_settings,
+            epistemics_settings=epistemics_policy,
+        )
+
     return CommitOrreryTickResult(
         resolution_count=resolution_count,
         event_count=event_count,
@@ -592,6 +614,7 @@ async def commit_orrery_tick_async(
     project_settings: Optional[Any] = None,
     epistemics_settings: Optional[Any] = None,
     contagion_settings: Optional[Any] = None,
+    drift_settings: Optional[Any] = None,
 ) -> CommitOrreryTickResult:
     """Async parity wrapper for tests and non-production commit callers."""
 
@@ -640,6 +663,12 @@ async def commit_orrery_tick_async(
     )
     propagation_count = propagation_result.minted_count
     if not has_resolutions:
+        await drain_relationship_drift_async(
+            conn,
+            tick_chunk_id=tick_chunk_id,
+            settings=drift_settings,
+            epistemics_settings=epistemics_policy,
+        )
         return CommitOrreryTickResult(
             cleared_tag_count=expired_tag_count,
             scene_pressure_count=scene_pressure_count,
@@ -796,6 +825,15 @@ async def commit_orrery_tick_async(
                     triggering_event_id=event_id,
                     source_chunk_id=tick_chunk_id,
                 )
+
+    # See the sync path: current-tick applied project snapshots and emitted
+    # events must exist before the deterministic drift planner can consume them.
+    await drain_relationship_drift_async(
+        conn,
+        tick_chunk_id=tick_chunk_id,
+        settings=drift_settings,
+        epistemics_settings=epistemics_policy,
+    )
 
     return CommitOrreryTickResult(
         resolution_count=resolution_count,

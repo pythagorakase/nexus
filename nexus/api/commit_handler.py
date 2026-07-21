@@ -185,7 +185,9 @@ async def insert_place_references(
     for ref in place_refs:
         await conn.execute(
             """
-            INSERT INTO place_chunk_references (place_id, chunk_id, reference_type, evidence)
+            INSERT INTO place_chunk_references (
+                place_id, chunk_id, reference_type, evidence
+            )
             VALUES ($1, $2, $3, $4)
             """,
             ref["place_id"],
@@ -564,6 +566,7 @@ async def commit_incubator_to_database(
                 ecology_settings=_orrery_ecology_settings(),
                 project_settings=_orrery_project_settings(),
                 contagion_settings=_orrery_contagion_settings(),
+                drift_settings=_orrery_drift_settings(),
             )
             if (
                 orrery_result.resolution_count
@@ -664,6 +667,14 @@ def _orrery_contagion_settings() -> Any:
     from nexus.config import load_settings_as_dict
 
     return (load_settings_as_dict().get("orrery") or {}).get("contagion")
+
+
+def _orrery_drift_settings() -> Any:
+    """[orrery.drift] continuous relationship-valence policy."""
+
+    from nexus.config import load_settings_as_dict
+
+    return (load_settings_as_dict().get("orrery") or {}).get("drift")
 
 
 def _orrery_checkpoint_interval() -> int:
