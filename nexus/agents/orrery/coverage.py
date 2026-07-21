@@ -216,6 +216,8 @@ def _tally_report(
                     "advance_pursue_romance",
                     "start_court_patron",
                     "advance_court_patron",
+                    "start_seek_redemption",
+                    "advance_seek_redemption",
                 }:
                     project_gates.append(
                         {

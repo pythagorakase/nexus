@@ -90,6 +90,11 @@ PROJECT_STAGE_LADDERS = {
         "declaring_intentions",
     ),
     "court_patron": ("gaining_notice", "proving_worth", "securing_favor"),
+    "seek_redemption": (
+        "owning_the_wrong",
+        "making_amends",
+        "earning_forgiveness",
+    ),
 }
 
 # Composite natural keys, verbatim column order (faction_relationships
@@ -1013,11 +1018,12 @@ class _Replayer:
             "recruit_ally",
             "pursue_romance",
             "court_patron",
+            "seek_redemption",
         } and (
             applied_row["target_place_id"] is not None
             or applied_row["target_character_entity_id"] is None
             or (
-                project_type in {"pursue_romance", "court_patron"}
+                project_type in {"pursue_romance", "court_patron", "seek_redemption"}
                 and applied_row["target_faction_entity_id"] is not None
             )
         ):
@@ -1090,6 +1096,7 @@ class _Replayer:
                 "recruit_ally",
                 "pursue_romance",
                 "court_patron",
+                "seek_redemption",
             }:
                 if applied_row["target_character_entity_id"] is None:
                     raise ValueError(

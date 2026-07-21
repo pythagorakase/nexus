@@ -2218,6 +2218,11 @@ PROJECT_STAGE_LADDERS = {
         "declaring_intentions",
     ),
     "court_patron": ("gaining_notice", "proving_worth", "securing_favor"),
+    "seek_redemption": (
+        "owning_the_wrong",
+        "making_amends",
+        "earning_forgiveness",
+    ),
 }
 
 
@@ -2450,7 +2455,12 @@ def _apply_project_start_sync(
         raise ValueError("project.start faction target must be an entity id")
     if project_type == "plan_relocation" and target_character_entity_id is not None:
         raise ValueError("plan_relocation project.start forbids a character target")
-    if project_type in {"recruit_ally", "pursue_romance", "court_patron"}:
+    if project_type in {
+        "recruit_ally",
+        "pursue_romance",
+        "court_patron",
+        "seek_redemption",
+    }:
         if target_place_id is not None:
             raise ValueError(f"{project_type} project.start forbids a place target")
         if not isinstance(target_character_entity_id, int):
@@ -2458,7 +2468,7 @@ def _apply_project_start_sync(
                 f"{project_type} project.start requires a character target"
             )
         if (
-            project_type in {"pursue_romance", "court_patron"}
+            project_type in {"pursue_romance", "court_patron", "seek_redemption"}
             and target_faction_entity_id is not None
         ):
             raise ValueError(f"{project_type} project.start forbids a faction target")
@@ -2536,7 +2546,12 @@ async def _apply_project_start_async(
         raise ValueError("project.start faction target must be an entity id")
     if project_type == "plan_relocation" and target_character_entity_id is not None:
         raise ValueError("plan_relocation project.start forbids a character target")
-    if project_type in {"recruit_ally", "pursue_romance", "court_patron"}:
+    if project_type in {
+        "recruit_ally",
+        "pursue_romance",
+        "court_patron",
+        "seek_redemption",
+    }:
         if target_place_id is not None:
             raise ValueError(f"{project_type} project.start forbids a place target")
         if not isinstance(target_character_entity_id, int):
@@ -2544,7 +2559,7 @@ async def _apply_project_start_async(
                 f"{project_type} project.start requires a character target"
             )
         if (
-            project_type in {"pursue_romance", "court_patron"}
+            project_type in {"pursue_romance", "court_patron", "seek_redemption"}
             and target_faction_entity_id is not None
         ):
             raise ValueError(f"{project_type} project.start forbids a faction target")
@@ -2960,6 +2975,19 @@ def _validate_project_completion(
             raise ValueError("court_patron completion forbids a place target")
         if project["target_faction_entity_id"] is not None:
             raise ValueError("court_patron completion forbids a faction target")
+    if project_type == "seek_redemption":
+        wronged_party_id = project["target_character_entity_id"]
+        if wronged_party_id is None:
+            raise ValueError("seek_redemption completion requires its character target")
+        if target_entity_id != wronged_party_id:
+            raise ValueError(
+                "seek_redemption completion target binding does not match its "
+                "wronged party"
+            )
+        if project["target_place_id"] is not None:
+            raise ValueError("seek_redemption completion forbids a place target")
+        if project["target_faction_entity_id"] is not None:
+            raise ValueError("seek_redemption completion forbids a faction target")
     if project_type == "build_venture" and any(
         project[target] is not None
         for target in (
@@ -3147,6 +3175,211 @@ async def _upsert_recruited_ally_relationship_async(
         "previous_relationship_type": previous_type,
         "relationship_type": "ally",
         "relationship_type_changed": previous_type != "ally",
+    }
+
+
+def _seek_redemption_relationship_metadata(
+    *,
+    template_id: str,
+    source_chunk_id: int,
+    previous_relationship_type: Optional[str],
+    previous_emotional_valence: Optional[str],
+    existing_extra_data: Any,
+) -> dict[str, Any]:
+    """Return first-write-preserving provenance for reconciliation."""
+
+    original_type = previous_relationship_type
+    original_valence = previous_emotional_valence
+    if isinstance(existing_extra_data, Mapping):
+        prior = existing_extra_data.get("orrery_seek_redemption")
+        if isinstance(prior, Mapping):
+            original_type = prior.get("previous_relationship_type", original_type)
+            original_valence = prior.get("previous_emotional_valence", original_valence)
+    return {
+        "orrery_seek_redemption": {
+            "template_id": template_id,
+            "source_chunk_id": source_chunk_id,
+            "previous_relationship_type": original_type,
+            "previous_emotional_valence": original_valence,
+        }
+    }
+
+
+def _upsert_reconciled_relationship_sync(
+    cur: Any,
+    *,
+    actor_entity_id: int,
+    target_entity_id: int,
+    template_id: str,
+    source_chunk_id: int,
+) -> dict[str, Any]:
+    """Persist actor->target as the canonical reconciled relationship."""
+
+    cur.execute(
+        """
+        SELECT actor.id AS character1_id,
+               target.id AS character2_id,
+               existing.relationship_type AS previous_relationship_type,
+               existing.emotional_valence AS previous_emotional_valence,
+               existing.extra_data
+        FROM characters actor
+        JOIN characters target ON target.entity_id = %s
+        LEFT JOIN character_relationships existing
+          ON existing.character1_id = actor.id
+         AND existing.character2_id = target.id
+        WHERE actor.entity_id = %s
+        """,
+        (target_entity_id, actor_entity_id),
+    )
+    row = cur.fetchone()
+    if row is None:
+        raise ValueError(
+            "seek_redemption completion requires actor and target character rows"
+        )
+    character1_id = int(_row_get(row, "character1_id", 0))
+    character2_id = int(_row_get(row, "character2_id", 1))
+    if character1_id == character2_id:
+        raise ValueError("seek_redemption completion cannot target the actor")
+    previous_type_raw = _row_get(row, "previous_relationship_type", 2)
+    previous_valence_raw = _row_get(row, "previous_emotional_valence", 3)
+    previous_type = str(previous_type_raw) if previous_type_raw is not None else None
+    previous_valence = (
+        str(previous_valence_raw) if previous_valence_raw is not None else None
+    )
+    metadata = _seek_redemption_relationship_metadata(
+        template_id=template_id,
+        source_chunk_id=source_chunk_id,
+        previous_relationship_type=previous_type,
+        previous_emotional_valence=previous_valence,
+        existing_extra_data=_row_get(row, "extra_data", 4),
+    )
+    cur.execute(
+        """
+        INSERT INTO character_relationships (
+            character1_id, character2_id, relationship_type,
+            emotional_valence, dynamic, recent_events, history, extra_data
+        ) VALUES (
+            %s, %s, 'complex', '+1|favorable',
+            'Reconciliation accepted without erasing the past.',
+            'A sustained attempt at amends reached acceptance.',
+            'Reconciliation established through the SEEK_REDEMPTION project.',
+            %s::jsonb
+        )
+        ON CONFLICT (character1_id, character2_id) DO UPDATE SET
+            relationship_type = EXCLUDED.relationship_type,
+            emotional_valence = EXCLUDED.emotional_valence,
+            extra_data = COALESCE(character_relationships.extra_data, '{}'::jsonb)
+                         || EXCLUDED.extra_data,
+            updated_at = now()
+        RETURNING character1_id, character2_id, relationship_type,
+                  emotional_valence
+        """,
+        (character1_id, character2_id, json.dumps(metadata)),
+    )
+    if cur.fetchone() is None:
+        raise RuntimeError("seek_redemption relationship upsert returned no row")
+    return {
+        "operation": "insert" if previous_type is None else "update",
+        "subject_entity_id": actor_entity_id,
+        "object_entity_id": target_entity_id,
+        "character1_id": character1_id,
+        "character2_id": character2_id,
+        "previous_relationship_type": previous_type,
+        "previous_emotional_valence": previous_valence,
+        "relationship_type": "complex",
+        "emotional_valence": "+1|favorable",
+        "relationship_type_changed": previous_type != "complex",
+        "emotional_valence_changed": previous_valence != "+1|favorable",
+    }
+
+
+async def _upsert_reconciled_relationship_async(
+    conn: Any,
+    *,
+    actor_entity_id: int,
+    target_entity_id: int,
+    template_id: str,
+    source_chunk_id: int,
+) -> dict[str, Any]:
+    """Async twin of _upsert_reconciled_relationship_sync."""
+
+    row = await conn.fetchrow(
+        """
+        SELECT actor.id AS character1_id,
+               target.id AS character2_id,
+               existing.relationship_type AS previous_relationship_type,
+               existing.emotional_valence AS previous_emotional_valence,
+               existing.extra_data
+        FROM characters actor
+        JOIN characters target ON target.entity_id = $2
+        LEFT JOIN character_relationships existing
+          ON existing.character1_id = actor.id
+         AND existing.character2_id = target.id
+        WHERE actor.entity_id = $1
+        """,
+        actor_entity_id,
+        target_entity_id,
+    )
+    if row is None:
+        raise ValueError(
+            "seek_redemption completion requires actor and target character rows"
+        )
+    character1_id = int(_row_get(row, "character1_id", 0))
+    character2_id = int(_row_get(row, "character2_id", 1))
+    if character1_id == character2_id:
+        raise ValueError("seek_redemption completion cannot target the actor")
+    previous_type_raw = _row_get(row, "previous_relationship_type", 2)
+    previous_valence_raw = _row_get(row, "previous_emotional_valence", 3)
+    previous_type = str(previous_type_raw) if previous_type_raw is not None else None
+    previous_valence = (
+        str(previous_valence_raw) if previous_valence_raw is not None else None
+    )
+    metadata = _seek_redemption_relationship_metadata(
+        template_id=template_id,
+        source_chunk_id=source_chunk_id,
+        previous_relationship_type=previous_type,
+        previous_emotional_valence=previous_valence,
+        existing_extra_data=_row_get(row, "extra_data", 4),
+    )
+    written = await conn.fetchrow(
+        """
+        INSERT INTO character_relationships (
+            character1_id, character2_id, relationship_type,
+            emotional_valence, dynamic, recent_events, history, extra_data
+        ) VALUES (
+            $1, $2, 'complex', '+1|favorable',
+            'Reconciliation accepted without erasing the past.',
+            'A sustained attempt at amends reached acceptance.',
+            'Reconciliation established through the SEEK_REDEMPTION project.',
+            $3::jsonb
+        )
+        ON CONFLICT (character1_id, character2_id) DO UPDATE SET
+            relationship_type = EXCLUDED.relationship_type,
+            emotional_valence = EXCLUDED.emotional_valence,
+            extra_data = COALESCE(character_relationships.extra_data, '{}'::jsonb)
+                         || EXCLUDED.extra_data,
+            updated_at = now()
+        RETURNING character1_id, character2_id, relationship_type,
+                  emotional_valence
+        """,
+        character1_id,
+        character2_id,
+        json.dumps(metadata),
+    )
+    if written is None:
+        raise RuntimeError("seek_redemption relationship upsert returned no row")
+    return {
+        "operation": "insert" if previous_type is None else "update",
+        "subject_entity_id": actor_entity_id,
+        "object_entity_id": target_entity_id,
+        "character1_id": character1_id,
+        "character2_id": character2_id,
+        "previous_relationship_type": previous_type,
+        "previous_emotional_valence": previous_valence,
+        "relationship_type": "complex",
+        "emotional_valence": "+1|favorable",
+        "relationship_type_changed": previous_type != "complex",
+        "emotional_valence_changed": previous_valence != "+1|favorable",
     }
 
 
@@ -3569,6 +3802,15 @@ def _apply_project_complete_sync(
             template_id=template_id,
             source_chunk_id=source_chunk_id,
         )
+    elif project["project_type"] == "seek_redemption":
+        assert target_entity_id is not None
+        relationship_mutation = _upsert_reconciled_relationship_sync(
+            cur,
+            actor_entity_id=actor_entity_id,
+            target_entity_id=target_entity_id,
+            template_id=template_id,
+            source_chunk_id=source_chunk_id,
+        )
     elif project["project_type"] == "build_venture":
         pass
     else:
@@ -3648,6 +3890,15 @@ async def _apply_project_complete_async(
     elif project["project_type"] == "court_patron":
         assert target_entity_id is not None
         relationship_mutation = await _upsert_court_patron_relationship_async(
+            conn,
+            actor_entity_id=actor_entity_id,
+            target_entity_id=target_entity_id,
+            template_id=template_id,
+            source_chunk_id=source_chunk_id,
+        )
+    elif project["project_type"] == "seek_redemption":
+        assert target_entity_id is not None
+        relationship_mutation = await _upsert_reconciled_relationship_async(
             conn,
             actor_entity_id=actor_entity_id,
             target_entity_id=target_entity_id,

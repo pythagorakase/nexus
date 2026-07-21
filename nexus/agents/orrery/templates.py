@@ -1028,6 +1028,7 @@ SURVEIL = Template(
         NOT(project_due("ready", project_type="recruit_ally")),
         NOT(project_due("ready", project_type="pursue_romance")),
         NOT(project_due("ready", project_type="court_patron")),
+        NOT(project_due("ready", project_type="seek_redemption")),
         NOT(is_constrained()),
         NOT(has_inbound_pair_tag("hunting")),
         NOT(has_ephemeral("grudge_active")),
@@ -5696,6 +5697,349 @@ ADVANCE_COURT_PATRON = Template(
 )
 
 
+START_SEEK_REDEMPTION = Template(
+    id="start_seek_redemption",
+    priority=17,
+    drive_band=DriveBand.PROJECT_IDENTITY,
+    priority_override_rationale=(
+        "Seeking redemption requires durable evidence of a wrong and an actor "
+        "who is no longer actively hostile toward the wronged party."
+    ),
+    blurb="An off-screen character begins making amends to someone they wronged.",
+    required_slots=(Slot.ACTOR, Slot.TARGET),
+    starts_from_social_contact=True,
+    package_gate=AND(
+        project_due("start", project_type="seek_redemption"),
+        has_minimal_context(),
+        at_routine_anchor("home"),
+        NOT(is_in_transit()),
+        NOT(is_constrained()),
+        NOT(
+            OR(
+                has_need_debt_at_or_above("sleep", 8),
+                has_need_debt_at_or_above("thirst", 2),
+                has_need_debt_at_or_above("hunger", 4),
+            )
+        ),
+        OR(
+            trust_below(0, Slot.TARGET, Slot.ACTOR),
+            has_symmetric_relationship_of_type("enemy", Slot.ACTOR, Slot.TARGET),
+            has_symmetric_relationship_of_type("rival", Slot.ACTOR, Slot.TARGET),
+            has_any_pair_tag(
+                "hostile_to",
+                "hunting",
+                subject_slot=Slot.TARGET,
+                object_slot=Slot.ACTOR,
+            ),
+        ),
+        NOT(
+            has_any_pair_tag(
+                "hostile_to",
+                "hunting",
+                subject_slot=Slot.ACTOR,
+                object_slot=Slot.TARGET,
+            )
+        ),
+    ),
+    branches=(
+        Branch(
+            label="Own the wrong",
+            conditions=ALWAYS,
+            narrative_stub=(
+                "{actor} stops arranging the past into excuses. What they did "
+                "to {target} becomes a wrong they can name, and therefore one "
+                "they can begin trying to repair."
+            ),
+            state_delta={
+                "project.start": {
+                    "project_type": "seek_redemption",
+                    "stage": "owning_the_wrong",
+                    "milestone": True,
+                }
+            },
+            event_type="seek_redemption_started",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.stage",
+                "character_project_states.target_character_entity_id",
+                "character_project_states.next_eligible_at_world_time",
+            ),
+            magnitude=0.40,
+        ),
+    ),
+)
+
+
+ADVANCE_SEEK_REDEMPTION = Template(
+    id="advance_seek_redemption",
+    priority=47,
+    drive_band=DriveBand.PROJECT_IDENTITY,
+    priority_override_rationale=(
+        "A due reconciliation effort shares the established continuation slot "
+        "while SURVEIL yields to its bound two-party work."
+    ),
+    blurb=(
+        "A due attempt at redemption owns the wrong, makes amends, seeks "
+        "forgiveness, stalls, is thrown back, or ends."
+    ),
+    required_slots=(Slot.ACTOR, Slot.TARGET),
+    binds_project_target=True,
+    package_gate=AND(
+        project_due("ready", project_type="seek_redemption"),
+        project_target_is(Slot.TARGET),
+        NOT(is_in_transit()),
+        NOT(is_constrained()),
+        NOT(
+            OR(
+                has_need_debt_at_or_above("sleep", 8),
+                has_need_debt_at_or_above("thirst", 2),
+                has_need_debt_at_or_above("hunger", 4),
+            )
+        ),
+    ),
+    branches=(
+        Branch(
+            label="End amends whose wronged party is no longer available",
+            conditions=NOT(project_target_is_active(Slot.TARGET)),
+            narrative_stub=(
+                "{target} is no longer someone who can receive an attempt at "
+                "amends. {actor} closes the effort rather than preserving an "
+                "unanswerable claim to forgiveness."
+            ),
+            state_delta={
+                "project.abandon": {
+                    "reason": "target_inactive_or_non_character",
+                    "milestone": True,
+                }
+            },
+            event_type="seek_redemption_abandoned",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.source_chunk_id",
+            ),
+            magnitude=0.40,
+            preemptive=True,
+        ),
+        Branch(
+            label="Have the amends accepted",
+            conditions=AND(
+                project_due("completion", project_type="seek_redemption"),
+                NOT(
+                    has_any_pair_tag(
+                        "hostile_to",
+                        "hunting",
+                        subject_slot=Slot.ACTOR,
+                        object_slot=Slot.TARGET,
+                    )
+                ),
+                NOT(
+                    has_any_pair_tag(
+                        "hostile_to",
+                        "hunting",
+                        subject_slot=Slot.TARGET,
+                        object_slot=Slot.ACTOR,
+                    )
+                ),
+            ),
+            narrative_stub=(
+                "{target} accepts what {actor} has done to make amends. The "
+                "history remains complicated, but it no longer dictates only "
+                "hostility between them."
+            ),
+            state_delta={
+                "project.complete": {"milestone": True},
+                "entity_tags_target.remove": ["grudge_active"],
+            },
+            event_type="seek_redemption_completed",
+            changed_fields=(
+                "character_project_states.status",
+                "entity_tags",
+                "character_relationships.relationship_type",
+                "character_relationships.emotional_valence",
+            ),
+            magnitude=0.40,
+            preemptive=True,
+        ),
+        Branch(
+            label="Abandon amends that are thrown back",
+            conditions=OR(
+                trust_below(-2, Slot.TARGET, Slot.ACTOR),
+                has_any_pair_tag(
+                    "hostile_to",
+                    "hunting",
+                    subject_slot=Slot.ACTOR,
+                    object_slot=Slot.TARGET,
+                ),
+                has_any_pair_tag(
+                    "hostile_to",
+                    "hunting",
+                    subject_slot=Slot.TARGET,
+                    object_slot=Slot.ACTOR,
+                ),
+            ),
+            narrative_stub=(
+                "The amends are thrown back in {actor}'s face. Whether the "
+                "answer is hardened resentment or fresh hostility, {target} "
+                "will not accept reconciliation on these terms."
+            ),
+            state_delta={
+                "project.abandon": {
+                    "reason": "amends_spurned_or_hostility_hardened",
+                    "milestone": True,
+                }
+            },
+            event_type="seek_redemption_abandoned",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.source_chunk_id",
+            ),
+            magnitude=0.40,
+            preemptive=True,
+        ),
+        Branch(
+            label="Let the attempt at redemption go",
+            conditions=project_due("abandon", project_type="seek_redemption"),
+            narrative_stub=(
+                "Delay has made the attempt another promise without repair. "
+                "{actor} stops claiming that unfinished amends are progress."
+            ),
+            state_delta={
+                "project.abandon": {
+                    "reason": "stalled_or_overdue",
+                    "milestone": True,
+                }
+            },
+            event_type="seek_redemption_abandoned",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.source_chunk_id",
+            ),
+            magnitude=0.40,
+            preemptive=True,
+        ),
+        Branch(
+            label="Turn ownership into amends",
+            conditions=project_due(
+                "owning_the_wrong_milestone", project_type="seek_redemption"
+            ),
+            narrative_stub=(
+                "{actor} has named the wrong without qualification. Words now "
+                "have to become repair shaped by what {target} actually lost."
+            ),
+            state_delta={
+                "project.advance": {
+                    "stage": "making_amends",
+                    "set_progress": 0.0,
+                    "milestone": True,
+                }
+            },
+            event_type="seek_redemption_milestone",
+            changed_fields=(
+                "character_project_states.stage",
+                "character_project_states.progress",
+                "character_project_states.stall_count",
+            ),
+            magnitude=0.40,
+            preemptive=True,
+        ),
+        Branch(
+            label="Let amends ask for forgiveness",
+            conditions=project_due(
+                "making_amends_milestone", project_type="seek_redemption"
+            ),
+            narrative_stub=(
+                "The repair is no longer hypothetical. {actor} leaves the last "
+                "judgment with {target}: whether these amends can be accepted."
+            ),
+            state_delta={
+                "project.advance": {
+                    "stage": "earning_forgiveness",
+                    "set_progress": 0.0,
+                    "milestone": True,
+                }
+            },
+            event_type="seek_redemption_milestone",
+            changed_fields=(
+                "character_project_states.stage",
+                "character_project_states.progress",
+                "character_project_states.stall_count",
+            ),
+            magnitude=0.40,
+            preemptive=True,
+        ),
+        Branch(
+            label="Lose ground through neglected amends",
+            conditions=project_due("neglected", project_type="seek_redemption"),
+            narrative_stub=(
+                "Neglect makes the apology look like another demand for easy "
+                "absolution. The attempt at redemption loses ground."
+            ),
+            state_delta={"project.stall": {"increment": 1}},
+            event_type="seek_redemption_stalled",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.stall_count",
+                "character_project_states.next_eligible_at_world_time",
+            ),
+            magnitude=0.10,
+            promotable=False,
+            preemptive=True,
+        ),
+        Branch(
+            label="Name the wrong without self-exoneration",
+            conditions=project_due("owning_the_wrong", project_type="seek_redemption"),
+            narrative_stub=(
+                "{actor} examines one consequence from {target}'s side of the "
+                "harm and removes another comforting excuse from the account."
+            ),
+            state_delta={"project.advance": {"progress_delta": 0.35}},
+            event_type="seek_redemption_progressed",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.progress",
+                "character_project_states.next_eligible_at_world_time",
+            ),
+            magnitude=0.18,
+            promotable=False,
+        ),
+        Branch(
+            label="Make one concrete repair",
+            conditions=project_due("making_amends", project_type="seek_redemption"),
+            narrative_stub=(
+                "{actor} makes one repair that costs them something and returns "
+                "something meaningful to {target}."
+            ),
+            state_delta={"project.advance": {"progress_delta": 0.35}},
+            event_type="seek_redemption_progressed",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.progress",
+                "character_project_states.next_eligible_at_world_time",
+            ),
+            magnitude=0.18,
+            promotable=False,
+        ),
+        Branch(
+            label="Leave forgiveness in the wronged party's hands",
+            conditions=ALWAYS,
+            narrative_stub=(
+                "{actor} continues the work without treating forgiveness as a "
+                "debt {target} now owes them."
+            ),
+            state_delta={"project.advance": {"progress_delta": 0.25}},
+            event_type="seek_redemption_progressed",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.progress",
+                "character_project_states.next_eligible_at_world_time",
+            ),
+            magnitude=0.16,
+            promotable=False,
+        ),
+    ),
+)
+
+
 START_BUILD_VENTURE = Template(
     id="start_build_venture",
     priority=17,
@@ -5963,6 +6307,7 @@ BUILTIN_TEMPLATES = (
     ADVANCE_BUILD_VENTURE,
     ADVANCE_PURSUE_ROMANCE,
     ADVANCE_COURT_PATRON,
+    ADVANCE_SEEK_REDEMPTION,
     ACT_ON_INTEL,
     UNCOVER_PAST,
     CHECK_ON_DEPENDENT,
@@ -5990,6 +6335,7 @@ BUILTIN_TEMPLATES = (
     START_BUILD_VENTURE,
     START_PURSUE_ROMANCE,
     START_COURT_PATRON,
+    START_SEEK_REDEMPTION,
     MAINTAIN_COVER,
 )
 

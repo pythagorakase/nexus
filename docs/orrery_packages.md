@@ -925,6 +925,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
   - **NOT:** actor `recruit_ally` project passes `ready` due-state
   - **NOT:** actor `pursue_romance` project passes `ready` due-state
   - **NOT:** actor `court_patron` project passes `ready` due-state
+  - **NOT:** actor `seek_redemption` project passes `ready` due-state
   - **NOT:** actor is constrained or immobilized
   - **NOT:** actor has inbound `hunting` pair tag
   - **NOT:** actor has `grudge_active` ephemeral
@@ -1588,6 +1589,130 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 **Event:** `court_patron_progressed`
 
 > {actor} makes one more service, request, or allegiance explicit, bringing {target}'s answer closer without pretending it is owed.
+
+---
+
+## ADVANCE_SEEK_REDEMPTION — priority 47
+
+> A due attempt at redemption owns the wrong, makes amends, seeks forgiveness, stalls, is thrown back, or ends.
+
+**Drive band:** project identity — A due reconciliation effort shares the established continuation slot while SURVEIL yields to its bound two-party work.
+**Slots:** ACTOR, TARGET
+
+**Gate:**
+
+- **AND:**
+  - actor `seek_redemption` project passes `ready` due-state
+  - target is the project's bound target
+  - **NOT:** actor is in transit
+  - **NOT:** actor is constrained or immobilized
+  - **NOT:**
+    - **OR:**
+      - actor has `sleep` debt ≥ 8
+      - actor has `thirst` debt ≥ 2
+      - actor has `hunger` debt ≥ 4
+
+### Branch 1 — End amends whose wronged party is no longer available  *(mag 0.4)* · **preemptive**
+
+**When:**
+
+- **NOT:** target is the project's target and still an active character
+
+**Does:** applies project `abandon` transition
+**Event:** `seek_redemption_abandoned`
+
+> {target} is no longer someone who can receive an attempt at amends. {actor} closes the effort rather than preserving an unanswerable claim to forgiveness.
+
+### Branch 2 — Have the amends accepted  *(mag 0.4)* · **preemptive**
+
+**When:**
+
+- **AND:**
+  - actor `seek_redemption` project passes `completion` due-state
+  - **NOT:** actor has any of [`hostile_to`, `hunting`] pair tags to target
+  - **NOT:** target has any of [`hostile_to`, `hunting`] pair tags to actor
+
+**Does:** applies project `complete` transition and upserts the actor→target `complex` relationship with `+1|favorable` valence; removes `grudge_active` from target
+**Event:** `seek_redemption_completed`
+
+> {target} accepts what {actor} has done to make amends. The history remains complicated, but it no longer dictates only hostility between them.
+
+### Branch 3 — Abandon amends that are thrown back  *(mag 0.4)* · **preemptive**
+
+**When:**
+
+- **OR:**
+  - trust target→actor < -2
+  - actor has any of [`hostile_to`, `hunting`] pair tags to target
+  - target has any of [`hostile_to`, `hunting`] pair tags to actor
+
+**Does:** applies project `abandon` transition
+**Event:** `seek_redemption_abandoned`
+
+> The amends are thrown back in {actor}'s face. Whether the answer is hardened resentment or fresh hostility, {target} will not accept reconciliation on these terms.
+
+### Branch 4 — Let the attempt at redemption go  *(mag 0.4)* · **preemptive**
+
+**When:** actor `seek_redemption` project passes `abandon` due-state
+
+**Does:** applies project `abandon` transition
+**Event:** `seek_redemption_abandoned`
+
+> Delay has made the attempt another promise without repair. {actor} stops claiming that unfinished amends are progress.
+
+### Branch 5 — Turn ownership into amends  *(mag 0.4)* · **preemptive**
+
+**When:** actor `seek_redemption` project passes `owning_the_wrong_milestone` due-state
+
+**Does:** applies project `advance` transition
+**Event:** `seek_redemption_milestone`
+
+> {actor} has named the wrong without qualification. Words now have to become repair shaped by what {target} actually lost.
+
+### Branch 6 — Let amends ask for forgiveness  *(mag 0.4)* · **preemptive**
+
+**When:** actor `seek_redemption` project passes `making_amends_milestone` due-state
+
+**Does:** applies project `advance` transition
+**Event:** `seek_redemption_milestone`
+
+> The repair is no longer hypothetical. {actor} leaves the last judgment with {target}: whether these amends can be accepted.
+
+### Branch 7 — Lose ground through neglected amends  *(mag 0.1)* · **preemptive** · **not promotable**
+
+**When:** actor `seek_redemption` project passes `neglected` due-state
+
+**Does:** applies project `stall` transition
+**Event:** `seek_redemption_stalled`
+
+> Neglect makes the apology look like another demand for easy absolution. The attempt at redemption loses ground.
+
+### Branch 8 — Name the wrong without self-exoneration  *(mag 0.18)* · **not promotable**
+
+**When:** actor `seek_redemption` project passes `owning_the_wrong` due-state
+
+**Does:** applies project `advance` transition
+**Event:** `seek_redemption_progressed`
+
+> {actor} examines one consequence from {target}'s side of the harm and removes another comforting excuse from the account.
+
+### Branch 9 — Make one concrete repair  *(mag 0.18)* · **not promotable**
+
+**When:** actor `seek_redemption` project passes `making_amends` due-state
+
+**Does:** applies project `advance` transition
+**Event:** `seek_redemption_progressed`
+
+> {actor} makes one repair that costs them something and returns something meaningful to {target}.
+
+### Branch 10 — Leave forgiveness in the wronged party's hands  *(mag 0.16)* · **not promotable**
+
+**When:** *(always)*
+
+**Does:** applies project `advance` transition
+**Event:** `seek_redemption_progressed`
+
+> {actor} continues the work without treating forgiveness as a debt {target} now owes them.
 
 ---
 
@@ -2619,6 +2744,44 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 ---
 
+## START_SEEK_REDEMPTION — priority 17
+
+> An off-screen character begins making amends to someone they wronged.
+
+**Drive band:** project identity — Seeking redemption requires durable evidence of a wrong and an actor who is no longer actively hostile toward the wronged party.
+**Slots:** ACTOR, TARGET
+
+**Gate:**
+
+- **AND:**
+  - actor `seek_redemption` project passes `start` due-state
+  - actor has enough hydrated context
+  - actor is at `home` anchor
+  - **NOT:** actor is in transit
+  - **NOT:** actor is constrained or immobilized
+  - **NOT:**
+    - **OR:**
+      - actor has `sleep` debt ≥ 8
+      - actor has `thirst` debt ≥ 2
+      - actor has `hunger` debt ≥ 4
+  - **OR:**
+    - trust target→actor < 0
+    - actor and target share `enemy` relationship (either direction)
+    - actor and target share `rival` relationship (either direction)
+    - target has any of [`hostile_to`, `hunting`] pair tags to actor
+  - **NOT:** actor has any of [`hostile_to`, `hunting`] pair tags to target
+
+### Branch 1 — Own the wrong  *(mag 0.4)*
+
+**When:** *(always)*
+
+**Does:** applies project `start` transition
+**Event:** `seek_redemption_started`
+
+> {actor} stops arranging the past into excuses. What they did to {target} becomes a wrong they can name, and therefore one they can begin trying to repair.
+
+---
+
 ## INTIMACY — priority 16
 
 > The body asks for the kind of connection that is not conversation.
@@ -3566,6 +3729,12 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `retaliation_attempted`
 - `retaliation_executed`
 - `rival_consulted`
+- `seek_redemption_abandoned`
+- `seek_redemption_completed`
+- `seek_redemption_milestone`
+- `seek_redemption_progressed`
+- `seek_redemption_stalled`
+- `seek_redemption_started`
 - `signal_exposure_reduced`
 - `slept`
 - `social_travel_departed`

@@ -96,6 +96,18 @@ def test_catalog_renders_court_patron_completion_vocabulary() -> None:
     assert "- `sponsors`" in content
 
 
+def test_catalog_renders_seek_redemption_completion_vocabulary() -> None:
+    """Reconciliation gates and its bespoke completion stay discoverable."""
+
+    content = render_catalog(BUILTIN_TEMPLATES)
+    assert "## START_SEEK_REDEMPTION — priority 17" in content
+    assert "## ADVANCE_SEEK_REDEMPTION — priority 47" in content
+    assert "actor `seek_redemption` project passes `completion` due-state" in content
+    assert "actor→target `complex` relationship" in content
+    assert "`+1|favorable` valence" in content
+    assert "removes `grudge_active` from target" in content
+
+
 def test_catalog_renders_compound_structure() -> None:
     """AND / OR / NOT compositions appear as labeled nested bullets."""
 
