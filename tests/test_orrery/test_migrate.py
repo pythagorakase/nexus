@@ -266,6 +266,35 @@ def test_relationship_drift_migration_registers_visibility_event_only() -> None:
     assert "ALTER TABLE" not in migration_sql
 
 
+def test_claim_accounts_migration_installs_shape_c_contract() -> None:
+    """Migration 090 replaces event uniqueness with labeled sibling accounts."""
+
+    migration_sql = (
+        Path(__file__).parent.parent.parent / "migrations" / "090_claim_accounts.sql"
+    ).read_text()
+
+    assert "ADD COLUMN account_label text NOT NULL DEFAULT 'canonical'" in (
+        migration_sql
+    )
+    assert "ADD COLUMN account_payload jsonb" in migration_sql
+    assert "ADD COLUMN distorted_from_claim_id bigint" in migration_sql
+    assert "REFERENCES claims(id)" in migration_sql
+    assert "CHECK (distorted_from_claim_id <> id)" in migration_sql
+    assert "DROP INDEX ux_claims_world_event_v1" in migration_sql
+    assert "CREATE UNIQUE INDEX ux_claims_world_event_account_v1" in migration_sql
+    assert "ON claims (world_event_id, account_label)" in migration_sql
+    assert "WHERE world_event_id IS NOT NULL" in migration_sql
+    for column in (
+        "account_label",
+        "account_payload",
+        "distorted_from_claim_id",
+    ):
+        assert f"COMMENT ON COLUMN claims.{column}" in migration_sql
+    assert "truth markers and account facts" in migration_sql
+    assert "retrograde_summaries.summary_text" in migration_sql
+    assert "COMMENT ON INDEX ux_claims_world_event_account_v1" in migration_sql
+
+
 def test_retrograde_persistence_migration_adds_distinct_sources() -> None:
     """Retrograde canonical writes need explicit event and tag provenance."""
 

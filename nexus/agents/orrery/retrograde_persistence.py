@@ -1412,6 +1412,8 @@ def _mint_retrograde_event_claim(
     source_chunk_id: Optional[int],
     epistemics_settings: Optional[Any],
 ) -> Any:
+    """Mint the canonical account through the shared tuple-conflict writer."""
+
     policy = coerce_epistemics_policy(epistemics_settings)
     if not policy.enabled or event_type not in policy.claim_event_types:
         return None

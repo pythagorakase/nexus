@@ -35,6 +35,10 @@ from nexus.agents.orrery.replay import (
 from nexus.agents.orrery.resolver import _load_recent_events, compose_actor_bindings
 from nexus.api.slot_utils import get_slot_db_url
 from nexus.config.settings_models import OrreryContagionSettings
+from tests.test_orrery.claim_accounts_test_support import (
+    install_claim_accounts_shadow_async,
+    install_claim_accounts_shadow_sync,
+)
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -100,6 +104,7 @@ def live_conn() -> Iterator[Any]:
                     "slot 5 has not applied migration 083: claim_propagated "
                     "registration and world_events.world_time are required"
                 )
+            install_claim_accounts_shadow_sync(cur)
             _install_valence_shadow(cur)
         yield conn
     finally:
@@ -483,6 +488,7 @@ def test_propagation_event_does_not_change_salience_or_hydration_feed() -> None:
                     "slot 5 has not applied migration 083: salience isolation "
                     "requires the real propagation ledger"
                 )
+            install_claim_accounts_shadow_sync(cur)
             _install_valence_shadow(cur)
             entities, _ = _chain(cur, 2)
             birth_chunk, birth_world_time = _insert_chunk(cur)
@@ -1170,6 +1176,7 @@ async def test_async_drain_matches_sync_single_hop() -> None:
                 "slot 5 has not applied migration 083: async propagation "
                 "coverage requires the registered event and shaped ledger"
             )
+        await install_claim_accounts_shadow_async(conn)
         await conn.execute(
             r"""
             CREATE TEMP TABLE character_relationships ON COMMIT DROP AS

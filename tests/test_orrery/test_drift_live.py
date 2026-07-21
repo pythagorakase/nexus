@@ -16,6 +16,9 @@ from nexus.agents.orrery.events import commit_orrery_tick_sync
 from nexus.api.slot_utils import get_slot_db_url
 from nexus.config import load_settings
 from nexus.config.settings_models import OrreryDriftSettings
+from tests.test_orrery.claim_accounts_test_support import (
+    install_claim_accounts_shadow_sync,
+)
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -56,6 +59,7 @@ def live_conn() -> Iterator[Any]:
             readiness = cur.fetchone()
             if not readiness["valence_ready"] or not readiness["event_clock_ready"]:
                 pytest.skip("slot 5 requires applied migrations 083 and 088")
+            install_claim_accounts_shadow_sync(cur)
             cur.execute(
                 """
                 INSERT INTO event_types (type, category, severity, description)

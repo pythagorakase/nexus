@@ -50,6 +50,10 @@ from nexus.agents.orrery.substrate import (
 from nexus.agents.orrery.templates import SURVEIL
 from nexus.api.slot_utils import get_slot_db_url
 from nexus.config.settings_models import OrreryEpistemicsSettings
+from tests.test_orrery.claim_accounts_test_support import (
+    install_claim_accounts_shadow_async,
+    install_claim_accounts_shadow_sync,
+)
 
 
 EPISTEMICS = {
@@ -66,6 +70,8 @@ def save_02_conn() -> Iterator[Any]:
 
     conn = psycopg2.connect(get_slot_db_url(slot=2))
     try:
+        with conn.cursor() as cur:
+            install_claim_accounts_shadow_sync(cur)
         yield conn
     finally:
         conn.rollback()
@@ -640,6 +646,7 @@ def test_async_live_applier_has_epistemics_parity() -> None:
         transaction = conn.transaction()
         await transaction.start()
         try:
+            await install_claim_accounts_shadow_async(conn)
             anchor = int(await conn.fetchval("SELECT max(id) FROM narrative_chunks"))
             rows = await conn.fetch(
                 """
@@ -743,6 +750,8 @@ def test_resolver_hydrates_scopes_and_awareness_in_recent_window() -> None:
     engine = create_engine(get_slot_db_url(slot=2))
     connection = engine.connect()
     transaction = connection.begin()
+    with connection.connection.driver_connection.cursor() as cur:
+        install_claim_accounts_shadow_sync(cur)
     session = Session(bind=connection)
     try:
         anchor_value = session.execute(
@@ -826,6 +835,8 @@ def test_unclaimed_event_is_implicitly_common_with_epistemics_enabled() -> None:
     engine = create_engine(get_slot_db_url(slot=2))
     connection = engine.connect()
     transaction = connection.begin()
+    with connection.connection.driver_connection.cursor() as cur:
+        install_claim_accounts_shadow_sync(cur)
     session = Session(bind=connection)
     try:
         anchor_value = session.execute(

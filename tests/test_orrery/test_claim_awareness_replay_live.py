@@ -14,6 +14,9 @@ from psycopg2.extras import RealDictCursor  # type: ignore[import-untyped]
 from nexus.agents.orrery.epistemics import ClaimParticipant, mint_claim_for_event
 from nexus.agents.orrery.reconstruction import capture_state_checkpoint_sync
 from nexus.agents.orrery.replay import verify_checkpoints_sync
+from tests.test_orrery.claim_accounts_test_support import (
+    install_claim_accounts_shadow_sync,
+)
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -37,6 +40,8 @@ def template_conn() -> Iterator[Any]:
         port=os.environ.get("PGPORT", "5432"),
     )
     try:
+        with conn.cursor() as cur:
+            install_claim_accounts_shadow_sync(cur)
         yield conn
     finally:
         conn.rollback()
