@@ -1502,6 +1502,15 @@ def _project_payload_with_bound_faction(
     """Carry the adjudicated draft's immutable faction into a transition."""
 
     data = _coerce_project_payload(draft.state_delta[project_key])
+    if data.get("project_type") == "build_venture" and any(
+        data.get(target) is not None
+        for target in (
+            "target_place_id",
+            "target_character_entity_id",
+            "target_faction_entity_id",
+        )
+    ):
+        raise ValueError("build_venture project.start forbids all targets")
     bound_faction = draft.bindings.get("faction")
     has_faction_binding = "faction" in draft.bindings
     if has_faction_binding and not isinstance(bound_faction, int):
@@ -2138,6 +2147,11 @@ PROJECT_OPEN_STATUSES = ("active", "paused", "stalled")
 PROJECT_STAGE_LADDERS = {
     "plan_relocation": ("saving", "scouting", "committing"),
     "recruit_ally": ("sounding_out", "earning_trust", "sealing_commitment"),
+    "build_venture": (
+        "laying_groundwork",
+        "securing_backing",
+        "opening_doors",
+    ),
 }
 
 
@@ -2375,6 +2389,15 @@ def _apply_project_start_sync(
             raise ValueError("recruit_ally project.start forbids a place target")
         if not isinstance(target_character_entity_id, int):
             raise ValueError("recruit_ally project.start requires a character target")
+    if project_type == "build_venture" and any(
+        target is not None
+        for target in (
+            target_place_id,
+            target_character_entity_id,
+            target_faction_entity_id,
+        )
+    ):
+        raise ValueError("build_venture project.start forbids all targets")
     progress = float(data.get("progress", 0.0))
     cur.execute(
         """
@@ -2445,6 +2468,15 @@ async def _apply_project_start_async(
             raise ValueError("recruit_ally project.start forbids a place target")
         if not isinstance(target_character_entity_id, int):
             raise ValueError("recruit_ally project.start requires a character target")
+    if project_type == "build_venture" and any(
+        target is not None
+        for target in (
+            target_place_id,
+            target_character_entity_id,
+            target_faction_entity_id,
+        )
+    ):
+        raise ValueError("build_venture project.start forbids all targets")
     progress = float(data.get("progress", 0.0))
     await conn.execute(
         """
@@ -2824,6 +2856,15 @@ def _validate_project_completion(
             raise ValueError(
                 "recruit_ally completion target binding does not match its recruit"
             )
+    if project_type == "build_venture" and any(
+        project[target] is not None
+        for target in (
+            "target_place_id",
+            "target_character_entity_id",
+            "target_faction_entity_id",
+        )
+    ):
+        raise ValueError("build_venture completion forbids all targets")
 
 
 def _recruit_ally_relationship_metadata(
@@ -3048,6 +3089,8 @@ def _apply_project_complete_sync(
             template_id=template_id,
             source_chunk_id=source_chunk_id,
         )
+    elif project["project_type"] == "build_venture":
+        pass
     else:
         raise ValueError(
             f"Unsupported project completion type: {project['project_type']!r}"
@@ -3113,6 +3156,8 @@ async def _apply_project_complete_async(
             template_id=template_id,
             source_chunk_id=source_chunk_id,
         )
+    elif project["project_type"] == "build_venture":
+        pass
     else:
         raise ValueError(
             f"Unsupported project completion type: {project['project_type']!r}"

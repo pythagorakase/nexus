@@ -4967,6 +4967,259 @@ ADVANCE_RECRUIT_ALLY = Template(
 )
 
 
+START_BUILD_VENTURE = Template(
+    id="start_build_venture",
+    priority=17,
+    drive_band=DriveBand.PROJECT_IDENTITY,
+    priority_override_rationale=(
+        "A venture begins from a stable home anchor and shares the proven "
+        "project-entry priority with relocation and recruitment."
+    ),
+    blurb=(
+        "An off-screen character turns a business, workshop, or crew from an "
+        "idea into deliberate groundwork."
+    ),
+    required_slots=(Slot.ACTOR,),
+    package_gate=AND(
+        project_due("start", project_type="build_venture"),
+        has_minimal_context(),
+        at_routine_anchor("home"),
+        NOT(is_in_transit()),
+        NOT(is_constrained()),
+        NOT(
+            OR(
+                has_need_debt_at_or_above("sleep", 8),
+                has_need_debt_at_or_above("thirst", 2),
+                has_need_debt_at_or_above("hunger", 4),
+            )
+        ),
+        NOT(has_inbound_pair_tag("hostile_to")),
+        NOT(has_inbound_pair_tag("hunting")),
+    ),
+    branches=(
+        Branch(
+            label="Lay the first groundwork",
+            conditions=ALWAYS,
+            narrative_stub=(
+                "{actor} stops leaving the venture in the realm of someday. "
+                "They name what it will do, what it will need, and the first "
+                "piece of groundwork they can finish now."
+            ),
+            state_delta={
+                "project.start": {
+                    "project_type": "build_venture",
+                    "stage": "laying_groundwork",
+                    "milestone": True,
+                }
+            },
+            event_type="build_venture_started",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.stage",
+                "character_project_states.next_eligible_at_world_time",
+            ),
+            magnitude=0.40,
+        ),
+    ),
+)
+
+
+ADVANCE_BUILD_VENTURE = Template(
+    id="advance_build_venture",
+    priority=47,
+    drive_band=DriveBand.PROJECT_IDENTITY,
+    priority_override_rationale=(
+        "A due venture shares the established project-advance priority; its "
+        "cadence and embodied floor preserve routine stability."
+    ),
+    blurb=(
+        "A due venture lays groundwork, secures backing, opens doors, stalls, "
+        "or ends."
+    ),
+    required_slots=(Slot.ACTOR,),
+    package_gate=AND(
+        project_due("ready", project_type="build_venture"),
+        NOT(is_in_transit()),
+        NOT(is_constrained()),
+        NOT(
+            OR(
+                has_need_debt_at_or_above("sleep", 8),
+                has_need_debt_at_or_above("thirst", 2),
+                has_need_debt_at_or_above("hunger", 4),
+            )
+        ),
+    ),
+    branches=(
+        Branch(
+            label="Open the doors",
+            conditions=project_due("completion", project_type="build_venture"),
+            narrative_stub=(
+                "The preparations stop being preparations. {actor} opens the "
+                "doors, takes responsibility for what happens beyond them, "
+                "and becomes the proprietor of something now alive in the world."
+            ),
+            state_delta={
+                "project.complete": {"milestone": True},
+                "entity_tags.add": ["proprietor"],
+            },
+            event_type="build_venture_completed",
+            changed_fields=(
+                "character_project_states.status",
+                "entity_tags",
+            ),
+            magnitude=0.40,
+            preemptive=True,
+        ),
+        Branch(
+            label="Let the venture go",
+            conditions=project_due("abandon", project_type="build_venture"),
+            narrative_stub=(
+                "{actor} admits that the venture has become an obligation to "
+                "an unopened future. They release it rather than feed another "
+                "season into delay."
+            ),
+            state_delta={
+                "project.abandon": {
+                    "reason": "stalled_or_overdue",
+                    "milestone": True,
+                }
+            },
+            event_type="build_venture_abandoned",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.source_chunk_id",
+            ),
+            magnitude=0.40,
+            preemptive=True,
+        ),
+        Branch(
+            label="Turn groundwork into backing",
+            conditions=project_due(
+                "laying_groundwork_milestone", project_type="build_venture"
+            ),
+            narrative_stub=(
+                "The shape is credible enough to show another person. {actor} "
+                "stops refining the idea in private and begins securing the "
+                "money, materials, promises, and labor that can hold it up."
+            ),
+            state_delta={
+                "project.advance": {
+                    "stage": "securing_backing",
+                    "set_progress": 0.0,
+                    "milestone": True,
+                }
+            },
+            event_type="build_venture_milestone",
+            changed_fields=(
+                "character_project_states.stage",
+                "character_project_states.progress",
+                "character_project_states.stall_count",
+            ),
+            magnitude=0.40,
+            preemptive=True,
+        ),
+        Branch(
+            label="Turn backing into an opening",
+            conditions=project_due(
+                "securing_backing_milestone", project_type="build_venture"
+            ),
+            narrative_stub=(
+                "Enough commitments now hold. {actor} turns from winning "
+                "support to the last concrete work: a place in the world, a "
+                "way of operating, and doors ready to open."
+            ),
+            state_delta={
+                "project.advance": {
+                    "stage": "opening_doors",
+                    "set_progress": 0.0,
+                    "milestone": True,
+                }
+            },
+            event_type="build_venture_milestone",
+            changed_fields=(
+                "character_project_states.stage",
+                "character_project_states.progress",
+                "character_project_states.stall_count",
+            ),
+            magnitude=0.40,
+            preemptive=True,
+        ),
+        Branch(
+            label="Lose ground through neglect",
+            conditions=project_due("neglected", project_type="build_venture"),
+            narrative_stub=(
+                "Unanswered messages and unfinished arrangements begin undoing "
+                "what {actor} assembled. The venture stalls, still possible but "
+                "no longer moving on its own momentum."
+            ),
+            state_delta={"project.stall": {"increment": 1}},
+            event_type="build_venture_stalled",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.stall_count",
+                "character_project_states.next_eligible_at_world_time",
+            ),
+            magnitude=0.10,
+            promotable=False,
+            preemptive=True,
+        ),
+        Branch(
+            label="Make the venture legible",
+            conditions=project_due("laying_groundwork", project_type="build_venture"),
+            narrative_stub=(
+                "{actor} turns another vague requirement into a concrete one: "
+                "a cost counted, a service defined, or a necessary piece of "
+                "work finished."
+            ),
+            state_delta={"project.advance": {"progress_delta": 0.35}},
+            event_type="build_venture_progressed",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.progress",
+                "character_project_states.next_eligible_at_world_time",
+            ),
+            magnitude=0.18,
+            promotable=False,
+        ),
+        Branch(
+            label="Secure one more commitment",
+            conditions=project_due("securing_backing", project_type="build_venture"),
+            narrative_stub=(
+                "{actor} wins one more commitment the venture can rely on: "
+                "capital, material, labor, permission, or a promise with weight."
+            ),
+            state_delta={"project.advance": {"progress_delta": 0.35}},
+            event_type="build_venture_progressed",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.progress",
+                "character_project_states.next_eligible_at_world_time",
+            ),
+            magnitude=0.18,
+            promotable=False,
+        ),
+        Branch(
+            label="Finish the next opening task",
+            conditions=ALWAYS,
+            narrative_stub=(
+                "{actor} finishes one of the unglamorous tasks between backing "
+                "and opening: a roster, a schedule, a key, a supply line, or "
+                "the first promise to a customer."
+            ),
+            state_delta={"project.advance": {"progress_delta": 0.25}},
+            event_type="build_venture_progressed",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.progress",
+                "character_project_states.next_eligible_at_world_time",
+            ),
+            magnitude=0.16,
+            promotable=False,
+        ),
+    ),
+)
+
+
 BUILTIN_TEMPLATES = (
     EVADE_PURSUERS,
     PROTECT_KIN,
@@ -4978,6 +5231,7 @@ BUILTIN_TEMPLATES = (
     SURVEIL,
     ADVANCE_RELOCATION_PLAN,
     ADVANCE_RECRUIT_ALLY,
+    ADVANCE_BUILD_VENTURE,
     ACT_ON_INTEL,
     UNCOVER_PAST,
     CHECK_ON_DEPENDENT,
@@ -5002,6 +5256,7 @@ BUILTIN_TEMPLATES = (
     RECREATE,
     START_RELOCATION_PLAN,
     START_RECRUIT_ALLY,
+    START_BUILD_VENTURE,
     MAINTAIN_COVER,
 )
 

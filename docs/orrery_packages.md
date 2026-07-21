@@ -1246,6 +1246,99 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 ---
 
+## ADVANCE_BUILD_VENTURE — priority 47
+
+> A due venture lays groundwork, secures backing, opens doors, stalls, or ends.
+
+**Drive band:** project identity — A due venture shares the established project-advance priority; its cadence and embodied floor preserve routine stability.
+**Slots:** ACTOR
+
+**Gate:**
+
+- **AND:**
+  - actor `build_venture` project passes `ready` due-state
+  - **NOT:** actor is in transit
+  - **NOT:** actor is constrained or immobilized
+  - **NOT:**
+    - **OR:**
+      - actor has `sleep` debt ≥ 8
+      - actor has `thirst` debt ≥ 2
+      - actor has `hunger` debt ≥ 4
+
+### Branch 1 — Open the doors  *(mag 0.4)* · **preemptive**
+
+**When:** actor `build_venture` project passes `completion` due-state
+
+**Does:** applies project `complete` transition; adds `proprietor` to actor
+**Event:** `build_venture_completed`
+
+> The preparations stop being preparations. {actor} opens the doors, takes responsibility for what happens beyond them, and becomes the proprietor of something now alive in the world.
+
+### Branch 2 — Let the venture go  *(mag 0.4)* · **preemptive**
+
+**When:** actor `build_venture` project passes `abandon` due-state
+
+**Does:** applies project `abandon` transition
+**Event:** `build_venture_abandoned`
+
+> {actor} admits that the venture has become an obligation to an unopened future. They release it rather than feed another season into delay.
+
+### Branch 3 — Turn groundwork into backing  *(mag 0.4)* · **preemptive**
+
+**When:** actor `build_venture` project passes `laying_groundwork_milestone` due-state
+
+**Does:** applies project `advance` transition
+**Event:** `build_venture_milestone`
+
+> The shape is credible enough to show another person. {actor} stops refining the idea in private and begins securing the money, materials, promises, and labor that can hold it up.
+
+### Branch 4 — Turn backing into an opening  *(mag 0.4)* · **preemptive**
+
+**When:** actor `build_venture` project passes `securing_backing_milestone` due-state
+
+**Does:** applies project `advance` transition
+**Event:** `build_venture_milestone`
+
+> Enough commitments now hold. {actor} turns from winning support to the last concrete work: a place in the world, a way of operating, and doors ready to open.
+
+### Branch 5 — Lose ground through neglect  *(mag 0.1)* · **preemptive** · **not promotable**
+
+**When:** actor `build_venture` project passes `neglected` due-state
+
+**Does:** applies project `stall` transition
+**Event:** `build_venture_stalled`
+
+> Unanswered messages and unfinished arrangements begin undoing what {actor} assembled. The venture stalls, still possible but no longer moving on its own momentum.
+
+### Branch 6 — Make the venture legible  *(mag 0.18)* · **not promotable**
+
+**When:** actor `build_venture` project passes `laying_groundwork` due-state
+
+**Does:** applies project `advance` transition
+**Event:** `build_venture_progressed`
+
+> {actor} turns another vague requirement into a concrete one: a cost counted, a service defined, or a necessary piece of work finished.
+
+### Branch 7 — Secure one more commitment  *(mag 0.18)* · **not promotable**
+
+**When:** actor `build_venture` project passes `securing_backing` due-state
+
+**Does:** applies project `advance` transition
+**Event:** `build_venture_progressed`
+
+> {actor} wins one more commitment the venture can rely on: capital, material, labor, permission, or a promise with weight.
+
+### Branch 8 — Finish the next opening task  *(mag 0.16)* · **not promotable**
+
+**When:** *(always)*
+
+**Does:** applies project `advance` transition
+**Event:** `build_venture_progressed`
+
+> {actor} finishes one of the unglamorous tasks between backing and opening: a roster, a schedule, a key, a supply line, or the first promise to a customer.
+
+---
+
 ## REACH_OUT — priority 40
 
 > A small thread of contact between people who hold each other.
@@ -2131,6 +2224,40 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 ---
 
+## START_BUILD_VENTURE — priority 17
+
+> An off-screen character turns a business, workshop, or crew from an idea into deliberate groundwork.
+
+**Drive band:** project identity — A venture begins from a stable home anchor and shares the proven project-entry priority with relocation and recruitment.
+**Slots:** ACTOR
+
+**Gate:**
+
+- **AND:**
+  - actor `build_venture` project passes `start` due-state
+  - actor has enough hydrated context
+  - actor is at `home` anchor
+  - **NOT:** actor is in transit
+  - **NOT:** actor is constrained or immobilized
+  - **NOT:**
+    - **OR:**
+      - actor has `sleep` debt ≥ 8
+      - actor has `thirst` debt ≥ 2
+      - actor has `hunger` debt ≥ 4
+  - **NOT:** actor has inbound `hostile_to` pair tag
+  - **NOT:** actor has inbound `hunting` pair tag
+
+### Branch 1 — Lay the first groundwork  *(mag 0.4)*
+
+**When:** *(always)*
+
+**Does:** applies project `start` transition
+**Event:** `build_venture_started`
+
+> {actor} stops leaving the venture in the realm of someday. They name what it will do, what it will need, and the first piece of groundwork they can finish now.
+
+---
+
 ## INTIMACY — priority 16
 
 > The body asks for the kind of connection that is not conversation.
@@ -2989,6 +3116,7 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `at_vigil`
 - `distressed`
 - `forewarned`
+- `proprietor`
 - `recently_drained`
 - `recently_protective`
 - `recently_tended`
@@ -3010,6 +3138,12 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 ### Event types
 
 - `ate`
+- `build_venture_abandoned`
+- `build_venture_completed`
+- `build_venture_milestone`
+- `build_venture_progressed`
+- `build_venture_stalled`
+- `build_venture_started`
 - `compliance_alert`
 - `contact_deferred`
 - `contact_made`

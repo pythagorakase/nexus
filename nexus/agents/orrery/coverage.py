@@ -199,6 +199,8 @@ def _tally_report(
                     "advance_relocation_plan",
                     "start_recruit_ally",
                     "advance_recruit_ally",
+                    "start_build_venture",
+                    "advance_build_venture",
                 }:
                     project_gates.append(
                         {

@@ -79,6 +79,11 @@ from nexus.agents.orrery.substrate import ProjectPolicy, coerce_project_policy
 PROJECT_STAGE_LADDERS = {
     "plan_relocation": ("saving", "scouting", "committing"),
     "recruit_ally": ("sounding_out", "earning_trust", "sealing_commitment"),
+    "build_venture": (
+        "laying_groundwork",
+        "securing_backing",
+        "opening_doors",
+    ),
 }
 
 # Composite natural keys, verbatim column order (faction_relationships
@@ -997,13 +1002,22 @@ class _Replayer:
                 raise ValueError(
                     "plan_relocation replay projection forbids character target"
                 )
-        elif (
+        elif project_type == "recruit_ally" and (
             applied_row["target_place_id"] is not None
             or applied_row["target_character_entity_id"] is None
         ):
             raise ValueError(
                 "recruit_ally replay projection requires only a character target"
             )
+        elif project_type == "build_venture" and any(
+            applied_row[target] is not None
+            for target in (
+                "target_place_id",
+                "target_character_entity_id",
+                "target_faction_entity_id",
+            )
+        ):
+            raise ValueError("build_venture replay projection forbids all targets")
         if applied_row["source_chunk_id"] != chunk_id:
             raise ValueError(
                 f"{delta_key} at chunk {chunk_id} applied source_chunk_id is "
@@ -1062,6 +1076,8 @@ class _Replayer:
                     raise ValueError(
                         "recruit_ally completion replay requires character target"
                     )
+                return
+            if project_type == "build_venture":
                 return
             destination = applied_row["target_place_id"]
             if destination is None:
