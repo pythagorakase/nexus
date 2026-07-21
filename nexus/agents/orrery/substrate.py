@@ -1186,6 +1186,11 @@ _PROJECT_DUE_MODES = frozenset(
         "declaring_intentions",
         "testing_waters_milestone",
         "growing_closer_milestone",
+        "gaining_notice",
+        "proving_worth",
+        "securing_favor",
+        "gaining_notice_milestone",
+        "proving_worth_milestone",
     }
 )
 
@@ -1202,6 +1207,7 @@ _PROJECT_STAGE_LADDERS = {
         "growing_closer",
         "declaring_intentions",
     ),
+    "court_patron": ("gaining_notice", "proving_worth", "securing_favor"),
 }
 
 
@@ -1330,7 +1336,12 @@ def project_due(
                 if project_type == "plan_relocation"
                 else (
                     project.target_character_entity_id is not None
-                    if project_type in {"recruit_ally", "pursue_romance"}
+                    if project_type
+                    in {
+                        "recruit_ally",
+                        "pursue_romance",
+                        "court_patron",
+                    }
                     else True
                 )
             )
@@ -1345,7 +1356,12 @@ def project_due(
                 if project_type == "plan_relocation"
                 else (
                     project.target_character_entity_id is not None
-                    if project_type in {"recruit_ally", "pursue_romance"}
+                    if project_type
+                    in {
+                        "recruit_ally",
+                        "pursue_romance",
+                        "court_patron",
+                    }
                     else True
                 )
             )

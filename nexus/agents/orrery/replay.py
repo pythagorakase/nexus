@@ -89,6 +89,7 @@ PROJECT_STAGE_LADDERS = {
         "growing_closer",
         "declaring_intentions",
     ),
+    "court_patron": ("gaining_notice", "proving_worth", "securing_favor"),
 }
 
 # Composite natural keys, verbatim column order (faction_relationships
@@ -126,6 +127,7 @@ TAG_DELTA_KEYS = frozenset(
         "entity_tags_target.add",
         "entity_tags_target.remove",
         "entity_pair_tags.add_outbound",
+        "entity_pair_tags.add_inbound",
         "entity_pair_tags.clear_outbound",
         "entity_pair_tags_target.clear_inbound",
     }
@@ -1007,11 +1009,15 @@ class _Replayer:
                 raise ValueError(
                     "plan_relocation replay projection forbids character target"
                 )
-        elif project_type in {"recruit_ally", "pursue_romance"} and (
+        elif project_type in {
+            "recruit_ally",
+            "pursue_romance",
+            "court_patron",
+        } and (
             applied_row["target_place_id"] is not None
             or applied_row["target_character_entity_id"] is None
             or (
-                project_type == "pursue_romance"
+                project_type in {"pursue_romance", "court_patron"}
                 and applied_row["target_faction_entity_id"] is not None
             )
         ):
@@ -1080,7 +1086,11 @@ class _Replayer:
             if float(applied_row["progress"] or 0.0) < 1.0:
                 raise ValueError("project.complete replay requires full progress")
             row.update(applied_row)
-            if project_type in {"recruit_ally", "pursue_romance"}:
+            if project_type in {
+                "recruit_ally",
+                "pursue_romance",
+                "court_patron",
+            }:
                 if applied_row["target_character_entity_id"] is None:
                     raise ValueError(
                         f"{project_type} completion replay requires character target"

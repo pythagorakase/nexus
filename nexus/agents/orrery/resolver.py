@@ -2213,7 +2213,11 @@ def _materialize_project_delta(
     raw_start = delta.get("project.start")
     if raw_start is not None:
         start_payload = dict(raw_start) if isinstance(raw_start, Mapping) else {}
-        if start_payload.get("project_type") in {"recruit_ally", "pursue_romance"}:
+        if start_payload.get("project_type") in {
+            "recruit_ally",
+            "pursue_romance",
+            "court_patron",
+        }:
             target = resolution.bindings.get(Slot.TARGET)
             if not isinstance(target, int):
                 raise ValueError(

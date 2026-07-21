@@ -83,6 +83,19 @@ def test_catalog_renders_pursue_romance_completion_vocabulary() -> None:
     assert "- `contact:intimate`" in content
 
 
+def test_catalog_renders_court_patron_completion_vocabulary() -> None:
+    """Patronage gates and its three-write completion stay discoverable."""
+
+    content = render_catalog(BUILTIN_TEMPLATES)
+    assert "## START_COURT_PATRON — priority 17" in content
+    assert "## ADVANCE_COURT_PATRON — priority 47" in content
+    assert "actor `court_patron` project passes `completion` due-state" in content
+    assert "inbound `sponsors` pair tag from target to actor" in content
+    assert "actor→target `patron` relationship" in content
+    assert "- `obligation`" in content
+    assert "- `sponsors`" in content
+
+
 def test_catalog_renders_compound_structure() -> None:
     """AND / OR / NOT compositions appear as labeled nested bullets."""
 

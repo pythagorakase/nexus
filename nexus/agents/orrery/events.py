@@ -62,6 +62,7 @@ SUPPORTED_STATE_DELTA_KEYS = frozenset(
         "entity_tags_target.add",
         "entity_tags_target.remove",
         "entity_pair_tags.add_outbound",
+        "entity_pair_tags.add_inbound",
         "entity_pair_tags.clear_outbound",
         "entity_pair_tags_target.clear_inbound",
         "need.fulfill",
@@ -85,6 +86,7 @@ REPLACEMENT_STATE_DELTA_ALIASES = {
     "entity_tags_target_add": "entity_tags_target.add",
     "entity_tags_target_remove": "entity_tags_target.remove",
     "entity_pair_tags_add_outbound": "entity_pair_tags.add_outbound",
+    "entity_pair_tags_add_inbound": "entity_pair_tags.add_inbound",
     "entity_pair_tags_clear_outbound": "entity_pair_tags.clear_outbound",
     "entity_pair_tags_target_clear_inbound": ("entity_pair_tags_target.clear_inbound"),
 }
@@ -1628,6 +1630,35 @@ def _apply_state_delta_sync(
                 template_id=draft.template_id,
                 source_chunk_id=source_chunk_id,
             )
+    inbound_pair_tag_adds = (
+        draft.state_delta.get("entity_pair_tags.add_inbound", ()) or ()
+    )
+    if inbound_pair_tag_adds:
+        if target_entity_id is None:
+            raise ValueError(
+                f"Orrery draft {draft.template_id} adds an inbound pair tag "
+                "but has no target binding"
+            )
+        for tag in inbound_pair_tag_adds:
+            changed = _add_inbound_pair_tag_sync(
+                cur,
+                target_entity_id=target_entity_id,
+                actor_entity_id=actor_entity_id,
+                tag=str(tag),
+                template_id=draft.template_id,
+                source_chunk_id=source_chunk_id,
+            )
+            applied_pair_tag_mutations.append(
+                {
+                    "operation": "add_inbound",
+                    "tag": str(tag),
+                    "subject_entity_id": target_entity_id,
+                    "object_entity_id": actor_entity_id,
+                    "changed": changed,
+                }
+            )
+            if changed:
+                tag_mutations += 1
     outbound_pair_tag_adds = (
         draft.state_delta.get("entity_pair_tags.add_outbound", ()) or ()
     )
@@ -1863,6 +1894,35 @@ async def _apply_state_delta_async(
                 template_id=draft.template_id,
                 source_chunk_id=source_chunk_id,
             )
+    inbound_pair_tag_adds = (
+        draft.state_delta.get("entity_pair_tags.add_inbound", ()) or ()
+    )
+    if inbound_pair_tag_adds:
+        if target_entity_id is None:
+            raise ValueError(
+                f"Orrery draft {draft.template_id} adds an inbound pair tag "
+                "but has no target binding"
+            )
+        for tag in inbound_pair_tag_adds:
+            changed = await _add_inbound_pair_tag_async(
+                conn,
+                target_entity_id=target_entity_id,
+                actor_entity_id=actor_entity_id,
+                tag=str(tag),
+                template_id=draft.template_id,
+                source_chunk_id=source_chunk_id,
+            )
+            applied_pair_tag_mutations.append(
+                {
+                    "operation": "add_inbound",
+                    "tag": str(tag),
+                    "subject_entity_id": target_entity_id,
+                    "object_entity_id": actor_entity_id,
+                    "changed": changed,
+                }
+            )
+            if changed:
+                tag_mutations += 1
     outbound_pair_tag_adds = (
         draft.state_delta.get("entity_pair_tags.add_outbound", ()) or ()
     )
@@ -2157,6 +2217,7 @@ PROJECT_STAGE_LADDERS = {
         "growing_closer",
         "declaring_intentions",
     ),
+    "court_patron": ("gaining_notice", "proving_worth", "securing_favor"),
 }
 
 
@@ -2389,15 +2450,18 @@ def _apply_project_start_sync(
         raise ValueError("project.start faction target must be an entity id")
     if project_type == "plan_relocation" and target_character_entity_id is not None:
         raise ValueError("plan_relocation project.start forbids a character target")
-    if project_type in {"recruit_ally", "pursue_romance"}:
+    if project_type in {"recruit_ally", "pursue_romance", "court_patron"}:
         if target_place_id is not None:
             raise ValueError(f"{project_type} project.start forbids a place target")
         if not isinstance(target_character_entity_id, int):
             raise ValueError(
                 f"{project_type} project.start requires a character target"
             )
-        if project_type == "pursue_romance" and target_faction_entity_id is not None:
-            raise ValueError("pursue_romance project.start forbids a faction target")
+        if (
+            project_type in {"pursue_romance", "court_patron"}
+            and target_faction_entity_id is not None
+        ):
+            raise ValueError(f"{project_type} project.start forbids a faction target")
     if project_type == "build_venture" and any(
         target is not None
         for target in (
@@ -2472,15 +2536,18 @@ async def _apply_project_start_async(
         raise ValueError("project.start faction target must be an entity id")
     if project_type == "plan_relocation" and target_character_entity_id is not None:
         raise ValueError("plan_relocation project.start forbids a character target")
-    if project_type in {"recruit_ally", "pursue_romance"}:
+    if project_type in {"recruit_ally", "pursue_romance", "court_patron"}:
         if target_place_id is not None:
             raise ValueError(f"{project_type} project.start forbids a place target")
         if not isinstance(target_character_entity_id, int):
             raise ValueError(
                 f"{project_type} project.start requires a character target"
             )
-        if project_type == "pursue_romance" and target_faction_entity_id is not None:
-            raise ValueError("pursue_romance project.start forbids a faction target")
+        if (
+            project_type in {"pursue_romance", "court_patron"}
+            and target_faction_entity_id is not None
+        ):
+            raise ValueError(f"{project_type} project.start forbids a faction target")
     if project_type == "build_venture" and any(
         target is not None
         for target in (
@@ -2881,6 +2948,18 @@ def _validate_project_completion(
             raise ValueError("pursue_romance completion forbids a place target")
         if project["target_faction_entity_id"] is not None:
             raise ValueError("pursue_romance completion forbids a faction target")
+    if project_type == "court_patron":
+        patron_id = project["target_character_entity_id"]
+        if patron_id is None:
+            raise ValueError("court_patron completion requires its character target")
+        if target_entity_id != patron_id:
+            raise ValueError(
+                "court_patron completion target binding does not match its patron"
+            )
+        if project["target_place_id"] is not None:
+            raise ValueError("court_patron completion forbids a place target")
+        if project["target_faction_entity_id"] is not None:
+            raise ValueError("court_patron completion forbids a faction target")
     if project_type == "build_venture" and any(
         project[target] is not None
         for target in (
@@ -3250,6 +3329,185 @@ async def _upsert_pursue_romance_relationship_async(
     }
 
 
+def _court_patron_relationship_metadata(
+    *,
+    template_id: str,
+    source_chunk_id: int,
+    previous_relationship_type: Optional[str],
+    existing_extra_data: Any,
+) -> dict[str, Any]:
+    """Return durable provenance for the canonical patron relationship."""
+
+    original_type = previous_relationship_type
+    if isinstance(existing_extra_data, Mapping):
+        prior = existing_extra_data.get("orrery_court_patron")
+        if isinstance(prior, Mapping):
+            original_type = prior.get("previous_relationship_type", original_type)
+    return {
+        "orrery_court_patron": {
+            "template_id": template_id,
+            "source_chunk_id": source_chunk_id,
+            "previous_relationship_type": original_type,
+        }
+    }
+
+
+def _upsert_court_patron_relationship_sync(
+    cur: Any,
+    *,
+    actor_entity_id: int,
+    target_entity_id: int,
+    template_id: str,
+    source_chunk_id: int,
+) -> dict[str, Any]:
+    """Persist actor->target using the trait compiler's patron convention."""
+
+    cur.execute(
+        """
+        SELECT actor.id AS character1_id,
+               target.id AS character2_id,
+               existing.relationship_type AS previous_relationship_type,
+               existing.extra_data
+        FROM characters actor
+        JOIN characters target ON target.entity_id = %s
+        LEFT JOIN character_relationships existing
+          ON existing.character1_id = actor.id
+         AND existing.character2_id = target.id
+        WHERE actor.entity_id = %s
+        """,
+        (target_entity_id, actor_entity_id),
+    )
+    row = cur.fetchone()
+    if row is None:
+        raise ValueError(
+            "court_patron completion requires actor and target character rows"
+        )
+    character1_id = int(_row_get(row, "character1_id", 0))
+    character2_id = int(_row_get(row, "character2_id", 1))
+    if character1_id == character2_id:
+        raise ValueError("court_patron completion cannot target the actor")
+    previous = _row_get(row, "previous_relationship_type", 2)
+    previous_type = str(previous) if previous is not None else None
+    metadata = _court_patron_relationship_metadata(
+        template_id=template_id,
+        source_chunk_id=source_chunk_id,
+        previous_relationship_type=previous_type,
+        existing_extra_data=_row_get(row, "extra_data", 3),
+    )
+    cur.execute(
+        """
+        INSERT INTO character_relationships (
+            character1_id, character2_id, relationship_type,
+            emotional_valence, dynamic, recent_events, history, extra_data
+        ) VALUES (
+            %s, %s, 'patron', '+2|friendly',
+            'Patronage secured through demonstrated worth.',
+            'A sustained effort concluded in granted favor and obligation.',
+            'Patronage established through the COURT_PATRON project.',
+            %s::jsonb
+        )
+        ON CONFLICT (character1_id, character2_id) DO UPDATE SET
+            relationship_type = EXCLUDED.relationship_type,
+            extra_data = COALESCE(character_relationships.extra_data, '{}'::jsonb)
+                         || EXCLUDED.extra_data,
+            updated_at = now()
+        RETURNING character1_id, character2_id, relationship_type
+        """,
+        (character1_id, character2_id, json.dumps(metadata)),
+    )
+    if cur.fetchone() is None:
+        raise RuntimeError("court_patron relationship upsert returned no row")
+    return {
+        "operation": "insert" if previous_type is None else "update",
+        "subject_entity_id": actor_entity_id,
+        "object_entity_id": target_entity_id,
+        "character1_id": character1_id,
+        "character2_id": character2_id,
+        "previous_relationship_type": previous_type,
+        "relationship_type": "patron",
+        "relationship_type_changed": previous_type != "patron",
+    }
+
+
+async def _upsert_court_patron_relationship_async(
+    conn: Any,
+    *,
+    actor_entity_id: int,
+    target_entity_id: int,
+    template_id: str,
+    source_chunk_id: int,
+) -> dict[str, Any]:
+    """Async twin of _upsert_court_patron_relationship_sync."""
+
+    row = await conn.fetchrow(
+        """
+        SELECT actor.id AS character1_id,
+               target.id AS character2_id,
+               existing.relationship_type AS previous_relationship_type,
+               existing.extra_data
+        FROM characters actor
+        JOIN characters target ON target.entity_id = $2
+        LEFT JOIN character_relationships existing
+          ON existing.character1_id = actor.id
+         AND existing.character2_id = target.id
+        WHERE actor.entity_id = $1
+        """,
+        actor_entity_id,
+        target_entity_id,
+    )
+    if row is None:
+        raise ValueError(
+            "court_patron completion requires actor and target character rows"
+        )
+    character1_id = int(_row_get(row, "character1_id", 0))
+    character2_id = int(_row_get(row, "character2_id", 1))
+    if character1_id == character2_id:
+        raise ValueError("court_patron completion cannot target the actor")
+    previous = _row_get(row, "previous_relationship_type", 2)
+    previous_type = str(previous) if previous is not None else None
+    metadata = _court_patron_relationship_metadata(
+        template_id=template_id,
+        source_chunk_id=source_chunk_id,
+        previous_relationship_type=previous_type,
+        existing_extra_data=_row_get(row, "extra_data", 3),
+    )
+    written = await conn.fetchrow(
+        """
+        INSERT INTO character_relationships (
+            character1_id, character2_id, relationship_type,
+            emotional_valence, dynamic, recent_events, history, extra_data
+        ) VALUES (
+            $1, $2, 'patron', '+2|friendly',
+            'Patronage secured through demonstrated worth.',
+            'A sustained effort concluded in granted favor and obligation.',
+            'Patronage established through the COURT_PATRON project.',
+            $3::jsonb
+        )
+        ON CONFLICT (character1_id, character2_id) DO UPDATE SET
+            relationship_type = EXCLUDED.relationship_type,
+            extra_data = COALESCE(character_relationships.extra_data, '{}'::jsonb)
+                         || EXCLUDED.extra_data,
+            updated_at = now()
+        RETURNING character1_id, character2_id, relationship_type
+        """,
+        character1_id,
+        character2_id,
+        json.dumps(metadata),
+    )
+    if written is None:
+        raise RuntimeError("court_patron relationship upsert returned no row")
+    return {
+        "operation": "insert" if previous_type is None else "update",
+        "subject_entity_id": actor_entity_id,
+        "object_entity_id": target_entity_id,
+        "character1_id": character1_id,
+        "character2_id": character2_id,
+        "previous_relationship_type": previous_type,
+        "relationship_type": "patron",
+        "relationship_type_changed": previous_type != "patron",
+    }
+
+
 def _apply_project_complete_sync(
     cur: Any,
     *,
@@ -3296,6 +3554,15 @@ def _apply_project_complete_sync(
     elif project["project_type"] == "pursue_romance":
         assert target_entity_id is not None
         relationship_mutation = _upsert_pursue_romance_relationship_sync(
+            cur,
+            actor_entity_id=actor_entity_id,
+            target_entity_id=target_entity_id,
+            template_id=template_id,
+            source_chunk_id=source_chunk_id,
+        )
+    elif project["project_type"] == "court_patron":
+        assert target_entity_id is not None
+        relationship_mutation = _upsert_court_patron_relationship_sync(
             cur,
             actor_entity_id=actor_entity_id,
             target_entity_id=target_entity_id,
@@ -3372,6 +3639,15 @@ async def _apply_project_complete_async(
     elif project["project_type"] == "pursue_romance":
         assert target_entity_id is not None
         relationship_mutation = await _upsert_pursue_romance_relationship_async(
+            conn,
+            actor_entity_id=actor_entity_id,
+            target_entity_id=target_entity_id,
+            template_id=template_id,
+            source_chunk_id=source_chunk_id,
+        )
+    elif project["project_type"] == "court_patron":
+        assert target_entity_id is not None
+        relationship_mutation = await _upsert_court_patron_relationship_async(
             conn,
             actor_entity_id=actor_entity_id,
             target_entity_id=target_entity_id,
@@ -4483,6 +4759,27 @@ def _add_outbound_pair_tag_sync(
     return cur.fetchone() is not None
 
 
+def _add_inbound_pair_tag_sync(
+    cur: Any,
+    *,
+    target_entity_id: int,
+    actor_entity_id: int,
+    tag: str,
+    template_id: str,
+    source_chunk_id: int,
+) -> bool:
+    """Create a directed pair tag from the bound target to the actor."""
+
+    return _add_outbound_pair_tag_sync(
+        cur,
+        subject_entity_id=target_entity_id,
+        object_entity_id=actor_entity_id,
+        tag=tag,
+        template_id=template_id,
+        source_chunk_id=source_chunk_id,
+    )
+
+
 def _clear_outbound_pair_tag_sync(
     cur: Any,
     *,
@@ -4670,6 +4967,27 @@ async def _add_outbound_pair_tag_async(
         source_chunk_id,
     )
     return row is not None
+
+
+async def _add_inbound_pair_tag_async(
+    conn: Any,
+    *,
+    target_entity_id: int,
+    actor_entity_id: int,
+    tag: str,
+    template_id: str,
+    source_chunk_id: int,
+) -> bool:
+    """Async twin of _add_inbound_pair_tag_sync."""
+
+    return await _add_outbound_pair_tag_async(
+        conn,
+        subject_entity_id=target_entity_id,
+        object_entity_id=actor_entity_id,
+        tag=tag,
+        template_id=template_id,
+        source_chunk_id=source_chunk_id,
+    )
 
 
 async def _clear_outbound_pair_tag_async(

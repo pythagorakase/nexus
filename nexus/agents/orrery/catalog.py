@@ -579,6 +579,16 @@ def _render_state_delta(delta: Mapping[str, Any]) -> str:
             else:
                 parts.append(f"adds outbound {tags} pair tag to target")
             continue
+        if key == "entity_pair_tags.add_inbound":
+            tags = ", ".join(f"`{t}`" for t in value)
+            if "project.complete" in delta and "sponsors" in value:
+                parts.append(
+                    f"adds inbound {tags} pair tag from target to actor and "
+                    "upserts the actor→target `patron` relationship"
+                )
+            else:
+                parts.append(f"adds inbound {tags} pair tag from target to actor")
+            continue
         if key == "entity_pair_tags.clear_outbound":
             tags = ", ".join(f"`{t}`" for t in value)
             parts.append(f"clears own outbound {tags} pair tag to target")
@@ -846,6 +856,7 @@ def _collect_vocabulary(
                 if key in (
                     "entity_pair_tags_target.clear_inbound",
                     "entity_pair_tags.add_outbound",
+                    "entity_pair_tags.add_inbound",
                     "entity_pair_tags.clear_outbound",
                 ):
                     if isinstance(value, list):

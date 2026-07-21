@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from itertools import count
 from typing import Any, Iterator
 from uuid import uuid4
 
@@ -16,6 +17,9 @@ from nexus.agents.orrery.replay import verify_checkpoints_sync
 
 
 pytestmark = pytest.mark.requires_postgres
+
+# Bounded scene numbers: the slug trigger's TO_CHAR scene mask is 3 digits.
+_SCENE_NUMBERS = count(1)
 
 EPISTEMICS = {
     "enabled": True,
@@ -59,7 +63,7 @@ def _insert_chunk(cur: Any) -> int:
             %s, 99, 99, %s, 'primary', interval '0 seconds', now(), %s
         )
         """,
-        (chunk_id, chunk_id, token[:10]),
+        (chunk_id, next(_SCENE_NUMBERS), token[:10]),
     )
     return chunk_id
 

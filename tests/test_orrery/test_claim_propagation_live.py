@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 from typing import Any, Iterator, Mapping, Sequence
+from itertools import count
 from uuid import uuid4
 
 import asyncpg  # type: ignore[import-untyped]
@@ -38,6 +39,12 @@ from nexus.config.settings_models import OrreryContagionSettings
 pytestmark = pytest.mark.requires_postgres
 
 LIVE_SLOT = 5
+
+# The chunk_metadata slug trigger renders scene with TO_CHAR(..., 'FM000');
+# scenes >= 1000 overflow the mask to literal '###' and collide. Fixtures
+# must therefore use small bounded scene numbers, never chunk ids (the
+# narrative_chunks sequence never rolls back and grows without bound).
+_SCENE_NUMBERS = count(1)
 EPISTEMICS = {
     "enabled": True,
     "claim_event_types": ["threat_issued"],
@@ -135,7 +142,7 @@ def _insert_chunk(
             %s, 99, 99, %s, %s::world_layer_type, %s, now(), %s
         )
         """,
-        (chunk_id, chunk_id, world_layer, time_delta, token[:10]),
+        (chunk_id, next(_SCENE_NUMBERS), world_layer, time_delta, token[:10]),
     )
     cur.execute(
         "SELECT world_time FROM chunk_metadata WHERE chunk_id = %s", (chunk_id,)
@@ -1269,7 +1276,7 @@ async def _insert_chunk_async(
         )
         """,
         chunk_id,
-        chunk_id,
+        next(_SCENE_NUMBERS),
         world_layer,
         time_delta,
         token[:10],

@@ -1027,6 +1027,7 @@ SURVEIL = Template(
         NOT(project_due("ready")),
         NOT(project_due("ready", project_type="recruit_ally")),
         NOT(project_due("ready", project_type="pursue_romance")),
+        NOT(project_due("ready", project_type="court_patron")),
         NOT(is_constrained()),
         NOT(has_inbound_pair_tag("hunting")),
         NOT(has_ephemeral("grudge_active")),
@@ -5341,6 +5342,360 @@ ADVANCE_PURSUE_ROMANCE = Template(
 )
 
 
+START_COURT_PATRON = Template(
+    id="start_court_patron",
+    priority=17,
+    drive_band=DriveBand.PROJECT_IDENTITY,
+    priority_override_rationale=(
+        "Courting a patron requires both a plausible social opening and a "
+        "specific marker of the target's power."
+    ),
+    blurb="An off-screen character begins working to win a named power's favor.",
+    required_slots=(Slot.ACTOR, Slot.TARGET),
+    starts_from_social_contact=True,
+    package_gate=AND(
+        project_due("start", project_type="court_patron"),
+        has_minimal_context(),
+        at_routine_anchor("home"),
+        NOT(is_in_transit()),
+        NOT(is_constrained()),
+        NOT(
+            OR(
+                has_need_debt_at_or_above("sleep", 8),
+                has_need_debt_at_or_above("thirst", 2),
+                has_need_debt_at_or_above("hunger", 4),
+            )
+        ),
+        OR(
+            AND(has_contact_of_kind("social"), has_pair_tag("contact:social")),
+            has_relationship_of_type("friend", Slot.ACTOR, Slot.TARGET),
+            has_relationship_of_type("friend", Slot.TARGET, Slot.ACTOR),
+            has_relationship_of_type("companion", Slot.ACTOR, Slot.TARGET),
+            has_relationship_of_type("companion", Slot.TARGET, Slot.ACTOR),
+            has_relationship_of_type("comrade", Slot.ACTOR, Slot.TARGET),
+            has_relationship_of_type("comrade", Slot.TARGET, Slot.ACTOR),
+            has_relationship_of_type("chosen_kin", Slot.ACTOR, Slot.TARGET),
+            has_relationship_of_type("chosen_kin", Slot.TARGET, Slot.ACTOR),
+            trust_at_least(1),
+        ),
+        OR(
+            has_any_status_at_or_above("senior", Slot.TARGET),
+            has_tag("leader", Slot.TARGET),
+            has_pair_tag("authority_over", Slot.TARGET, Slot.ACTOR),
+        ),
+        lacks_pair_tag("sponsors", Slot.TARGET, Slot.ACTOR),
+        NOT(has_relationship_of_type("patron", Slot.ACTOR, Slot.TARGET)),
+        NOT(
+            has_any_pair_tag(
+                "hostile_to",
+                "hunting",
+                subject_slot=Slot.ACTOR,
+                object_slot=Slot.TARGET,
+            )
+        ),
+        NOT(
+            has_any_pair_tag(
+                "hostile_to",
+                "hunting",
+                subject_slot=Slot.TARGET,
+                object_slot=Slot.ACTOR,
+            )
+        ),
+    ),
+    branches=(
+        Branch(
+            label="Begin seeking the patron's notice",
+            conditions=ALWAYS,
+            narrative_stub=(
+                "{actor} stops hoping that {target} will notice them by accident. "
+                "They choose a first gesture calculated to be useful, visible, "
+                "and difficult to mistake for idle flattery."
+            ),
+            state_delta={
+                "project.start": {
+                    "project_type": "court_patron",
+                    "stage": "gaining_notice",
+                    "milestone": True,
+                }
+            },
+            event_type="court_patron_started",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.stage",
+                "character_project_states.target_character_entity_id",
+                "character_project_states.next_eligible_at_world_time",
+            ),
+            magnitude=0.40,
+        ),
+    ),
+)
+
+
+ADVANCE_COURT_PATRON = Template(
+    id="advance_court_patron",
+    priority=47,
+    drive_band=DriveBand.PROJECT_IDENTITY,
+    priority_override_rationale=(
+        "A due patronage effort shares the established project-continuation "
+        "slot while SURVEIL yields to its bound two-party work."
+    ),
+    blurb=(
+        "A due patronage effort gains notice, proves worth, secures favor, "
+        "stalls, is spurned, or ends."
+    ),
+    required_slots=(Slot.ACTOR, Slot.TARGET),
+    binds_project_target=True,
+    package_gate=AND(
+        project_due("ready", project_type="court_patron"),
+        project_target_is(Slot.TARGET),
+        NOT(is_in_transit()),
+        NOT(is_constrained()),
+        NOT(
+            OR(
+                has_need_debt_at_or_above("sleep", 8),
+                has_need_debt_at_or_above("thirst", 2),
+                has_need_debt_at_or_above("hunger", 4),
+            )
+        ),
+    ),
+    branches=(
+        Branch(
+            label="End a patronage effort whose target is no longer available",
+            conditions=NOT(project_target_is_active(Slot.TARGET)),
+            narrative_stub=(
+                "{target} is no longer someone whose favor can be won. {actor} "
+                "closes the effort rather than courting a power that cannot answer."
+            ),
+            state_delta={
+                "project.abandon": {
+                    "reason": "target_inactive_or_non_character",
+                    "milestone": True,
+                }
+            },
+            event_type="court_patron_abandoned",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.source_chunk_id",
+            ),
+            magnitude=0.40,
+            preemptive=True,
+        ),
+        Branch(
+            label="Secure the patron's favor",
+            conditions=AND(
+                project_due("completion", project_type="court_patron"),
+                trust_at_least(2, Slot.TARGET, Slot.ACTOR),
+                NOT(
+                    has_any_pair_tag(
+                        "hostile_to",
+                        "hunting",
+                        subject_slot=Slot.ACTOR,
+                        object_slot=Slot.TARGET,
+                    )
+                ),
+                NOT(
+                    has_any_pair_tag(
+                        "hostile_to",
+                        "hunting",
+                        subject_slot=Slot.TARGET,
+                        object_slot=Slot.ACTOR,
+                    )
+                ),
+            ),
+            narrative_stub=(
+                "{target} finally answers {actor}'s service with public favor. "
+                "The protection is real, and so is the obligation attached to it."
+            ),
+            state_delta={
+                "project.complete": {"milestone": True},
+                "entity_pair_tags.add_inbound": ["sponsors"],
+                "entity_pair_tags.add_outbound": ["obligation"],
+            },
+            event_type="court_patron_completed",
+            changed_fields=(
+                "character_project_states.status",
+                "entity_pair_tags",
+                "character_relationships.relationship_type",
+            ),
+            magnitude=0.40,
+            preemptive=True,
+        ),
+        Branch(
+            label="Withdraw after being spurned",
+            conditions=OR(
+                has_any_pair_tag(
+                    "hostile_to",
+                    "hunting",
+                    subject_slot=Slot.ACTOR,
+                    object_slot=Slot.TARGET,
+                ),
+                has_any_pair_tag(
+                    "hostile_to",
+                    "hunting",
+                    subject_slot=Slot.TARGET,
+                    object_slot=Slot.ACTOR,
+                ),
+                trust_below(-1, Slot.TARGET, Slot.ACTOR),
+            ),
+            narrative_stub=(
+                "{target}'s answer is rejection, contempt, or danger. {actor} "
+                "abandons the bid for favor before deference becomes humiliation."
+            ),
+            state_delta={
+                "project.abandon": {
+                    "reason": "target_spurned_or_hostile",
+                    "milestone": True,
+                }
+            },
+            event_type="court_patron_abandoned",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.source_chunk_id",
+            ),
+            magnitude=0.40,
+            preemptive=True,
+        ),
+        Branch(
+            label="Let the bid for patronage go",
+            conditions=project_due("abandon", project_type="court_patron"),
+            narrative_stub=(
+                "Delay has become its own refusal. {actor} stops spending effort "
+                "on favor that never comes within reach."
+            ),
+            state_delta={
+                "project.abandon": {"reason": "stalled_or_overdue", "milestone": True}
+            },
+            event_type="court_patron_abandoned",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.source_chunk_id",
+            ),
+            magnitude=0.40,
+            preemptive=True,
+        ),
+        Branch(
+            label="Turn notice into a chance to prove worth",
+            conditions=project_due(
+                "gaining_notice_milestone", project_type="court_patron"
+            ),
+            narrative_stub=(
+                "{target} has noticed {actor}. Attention now becomes a test: "
+                "whether usefulness survives scrutiny and inconvenience."
+            ),
+            state_delta={
+                "project.advance": {
+                    "stage": "proving_worth",
+                    "set_progress": 0.0,
+                    "milestone": True,
+                }
+            },
+            event_type="court_patron_milestone",
+            changed_fields=(
+                "character_project_states.stage",
+                "character_project_states.progress",
+                "character_project_states.stall_count",
+            ),
+            magnitude=0.40,
+            preemptive=True,
+        ),
+        Branch(
+            label="Ask proven worth to become favor",
+            conditions=project_due(
+                "proving_worth_milestone", project_type="court_patron"
+            ),
+            narrative_stub=(
+                "{actor} has supplied proof instead of promises. The remaining "
+                "question is whether {target} will convert approval into favor."
+            ),
+            state_delta={
+                "project.advance": {
+                    "stage": "securing_favor",
+                    "set_progress": 0.0,
+                    "milestone": True,
+                }
+            },
+            event_type="court_patron_milestone",
+            changed_fields=(
+                "character_project_states.stage",
+                "character_project_states.progress",
+                "character_project_states.stall_count",
+            ),
+            magnitude=0.40,
+            preemptive=True,
+        ),
+        Branch(
+            label="Lose ground through neglect",
+            conditions=project_due("neglected", project_type="court_patron"),
+            narrative_stub=(
+                "Inattention erodes the impression {actor} worked to create. "
+                "The bid for patronage stalls and must recover its momentum."
+            ),
+            state_delta={"project.stall": {"increment": 1}},
+            event_type="court_patron_stalled",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.stall_count",
+                "character_project_states.next_eligible_at_world_time",
+            ),
+            magnitude=0.10,
+            promotable=False,
+            preemptive=True,
+        ),
+        Branch(
+            label="Make useful work visible",
+            conditions=project_due("gaining_notice", project_type="court_patron"),
+            narrative_stub=(
+                "{actor} places one useful act where {target} can see both its "
+                "value and the judgment behind it."
+            ),
+            state_delta={"project.advance": {"progress_delta": 0.35}},
+            event_type="court_patron_progressed",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.progress",
+                "character_project_states.next_eligible_at_world_time",
+            ),
+            magnitude=0.18,
+            promotable=False,
+        ),
+        Branch(
+            label="Prove reliable under scrutiny",
+            conditions=project_due("proving_worth", project_type="court_patron"),
+            narrative_stub=(
+                "{actor} accepts a consequential task and performs it cleanly, "
+                "giving {target} evidence that usefulness is not a pose."
+            ),
+            state_delta={"project.advance": {"progress_delta": 0.35}},
+            event_type="court_patron_progressed",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.progress",
+                "character_project_states.next_eligible_at_world_time",
+            ),
+            magnitude=0.18,
+            promotable=False,
+        ),
+        Branch(
+            label="Make the next claim on favor legible",
+            conditions=ALWAYS,
+            narrative_stub=(
+                "{actor} makes one more service, request, or allegiance explicit, "
+                "bringing {target}'s answer closer without pretending it is owed."
+            ),
+            state_delta={"project.advance": {"progress_delta": 0.25}},
+            event_type="court_patron_progressed",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.progress",
+                "character_project_states.next_eligible_at_world_time",
+            ),
+            magnitude=0.16,
+            promotable=False,
+        ),
+    ),
+)
+
+
 START_BUILD_VENTURE = Template(
     id="start_build_venture",
     priority=17,
@@ -5607,6 +5962,7 @@ BUILTIN_TEMPLATES = (
     ADVANCE_RECRUIT_ALLY,
     ADVANCE_BUILD_VENTURE,
     ADVANCE_PURSUE_ROMANCE,
+    ADVANCE_COURT_PATRON,
     ACT_ON_INTEL,
     UNCOVER_PAST,
     CHECK_ON_DEPENDENT,
@@ -5633,6 +5989,7 @@ BUILTIN_TEMPLATES = (
     START_RECRUIT_ALLY,
     START_BUILD_VENTURE,
     START_PURSUE_ROMANCE,
+    START_COURT_PATRON,
     MAINTAIN_COVER,
 )
 
