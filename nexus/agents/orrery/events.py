@@ -3408,7 +3408,6 @@ def _upsert_court_patron_relationship_sync(
         )
         ON CONFLICT (character1_id, character2_id) DO UPDATE SET
             relationship_type = EXCLUDED.relationship_type,
-            emotional_valence = EXCLUDED.emotional_valence,
             extra_data = COALESCE(character_relationships.extra_data, '{}'::jsonb)
                          || EXCLUDED.extra_data,
             updated_at = now()
@@ -3486,7 +3485,6 @@ async def _upsert_court_patron_relationship_async(
         )
         ON CONFLICT (character1_id, character2_id) DO UPDATE SET
             relationship_type = EXCLUDED.relationship_type,
-            emotional_valence = EXCLUDED.emotional_valence,
             extra_data = COALESCE(character_relationships.extra_data, '{}'::jsonb)
                          || EXCLUDED.extra_data,
             updated_at = now()

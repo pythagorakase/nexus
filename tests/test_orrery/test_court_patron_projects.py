@@ -482,3 +482,77 @@ def test_completion_applies_inbound_outbound_and_patron_relationship(
         "add_inbound",
         "add_outbound",
     }
+
+
+@pytest.mark.requires_postgres
+def test_completion_preserves_existing_relationship_valence(
+    live_patron_db: dict[str, Any],
+) -> None:
+    """The conflict arm updates the type but never the valence — the family
+    convention (recruit_ally, pursue_romance); valence movement on existing
+    rows is seek_redemption's deliberate innovation, not patron's."""
+
+    db = live_patron_db
+    with db["conn"].cursor() as cur:
+        cur.execute(
+            "INSERT INTO character_relationships "
+            "(character1_id, character2_id, relationship_type, "
+            " emotional_valence, dynamic, recent_events, history) "
+            "SELECT a.id, t.id, 'mentor', '+4|admiring', 'd', 'r', 'h' "
+            "FROM characters a, characters t "
+            "WHERE a.entity_id=%s AND t.entity_id=%s",
+            (db["actor"], db["target"]),
+        )
+    base = OrreryResolutionDraft(
+        template_id="start_court_patron",
+        priority=17,
+        binding_hash="start-preserve",
+        bindings={"actor": db["actor"], "target": db["target"]},
+        branch_label="start",
+        narrative_stub="start",
+        state_delta={
+            "project.start": {
+                "project_type": "court_patron",
+                "stage": "gaining_notice",
+                "target_character_entity_id": db["target"],
+                "milestone": True,
+            }
+        },
+        magnitude=0.4,
+    )
+    _apply(db, base)
+    with db["conn"].cursor() as cur:
+        cur.execute(
+            "UPDATE character_project_states "
+            "SET stage='securing_favor',progress=1 "
+            "WHERE character_entity_id=%s",
+            (db["actor"],),
+        )
+    _apply(
+        db,
+        replace(
+            base,
+            template_id="advance_court_patron",
+            binding_hash="complete-preserve",
+            state_delta={
+                "project.complete": {"milestone": True},
+                "entity_pair_tags.add_inbound": ["sponsors"],
+                "entity_pair_tags.add_outbound": ["obligation"],
+            },
+        ),
+    )
+    with db["conn"].cursor() as cur:
+        cur.execute(
+            "SELECT cr.relationship_type,cr.emotional_valence,cr.extra_data "
+            "FROM character_relationships cr "
+            "JOIN characters a ON a.id=cr.character1_id "
+            "JOIN characters t ON t.id=cr.character2_id "
+            "WHERE a.entity_id=%s AND t.entity_id=%s",
+            (db["actor"], db["target"]),
+        )
+        relationship_type, valence, extra = cur.fetchone()
+    assert relationship_type == "patron"
+    assert valence == "+4|admiring"
+    assert (
+        extra["orrery_court_patron"]["previous_relationship_type"] == "mentor"
+    )
