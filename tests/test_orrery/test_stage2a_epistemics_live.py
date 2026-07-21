@@ -17,6 +17,9 @@ from nexus.agents.orrery.epistemics import (
     mint_claim_for_event,
     record_revelation,
 )
+from tests.test_orrery.claim_accounts_test_support import (
+    install_claim_accounts_shadow_sync,
+)
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -41,6 +44,8 @@ def live_conn() -> Iterator[Any]:
         port=os.environ.get("PGPORT", "5432"),
     )
     try:
+        with conn.cursor() as cur:
+            install_claim_accounts_shadow_sync(cur)
         yield conn
     finally:
         conn.rollback()

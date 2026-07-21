@@ -421,6 +421,9 @@ def _build_frontier(
         knower = int(_row_get(row, "knower_entity_id", 2))
         acquired = _row_get(row, "acquired_at_world_time", 4)
         root = _row_get(row, "root_source_entity_id", 3)
+        # NOTE(#479 Stage C): accounts remain independent claim-id frontiers.
+        # Do not skip this account because the knower possesses a sibling;
+        # cross-account exclusion belongs to the later distortion policy.
         key = (claim_id, knower)
         awareness_keys.add(key)
         frontier.append(

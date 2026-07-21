@@ -30,6 +30,9 @@ from nexus.agents.orrery.substrate import (
     knows_recent_event,
 )
 from nexus.api.slot_utils import get_slot_db_url
+from tests.test_orrery.claim_accounts_test_support import (
+    install_claim_accounts_shadow_sync,
+)
 from tests.test_orrery.test_claim_propagation_live import (
     EPISTEMICS,
     LIVE_SLOT,
@@ -74,6 +77,7 @@ def live_connection() -> Iterator[Any]:
             migration_state = cur.fetchone()
             if not migration_state["registered"] or not migration_state["shaped"]:
                 pytest.skip("slot 5 requires migrations 080-083 for Stage 2d")
+            install_claim_accounts_shadow_sync(cur)
             _install_valence_shadow(cur)
         yield connection
     finally:

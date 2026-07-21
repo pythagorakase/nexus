@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+import json
 from typing import Any, Iterable, Mapping, Optional, Sequence
 
 from sqlalchemy import text
@@ -164,9 +165,11 @@ def mint_claim_for_event(
     cur.execute(
         """
         INSERT INTO claims (
-            world_event_id, summary, scope, source_chunk_id, source_resolution_id
-        ) VALUES (%s, %s, 'bounded', %s, %s)
-        ON CONFLICT (world_event_id) WHERE world_event_id IS NOT NULL DO NOTHING
+            world_event_id, account_label, summary, scope, source_chunk_id,
+            source_resolution_id
+        ) VALUES (%s, 'canonical', %s, 'bounded', %s, %s)
+        ON CONFLICT (world_event_id, account_label)
+            WHERE world_event_id IS NOT NULL DO NOTHING
         RETURNING id
         """,
         (world_event_id, clean_summary, source_chunk_id, source_resolution_id),
@@ -174,7 +177,9 @@ def mint_claim_for_event(
     row = cur.fetchone()
     if row is None:
         cur.execute(
-            "SELECT id FROM claims WHERE world_event_id = %s", (world_event_id,)
+            "SELECT id FROM claims "
+            "WHERE world_event_id = %s AND account_label = 'canonical'",
+            (world_event_id,),
         )
         row = cur.fetchone()
         if row is None:
@@ -217,9 +222,11 @@ async def mint_claim_for_event_async(
     claim_id = await conn.fetchval(
         """
         INSERT INTO claims (
-            world_event_id, summary, scope, source_chunk_id, source_resolution_id
-        ) VALUES ($1, $2, 'bounded', $3, $4)
-        ON CONFLICT (world_event_id) WHERE world_event_id IS NOT NULL DO NOTHING
+            world_event_id, account_label, summary, scope, source_chunk_id,
+            source_resolution_id
+        ) VALUES ($1, 'canonical', $2, 'bounded', $3, $4)
+        ON CONFLICT (world_event_id, account_label)
+            WHERE world_event_id IS NOT NULL DO NOTHING
         RETURNING id
         """,
         world_event_id,
@@ -229,7 +236,9 @@ async def mint_claim_for_event_async(
     )
     if claim_id is None:
         claim_id = await conn.fetchval(
-            "SELECT id FROM claims WHERE world_event_id = $1", world_event_id
+            "SELECT id FROM claims "
+            "WHERE world_event_id = $1 AND account_label = 'canonical'",
+            world_event_id,
         )
         if claim_id is None:
             raise RuntimeError(
@@ -243,6 +252,122 @@ async def mint_claim_for_event_async(
         source_chunk_id=source_chunk_id,
     )
     return MintResult(claim_id=int(claim_id), awareness_ids=awareness_ids)
+
+
+def mint_account_variant_sync(
+    cur: Any,
+    *,
+    source_claim_id: int,
+    account_label: str,
+    summary: str,
+    source_chunk_id: Optional[int],
+    account_payload: Optional[Mapping[str, Any]] = None,
+    distorted_from_claim_id: Optional[int] = None,
+) -> int:
+    """Mint one non-awareness sibling account from an existing claim."""
+
+    clean_label = account_label.strip()
+    clean_summary = summary.strip()
+    if not clean_label:
+        raise ValueError("Account label must be non-empty")
+    if not clean_summary:
+        raise ValueError("Account variant summary must be non-empty")
+    cur.execute(
+        "SELECT world_event_id, scope FROM claims WHERE id = %s",
+        (source_claim_id,),
+    )
+    source = cur.fetchone()
+    if source is None:
+        raise ValueError(f"Source claim {source_claim_id} does not exist")
+    parent_claim_id = (
+        source_claim_id if distorted_from_claim_id is None else distorted_from_claim_id
+    )
+    payload_json = _account_payload_json(account_payload)
+    cur.execute(
+        """
+        INSERT INTO claims (
+            world_event_id, account_label, account_payload,
+            distorted_from_claim_id, summary, scope, source_chunk_id
+        ) VALUES (%s, %s, %s::jsonb, %s, %s, %s, %s)
+        RETURNING id
+        """,
+        (
+            _row_value(source, "world_event_id", 0),
+            clean_label,
+            payload_json,
+            parent_claim_id,
+            clean_summary,
+            _row_value(source, "scope", 1),
+            source_chunk_id,
+        ),
+    )
+    inserted = cur.fetchone()
+    if inserted is None:
+        raise RuntimeError("Account variant INSERT returned no claim id")
+    return int(_row_value(inserted, "id", 0))
+
+
+async def mint_account_variant_async(
+    conn: Any,
+    *,
+    source_claim_id: int,
+    account_label: str,
+    summary: str,
+    source_chunk_id: Optional[int],
+    account_payload: Optional[Mapping[str, Any]] = None,
+    distorted_from_claim_id: Optional[int] = None,
+) -> int:
+    """Asyncpg twin of :func:`mint_account_variant_sync`."""
+
+    clean_label = account_label.strip()
+    clean_summary = summary.strip()
+    if not clean_label:
+        raise ValueError("Account label must be non-empty")
+    if not clean_summary:
+        raise ValueError("Account variant summary must be non-empty")
+    source = await conn.fetchrow(
+        "SELECT world_event_id, scope FROM claims WHERE id = $1",
+        source_claim_id,
+    )
+    if source is None:
+        raise ValueError(f"Source claim {source_claim_id} does not exist")
+    parent_claim_id = (
+        source_claim_id if distorted_from_claim_id is None else distorted_from_claim_id
+    )
+    claim_id = await conn.fetchval(
+        """
+        INSERT INTO claims (
+            world_event_id, account_label, account_payload,
+            distorted_from_claim_id, summary, scope, source_chunk_id
+        ) VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7)
+        RETURNING id
+        """,
+        source["world_event_id"],
+        clean_label,
+        _account_payload_json(account_payload),
+        parent_claim_id,
+        clean_summary,
+        source["scope"],
+        source_chunk_id,
+    )
+    if claim_id is None:
+        raise RuntimeError("Account variant INSERT returned no claim id")
+    return int(claim_id)
+
+
+def _account_payload_json(
+    account_payload: Optional[Mapping[str, Any]],
+) -> Optional[str]:
+    """Serialize structured account content deterministically or fail loudly."""
+
+    if account_payload is None:
+        return None
+    return json.dumps(
+        dict(account_payload),
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
 
 
 def record_revelation(
@@ -386,14 +511,15 @@ def load_epistemics_hydration(
         scope_query = text(
             """
             /* orrery:epistemics_hydration:recent_event_scopes */
-            SELECT c.world_event_id,
+            SELECT c.id AS claim_id,
+                   c.world_event_id,
                    c.scope
             FROM claims c
             JOIN world_events we ON we.id = c.world_event_id
             WHERE c.world_event_id = ANY(:recent_event_ids)
               AND (:anchor_chunk_id IS NULL
                    OR we.tick_chunk_id <= :anchor_chunk_id)
-            ORDER BY c.world_event_id
+            ORDER BY c.world_event_id, c.id
             """
         )
         for row in session.execute(
@@ -409,6 +535,17 @@ def load_epistemics_hydration(
                 raise ValueError(
                     f"Claim on event {event_id} has unknown scope {scope!r}"
                 )
+            previous_scope = scopes.get(event_id)
+            if previous_scope is not None and previous_scope != scope:
+                raise ValueError(
+                    "Sibling claims on event "
+                    f"{event_id} have divergent scopes "
+                    f"{previous_scope!r} and {scope!r}"
+                )
+            # Legacy recent-event predicates are incident-level: possession
+            # of any sibling account admits the shared event. Account-aware
+            # predicates remain claim-id keyed below. Variant minting copies
+            # scope, and divergent later mutations fail loudly above.
             scopes[event_id] = scope
 
     if not universe:
@@ -573,6 +710,8 @@ def load_epistemics_hydration(
             raise ValueError(
                 f"Claim {claim_id} has unknown awareness tier {source_tier!r}"
             )
+        # Event-level knowledge intentionally collapses sibling possession;
+        # claim_knowledge below preserves the exact possessed account id.
         awareness.setdefault(knower_id, set()).add(event_id)
         awareness_rows.setdefault(
             (claim_id, knower_id),
