@@ -9,7 +9,10 @@ from uuid import uuid4
 import asyncpg
 import pytest
 
-from nexus.agents.orrery.events import _apply_state_delta_async
+from nexus.agents.orrery.events import (
+    _apply_state_delta_async,
+    _upsert_reconciled_relationship_async,
+)
 from nexus.agents.orrery.needs import NeedTuning
 from nexus.agents.orrery.resolver import OrreryResolutionDraft
 from nexus.agents.orrery.substrate import ProjectPolicy
@@ -123,6 +126,16 @@ async def test_async_seek_redemption_three_write_completion() -> None:
             target,
         )
         await conn.execute(
+            "INSERT INTO character_relationships "
+            "(character1_id,character2_id,relationship_type,emotional_valence,"
+            " dynamic,recent_events,history) "
+            "SELECT a.id,t.id,'enemy','-4|hostile','d','r','h' "
+            "FROM characters a,characters t "
+            "WHERE a.entity_id=$1 AND t.entity_id=$2",
+            actor,
+            target,
+        )
+        await conn.execute(
             "UPDATE entity_tags et SET cleared_at=now() FROM tags t "
             "WHERE et.tag_id=t.id AND et.entity_id=$1 "
             "AND t.tag='grudge_active' AND et.cleared_at IS NULL",
@@ -221,12 +234,33 @@ async def test_async_seek_redemption_three_write_completion() -> None:
             relationship["relationship_type"],
             relationship["emotional_valence"],
         ) == ("complex", "+1|favorable")
-        assert (
-            json.loads(relationship["extra_data"])["orrery_seek_redemption"][
-                "template_id"
-            ]
-            == "advance_seek_redemption"
+        provenance = json.loads(relationship["extra_data"])["orrery_seek_redemption"]
+        assert provenance["template_id"] == "advance_seek_redemption"
+        assert provenance["previous_relationship_type"] == "enemy"
+        assert provenance["previous_emotional_valence"] == "-4|hostile"
+
+        # Re-run the upsert directly: asyncpg hands extra_data back as a
+        # JSONB string, and the first-write provenance must survive the
+        # decode (a regression here rewrites the originals as
+        # complex/+1|favorable).
+        await _upsert_reconciled_relationship_async(
+            conn,
+            actor_entity_id=actor,
+            target_entity_id=target,
+            template_id="advance_seek_redemption",
+            source_chunk_id=chunk,
         )
+        rewritten = await conn.fetchrow(
+            "SELECT cr.extra_data FROM character_relationships cr "
+            "JOIN characters a ON a.id=cr.character1_id "
+            "JOIN characters t ON t.id=cr.character2_id "
+            "WHERE a.entity_id=$1 AND t.entity_id=$2",
+            actor,
+            target,
+        )
+        second = json.loads(rewritten["extra_data"])["orrery_seek_redemption"]
+        assert second["previous_relationship_type"] == "enemy"
+        assert second["previous_emotional_valence"] == "-4|hostile"
     finally:
         await transaction.rollback()
         await conn.close()

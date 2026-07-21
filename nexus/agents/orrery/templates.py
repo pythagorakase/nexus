@@ -5725,6 +5725,16 @@ START_SEEK_REDEMPTION = Template(
             trust_below(0, Slot.TARGET, Slot.ACTOR),
             has_symmetric_relationship_of_type("enemy", Slot.ACTOR, Slot.TARGET),
             has_symmetric_relationship_of_type("rival", Slot.ACTOR, Slot.TARGET),
+            # Reachability contour: candidate pairs compose from relationship
+            # rows (any type) and contact:social edges, never from hostile
+            # pair tags alone. This arm therefore fires only when the pair
+            # composed via one of those routes and the hostile edge is the
+            # sole EVIDENCE (e.g. a hunting edge atop a neutral-valence
+            # relationship row). A pair whose only connection is a hostile
+            # edge does not compose — deliberately: a wrong worth redeeming
+            # with no relationship row is data-shape-poor, and widening the
+            # shared composer for that corner would touch every two-party
+            # package.
             has_any_pair_tag(
                 "hostile_to",
                 "hunting",

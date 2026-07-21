@@ -3009,6 +3009,9 @@ def _recruit_ally_relationship_metadata(
     """Return durable provenance for the canonical recruited-ally relation."""
 
     original_type = previous_relationship_type
+    # asyncpg returns JSONB as str; without decoding, the Mapping check
+    # silently misses prior provenance and a re-run clobbers the originals.
+    existing_extra_data = _decode_json_value(existing_extra_data)
     if isinstance(existing_extra_data, Mapping):
         prior = existing_extra_data.get("orrery_recruit_ally")
         if isinstance(prior, Mapping):
@@ -3190,6 +3193,9 @@ def _seek_redemption_relationship_metadata(
 
     original_type = previous_relationship_type
     original_valence = previous_emotional_valence
+    # asyncpg returns JSONB as str; without decoding, the Mapping check
+    # silently misses prior provenance and a re-run clobbers the originals.
+    existing_extra_data = _decode_json_value(existing_extra_data)
     if isinstance(existing_extra_data, Mapping):
         prior = existing_extra_data.get("orrery_seek_redemption")
         if isinstance(prior, Mapping):
@@ -3393,6 +3399,9 @@ def _pursue_romance_relationship_metadata(
     """Return durable provenance for the canonical romance relation."""
 
     original_type = previous_relationship_type
+    # asyncpg returns JSONB as str; without decoding, the Mapping check
+    # silently misses prior provenance and a re-run clobbers the originals.
+    existing_extra_data = _decode_json_value(existing_extra_data)
     if isinstance(existing_extra_data, Mapping):
         prior = existing_extra_data.get("orrery_pursue_romance")
         if isinstance(prior, Mapping):
@@ -3572,6 +3581,9 @@ def _court_patron_relationship_metadata(
     """Return durable provenance for the canonical patron relationship."""
 
     original_type = previous_relationship_type
+    # asyncpg returns JSONB as str; without decoding, the Mapping check
+    # silently misses prior provenance and a re-run clobbers the originals.
+    existing_extra_data = _decode_json_value(existing_extra_data)
     if isinstance(existing_extra_data, Mapping):
         prior = existing_extra_data.get("orrery_court_patron")
         if isinstance(prior, Mapping):
