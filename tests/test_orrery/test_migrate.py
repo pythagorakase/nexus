@@ -206,6 +206,46 @@ def test_seek_redemption_migration_replaces_named_six_type_constraints() -> None
     assert migration_sql.count("seek_redemption_") >= 6
 
 
+def test_valence_float_migration_installs_one_canonical_boundary() -> None:
+    """Migration 088 freezes the float-first 5.5 substrate contract."""
+
+    migration_sql = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "088_valence_float_canonical.sql"
+    ).read_text()
+
+    assert "ADD COLUMN valence_current numeric" in migration_sql
+    assert "ALTER COLUMN valence_current SET NOT NULL" in migration_sql
+    assert "CHECK (valence_current > -1 AND valence_current < 1)" in migration_sql
+    assert "fn_character_valence_from_literal" in migration_sql
+    assert "prefix_match[1]::numeric / 5.5" in migration_sql
+    assert "fn_character_valence_literal" in migration_sql
+    assert "round(valence * 5.5)" in migration_sql
+    assert "trg_character_relationships_valence_boundary" in migration_sql
+    assert "BEFORE INSERT OR UPDATE ON character_relationships" in migration_sql
+    assert "trg_version_character_relationships" in migration_sql
+    assert "to_jsonb(OLD)" in migration_sql
+    assert "round(cr.valence_current * 5.5)::integer" in migration_sql
+    assert "NULL::numeric AS valence_current" in migration_sql
+    assert "COMMENT ON COLUMN entity_relationships_v.valence_current" in migration_sql
+    assert "CASE cr.emotional_valence::text" not in migration_sql
+    for literal in (
+        "+5|devoted",
+        "+4|admiring",
+        "+3|trusting",
+        "+2|friendly",
+        "+1|favorable",
+        "0|neutral",
+        "-1|wary",
+        "-2|disapproving",
+        "-3|resentful",
+        "-4|hostile",
+        "-5|hateful",
+    ):
+        assert literal in migration_sql
+
+
 def test_retrograde_persistence_migration_adds_distinct_sources() -> None:
     """Retrograde canonical writes need explicit event and tag provenance."""
 

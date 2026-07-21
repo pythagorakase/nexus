@@ -39,6 +39,7 @@ from tests.test_orrery.test_claim_propagation_live import (
     _insert_faction,
     _insert_pair_tag,
     _insert_relationship,
+    _install_valence_shadow,
     _settings,
 )
 
@@ -73,6 +74,7 @@ def live_connection() -> Iterator[Any]:
             migration_state = cur.fetchone()
             if not migration_state["registered"] or not migration_state["shaped"]:
                 pytest.skip("slot 5 requires migrations 080-083 for Stage 2d")
+            _install_valence_shadow(cur)
         yield connection
     finally:
         transaction.rollback()

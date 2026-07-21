@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Any, Iterable, Optional
 
+from nexus.agents.logon.apex_enums import EmotionalValence
 from nexus.agents.orrery.status_family import (
     normalize_status_level,
     status_tag_for_level,
@@ -67,14 +70,19 @@ DEPENDENT_PAIR_TAG = "protects"
 OBLIGATION_PAIR_TAG = "obligation"
 
 PATRON_RELATIONSHIP_TYPE = "patron"
-PATRON_DEFAULT_VALENCE = "+2|deferential"
+PATRON_DEFAULT_VALENCE = "+2|friendly"
 DEPENDENT_RELATIONSHIP_TYPE = "dependent"
-DEPENDENT_DEFAULT_VALENCE = "+3|devoted"
+DEPENDENT_DEFAULT_VALENCE = "+3|trusting"
 OBLIGATION_RELATIONSHIP_TYPE = "obligation"
-OBLIGATION_DEFAULT_VALENCE = "-1|beholden"
+OBLIGATION_DEFAULT_VALENCE = "-1|wary"
 
 TRAIT_COMPILER_SOURCE = "trait_compiler"
 TRAIT_STUB_KIND = "trait_compiler_target_ref"
+_CANONICAL_VALENCE_BY_RUNG = {
+    int(valence.value.split("|", maxsplit=1)[0]): valence.value
+    for valence in EmotionalValence
+}
+_AUTHORED_VALENCE_PREFIX_RE = re.compile(r"^([+-]?[0-9]+)\|")
 
 
 @dataclass(frozen=True)
@@ -631,22 +639,28 @@ def _compile_relationship_target(
             )
         )
 
-    if not dry_run:
-        _upsert_character_relationship(
-            cur,
-            character1_id=character_id,
-            character2_id=target.character_id,
-            relationship_type=relationship_type,
-            emotional_valence=emotional_valence,
-            dynamic=target.dynamic,
-            recent_events=target.recent_events,
-            history=target.history,
-            trait=trait,
-            pair_tag=pair_tag if target.apply_pair_tag else None,
-            pair_tag_direction=(
-                target.pair_tag_direction if target.apply_pair_tag else None
-            ),
-            contact_kind=contact_kind,
+    if dry_run:
+        reported_emotional_valence = _project_authored_valence_for_report(
+            emotional_valence
+        )
+    else:
+        reported_emotional_valence, _stored_valence_current = (
+            _upsert_character_relationship(
+                cur,
+                character1_id=character_id,
+                character2_id=target.character_id,
+                relationship_type=relationship_type,
+                emotional_valence=emotional_valence,
+                dynamic=target.dynamic,
+                recent_events=target.recent_events,
+                history=target.history,
+                trait=trait,
+                pair_tag=pair_tag if target.apply_pair_tag else None,
+                pair_tag_direction=(
+                    target.pair_tag_direction if target.apply_pair_tag else None
+                ),
+                contact_kind=contact_kind,
+            )
         )
     result.created_relationships.append(
         CreatedRelationship(
@@ -654,7 +668,7 @@ def _compile_relationship_target(
             character1_id=character_id,
             character2_id=target.character_id,
             relationship_type=relationship_type,
-            emotional_valence=emotional_valence,
+            emotional_valence=reported_emotional_valence,
             pair_tag=pair_tag if target.apply_pair_tag else None,
             contact_kind=contact_kind,
             dry_run=dry_run,
@@ -1124,23 +1138,29 @@ def _write_trait_relationship(
 ) -> None:
     """Record (and on apply, upsert) a compiler-authored relationship row."""
 
-    if not dry_run:
+    if dry_run:
+        reported_emotional_valence = _project_authored_valence_for_report(
+            emotional_valence
+        )
+    else:
         if target.row_id is None:
             raise AssertionError("apply-mode relationship target must have a row id")
-        _upsert_character_relationship(
-            cur,
-            character1_id=character1_id,
-            character2_id=target.row_id,
-            relationship_type=relationship_type,
-            emotional_valence=emotional_valence,
-            dynamic=dynamic,
-            recent_events=recent_events,
-            history=history,
-            trait=trait,
-            pair_tag=None,
-            pair_tag_direction=None,
-            contact_kind=None,
-            additional_extra_data=additional_extra_data,
+        reported_emotional_valence, _stored_valence_current = (
+            _upsert_character_relationship(
+                cur,
+                character1_id=character1_id,
+                character2_id=target.row_id,
+                relationship_type=relationship_type,
+                emotional_valence=emotional_valence,
+                dynamic=dynamic,
+                recent_events=recent_events,
+                history=history,
+                trait=trait,
+                pair_tag=None,
+                pair_tag_direction=None,
+                contact_kind=None,
+                additional_extra_data=additional_extra_data,
+            )
         )
     result.created_relationships.append(
         CreatedRelationship(
@@ -1149,7 +1169,7 @@ def _write_trait_relationship(
             character2_id=target.row_id,
             character2_name=target.name if target.pending_stub else None,
             relationship_type=relationship_type,
-            emotional_valence=emotional_valence,
+            emotional_valence=reported_emotional_valence,
             dry_run=dry_run,
         )
     )
@@ -1563,7 +1583,9 @@ def _upsert_character_relationship(
     pair_tag_direction: Optional[str],
     contact_kind: Optional[str],
     additional_extra_data: Optional[dict[str, Any]] = None,
-) -> None:
+) -> tuple[str, Decimal]:
+    """Upsert one row and return the boundary trigger's canonical valence."""
+
     extra_data: dict[str, Any] = {
         "source": "trait_compiler",
         "trait": trait,
@@ -1594,6 +1616,7 @@ def _upsert_character_relationship(
             extra_data = COALESCE(character_relationships.extra_data, '{}'::jsonb)
                          || EXCLUDED.extra_data,
             updated_at = NOW()
+        RETURNING emotional_valence, valence_current
         """,
         (
             character1_id,
@@ -1606,6 +1629,31 @@ def _upsert_character_relationship(
             json.dumps(extra_data),
         ),
     )
+    stored = cur.fetchone()
+    if stored is None:
+        raise RuntimeError("Trait relationship upsert returned no row.")
+    return (
+        str(_row_value(stored, "emotional_valence", 0)),
+        Decimal(str(_row_value(stored, "valence_current", 1))),
+    )
+
+
+def _project_authored_valence_for_report(emotional_valence: str) -> str:
+    """Mirror migration 088's authored-literal projection for dry-run output."""
+
+    prefix = _AUTHORED_VALENCE_PREFIX_RE.match(emotional_valence)
+    if prefix is None:
+        raise ValueError(
+            "Unparseable emotional_valence "
+            f"{emotional_valence!r}; expected signed integer prefix and |label"
+        )
+    rung = int(prefix.group(1))
+    try:
+        return _CANONICAL_VALENCE_BY_RUNG[rung]
+    except KeyError as exc:
+        raise ValueError(
+            f"Emotional valence rung {rung} is outside the authored -5..+5 ladder"
+        ) from exc
 
 
 def _registered_tag_exists(cur: Any, tag: str, category: str) -> bool:

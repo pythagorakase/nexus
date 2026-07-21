@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
-from typing import Any, Iterator, Mapping, Sequence
+from decimal import Decimal
 from itertools import count
+from typing import Any, Iterator, Mapping, Sequence
 from uuid import uuid4
 
 import asyncpg  # type: ignore[import-untyped]
@@ -52,6 +53,26 @@ EPISTEMICS = {
 }
 
 
+def _install_valence_shadow(cur: Any) -> None:
+    """Shadow the pending-088 table shape in this connection's temp schema."""
+
+    cur.execute(
+        r"""
+        CREATE TEMP TABLE character_relationships ON COMMIT DROP AS
+        SELECT cr.* FROM public.character_relationships cr;
+
+        ALTER TABLE pg_temp.character_relationships
+            ADD COLUMN IF NOT EXISTS valence_current numeric;
+
+        UPDATE pg_temp.character_relationships
+        SET valence_current = substring(
+            emotional_valence::text FROM '^([+-]?[0-9]+)\|'
+        )::numeric / 5.5
+        WHERE valence_current IS NULL
+        """
+    )
+
+
 @pytest.fixture()
 def live_conn() -> Iterator[Any]:
     """Open one slot-5 transaction and roll back fixture writes."""
@@ -79,6 +100,7 @@ def live_conn() -> Iterator[Any]:
                     "slot 5 has not applied migration 083: claim_propagated "
                     "registration and world_events.world_time are required"
                 )
+            _install_valence_shadow(cur)
         yield conn
     finally:
         conn.rollback()
@@ -190,7 +212,7 @@ def _insert_relationship(
 ) -> None:
     cur.execute(
         """
-        INSERT INTO character_relationships (
+        INSERT INTO public.character_relationships (
             character1_id, character2_id, relationship_type,
             emotional_valence, dynamic, recent_events, history
         ) VALUES (
@@ -199,6 +221,23 @@ def _insert_relationship(
         )
         """,
         (source_character_id, target_character_id, valence),
+    )
+    cur.execute(
+        """
+        INSERT INTO pg_temp.character_relationships (
+            character1_id, character2_id, relationship_type,
+            emotional_valence, valence_current, dynamic, recent_events, history
+        ) VALUES (
+            %s, %s, 'associate', %s, %s,
+            'Rollback-only Stage 2c conduit.', 'None.', 'Fixture.'
+        )
+        """,
+        (
+            source_character_id,
+            target_character_id,
+            valence,
+            Decimal(valence.split("|", maxsplit=1)[0]) / Decimal("5.5"),
+        ),
     )
 
 
@@ -444,6 +483,7 @@ def test_propagation_event_does_not_change_salience_or_hydration_feed() -> None:
                     "slot 5 has not applied migration 083: salience isolation "
                     "requires the real propagation ledger"
                 )
+            _install_valence_shadow(cur)
             entities, _ = _chain(cur, 2)
             birth_chunk, birth_world_time = _insert_chunk(cur)
             claim_id = _insert_claim(
@@ -1130,6 +1170,21 @@ async def test_async_drain_matches_sync_single_hop() -> None:
                 "slot 5 has not applied migration 083: async propagation "
                 "coverage requires the registered event and shaped ledger"
             )
+        await conn.execute(
+            r"""
+            CREATE TEMP TABLE character_relationships ON COMMIT DROP AS
+            SELECT cr.* FROM public.character_relationships cr;
+
+            ALTER TABLE pg_temp.character_relationships
+                ADD COLUMN IF NOT EXISTS valence_current numeric;
+
+            UPDATE pg_temp.character_relationships
+            SET valence_current = substring(
+                emotional_valence::text FROM '^([+-]?[0-9]+)\|'
+            )::numeric / 5.5
+            WHERE valence_current IS NULL
+            """
+        )
         source = int(
             await conn.fetchval(
                 "INSERT INTO entities (kind, is_active) "
@@ -1160,11 +1215,25 @@ async def test_async_drain_matches_sync_single_hop() -> None:
         )
         await conn.execute(
             """
-            INSERT INTO character_relationships (
+            INSERT INTO public.character_relationships (
                 character1_id, character2_id, relationship_type,
                 emotional_valence, dynamic, recent_events, history
             ) VALUES (
                 $1, $2, 'associate', '+3|trusting',
+                'Rollback-only Stage 2c conduit.', 'None.', 'Fixture.'
+            )
+            """,
+            source_character,
+            listener_character,
+        )
+        await conn.execute(
+            """
+            INSERT INTO pg_temp.character_relationships (
+                character1_id, character2_id, relationship_type,
+                emotional_valence, valence_current, dynamic,
+                recent_events, history
+            ) VALUES (
+                $1, $2, 'associate', '+3|trusting', 3::numeric / 5.5,
                 'Rollback-only Stage 2c conduit.', 'None.', 'Fixture.'
             )
             """,

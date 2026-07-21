@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-import re
+from decimal import Decimal
 from typing import Any, Iterable, Literal, Mapping, Optional, Sequence, Tuple
 
 from sqlalchemy import text
@@ -18,14 +19,13 @@ from nexus.config.settings_models import OrreryContagionSettings
 
 
 CommunicationEdgeKind = Literal["dyad", "channel"]
-_VALENCE_RE = re.compile(r"^(?P<magnitude>[+-]?\d+)\|[^|]+$")
 _CULTURE_CATEGORIES = frozenset({"operational_secrecy", "operational_mode"})
 _DYAD_SQL = """
     /* orrery:communication_dyads */
     SELECT c1.entity_id AS teller_entity_id,
            c2.entity_id AS listener_entity_id,
            cr.relationship_type::text AS relationship_type,
-           cr.emotional_valence::text AS emotional_valence
+           cr.valence_current
     FROM character_relationships cr
     JOIN characters c1 ON c1.id = cr.character1_id
     JOIN characters c2 ON c2.id = cr.character2_id
@@ -159,26 +159,38 @@ async def _fetch_mappings_async(conn: Any, sql: str) -> list[dict[str, Any]]:
     return [dict(row) for row in await conn.fetch(sql)]
 
 
-def _valence_tier(emotional_valence: Any) -> Literal["trusting", "neutral", "hostile"]:
-    """Parse the canonical signed numeric valence prefix, or fail loudly."""
+def _valence_tier(
+    valence_current: Any,
+) -> Literal["trusting", "neutral", "hostile"]:
+    """Classify canonical float valence by sign, or fail loudly."""
 
-    if not isinstance(emotional_valence, str):
+    if isinstance(valence_current, bool) or not isinstance(
+        valence_current, (Decimal, float, int)
+    ):
         raise ValueError(
-            f"Unparseable emotional_valence {emotional_valence!r}; expected "
-            "'<signed integer>|<label>'"
+            f"Unparseable valence_current {valence_current!r}; expected "
+            "a signed numeric value"
         )
-    match = _VALENCE_RE.fullmatch(emotional_valence.strip())
-    if match is None:
+    if isinstance(valence_current, Decimal) and not valence_current.is_finite():
         raise ValueError(
-            f"Unparseable emotional_valence {emotional_valence!r}; expected "
-            "'<signed integer>|<label>'"
+            f"Unparseable valence_current {valence_current!r}; expected "
+            "a finite signed numeric value"
         )
-    magnitude = int(match.group("magnitude"))
-    if magnitude > 0:
+    if isinstance(valence_current, float) and not math.isfinite(valence_current):
+        raise ValueError(
+            f"Unparseable valence_current {valence_current!r}; expected "
+            "a finite signed numeric value"
+        )
+    if valence_current > 0:
         return "trusting"
-    if magnitude < 0:
+    if valence_current < 0:
         return "hostile"
-    return "neutral"
+    if valence_current == 0:
+        return "neutral"
+    raise ValueError(
+        f"Unparseable valence_current {valence_current!r}; expected "
+        "a finite signed numeric value"
+    )
 
 
 def _edge_sort_key(edge: CommunicationEdge) -> tuple[Any, ...]:
@@ -248,7 +260,7 @@ def _dyad_edges_from_rows(
         teller = int(row["teller_entity_id"])
         listener = int(row["listener_entity_id"])
         relationship_type = str(row["relationship_type"])
-        tier = _valence_tier(row["emotional_valence"])
+        tier = _valence_tier(row["valence_current"])
         override = settings.dyad_overrides.get(relationship_type)
         if override is None:
             latency = getattr(settings.dyad_tiers, tier)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from typing import Any, Iterator
 from uuid import uuid4
 
@@ -14,6 +15,7 @@ from nexus.agents.orrery.audit import entity_context, explain_dry_run
 from nexus.agents.orrery.communication import (
     CommunicationEdge,
     CommunicationGraph,
+    _valence_tier,
     assemble_communication_graph,
 )
 from nexus.agents.orrery.resolver import resolve_dry_run
@@ -26,6 +28,26 @@ pytestmark = pytest.mark.requires_postgres
 
 LIVE_SLOT = 5
 WORLD_TIME = datetime(2073, 8, 1, 12, 0, tzinfo=timezone.utc)
+
+
+def _install_valence_shadow(cur: Any) -> None:
+    """Shadow the pending-088 table shape in this connection's temp schema."""
+
+    cur.execute(
+        r"""
+        CREATE TEMP TABLE character_relationships ON COMMIT DROP AS
+        SELECT cr.* FROM public.character_relationships cr;
+
+        ALTER TABLE pg_temp.character_relationships
+            ADD COLUMN IF NOT EXISTS valence_current numeric;
+
+        UPDATE pg_temp.character_relationships
+        SET valence_current = substring(
+            emotional_valence::text FROM '^([+-]?[0-9]+)\|'
+        )::numeric / 5.5
+        WHERE valence_current IS NULL
+        """
+    )
 
 
 def _insert_character(
@@ -71,10 +93,12 @@ def _insert_relationship(
             """
             INSERT INTO character_relationships (
                 character1_id, character2_id, relationship_type,
-                emotional_valence, dynamic, recent_events, history
+                emotional_valence, valence_current, dynamic,
+                recent_events, history
             ) VALUES (
                 :source_id, :target_id, :relationship_type,
-                :emotional_valence, 'Rollback-only communication fixture.',
+                :emotional_valence, :valence_current,
+                'Rollback-only communication fixture.',
                 'No persistent events.', 'Created for issue 477 Stage 2b.'
             )
             """
@@ -84,6 +108,8 @@ def _insert_relationship(
             "target_id": target_character_id,
             "relationship_type": relationship_type,
             "emotional_valence": emotional_valence,
+            "valence_current": Decimal(emotional_valence.split("|", maxsplit=1)[0])
+            / Decimal("5.5"),
         },
     )
 
@@ -139,6 +165,9 @@ def communication_db() -> Iterator[dict[str, Any]]:
     transaction = connection.begin()
     session = Session(bind=connection)
     try:
+        raw_connection = connection.connection.driver_connection
+        with raw_connection.cursor() as cur:
+            _install_valence_shadow(cur)
         token = uuid4().hex[:12]
         labels = (
             "lone_teller",
@@ -326,34 +355,32 @@ def _between(
     )
 
 
-def test_conflicted_live_pair_licenses_only_each_tellers_own_direction() -> None:
+def test_conflicted_live_pair_licenses_only_each_tellers_own_direction(
+    communication_db: dict[str, Any],
+) -> None:
     """Tomi trusts Kosi; Kosi's captor stance is configured as never."""
 
-    engine = create_engine(get_slot_db_url(slot=LIVE_SLOT), future=True)
-    try:
-        with Session(engine) as session:
-            ids = {
-                row["name"]: int(row["entity_id"])
-                for row in session.execute(
-                    text(
-                        """
-                        SELECT name, entity_id
-                        FROM characters
-                        WHERE name IN ('Tomi', 'Kosi')
-                        ORDER BY name
-                        """
-                    )
-                ).mappings()
-            }
-            if set(ids) != {"Tomi", "Kosi"}:
-                pytest.skip("save_05 does not contain the frozen Tomi/Kosi pair")
-            graph = assemble_communication_graph(
-                session,
-                settings=load_settings("nexus.toml").orrery.contagion,
-                world_time=WORLD_TIME,
+    session = communication_db["session"]
+    ids = {
+        row["name"]: int(row["entity_id"])
+        for row in session.execute(
+            text(
+                """
+                SELECT name, entity_id
+                FROM characters
+                WHERE name IN ('Tomi', 'Kosi')
+                ORDER BY name
+                """
             )
-    finally:
-        engine.dispose()
+        ).mappings()
+    }
+    if set(ids) != {"Tomi", "Kosi"}:
+        pytest.skip("save_05 does not contain the frozen Tomi/Kosi pair")
+    graph = assemble_communication_graph(
+        session,
+        settings=load_settings("nexus.toml").orrery.contagion,
+        world_time=WORLD_TIME,
+    )
 
     tomi_to_kosi = _between(graph, ids["Tomi"], ids["Kosi"], kind="dyad")
     assert [(edge.label, edge.latency) for edge in tomi_to_kosi] == [
@@ -615,21 +642,11 @@ def test_unknown_dyad_override_key_is_loud(
         )
 
 
-def test_unparseable_relationship_valence_is_loud(
-    communication_db: dict[str, Any],
-) -> None:
-    """Legacy or drifted valence strings cannot silently lose an edge."""
+def test_unparseable_relationship_valence_is_loud() -> None:
+    """Non-numeric canonical values cannot silently lose an edge."""
 
-    characters = communication_db["characters"]
-    _insert_relationship(
-        communication_db["session"],
-        source_character_id=characters["neutral_listener"],
-        target_character_id=characters["neutral_teller"],
-        relationship_type="associate",
-        emotional_valence="friendly",
-    )
-    with pytest.raises(ValueError, match="Unparseable emotional_valence"):
-        _assemble(communication_db)
+    with pytest.raises(ValueError, match="Unparseable valence_current"):
+        _valence_tier("friendly")
 
 
 def test_production_explain_and_entity_audit_share_one_edge_list(
