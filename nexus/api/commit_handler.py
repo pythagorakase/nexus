@@ -571,6 +571,7 @@ async def commit_incubator_to_database(
                     else None
                 ),
                 contagion_settings=_orrery_contagion_settings(),
+                distortion_settings=_orrery_distortion_settings(),
                 drift_settings=_orrery_drift_settings(),
                 reveal_settings=_orrery_reveal_settings(),
             )
@@ -676,6 +677,14 @@ def _orrery_contagion_settings() -> Any:
     from nexus.config import load_settings_as_dict
 
     return (load_settings_as_dict().get("orrery") or {}).get("contagion")
+
+
+def _orrery_distortion_settings() -> Any:
+    """[orrery.distortion] authored hop-depth account selection policy."""
+
+    from nexus.config import load_settings_as_dict
+
+    return (load_settings_as_dict().get("orrery") or {}).get("distortion")
 
 
 def _orrery_epistemics_settings() -> Any:

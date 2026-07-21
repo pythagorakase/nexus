@@ -404,6 +404,8 @@ def test_single_hop_ledgers_scheduled_time_provenance_and_policy(
         )
         rows = _awareness(cur, claim_id)
         events = _propagation_events(cur, claim_id)
+        cur.execute("SELECT world_event_id FROM claims WHERE id = %s", (claim_id,))
+        incident_world_event_id = int(cur.fetchone()["world_event_id"])
         cur.execute(
             """
             SELECT role::text, entity_id
@@ -448,6 +450,9 @@ def test_single_hop_ledgers_scheduled_time_provenance_and_policy(
     assert event["payload"] == {
         "awareness_id": told["id"],
         "claim_id": claim_id,
+        "delivered_claim_id": claim_id,
+        "incident_world_event_id": incident_world_event_id,
+        "distortion_applied": False,
         "knower_entity_id": listener,
         "immediate_source_entity_id": source,
         "root_source_entity_id": source,

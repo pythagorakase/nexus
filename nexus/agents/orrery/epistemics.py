@@ -263,6 +263,7 @@ def mint_account_variant_sync(
     source_chunk_id: Optional[int],
     account_payload: Optional[Mapping[str, Any]] = None,
     distorted_from_claim_id: Optional[int] = None,
+    distortion_min_depth: Optional[int] = None,
 ) -> int:
     """Mint one non-awareness sibling account from an existing claim."""
 
@@ -272,6 +273,7 @@ def mint_account_variant_sync(
         raise ValueError("Account label must be non-empty")
     if not clean_summary:
         raise ValueError("Account variant summary must be non-empty")
+    _validate_distortion_min_depth(distortion_min_depth)
     cur.execute(
         "SELECT world_event_id, scope FROM claims WHERE id = %s FOR SHARE",
         (source_claim_id,),
@@ -305,8 +307,9 @@ def mint_account_variant_sync(
         """
         INSERT INTO claims (
             world_event_id, account_label, account_payload,
-            distorted_from_claim_id, summary, scope, source_chunk_id
-        ) VALUES (%s, %s, %s::jsonb, %s, %s, %s, %s)
+            distorted_from_claim_id, distortion_min_depth, summary, scope,
+            source_chunk_id
+        ) VALUES (%s, %s, %s::jsonb, %s, %s, %s, %s, %s)
         RETURNING id
         """,
         (
@@ -314,6 +317,7 @@ def mint_account_variant_sync(
             clean_label,
             payload_json,
             parent_claim_id,
+            distortion_min_depth,
             clean_summary,
             _row_value(source, "scope", 1),
             source_chunk_id,
@@ -334,6 +338,7 @@ async def mint_account_variant_async(
     source_chunk_id: Optional[int],
     account_payload: Optional[Mapping[str, Any]] = None,
     distorted_from_claim_id: Optional[int] = None,
+    distortion_min_depth: Optional[int] = None,
 ) -> int:
     """Asyncpg twin of :func:`mint_account_variant_sync`."""
 
@@ -343,6 +348,7 @@ async def mint_account_variant_async(
         raise ValueError("Account label must be non-empty")
     if not clean_summary:
         raise ValueError("Account variant summary must be non-empty")
+    _validate_distortion_min_depth(distortion_min_depth)
     source = await conn.fetchrow(
         "SELECT world_event_id, scope FROM claims WHERE id = $1 FOR SHARE",
         source_claim_id,
@@ -372,14 +378,16 @@ async def mint_account_variant_async(
         """
         INSERT INTO claims (
             world_event_id, account_label, account_payload,
-            distorted_from_claim_id, summary, scope, source_chunk_id
-        ) VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7)
+            distorted_from_claim_id, distortion_min_depth, summary, scope,
+            source_chunk_id
+        ) VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7, $8)
         RETURNING id
         """,
         source_event_id,
         clean_label,
         _account_payload_json(account_payload),
         parent_claim_id,
+        distortion_min_depth,
         clean_summary,
         source["scope"],
         source_chunk_id,
@@ -387,6 +395,15 @@ async def mint_account_variant_async(
     if claim_id is None:
         raise RuntimeError("Account variant INSERT returned no claim id")
     return int(claim_id)
+
+
+def _validate_distortion_min_depth(value: Optional[int]) -> None:
+    """Reject invalid authored propagation thresholds before SQL execution."""
+
+    if value is None:
+        return
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise ValueError("distortion_min_depth must be an integer >= 1")
 
 
 def _account_payload_json(

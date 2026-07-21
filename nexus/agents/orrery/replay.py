@@ -225,6 +225,50 @@ def _as_document(value: Any) -> dict[str, Any]:
     return value
 
 
+def _propagated_claim_identity(
+    payload: dict[str, Any], *, event_id: int
+) -> tuple[int, int]:
+    """Validate Stage C keys while accepting historical pre-092 payloads."""
+
+    stage_c_keys = {
+        "delivered_claim_id",
+        "incident_world_event_id",
+        "distortion_applied",
+    }
+    present = stage_c_keys & set(payload)
+    if present and present != stage_c_keys:
+        missing = sorted(stage_c_keys - present)
+        raise ValueError(
+            f"claim_propagated event {event_id} lacks payload fields {missing}"
+        )
+    try:
+        scheduling_claim_id = int(payload["claim_id"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError(
+            f"claim_propagated event {event_id} has invalid 'claim_id'"
+        ) from exc
+    if not present:
+        return scheduling_claim_id, scheduling_claim_id
+    try:
+        delivered_claim_id = int(payload["delivered_claim_id"])
+        int(payload["incident_world_event_id"])
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"claim_propagated event {event_id} has invalid Stage C claim identity"
+        ) from exc
+    distortion_applied = payload["distortion_applied"]
+    if not isinstance(distortion_applied, bool):
+        raise ValueError(
+            f"claim_propagated event {event_id} has invalid " "'distortion_applied'"
+        )
+    if distortion_applied != (delivered_claim_id != scheduling_claim_id):
+        raise ValueError(
+            f"claim_propagated event {event_id} distortion_applied disagrees "
+            "with its scheduling and delivered claims"
+        )
+    return scheduling_claim_id, delivered_claim_id
+
+
 def _row_value(row: Any, index: int) -> Any:
     return row[index]
 
@@ -707,7 +751,7 @@ class _Replayer:
                 )
             if int(payload["depth"]) < 1:
                 raise ValueError(f"claim_propagated event {event_id} has invalid depth")
-            claim_id = int(payload["claim_id"])
+            _, claim_id = _propagated_claim_identity(payload, event_id=event_id)
             knower = int(payload["knower_entity_id"])
             working[(claim_id, knower)] = {
                 "id": int(payload["awareness_id"]),

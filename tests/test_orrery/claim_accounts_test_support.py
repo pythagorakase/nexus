@@ -8,6 +8,7 @@ from typing import Any
 
 
 MIGRATION_SQL = Path("migrations/090_claim_accounts.sql").read_text()
+DISTORTION_MIGRATION_SQL = Path("migrations/092_claim_distortion_depth.sql").read_text()
 
 
 _CREATE_SHADOW_SQL = """
@@ -51,6 +52,10 @@ _CREATE_SHADOW_SQL = """
             source_tier IN ('participant', 'witness', 'told', 'granted')
         );
 
+"""
+
+
+_CREATE_BACKSTORY_SHADOW_SQL = """
     CREATE TEMP TABLE backstory_secrets (
         id bigserial PRIMARY KEY,
         claim_id bigint NOT NULL UNIQUE,
@@ -67,7 +72,9 @@ _POST_090_INDEX_SQL = """
 """
 
 
-def install_claim_accounts_shadow_sync(cur: Any) -> None:
+def install_claim_accounts_shadow_sync(
+    cur: Any, *, include_backstory_shadow: bool = True
+) -> None:
     """Shadow durable projections and install 090 without touching public tables."""
 
     cur.execute(
@@ -84,6 +91,8 @@ def install_claim_accounts_shadow_sync(cur: Any) -> None:
     row = cur.fetchone()
     public_is_post_090 = bool(row["applied"] if isinstance(row, Mapping) else row[0])
     cur.execute(_CREATE_SHADOW_SQL)
+    if include_backstory_shadow:
+        cur.execute(_CREATE_BACKSTORY_SHADOW_SQL)
     if public_is_post_090:
         cur.execute(_POST_090_INDEX_SQL)
     else:
@@ -95,9 +104,26 @@ def install_claim_accounts_shadow_sync(cur: Any) -> None:
             """
         )
         cur.execute(MIGRATION_SQL)
+    cur.execute(
+        "SELECT EXISTS ("
+        "SELECT 1 FROM information_schema.columns "
+        "WHERE table_schema = ANY(current_schemas(false)) "
+        "AND table_name = 'claims' AND column_name = 'distortion_min_depth'"
+        ")"
+    )
+    distortion_row = cur.fetchone()
+    distortion_shaped = bool(
+        next(iter(distortion_row.values()))
+        if isinstance(distortion_row, Mapping)
+        else distortion_row[0]
+    )
+    if not distortion_shaped:
+        cur.execute(DISTORTION_MIGRATION_SQL)
 
 
-async def install_claim_accounts_shadow_async(conn: Any) -> None:
+async def install_claim_accounts_shadow_async(
+    conn: Any, *, include_backstory_shadow: bool = True
+) -> None:
     """Asyncpg twin of :func:`install_claim_accounts_shadow_sync`."""
 
     public_is_post_090 = bool(
@@ -114,6 +140,8 @@ async def install_claim_accounts_shadow_async(conn: Any) -> None:
         )
     )
     await conn.execute(_CREATE_SHADOW_SQL)
+    if include_backstory_shadow:
+        await conn.execute(_CREATE_BACKSTORY_SHADOW_SQL)
     if public_is_post_090:
         await conn.execute(_POST_090_INDEX_SQL)
     else:
@@ -125,3 +153,15 @@ async def install_claim_accounts_shadow_async(conn: Any) -> None:
             """
         )
         await conn.execute(MIGRATION_SQL)
+    distortion_shaped = bool(
+        await conn.fetchval(
+            "SELECT EXISTS ("
+            "SELECT 1 FROM information_schema.columns "
+            "WHERE table_schema = ANY(current_schemas(false)) "
+            "AND table_name = 'claims' "
+            "AND column_name = 'distortion_min_depth'"
+            ")"
+        )
+    )
+    if not distortion_shaped:
+        await conn.execute(DISTORTION_MIGRATION_SQL)

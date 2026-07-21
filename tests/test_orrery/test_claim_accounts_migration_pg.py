@@ -19,6 +19,7 @@ from nexus.api.slot_utils import get_slot_db_url
 
 pytestmark = pytest.mark.requires_postgres
 MIGRATION_SQL = Path("migrations/090_claim_accounts.sql").read_text()
+DISTORTION_MIGRATION_SQL = Path("migrations/092_claim_distortion_depth.sql").read_text()
 EPISTEMICS = {
     "enabled": True,
     "claim_event_types": ["threat_issued"],
@@ -123,6 +124,7 @@ def test_migration_090_mints_canonical_idempotently_and_variants_loudly(
 
     with migration_089_schema.cursor() as cur:
         cur.execute(MIGRATION_SQL)
+        cur.execute(DISTORTION_MIGRATION_SQL)
         first = mint_claim_for_event(
             cur,
             world_event_id=1,

@@ -365,6 +365,7 @@ def commit_orrery_tick_sync(
     project_settings: Optional[Any] = None,
     epistemics_settings: Optional[Any] = None,
     contagion_settings: Optional[Any] = None,
+    distortion_settings: Optional[Any] = None,
     drift_settings: Optional[Any] = None,
     reveal_settings: Optional[Any] = None,
     reveal_state: Optional[WorldState] = None,
@@ -414,6 +415,7 @@ def commit_orrery_tick_sync(
             cur,
             tick_chunk_id=tick_chunk_id,
             settings=contagion_settings,
+            distortion_settings=distortion_settings,
         )
         propagation_count = propagation_result.minted_count
         if not has_resolutions:
@@ -636,6 +638,7 @@ async def commit_orrery_tick_async(
     project_settings: Optional[Any] = None,
     epistemics_settings: Optional[Any] = None,
     contagion_settings: Optional[Any] = None,
+    distortion_settings: Optional[Any] = None,
     drift_settings: Optional[Any] = None,
     reveal_settings: Optional[Any] = None,
     reveal_state: Optional[WorldState] = None,
@@ -684,6 +687,7 @@ async def commit_orrery_tick_async(
         conn,
         tick_chunk_id=tick_chunk_id,
         settings=contagion_settings,
+        distortion_settings=distortion_settings,
     )
     propagation_count = propagation_result.minted_count
     if not has_resolutions:
