@@ -34,7 +34,14 @@ try:
         record_bleed_offers,
         select_bleed_menu,
     )
-    from nexus.config.settings_models import LORERetrievalSettings, OrreryBleedSettings
+    from nexus.agents.orrery.knowledge_surfacing import (
+        build_knowledge_digest_sync,
+    )
+    from nexus.config.settings_models import (
+        LORERetrievalSettings,
+        OrreryBleedSettings,
+        OrreryKnowledgeSettings,
+    )
 except ImportError:
     # If relative import fails, try absolute
     from nexus.agents.lore.utils.turn_context import TurnContext
@@ -57,7 +64,14 @@ except ImportError:
         record_bleed_offers,
         select_bleed_menu,
     )
-    from nexus.config.settings_models import LORERetrievalSettings, OrreryBleedSettings
+    from nexus.agents.orrery.knowledge_surfacing import (
+        build_knowledge_digest_sync,
+    )
+    from nexus.config.settings_models import (
+        LORERetrievalSettings,
+        OrreryBleedSettings,
+        OrreryKnowledgeSettings,
+    )
 
 try:
     from nexus.agents.memnon.utils.query_analysis import QueryAnalyzer
@@ -805,6 +819,7 @@ class TurnCycleManager:
         logger.debug("Assembling context payload...")
 
         await self.select_orrery_bleed(turn_context)
+        world_knowledge = self._build_world_knowledge(turn_context)
 
         # Build the context payload
         turn_context.context_payload = {
@@ -853,6 +868,12 @@ class TurnCycleManager:
                 candidate.to_prompt_dict() for candidate in turn_context.bleed_menu
             ]
 
+        if world_knowledge:
+            turn_context.context_payload["world_knowledge"] = world_knowledge
+            turn_context.context_payload["world_knowledge_truncated"] = bool(
+                getattr(world_knowledge, "truncated", False)
+            )
+
         if turn_context.target_chunk_id is not None:
             turn_context.context_payload["metadata"][
                 "target_chunk_id"
@@ -879,6 +900,55 @@ class TurnCycleManager:
         }
 
         logger.info(f"Context payload assembled: {utilization:.1f}% budget utilization")
+
+    def _build_world_knowledge(self, turn_context: TurnContext) -> list[dict[str, Any]]:
+        """Load optional spoiler-limited knowledge for the current scene."""
+
+        orrery_settings = self.settings.get("orrery", {})
+        knowledge_settings = OrreryKnowledgeSettings.model_validate(
+            orrery_settings.get("knowledge", {})
+        )
+        if not orrery_settings.get("enabled", False) or not knowledge_settings.enabled:
+            turn_context.phase_states["world_knowledge"] = {
+                "enabled": False,
+                "skipped": True,
+            }
+            return []
+        if not self.lore.memnon:
+            raise RuntimeError("World knowledge requires MEMNON database access")
+
+        with self.lore.memnon.Session() as session:
+            if turn_context.orrery_proposal is not None:
+                anchor_chunk_id = turn_context.orrery_proposal.anchor_chunk_id
+            else:
+                anchor_chunk_id = self._orrery_anchor_chunk_id(session, turn_context)
+            if anchor_chunk_id is None:
+                turn_context.phase_states["world_knowledge"] = {
+                    "enabled": True,
+                    "skipped": True,
+                    "reason": "no_anchor_chunk",
+                }
+                return []
+
+            present_entity_ids = load_bleed_anchor_entity_ids(
+                session,
+                anchor_chunk_id=anchor_chunk_id,
+            )
+            digest = build_knowledge_digest_sync(
+                session,
+                present_entity_ids=present_entity_ids,
+                anchor_chunk_id=anchor_chunk_id,
+                settings=knowledge_settings,
+            )
+
+        turn_context.phase_states["world_knowledge"] = {
+            "enabled": True,
+            "anchor_chunk_id": anchor_chunk_id,
+            "present_entity_count": len(present_entity_ids),
+            "entry_count": len(digest),
+            "truncated": bool(getattr(digest, "truncated", False)),
+        }
+        return digest
 
     async def select_orrery_bleed(self, turn_context: TurnContext) -> None:
         """Populate optional Orrery Bleed menu before payload assembly."""

@@ -18,6 +18,7 @@ from nexus.config.settings_models import (
     OrreryDistortionSettings,
     OrreryDriftSettings,
     OrreryEpistemicsSettings,
+    OrreryKnowledgeSettings,
     OrreryPromoteSettings,
     OrreryRevealSettings,
     OrrerySettings,
@@ -102,6 +103,9 @@ def test_orrery_settings_resolve_model_reference() -> None:
         "protective_intervention"
     ] == Decimal("0.04")
     assert settings.orrery.reveal.enabled is True
+    assert settings.orrery.knowledge.enabled is True
+    assert settings.orrery.knowledge.max_entries == 12
+    assert settings.orrery.knowledge.recent_reveal_window_chunks == 5
     assert "relationship_drift_milestone" in (
         settings.orrery.epistemics.claim_event_types
     )
@@ -210,6 +214,19 @@ def test_reveal_defaults_off_when_block_is_absent() -> None:
     payload = load_settings("nexus.toml").orrery.model_dump()
     payload.pop("reveal")
     assert OrrerySettings.model_validate(payload).reveal.enabled is False
+
+
+def test_knowledge_defaults_off_and_requires_positive_windows() -> None:
+    """Legacy configs stay off and invalid digest bounds fail validation."""
+
+    assert OrreryKnowledgeSettings().enabled is False
+    payload = load_settings("nexus.toml").orrery.model_dump()
+    payload.pop("knowledge")
+    assert OrrerySettings.model_validate(payload).knowledge.enabled is False
+    with pytest.raises(ValidationError, match="greater than or equal to 1"):
+        OrreryKnowledgeSettings(max_entries=0)
+    with pytest.raises(ValidationError, match="greater than or equal to 1"):
+        OrreryKnowledgeSettings(recent_reveal_window_chunks=0)
 
 
 def test_distortion_defaults_off_when_block_is_absent() -> None:

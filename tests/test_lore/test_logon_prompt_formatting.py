@@ -273,6 +273,35 @@ def test_context_prompt_includes_orrery_bleed_menu_controls() -> None:
     assert "[digital] Mara: street cameras briefly lose Mara" in prompt
 
 
+def test_context_prompt_renders_world_knowledge_without_answer_keys() -> None:
+    """Possessed accounts render as character knowledge, not system truth."""
+
+    prompt = LogonUtility({})._format_context_prompt(
+        {
+            "user_input": "Continue.",
+            "world_knowledge": [
+                {
+                    "character_entity_id": 7,
+                    "character_name": "Mara",
+                    "claim_id": 91,
+                    "summary": "The courier left by the river gate.",
+                    "account_label": "station-rumor",
+                    "acquisition": {
+                        "kind": "told",
+                        "source_entity_id": 8,
+                        "source_name": "Ilya",
+                    },
+                    "freshly_revealed": True,
+                }
+            ],
+        }
+    )
+
+    assert "=== WORLD KNOWLEDGE ===" in prompt
+    assert "Mara [told by Ilya; belief: station-rumor; freshly revealed]" in prompt
+    assert "The courier left by the river gate." in prompt
+
+
 def test_system_prompt_includes_runtime_tag_library(monkeypatch) -> None:
     """Storyteller prompt receives the slot's live Orrery tag library."""
 
