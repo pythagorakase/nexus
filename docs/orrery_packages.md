@@ -923,6 +923,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
   - actor has enough hydrated context
   - **NOT:** actor `plan_relocation` project passes `ready` due-state
   - **NOT:** actor `recruit_ally` project passes `ready` due-state
+  - **NOT:** actor `pursue_romance` project passes `ready` due-state
   - **NOT:** actor is constrained or immobilized
   - **NOT:** actor has inbound `hunting` pair tag
   - **NOT:** actor has `grudge_active` ephemeral
@@ -1134,7 +1135,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 - **AND:**
   - actor `recruit_ally` project passes `ready` due-state
-  - advancing recruitment of target
+  - target is the project's bound target
   - **NOT:** actor is in transit
   - **NOT:** actor is constrained or immobilized
   - **NOT:**
@@ -1147,7 +1148,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 **When:**
 
-- **NOT:** target is the project's active-character recruit
+- **NOT:** target is the project's target and still an active character
 
 **Does:** applies project `abandon` transition
 **Event:** `recruit_ally_abandoned`
@@ -1336,6 +1337,131 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 **Event:** `build_venture_progressed`
 
 > {actor} finishes one of the unglamorous tasks between backing and opening: a roster, a schedule, a key, a supply line, or the first promise to a customer.
+
+---
+
+## ADVANCE_PURSUE_ROMANCE — priority 47
+
+> A due courtship tests the waters, grows closer, declares intention, stalls, is rebuffed, or becomes mutual.
+
+**Drive band:** project identity — A due courtship shares the established project-continuation slot while cadence and embodied guards preserve routine stability.
+**Slots:** ACTOR, TARGET
+
+**Gate:**
+
+- **AND:**
+  - actor `pursue_romance` project passes `ready` due-state
+  - target is the project's bound target
+  - **NOT:** actor is in transit
+  - **NOT:** actor is constrained or immobilized
+  - **NOT:**
+    - **OR:**
+      - actor has `sleep` debt ≥ 8
+      - actor has `thirst` debt ≥ 2
+      - actor has `hunger` debt ≥ 4
+
+### Branch 1 — End a courtship whose target is no longer available  *(mag 0.4)* · **preemptive**
+
+**When:**
+
+- **NOT:** target is the project's target and still an active character
+
+**Does:** applies project `abandon` transition
+**Event:** `pursue_romance_abandoned`
+
+> {target} is no longer someone this courtship can reach. {actor} releases the hope rather than preserving an impossible promise.
+
+### Branch 2 — Declare the feeling and be answered  *(mag 0.4)* · **preemptive**
+
+**When:**
+
+- **AND:**
+  - actor `pursue_romance` project passes `completion` due-state
+  - actor and target have mutual warm trust
+  - **NOT:** actor has any of [`hostile_to`, `hunting`] pair tags to target
+  - **NOT:** target has any of [`hostile_to`, `hunting`] pair tags to actor
+
+**Does:** applies project `complete` transition; adds outbound `contact:intimate` pair tag to target and upserts the actor→target `romantic` relationship
+**Event:** `pursue_romance_completed`
+
+> {actor} finally names what has grown between them, and {target} answers with warmth of their own. The courtship becomes a relationship both can recognize.
+
+### Branch 3 — Withdraw after being rebuffed  *(mag 0.4)* · **preemptive**
+
+**When:**
+
+- **OR:**
+  - actor has any of [`hostile_to`, `hunting`] pair tags to target
+  - target has any of [`hostile_to`, `hunting`] pair tags to actor
+  - trust target→actor < -1
+
+**Does:** applies project `abandon` transition
+**Event:** `pursue_romance_abandoned`
+
+> {target}'s answer closes the possibility, whether through plain refusal, disapproval, or danger. {actor} stops pursuing what is not mutual.
+
+### Branch 4 — Let the courtship go rather than force it  *(mag 0.4)* · **preemptive**
+
+**When:** actor `pursue_romance` project passes `abandon` due-state
+
+**Does:** applies project `abandon` transition
+**Event:** `pursue_romance_abandoned`
+
+> Delay has become its own answer. {actor} stops asking the unfinished courtship to become something it has not become.
+
+### Branch 5 — Let tentative interest become closeness  *(mag 0.4)* · **preemptive**
+
+**When:** actor `pursue_romance` project passes `testing_waters_milestone` due-state
+
+**Does:** applies project `advance` transition
+**Event:** `pursue_romance_milestone`
+
+> The first openings have been met rather than ignored. {actor} and {target} begin making room for a closeness neither needs to disguise as accident.
+
+### Branch 6 — Move from closeness toward declared intention  *(mag 0.4)* · **preemptive**
+
+**When:** actor `pursue_romance` project passes `growing_closer_milestone` due-state
+
+**Does:** applies project `advance` transition
+**Event:** `pursue_romance_milestone`
+
+> What has grown between them is too deliberate to leave unnamed. {actor} prepares to say plainly what they want and hear plainly what {target} wants in return.
+
+### Branch 7 — Lose romantic ground through neglect  *(mag 0.1)* · **preemptive** · **not promotable**
+
+**When:** actor `pursue_romance` project passes `neglected` due-state
+
+**Does:** applies project `stall` transition
+**Event:** `pursue_romance_stalled`
+
+> Unanswered openings and postponed honesty do their own work. The courtship stalls, still possible but less certain.
+
+### Branch 8 — Offer another honest opening  *(mag 0.18)* · **not promotable**
+
+**When:** actor `pursue_romance` project passes `testing_waters` due-state
+
+**Does:** applies project `advance` transition
+**Event:** `pursue_romance_progressed`
+
+> {actor} offers {target} another unmistakably personal opening and pays attention to whether it is welcomed.
+
+### Branch 9 — Build closeness through chosen time  *(mag 0.18)* · **not promotable**
+
+**When:** actor `pursue_romance` project passes `growing_closer` due-state
+
+**Does:** applies project `advance` transition
+**Event:** `pursue_romance_progressed`
+
+> {actor} and {target} choose time together that asks for more attention and trust than ordinary company.
+
+### Branch 10 — Make the next intention legible  *(mag 0.16)* · **not promotable**
+
+**When:** *(always)*
+
+**Does:** applies project `advance` transition
+**Event:** `pursue_romance_progressed`
+
+> {actor} makes one more part of their intention legible, leaving {target} room for an answer that is genuinely theirs.
 
 ---
 
@@ -2258,6 +2384,62 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 ---
 
+## START_PURSUE_ROMANCE — priority 17
+
+> An off-screen character makes a named person the focus of a courtship.
+
+**Drive band:** project identity — A courtship begins only around existing social plausibility and shares the established project-entry priority.
+**Slots:** ACTOR, TARGET
+
+**Gate:**
+
+- **AND:**
+  - actor `pursue_romance` project passes `start` due-state
+  - actor has enough hydrated context
+  - actor is at `home` anchor
+  - **NOT:** actor is in transit
+  - **NOT:** actor is constrained or immobilized
+  - **NOT:**
+    - **OR:**
+      - actor has `sleep` debt ≥ 8
+      - actor has `thirst` debt ≥ 2
+      - actor has `hunger` debt ≥ 4
+  - **OR:**
+    - **AND:**
+      - actor has outbound `contact:social` pair tag
+      - actor has `contact:social` pair tag to target
+    - actor has `friend` relationship to target
+    - target has `friend` relationship to actor
+    - actor has `companion` relationship to target
+    - target has `companion` relationship to actor
+    - actor has `comrade` relationship to target
+    - target has `comrade` relationship to actor
+    - actor has `chosen_kin` relationship to target
+    - target has `chosen_kin` relationship to actor
+    - trust actor→target ≥ 1
+    - actor has `contact:intimate` pair tag to target
+  - **NOT:** actor has any of [`hostile_to`, `hunting`] pair tags to target
+  - **NOT:** target has any of [`hostile_to`, `hunting`] pair tags to actor
+  - **NOT:** actor and target share `lover` relationship (either direction)
+  - **NOT:** actor and target share `partner` relationship (either direction)
+  - **NOT:** actor and target share `romantic` relationship (either direction)
+  - **NOT:** actor and target share `romantic_partner` relationship (either direction)
+  - **NOT:** actor and target share `spouse` relationship (either direction)
+  - **NOT:** actor has `partnered_exclusively` tag
+  - **NOT:** actor has `married` tag
+  - **NOT:** actor has an intimacy suppressor
+
+### Branch 1 — Begin testing the waters  *(mag 0.4)*
+
+**When:** *(always)*
+
+**Does:** applies project `start` transition
+**Event:** `pursue_romance_started`
+
+> {actor} lets {target} see that their attention is no longer merely friendly, offering one small opening without demanding an answer before either of them is ready.
+
+---
+
 ## INTIMACY — priority 16
 
 > The body asks for the kind of connection that is not conversation.
@@ -3173,6 +3355,12 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `mourning_completed`
 - `protective_intervention`
 - `pursue_identity_lead`
+- `pursue_romance_abandoned`
+- `pursue_romance_completed`
+- `pursue_romance_milestone`
+- `pursue_romance_progressed`
+- `pursue_romance_stalled`
+- `pursue_romance_started`
 - `recreation_taken`
 - `recruit_ally_abandoned`
 - `recruit_ally_completed`
@@ -3248,8 +3436,12 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `friend`
 - `guardian`
 - `handler`
+- `lover`
 - `mentor`
+- `partner`
 - `patron`
 - `rival`
 - `romantic`
+- `romantic_partner`
+- `spouse`
 - `ward`

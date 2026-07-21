@@ -1181,6 +1181,11 @@ _PROJECT_DUE_MODES = frozenset(
         "opening_doors",
         "laying_groundwork_milestone",
         "securing_backing_milestone",
+        "testing_waters",
+        "growing_closer",
+        "declaring_intentions",
+        "testing_waters_milestone",
+        "growing_closer_milestone",
     }
 )
 
@@ -1191,6 +1196,11 @@ _PROJECT_STAGE_LADDERS = {
         "laying_groundwork",
         "securing_backing",
         "opening_doors",
+    ),
+    "pursue_romance": (
+        "testing_waters",
+        "growing_closer",
+        "declaring_intentions",
     ),
 }
 
@@ -1320,7 +1330,7 @@ def project_due(
                 if project_type == "plan_relocation"
                 else (
                     project.target_character_entity_id is not None
-                    if project_type == "recruit_ally"
+                    if project_type in {"recruit_ally", "pursue_romance"}
                     else True
                 )
             )
@@ -1335,7 +1345,7 @@ def project_due(
                 if project_type == "plan_relocation"
                 else (
                     project.target_character_entity_id is not None
-                    if project_type == "recruit_ally"
+                    if project_type in {"recruit_ally", "pursue_romance"}
                     else True
                 )
             )

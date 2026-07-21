@@ -448,11 +448,14 @@ _register(
 )
 _register(
     r"project_target_is\((?P<slot>\w+)\)",
-    lambda m: f"advancing recruitment of {_slot(m.group('slot'))}",
+    lambda m: f"{_slot(m.group('slot'))} is the project's bound target",
 )
 _register(
     r"project_target_is_active\((?P<slot>\w+)\)",
-    lambda m: f"{_slot(m.group('slot'))} is the project's active-character recruit",
+    lambda m: (
+        f"{_slot(m.group('slot'))} is the project's target and still an "
+        "active character"
+    ),
 )
 _register(
     r"project_faction_is\((?P<slot>\w+)\)",
@@ -567,6 +570,11 @@ def _render_state_delta(delta: Mapping[str, Any]) -> str:
                 parts.append(
                     f"adds outbound {tags} pair tag to target and upserts the "
                     "actor→target `ally` relationship"
+                )
+            elif "project.complete" in delta and "contact:intimate" in value:
+                parts.append(
+                    f"adds outbound {tags} pair tag to target and upserts the "
+                    "actor→target `romantic` relationship"
                 )
             else:
                 parts.append(f"adds outbound {tags} pair tag to target")

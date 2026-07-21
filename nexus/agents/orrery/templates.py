@@ -10,6 +10,7 @@ from nexus.agents.orrery.substrate import (
     Branch,
     Condition,
     DriveBand,
+    ESTABLISHED_PARTNER_RELATIONSHIP_TYPES,
     PresentTargetPolicy,
     Slot,
     Template,
@@ -1025,6 +1026,7 @@ SURVEIL = Template(
         has_minimal_context(),
         NOT(project_due("ready")),
         NOT(project_due("ready", project_type="recruit_ally")),
+        NOT(project_due("ready", project_type="pursue_romance")),
         NOT(is_constrained()),
         NOT(has_inbound_pair_tag("hunting")),
         NOT(has_ephemeral("grudge_active")),
@@ -4967,6 +4969,378 @@ ADVANCE_RECRUIT_ALLY = Template(
 )
 
 
+START_PURSUE_ROMANCE = Template(
+    id="start_pursue_romance",
+    priority=17,
+    drive_band=DriveBand.PROJECT_IDENTITY,
+    priority_override_rationale=(
+        "A courtship begins only around existing social plausibility and shares "
+        "the established project-entry priority."
+    ),
+    blurb="An off-screen character makes a named person the focus of a courtship.",
+    required_slots=(Slot.ACTOR, Slot.TARGET),
+    starts_from_social_contact=True,
+    package_gate=AND(
+        project_due("start", project_type="pursue_romance"),
+        has_minimal_context(),
+        at_routine_anchor("home"),
+        NOT(is_in_transit()),
+        NOT(is_constrained()),
+        NOT(
+            OR(
+                has_need_debt_at_or_above("sleep", 8),
+                has_need_debt_at_or_above("thirst", 2),
+                has_need_debt_at_or_above("hunger", 4),
+            )
+        ),
+        OR(
+            AND(
+                has_contact_of_kind("social"),
+                has_pair_tag("contact:social"),
+            ),
+            has_relationship_of_type("friend", Slot.ACTOR, Slot.TARGET),
+            has_relationship_of_type("friend", Slot.TARGET, Slot.ACTOR),
+            has_relationship_of_type("companion", Slot.ACTOR, Slot.TARGET),
+            has_relationship_of_type("companion", Slot.TARGET, Slot.ACTOR),
+            has_relationship_of_type("comrade", Slot.ACTOR, Slot.TARGET),
+            has_relationship_of_type("comrade", Slot.TARGET, Slot.ACTOR),
+            has_relationship_of_type("chosen_kin", Slot.ACTOR, Slot.TARGET),
+            has_relationship_of_type("chosen_kin", Slot.TARGET, Slot.ACTOR),
+            trust_at_least(1),
+            has_pair_tag("contact:intimate", Slot.ACTOR, Slot.TARGET),
+        ),
+        NOT(
+            has_any_pair_tag(
+                "hostile_to",
+                "hunting",
+                subject_slot=Slot.ACTOR,
+                object_slot=Slot.TARGET,
+            )
+        ),
+        NOT(
+            has_any_pair_tag(
+                "hostile_to",
+                "hunting",
+                subject_slot=Slot.TARGET,
+                object_slot=Slot.ACTOR,
+            )
+        ),
+        *(
+            NOT(has_symmetric_relationship_of_type(relationship_type))
+            for relationship_type in sorted(ESTABLISHED_PARTNER_RELATIONSHIP_TYPES)
+        ),
+        NOT(has_tag("partnered_exclusively")),
+        NOT(has_tag("married")),
+        # The canonical suppressor set (shared with the intimacy band) also
+        # blocks grieving and libido_absent — courtship defers to the same
+        # availability concept intimacy behavior does.
+        NOT(has_any_intimacy_suppressor()),
+    ),
+    branches=(
+        Branch(
+            label="Begin testing the waters",
+            conditions=ALWAYS,
+            narrative_stub=(
+                "{actor} lets {target} see that their attention is no longer "
+                "merely friendly, offering one small opening without demanding "
+                "an answer before either of them is ready."
+            ),
+            state_delta={
+                "project.start": {
+                    "project_type": "pursue_romance",
+                    "stage": "testing_waters",
+                    "milestone": True,
+                }
+            },
+            event_type="pursue_romance_started",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.stage",
+                "character_project_states.target_character_entity_id",
+                "character_project_states.next_eligible_at_world_time",
+            ),
+            magnitude=0.40,
+        ),
+    ),
+)
+
+
+ADVANCE_PURSUE_ROMANCE = Template(
+    id="advance_pursue_romance",
+    priority=47,
+    drive_band=DriveBand.PROJECT_IDENTITY,
+    priority_override_rationale=(
+        "A due courtship shares the established project-continuation slot while "
+        "cadence and embodied guards preserve routine stability."
+    ),
+    blurb=(
+        "A due courtship tests the waters, grows closer, declares intention, "
+        "stalls, is rebuffed, or becomes mutual."
+    ),
+    required_slots=(Slot.ACTOR, Slot.TARGET),
+    binds_project_target=True,
+    package_gate=AND(
+        project_due("ready", project_type="pursue_romance"),
+        project_target_is(Slot.TARGET),
+        NOT(is_in_transit()),
+        NOT(is_constrained()),
+        NOT(
+            OR(
+                has_need_debt_at_or_above("sleep", 8),
+                has_need_debt_at_or_above("thirst", 2),
+                has_need_debt_at_or_above("hunger", 4),
+            )
+        ),
+    ),
+    branches=(
+        Branch(
+            label="End a courtship whose target is no longer available",
+            conditions=NOT(project_target_is_active(Slot.TARGET)),
+            narrative_stub=(
+                "{target} is no longer someone this courtship can reach. "
+                "{actor} releases the hope rather than preserving an impossible "
+                "promise."
+            ),
+            state_delta={
+                "project.abandon": {
+                    "reason": "target_inactive_or_non_character",
+                    "milestone": True,
+                }
+            },
+            event_type="pursue_romance_abandoned",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.source_chunk_id",
+            ),
+            magnitude=0.40,
+            preemptive=True,
+        ),
+        Branch(
+            label="Declare the feeling and be answered",
+            conditions=AND(
+                project_due("completion", project_type="pursue_romance"),
+                relationship_is_mutual_warm(Slot.ACTOR, Slot.TARGET),
+                # Trust is valence-derived while hostility is a pair tag, so
+                # the two can coexist; without this exclusion the completion
+                # arm outruns the rebuffed arm (recruit_ally's seal carries
+                # the same guard).
+                NOT(
+                    has_any_pair_tag(
+                        "hostile_to",
+                        "hunting",
+                        subject_slot=Slot.ACTOR,
+                        object_slot=Slot.TARGET,
+                    )
+                ),
+                NOT(
+                    has_any_pair_tag(
+                        "hostile_to",
+                        "hunting",
+                        subject_slot=Slot.TARGET,
+                        object_slot=Slot.ACTOR,
+                    )
+                ),
+            ),
+            narrative_stub=(
+                "{actor} finally names what has grown between them, and "
+                "{target} answers with warmth of their own. The courtship "
+                "becomes a relationship both can recognize."
+            ),
+            state_delta={
+                "project.complete": {"milestone": True},
+                "entity_pair_tags.add_outbound": ["contact:intimate"],
+            },
+            event_type="pursue_romance_completed",
+            changed_fields=(
+                "character_project_states.status",
+                "entity_pair_tags",
+                "character_relationships.relationship_type",
+            ),
+            magnitude=0.40,
+            preemptive=True,
+        ),
+        Branch(
+            label="Withdraw after being rebuffed",
+            conditions=OR(
+                has_any_pair_tag(
+                    "hostile_to",
+                    "hunting",
+                    subject_slot=Slot.ACTOR,
+                    object_slot=Slot.TARGET,
+                ),
+                has_any_pair_tag(
+                    "hostile_to",
+                    "hunting",
+                    subject_slot=Slot.TARGET,
+                    object_slot=Slot.ACTOR,
+                ),
+                trust_below(-1, Slot.TARGET, Slot.ACTOR),
+            ),
+            narrative_stub=(
+                "{target}'s answer closes the possibility, whether through "
+                "plain refusal, disapproval, or danger. {actor} stops pursuing "
+                "what is not mutual."
+            ),
+            state_delta={
+                "project.abandon": {
+                    "reason": "target_rebuffed_or_hostile",
+                    "milestone": True,
+                }
+            },
+            event_type="pursue_romance_abandoned",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.source_chunk_id",
+            ),
+            magnitude=0.40,
+            preemptive=True,
+        ),
+        Branch(
+            label="Let the courtship go rather than force it",
+            conditions=project_due("abandon", project_type="pursue_romance"),
+            narrative_stub=(
+                "Delay has become its own answer. {actor} stops asking the "
+                "unfinished courtship to become something it has not become."
+            ),
+            state_delta={
+                "project.abandon": {
+                    "reason": "stalled_or_overdue",
+                    "milestone": True,
+                }
+            },
+            event_type="pursue_romance_abandoned",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.source_chunk_id",
+            ),
+            magnitude=0.40,
+            preemptive=True,
+        ),
+        Branch(
+            label="Let tentative interest become closeness",
+            conditions=project_due(
+                "testing_waters_milestone", project_type="pursue_romance"
+            ),
+            narrative_stub=(
+                "The first openings have been met rather than ignored. {actor} "
+                "and {target} begin making room for a closeness neither needs "
+                "to disguise as accident."
+            ),
+            state_delta={
+                "project.advance": {
+                    "stage": "growing_closer",
+                    "set_progress": 0.0,
+                    "milestone": True,
+                }
+            },
+            event_type="pursue_romance_milestone",
+            changed_fields=(
+                "character_project_states.stage",
+                "character_project_states.progress",
+                "character_project_states.stall_count",
+            ),
+            magnitude=0.40,
+            preemptive=True,
+        ),
+        Branch(
+            label="Move from closeness toward declared intention",
+            conditions=project_due(
+                "growing_closer_milestone", project_type="pursue_romance"
+            ),
+            narrative_stub=(
+                "What has grown between them is too deliberate to leave "
+                "unnamed. {actor} prepares to say plainly what they want and "
+                "hear plainly what {target} wants in return."
+            ),
+            state_delta={
+                "project.advance": {
+                    "stage": "declaring_intentions",
+                    "set_progress": 0.0,
+                    "milestone": True,
+                }
+            },
+            event_type="pursue_romance_milestone",
+            changed_fields=(
+                "character_project_states.stage",
+                "character_project_states.progress",
+                "character_project_states.stall_count",
+            ),
+            magnitude=0.40,
+            preemptive=True,
+        ),
+        Branch(
+            label="Lose romantic ground through neglect",
+            conditions=project_due("neglected", project_type="pursue_romance"),
+            narrative_stub=(
+                "Unanswered openings and postponed honesty do their own work. "
+                "The courtship stalls, still possible but less certain."
+            ),
+            state_delta={"project.stall": {"increment": 1}},
+            event_type="pursue_romance_stalled",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.stall_count",
+                "character_project_states.next_eligible_at_world_time",
+            ),
+            magnitude=0.10,
+            promotable=False,
+            preemptive=True,
+        ),
+        Branch(
+            label="Offer another honest opening",
+            conditions=project_due("testing_waters", project_type="pursue_romance"),
+            narrative_stub=(
+                "{actor} offers {target} another unmistakably personal opening "
+                "and pays attention to whether it is welcomed."
+            ),
+            state_delta={"project.advance": {"progress_delta": 0.35}},
+            event_type="pursue_romance_progressed",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.progress",
+                "character_project_states.next_eligible_at_world_time",
+            ),
+            magnitude=0.18,
+            promotable=False,
+        ),
+        Branch(
+            label="Build closeness through chosen time",
+            conditions=project_due("growing_closer", project_type="pursue_romance"),
+            narrative_stub=(
+                "{actor} and {target} choose time together that asks for more "
+                "attention and trust than ordinary company."
+            ),
+            state_delta={"project.advance": {"progress_delta": 0.35}},
+            event_type="pursue_romance_progressed",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.progress",
+                "character_project_states.next_eligible_at_world_time",
+            ),
+            magnitude=0.18,
+            promotable=False,
+        ),
+        Branch(
+            label="Make the next intention legible",
+            conditions=ALWAYS,
+            narrative_stub=(
+                "{actor} makes one more part of their intention legible, "
+                "leaving {target} room for an answer that is genuinely theirs."
+            ),
+            state_delta={"project.advance": {"progress_delta": 0.25}},
+            event_type="pursue_romance_progressed",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.progress",
+                "character_project_states.next_eligible_at_world_time",
+            ),
+            magnitude=0.16,
+            promotable=False,
+        ),
+    ),
+)
+
+
 START_BUILD_VENTURE = Template(
     id="start_build_venture",
     priority=17,
@@ -5232,6 +5606,7 @@ BUILTIN_TEMPLATES = (
     ADVANCE_RELOCATION_PLAN,
     ADVANCE_RECRUIT_ALLY,
     ADVANCE_BUILD_VENTURE,
+    ADVANCE_PURSUE_ROMANCE,
     ACT_ON_INTEL,
     UNCOVER_PAST,
     CHECK_ON_DEPENDENT,
@@ -5257,6 +5632,7 @@ BUILTIN_TEMPLATES = (
     START_RELOCATION_PLAN,
     START_RECRUIT_ALLY,
     START_BUILD_VENTURE,
+    START_PURSUE_ROMANCE,
     MAINTAIN_COVER,
 )
 

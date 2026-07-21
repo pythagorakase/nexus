@@ -84,6 +84,11 @@ PROJECT_STAGE_LADDERS = {
         "securing_backing",
         "opening_doors",
     ),
+    "pursue_romance": (
+        "testing_waters",
+        "growing_closer",
+        "declaring_intentions",
+    ),
 }
 
 # Composite natural keys, verbatim column order (faction_relationships
@@ -1002,12 +1007,16 @@ class _Replayer:
                 raise ValueError(
                     "plan_relocation replay projection forbids character target"
                 )
-        elif project_type == "recruit_ally" and (
+        elif project_type in {"recruit_ally", "pursue_romance"} and (
             applied_row["target_place_id"] is not None
             or applied_row["target_character_entity_id"] is None
+            or (
+                project_type == "pursue_romance"
+                and applied_row["target_faction_entity_id"] is not None
+            )
         ):
             raise ValueError(
-                "recruit_ally replay projection requires only a character target"
+                f"{project_type} replay projection requires only a character target"
             )
         elif project_type == "build_venture" and any(
             applied_row[target] is not None
@@ -1071,10 +1080,10 @@ class _Replayer:
             if float(applied_row["progress"] or 0.0) < 1.0:
                 raise ValueError("project.complete replay requires full progress")
             row.update(applied_row)
-            if project_type == "recruit_ally":
+            if project_type in {"recruit_ally", "pursue_romance"}:
                 if applied_row["target_character_entity_id"] is None:
                     raise ValueError(
-                        "recruit_ally completion replay requires character target"
+                        f"{project_type} completion replay requires character target"
                     )
                 return
             if project_type == "build_venture":

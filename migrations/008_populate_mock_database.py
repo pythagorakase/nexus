@@ -21,7 +21,9 @@ from psycopg2.extras import Json
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 MOCK_DB = "mock"
-CACHE_FILE = Path(__file__).parent.parent / "tests" / "fixtures" / "test_cache_wizard.json"
+CACHE_FILE = (
+    Path(__file__).parent.parent / "tests" / "fixtures" / "test_cache_wizard.json"
+)
 
 
 def _require_fixture_base_timestamp(cache: dict) -> str:
@@ -76,9 +78,7 @@ def populate_wizard_cache(conn, cache: dict):
 
         # Traits moved from new_story_creator columns to assets.traits in
         # migration 010. Reset and repopulate the normalized rows.
-        cur.execute(
-            "UPDATE assets.traits SET is_selected = FALSE, rationale = NULL"
-        )
+        cur.execute("UPDATE assets.traits SET is_selected = FALSE, rationale = NULL")
         for trait_name in selected_traits:
             cur.execute(
                 """
@@ -106,7 +106,8 @@ def populate_wizard_cache(conn, cache: dict):
 
         # Insert wizard cache row
         # Note: Array columns need explicit casting to enum types
-        cur.execute("""
+        cur.execute(
+            """
             INSERT INTO assets.new_story_creator (
                 id, thread_id, target_slot,
                 -- Setting phase
@@ -148,58 +149,60 @@ def populate_wizard_cache(conn, cache: dict):
                 -- Temporal
                 %s
             )
-        """, (
-            cache.get("thread_id", "test_thread_mock"),
-            cache.get("target_slot", 5),
-            # Setting
-            setting.get("genre"),
-            setting.get("secondary_genres"),
-            setting.get("world_name"),
-            setting.get("time_period"),
-            setting.get("tech_level"),
-            setting.get("magic_exists", False),
-            setting.get("magic_description"),
-            setting.get("political_structure"),
-            setting.get("major_conflict"),
-            setting.get("tone"),
-            setting.get("themes"),
-            setting.get("cultural_notes"),
-            setting.get("language_notes"),
-            setting.get("geographic_scope"),
-            setting.get("diegetic_artifact"),
-            # Character
-            concept.get("name"),
-            concept.get("archetype"),
-            concept.get("background"),
-            concept.get("appearance"),
-            # Seed
-            seed.get("seed_type"),
-            seed.get("title"),
-            seed.get("situation"),
-            seed.get("hook"),
-            seed.get("immediate_goal"),
-            seed.get("stakes"),
-            seed.get("tension_source"),
-            seed.get("starting_location"),
-            seed.get("weather"),
-            seed.get("key_npcs"),
-            seed.get("initial_mystery"),
-            seed.get("potential_allies"),
-            seed.get("potential_obstacles"),
-            seed.get("secrets"),
-            # Layer/Zone (cache uses "type" not "layer_type")
-            layer.get("name"),
-            layer.get("type") or layer.get("layer_type", "planet"),
-            layer.get("description"),
-            zone.get("name"),
-            zone.get("summary"),
-            zone.get("boundary_description"),
-            zone.get("approximate_area"),
-            # Location
-            Json(location) if location else None,
-            # Temporal
-            base_timestamp,
-        ))
+        """,
+            (
+                cache.get("thread_id", "test_thread_mock"),
+                cache.get("target_slot", 5),
+                # Setting
+                setting.get("genre"),
+                setting.get("secondary_genres"),
+                setting.get("world_name"),
+                setting.get("time_period"),
+                setting.get("tech_level"),
+                setting.get("magic_exists", False),
+                setting.get("magic_description"),
+                setting.get("political_structure"),
+                setting.get("major_conflict"),
+                setting.get("tone"),
+                setting.get("themes"),
+                setting.get("cultural_notes"),
+                setting.get("language_notes"),
+                setting.get("geographic_scope"),
+                setting.get("diegetic_artifact"),
+                # Character
+                concept.get("name"),
+                concept.get("archetype"),
+                concept.get("background"),
+                concept.get("appearance"),
+                # Seed
+                seed.get("seed_type"),
+                seed.get("title"),
+                seed.get("situation"),
+                seed.get("hook"),
+                seed.get("immediate_goal"),
+                seed.get("stakes"),
+                seed.get("tension_source"),
+                seed.get("starting_location"),
+                seed.get("weather"),
+                seed.get("key_npcs"),
+                seed.get("initial_mystery"),
+                seed.get("potential_allies"),
+                seed.get("potential_obstacles"),
+                seed.get("secrets"),
+                # Layer/Zone (cache uses "type" not "layer_type")
+                layer.get("name"),
+                layer.get("type") or layer.get("layer_type", "planet"),
+                layer.get("description"),
+                zone.get("name"),
+                zone.get("summary"),
+                zone.get("boundary_description"),
+                zone.get("approximate_area"),
+                # Location
+                Json(location) if location else None,
+                # Temporal
+                base_timestamp,
+            ),
+        )
 
     print("✓ Populated assets.new_story_creator")
 
@@ -222,75 +225,100 @@ def populate_post_transition_data(conn, cache: dict):
         cur.execute("TRUNCATE characters CASCADE")
 
         # Insert layer (column is 'type' not 'layer_type')
-        cur.execute("""
+        cur.execute(
+            """
             INSERT INTO layers (id, name, type, description)
             VALUES (1, %s, %s::layer_type, %s)
-        """, (
-            layer.get("name", "Neon Palimpsest Earth"),
-            layer.get("type") or layer.get("layer_type", "planet"),
-            layer.get("description"),
-        ))
+        """,
+            (
+                layer.get("name", "Neon Palimpsest Earth"),
+                layer.get("type") or layer.get("layer_type", "planet"),
+                layer.get("description"),
+            ),
+        )
 
         # Insert zone (FK column is 'layer' not 'layer_id')
         # Note: boundary_description and approximate_area not in base schema
-        cur.execute("""
+        cur.execute(
+            """
             INSERT INTO zones (id, name, summary, layer)
             VALUES (1, %s, %s, 1)
-        """, (
-            zone.get("name", "Rhine-Ruhr Arcology Belt"),
-            zone.get("summary"),
-        ))
+        """,
+            (
+                zone.get("name", "Rhine-Ruhr Arcology Belt"),
+                zone.get("summary"),
+            ),
+        )
 
         # Insert place (type is required, FK column is 'zone' not 'zone_id')
         # Tram car is a 'vehicle' type
-        cur.execute("""
+        cur.execute(
+            """
             INSERT INTO places (id, name, type, summary, zone, extra_data)
             VALUES (1, %s, 'vehicle'::place_type, %s, 1, %s)
-        """, (
-            location.get("name", "Spine-9 Rootline Tram 3B"),
-            location.get("summary"),
-            Json({
-                "atmosphere": location.get("atmosphere"),
-                "notable_features": location.get("notable_features", []),
-                "boundary_description": zone.get("boundary_description"),
-                "approximate_area": zone.get("approximate_area"),
-            }),
-        ))
+        """,
+            (
+                location.get("name", "Spine-9 Rootline Tram 3B"),
+                location.get("summary"),
+                Json(
+                    {
+                        "atmosphere": location.get("atmosphere"),
+                        "notable_features": location.get("notable_features", []),
+                        "boundary_description": zone.get("boundary_description"),
+                        "approximate_area": zone.get("approximate_area"),
+                    }
+                ),
+            ),
+        )
 
         # Insert character
-        cur.execute("""
+        cur.execute(
+            """
             INSERT INTO characters (id, name, appearance, background, current_location, extra_data)
             VALUES (1, %s, %s, %s, 1, %s)
-        """, (
-            concept.get("name", "Kade Imani"),
-            concept.get("appearance"),
-            concept.get("background"),
-            Json({
-                "archetype": concept.get("archetype"),
-                "wildcard_name": character.get("wildcard", {}).get("wildcard_name"),
-                "wildcard_description": character.get("wildcard", {}).get("wildcard_description"),
-            }),
-        ))
+        """,
+            (
+                concept.get("name", "Kade Imani"),
+                concept.get("appearance"),
+                concept.get("background"),
+                Json(
+                    {
+                        "archetype": concept.get("archetype"),
+                        "wildcard_name": character.get("wildcard", {}).get(
+                            "wildcard_name"
+                        ),
+                        "wildcard_description": character.get("wildcard", {}).get(
+                            "wildcard_description"
+                        ),
+                    }
+                ),
+            ),
+        )
 
         # Update global_variables
         cur.execute("DELETE FROM global_variables WHERE id = TRUE")
-        cur.execute("""
+        cur.execute(
+            """
             INSERT INTO global_variables (id, setting, user_character, base_timestamp)
             VALUES (TRUE, %s, 1, %s)
-        """, (
-            Json({
-                "world_name": setting.get("world_name"),
-                "genre": setting.get("genre"),
-                "tone": setting.get("tone"),
-                "themes": setting.get("themes"),
-                "magic_exists": setting.get("magic_exists", False),
-                "magic_description": setting.get("magic_description"),
-                "story_seed": seed,
-                "content": setting.get("diegetic_artifact"),
-                "title": f"Welcome to {setting.get('world_name', 'the World')}",
-            }),
-            base_timestamp,
-        ))
+        """,
+            (
+                Json(
+                    {
+                        "world_name": setting.get("world_name"),
+                        "genre": setting.get("genre"),
+                        "tone": setting.get("tone"),
+                        "themes": setting.get("themes"),
+                        "magic_exists": setting.get("magic_exists", False),
+                        "magic_description": setting.get("magic_description"),
+                        "story_seed": seed,
+                        "content": setting.get("diegetic_artifact"),
+                        "title": f"Welcome to {setting.get('world_name', 'the World')}",
+                    }
+                ),
+                base_timestamp,
+            ),
+        )
 
     print("✓ Populated layers, zones, places, characters, global_variables")
 
@@ -315,7 +343,7 @@ Rain hammers against the hull above. Somewhere in the distance, the city's heart
     choices = [
         "Examine the satchel more closely, testing the seals for signs of tampering",
         "Study the auditor two cars back—their posture, their equipment, their probable threat level",
-        "Make contact with the sleeping medic, a calculated risk to gauge their intentions"
+        "Make contact with the sleeping medic, a calculated risk to gauge their intentions",
     ]
 
     import uuid
@@ -326,7 +354,8 @@ Rain hammers against the hull above. Somewhere in the distance, the city's heart
 
         # Insert bootstrap narrative
         # Note: incubator uses singleton pattern (id=true)
-        cur.execute("""
+        cur.execute(
+            """
             INSERT INTO incubator (
                 id, chunk_id, parent_chunk_id,
                 user_text, storyteller_text, choice_object,
@@ -338,30 +367,40 @@ Rain hammers against the hull above. Somewhere in the distance, the city's heart
                 %s, %s, %s,
                 %s, %s, 'provisional'
             )
-        """, (
-            "Begin the story.",
-            narrative_text,
-            Json({
-                "presented": choices,
-                "selected": None,
-            }),
-            Json({
-                "chronology": {
-                    "episode_transition": "new_episode",  # Valid: continue, new_episode, new_season
-                    "time_delta_minutes": 0,
-                    "time_delta_description": "Story begins",
-                },
-                "world_layer": "primary",
-            }),
-            Json([]),  # entity_updates is an array
-            Json({
-                "characters": [{"character_id": 1, "reference_type": "present"}],
-                "places": [{"place_id": 1, "reference_type": "setting"}],
-                "factions": [],
-            }),
-            str(uuid.uuid4()),  # Generate real UUID
-            "mock_bootstrap_response",
-        ))
+        """,
+            (
+                "Begin the story.",
+                narrative_text,
+                Json(
+                    {
+                        "presented": choices,
+                        "selected": None,
+                    }
+                ),
+                Json(
+                    {
+                        "chronology": {
+                            "episode_transition": "new_episode",  # Valid: continue, new_episode, new_season
+                            "time_delta_minutes": 0,
+                            "time_delta_description": "Story begins",
+                        },
+                        "world_layer": "primary",
+                    }
+                ),
+                Json([]),  # entity_updates is an array
+                Json(
+                    {
+                        "characters": [
+                            {"character_id": 1, "reference_type": "present"}
+                        ],
+                        "places": [{"place_id": 1, "reference_type": "setting"}],
+                        "factions": [],
+                    }
+                ),
+                str(uuid.uuid4()),  # Generate real UUID
+                "mock_bootstrap_response",
+            ),
+        )
 
     print("✓ Populated incubator with bootstrap narrative")
 
