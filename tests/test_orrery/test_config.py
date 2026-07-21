@@ -15,6 +15,7 @@ from nexus.config.settings_models import (
     OrreryBleedSettings,
     OrreryContagionSettings,
     OrreryDashboardSettings,
+    OrreryDistortionSettings,
     OrreryDriftSettings,
     OrreryEpistemicsSettings,
     OrreryPromoteSettings,
@@ -54,6 +55,7 @@ def test_orrery_settings_resolve_model_reference() -> None:
     assert settings.orrery.contagion.channels["status:*"].min_level == "junior"
     assert settings.orrery.contagion.culture_profiles["cellular_clandestine"] == 4.0
     assert settings.orrery.contagion.guards.age_horizon == timedelta(days=14)
+    assert settings.orrery.distortion.enabled is True
     expected_model = settings.global_.model.api_models["anthropic"].roles["default"]
     assert settings.orrery.narration.model_ref == expected_model
     assert settings.orrery.promote.provider is None
@@ -208,6 +210,15 @@ def test_reveal_defaults_off_when_block_is_absent() -> None:
     payload = load_settings("nexus.toml").orrery.model_dump()
     payload.pop("reveal")
     assert OrrerySettings.model_validate(payload).reveal.enabled is False
+
+
+def test_distortion_defaults_off_when_block_is_absent() -> None:
+    """Legacy configs cannot silently opt into authored account distortion."""
+
+    assert OrreryDistortionSettings().enabled is False
+    payload = load_settings("nexus.toml").orrery.model_dump()
+    payload.pop("distortion")
+    assert OrrerySettings.model_validate(payload).distortion.enabled is False
 
 
 def test_drift_rejects_project_delta_at_or_above_one() -> None:

@@ -13,6 +13,9 @@ from sqlalchemy import create_engine, text
 from nexus.api.commit_handler_sync import commit_incubator_to_database_sync
 from nexus.api.narrative_generation import write_to_incubator
 from nexus.api.slot_utils import get_slot_db_url
+from tests.test_orrery.claim_accounts_test_support import (
+    install_claim_accounts_shadow_sync,
+)
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -60,6 +63,10 @@ def provenance_db() -> Iterator[dict[str, Any]]:
             cur.execute(f'CREATE SCHEMA "{schema}"')
             cur.execute(f'SET LOCAL search_path = "{schema}", public')
             cur.execute(reveal_migration_sql)
+            install_claim_accounts_shadow_sync(
+                cur,
+                include_backstory_shadow=False,
+            )
             cur.execute(
                 """
                 INSERT INTO event_types (type, category, severity, description)

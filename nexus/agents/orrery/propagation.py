@@ -24,7 +24,10 @@ from nexus.agents.orrery.communication import (
     coerce_contagion_settings,
 )
 from nexus.agents.orrery.db_rows import row_get as _row_get
-from nexus.config.settings_models import OrreryContagionSettings
+from nexus.config.settings_models import (
+    OrreryContagionSettings,
+    OrreryDistortionSettings,
+)
 
 
 CLAIM_PROPAGATED_EVENT_TYPE = "claim_propagated"
@@ -35,6 +38,7 @@ class AwarenessState:
     """The frontier fields needed to schedule one knower's outbound hops."""
 
     claim_id: int
+    incident_world_event_id: int
     knower_entity_id: int
     acquired_at_world_time: Optional[datetime]
     root_source_entity_id: Optional[int]
@@ -46,6 +50,8 @@ class PlannedPropagation:
     """One deterministic acquisition derived during a drain fixpoint."""
 
     claim_id: int
+    delivered_claim_id: int
+    incident_world_event_id: int
     knower_entity_id: int
     immediate_source_entity_id: int
     root_source_entity_id: int
@@ -53,6 +59,24 @@ class PlannedPropagation:
     acquired_at_world_time: datetime
     latency_seconds: float
     depth: int
+
+
+@dataclass(frozen=True, slots=True)
+class ClaimAccount:
+    """One authored sibling in a drain-start incident snapshot."""
+
+    claim_id: int
+    distortion_min_depth: Optional[int]
+    propagation_eligible: bool
+
+
+@dataclass(frozen=True, slots=True)
+class IncidentSnapshot:
+    """Sibling accounts and their shared canonical-event clock."""
+
+    world_event_id: int
+    birth_world_time: datetime
+    accounts: tuple[ClaimAccount, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,6 +114,7 @@ def drain_claim_propagation_sync(
     *,
     tick_chunk_id: int,
     settings: Any,
+    distortion_settings: Any = None,
 ) -> PropagationDrainResult:
     """Drain every eligible bounded-claim hop through a DB-API cursor."""
 
@@ -100,21 +125,22 @@ def drain_claim_propagation_sync(
     world_time, world_layer = _commit_clock_sync(cur, tick_chunk_id)
     if world_layer != "primary" or world_time is None:
         return PropagationDrainResult()
-    claim_births = _candidate_claim_births_sync(cur, config)
-    if not claim_births:
+    incidents = _candidate_incidents_sync(cur, config)
+    if not incidents:
         return PropagationDrainResult(policy_digest=contagion_policy_digest(config))
     graph = assemble_communication_graph(
         cur,
         settings=config,
         world_time=world_time,
     )
-    frontier = _awareness_frontier_sync(cur, tuple(claim_births))
+    frontier = _awareness_frontier_sync(cur, incidents)
     planned = _plan_propagations(
-        claim_births=claim_births,
+        incidents=incidents,
         frontier=frontier,
         graph=graph,
         world_time=world_time,
         settings=config,
+        distortion_enabled=_distortion_enabled(distortion_settings),
     )
     digest = contagion_policy_digest(config)
     awareness_ids: list[int] = []
@@ -144,6 +170,7 @@ async def drain_claim_propagation_async(
     *,
     tick_chunk_id: int,
     settings: Any,
+    distortion_settings: Any = None,
 ) -> PropagationDrainResult:
     """Asyncpg twin of :func:`drain_claim_propagation_sync`."""
 
@@ -154,21 +181,22 @@ async def drain_claim_propagation_async(
     world_time, world_layer = await _commit_clock_async(conn, tick_chunk_id)
     if world_layer != "primary" or world_time is None:
         return PropagationDrainResult()
-    claim_births = await _candidate_claim_births_async(conn, config)
-    if not claim_births:
+    incidents = await _candidate_incidents_async(conn, config)
+    if not incidents:
         return PropagationDrainResult(policy_digest=contagion_policy_digest(config))
     graph = await assemble_communication_graph_async(
         conn,
         settings=config,
         world_time=world_time,
     )
-    frontier = await _awareness_frontier_async(conn, tuple(claim_births))
+    frontier = await _awareness_frontier_async(conn, incidents)
     planned = _plan_propagations(
-        claim_births=claim_births,
+        incidents=incidents,
         frontier=frontier,
         graph=graph,
         world_time=world_time,
         settings=config,
+        distortion_enabled=_distortion_enabled(distortion_settings),
     )
     digest = contagion_policy_digest(config)
     awareness_ids: list[int] = []
@@ -200,6 +228,12 @@ def _enabled_config(settings: Any) -> Optional[OrreryContagionSettings]:
     return config if config.enabled else None
 
 
+def _distortion_enabled(settings: Any) -> bool:
+    if isinstance(settings, OrreryDistortionSettings):
+        return settings.enabled
+    return OrreryDistortionSettings.model_validate(settings or {}).enabled
+
+
 _MIGRATION_083_ERROR = (
     "Claim propagation requires migration 083; apply migration 083 before "
     "enabling [orrery.contagion]."
@@ -219,7 +253,17 @@ def _require_migration_083_sync(cur: Any) -> None:
                    WHERE table_schema = ANY(current_schemas(false))
                      AND table_name = 'world_events'
                      AND column_name = 'world_time'
-               ) AS world_time_column
+               ) AS world_time_column,
+               EXISTS (
+                   SELECT 1
+                   FROM information_schema.columns
+                   WHERE (
+                         table_schema = ANY(current_schemas(false))
+                         OR table_schema = pg_my_temp_schema()::regnamespace::text
+                     )
+                     AND table_name = 'claims'
+                     AND column_name = 'distortion_min_depth'
+               ) AS distortion_depth_column
         """
     )
     row = cur.fetchone()
@@ -227,6 +271,11 @@ def _require_migration_083_sync(cur: Any) -> None:
         raise RuntimeError(_MIGRATION_083_ERROR)
     if not bool(_row_get(row, "world_time_column", 1)):
         raise RuntimeError(_MIGRATION_083_ERROR)
+    if not bool(_row_get(row, "distortion_depth_column", 2)):
+        raise RuntimeError(
+            "Claim propagation requires migration 092; apply migration 092 "
+            "before draining incident-aware propagation."
+        )
 
 
 async def _require_migration_083_async(conn: Any) -> None:
@@ -242,13 +291,28 @@ async def _require_migration_083_async(conn: Any) -> None:
                    WHERE table_schema = ANY(current_schemas(false))
                      AND table_name = 'world_events'
                      AND column_name = 'world_time'
-               ) AS world_time_column
+               ) AS world_time_column,
+               EXISTS (
+                   SELECT 1
+                   FROM information_schema.columns
+                   WHERE (
+                         table_schema = ANY(current_schemas(false))
+                         OR table_schema = pg_my_temp_schema()::regnamespace::text
+                     )
+                     AND table_name = 'claims'
+                     AND column_name = 'distortion_min_depth'
+               ) AS distortion_depth_column
         """
     )
     if row is None or not bool(row["event_registered"]):
         raise RuntimeError(_MIGRATION_083_ERROR)
     if not bool(row["world_time_column"]):
         raise RuntimeError(_MIGRATION_083_ERROR)
+    if not bool(row["distortion_depth_column"]):
+        raise RuntimeError(
+            "Claim propagation requires migration 092; apply migration 092 "
+            "before draining incident-aware propagation."
+        )
 
 
 def _commit_clock_sync(cur: Any, tick_chunk_id: int) -> tuple[Optional[datetime], Any]:
@@ -284,64 +348,95 @@ async def _commit_clock_async(
     return world_time, row["world_layer"]
 
 
-_CANDIDATE_CLAIMS_SQL = """
-    WITH bounded_claims AS (
-        SELECT c.id AS claim_id,
-               COALESCE(we.world_time, cm.world_time) AS birth_world_time
-        FROM claims c
-        JOIN world_events we ON we.id = c.world_event_id
-        LEFT JOIN chunk_metadata cm ON cm.chunk_id = we.tick_chunk_id
-        WHERE c.scope = 'bounded'
+_CANDIDATE_INCIDENTS_SQL = """
+    WITH incident_accounts AS (
+        SELECT claim.id AS claim_id,
+               claim.world_event_id AS incident_world_event_id,
+               claim.scope,
+               claim.distortion_min_depth,
+               COALESCE(event.world_time, metadata.world_time)
+                   AS birth_world_time
+        FROM claims claim
+        JOIN world_events event ON event.id = claim.world_event_id
+        LEFT JOIN chunk_metadata metadata
+          ON metadata.chunk_id = event.tick_chunk_id
+    ), eligible_incidents AS (
+        SELECT DISTINCT account.incident_world_event_id
+        FROM incident_accounts account
+        JOIN claim_awareness awareness
+          ON awareness.claim_id = account.claim_id
+        WHERE account.scope = 'bounded'
+          AND account.birth_world_time IS NOT NULL
+          AND awareness.acquired_at_world_time IS NOT NULL
+          AND awareness.acquired_at_world_time
+              <= account.birth_world_time + {horizon_placeholder}
     )
-    SELECT candidate.claim_id, candidate.birth_world_time
-    FROM bounded_claims candidate
-    WHERE candidate.birth_world_time IS NOT NULL
-      AND EXISTS (
-          SELECT 1
-          FROM claim_awareness awareness
-          WHERE awareness.claim_id = candidate.claim_id
-            AND awareness.acquired_at_world_time IS NOT NULL
-            AND awareness.acquired_at_world_time
-                <= candidate.birth_world_time + {horizon_placeholder}
-      )
-    ORDER BY candidate.claim_id
+    SELECT account.claim_id, account.incident_world_event_id,
+           account.birth_world_time, account.distortion_min_depth,
+           account.scope
+    FROM incident_accounts account
+    JOIN eligible_incidents eligible
+      ON eligible.incident_world_event_id = account.incident_world_event_id
+    ORDER BY account.incident_world_event_id, account.claim_id
 """
 
 
-def _candidate_claim_births_sync(
+def _candidate_incidents_sync(
     cur: Any, settings: OrreryContagionSettings
-) -> dict[int, datetime]:
+) -> dict[int, IncidentSnapshot]:
     cur.execute(
-        _CANDIDATE_CLAIMS_SQL.format(horizon_placeholder="%s"),
+        _CANDIDATE_INCIDENTS_SQL.format(horizon_placeholder="%s"),
         (settings.guards.age_horizon,),
     )
-    return _claim_births(cur.fetchall())
+    return _incident_snapshots(cur.fetchall())
 
 
-async def _candidate_claim_births_async(
+async def _candidate_incidents_async(
     conn: Any, settings: OrreryContagionSettings
-) -> dict[int, datetime]:
+) -> dict[int, IncidentSnapshot]:
     rows = await conn.fetch(
-        _CANDIDATE_CLAIMS_SQL.format(horizon_placeholder="$1"),
+        _CANDIDATE_INCIDENTS_SQL.format(horizon_placeholder="$1"),
         settings.guards.age_horizon,
     )
-    return _claim_births(rows)
+    return _incident_snapshots(rows)
 
 
-def _claim_births(rows: Sequence[Any]) -> dict[int, datetime]:
-    births = {}
+def _incident_snapshots(rows: Sequence[Any]) -> dict[int, IncidentSnapshot]:
+    grouped: dict[int, tuple[datetime, list[ClaimAccount]]] = {}
     for row in rows:
         claim_id = int(_row_get(row, "claim_id", 0))
-        birth = _row_get(row, "birth_world_time", 1)
+        incident_id = int(_row_get(row, "incident_world_event_id", 1))
+        birth = _row_get(row, "birth_world_time", 2)
         if birth is None:
             continue
-        births[claim_id] = birth
-    return births
+        raw_depth = _row_get(row, "distortion_min_depth", 3)
+        scope = str(_row_get(row, "scope", 4))
+        account = ClaimAccount(
+            claim_id=claim_id,
+            distortion_min_depth=(int(raw_depth) if raw_depth is not None else None),
+            propagation_eligible=scope == "bounded",
+        )
+        existing = grouped.setdefault(incident_id, (birth, []))
+        if existing[0] != birth:
+            raise ValueError(
+                f"Incident {incident_id} sibling claims disagree on birth time"
+            )
+        existing[1].append(account)
+    return {
+        incident_id: IncidentSnapshot(
+            world_event_id=incident_id,
+            birth_world_time=birth,
+            accounts=tuple(accounts),
+        )
+        for incident_id, (birth, accounts) in grouped.items()
+    }
 
 
 def _awareness_frontier_sync(
-    cur: Any, claim_ids: Sequence[int]
+    cur: Any, incidents: Mapping[int, IncidentSnapshot]
 ) -> tuple[AwarenessState, ...]:
+    claim_incidents = _claim_incident_index(incidents)
+    claim_ids = tuple(claim_incidents)
     cur.execute(
         """
         SELECT id, claim_id, knower_entity_id, root_source_entity_id,
@@ -363,12 +458,18 @@ def _awareness_frontier_sync(
         """,
         (list(claim_ids),),
     )
-    return _build_frontier(awareness_rows, cur.fetchall())
+    return _build_frontier(
+        awareness_rows,
+        cur.fetchall(),
+        claim_incidents=claim_incidents,
+    )
 
 
 async def _awareness_frontier_async(
-    conn: Any, claim_ids: Sequence[int]
+    conn: Any, incidents: Mapping[int, IncidentSnapshot]
 ) -> tuple[AwarenessState, ...]:
+    claim_incidents = _claim_incident_index(incidents)
+    claim_ids = tuple(claim_incidents)
     awareness_rows = await conn.fetch(
         """
         SELECT id, claim_id, knower_entity_id, root_source_entity_id,
@@ -389,18 +490,54 @@ async def _awareness_frontier_async(
         """,
         list(claim_ids),
     )
-    return _build_frontier(awareness_rows, event_rows)
+    return _build_frontier(
+        awareness_rows,
+        event_rows,
+        claim_incidents=claim_incidents,
+    )
+
+
+def _claim_incident_index(
+    incidents: Mapping[int, IncidentSnapshot],
+) -> dict[int, int]:
+    return {
+        account.claim_id: incident.world_event_id
+        for incident in incidents.values()
+        for account in incident.accounts
+    }
 
 
 def _build_frontier(
-    awareness_rows: Sequence[Any], event_rows: Sequence[Any]
+    awareness_rows: Sequence[Any],
+    event_rows: Sequence[Any],
+    *,
+    claim_incidents: Mapping[int, int],
 ) -> tuple[AwarenessState, ...]:
     depths: dict[tuple[int, int], int] = {}
     for row in event_rows:
         event_id = int(_row_get(row, "id", 0))
         payload = _json_object(_row_get(row, "payload", 1), event_id=event_id)
+        scheduling_claim_id, delivered_claim_id, incident_id = (
+            _propagation_claim_identity(payload, event_id=event_id)
+        )
+        scheduling_incident = claim_incidents.get(scheduling_claim_id)
+        delivered_incident = claim_incidents.get(delivered_claim_id)
+        if scheduling_incident is None or delivered_incident is None:
+            raise ValueError(
+                f"claim_propagated event {event_id} names a claim outside its "
+                "incident snapshot"
+            )
+        if scheduling_incident != delivered_incident:
+            raise ValueError(
+                f"claim_propagated event {event_id} crosses incident boundaries"
+            )
+        if incident_id is not None and incident_id != scheduling_incident:
+            raise ValueError(
+                f"claim_propagated event {event_id} has incident "
+                f"{incident_id}, expected {scheduling_incident}"
+            )
         key = (
-            _payload_int(payload, "claim_id", event_id),
+            delivered_claim_id,
             _payload_int(payload, "knower_entity_id", event_id),
         )
         depth = _payload_int(payload, "depth", event_id)
@@ -410,7 +547,8 @@ def _build_frontier(
             )
         if key in depths:
             raise ValueError(
-                "Duplicate claim_propagated ledger entries for claim/knower " f"{key}"
+                "Duplicate claim_propagated ledger entries for delivered "
+                f"claim/knower {key}"
             )
         depths[key] = depth
 
@@ -421,14 +559,15 @@ def _build_frontier(
         knower = int(_row_get(row, "knower_entity_id", 2))
         acquired = _row_get(row, "acquired_at_world_time", 4)
         root = _row_get(row, "root_source_entity_id", 3)
-        # NOTE(#479 Stage C): accounts remain independent claim-id frontiers.
-        # Do not skip this account because the knower possesses a sibling;
-        # cross-account exclusion belongs to the later distortion policy.
         key = (claim_id, knower)
         awareness_keys.add(key)
+        incident_id = claim_incidents.get(claim_id)
+        if incident_id is None:
+            raise ValueError(f"Awareness row names unknown incident claim {claim_id}")
         frontier.append(
             AwarenessState(
                 claim_id=claim_id,
+                incident_world_event_id=incident_id,
                 knower_entity_id=knower,
                 acquired_at_world_time=acquired,
                 root_source_entity_id=int(root) if root is not None else None,
@@ -438,7 +577,8 @@ def _build_frontier(
     orphaned = sorted(set(depths) - awareness_keys)
     if orphaned:
         raise ValueError(
-            "claim_propagated ledger entries have no awareness projection: "
+            "claim_propagated delivered claim/knower entries have no awareness "
+            "projection: "
             f"{orphaned}"
         )
     return tuple(frontier)
@@ -446,31 +586,45 @@ def _build_frontier(
 
 def _plan_propagations(
     *,
-    claim_births: Mapping[int, datetime],
+    incidents: Mapping[int, IncidentSnapshot],
     frontier: Sequence[AwarenessState],
     graph: CommunicationGraph,
     world_time: datetime,
     settings: OrreryContagionSettings,
+    distortion_enabled: bool,
 ) -> tuple[PlannedPropagation, ...]:
-    by_claim: dict[int, list[AwarenessState]] = {
-        claim_id: [] for claim_id in claim_births
+    by_incident: dict[int, list[AwarenessState]] = {
+        incident_id: [] for incident_id in incidents
     }
     for awareness in frontier:
-        by_claim.setdefault(awareness.claim_id, []).append(awareness)
+        by_incident.setdefault(awareness.incident_world_event_id, []).append(awareness)
 
     outbound = _fan_out_edges(graph, settings.guards.fan_out_cap)
     planned: list[PlannedPropagation] = []
     sequence = count()
-    for claim_id, birth_world_time in claim_births.items():
-        possessed = {
-            awareness.knower_entity_id: awareness
-            for awareness in by_claim.get(claim_id, ())
+    for incident_id in sorted(incidents):
+        incident = incidents[incident_id]
+        birth_world_time = incident.birth_world_time
+        eligible_claim_ids = {
+            account.claim_id
+            for account in incident.accounts
+            if account.propagation_eligible
         }
+        # Ledger integrity remains keyed by delivered claim/knower, while this
+        # possession frontier is deliberately incident/knower: hearing any
+        # sibling account suppresses every later propagated account.
+        possessed: dict[int, AwarenessState] = {}
+        for awareness in sorted(
+            by_incident.get(incident_id, ()),
+            key=_awareness_source_sort_key,
+        ):
+            possessed.setdefault(awareness.knower_entity_id, awareness)
         pending: list[tuple[Any, ...]] = []
 
         def offer(source: AwarenessState) -> None:
             if (
-                source.acquired_at_world_time is None
+                source.claim_id not in eligible_claim_ids
+                or source.acquired_at_world_time is None
                 or source.depth >= settings.guards.depth_cap
             ):
                 return
@@ -490,21 +644,14 @@ def _plan_propagations(
                         source.knower_entity_id,
                         edge.kind,
                         edge.label,
+                        source.claim_id,
                         next(sequence),
                         edge,
                         source,
                     ),
                 )
 
-        for awareness in sorted(
-            possessed.values(),
-            key=lambda item: (
-                item.acquired_at_world_time is None,
-                item.acquired_at_world_time or world_time,
-                item.depth,
-                item.knower_entity_id,
-            ),
-        ):
+        for awareness in sorted(possessed.values(), key=_awareness_source_sort_key):
             offer(awareness)
 
         while pending:
@@ -515,6 +662,7 @@ def _plan_propagations(
                 source_id,
                 _kind,
                 _label,
+                _scheduling_claim_id,
                 _sequence,
                 edge,
                 source,
@@ -522,8 +670,16 @@ def _plan_propagations(
             if listener in possessed:
                 continue
             root = source.root_source_entity_id or source_id
+            delivered_claim_id = _select_delivered_claim(
+                incident,
+                scheduling_claim_id=source.claim_id,
+                depth=depth,
+                distortion_enabled=distortion_enabled,
+            )
             acquisition = PlannedPropagation(
-                claim_id=claim_id,
+                claim_id=source.claim_id,
+                delivered_claim_id=delivered_claim_id,
+                incident_world_event_id=incident_id,
                 knower_entity_id=listener,
                 immediate_source_entity_id=source_id,
                 root_source_entity_id=root,
@@ -534,7 +690,8 @@ def _plan_propagations(
             )
             planned.append(acquisition)
             minted = AwarenessState(
-                claim_id=claim_id,
+                claim_id=delivered_claim_id,
+                incident_world_event_id=incident_id,
                 knower_entity_id=listener,
                 acquired_at_world_time=scheduled,
                 root_source_entity_id=root,
@@ -543,6 +700,47 @@ def _plan_propagations(
             possessed[listener] = minted
             offer(minted)
     return tuple(planned)
+
+
+def _awareness_source_sort_key(awareness: AwarenessState) -> tuple[Any, ...]:
+    return (
+        awareness.acquired_at_world_time is None,
+        awareness.acquired_at_world_time or datetime.max,
+        awareness.depth,
+        awareness.knower_entity_id,
+        awareness.claim_id,
+    )
+
+
+def _select_delivered_claim(
+    incident: IncidentSnapshot,
+    *,
+    scheduling_claim_id: int,
+    depth: int,
+    distortion_enabled: bool,
+) -> int:
+    """Select from the fixed authored sibling set by total birth-hop depth.
+
+    Variants do not compound through lineage. Each onward hop consults the
+    original drain-start incident snapshot, and the deepest qualifying authored
+    account wins directly.
+    """
+
+    if not distortion_enabled:
+        return scheduling_claim_id
+    qualifying = [
+        account
+        for account in incident.accounts
+        if account.propagation_eligible
+        and account.distortion_min_depth is not None
+        and account.distortion_min_depth <= depth
+    ]
+    if not qualifying:
+        return scheduling_claim_id
+    return min(
+        qualifying,
+        key=lambda account: (-int(account.distortion_min_depth or 0), account.claim_id),
+    ).claim_id
 
 
 def _fan_out_edges(
@@ -581,7 +779,7 @@ def _insert_propagation_sync(
         RETURNING id
         """,
         (
-            acquisition.claim_id,
+            acquisition.delivered_claim_id,
             acquisition.knower_entity_id,
             acquisition.immediate_source_entity_id,
             acquisition.root_source_entity_id,
@@ -635,7 +833,7 @@ async def _insert_propagation_async(
         ON CONFLICT (claim_id, knower_entity_id) DO NOTHING
         RETURNING id
         """,
-        acquisition.claim_id,
+        acquisition.delivered_claim_id,
         acquisition.knower_entity_id,
         acquisition.immediate_source_entity_id,
         acquisition.root_source_entity_id,
@@ -671,6 +869,9 @@ def _event_payload(
     return {
         "awareness_id": awareness_id,
         "claim_id": acquisition.claim_id,
+        "delivered_claim_id": acquisition.delivered_claim_id,
+        "incident_world_event_id": acquisition.incident_world_event_id,
+        "distortion_applied": (acquisition.delivered_claim_id != acquisition.claim_id),
         "knower_entity_id": acquisition.knower_entity_id,
         "immediate_source_entity_id": acquisition.immediate_source_entity_id,
         "root_source_entity_id": acquisition.root_source_entity_id,
@@ -687,6 +888,42 @@ def _json_object(raw: Any, *, event_id: int) -> Mapping[str, Any]:
     if not isinstance(raw, Mapping):
         raise ValueError(f"claim_propagated event {event_id} payload is not an object")
     return raw
+
+
+def _propagation_claim_identity(
+    payload: Mapping[str, Any], *, event_id: int
+) -> tuple[int, int, Optional[int]]:
+    """Validate Stage C identity keys with a pre-092 absent-key fallback."""
+
+    stage_c_keys = {
+        "delivered_claim_id",
+        "incident_world_event_id",
+        "distortion_applied",
+    }
+    present = stage_c_keys & set(payload)
+    if present and present != stage_c_keys:
+        missing = sorted(stage_c_keys - present)
+        raise ValueError(
+            f"claim_propagated event {event_id} lacks Stage C payload fields "
+            f"{missing}"
+        )
+    scheduling_claim_id = _payload_int(payload, "claim_id", event_id)
+    if not present:
+        return scheduling_claim_id, scheduling_claim_id, None
+    delivered_claim_id = _payload_int(payload, "delivered_claim_id", event_id)
+    incident_id = _payload_int(payload, "incident_world_event_id", event_id)
+    distortion_applied = payload["distortion_applied"]
+    if not isinstance(distortion_applied, bool):
+        raise ValueError(
+            f"claim_propagated event {event_id} has invalid " "'distortion_applied'"
+        )
+    expected = delivered_claim_id != scheduling_claim_id
+    if distortion_applied != expected:
+        raise ValueError(
+            f"claim_propagated event {event_id} distortion_applied disagrees "
+            "with its scheduling and delivered claims"
+        )
+    return scheduling_claim_id, delivered_claim_id, incident_id
 
 
 def _payload_int(payload: Mapping[str, Any], key: str, event_id: int) -> int:

@@ -285,6 +285,12 @@ depth_cap = 4
 age_horizon = "14d"
 fan_out_cap = 6
 
+[orrery.distortion]
+# Authored sibling accounts may replace the scheduling account at configured
+# total hop depths. Incident-level scheduling suppression remains active when
+# this feature is disabled because it is a propagation correctness invariant.
+enabled = true
+
 [orrery.selection]
 # Branch selection inside a fired package: "stochastic" softmax-samples all
 # passing branches by magnitude (PRNG seeded on per-resolution persisted

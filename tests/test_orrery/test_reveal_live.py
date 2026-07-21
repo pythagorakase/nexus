@@ -30,7 +30,49 @@ from tests.test_orrery.claim_accounts_test_support import (
 
 pytestmark = pytest.mark.requires_postgres
 MIGRATION_SQL = Path("migrations/091_backstory_secrets.sql").read_text()
+ACCOUNT_MIGRATION_SQL = Path("migrations/090_claim_accounts.sql").read_text()
+DISTORTION_MIGRATION_SQL = Path("migrations/092_claim_distortion_depth.sql").read_text()
 _SCENES = count(400)
+
+
+def _install_claim_schema(cur: Any) -> None:
+    """Install migrations 090 and 092 in the rollback-only reveal schema."""
+
+    cur.execute(
+        """
+        CREATE TABLE claims (
+            id bigserial PRIMARY KEY,
+            world_event_id bigint NOT NULL,
+            summary text NOT NULL,
+            scope text NOT NULL CHECK (
+                scope IN ('common', 'bounded', 'private')
+            ),
+            source_chunk_id bigint,
+            source_resolution_id bigint,
+            created_at timestamptz NOT NULL DEFAULT now()
+        );
+        CREATE UNIQUE INDEX ux_claims_world_event_v1
+            ON claims (world_event_id)
+            WHERE world_event_id IS NOT NULL;
+        CREATE TABLE claim_awareness (
+            id bigserial PRIMARY KEY,
+            claim_id bigint NOT NULL,
+            knower_entity_id bigint NOT NULL,
+            source_tier text NOT NULL CHECK (
+                source_tier IN ('participant', 'witness', 'told', 'granted')
+            ),
+            immediate_source_entity_id bigint,
+            root_source_entity_id bigint,
+            channel text,
+            acquired_at_world_time timestamptz,
+            source_chunk_id bigint,
+            created_at timestamptz NOT NULL DEFAULT now(),
+            UNIQUE (claim_id, knower_entity_id)
+        );
+        """
+    )
+    cur.execute(ACCOUNT_MIGRATION_SQL)
+    cur.execute(DISTORTION_MIGRATION_SQL)
 
 
 @pytest.fixture()
@@ -65,6 +107,7 @@ def live_conn() -> Iterator[Any]:
             schema = f"reveal_live_{uuid4().hex[:12]}"
             cur.execute(f'CREATE SCHEMA "{schema}"')
             cur.execute(f'SET LOCAL search_path = "{schema}", public')
+            _install_claim_schema(cur)
             cur.execute(MIGRATION_SQL)
         yield conn
     finally:

@@ -912,6 +912,14 @@ class OrreryContagionSettings(BaseModel):
         return self
 
 
+class OrreryDistortionSettings(BaseModel):
+    """Authored hop-depth account selection for ``[orrery.distortion]``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+
+
 class OrreryRouteGraphSettings(BaseModel):
     """Offline route graph safety settings for Orrery travel."""
 
@@ -2034,6 +2042,9 @@ class OrrerySettings(BaseModel):
     enabled: bool = True
     binding: OrreryBindingSettings = Field(default_factory=OrreryBindingSettings)
     contagion: OrreryContagionSettings = Field(default_factory=OrreryContagionSettings)
+    distortion: OrreryDistortionSettings = Field(
+        default_factory=OrreryDistortionSettings
+    )
     route_graph: OrreryRouteGraphSettings = Field(
         default_factory=OrreryRouteGraphSettings
     )

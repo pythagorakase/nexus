@@ -46,6 +46,7 @@ from tests.test_orrery.test_claim_propagation_live import (
 pytestmark = pytest.mark.requires_postgres
 MIGRATION_SQL = Path("migrations/090_claim_accounts.sql").read_text()
 BACKSTORY_MIGRATION_SQL = Path("migrations/091_backstory_secrets.sql").read_text()
+DISTORTION_MIGRATION_SQL = Path("migrations/092_claim_distortion_depth.sql").read_text()
 EPISTEMICS = {
     "enabled": True,
     "claim_event_types": ["threat_issued"],
@@ -91,6 +92,7 @@ def _install_account_shadow(cur: Any) -> None:
     )
     cur.execute(MIGRATION_SQL)
     cur.execute(BACKSTORY_MIGRATION_SQL)
+    cur.execute(DISTORTION_MIGRATION_SQL)
 
 
 @pytest.fixture()
@@ -599,6 +601,7 @@ async def test_async_variant_primitive_uses_real_postgres() -> None:
             """
         )
         await conn.execute(MIGRATION_SQL)
+        await conn.execute(DISTORTION_MIGRATION_SQL)
         variant_id = await mint_account_variant_async(
             conn,
             source_claim_id=1,

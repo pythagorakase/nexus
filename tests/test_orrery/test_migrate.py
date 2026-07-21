@@ -328,6 +328,24 @@ def test_backstory_secrets_migration_installs_reveal_contract() -> None:
         assert f"COMMENT ON COLUMN backstory_secrets.{column}" in migration_sql
 
 
+def test_claim_distortion_migration_installs_depth_contract() -> None:
+    """Migration 092 adds a nullable, positive authored hop threshold."""
+
+    migration_sql = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "092_claim_distortion_depth.sql"
+    ).read_text()
+
+    assert "ADD COLUMN distortion_min_depth integer" in migration_sql
+    assert "CHECK (distortion_min_depth >= 1)" in migration_sql
+    assert "COMMENT ON COLUMN claims.distortion_min_depth" in migration_sql
+    assert "largest distortion_min_depth wins" in migration_sql
+    assert "lowest claim id" in migration_sql
+    assert "No partial unique index is intentional" in migration_sql
+    assert "CREATE UNIQUE INDEX" not in migration_sql
+
+
 def test_retrograde_persistence_migration_adds_distinct_sources() -> None:
     """Retrograde canonical writes need explicit event and tag provenance."""
 
