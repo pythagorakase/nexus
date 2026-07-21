@@ -1086,7 +1086,7 @@ def test_patron_default_compiles_relationship_row_only() -> None:
     assert created.name == "Magistrate Hale"
     relationship = result.created_relationships[0]
     assert relationship.relationship_type == "patron"
-    assert relationship.emotional_valence == "+2|deferential"
+    assert relationship.emotional_valence == "+2|friendly"
     assert relationship.character2_id == created.row_id
     assert cur.character_relationships[0]["character2_id"] == created.row_id
     extra_data = json.loads(cur.character_relationships[0]["extra_data"])
@@ -1247,7 +1247,7 @@ def test_obligation_character_counterparty_writes_edge_and_relationship() -> Non
     assert tag.object_entity_id == 502
     relationship = result.created_relationships[0]
     assert relationship.relationship_type == "obligation"
-    assert relationship.emotional_valence == "-1|beholden"
+    assert relationship.emotional_valence == "-1|wary"
     assert cur.entity_pair_tags[0]["pair_tag_id"] == 112
     extra_data = json.loads(cur.character_relationships[0]["extra_data"])
     assert extra_data["trait_compiler_functional_pair_tag"] == "obligation"

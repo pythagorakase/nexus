@@ -292,7 +292,7 @@ def test_dependents_apply_and_dry_run_audit_on_save_05() -> None:
                 """,
                 (character_id,),
             )
-            assert cur.fetchall() == [("dependent", "+3|devoted", "protects")]
+            assert cur.fetchall() == [("dependent", "+3|trusting", "protects")]
     finally:
         conn.rollback()
         conn.close()

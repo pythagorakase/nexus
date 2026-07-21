@@ -394,7 +394,7 @@ def test_print_trait_audit_renders_pending_stub_endpoints(capsys) -> None:
                         "character2_id": None,
                         "character2_name": "Magistrate Hale",
                         "relationship_type": "patron",
-                        "emotional_valence": "+2|deferential",
+                        "emotional_valence": "+2|friendly",
                     }
                 ],
             },
@@ -408,7 +408,7 @@ def test_print_trait_audit_renders_pending_stub_endpoints(capsys) -> None:
     assert "patron: character entity 1042 (Magistrate Hale)" in captured.out
     assert (
         "patron: character 1 -> (pending stub) Magistrate Hale "
-        "(patron, +2|deferential)" in captured.out
+        "(patron, +2|friendly)" in captured.out
     )
 
 
