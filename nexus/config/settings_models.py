@@ -1258,10 +1258,10 @@ class OrreryDriftSettings(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    enabled: bool = True
+    enabled: bool = False
     copresence_rate_per_hour: Decimal = Field(default=Decimal("0.001"), gt=0)
     copresence_max_hours_per_tick: Decimal = Field(default=Decimal("12.0"), gt=0)
-    project_milestone_delta: Decimal = Field(default=Decimal("0.03"), gt=0)
+    project_milestone_delta: Decimal = Field(default=Decimal("0.03"), gt=0, lt=1)
     hostile_events: Dict[str, Decimal] = Field(
         default_factory=lambda: {
             "threat_issued": Decimal("-0.02"),
@@ -1293,6 +1293,13 @@ class OrreryDriftSettings(BaseModel):
             raise ValueError(
                 f"hostile_events deltas must be strictly negative: {nonnegative}"
             )
+        oversized = sorted(
+            event_type for event_type, delta in values.items() if abs(delta) >= 1
+        )
+        if oversized:
+            raise ValueError(
+                "hostile_events delta magnitudes must be < 1: " f"{oversized}"
+            )
         return values
 
     @field_validator("cooperative_events")
@@ -1311,7 +1318,40 @@ class OrreryDriftSettings(BaseModel):
             raise ValueError(
                 f"cooperative_events deltas must be strictly positive: {nonpositive}"
             )
+        oversized = sorted(
+            event_type for event_type, delta in values.items() if abs(delta) >= 1
+        )
+        if oversized:
+            raise ValueError(
+                "cooperative_events delta magnitudes must be < 1: " f"{oversized}"
+            )
         return values
+
+    @model_validator(mode="after")
+    def _validate_copresence_tick_delta(self) -> "OrreryDriftSettings":
+        """Keep the maximum co-presence delta inside the soft-clamp domain."""
+
+        maximum_delta = (
+            self.copresence_rate_per_hour * self.copresence_max_hours_per_tick
+        )
+        if maximum_delta >= 1:
+            raise ValueError(
+                "copresence_rate_per_hour * copresence_max_hours_per_tick "
+                "must be < 1"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_event_maps_disjoint(self) -> "OrreryDriftSettings":
+        """An event type in both maps would double-apply its deltas."""
+
+        overlap = sorted(set(self.hostile_events) & set(self.cooperative_events))
+        if overlap:
+            raise ValueError(
+                "hostile_events and cooperative_events must be disjoint: "
+                f"{overlap}"
+            )
+        return self
 
 
 class OrreryEpistemicsSettings(BaseModel):

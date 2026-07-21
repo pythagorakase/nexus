@@ -257,6 +257,7 @@ def test_relationship_drift_migration_registers_visibility_event_only() -> None:
 
     assert "INSERT INTO event_types" in migration_sql
     assert "'relationship_drift_milestone'" in migration_sql
+    assert "'relationship_drift_drained'" in migration_sql
     assert "'emotional'" in migration_sql
     assert "'minor'" in migration_sql
     assert "ON CONFLICT (type) DO NOTHING" in migration_sql

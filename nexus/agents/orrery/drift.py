@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, ROUND_HALF_UP, localcontext
 import json
 from typing import Any, Mapping, Optional, Sequence
 
@@ -31,12 +31,19 @@ from nexus.config.settings_models import OrreryDriftSettings
 
 
 RELATIONSHIP_DRIFT_EVENT_TYPE = "relationship_drift_milestone"
+RELATIONSHIP_DRIFT_DRAINED_EVENT_TYPE = "relationship_drift_drained"
+RELATIONSHIP_DRIFT_EVENT_TYPES = frozenset(
+    {RELATIONSHIP_DRIFT_EVENT_TYPE, RELATIONSHIP_DRIFT_DRAINED_EVENT_TYPE}
+)
 TWO_PARTY_PROJECT_TYPES = frozenset(
     {"recruit_ally", "pursue_romance", "court_patron", "seek_redemption"}
 )
 ZERO = Decimal("0")
 ONE = Decimal("1")
 RUNG_SCALE = Decimal("5.5")
+VALENCE_QUANTUM = Decimal("1E-12")
+MAX_VALENCE = ONE - VALENCE_QUANTUM
+PLANNER_PRECISION = 40
 
 EdgeKey = tuple[int, int]
 
@@ -130,7 +137,20 @@ class RelationshipDriftDrainResult:
 def derived_rung(valence: Decimal) -> int:
     """Mirror PostgreSQL ``round(numeric * 5.5)`` exactly."""
 
-    return int((valence * RUNG_SCALE).quantize(ONE, rounding=ROUND_HALF_UP))
+    with localcontext() as context:
+        context.prec = PLANNER_PRECISION
+        bounded = _quantize_valence(valence)
+        return int((bounded * RUNG_SCALE).quantize(ONE, rounding=ROUND_HALF_UP))
+
+
+def _quantize_valence(valence: Decimal) -> Decimal:
+    """Return the canonical fixed-scale representation for a valence write."""
+
+    value = Decimal(valence)
+    if abs(value) >= ONE:
+        raise AssertionError(f"Relationship valence is outside (-1, +1): {value}")
+    quantized = value.quantize(VALENCE_QUANTUM, rounding=ROUND_HALF_UP)
+    return min(max(quantized, -MAX_VALENCE), MAX_VALENCE)
 
 
 def soft_clamp_step(valence: Decimal, delta: Decimal) -> tuple[Decimal, Decimal]:
@@ -159,63 +179,77 @@ def plan_relationship_drift(
 ) -> RelationshipDriftPlan:
     """Plan all edge-local drift without database access or side effects."""
 
-    values = {edge: Decimal(value) for edge, value in relationships.items()}
-    old_values = dict(values)
-    applied: dict[EdgeKey, list[tuple[str, Decimal]]] = {}
+    with localcontext() as context:
+        context.prec = PLANNER_PRECISION
+        values = {
+            edge: _quantize_valence(Decimal(value))
+            for edge, value in relationships.items()
+        }
+        old_values = dict(values)
+        applied: dict[EdgeKey, list[tuple[str, Decimal]]] = {}
 
-    def apply(edge: EdgeKey, delta: Decimal, label: str) -> None:
-        current = values.get(edge)
-        if current is None:
-            return
-        next_value, effective = soft_clamp_step(current, delta)
-        values[edge] = next_value
-        applied.setdefault(edge, []).append((label, effective))
-
-    for milestone in sorted(project_milestones, key=lambda item: item.resolution_id):
-        endpoints = (milestone.actor_entity_id, milestone.target_entity_id)
-        label = f"project_milestone:{milestone.resolution_id}"
-        for edge in _directed_edges(*endpoints):
-            apply(edge, settings.project_milestone_delta, label)
-
-    hostile = [event for event in events if event.event_type in settings.hostile_events]
-    for event in sorted(hostile, key=lambda item: item.event_id):
-        delta = settings.hostile_events[event.event_type]
-        label = f"hostile:{event.event_id}:{event.event_type}"
-        for edge in _directed_edges(event.actor_entity_id, event.target_entity_id):
-            apply(edge, delta, label)
-
-    cooperative = [
-        event for event in events if event.event_type in settings.cooperative_events
-    ]
-    for event in sorted(cooperative, key=lambda item: item.event_id):
-        delta = settings.cooperative_events[event.event_type]
-        label = f"cooperative:{event.event_id}:{event.event_type}"
-        for edge in _directed_edges(event.actor_entity_id, event.target_entity_id):
-            apply(edge, delta, label)
-
-    capped_hours = min(max(elapsed_hours, ZERO), settings.copresence_max_hours_per_tick)
-    for pair in sorted(copresence_pairs, key=lambda item: item.ordered()):
-        first, second = pair.ordered()
-        for edge in ((first, second), (second, first)):
+        def apply(edge: EdgeKey, delta: Decimal, label: str) -> None:
             current = values.get(edge)
-            if current is None or current == ZERO or capped_hours == ZERO:
-                continue
-            direction = ONE if current > ZERO else -ONE
-            delta = direction * settings.copresence_rate_per_hour * capped_hours
-            apply(edge, delta, "copresence")
+            if current is None:
+                return
+            next_value, effective = soft_clamp_step(current, delta)
+            values[edge] = next_value
+            applied.setdefault(edge, []).append((label, effective))
 
-    plans = tuple(
-        PlannedEdgeDrift(
-            source_entity_id=edge[0],
-            target_entity_id=edge[1],
-            old_valence=old_values[edge],
-            new_valence=values[edge],
-            producer_deltas=tuple(applied[edge]),
+        for milestone in sorted(
+            project_milestones, key=lambda item: item.resolution_id
+        ):
+            endpoints = (milestone.actor_entity_id, milestone.target_entity_id)
+            label = f"project_milestone:{milestone.resolution_id}"
+            for edge in _directed_edges(*endpoints):
+                apply(edge, settings.project_milestone_delta, label)
+
+        hostile = [
+            event for event in events if event.event_type in settings.hostile_events
+        ]
+        for event in sorted(hostile, key=lambda item: item.event_id):
+            delta = settings.hostile_events[event.event_type]
+            label = f"hostile:{event.event_id}:{event.event_type}"
+            for edge in _directed_edges(event.actor_entity_id, event.target_entity_id):
+                apply(edge, delta, label)
+
+        cooperative = [
+            event for event in events if event.event_type in settings.cooperative_events
+        ]
+        for event in sorted(cooperative, key=lambda item: item.event_id):
+            delta = settings.cooperative_events[event.event_type]
+            label = f"cooperative:{event.event_id}:{event.event_type}"
+            for edge in _directed_edges(event.actor_entity_id, event.target_entity_id):
+                apply(edge, delta, label)
+
+        capped_hours = min(
+            max(elapsed_hours, ZERO), settings.copresence_max_hours_per_tick
         )
-        for edge in sorted(applied)
-        if values[edge] != old_values[edge]
-    )
-    return RelationshipDriftPlan(edges=plans)
+        for pair in sorted(copresence_pairs, key=lambda item: item.ordered()):
+            first, second = pair.ordered()
+            for edge in ((first, second), (second, first)):
+                current = values.get(edge)
+                if current is None or current == ZERO or capped_hours == ZERO:
+                    continue
+                direction = ONE if current > ZERO else -ONE
+                delta = direction * settings.copresence_rate_per_hour * capped_hours
+                apply(edge, delta, "copresence")
+
+        write_values = {
+            edge: _quantize_valence(value) for edge, value in values.items()
+        }
+        plans = tuple(
+            PlannedEdgeDrift(
+                source_entity_id=edge[0],
+                target_entity_id=edge[1],
+                old_valence=old_values[edge],
+                new_valence=write_values[edge],
+                producer_deltas=tuple(applied[edge]),
+            )
+            for edge in sorted(applied)
+            if write_values[edge] != old_values[edge]
+        )
+        return RelationshipDriftPlan(edges=plans)
 
 
 def drain_relationship_drift_sync(
@@ -229,6 +263,9 @@ def drain_relationship_drift_sync(
 
     config = _enabled_config(settings)
     if config is None:
+        return RelationshipDriftDrainResult()
+    _require_migration_089_sync(cur)
+    if _drain_recorded_sync(cur, tick_chunk_id):
         return RelationshipDriftDrainResult()
     world_time, world_layer = _commit_clock_sync(cur, tick_chunk_id)
     if world_layer != "primary" or world_time is None:
@@ -244,13 +281,20 @@ def drain_relationship_drift_sync(
         elapsed_hours=_elapsed_hours(previous_world_time, world_time),
         settings=config,
     )
-    return _apply_plan_sync(
+    result = _apply_plan_sync(
         cur,
         plan=plan,
         tick_chunk_id=tick_chunk_id,
         world_time=world_time,
         epistemics_settings=epistemics_settings,
     )
+    _record_drain_sync(
+        cur,
+        tick_chunk_id=tick_chunk_id,
+        world_time=world_time,
+        result=result,
+    )
+    return result
 
 
 async def drain_relationship_drift_async(
@@ -264,6 +308,9 @@ async def drain_relationship_drift_async(
 
     config = _enabled_config(settings)
     if config is None:
+        return RelationshipDriftDrainResult()
+    await _require_migration_089_async(conn)
+    if await _drain_recorded_async(conn, tick_chunk_id):
         return RelationshipDriftDrainResult()
     world_time, world_layer = await _commit_clock_async(conn, tick_chunk_id)
     if world_layer != "primary" or world_time is None:
@@ -279,13 +326,20 @@ async def drain_relationship_drift_async(
         elapsed_hours=_elapsed_hours(previous_world_time, world_time),
         settings=config,
     )
-    return await _apply_plan_async(
+    result = await _apply_plan_async(
         conn,
         plan=plan,
         tick_chunk_id=tick_chunk_id,
         world_time=world_time,
         epistemics_settings=epistemics_settings,
     )
+    await _record_drain_async(
+        conn,
+        tick_chunk_id=tick_chunk_id,
+        world_time=world_time,
+        result=result,
+    )
+    return result
 
 
 def _enabled_config(settings: Any) -> Optional[OrreryDriftSettings]:
@@ -300,6 +354,74 @@ def _enabled_config(settings: Any) -> Optional[OrreryDriftSettings]:
     else:
         raise TypeError("Orrery drift settings must be a mapping or Pydantic model")
     return config if config.enabled else None
+
+
+_MIGRATION_089_ERROR = (
+    "Relationship drift requires migration 089; apply migration 089 before "
+    "enabling [orrery.drift]."
+)
+
+
+def _require_migration_089_sync(cur: Any) -> None:
+    cur.execute(
+        """
+        SELECT count(*) AS registered_count
+        FROM event_types
+        WHERE type = ANY(%s)
+        """,
+        (sorted(RELATIONSHIP_DRIFT_EVENT_TYPES),),
+    )
+    row = cur.fetchone()
+    if row is None or int(_row_get(row, "registered_count", 0)) != len(
+        RELATIONSHIP_DRIFT_EVENT_TYPES
+    ):
+        raise RuntimeError(_MIGRATION_089_ERROR)
+
+
+async def _require_migration_089_async(conn: Any) -> None:
+    registered_count = await conn.fetchval(
+        """
+        SELECT count(*)
+        FROM event_types
+        WHERE type = ANY($1::text[])
+        """,
+        sorted(RELATIONSHIP_DRIFT_EVENT_TYPES),
+    )
+    if int(registered_count or 0) != len(RELATIONSHIP_DRIFT_EVENT_TYPES):
+        raise RuntimeError(_MIGRATION_089_ERROR)
+
+
+def _drain_recorded_sync(cur: Any, tick_chunk_id: int) -> bool:
+    cur.execute(
+        """
+        SELECT EXISTS (
+            SELECT 1
+            FROM world_events
+            WHERE tick_chunk_id = %s
+              AND event_type = %s
+        ) AS recorded
+        """,
+        (tick_chunk_id, RELATIONSHIP_DRIFT_DRAINED_EVENT_TYPE),
+    )
+    row = cur.fetchone()
+    return row is not None and bool(_row_get(row, "recorded", 0))
+
+
+async def _drain_recorded_async(conn: Any, tick_chunk_id: int) -> bool:
+    return bool(
+        await conn.fetchval(
+            """
+            SELECT EXISTS (
+                SELECT 1
+                FROM world_events
+                WHERE tick_chunk_id = $1
+                  AND event_type = $2
+            )
+            """,
+            tick_chunk_id,
+            RELATIONSHIP_DRIFT_DRAINED_EVENT_TYPE,
+        )
+    )
 
 
 def _commit_clock_sync(cur: Any, tick_chunk_id: int) -> tuple[Any, Any]:
@@ -367,7 +489,9 @@ def _elapsed_hours(previous: Optional[datetime], current: datetime) -> Decimal:
     if previous is None:
         return ZERO
     elapsed = current - previous
-    return _timedelta_seconds(elapsed) / Decimal("3600")
+    with localcontext() as context:
+        context.prec = PLANNER_PRECISION
+        return _timedelta_seconds(elapsed) / Decimal("3600")
 
 
 def _timedelta_seconds(value: timedelta) -> Decimal:
@@ -394,7 +518,7 @@ def _relationships_sync(cur: Any) -> dict[EdgeKey, Decimal]:
         (
             int(_row_get(row, "source_entity_id", 0)),
             int(_row_get(row, "target_entity_id", 1)),
-        ): Decimal(_row_get(row, "valence_current", 2))
+        ): _quantize_valence(Decimal(_row_get(row, "valence_current", 2)))
         for row in cur.fetchall()
     }
 
@@ -412,9 +536,10 @@ async def _relationships_async(conn: Any) -> dict[EdgeKey, Decimal]:
         """
     )
     return {
-        (int(row["source_entity_id"]), int(row["target_entity_id"])): Decimal(
-            row["valence_current"]
-        )
+        (
+            int(row["source_entity_id"]),
+            int(row["target_entity_id"]),
+        ): _quantize_valence(Decimal(row["valence_current"]))
         for row in rows
     }
 
@@ -681,6 +806,66 @@ async def _apply_plan_async(
         updated_edges=tuple(updated_edges),
         milestone_event_ids=tuple(event_ids),
         claim_ids=tuple(claim_ids),
+    )
+
+
+def _record_drain_sync(
+    cur: Any,
+    *,
+    tick_chunk_id: int,
+    world_time: datetime,
+    result: RelationshipDriftDrainResult,
+) -> None:
+    cur.execute(
+        """
+        INSERT INTO world_events (
+            event_type, tick_chunk_id, world_layer, source,
+            changed_fields, payload, world_time
+        ) VALUES (
+            %s, %s, 'primary', 'resolver', ARRAY[]::text[],
+            jsonb_build_object(
+                'edges_touched', %s::integer,
+                'milestone_count', %s::integer
+            ),
+            %s
+        )
+        """,
+        (
+            RELATIONSHIP_DRIFT_DRAINED_EVENT_TYPE,
+            tick_chunk_id,
+            len(result.updated_edges),
+            len(result.milestone_event_ids),
+            world_time,
+        ),
+    )
+
+
+async def _record_drain_async(
+    conn: Any,
+    *,
+    tick_chunk_id: int,
+    world_time: datetime,
+    result: RelationshipDriftDrainResult,
+) -> None:
+    await conn.execute(
+        """
+        INSERT INTO world_events (
+            event_type, tick_chunk_id, world_layer, source,
+            changed_fields, payload, world_time
+        ) VALUES (
+            $1, $2, 'primary', 'resolver', ARRAY[]::text[],
+            jsonb_build_object(
+                'edges_touched', $3::integer,
+                'milestone_count', $4::integer
+            ),
+            $5
+        )
+        """,
+        RELATIONSHIP_DRIFT_DRAINED_EVENT_TYPE,
+        tick_chunk_id,
+        len(result.updated_edges),
+        len(result.milestone_event_ids),
+        world_time,
     )
 
 

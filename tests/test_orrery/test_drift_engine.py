@@ -2,10 +2,14 @@
 
 from decimal import Decimal
 
+import pytest
+
 from nexus.agents.orrery.drift import (
     CopresencePair,
     DriftEvent,
     ProjectMilestone,
+    _require_migration_089_async,
+    _require_migration_089_sync,
     plan_relationship_drift,
     soft_clamp_step,
 )
@@ -113,7 +117,7 @@ def test_repeated_hostility_approaches_negative_one_without_reaching_it() -> Non
     )
 
     value = plan.edges[0].new_valence
-    assert Decimal("-1") < value < Decimal("-0.999999999999")
+    assert value == Decimal("-0.999999999999")
 
 
 def test_copresence_deepens_each_nonzero_sign_and_leaves_zero_inert() -> None:
@@ -181,3 +185,43 @@ def test_decimal_plan_is_bit_exact_across_identical_runs() -> None:
     }
 
     assert plan_relationship_drift(**inputs) == plan_relationship_drift(**inputs)
+
+
+def test_written_valence_is_quantized_to_twelve_decimal_places() -> None:
+    plan = plan_relationship_drift(
+        relationships={(1, 2): Decimal("0.12345678901234567890")},
+        project_milestones=[],
+        events=[DriftEvent(1, "cooperative", 1, 2)],
+        copresence_pairs=[],
+        elapsed_hours=Decimal("0"),
+        settings=_settings(),
+    )
+
+    edge = plan.edges[0]
+    assert edge.old_valence == Decimal("0.123456789012")
+    assert edge.new_valence == Decimal("0.211111110111")
+    assert edge.new_valence.as_tuple().exponent == -12
+
+
+class _MigrationGateCursor:
+    def execute(self, _sql: str, _params: object) -> None:
+        return None
+
+    def fetchone(self) -> dict[str, int]:
+        return {"registered_count": 1}
+
+
+class _MigrationGateAsyncConnection:
+    async def fetchval(self, _sql: str, _event_types: object) -> int:
+        return 1
+
+
+def test_sync_migration_gate_requires_both_drift_event_types() -> None:
+    with pytest.raises(RuntimeError, match="migration 089"):
+        _require_migration_089_sync(_MigrationGateCursor())
+
+
+@pytest.mark.asyncio
+async def test_async_migration_gate_requires_both_drift_event_types() -> None:
+    with pytest.raises(RuntimeError, match="migration 089"):
+        await _require_migration_089_async(_MigrationGateAsyncConnection())

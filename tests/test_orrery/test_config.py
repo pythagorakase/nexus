@@ -173,11 +173,53 @@ def test_drift_rejects_nonnegative_hostile_delta() -> None:
         OrreryDriftSettings(hostile_events={"threat_issued": 0})
 
 
+def test_drift_event_maps_must_be_disjoint() -> None:
+    """The same event type in both maps would double-apply its deltas."""
+
+    with pytest.raises(ValidationError, match="must be disjoint"):
+        OrreryDriftSettings(
+            hostile_events={"threat_issued": Decimal("-0.02")},
+            cooperative_events={"threat_issued": Decimal("0.02")},
+        )
+
+
 def test_drift_rejects_nonpositive_cooperative_delta() -> None:
     """Cooperative classification mistakes fail during config validation."""
 
     with pytest.raises(ValidationError, match="strictly positive"):
         OrreryDriftSettings(cooperative_events={"welfare_check": -0.1})
+
+
+def test_drift_defaults_off_when_block_is_absent() -> None:
+    """Legacy configs cannot silently opt into relationship drift."""
+
+    assert OrreryDriftSettings().enabled is False
+    payload = load_settings("nexus.toml").orrery.model_dump()
+    payload.pop("drift")
+    assert OrrerySettings.model_validate(payload).drift.enabled is False
+
+
+def test_drift_rejects_project_delta_at_or_above_one() -> None:
+    with pytest.raises(ValidationError, match="less than 1"):
+        OrreryDriftSettings(project_milestone_delta=1)
+
+
+def test_drift_rejects_hostile_delta_magnitude_at_or_above_one() -> None:
+    with pytest.raises(ValidationError, match="magnitudes must be < 1"):
+        OrreryDriftSettings(hostile_events={"threat_issued": -1})
+
+
+def test_drift_rejects_cooperative_delta_magnitude_at_or_above_one() -> None:
+    with pytest.raises(ValidationError, match="magnitudes must be < 1"):
+        OrreryDriftSettings(cooperative_events={"welfare_check": 1})
+
+
+def test_drift_rejects_copresence_tick_delta_at_or_above_one() -> None:
+    with pytest.raises(ValidationError, match=r"copresence_rate_per_hour \*"):
+        OrreryDriftSettings(
+            copresence_rate_per_hour=Decimal("0.1"),
+            copresence_max_hours_per_tick=Decimal("10"),
+        )
 
 
 @pytest.mark.parametrize(

@@ -565,6 +565,11 @@ async def commit_incubator_to_database(
                 prompt_settings=_orrery_prompt_settings(),
                 ecology_settings=_orrery_ecology_settings(),
                 project_settings=_orrery_project_settings(),
+                epistemics_settings=(
+                    _orrery_epistemics_settings()
+                    if incubator.get("orrery_proposal") is None
+                    else None
+                ),
                 contagion_settings=_orrery_contagion_settings(),
                 drift_settings=_orrery_drift_settings(),
             )
@@ -667,6 +672,14 @@ def _orrery_contagion_settings() -> Any:
     from nexus.config import load_settings_as_dict
 
     return (load_settings_as_dict().get("orrery") or {}).get("contagion")
+
+
+def _orrery_epistemics_settings() -> Any:
+    """[orrery.epistemics] claim-minting and awareness policy."""
+
+    from nexus.config import load_settings_as_dict
+
+    return (load_settings_as_dict().get("orrery") or {}).get("epistemics")
 
 
 def _orrery_drift_settings() -> Any:

@@ -14,6 +14,7 @@ from psycopg2.extras import RealDictCursor  # type: ignore[import-untyped]
 
 from nexus.agents.orrery.events import commit_orrery_tick_sync
 from nexus.api.slot_utils import get_slot_db_url
+from nexus.config import load_settings
 from nexus.config.settings_models import OrreryDriftSettings
 
 
@@ -58,10 +59,15 @@ def live_conn() -> Iterator[Any]:
             cur.execute(
                 """
                 INSERT INTO event_types (type, category, severity, description)
-                VALUES (
-                    'relationship_drift_milestone', 'emotional', 'minor',
-                    'Rollback-only migration-089 event seed.'
-                )
+                VALUES
+                    (
+                        'relationship_drift_milestone', 'emotional', 'minor',
+                        'Rollback-only migration-089 milestone event seed.'
+                    ),
+                    (
+                        'relationship_drift_drained', 'emotional', 'minor',
+                        'Rollback-only migration-089 drain event seed.'
+                    )
                 ON CONFLICT (type) DO NOTHING
                 """
             )
@@ -71,17 +77,17 @@ def live_conn() -> Iterator[Any]:
         conn.close()
 
 
-def _settings(*, enabled: bool = True) -> OrreryDriftSettings:
-    return OrreryDriftSettings.model_validate(
-        {
-            "enabled": enabled,
-            "copresence_rate_per_hour": "0.001",
-            "copresence_max_hours_per_tick": "12",
-            "project_milestone_delta": "0.03",
-            "hostile_events": {"threat_issued": "-0.2"},
-            "cooperative_events": {"welfare_check": "0.02"},
-        }
-    )
+def _settings(*, enabled: bool = True, **overrides: object) -> OrreryDriftSettings:
+    payload: dict[str, object] = {
+        "enabled": enabled,
+        "copresence_rate_per_hour": "0.001",
+        "copresence_max_hours_per_tick": "12",
+        "project_milestone_delta": "0.03",
+        "hostile_events": {"threat_issued": "-0.2"},
+        "cooperative_events": {"welfare_check": "0.02"},
+    }
+    payload.update(overrides)
+    return OrreryDriftSettings.model_validate(payload)
 
 
 def _insert_chunk(
@@ -165,7 +171,10 @@ def _insert_hostile_event(
 
 
 def _seed_tick(
-    cur: Any, *, world_layer: str = "primary"
+    cur: Any,
+    *,
+    world_layer: str = "primary",
+    valence: Decimal = Decimal("0.1"),
 ) -> tuple[int, int, int, int, int]:
     _insert_chunk(cur, time_delta=timedelta(0))
     tick_chunk_id = _insert_chunk(
@@ -177,6 +186,7 @@ def _seed_tick(
         cur,
         source_character_id=actor_character_id,
         target_character_id=target_character_id,
+        valence=valence,
     )
     event_id = _insert_hostile_event(
         cur,
@@ -215,7 +225,14 @@ def test_commit_drift_updates_versions_projects_literal_and_mints_claim(
         None,
         tick_chunk_id=tick_chunk_id,
         drift_settings=_settings(),
-        epistemics_settings=EPISTEMICS,
+        epistemics_settings=load_settings("nexus.toml").orrery.epistemics,
+    )
+    commit_orrery_tick_sync(
+        live_conn,
+        None,
+        tick_chunk_id=tick_chunk_id,
+        drift_settings=_settings(),
+        epistemics_settings=load_settings("nexus.toml").orrery.epistemics,
     )
 
     with live_conn.cursor() as cur:
@@ -243,6 +260,23 @@ def test_commit_drift_updates_versions_projects_literal_and_mints_claim(
             (tick_chunk_id,),
         )
         assert cur.fetchone()["count"] == 1
+
+        cur.execute(
+            """
+            SELECT payload
+            FROM world_events
+            WHERE tick_chunk_id = %s
+              AND event_type = 'relationship_drift_drained'
+            """,
+            (tick_chunk_id,),
+        )
+        drain_marker = cur.fetchone()
+        assert drain_marker is not None
+        assert cur.fetchone() is None
+        assert drain_marker["payload"] == {
+            "edges_touched": 1,
+            "milestone_count": 1,
+        }
 
         cur.execute(
             """
@@ -349,3 +383,122 @@ def test_disabled_config_does_not_drift(live_conn: Any) -> None:
             (actor_character_id,),
         )
         assert cur.fetchone()["valence_current"] == Decimal("0.1")
+
+
+def test_zero_edge_tick_still_records_drain_marker(live_conn: Any) -> None:
+    """A completed empty drain is durable and idempotent too."""
+
+    with live_conn.cursor() as cur:
+        _insert_chunk(cur, time_delta=timedelta(0))
+        tick_chunk_id = _insert_chunk(cur, time_delta=timedelta(0))
+
+    commit_orrery_tick_sync(
+        live_conn,
+        None,
+        tick_chunk_id=tick_chunk_id,
+        drift_settings=_settings(),
+        epistemics_settings=EPISTEMICS,
+    )
+
+    with live_conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT payload
+            FROM world_events
+            WHERE tick_chunk_id = %s
+              AND event_type = 'relationship_drift_drained'
+            """,
+            (tick_chunk_id,),
+        )
+        assert cur.fetchone()["payload"] == {
+            "edges_touched": 0,
+            "milestone_count": 0,
+        }
+
+
+def test_resolution_free_copresence_crossing_mints_canonical_claim(
+    live_conn: Any,
+) -> None:
+    """Canonical epistemics reaches drift when no Orrery proposal exists."""
+
+    with live_conn.cursor() as cur:
+        tick_chunk_id, actor_id, target_id, _character_id, _event = _seed_tick(
+            cur, valence=Decimal("0.08")
+        )
+        cur.execute("SELECT id FROM places ORDER BY id LIMIT 1")
+        place_id = cur.fetchone()["id"]
+        cur.execute(
+            """
+            UPDATE characters
+            SET current_location = %s
+            WHERE entity_id = ANY(%s)
+            """,
+            (place_id, [actor_id, target_id]),
+        )
+
+    commit_orrery_tick_sync(
+        live_conn,
+        None,
+        tick_chunk_id=tick_chunk_id,
+        drift_settings=_settings(
+            copresence_rate_per_hour="0.2",
+            copresence_max_hours_per_tick="1",
+            hostile_events={},
+            cooperative_events={},
+        ),
+        epistemics_settings=load_settings("nexus.toml").orrery.epistemics,
+    )
+
+    with live_conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT claim.id
+            FROM world_events event
+            JOIN claims claim ON claim.world_event_id = event.id
+            WHERE event.tick_chunk_id = %s
+              AND event.event_type = 'relationship_drift_milestone'
+              AND event.actor_entity_id = %s
+              AND event.target_entity_id = %s
+            """,
+            (tick_chunk_id, actor_id, target_id),
+        )
+        assert cur.fetchone() is not None
+
+
+def test_long_scale_valence_uses_same_rung_as_postgres(live_conn: Any) -> None:
+    """Defensive read quantization cannot disagree with SQL rung derivation."""
+
+    long_valence = Decimal("-0.4545454545454545454545454545454545454545")
+    with live_conn.cursor() as cur:
+        tick_chunk_id, _actor, _target, actor_character_id, _event = _seed_tick(
+            cur, valence=long_valence
+        )
+        cur.execute(
+            """
+            SELECT round(valence_current * 5.5)::integer AS sql_rung
+            FROM character_relationships
+            WHERE character1_id = %s
+            """,
+            (actor_character_id,),
+        )
+        sql_rung = cur.fetchone()["sql_rung"]
+
+    commit_orrery_tick_sync(
+        live_conn,
+        None,
+        tick_chunk_id=tick_chunk_id,
+        drift_settings=_settings(),
+        epistemics_settings=EPISTEMICS,
+    )
+
+    with live_conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT (payload ->> 'old_rung')::integer AS python_rung
+            FROM world_events
+            WHERE tick_chunk_id = %s
+              AND event_type = 'relationship_drift_milestone'
+            """,
+            (tick_chunk_id,),
+        )
+        assert cur.fetchone()["python_rung"] == sql_rung
