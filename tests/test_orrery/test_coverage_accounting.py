@@ -61,6 +61,7 @@ def _analyze(
     *,
     groups: tuple[SimpleNamespace, ...],
     fanout_trimmed: tuple[dict[str, Any], ...] = (),
+    project_start_arbitration_trimmed: tuple[dict[str, Any], ...] = (),
 ) -> dict[str, Any]:
     report = SimpleNamespace(
         anchor_chunk_id=42,
@@ -73,6 +74,7 @@ def _analyze(
             group.actor_entity_id: f"Actor {group.actor_entity_id}" for group in groups
         },
         fanout_trimmed=fanout_trimmed,
+        project_start_arbitration_trimmed=project_start_arbitration_trimmed,
     )
     monkeypatch.setattr(
         coverage,
@@ -155,3 +157,35 @@ def test_fanout_trimmed_pair_stays_fired_but_is_not_counted_as_winner(
             "promotable": True,
         }
     ]
+
+
+def test_arbitration_trimmed_start_is_not_counted_as_winner(
+    monkeypatch: Any,
+) -> None:
+    """Project starts dropped by _arbitrate_project_starts never commit, so
+    coverage must exclude them from winner tallies like fanout trims."""
+
+    payload = _analyze(
+        monkeypatch,
+        groups=(
+            _group(1, pair_stacks=(_stack(actor=1, target=2, winner=True),)),
+            _group(3, pair_stacks=(_stack(actor=3, target=4, winner=True),)),
+        ),
+        project_start_arbitration_trimmed=(
+            {
+                "actor_entity_id": 1,
+                "target_entity_id": 2,
+                "faction_entity_id": None,
+                "template_id": TEMPLATE_ID,
+            },
+        ),
+    )
+
+    stats = payload["templates"][TEMPLATE_ID]
+    assert stats["fired"] == 2
+    assert stats["won"] == 1
+    assert payload["anchors"][0]["winners_by_band"] == {"affiliation": 1}
+    assert [
+        winner["actor_entity_id"]
+        for winner in payload["anchors"][0]["resolution_winners"]
+    ] == [3]

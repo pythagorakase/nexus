@@ -145,7 +145,10 @@ def _tally_report(
     tallies: dict[str, _TemplateTally],
     gap_counts: dict[int, dict[str, int]],
 ) -> dict[str, Any]:
-    fanout_trimmed = {
+    # Winners production dropped never reach commit, so they must not be
+    # tallied — the fan-out quota and the project-start arbitration are the
+    # two draft-level filters (resolver order: quota, then arbitration).
+    trimmed_winners = {
         (
             item["actor_entity_id"],
             item["target_entity_id"],
@@ -153,6 +156,14 @@ def _tally_report(
             item["template_id"],
         )
         for item in report.fanout_trimmed
+    } | {
+        (
+            item["actor_entity_id"],
+            item.get("target_entity_id"),
+            item.get("faction_entity_id"),
+            item["template_id"],
+        )
+        for item in report.project_start_arbitration_trimmed
     }
     winners_by_band: dict[str, int] = {}
     gap_actor_ids: list[int] = []
@@ -179,7 +190,7 @@ def _tally_report(
                 )
                 if (
                     item.template_id == stack.winner_id
-                    and winner_key not in fanout_trimmed
+                    and winner_key not in trimmed_winners
                 ):
                     tally.won += 1
                     winners_by_band[item.drive_band] = (

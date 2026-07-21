@@ -181,6 +181,14 @@ def test_entry_gate_requires_social_base_and_power_and_blocks_redundancy() -> No
             "project.abandon",
         ),
         (
+            # Strict boundary: a merely wary patron (-1) does NOT spurn —
+            # trust_below(-1) means strictly worse than wary; the courtship
+            # keeps making routine progress instead.
+            _advance_state(_project(), trust={(TARGET, ACTOR): -1}),
+            "Make useful work visible",
+            "project.advance",
+        ),
+        (
             _advance_state(_project(stall_count=3)),
             "Let the bid for patronage go",
             "project.abandon",

@@ -151,13 +151,23 @@ def test_resolve_parity_with_production_resolver(
     assert len(payload["actors"]) == proposal.actor_count
 
     # --- Resolution parity: actor-only + off-screen two-party stacks -------
-    fanout_trimmed = {
+    # Production drops drafts via the fan-out quota AND the project-start
+    # arbitration; the endpoint reports both trim lists, and parity holds
+    # only after excluding both.
+    trimmed = {
         (
             item["actor_entity_id"],
             item["target_entity_id"],
             item["template_id"],
         )
         for item in payload["fanout_trimmed"]
+    } | {
+        (
+            item["actor_entity_id"],
+            item.get("target_entity_id"),
+            item["template_id"],
+        )
+        for item in payload["project_start_arbitration_trimmed"]
     }
     endpoint_winners: dict[tuple[str, str], dict] = {}
     for group in payload["actors"]:
@@ -169,7 +179,7 @@ def test_resolve_parity_with_production_resolver(
                 group["actor_entity_id"],
                 stack["bindings"].get("target"),
                 winner["template_id"],
-            ) in fanout_trimmed:
+            ) in trimmed:
                 continue
             key = (winner["template_id"], winner["binding_hash"])
             assert key not in endpoint_winners, "duplicate winner stack"

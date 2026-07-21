@@ -88,6 +88,17 @@ def migration_085_schema() -> Iterator[Any]:
                     (character_entity_id,project_type,status,stage,
                      target_character_entity_id)
                     VALUES (1,'pursue_romance','active','testing_waters',2);
+                INSERT INTO character_project_states
+                    (character_entity_id,project_type,status,stage,
+                     target_place_id)
+                    VALUES (30,'plan_relocation','active','saving',NULL);
+                INSERT INTO character_project_states
+                    (character_entity_id,project_type,status,stage,
+                     target_character_entity_id,target_faction_entity_id)
+                    VALUES (4,'recruit_ally','active','sounding_out',5,11);
+                INSERT INTO character_project_states
+                    (character_entity_id,project_type,status,stage)
+                    VALUES (6,'build_venture','active','laying_groundwork');
                 """
             )
         yield conn
@@ -115,6 +126,20 @@ def test_migration_086_widens_constraints_and_seeds_events(
             "court_patron" in definition for definition, _ in constraints.values()
         )
         assert all(comment for _, comment in constraints.values())
+        # Every prior-type row — including the faction-bound recruitment row
+        # (migration-081 context) — must survive the constraint replacement.
+        cur.execute(
+            "SELECT project_type, target_faction_entity_id "
+            "FROM character_project_states "
+            "WHERE character_entity_id IN (1, 30, 4, 6) "
+            "ORDER BY character_entity_id"
+        )
+        assert cur.fetchall() == [
+            ("pursue_romance", None),
+            ("recruit_ally", 11),
+            ("build_venture", None),
+            ("plan_relocation", None),
+        ]
         cur.execute(
             "INSERT INTO character_project_states "
             "(character_entity_id,project_type,status,stage,"
