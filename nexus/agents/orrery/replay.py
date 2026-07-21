@@ -41,6 +41,8 @@ produces. Sections and their replay sources:
 - ``claim_awareness`` — append-only participant/witness/granted/deliberate-
   told rows from their chunk provenance, while passive told rows are rebuilt
   from ``claim_propagated`` world events rather than trusted from projection.
+- ``backstory_secrets`` — lifecycle rows rebuilt from
+  ``backstory_secret_authored`` and ``backstory_revealed`` world events.
 
 Known undetectable gaps: (1) reapplication policies ``replace`` and
 ``extend_expiry`` overwrite a live tag row's ``source_chunk_id`` in place
@@ -385,7 +387,11 @@ class _Replayer:
                 f"base for reconstruction at chunk {self.target_chunk_id}"
             )
         missing = set(CHECKPOINT_SECTIONS) - set(state)
-        allowed_missing = {"character_project_states", "claim_awareness"}
+        allowed_missing = {
+            "character_project_states",
+            "claim_awareness",
+            "backstory_secrets",
+        }
         unexpected_missing = missing - allowed_missing
         if unexpected_missing:
             raise ValueError(
@@ -398,6 +404,9 @@ class _Replayer:
         if "claim_awareness" in missing:
             state["claim_awareness"] = []
             self.missing_base_sections.add("claim_awareness")
+        if "backstory_secrets" in missing:
+            state["backstory_secrets"] = []
+            self.missing_base_sections.add("backstory_secrets")
         return checkpoint_id, chunk_id, created_at, state
 
     # -- forward scalar replay ----------------------------------------------
@@ -425,6 +434,14 @@ class _Replayer:
                 "claim_awareness",
                 "base checkpoint predates the claim-awareness checkpoint section; "
                 "pre-checkpoint possession is unreproducible",
+                approximate=True,
+            )
+        if "backstory_secrets" in self.missing_base_sections:
+            result.add_note(
+                "backstory_secrets",
+                "base checkpoint predates migration 091 and lacks the backstory-"
+                "secret section; treated as empty because the table and writers "
+                "did not exist at that checkpoint",
                 approximate=True,
             )
 
@@ -500,6 +517,11 @@ class _Replayer:
             base_state=base_state,
             base_chunk=base_chunk,
             base_created_at=base_created_at,
+        )
+        self._replay_backstory_secrets(
+            result,
+            base_state=base_state,
+            base_chunk=base_chunk,
         )
 
         for table in RELATIONSHIP_KEY_COLUMNS:
@@ -710,6 +732,142 @@ class _Replayer:
             f"rebuilt {mint_count} mint row(s), {revelation_count} explicit "
             f"revelation row(s), and {event_count} passive row(s) from "
             "producer provenance",
+            approximate=False,
+        )
+
+    def _replay_backstory_secrets(
+        self,
+        result: ReplayResult,
+        *,
+        base_state: dict[str, Any],
+        base_chunk: int,
+    ) -> None:
+        """Rebuild the secret lifecycle projection from its two event types."""
+
+        working = {int(row["id"]): dict(row) for row in base_state["backstory_secrets"]}
+        self.cur.execute(
+            """
+            SELECT id, event_type, tick_chunk_id, actor_entity_id, world_time,
+                   payload, created_at
+            FROM world_events
+            WHERE event_type IN (
+                      'backstory_secret_authored', 'backstory_revealed'
+                  )
+              AND tick_chunk_id > %s
+              AND tick_chunk_id <= %s
+            ORDER BY tick_chunk_id, id
+            """,
+            (base_chunk, self.target_chunk_id),
+        )
+        authored_count = 0
+        revealed_count = 0
+        for (
+            event_id,
+            event_type,
+            tick_chunk_id,
+            actor_entity_id,
+            world_time,
+            raw_payload,
+            created_at,
+        ) in self.cur.fetchall():
+            payload = _as_document(raw_payload)
+            if not isinstance(payload, dict):
+                raise ValueError(
+                    f"{event_type} event {event_id} payload is not an object"
+                )
+            required = {
+                "claim_id",
+                "gate_template_id",
+                "secret_id",
+            }
+            if event_type == "backstory_secret_authored":
+                required.add("holder_entity_id")
+            missing = sorted(required - set(payload))
+            if missing:
+                raise ValueError(
+                    f"{event_type} event {event_id} lacks payload fields {missing}"
+                )
+
+            secret_id = int(payload["secret_id"])
+            claim_id = int(payload["claim_id"])
+            gate_template_id = str(payload["gate_template_id"])
+            if event_type == "backstory_secret_authored":
+                if secret_id in working:
+                    raise ValueError(
+                        f"backstory_secret_authored event {event_id} duplicates "
+                        f"secret {secret_id}"
+                    )
+                holder_entity_id = int(payload["holder_entity_id"])
+                if int(actor_entity_id) != holder_entity_id:
+                    raise ValueError(
+                        f"backstory_secret_authored event {event_id} actor does "
+                        f"not match holder {holder_entity_id}"
+                    )
+                working[secret_id] = {
+                    "id": secret_id,
+                    "claim_id": claim_id,
+                    "gate_template_id": gate_template_id,
+                    "status": "latent",
+                    "holder_entity_id": holder_entity_id,
+                    "source_chunk_id": int(tick_chunk_id),
+                    "revealed_at_world_time": None,
+                    "revealed_by_chunk_id": None,
+                    "created_at": created_at,
+                }
+                authored_count += 1
+                continue
+
+            secret = working.get(secret_id)
+            if secret is None:
+                raise ValueError(
+                    f"backstory_revealed event {event_id} names unknown secret "
+                    f"{secret_id}"
+                )
+            if secret["status"] != "latent":
+                raise ValueError(
+                    f"backstory_revealed event {event_id} repeats lifecycle flip "
+                    f"for {secret_id} from {secret['status']!r}"
+                )
+            if secret["claim_id"] != claim_id:
+                raise ValueError(
+                    f"backstory_revealed event {event_id} changes secret "
+                    f"{secret_id} claim provenance"
+                )
+            if secret["gate_template_id"] != gate_template_id:
+                raise ValueError(
+                    f"backstory_revealed event {event_id} changes secret "
+                    f"{secret_id} gate provenance"
+                )
+            if int(actor_entity_id) != int(secret["holder_entity_id"]):
+                raise ValueError(
+                    f"backstory_revealed event {event_id} actor does not match "
+                    f"secret {secret_id} holder"
+                )
+            if world_time is None:
+                raise ValueError(
+                    f"backstory_revealed event {event_id} has NULL world_time"
+                )
+            if "world_time" in payload and not _values_equal(
+                payload["world_time"], world_time
+            ):
+                raise ValueError(
+                    f"backstory_revealed event {event_id} payload world_time "
+                    "disagrees with its ledger column"
+                )
+            secret.update(
+                {
+                    "status": "revealed",
+                    "revealed_at_world_time": world_time,
+                    "revealed_by_chunk_id": int(tick_chunk_id),
+                }
+            )
+            revealed_count += 1
+
+        result.state["backstory_secrets"] = [working[key] for key in sorted(working)]
+        result.add_note(
+            "backstory_secrets",
+            f"rebuilt {authored_count} authored row(s) and {revealed_count} "
+            "lifecycle flip(s) from world-event provenance",
             approximate=False,
         )
 
@@ -1850,6 +2008,7 @@ def _load_checkpoint_state(cur: Any, checkpoint_id: int) -> dict[str, Any]:
     state = _as_document(_row_value(cur.fetchone(), 0))
     state.setdefault("character_project_states", [])
     state.setdefault("claim_awareness", [])
+    state.setdefault("backstory_secrets", [])
     return state
 
 
@@ -1932,6 +2091,16 @@ def verify_checkpoints_sync(cur: Any) -> list[CheckpointPairVerdict]:
                                 ]
                             }
                             if "claim_awareness" in missing_sections
+                            else {}
+                        ),
+                        **(
+                            {
+                                "backstory_secrets": [
+                                    "checkpoint predates migration 091 and the "
+                                    "backstory-secret section; comparison skipped"
+                                ]
+                            }
+                            if "backstory_secrets" in missing_sections
                             else {}
                         ),
                     },

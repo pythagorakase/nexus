@@ -334,6 +334,9 @@ welfare_check = 0.02
 kin_visit = 0.02
 confrontation_resolved = 0.03
 
+[orrery.reveal]
+enabled = true
+
 [orrery.epistemics]
 enabled = true
 # Event types that mint a bounded claim at birth. Types absent from this list

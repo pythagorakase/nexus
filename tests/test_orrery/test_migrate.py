@@ -295,6 +295,39 @@ def test_claim_accounts_migration_installs_shape_c_contract() -> None:
     assert "COMMENT ON INDEX ux_claims_world_event_account_v1" in migration_sql
 
 
+def test_backstory_secrets_migration_installs_reveal_contract() -> None:
+    """Migration 091 stores private claims behind named authored gates."""
+
+    migration_sql = (
+        Path(__file__).parent.parent.parent / "migrations" / "091_backstory_secrets.sql"
+    ).read_text()
+
+    assert "CREATE TABLE backstory_secrets" in migration_sql
+    assert "claim_id" in migration_sql
+    assert "UNIQUE REFERENCES claims(id)" in migration_sql
+    assert "gate_template_id" in migration_sql
+    assert "status IN ('latent', 'revealed', 'retired')" in migration_sql
+    assert "holder_entity_id" in migration_sql
+    assert "revealed_at_world_time" in migration_sql
+    assert "revealed_by_chunk_id" in migration_sql
+    assert "'backstory_secret_authored'" in migration_sql
+    assert "'backstory_revealed'" in migration_sql
+    assert "'revelation'" in migration_sql
+    assert "ON CONFLICT (type) DO NOTHING" in migration_sql
+    for column in (
+        "id",
+        "claim_id",
+        "gate_template_id",
+        "status",
+        "holder_entity_id",
+        "source_chunk_id",
+        "revealed_at_world_time",
+        "revealed_by_chunk_id",
+        "created_at",
+    ):
+        assert f"COMMENT ON COLUMN backstory_secrets.{column}" in migration_sql
+
+
 def test_retrograde_persistence_migration_adds_distinct_sources() -> None:
     """Retrograde canonical writes need explicit event and tag provenance."""
 

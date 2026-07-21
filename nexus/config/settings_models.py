@@ -1348,8 +1348,7 @@ class OrreryDriftSettings(BaseModel):
         overlap = sorted(set(self.hostile_events) & set(self.cooperative_events))
         if overlap:
             raise ValueError(
-                "hostile_events and cooperative_events must be disjoint: "
-                f"{overlap}"
+                "hostile_events and cooperative_events must be disjoint: " f"{overlap}"
             )
         return self
 
@@ -1406,6 +1405,14 @@ class OrreryEpistemicsSettings(BaseModel):
         if len(set(values)) != len(values):
             raise ValueError("aware_roles entries must be unique")
         return values
+
+
+class OrreryRevealSettings(BaseModel):
+    """Template-authored backstory reveal policy for ``[orrery.reveal]``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
 
 
 class OrreryReconstructionSettings(BaseModel):
@@ -2040,6 +2047,7 @@ class OrrerySettings(BaseModel):
     )
     projects: OrreryProjectSettings = Field(default_factory=OrreryProjectSettings)
     drift: OrreryDriftSettings = Field(default_factory=OrreryDriftSettings)
+    reveal: OrreryRevealSettings = Field(default_factory=OrreryRevealSettings)
     epistemics: OrreryEpistemicsSettings = Field(
         default_factory=OrreryEpistemicsSettings
     )

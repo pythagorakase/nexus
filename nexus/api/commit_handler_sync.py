@@ -578,6 +578,7 @@ def commit_incubator_to_database_sync(
                 ),
                 contagion_settings=_orrery_contagion_settings(),
                 drift_settings=_orrery_drift_settings(),
+                reveal_settings=_orrery_reveal_settings(),
             )
             if (
                 orrery_result.resolution_count
@@ -587,12 +588,14 @@ def commit_incubator_to_database_sync(
                 or orrery_result.scene_pressure_count
                 or orrery_result.prompt_exposure_count
                 or orrery_result.propagation_count
+                or orrery_result.reveal_count
             ):
                 logger.info(
                     "Committed Orrery tick for chunk %s: %s resolutions, %s events, "
                     "%s tag mutations, %s cleared tags, %s existing skipped, "
                     "%s adjudications (%s deferred, %s voided, %s replaced), "
-                    "%s scene pressures, %s prompt exposures, %s propagations",
+                    "%s scene pressures, %s prompt exposures, %s propagations, "
+                    "%s reveals",
                     chunk_id,
                     orrery_result.resolution_count,
                     orrery_result.event_count,
@@ -606,6 +609,7 @@ def commit_incubator_to_database_sync(
                     orrery_result.scene_pressure_count,
                     orrery_result.prompt_exposure_count,
                     orrery_result.propagation_count,
+                    orrery_result.reveal_count,
                 )
 
             # Step 8.55: interval state checkpoint (reconstruction bar 7c).
@@ -879,6 +883,14 @@ def _orrery_drift_settings() -> Any:
     from nexus.config import load_settings_as_dict
 
     return (load_settings_as_dict().get("orrery") or {}).get("drift")
+
+
+def _orrery_reveal_settings() -> Any:
+    """[orrery.reveal] template-authored backstory reveal policy."""
+
+    from nexus.config import load_settings_as_dict
+
+    return (load_settings_as_dict().get("orrery") or {}).get("reveal")
 
 
 def _orrery_checkpoint_interval() -> int:

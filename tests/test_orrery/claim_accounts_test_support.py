@@ -50,6 +50,13 @@ _CREATE_SHADOW_SQL = """
         ADD CHECK (
             source_tier IN ('participant', 'witness', 'told', 'granted')
         );
+
+    CREATE TEMP TABLE backstory_secrets (
+        id bigserial PRIMARY KEY,
+        claim_id bigint NOT NULL UNIQUE,
+        status text NOT NULL DEFAULT 'latent'
+            CHECK (status IN ('latent', 'revealed', 'retired'))
+    ) ON COMMIT DROP;
 """
 
 

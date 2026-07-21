@@ -18,6 +18,7 @@ from nexus.config.settings_models import (
     OrreryDriftSettings,
     OrreryEpistemicsSettings,
     OrreryPromoteSettings,
+    OrreryRevealSettings,
     OrrerySettings,
     OrreryRetrogradeMaturationSettings,
     OrreryRetrogradeWeirdGenreBands,
@@ -98,6 +99,7 @@ def test_orrery_settings_resolve_model_reference() -> None:
     assert settings.orrery.drift.cooperative_events[
         "protective_intervention"
     ] == Decimal("0.04")
+    assert settings.orrery.reveal.enabled is True
     assert "relationship_drift_milestone" in (
         settings.orrery.epistemics.claim_event_types
     )
@@ -197,6 +199,15 @@ def test_drift_defaults_off_when_block_is_absent() -> None:
     payload = load_settings("nexus.toml").orrery.model_dump()
     payload.pop("drift")
     assert OrrerySettings.model_validate(payload).drift.enabled is False
+
+
+def test_reveal_defaults_off_when_block_is_absent() -> None:
+    """Legacy configs cannot silently opt into backstory reveals."""
+
+    assert OrreryRevealSettings().enabled is False
+    payload = load_settings("nexus.toml").orrery.model_dump()
+    payload.pop("reveal")
+    assert OrrerySettings.model_validate(payload).reveal.enabled is False
 
 
 def test_drift_rejects_project_delta_at_or_above_one() -> None:

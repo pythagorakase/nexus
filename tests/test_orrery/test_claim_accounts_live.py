@@ -15,6 +15,7 @@ from sqlalchemy import create_engine
 
 from nexus.agents.orrery.epistemics import (
     ClaimParticipant,
+    author_backstory_secret_sync,
     load_epistemics_hydration,
     mint_account_variant_async,
     mint_account_variant_sync,
@@ -22,6 +23,7 @@ from nexus.agents.orrery.epistemics import (
     promote_claim_scope,
 )
 from nexus.agents.orrery.propagation import drain_claim_propagation_sync
+from nexus.agents.orrery.reveal import drain_backstory_reveals_sync
 from nexus.agents.orrery.substrate import (
     EventRecord,
     Slot,
@@ -43,6 +45,7 @@ from tests.test_orrery.test_claim_propagation_live import (
 
 pytestmark = pytest.mark.requires_postgres
 MIGRATION_SQL = Path("migrations/090_claim_accounts.sql").read_text()
+BACKSTORY_MIGRATION_SQL = Path("migrations/091_backstory_secrets.sql").read_text()
 EPISTEMICS = {
     "enabled": True,
     "claim_event_types": ["threat_issued"],
@@ -87,6 +90,7 @@ def _install_account_shadow(cur: Any) -> None:
         """
     )
     cur.execute(MIGRATION_SQL)
+    cur.execute(BACKSTORY_MIGRATION_SQL)
 
 
 @pytest.fixture()
@@ -226,7 +230,7 @@ def test_old_divergent_sibling_scopes_raise_during_hydration(
             _mint_sibling_incident(cur, label="old-divergent")
         )
         cur.execute(
-            "UPDATE claims SET scope = 'common' WHERE id = %s",
+            "UPDATE claims SET scope = 'private' WHERE id = %s",
             (variant_id,),
         )
 
@@ -237,6 +241,107 @@ def test_old_divergent_sibling_scopes_raise_during_hydration(
             recent_event_ids=(),
             anchor_chunk_id=anchor,
         )
+
+
+def test_latent_sibling_secret_stays_private_until_its_own_gate_fires(
+    account_connection: Any,
+) -> None:
+    """One reveal cannot promote or spread a differently gated sibling."""
+
+    raw_connection = account_connection.connection.driver_connection
+    with raw_connection.cursor(cursor_factory=RealDictCursor) as cur:
+        event_id, anchor, actor, target, secret_a_claim, secret_b_claim = (
+            _mint_sibling_incident(
+                cur,
+                label="latent-sibling",
+                scope="private",
+            )
+        )
+        secret_a = author_backstory_secret_sync(
+            cur,
+            claim_id=secret_a_claim,
+            gate_template_id="holder_death",
+            holder_entity_id=actor,
+            source_chunk_id=anchor,
+        )
+        secret_b = author_backstory_secret_sync(
+            cur,
+            claim_id=secret_b_claim,
+            gate_template_id="holder_death",
+            holder_entity_id=target,
+            source_chunk_id=anchor,
+        )
+        first_tick, first_world_time = _insert_chunk(
+            cur,
+            time_delta=timedelta(hours=1),
+        )
+        first = drain_backstory_reveals_sync(
+            cur,
+            tick_chunk_id=first_tick,
+            settings={"enabled": True},
+            state=WorldState(
+                is_active={actor: False, target: True},
+                world_time=first_world_time,
+            ),
+        )
+        assert first.secret_ids == (secret_a,)
+        cur.execute(
+            "SELECT id, scope FROM claims WHERE world_event_id = %s ORDER BY id",
+            (event_id,),
+        )
+        assert {row["id"]: row["scope"] for row in cur.fetchall()} == {
+            secret_a_claim: "bounded",
+            secret_b_claim: "private",
+        }
+        cur.execute(
+            """
+            SELECT knower_entity_id, source_tier
+            FROM claim_awareness
+            WHERE claim_id = %s
+            ORDER BY id
+            """,
+            (secret_b_claim,),
+        )
+        assert cur.fetchall() == [
+            {"knower_entity_id": target, "source_tier": "granted"}
+        ]
+
+    hydration = load_epistemics_hydration(
+        account_connection,
+        entity_ids=(actor, target),
+        recent_event_ids=(event_id,),
+        anchor_chunk_id=first_tick,
+    )
+    assert hydration.claimed_event_scopes == {event_id: "bounded"}
+
+    with raw_connection.cursor(cursor_factory=RealDictCursor) as cur:
+        second_tick, second_world_time = _insert_chunk(
+            cur,
+            time_delta=timedelta(hours=1),
+        )
+        second = drain_backstory_reveals_sync(
+            cur,
+            tick_chunk_id=second_tick,
+            settings={"enabled": True},
+            state=WorldState(
+                is_active={actor: False, target: False},
+                world_time=second_world_time,
+            ),
+        )
+        assert second.secret_ids == (secret_b,)
+        cur.execute(
+            "SELECT scope FROM claims WHERE world_event_id = %s ORDER BY id",
+            (event_id,),
+        )
+        assert [row["scope"] for row in cur.fetchall()] == ["bounded", "bounded"]
+
+    converged = load_epistemics_hydration(
+        account_connection,
+        entity_ids=(actor, target),
+        recent_event_ids=(event_id,),
+        anchor_chunk_id=second_tick,
+    )
+    assert converged.claimed_event_scopes == {event_id: "bounded"}
 
 
 def test_sync_variant_rejects_cross_incident_lineage_parent(
