@@ -273,15 +273,33 @@ def mint_account_variant_sync(
     if not clean_summary:
         raise ValueError("Account variant summary must be non-empty")
     cur.execute(
-        "SELECT world_event_id, scope FROM claims WHERE id = %s",
+        "SELECT world_event_id, scope FROM claims WHERE id = %s FOR SHARE",
         (source_claim_id,),
     )
     source = cur.fetchone()
     if source is None:
         raise ValueError(f"Source claim {source_claim_id} does not exist")
+    source_event_id = int(_row_value(source, "world_event_id", 0))
     parent_claim_id = (
         source_claim_id if distorted_from_claim_id is None else distorted_from_claim_id
     )
+    if distorted_from_claim_id is not None:
+        cur.execute(
+            "SELECT world_event_id FROM claims WHERE id = %s FOR SHARE",
+            (distorted_from_claim_id,),
+        )
+        parent = cur.fetchone()
+        if parent is None:
+            raise ValueError(
+                f"Lineage parent claim {distorted_from_claim_id} does not exist"
+            )
+        parent_event_id = int(_row_value(parent, "world_event_id", 0))
+        if parent_event_id != source_event_id:
+            raise ValueError(
+                f"Lineage parent claim {distorted_from_claim_id} belongs to world "
+                f"event {parent_event_id}; source claim {source_claim_id} belongs "
+                f"to world event {source_event_id}"
+            )
     payload_json = _account_payload_json(account_payload)
     cur.execute(
         """
@@ -292,7 +310,7 @@ def mint_account_variant_sync(
         RETURNING id
         """,
         (
-            _row_value(source, "world_event_id", 0),
+            source_event_id,
             clean_label,
             payload_json,
             parent_claim_id,
@@ -326,14 +344,30 @@ async def mint_account_variant_async(
     if not clean_summary:
         raise ValueError("Account variant summary must be non-empty")
     source = await conn.fetchrow(
-        "SELECT world_event_id, scope FROM claims WHERE id = $1",
+        "SELECT world_event_id, scope FROM claims WHERE id = $1 FOR SHARE",
         source_claim_id,
     )
     if source is None:
         raise ValueError(f"Source claim {source_claim_id} does not exist")
+    source_event_id = int(source["world_event_id"])
     parent_claim_id = (
         source_claim_id if distorted_from_claim_id is None else distorted_from_claim_id
     )
+    if distorted_from_claim_id is not None:
+        parent_event_id = await conn.fetchval(
+            "SELECT world_event_id FROM claims WHERE id = $1 FOR SHARE",
+            distorted_from_claim_id,
+        )
+        if parent_event_id is None:
+            raise ValueError(
+                f"Lineage parent claim {distorted_from_claim_id} does not exist"
+            )
+        if int(parent_event_id) != source_event_id:
+            raise ValueError(
+                f"Lineage parent claim {distorted_from_claim_id} belongs to world "
+                f"event {int(parent_event_id)}; source claim {source_claim_id} belongs "
+                f"to world event {source_event_id}"
+            )
     claim_id = await conn.fetchval(
         """
         INSERT INTO claims (
@@ -342,7 +376,7 @@ async def mint_account_variant_async(
         ) VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7)
         RETURNING id
         """,
-        source["world_event_id"],
+        source_event_id,
         clean_label,
         _account_payload_json(account_payload),
         parent_claim_id,
@@ -457,22 +491,50 @@ def record_revelation(
 
 
 def promote_claim_scope(cur: Any, *, claim_id: int, new_scope: str) -> None:
-    """Promote a common claim to bounded/private; reject every narrowing."""
+    """Promote every sibling account on an incident; reject every narrowing."""
 
     if new_scope not in CLAIM_SCOPES:
         raise ValueError(f"Unknown claim scope {new_scope!r}")
-    cur.execute("SELECT scope FROM claims WHERE id = %s FOR UPDATE", (claim_id,))
-    row = cur.fetchone()
-    if row is None:
+    cur.execute(
+        """
+        SELECT sibling.id, sibling.scope
+        FROM claims sibling
+        WHERE sibling.world_event_id = (
+            SELECT target.world_event_id
+            FROM claims target
+            WHERE target.id = %s
+        )
+        ORDER BY sibling.id
+        FOR UPDATE
+        """,
+        (claim_id,),
+    )
+    siblings = cur.fetchall()
+    if not siblings:
         raise ValueError(f"Claim {claim_id} does not exist")
-    current_scope = str(_row_value(row, "scope", 0))
-    if new_scope == current_scope:
-        return
-    if current_scope != "common" or new_scope == "common":
+    target = next(
+        (row for row in siblings if int(_row_value(row, "id", 0)) == claim_id),
+        None,
+    )
+    if target is None:
+        raise RuntimeError(f"Claim {claim_id} disappeared during scope promotion")
+    current_scope = str(_row_value(target, "scope", 1))
+    if new_scope != current_scope and (
+        current_scope != "common" or new_scope == "common"
+    ):
         raise ValueError(
             f"Illegal claim scope transition {current_scope!r} -> {new_scope!r}"
         )
-    cur.execute("UPDATE claims SET scope = %s WHERE id = %s", (new_scope, claim_id))
+    cur.execute(
+        """
+        UPDATE claims
+        SET scope = %s
+        WHERE world_event_id = (
+            SELECT world_event_id FROM claims WHERE id = %s
+        )
+        """,
+        (new_scope, claim_id),
+    )
 
 
 def load_epistemics_hydration(
@@ -639,6 +701,7 @@ def load_epistemics_hydration(
         """
     )
     claims: dict[int, dict[str, Any]] = {}
+    hydrated_scopes: dict[int, str] = {}
     for row in session.execute(
         claims_query,
         {
@@ -651,6 +714,14 @@ def load_epistemics_hydration(
         scope = str(row["scope"])
         if scope not in CLAIM_SCOPES:
             raise ValueError(f"Claim on event {event_id} has unknown scope {scope!r}")
+        previous_scope = hydrated_scopes.get(event_id)
+        if previous_scope is not None and previous_scope != scope:
+            raise ValueError(
+                "Sibling claims on event "
+                f"{event_id} have divergent scopes "
+                f"{previous_scope!r} and {scope!r}"
+            )
+        hydrated_scopes[event_id] = scope
         claims[claim_id] = {
             "world_event_id": event_id,
             "scope": scope,

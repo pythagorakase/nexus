@@ -19,6 +19,7 @@ from nexus.agents.orrery.epistemics import (
     mint_account_variant_async,
     mint_account_variant_sync,
     mint_claim_for_event,
+    promote_claim_scope,
 )
 from nexus.agents.orrery.propagation import drain_claim_propagation_sync
 from nexus.agents.orrery.substrate import (
@@ -126,6 +127,149 @@ def account_connection() -> Iterator[Any]:
         transaction.rollback()
         connection.close()
         engine.dispose()
+
+
+def _mint_sibling_incident(
+    cur: Any,
+    *,
+    label: str,
+    scope: str = "bounded",
+) -> tuple[int, int, int, int, int, int]:
+    """Mint one real event with canonical and variant account rows."""
+
+    actor, _actor_character = _insert_character(cur, f"{label}-actor")
+    target, _target_character = _insert_character(cur, f"{label}-target")
+    anchor, _world_time = _insert_chunk(cur)
+    cur.execute(
+        """
+        INSERT INTO world_events (
+            event_type, tick_chunk_id, actor_entity_id, target_entity_id,
+            world_layer, source, changed_fields, payload
+        ) VALUES (
+            'threat_issued', %s, %s, %s, 'primary',
+            'resolver', '{}', '{}'::jsonb
+        ) RETURNING id
+        """,
+        (anchor, actor, target),
+    )
+    event_id = int(cur.fetchone()["id"])
+    cur.execute(
+        """
+        INSERT INTO world_event_entities (event_id, role, entity_id)
+        VALUES (%s, 'actor', %s), (%s, 'target', %s)
+        """,
+        (event_id, actor, event_id, target),
+    )
+    canonical = mint_claim_for_event(
+        cur,
+        world_event_id=event_id,
+        event_type="threat_issued",
+        summary=f"Canonical account for {label}.",
+        participants=(
+            ClaimParticipant(actor, "actor", f"{label} actor"),
+            ClaimParticipant(target, "target", f"{label} target"),
+        ),
+        source_chunk_id=anchor,
+        source_resolution_id=None,
+        settings=EPISTEMICS,
+    )
+    assert canonical is not None
+    if scope != "bounded":
+        cur.execute(
+            "UPDATE claims SET scope = %s WHERE id = %s",
+            (scope, canonical.claim_id),
+        )
+    variant_id = mint_account_variant_sync(
+        cur,
+        source_claim_id=canonical.claim_id,
+        account_label=f"{label}-variant",
+        summary=f"Variant account for {label}.",
+        source_chunk_id=anchor,
+    )
+    return event_id, anchor, actor, target, canonical.claim_id, variant_id
+
+
+def test_scope_promotion_updates_every_sibling_and_hydrates_cleanly(
+    account_connection: Any,
+) -> None:
+    """Scope promotion is one locked incident mutation, not a claim mutation."""
+
+    raw_connection = account_connection.connection.driver_connection
+    with raw_connection.cursor(cursor_factory=RealDictCursor) as cur:
+        event_id, anchor, actor, target, canonical_id, _variant_id = (
+            _mint_sibling_incident(cur, label="scope-promotion", scope="common")
+        )
+        promote_claim_scope(cur, claim_id=canonical_id, new_scope="bounded")
+        cur.execute(
+            "SELECT scope FROM claims WHERE world_event_id = %s ORDER BY id",
+            (event_id,),
+        )
+        assert [row["scope"] for row in cur.fetchall()] == ["bounded", "bounded"]
+
+    hydration = load_epistemics_hydration(
+        account_connection,
+        entity_ids=(actor, target),
+        recent_event_ids=(event_id,),
+        anchor_chunk_id=anchor,
+    )
+    assert hydration.claimed_event_scopes == {event_id: "bounded"}
+
+
+def test_old_divergent_sibling_scopes_raise_during_hydration(
+    account_connection: Any,
+) -> None:
+    """A divergent incident cannot hide after it leaves the recent window."""
+
+    raw_connection = account_connection.connection.driver_connection
+    with raw_connection.cursor(cursor_factory=RealDictCursor) as cur:
+        event_id, anchor, actor, target, _canonical_id, variant_id = (
+            _mint_sibling_incident(cur, label="old-divergent")
+        )
+        cur.execute(
+            "UPDATE claims SET scope = 'common' WHERE id = %s",
+            (variant_id,),
+        )
+
+    with pytest.raises(ValueError, match="Sibling claims.*divergent scopes"):
+        load_epistemics_hydration(
+            account_connection,
+            entity_ids=(actor, target),
+            recent_event_ids=(),
+            anchor_chunk_id=anchor,
+        )
+
+
+def test_sync_variant_rejects_cross_incident_lineage_parent(
+    account_connection: Any,
+) -> None:
+    """The sync writer rejects missing and cross-incident lineage parents."""
+
+    raw_connection = account_connection.connection.driver_connection
+    with raw_connection.cursor(cursor_factory=RealDictCursor) as cur:
+        _event_a, anchor, _actor, _target, source_id, _variant_a = (
+            _mint_sibling_incident(cur, label="lineage-source")
+        )
+        _event_b, _anchor, _actor, _target, foreign_id, _variant_b = (
+            _mint_sibling_incident(cur, label="lineage-foreign")
+        )
+        with pytest.raises(ValueError, match="belongs to world event"):
+            mint_account_variant_sync(
+                cur,
+                source_claim_id=source_id,
+                account_label="cross-incident-parent",
+                summary="This lineage must be rejected.",
+                source_chunk_id=anchor,
+                distorted_from_claim_id=foreign_id,
+            )
+        with pytest.raises(ValueError, match="Lineage parent claim 999999"):
+            mint_account_variant_sync(
+                cur,
+                source_claim_id=source_id,
+                account_label="missing-parent",
+                summary="This lineage must also be rejected.",
+                source_chunk_id=anchor,
+                distorted_from_claim_id=999999,
+            )
 
 
 def test_sibling_accounts_hydrate_predicates_and_propagate_independently(
@@ -345,7 +489,8 @@ async def test_async_variant_primitive_uses_real_postgres() -> None:
                 knower_entity_id bigint NOT NULL
             );
             INSERT INTO claims (world_event_id, summary, scope)
-            VALUES (77, 'Async canonical account.', 'private');
+            VALUES (77, 'Async canonical account.', 'private'),
+                   (78, 'Foreign async canonical account.', 'private');
             """
         )
         await conn.execute(MIGRATION_SQL)
@@ -369,6 +514,24 @@ async def test_async_variant_primitive_uses_real_postgres() -> None:
             "SELECT count(*) FROM claim_awareness WHERE claim_id = $1",
             variant_id,
         )
+        with pytest.raises(ValueError, match="belongs to world event"):
+            await mint_account_variant_async(
+                conn,
+                source_claim_id=1,
+                account_label="async-cross-incident",
+                summary="This async lineage must be rejected.",
+                source_chunk_id=None,
+                distorted_from_claim_id=2,
+            )
+        with pytest.raises(ValueError, match="Lineage parent claim 999999"):
+            await mint_account_variant_async(
+                conn,
+                source_claim_id=1,
+                account_label="async-missing-parent",
+                summary="This async lineage must also be rejected.",
+                source_chunk_id=None,
+                distorted_from_claim_id=999999,
+            )
     finally:
         await transaction.rollback()
         await conn.close()
