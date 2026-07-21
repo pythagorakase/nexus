@@ -4,6 +4,7 @@ import subprocess
 import tomllib
 from copy import deepcopy
 from datetime import timedelta
+from decimal import Decimal
 
 import pytest
 from pydantic import ValidationError
@@ -14,6 +15,7 @@ from nexus.config.settings_models import (
     OrreryBleedSettings,
     OrreryContagionSettings,
     OrreryDashboardSettings,
+    OrreryDriftSettings,
     OrreryEpistemicsSettings,
     OrreryPromoteSettings,
     OrrerySettings,
@@ -86,6 +88,19 @@ def test_orrery_settings_resolve_model_reference() -> None:
     assert settings.orrery.projects.abandon_after_stalled_world_hours == 168.0
     assert settings.orrery.projects.milestone_magnitude == 0.40
     assert settings.orrery.projects.coverage_distribution_tolerance == 0.05
+    assert settings.orrery.drift.enabled is True
+    assert settings.orrery.drift.copresence_rate_per_hour == Decimal("0.001")
+    assert settings.orrery.drift.copresence_max_hours_per_tick == Decimal("12.0")
+    assert settings.orrery.drift.project_milestone_delta == Decimal("0.03")
+    assert settings.orrery.drift.hostile_events["retaliation_executed"] == Decimal(
+        "-0.06"
+    )
+    assert settings.orrery.drift.cooperative_events[
+        "protective_intervention"
+    ] == Decimal("0.04")
+    assert "relationship_drift_milestone" in (
+        settings.orrery.epistemics.claim_event_types
+    )
     # The ship-off invariant applies to the COMMITTED config: flipping the
     # dashboard on locally is a documented workflow (nexus.toml comment,
     # issue #415), and asserting the working tree here trains developers to
@@ -149,6 +164,77 @@ def test_epistemics_rejects_claim_propagated_as_claim_producer() -> None:
 
     with pytest.raises(ValidationError, match="claim_propagated cannot appear"):
         OrreryEpistemicsSettings(claim_event_types=["claim_propagated"])
+
+
+def test_drift_rejects_nonnegative_hostile_delta() -> None:
+    """Hostile classification mistakes fail during config validation."""
+
+    with pytest.raises(ValidationError, match="strictly negative"):
+        OrreryDriftSettings(hostile_events={"threat_issued": 0})
+
+
+def test_drift_event_maps_must_be_disjoint() -> None:
+    """The same event type in both maps would double-apply its deltas."""
+
+    with pytest.raises(ValidationError, match="must be disjoint"):
+        OrreryDriftSettings(
+            hostile_events={"threat_issued": Decimal("-0.02")},
+            cooperative_events={"threat_issued": Decimal("0.02")},
+        )
+
+
+def test_drift_rejects_nonpositive_cooperative_delta() -> None:
+    """Cooperative classification mistakes fail during config validation."""
+
+    with pytest.raises(ValidationError, match="strictly positive"):
+        OrreryDriftSettings(cooperative_events={"welfare_check": -0.1})
+
+
+def test_drift_defaults_off_when_block_is_absent() -> None:
+    """Legacy configs cannot silently opt into relationship drift."""
+
+    assert OrreryDriftSettings().enabled is False
+    payload = load_settings("nexus.toml").orrery.model_dump()
+    payload.pop("drift")
+    assert OrrerySettings.model_validate(payload).drift.enabled is False
+
+
+def test_drift_rejects_project_delta_at_or_above_one() -> None:
+    with pytest.raises(ValidationError, match="less than 1"):
+        OrreryDriftSettings(project_milestone_delta=1)
+
+
+def test_drift_rejects_hostile_delta_magnitude_at_or_above_one() -> None:
+    with pytest.raises(ValidationError, match="magnitudes must be < 1"):
+        OrreryDriftSettings(hostile_events={"threat_issued": -1})
+
+
+def test_drift_rejects_cooperative_delta_magnitude_at_or_above_one() -> None:
+    with pytest.raises(ValidationError, match="magnitudes must be < 1"):
+        OrreryDriftSettings(cooperative_events={"welfare_check": 1})
+
+
+def test_drift_rejects_copresence_tick_delta_at_or_above_one() -> None:
+    with pytest.raises(ValidationError, match=r"copresence_rate_per_hour \*"):
+        OrreryDriftSettings(
+            copresence_rate_per_hour=Decimal("0.1"),
+            copresence_max_hours_per_tick=Decimal("10"),
+        )
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "copresence_rate_per_hour",
+        "copresence_max_hours_per_tick",
+        "project_milestone_delta",
+    ],
+)
+def test_drift_rejects_nonpositive_rates(field: str) -> None:
+    """All relationship-drift rates must remain strictly positive."""
+
+    with pytest.raises(ValidationError, match="greater than 0"):
+        OrreryDriftSettings.model_validate({field: 0})
 
 
 def test_project_milestones_cannot_fall_below_promotion_floor() -> None:

@@ -427,7 +427,7 @@ def test_relationship_unwind_restores_updates_deletes_and_drops_inserts() -> Non
                     character1_id, character2_id, relationship_type,
                     emotional_valence, dynamic, recent_events, history,
                     created_at
-                ) VALUES (%s, %s, 'ally', 'neutral', 'probe', 'probe',
+                ) VALUES (%s, %s, 'ally', '0|neutral', 'probe', 'probe',
                           'probe', now() + interval '1 minute')
                 """,
                 (n1, n2),

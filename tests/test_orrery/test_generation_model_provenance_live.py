@@ -55,6 +55,21 @@ def provenance_db() -> Iterator[dict[str, Any]]:
             cur.execute(migration_sql)
             cur.execute(
                 """
+                INSERT INTO event_types (type, category, severity, description)
+                VALUES
+                    (
+                        'relationship_drift_milestone', 'emotional', 'minor',
+                        'Rollback-only migration-089 milestone event seed.'
+                    ),
+                    (
+                        'relationship_drift_drained', 'emotional', 'minor',
+                        'Rollback-only migration-089 drain event seed.'
+                    )
+                ON CONFLICT (type) DO NOTHING
+                """
+            )
+            cur.execute(
+                """
                 SELECT max(nc.id)
                 FROM narrative_chunks nc
                 JOIN chunk_metadata cm ON cm.chunk_id = nc.id
