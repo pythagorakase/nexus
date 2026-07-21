@@ -156,12 +156,4 @@ INSERT INTO tags (
     FALSE,
     'Character role: founder or operator of an opened business, workshop, or crew; bestowed when BUILD_VENTURE completes.'
 )
-ON CONFLICT (tag) DO UPDATE SET
-    category = EXCLUDED.category,
-    is_ephemeral = EXCLUDED.is_ephemeral,
-    clearance_kind = EXCLUDED.clearance_kind,
-    reapplication_policy = EXCLUDED.reapplication_policy,
-    clear_on = EXCLUDED.clear_on,
-    synonym_for = NULL,
-    deprecated = FALSE,
-    description = EXCLUDED.description;
+ON CONFLICT (tag) DO NOTHING;
