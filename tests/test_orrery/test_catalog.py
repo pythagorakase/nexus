@@ -58,6 +58,20 @@ def test_catalog_includes_every_branch() -> None:
             )
 
 
+def test_catalog_renders_build_venture_completion_vocabulary() -> None:
+    """The actor-only venture and its durable founder trace stay discoverable."""
+
+    content = render_catalog(BUILTIN_TEMPLATES)
+
+    assert "## START_BUILD_VENTURE — priority 17" in content
+    assert "## ADVANCE_BUILD_VENTURE — priority 47" in content
+    assert "actor `build_venture` project passes `completion` due-state" in content
+    assert (
+        "applies project `complete` transition; adds `proprietor` to actor" in content
+    )
+    assert "- `proprietor`" in content
+
+
 def test_catalog_renders_compound_structure() -> None:
     """AND / OR / NOT compositions appear as labeled nested bullets."""
 

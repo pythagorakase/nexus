@@ -1176,12 +1176,22 @@ _PROJECT_DUE_MODES = frozenset(
         "sealing_commitment",
         "sounding_out_milestone",
         "earning_trust_milestone",
+        "laying_groundwork",
+        "securing_backing",
+        "opening_doors",
+        "laying_groundwork_milestone",
+        "securing_backing_milestone",
     }
 )
 
 _PROJECT_STAGE_LADDERS = {
     "plan_relocation": ("saving", "scouting", "committing"),
     "recruit_ally": ("sounding_out", "earning_trust", "sealing_commitment"),
+    "build_venture": (
+        "laying_groundwork",
+        "securing_backing",
+        "opening_doors",
+    ),
 }
 
 
@@ -1282,6 +1292,18 @@ def project_due(
             return due and overdue_hours >= policy.advance_interval_hours
         if not due:
             return False
+        if project_type == "build_venture" and any(
+            target is not None
+            for target in (
+                project.target_place_id,
+                project.target_character_entity_id,
+                project.target_faction_entity_id,
+            )
+        ):
+            raise ValueError(
+                f"BUILD_VENTURE project {project.id} has an impossible target "
+                "projection"
+            )
         if normalized_mode in project_stages:
             return project.stage == normalized_mode
         if normalized_mode == f"{project_stages[0]}_milestone":
@@ -1293,23 +1315,33 @@ def project_due(
                 and project.target_place_id is None
             )
         if normalized_mode == f"{project_stages[1]}_milestone":
+            target_ready = (
+                project.target_place_id is not None
+                if project_type == "plan_relocation"
+                else (
+                    project.target_character_entity_id is not None
+                    if project_type == "recruit_ally"
+                    else True
+                )
+            )
             return (
                 project.stage == project_stages[1]
-                and (
-                    project.target_place_id is not None
-                    if project_type == "plan_relocation"
-                    else project.target_character_entity_id is not None
-                )
+                and target_ready
                 and project.progress >= 1.0
             )
         if normalized_mode == "completion":
+            target_ready = (
+                project.target_place_id is not None
+                if project_type == "plan_relocation"
+                else (
+                    project.target_character_entity_id is not None
+                    if project_type == "recruit_ally"
+                    else True
+                )
+            )
             return (
                 project.stage == project_stages[2]
-                and (
-                    project.target_place_id is not None
-                    if project_type == "plan_relocation"
-                    else project.target_character_entity_id is not None
-                )
+                and target_ready
                 and project.progress >= 1.0
             )
         raise AssertionError(f"Unhandled project_due mode {normalized_mode!r}")

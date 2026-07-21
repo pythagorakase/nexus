@@ -1658,6 +1658,49 @@ def _apply_pair_fanout_quota(
     return [draft for draft in drafts if id(draft) in surviving]
 
 
+def _project_start_template_ids(templates_list: list[Template]) -> frozenset[str]:
+    """Ids of templates with any branch that opens a project."""
+
+    return frozenset(
+        template.id
+        for template in templates_list
+        if any(
+            "project.start" in (branch.state_delta or {})
+            for branch in template.branches
+        )
+    )
+
+
+def _arbitrate_project_starts(
+    drafts: list[_FanoutDraftT],
+    templates_list: list[Template],
+) -> list[_FanoutDraftT]:
+    """Keep at most one project-start draft per actor.
+
+    Slot-signature stacks evaluate independently, so a single proposal can
+    hand one actor several ``project.start`` drafts — an actor-only start
+    plus a routed pair start, or one pair start per candidate target. The
+    one-open-project guard makes committing the second a hard abort of the
+    accepted chunk, so the proposal itself must arbitrate. Assembly order
+    is the deterministic precedence: actor-only stacks precede routed pair
+    stacks, and routes keep their composition order.
+    """
+
+    start_templates = _project_start_template_ids(templates_list)
+    if not start_templates:
+        return drafts
+    actors_with_start: set[Any] = set()
+    kept: list[_FanoutDraftT] = []
+    for draft in drafts:
+        if draft.template_id in start_templates:
+            actor = draft.bindings.get("actor")
+            if actor in actors_with_start:
+                continue
+            actors_with_start.add(actor)
+        kept.append(draft)
+    return kept
+
+
 def resolve_dry_run(
     session: Any,
     templates: Iterable[Template],
@@ -1885,6 +1928,7 @@ def resolve_dry_run(
         max_pair_drafts_per_actor=fanout.max_pair_drafts_per_actor,
         exempt_bands=fanout.exempt_bands,
     )
+    drafts = _arbitrate_project_starts(drafts, templates_list)
 
     # Resolve binding entity names so Skald's adjudication payload says WHO
     # each off-screen proposal is about; bare entity ids invite misattribution
