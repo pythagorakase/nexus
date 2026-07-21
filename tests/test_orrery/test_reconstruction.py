@@ -47,6 +47,7 @@ def _connect() -> Any:
     )
     with conn.cursor() as cur:
         cur.execute(Path("migrations/074_plan_relocation_projects.sql").read_text())
+        cur.execute("CREATE TEMP TABLE backstory_secrets (id bigint) ON COMMIT DROP")
     return conn
 
 
@@ -248,7 +249,8 @@ def test_migration_genesis_sections_mirror_checkpoint_sections() -> None:
     genesis = migration[migration.index("jsonb_build_object") :]
     additive = Path("migrations/074_plan_relocation_projects.sql").read_text()
     propagation = Path("migrations/083_claim_propagation_ledger.sql").read_text()
-    genesis_sources = genesis + additive + propagation
+    backstory = Path("migrations/091_backstory_secrets.sql").read_text()
+    genesis_sources = genesis + additive + propagation + backstory
     for section in CHECKPOINT_SECTIONS:
         assert (
             f"'{section}'" in genesis_sources
@@ -259,4 +261,6 @@ def test_migration_genesis_sections_mirror_checkpoint_sections() -> None:
     migration_sections.update(re.findall(r"'(character_project_states)', \(", additive))
     if "'claim_awareness'" in propagation:
         migration_sections.add("claim_awareness")
+    if "'backstory_secrets'" in backstory:
+        migration_sections.add("backstory_secrets")
     assert migration_sections == set(CHECKPOINT_SECTIONS)

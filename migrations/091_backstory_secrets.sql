@@ -1,6 +1,10 @@
 -- 091_backstory_secrets.sql
 --
 -- Durable template-authored reveal gates for time-release backstory claims.
+-- New checkpoint captures add the 'backstory_secrets' section in Python.
+-- Older checkpoint documents intentionally keep the key absent: replay treats
+-- that pre-091 shape as an empty section and skips cross-era verification,
+-- matching the additive checkpoint compatibility contract.
 
 CREATE TABLE backstory_secrets (
     id                      bigserial PRIMARY KEY,
@@ -70,4 +74,3 @@ VALUES
         'A latent backstory secret fired its authored reveal gate.'
     )
 ON CONFLICT (type) DO NOTHING;
-

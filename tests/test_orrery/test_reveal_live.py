@@ -13,13 +13,19 @@ import pytest
 from psycopg2.extras import RealDictCursor  # type: ignore[import-untyped]
 
 from nexus.agents.orrery.epistemics import (
+    author_backstory_secret_async,
     author_backstory_secret_sync,
     mint_account_variant_sync,
 )
 from nexus.agents.orrery.events import commit_orrery_tick_sync
 from nexus.agents.orrery.reveal import drain_backstory_reveals_sync
+from nexus.agents.orrery.reconstruction import capture_state_checkpoint_sync
+from nexus.agents.orrery.replay import verify_checkpoints_sync
 from nexus.agents.orrery.substrate import WorldState
 from nexus.api.slot_utils import get_slot_db_url
+from tests.test_orrery.claim_accounts_test_support import (
+    install_claim_accounts_shadow_async,
+)
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -122,6 +128,7 @@ def _insert_private_incident(
     *,
     source_chunk_id: int,
     scope: str = "private",
+    holder_aware: bool = True,
 ) -> tuple[int, int, tuple[int, int, int], int]:
     cur.execute("SELECT id FROM places ORDER BY id LIMIT 1")
     place_id = int(cur.fetchone()["id"])
@@ -160,14 +167,15 @@ def _insert_private_incident(
         (event_id, f"canonical-{uuid4().hex[:8]}", scope, source_chunk_id),
     )
     claim_id = int(cur.fetchone()["id"])
-    cur.execute(
-        """
-        INSERT INTO claim_awareness (
-            claim_id, knower_entity_id, source_tier, source_chunk_id
-        ) VALUES (%s, %s, 'participant', %s)
-        """,
-        (claim_id, holder, source_chunk_id),
-    )
+    if holder_aware:
+        cur.execute(
+            """
+            INSERT INTO claim_awareness (
+                claim_id, knower_entity_id, source_tier, source_chunk_id
+            ) VALUES (%s, %s, 'participant', %s)
+            """,
+            (claim_id, holder, source_chunk_id),
+        )
     return event_id, claim_id, (holder, first, second), place_id
 
 
@@ -199,6 +207,182 @@ def test_authoring_rejects_non_private_and_unregistered_gate(
                 holder_entity_id=private_participants[0],
                 source_chunk_id=source_chunk_id,
             )
+
+
+def test_authoring_grants_unpossessed_holder_and_reveal_completes(
+    live_conn: Any,
+) -> None:
+    with live_conn.cursor() as cur:
+        source_chunk_id, source_world_time = _insert_chunk(cur)
+        _, claim_id, participants, place_id = _insert_private_incident(
+            cur,
+            source_chunk_id=source_chunk_id,
+            holder_aware=False,
+        )
+        holder, first, second = participants
+        secret_id = author_backstory_secret_sync(
+            cur,
+            claim_id=claim_id,
+            gate_template_id="holder_death",
+            holder_entity_id=holder,
+            source_chunk_id=source_chunk_id,
+        )
+        cur.execute(
+            """
+            SELECT source_tier, immediate_source_entity_id,
+                   acquired_at_world_time, source_chunk_id
+            FROM claim_awareness
+            WHERE claim_id = %s AND knower_entity_id = %s
+            """,
+            (claim_id, holder),
+        )
+        assert cur.fetchone() == {
+            "source_tier": "granted",
+            "immediate_source_entity_id": None,
+            "acquired_at_world_time": source_world_time,
+            "source_chunk_id": source_chunk_id,
+        }
+        tick_chunk_id, tick_world_time = _insert_chunk(
+            cur,
+            time_delta=timedelta(hours=1),
+        )
+        result = drain_backstory_reveals_sync(
+            cur,
+            tick_chunk_id=tick_chunk_id,
+            settings={"enabled": True},
+            state=WorldState(
+                is_active={holder: False, first: True, second: True},
+                locations={holder: place_id, first: place_id, second: place_id},
+                world_time=tick_world_time,
+            ),
+        )
+        assert result.secret_ids == (secret_id,)
+        cur.execute(
+            "SELECT status FROM backstory_secrets WHERE id = %s",
+            (secret_id,),
+        )
+        assert cur.fetchone()["status"] == "revealed"
+        cur.execute(
+            """
+            SELECT knower_entity_id
+            FROM claim_awareness
+            WHERE claim_id = %s
+            ORDER BY knower_entity_id
+            """,
+            (claim_id,),
+        )
+        assert [row["knower_entity_id"] for row in cur.fetchall()] == sorted(
+            participants
+        )
+
+
+def test_async_authoring_grants_unpossessed_holder() -> None:
+    import asyncio
+
+    import asyncpg  # type: ignore[import-untyped]
+
+    async def run() -> None:
+        conn = await asyncpg.connect(get_slot_db_url(slot=5))
+        transaction = conn.transaction()
+        await transaction.start()
+        try:
+            schema = f"reveal_async_{uuid4().hex[:12]}"
+            await conn.execute(f'CREATE SCHEMA "{schema}"')
+            await conn.execute(f'SET LOCAL search_path = "{schema}", public')
+            await install_claim_accounts_shadow_async(conn)
+            await conn.execute(
+                """
+                DROP TABLE backstory_secrets;
+                CREATE TEMP TABLE backstory_secrets (
+                    id bigserial PRIMARY KEY,
+                    claim_id bigint NOT NULL UNIQUE,
+                    gate_template_id text NOT NULL,
+                    status text NOT NULL DEFAULT 'latent'
+                        CHECK (status IN ('latent', 'revealed', 'retired')),
+                    holder_entity_id bigint NOT NULL,
+                    source_chunk_id bigint,
+                    revealed_at_world_time timestamptz,
+                    revealed_by_chunk_id bigint,
+                    created_at timestamptz NOT NULL DEFAULT now()
+                ) ON COMMIT DROP;
+                INSERT INTO event_types (
+                    type, category, severity, description
+                ) VALUES (
+                    'backstory_secret_authored', 'revelation', 'minor',
+                    'Async rollback-only authoring fixture.'
+                ) ON CONFLICT (type) DO NOTHING;
+                """
+            )
+            clock = await conn.fetchrow(
+                """
+                SELECT metadata.chunk_id, metadata.world_time,
+                       entity.id AS holder_entity_id
+                FROM chunk_metadata metadata
+                CROSS JOIN LATERAL (
+                    SELECT id FROM entities WHERE kind = 'character'
+                    ORDER BY id LIMIT 1
+                ) entity
+                WHERE metadata.world_time IS NOT NULL
+                ORDER BY metadata.chunk_id DESC
+                LIMIT 1
+                """
+            )
+            assert clock is not None
+            event_id = await conn.fetchval(
+                """
+                INSERT INTO world_events (
+                    event_type, tick_chunk_id, actor_entity_id, world_layer,
+                    source, changed_fields, payload
+                ) VALUES (
+                    'threat_issued', $1, $2, 'primary',
+                    'authored', '{}', '{}'::jsonb
+                )
+                RETURNING id
+                """,
+                clock["chunk_id"],
+                clock["holder_entity_id"],
+            )
+            claim_id = await conn.fetchval(
+                """
+                INSERT INTO claims (
+                    world_event_id, account_label, summary, scope,
+                    source_chunk_id
+                ) VALUES ($1, $2, 'Async holder grant fixture.', 'private', $3)
+                RETURNING id
+                """,
+                event_id,
+                f"async-secret-{uuid4().hex[:8]}",
+                clock["chunk_id"],
+            )
+            await author_backstory_secret_async(
+                conn,
+                claim_id=int(claim_id),
+                gate_template_id="holder_death",
+                holder_entity_id=int(clock["holder_entity_id"]),
+                source_chunk_id=int(clock["chunk_id"]),
+            )
+            awareness = await conn.fetchrow(
+                """
+                SELECT source_tier, immediate_source_entity_id,
+                       acquired_at_world_time, source_chunk_id
+                FROM claim_awareness
+                WHERE claim_id = $1 AND knower_entity_id = $2
+                """,
+                claim_id,
+                clock["holder_entity_id"],
+            )
+            assert awareness is not None
+            assert dict(awareness) == {
+                "source_tier": "granted",
+                "immediate_source_entity_id": None,
+                "acquired_at_world_time": clock["world_time"],
+                "source_chunk_id": clock["chunk_id"],
+            }
+        finally:
+            await transaction.rollback()
+            await conn.close()
+
+    asyncio.run(run())
 
 
 def test_commit_reveals_promotes_grants_once_and_redrain_is_noop(
@@ -375,3 +559,115 @@ def test_world_layer_and_disabled_config_leave_secret_latent(
         assert result.revealed_count == 0
         cur.execute("SELECT status FROM backstory_secrets WHERE id = %s", (secret_id,))
         assert cur.fetchone()["status"] == "latent"
+
+
+def test_authored_and_revealed_secrets_replay_between_checkpoints(
+    live_conn: Any,
+) -> None:
+    with live_conn.cursor() as cur:
+        base_chunk, _ = _insert_chunk(cur)
+        _, claim_id, participants, _ = _insert_private_incident(
+            cur,
+            source_chunk_id=base_chunk,
+        )
+        holder = participants[0]
+        base_id = capture_state_checkpoint_sync(
+            cur,
+            chunk_id=base_chunk,
+            label="manual",
+        )
+        assert base_id is not None
+
+        authored_chunk, _ = _insert_chunk(cur, time_delta=timedelta(hours=1))
+        secret_id = author_backstory_secret_sync(
+            cur,
+            claim_id=claim_id,
+            gate_template_id="holder_death",
+            holder_entity_id=holder,
+            source_chunk_id=authored_chunk,
+        )
+        authored_checkpoint_id = capture_state_checkpoint_sync(
+            cur,
+            chunk_id=authored_chunk,
+            label="manual",
+        )
+        assert authored_checkpoint_id is not None
+
+        reveal_chunk, _ = _insert_chunk(cur, time_delta=timedelta(hours=1))
+        result = drain_backstory_reveals_sync(
+            cur,
+            tick_chunk_id=reveal_chunk,
+            settings={"enabled": True},
+            state=WorldState(is_active={holder: False}),
+        )
+        assert result.secret_ids == (secret_id,)
+        revealed_checkpoint_id = capture_state_checkpoint_sync(
+            cur,
+            chunk_id=reveal_chunk,
+            label="manual",
+        )
+        assert revealed_checkpoint_id is not None
+
+    with live_conn.cursor(cursor_factory=psycopg2.extensions.cursor) as cur:
+        verdicts = verify_checkpoints_sync(cur)
+
+    authored_verdict = next(
+        verdict
+        for verdict in verdicts
+        if verdict.base_checkpoint_id == base_id
+        and verdict.target_checkpoint_id == authored_checkpoint_id
+    )
+    revealed_verdict = next(
+        verdict
+        for verdict in verdicts
+        if verdict.base_checkpoint_id == authored_checkpoint_id
+        and verdict.target_checkpoint_id == revealed_checkpoint_id
+    )
+    assert not [
+        drift
+        for verdict in (authored_verdict, revealed_verdict)
+        for drift in verdict.drifts
+        if drift.section == "backstory_secrets"
+    ]
+
+
+def test_verify_skips_checkpoint_that_predates_backstory_section(
+    live_conn: Any,
+) -> None:
+    with live_conn.cursor() as cur:
+        base_chunk, _ = _insert_chunk(cur)
+        base_id = capture_state_checkpoint_sync(
+            cur,
+            chunk_id=base_chunk,
+            label="manual",
+        )
+        assert base_id is not None
+        cur.execute(
+            "UPDATE state_checkpoints SET state = state - 'backstory_secrets' "
+            "WHERE id = %s",
+            (base_id,),
+        )
+        target_chunk, _ = _insert_chunk(cur, time_delta=timedelta(hours=1))
+        target_id = capture_state_checkpoint_sync(
+            cur,
+            chunk_id=target_chunk,
+            label="manual",
+        )
+        assert target_id is not None
+
+    with live_conn.cursor(cursor_factory=psycopg2.extensions.cursor) as cur:
+        verdicts = verify_checkpoints_sync(cur)
+
+    verdict = next(
+        item
+        for item in verdicts
+        if item.base_checkpoint_id == base_id and item.target_checkpoint_id == target_id
+    )
+    assert not [
+        drift for drift in verdict.drifts if drift.section == "backstory_secrets"
+    ]
+    assert verdict.skipped_unreproducible >= 1
+    assert any(
+        "comparison skipped" in note
+        for note in verdict.notes.get("backstory_secrets", [])
+    )

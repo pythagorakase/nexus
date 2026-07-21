@@ -451,6 +451,13 @@ def author_backstory_secret_sync(
         (claim_id, gate_template_id, holder_entity_id, source_chunk_id),
     )
     secret_id = int(_row_value(cur.fetchone(), "id", 0))
+    record_revelation(
+        cur,
+        claim_id=claim_id,
+        knower_entity_id=holder_entity_id,
+        world_time=_row_value(clock, "world_time", 0),
+        source_chunk_id=source_chunk_id,
+    )
     payload = json.dumps(
         {
             "claim_id": claim_id,
@@ -529,6 +536,13 @@ async def author_backstory_secret_async(
         gate_template_id,
         holder_entity_id,
         source_chunk_id,
+    )
+    await record_revelation_async(
+        conn,
+        claim_id=claim_id,
+        knower_entity_id=holder_entity_id,
+        world_time=clock["world_time"],
+        source_chunk_id=source_chunk_id,
     )
     payload = json.dumps(
         {
@@ -726,21 +740,25 @@ async def record_revelation_async(
 
 
 def promote_claim_scope(cur: Any, *, claim_id: int, new_scope: str) -> None:
-    """Move every sibling account into bounded spreadability, idempotently."""
+    """Move promotable sibling accounts into bounded spreadability."""
 
     if new_scope not in CLAIM_SCOPES:
         raise ValueError(f"Unknown claim scope {new_scope!r}")
+    # Keep this latent-secret filter aligned with _merge_sibling_scope below:
+    # hydration permits exactly the temporary divergence created here.
     cur.execute(
         """
         SELECT sibling.id, sibling.scope
-        FROM claims sibling
-        WHERE sibling.world_event_id = (
-            SELECT target.world_event_id
-            FROM claims target
-            WHERE target.id = %s
-        )
+        FROM claims target
+        JOIN claims sibling
+          ON sibling.world_event_id = target.world_event_id
+        LEFT JOIN backstory_secrets latent_secret
+          ON latent_secret.claim_id = sibling.id
+         AND latent_secret.status = 'latent'
+        WHERE target.id = %s
+          AND latent_secret.id IS NULL
         ORDER BY sibling.id
-        FOR UPDATE
+        FOR UPDATE OF sibling
         """,
         (claim_id,),
     )
@@ -760,13 +778,23 @@ def promote_claim_scope(cur: Any, *, claim_id: int, new_scope: str) -> None:
         )
     cur.execute(
         """
-        UPDATE claims
-        SET scope = %s
-        WHERE world_event_id = (
-            SELECT world_event_id FROM claims WHERE id = %s
+        WITH promotable AS (
+            SELECT sibling.id
+            FROM claims target
+            JOIN claims sibling
+              ON sibling.world_event_id = target.world_event_id
+            LEFT JOIN backstory_secrets latent_secret
+              ON latent_secret.claim_id = sibling.id
+             AND latent_secret.status = 'latent'
+            WHERE target.id = %s
+              AND latent_secret.id IS NULL
         )
+        UPDATE claims promoted
+        SET scope = %s
+        FROM promotable
+        WHERE promoted.id = promotable.id
         """,
-        (new_scope, claim_id),
+        (claim_id, new_scope),
     )
 
 
@@ -777,17 +805,20 @@ async def promote_claim_scope_async(
 
     if new_scope not in CLAIM_SCOPES:
         raise ValueError(f"Unknown claim scope {new_scope!r}")
+    # Async parity for the promotion/hydration contract documented above.
     siblings = await conn.fetch(
         """
         SELECT sibling.id, sibling.scope
-        FROM claims sibling
-        WHERE sibling.world_event_id = (
-            SELECT target.world_event_id
-            FROM claims target
-            WHERE target.id = $1
-        )
+        FROM claims target
+        JOIN claims sibling
+          ON sibling.world_event_id = target.world_event_id
+        LEFT JOIN backstory_secrets latent_secret
+          ON latent_secret.claim_id = sibling.id
+         AND latent_secret.status = 'latent'
+        WHERE target.id = $1
+          AND latent_secret.id IS NULL
         ORDER BY sibling.id
-        FOR UPDATE
+        FOR UPDATE OF sibling
         """,
         claim_id,
     )
@@ -803,14 +834,51 @@ async def promote_claim_scope_async(
         )
     await conn.execute(
         """
-        UPDATE claims
-        SET scope = $1
-        WHERE world_event_id = (
-            SELECT world_event_id FROM claims WHERE id = $2
+        WITH promotable AS (
+            SELECT sibling.id
+            FROM claims target
+            JOIN claims sibling
+              ON sibling.world_event_id = target.world_event_id
+            LEFT JOIN backstory_secrets latent_secret
+              ON latent_secret.claim_id = sibling.id
+             AND latent_secret.status = 'latent'
+            WHERE target.id = $1
+              AND latent_secret.id IS NULL
         )
+        UPDATE claims promoted
+        SET scope = $2
+        FROM promotable
+        WHERE promoted.id = promotable.id
         """,
-        new_scope,
         claim_id,
+        new_scope,
+    )
+
+
+def _merge_sibling_scope(
+    *,
+    event_id: int,
+    rows: list[tuple[str, bool]],
+) -> str:
+    """Validate one incident's sibling scopes and return its shared scope."""
+
+    scopes = {scope for scope, _is_latent_secret in rows}
+    if len(scopes) == 1:
+        return next(iter(scopes))
+
+    # Keep this exact exemption aligned with promote_claim_scope above: that
+    # writer skips private claims bound to latent backstory secrets so one
+    # reveal cannot expose a sibling whose own gate has not fired.
+    exempt_private = scopes == {"bounded", "private"} and all(
+        is_latent_secret for scope, is_latent_secret in rows if scope == "private"
+    )
+    if exempt_private:
+        return "bounded"
+    raise ValueError(
+        "Sibling claims on event "
+        f"{event_id} have divergent scopes {sorted(scopes)!r}; only a private "
+        "claim bound to a latent backstory secret may coexist with bounded "
+        "siblings"
     )
 
 
@@ -845,14 +913,43 @@ def load_epistemics_hydration(
             possessed_claim_knowledge_by_entity={},
         )
 
+    availability = (
+        session.execute(
+            text(
+                """
+                /* orrery:epistemics_hydration:backstory_availability */
+                SELECT to_regclass('backstory_secrets') IS NOT NULL AS available
+                """
+            )
+        )
+        .mappings()
+        .first()
+    )
+    backstory_available = bool(availability and availability["available"])
+    # A pre-091 schema cannot contain latent backstory bindings. Rendering a
+    # literal false keeps all divergence shapes loud until the table exists.
+    latent_secret_flag = (
+        """
+        EXISTS (
+            SELECT 1
+            FROM backstory_secrets latent_secret
+            WHERE latent_secret.claim_id = c.id
+              AND latent_secret.status = 'latent'
+        )
+        """
+        if backstory_available
+        else "false"
+    )
+
     scopes: dict[int, str] = {}
     if recent_events:
         scope_query = text(
-            """
+            f"""
             /* orrery:epistemics_hydration:recent_event_scopes */
             SELECT c.id AS claim_id,
                    c.world_event_id,
-                   c.scope
+                   c.scope,
+                   {latent_secret_flag} AS is_latent_backstory_secret
             FROM claims c
             JOIN world_events we ON we.id = c.world_event_id
             WHERE c.world_event_id = ANY(:recent_event_ids)
@@ -861,6 +958,7 @@ def load_epistemics_hydration(
             ORDER BY c.world_event_id, c.id
             """
         )
+        scope_rows_by_event: dict[int, list[tuple[str, bool]]] = {}
         for row in session.execute(
             scope_query,
             {
@@ -874,18 +972,17 @@ def load_epistemics_hydration(
                 raise ValueError(
                     f"Claim on event {event_id} has unknown scope {scope!r}"
                 )
-            previous_scope = scopes.get(event_id)
-            if previous_scope is not None and previous_scope != scope:
-                raise ValueError(
-                    "Sibling claims on event "
-                    f"{event_id} have divergent scopes "
-                    f"{previous_scope!r} and {scope!r}"
-                )
+            scope_rows_by_event.setdefault(event_id, []).append(
+                (scope, bool(row.get("is_latent_backstory_secret", False)))
+            )
+        for event_id, sibling_rows in scope_rows_by_event.items():
             # Legacy recent-event predicates are incident-level: possession
             # of any sibling account admits the shared event. Account-aware
-            # predicates remain claim-id keyed below. Variant minting copies
-            # scope, and divergent later mutations fail loudly above.
-            scopes[event_id] = scope
+            # predicates remain claim-id keyed below.
+            scopes[event_id] = _merge_sibling_scope(
+                event_id=event_id,
+                rows=sibling_rows,
+            )
 
     if not universe:
         return EpistemicsHydration(
@@ -897,7 +994,7 @@ def load_epistemics_hydration(
         )
 
     claims_query = text(
-        """
+        f"""
         /* orrery:epistemics_hydration:claims */
         WITH anchor AS (
             SELECT created_at
@@ -964,6 +1061,7 @@ def load_epistemics_hydration(
         SELECT c.id AS claim_id,
                c.world_event_id,
                c.scope,
+               {latent_secret_flag} AS is_latent_backstory_secret,
                COALESCE(
                    about.about_entity_ids,
                    ARRAY[]::bigint[]
@@ -978,7 +1076,7 @@ def load_epistemics_hydration(
         """
     )
     claims: dict[int, dict[str, Any]] = {}
-    hydrated_scopes: dict[int, str] = {}
+    hydrated_scope_rows: dict[int, list[tuple[str, bool]]] = {}
     for row in session.execute(
         claims_query,
         {
@@ -991,14 +1089,9 @@ def load_epistemics_hydration(
         scope = str(row["scope"])
         if scope not in CLAIM_SCOPES:
             raise ValueError(f"Claim on event {event_id} has unknown scope {scope!r}")
-        previous_scope = hydrated_scopes.get(event_id)
-        if previous_scope is not None and previous_scope != scope:
-            raise ValueError(
-                "Sibling claims on event "
-                f"{event_id} have divergent scopes "
-                f"{previous_scope!r} and {scope!r}"
-            )
-        hydrated_scopes[event_id] = scope
+        hydrated_scope_rows.setdefault(event_id, []).append(
+            (scope, bool(row.get("is_latent_backstory_secret", False)))
+        )
         claims[claim_id] = {
             "world_event_id": event_id,
             "scope": scope,
@@ -1006,6 +1099,8 @@ def load_epistemics_hydration(
                 int(entity_id) for entity_id in (row["about_entity_ids"] or ())
             ),
         }
+    for event_id, sibling_rows in hydrated_scope_rows.items():
+        _merge_sibling_scope(event_id=event_id, rows=sibling_rows)
 
     awareness: dict[int, set[int]] = {}
     awareness_rows: dict[tuple[int, int], dict[str, Any]] = {}

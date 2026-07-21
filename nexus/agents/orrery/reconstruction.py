@@ -139,7 +139,13 @@ CHECKPOINT_SECTIONS: dict[str, str] = {
     "claim_awareness": (
         "SELECT coalesce(jsonb_agg(to_jsonb(t)), '[]'::jsonb) " "FROM claim_awareness t"
     ),
+    "backstory_secrets": (
+        "SELECT coalesce(jsonb_agg(to_jsonb(t)), '[]'::jsonb) "
+        "FROM backstory_secrets t"
+    ),
 }
+
+_ADDITIVE_CHECKPOINT_TABLES = {"backstory_secrets": "backstory_secrets"}
 
 CHECKPOINT_LABELS = ("genesis", "interval", "manual")
 
@@ -165,6 +171,17 @@ def capture_state_checkpoint_sync(
     _validate_label(label)
     state: dict[str, Any] = {}
     for section, sql in CHECKPOINT_SECTIONS.items():
+        additive_table = _ADDITIVE_CHECKPOINT_TABLES.get(section)
+        if additive_table is not None:
+            cur.execute(
+                "SELECT to_regclass(%s) AS checkpoint_table",
+                (additive_table,),
+            )
+            if row_get(cur.fetchone(), "checkpoint_table", 0) is None:
+                # A genuinely pre-migration schema produces a pre-migration
+                # checkpoint document. Replay treats the absent key as the
+                # explicit cross-era compatibility boundary.
+                continue
         cur.execute(sql)
         row = cur.fetchone()
         state[section] = row[0] if not hasattr(row, "keys") else list(row.values())[0]
@@ -190,6 +207,12 @@ async def capture_state_checkpoint_async(
     _validate_label(label)
     state: dict[str, Any] = {}
     for section, sql in CHECKPOINT_SECTIONS.items():
+        additive_table = _ADDITIVE_CHECKPOINT_TABLES.get(section)
+        if (
+            additive_table is not None
+            and await conn.fetchval("SELECT to_regclass($1)", additive_table) is None
+        ):
+            continue
         value = await conn.fetchval(sql)
         state[section] = json.loads(value) if isinstance(value, str) else value
     return await conn.fetchval(

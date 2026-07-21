@@ -164,6 +164,8 @@ class FakeSession:
 
     def execute(self, statement, _params=None):
         sql = str(statement)
+        if "/* orrery:epistemics_hydration:backstory_availability */" in sql:
+            return FakeResult([{"available": True}])
         if "/* orrery:entity_activity */" in sql:
             assert "SELECT id, is_active" in sql
             assert "ORDER BY id" in sql

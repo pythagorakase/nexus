@@ -469,7 +469,11 @@ def _co_located_participants(
     return tuple(
         participant_id
         for participant_id in secret.participant_entity_ids
-        if state.locations.get(participant_id) == holder_location
+        # The holder is trivially co-located with themselves; without this
+        # exclusion the drain would record a self-revelation (both gate
+        # functions apply the same filter before consuming this list).
+        if participant_id != secret.holder_entity_id
+        and state.locations.get(participant_id) == holder_location
         and not _in_transit(state, participant_id)
     )
 

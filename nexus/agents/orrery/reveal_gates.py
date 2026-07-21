@@ -28,7 +28,11 @@ RevealGate = Callable[[WorldState, SecretContext], bool]
 def holder_death(state: WorldState, context: SecretContext) -> bool:
     """Reveal a secret when its keeper can no longer keep it in the world."""
 
-    return not state.is_active.get(context.holder_entity_id, False)
+    if context.holder_entity_id not in state.is_active:
+        # Irreversible reveals require positive evidence; missing activity is
+        # unknown, not proof that the holder is dead.
+        return False
+    return not state.is_active[context.holder_entity_id]
 
 
 def participants_reunited(state: WorldState, context: SecretContext) -> bool:

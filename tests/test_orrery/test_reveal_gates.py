@@ -32,6 +32,7 @@ def context() -> SecretContext:
 
 
 def test_holder_death_fires_only_for_inactive_holder(context: SecretContext) -> None:
+    assert holder_death(WorldState(is_active={}), context) is False
     assert holder_death(WorldState(is_active={HOLDER: False}), context) is True
     assert holder_death(WorldState(is_active={HOLDER: True}), context) is False
 
