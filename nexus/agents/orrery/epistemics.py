@@ -404,6 +404,161 @@ def _account_payload_json(
     )
 
 
+def author_backstory_secret_sync(
+    cur: Any,
+    *,
+    claim_id: int,
+    gate_template_id: str,
+    holder_entity_id: int,
+    source_chunk_id: int,
+) -> int:
+    """Author one private claim as a durable template-gated secret."""
+
+    from nexus.agents.orrery.reveal_gates import REVEAL_GATES
+
+    cur.execute("SELECT scope FROM claims WHERE id = %s", (claim_id,))
+    claim = cur.fetchone()
+    if claim is None:
+        raise ValueError(f"Claim {claim_id} does not exist")
+    scope = str(_row_value(claim, "scope", 0))
+    if scope != "private":
+        raise ValueError(
+            f"Backstory secret claim {claim_id} must be private, not {scope!r}"
+        )
+    if gate_template_id not in REVEAL_GATES:
+        raise ValueError(f"Unregistered reveal gate {gate_template_id!r}")
+    cur.execute("SELECT 1 FROM entities WHERE id = %s", (holder_entity_id,))
+    if cur.fetchone() is None:
+        raise ValueError(f"Secret holder entity {holder_entity_id} does not exist")
+    cur.execute(
+        """
+        SELECT world_time, world_layer::text AS world_layer
+        FROM chunk_metadata
+        WHERE chunk_id = %s
+        """,
+        (source_chunk_id,),
+    )
+    clock = cur.fetchone()
+    if clock is None:
+        raise ValueError(f"Secret source chunk {source_chunk_id} has no metadata")
+    cur.execute(
+        """
+        INSERT INTO backstory_secrets (
+            claim_id, gate_template_id, holder_entity_id, source_chunk_id
+        ) VALUES (%s, %s, %s, %s)
+        RETURNING id
+        """,
+        (claim_id, gate_template_id, holder_entity_id, source_chunk_id),
+    )
+    secret_id = int(_row_value(cur.fetchone(), "id", 0))
+    payload = json.dumps(
+        {
+            "claim_id": claim_id,
+            "gate_template_id": gate_template_id,
+            "holder_entity_id": holder_entity_id,
+            "secret_id": secret_id,
+        },
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    cur.execute(
+        """
+        INSERT INTO world_events (
+            event_type, tick_chunk_id, actor_entity_id, world_layer, source,
+            changed_fields, payload, world_time
+        ) VALUES (
+            'backstory_secret_authored', %s, %s, %s::world_layer_type,
+            'authored', ARRAY['backstory_secrets']::text[], %s::jsonb, %s
+        )
+        """,
+        (
+            source_chunk_id,
+            holder_entity_id,
+            _row_value(clock, "world_layer", 1),
+            payload,
+            _row_value(clock, "world_time", 0),
+        ),
+    )
+    return secret_id
+
+
+async def author_backstory_secret_async(
+    conn: Any,
+    *,
+    claim_id: int,
+    gate_template_id: str,
+    holder_entity_id: int,
+    source_chunk_id: int,
+) -> int:
+    """Asyncpg twin of :func:`author_backstory_secret_sync`."""
+
+    from nexus.agents.orrery.reveal_gates import REVEAL_GATES
+
+    scope = await conn.fetchval("SELECT scope FROM claims WHERE id = $1", claim_id)
+    if scope is None:
+        raise ValueError(f"Claim {claim_id} does not exist")
+    if str(scope) != "private":
+        raise ValueError(
+            f"Backstory secret claim {claim_id} must be private, not {str(scope)!r}"
+        )
+    if gate_template_id not in REVEAL_GATES:
+        raise ValueError(f"Unregistered reveal gate {gate_template_id!r}")
+    holder_exists = await conn.fetchval(
+        "SELECT EXISTS (SELECT 1 FROM entities WHERE id = $1)", holder_entity_id
+    )
+    if not holder_exists:
+        raise ValueError(f"Secret holder entity {holder_entity_id} does not exist")
+    clock = await conn.fetchrow(
+        """
+        SELECT world_time, world_layer::text AS world_layer
+        FROM chunk_metadata
+        WHERE chunk_id = $1
+        """,
+        source_chunk_id,
+    )
+    if clock is None:
+        raise ValueError(f"Secret source chunk {source_chunk_id} has no metadata")
+    secret_id = await conn.fetchval(
+        """
+        INSERT INTO backstory_secrets (
+            claim_id, gate_template_id, holder_entity_id, source_chunk_id
+        ) VALUES ($1, $2, $3, $4)
+        RETURNING id
+        """,
+        claim_id,
+        gate_template_id,
+        holder_entity_id,
+        source_chunk_id,
+    )
+    payload = json.dumps(
+        {
+            "claim_id": claim_id,
+            "gate_template_id": gate_template_id,
+            "holder_entity_id": holder_entity_id,
+            "secret_id": int(secret_id),
+        },
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    await conn.execute(
+        """
+        INSERT INTO world_events (
+            event_type, tick_chunk_id, actor_entity_id, world_layer, source,
+            changed_fields, payload, world_time
+        ) VALUES (
+            'backstory_secret_authored', $1, $2, $3::world_layer_type,
+            'authored', ARRAY['backstory_secrets']::text[], $4::jsonb, $5
+        )
+        """,
+        source_chunk_id,
+        holder_entity_id,
+        clock["world_layer"],
+        payload,
+        clock["world_time"],
+    )
+    return int(secret_id)
+
+
 def record_revelation(
     cur: Any,
     *,
@@ -490,8 +645,88 @@ def record_revelation(
     )
 
 
+async def record_revelation_async(
+    conn: Any,
+    *,
+    claim_id: int,
+    knower_entity_id: int,
+    source_entity_id: Optional[int] = None,
+    channel: Optional[str] = None,
+    world_time: Optional[datetime] = None,
+    source_chunk_id: Optional[int] = None,
+) -> RevelationResult:
+    """Asyncpg twin of :func:`record_revelation`."""
+
+    source_tier = "told" if source_entity_id is not None else "granted"
+    root_source_entity_id = None
+    if source_entity_id is not None:
+        scope = await conn.fetchval("SELECT scope FROM claims WHERE id = $1", claim_id)
+        if scope is None:
+            raise ValueError(f"Claim {claim_id} does not exist")
+        if str(scope) == "common":
+            root_source_entity_id = source_entity_id
+        else:
+            source_awareness = await conn.fetchrow(
+                """
+                SELECT root_source_entity_id
+                FROM claim_awareness
+                WHERE claim_id = $1 AND knower_entity_id = $2
+                """,
+                claim_id,
+                source_entity_id,
+            )
+            if source_awareness is None:
+                raise ValueError(
+                    f"Entity {source_entity_id} cannot reveal claim {claim_id}: "
+                    "the teller does not possess it"
+                )
+            inherited_root = source_awareness["root_source_entity_id"]
+            root_source_entity_id = (
+                int(inherited_root) if inherited_root is not None else source_entity_id
+            )
+    row = await conn.fetchrow(
+        """
+        INSERT INTO claim_awareness (
+            claim_id, knower_entity_id, source_tier,
+            immediate_source_entity_id, root_source_entity_id, channel,
+            acquired_at_world_time, source_chunk_id
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        ON CONFLICT (claim_id, knower_entity_id) DO NOTHING
+        RETURNING id, source_tier
+        """,
+        claim_id,
+        knower_entity_id,
+        source_tier,
+        source_entity_id,
+        root_source_entity_id,
+        channel,
+        world_time,
+        source_chunk_id,
+    )
+    inserted = row is not None
+    if row is None:
+        row = await conn.fetchrow(
+            """
+            SELECT id, source_tier FROM claim_awareness
+            WHERE claim_id = $1 AND knower_entity_id = $2
+            """,
+            claim_id,
+            knower_entity_id,
+        )
+        if row is None:
+            raise RuntimeError(
+                "Awareness conflict did not resolve to an existing row for "
+                f"claim {claim_id}, entity {knower_entity_id}"
+            )
+    return RevelationResult(
+        awareness_id=int(row["id"]),
+        source_tier=str(row["source_tier"]),
+        inserted=inserted,
+    )
+
+
 def promote_claim_scope(cur: Any, *, claim_id: int, new_scope: str) -> None:
-    """Promote every sibling account on an incident; reject every narrowing."""
+    """Move every sibling account into bounded spreadability, idempotently."""
 
     if new_scope not in CLAIM_SCOPES:
         raise ValueError(f"Unknown claim scope {new_scope!r}")
@@ -519,9 +754,7 @@ def promote_claim_scope(cur: Any, *, claim_id: int, new_scope: str) -> None:
     if target is None:
         raise RuntimeError(f"Claim {claim_id} disappeared during scope promotion")
     current_scope = str(_row_value(target, "scope", 1))
-    if new_scope != current_scope and (
-        current_scope != "common" or new_scope == "common"
-    ):
+    if new_scope != current_scope and new_scope != "bounded":
         raise ValueError(
             f"Illegal claim scope transition {current_scope!r} -> {new_scope!r}"
         )
@@ -534,6 +767,50 @@ def promote_claim_scope(cur: Any, *, claim_id: int, new_scope: str) -> None:
         )
         """,
         (new_scope, claim_id),
+    )
+
+
+async def promote_claim_scope_async(
+    conn: Any, *, claim_id: int, new_scope: str
+) -> None:
+    """Asyncpg twin of :func:`promote_claim_scope`."""
+
+    if new_scope not in CLAIM_SCOPES:
+        raise ValueError(f"Unknown claim scope {new_scope!r}")
+    siblings = await conn.fetch(
+        """
+        SELECT sibling.id, sibling.scope
+        FROM claims sibling
+        WHERE sibling.world_event_id = (
+            SELECT target.world_event_id
+            FROM claims target
+            WHERE target.id = $1
+        )
+        ORDER BY sibling.id
+        FOR UPDATE
+        """,
+        claim_id,
+    )
+    if not siblings:
+        raise ValueError(f"Claim {claim_id} does not exist")
+    target = next((row for row in siblings if int(row["id"]) == claim_id), None)
+    if target is None:
+        raise RuntimeError(f"Claim {claim_id} disappeared during scope promotion")
+    current_scope = str(target["scope"])
+    if new_scope != current_scope and new_scope != "bounded":
+        raise ValueError(
+            f"Illegal claim scope transition {current_scope!r} -> {new_scope!r}"
+        )
+    await conn.execute(
+        """
+        UPDATE claims
+        SET scope = $1
+        WHERE world_event_id = (
+            SELECT world_event_id FROM claims WHERE id = $2
+        )
+        """,
+        new_scope,
+        claim_id,
     )
 
 

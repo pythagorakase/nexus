@@ -333,6 +333,9 @@ class WorldState:
 
     tags: Mapping[int, frozenset[str]] = field(default_factory=dict)
     ephemeral_tags: Mapping[int, frozenset[str]] = field(default_factory=dict)
+    # Includes inactive entities so lifecycle gates can distinguish inactive
+    # holders from ids missing through an incomplete hydration.
+    is_active: Mapping[int, bool] = field(default_factory=dict)
     # Committed wins per (actor_entity_id, template_id) inside the
     # habituation window — hydrated from orrery_resolutions, so replay
     # reconstructs identical dampening. Empty when habituation is off.

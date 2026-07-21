@@ -41,7 +41,7 @@ class _NonCommittingConnection:
 
 @pytest.fixture()
 def provenance_db() -> Iterator[dict[str, Any]]:
-    """Apply 082 and isolate all slot-5 writes in one outer transaction."""
+    """Apply 082 plus a 091 shadow and roll back every slot-5 write."""
 
     engine = create_engine(get_slot_db_url(slot=LIVE_SLOT), future=True)
     connection = engine.connect()
@@ -50,9 +50,16 @@ def provenance_db() -> Iterator[dict[str, Any]]:
     migration_sql = (
         Path(__file__).parents[2] / "migrations" / "082_generation_model_provenance.sql"
     ).read_text()
+    reveal_migration_sql = (
+        Path(__file__).parents[2] / "migrations" / "091_backstory_secrets.sql"
+    ).read_text()
     try:
         with raw_connection.cursor() as cur:
             cur.execute(migration_sql)
+            schema = f"provenance_reveal_{uuid4().hex[:12]}"
+            cur.execute(f'CREATE SCHEMA "{schema}"')
+            cur.execute(f'SET LOCAL search_path = "{schema}", public')
+            cur.execute(reveal_migration_sql)
             cur.execute(
                 """
                 INSERT INTO event_types (type, category, severity, description)

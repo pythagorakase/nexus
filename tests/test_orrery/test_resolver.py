@@ -72,6 +72,7 @@ class FakeSession:
         faction_rows=None,
         event_rows=None,
         active_entity_rows=None,
+        entity_activity_rows=None,
         epistemics_scope_rows=None,
         epistemics_rows=None,
         epistemics_awareness_rows=None,
@@ -109,6 +110,11 @@ class FakeSession:
         self.event_rows = event_rows or []
         self.active_entity_rows = (
             [{"id": 1}] if active_entity_rows is None else active_entity_rows
+        )
+        self.entity_activity_rows = (
+            [dict(row, is_active=True) for row in self.active_entity_rows]
+            if entity_activity_rows is None
+            else entity_activity_rows
         )
         self.epistemics_rows = epistemics_rows or []
         self.epistemics_scope_rows = (
@@ -158,6 +164,10 @@ class FakeSession:
 
     def execute(self, statement, _params=None):
         sql = str(statement)
+        if "/* orrery:entity_activity */" in sql:
+            assert "SELECT id, is_active" in sql
+            assert "ORDER BY id" in sql
+            return FakeResult(self.entity_activity_rows)
         if "/* orrery:current_tags */" in sql:
             return FakeResult(self.tag_rows)
         if "/* orrery:character_locations */" in sql:

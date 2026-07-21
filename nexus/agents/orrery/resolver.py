@@ -405,6 +405,20 @@ def hydrate_world_state(
     project_policy = coerce_project_policy(project_settings)
     epistemics_policy = coerce_epistemics_policy(epistemics_settings)
 
+    is_active = {
+        int(row["id"]): bool(row["is_active"])
+        for row in session.execute(
+            text(
+                """
+                /* orrery:entity_activity */
+                SELECT id, is_active
+                FROM entities
+                ORDER BY id
+                """
+            )
+        ).mappings()
+    }
+
     tags: dict[int, set[str]] = {}
     ephemeral_tags: dict[int, set[str]] = {}
     for row in session.execute(
@@ -603,6 +617,7 @@ def hydrate_world_state(
         ephemeral_tags={
             entity_id: frozenset(values) for entity_id, values in ephemeral_tags.items()
         },
+        is_active=is_active,
         locations=locations,
         activities=activities,
         trust=trust,

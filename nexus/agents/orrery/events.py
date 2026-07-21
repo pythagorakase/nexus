@@ -39,6 +39,10 @@ from nexus.agents.orrery.propagation import (
     drain_claim_propagation_async,
     drain_claim_propagation_sync,
 )
+from nexus.agents.orrery.reveal import (
+    drain_backstory_reveals_async,
+    drain_backstory_reveals_sync,
+)
 from nexus.agents.orrery.resolver import (
     LOCATION_CLASS_TAG_CATEGORIES,
     OrreryResolutionDraft,
@@ -54,6 +58,7 @@ from nexus.agents.orrery.substrate import (
     ProjectPolicy,
     SUPPORTED_TRAVEL_PURPOSES,
     coerce_project_policy,
+    WorldState,
 )
 
 
@@ -188,6 +193,7 @@ class CommitOrreryTickResult:
     scene_pressure_count: int = 0
     prompt_exposure_count: int = 0
     propagation_count: int = 0
+    reveal_count: int = 0
 
 
 def _coerce_prompt_limits(prompt_settings: Any) -> tuple[int, int]:
@@ -360,6 +366,8 @@ def commit_orrery_tick_sync(
     epistemics_settings: Optional[Any] = None,
     contagion_settings: Optional[Any] = None,
     drift_settings: Optional[Any] = None,
+    reveal_settings: Optional[Any] = None,
+    reveal_state: Optional[WorldState] = None,
 ) -> CommitOrreryTickResult:
     """Materialize a preview proposal inside the accepted-chunk transaction."""
 
@@ -415,11 +423,18 @@ def commit_orrery_tick_sync(
                 settings=drift_settings,
                 epistemics_settings=epistemics_policy,
             )
+            reveal_result = drain_backstory_reveals_sync(
+                cur,
+                tick_chunk_id=tick_chunk_id,
+                settings=reveal_settings,
+                state=reveal_state,
+            )
             return CommitOrreryTickResult(
                 cleared_tag_count=expired_tag_count,
                 scene_pressure_count=scene_pressure_count,
                 prompt_exposure_count=prompt_exposure_count,
                 propagation_count=propagation_count,
+                reveal_count=reveal_result.revealed_count,
             )
 
         assert coerced is not None
@@ -582,6 +597,12 @@ def commit_orrery_tick_sync(
             settings=drift_settings,
             epistemics_settings=epistemics_policy,
         )
+        reveal_result = drain_backstory_reveals_sync(
+            cur,
+            tick_chunk_id=tick_chunk_id,
+            settings=reveal_settings,
+            state=reveal_state,
+        )
 
     return CommitOrreryTickResult(
         resolution_count=resolution_count,
@@ -596,6 +617,7 @@ def commit_orrery_tick_sync(
         scene_pressure_count=scene_pressure_count,
         prompt_exposure_count=prompt_exposure_count,
         propagation_count=propagation_count,
+        reveal_count=reveal_result.revealed_count,
     )
 
 
@@ -615,6 +637,8 @@ async def commit_orrery_tick_async(
     epistemics_settings: Optional[Any] = None,
     contagion_settings: Optional[Any] = None,
     drift_settings: Optional[Any] = None,
+    reveal_settings: Optional[Any] = None,
+    reveal_state: Optional[WorldState] = None,
 ) -> CommitOrreryTickResult:
     """Async parity wrapper for tests and non-production commit callers."""
 
@@ -669,11 +693,18 @@ async def commit_orrery_tick_async(
             settings=drift_settings,
             epistemics_settings=epistemics_policy,
         )
+        reveal_result = await drain_backstory_reveals_async(
+            conn,
+            tick_chunk_id=tick_chunk_id,
+            settings=reveal_settings,
+            state=reveal_state,
+        )
         return CommitOrreryTickResult(
             cleared_tag_count=expired_tag_count,
             scene_pressure_count=scene_pressure_count,
             prompt_exposure_count=prompt_exposure_count,
             propagation_count=propagation_count,
+            reveal_count=reveal_result.revealed_count,
         )
 
     assert coerced is not None
@@ -834,6 +865,12 @@ async def commit_orrery_tick_async(
         settings=drift_settings,
         epistemics_settings=epistemics_policy,
     )
+    reveal_result = await drain_backstory_reveals_async(
+        conn,
+        tick_chunk_id=tick_chunk_id,
+        settings=reveal_settings,
+        state=reveal_state,
+    )
 
     return CommitOrreryTickResult(
         resolution_count=resolution_count,
@@ -848,6 +885,7 @@ async def commit_orrery_tick_async(
         scene_pressure_count=scene_pressure_count,
         prompt_exposure_count=prompt_exposure_count,
         propagation_count=propagation_count,
+        reveal_count=reveal_result.revealed_count,
     )
 
 
