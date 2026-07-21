@@ -41,6 +41,77 @@ OBLIGATION_FACTION_NAME = "M5 Trait Test Tithe"
 DEPENDENT_NAME = "M5 Trait Test Pip"
 
 
+def _install_valence_shadow(cur: Any) -> None:
+    """Shadow the pending migration-088 write boundary for rollback-only tests."""
+
+    cur.execute(
+        r"""
+        CREATE TEMP TABLE character_relationships ON COMMIT DROP AS
+        SELECT cr.* FROM public.character_relationships cr;
+
+        CREATE UNIQUE INDEX trait_compiler_relationship_pair_uq
+            ON pg_temp.character_relationships (character1_id, character2_id);
+
+        ALTER TABLE pg_temp.character_relationships
+            ADD COLUMN IF NOT EXISTS valence_current numeric;
+
+        UPDATE pg_temp.character_relationships
+        SET valence_current = substring(
+            emotional_valence::text FROM '^([+-]?[0-9]+)\|'
+        )::numeric / 5.5
+        WHERE valence_current IS NULL;
+
+        CREATE FUNCTION pg_temp.fn_trait_compiler_valence_boundary()
+        RETURNS trigger
+        LANGUAGE plpgsql
+        AS $$
+        DECLARE
+            rung integer;
+        BEGIN
+            IF TG_OP = 'INSERT' THEN
+                IF NEW.valence_current IS NULL THEN
+                    NEW.valence_current := substring(
+                        NEW.emotional_valence::text FROM '^([+-]?[0-9]+)\|'
+                    )::numeric / 5.5;
+                END IF;
+            ELSIF NEW.valence_current IS DISTINCT FROM OLD.valence_current THEN
+                NULL;
+            ELSIF NEW.emotional_valence IS DISTINCT FROM OLD.emotional_valence THEN
+                NEW.valence_current := substring(
+                    NEW.emotional_valence::text FROM '^([+-]?[0-9]+)\|'
+                )::numeric / 5.5;
+            ELSE
+                RETURN NEW;
+            END IF;
+
+            rung := greatest(
+                -5,
+                least(5, round(NEW.valence_current * 5.5)::integer)
+            );
+            NEW.emotional_valence := CASE rung
+                WHEN 5 THEN '+5|devoted'
+                WHEN 4 THEN '+4|admiring'
+                WHEN 3 THEN '+3|trusting'
+                WHEN 2 THEN '+2|friendly'
+                WHEN 1 THEN '+1|favorable'
+                WHEN 0 THEN '0|neutral'
+                WHEN -1 THEN '-1|wary'
+                WHEN -2 THEN '-2|disapproving'
+                WHEN -3 THEN '-3|resentful'
+                WHEN -4 THEN '-4|hostile'
+                WHEN -5 THEN '-5|hateful'
+            END;
+            RETURN NEW;
+        END;
+        $$;
+
+        CREATE TRIGGER trg_trait_compiler_valence_boundary
+            BEFORE INSERT OR UPDATE ON pg_temp.character_relationships
+            FOR EACH ROW EXECUTE FUNCTION pg_temp.fn_trait_compiler_valence_boundary();
+        """
+    )
+
+
 def _character_sheet(
     *trait_names: str, inputs: Optional[TraitCompileInputs]
 ) -> CharacterSheet:
@@ -109,6 +180,7 @@ def test_full_trait_selection_compiles_on_save_05() -> None:
 
     try:
         with conn.cursor() as cur:
+            _install_valence_shadow(cur)
             drift_before = reconcile_trait_relationship_pair_tags(cur)
             character_id, character_entity_id = _insert_protagonist(cur)
 
@@ -236,6 +308,7 @@ def test_dependents_apply_and_dry_run_audit_on_save_05() -> None:
 
     try:
         with conn.cursor() as cur:
+            _install_valence_shadow(cur)
             character_id, character_entity_id = _insert_protagonist(cur)
 
             inputs = TraitCompileInputs(

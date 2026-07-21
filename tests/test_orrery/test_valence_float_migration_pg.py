@@ -11,7 +11,17 @@ from uuid import uuid4
 import psycopg2
 import pytest
 
+from nexus.api.new_story_schemas import CharacterSheet, CharacterTrait
 from nexus.api.slot_utils import get_slot_db_url
+from nexus.api.trait_compiler import (
+    apply_character_trait_compilation,
+    compile_character_traits,
+)
+from nexus.api.trait_compiler_schemas import (
+    RelationshipTargetInput,
+    RelationshipTraitInput,
+    TraitCompileInputs,
+)
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -62,6 +72,7 @@ def _schema_setup_sql() -> str:
             history text NOT NULL,
             extra_data jsonb,
             created_at timestamptz NOT NULL DEFAULT now(),
+            updated_at timestamptz NOT NULL DEFAULT now(),
             PRIMARY KEY (character1_id, character2_id)
         );
         CREATE TABLE faction_relationships (
@@ -220,6 +231,26 @@ def _expected_float(rung: int) -> float:
     return float(Decimal(rung) / Decimal("5.5"))
 
 
+def _legacy_valence_sheet(inputs: TraitCompileInputs) -> CharacterSheet:
+    traits = [
+        CharacterTrait(name=name, description=f"{name} test trait")
+        for name in ("allies", "resources", "fame")
+    ]
+    return CharacterSheet(
+        name="Migration 088 Trait Compiler",
+        summary="Rollback-only test character.",
+        appearance="Defined only for migration contract coverage.",
+        background="Exercises the typed relationship writer in an isolated schema.",
+        personality="Exacting about canonical response values.",
+        wildcard_name="Boundary Witness",
+        wildcard_description="Sees both sides of a trigger boundary.",
+        trait_1=traits[0],
+        trait_2=traits[1],
+        trait_3=traits[2],
+        trait_compile_inputs=inputs,
+    )
+
+
 def test_migration_088_backfills_and_canonicalizes_existing_rows(
     migration_087_schema: Any,
 ) -> None:
@@ -287,6 +318,51 @@ def test_migration_088_insert_without_float_derives_canonical_state(
         assert float(current) == pytest.approx(_expected_float(3))
 
 
+def test_trait_compiler_reports_trigger_canonicalized_valence(
+    migration_087_schema: Any,
+) -> None:
+    """Typed legacy input reports the exact literal persisted by migration 088."""
+
+    _apply_migration(migration_087_schema)
+    inputs = TraitCompileInputs(
+        allies=RelationshipTraitInput(
+            targets=[
+                RelationshipTargetInput(
+                    character_id=32,
+                    emotional_valence="+2|deferential",
+                    dynamic="Legacy authored label.",
+                )
+            ]
+        )
+    )
+    sheet = _legacy_valence_sheet(inputs)
+    with migration_087_schema.cursor() as cur:
+        audit = compile_character_traits(
+            cur,
+            character=sheet,
+            character_id=31,
+            character_entity_id=1031,
+            dry_run=True,
+        )
+        result = apply_character_trait_compilation(
+            cur,
+            character=sheet,
+            character_id=31,
+            character_entity_id=1031,
+        )
+        cur.execute(
+            "SELECT emotional_valence, valence_current "
+            "FROM character_relationships "
+            "WHERE character1_id = 31 AND character2_id = 32"
+        )
+        stored_literal, stored_current = cur.fetchone()
+
+    assert audit.created_relationships[0].emotional_valence == "+2|friendly"
+    assert result.created_relationships[0].emotional_valence == stored_literal
+    assert stored_literal == "+2|friendly"
+    assert float(stored_current) == pytest.approx(_expected_float(2))
+
+
 def test_migration_088_authored_literal_update_rederives_float(
     migration_087_schema: Any,
 ) -> None:
@@ -319,6 +395,29 @@ def test_migration_088_float_update_reprojects_literal(
             """
         )
         assert cur.fetchone() == ("+5|devoted", Decimal("0.84"))
+
+
+def test_migration_088_same_literal_reassertion_preserves_intra_rung_float(
+    migration_087_schema: Any,
+) -> None:
+    """Reasserting the projected literal must not re-center off-center drift."""
+
+    _apply_migration(migration_087_schema)
+    with migration_087_schema.cursor() as cur:
+        cur.execute(
+            "UPDATE character_relationships "
+            "SET valence_current = 0.4 "
+            "WHERE character1_id = 1"
+        )
+        cur.execute(
+            """
+            UPDATE character_relationships
+            SET emotional_valence = '+2|friendly'
+            WHERE character1_id = 1
+            RETURNING emotional_valence, valence_current
+            """
+        )
+        assert cur.fetchone() == ("+2|friendly", Decimal("0.4"))
 
 
 def test_migration_088_float_wins_when_both_representations_change(

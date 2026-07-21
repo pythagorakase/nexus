@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from copy import deepcopy
+from decimal import Decimal
 from typing import Any, Optional
 
 import pytest
@@ -431,18 +432,47 @@ class TraitCompilerCursor:
                 history,
                 extra_data,
             ) = params
-            self.character_relationships.append(
-                {
-                    "character1_id": character1_id,
-                    "character2_id": character2_id,
-                    "relationship_type": relationship_type,
-                    "emotional_valence": emotional_valence,
-                    "dynamic": dynamic,
-                    "recent_events": recent_events,
-                    "history": history,
-                    "extra_data": extra_data,
-                }
+            canonical_literals = {
+                5: "+5|devoted",
+                4: "+4|admiring",
+                3: "+3|trusting",
+                2: "+2|friendly",
+                1: "+1|favorable",
+                0: "0|neutral",
+                -1: "-1|wary",
+                -2: "-2|disapproving",
+                -3: "-3|resentful",
+                -4: "-4|hostile",
+                -5: "-5|hateful",
+            }
+            rung = int(emotional_valence.split("|", maxsplit=1)[0])
+            stored_valence = canonical_literals[rung]
+            valence_current = Decimal(rung) / Decimal("5.5")
+            relationship = {
+                "character1_id": character1_id,
+                "character2_id": character2_id,
+                "relationship_type": relationship_type,
+                "emotional_valence": stored_valence,
+                "valence_current": valence_current,
+                "dynamic": dynamic,
+                "recent_events": recent_events,
+                "history": history,
+                "extra_data": extra_data,
+            }
+            existing = next(
+                (
+                    row
+                    for row in self.character_relationships
+                    if row["character1_id"] == character1_id
+                    and row["character2_id"] == character2_id
+                ),
+                None,
             )
+            if existing is None:
+                self.character_relationships.append(relationship)
+            else:
+                existing.update(relationship)
+            self._next_row = (stored_valence, valence_current)
             self.rowcount = 1
             return
 
@@ -1092,6 +1122,40 @@ def test_patron_default_compiles_relationship_row_only() -> None:
     extra_data = json.loads(cur.character_relationships[0]["extra_data"])
     assert extra_data["source"] == "trait_compiler"
     assert "trait_compiler_patron_functions" not in extra_data
+
+
+def test_patron_legacy_valence_reports_trigger_canonical_literal() -> None:
+    """Dry-run and apply responses agree with the boundary-trigger projection."""
+
+    cur = TraitCompilerCursor()
+    inputs = TraitCompileInputs(
+        patron=PatronTraitInput(
+            name="Magistrate Hale",
+            emotional_valence="+2|deferential",
+        )
+    )
+    sheet = _character("patron", "resources", "allies", inputs=inputs)
+
+    audit = compile_character_traits(
+        cur,
+        character=sheet,
+        character_id=1,
+        character_entity_id=501,
+        dry_run=True,
+    )
+    result = apply_character_trait_compilation(
+        cur,
+        character=sheet,
+        character_id=1,
+        character_entity_id=501,
+    )
+
+    assert audit.created_relationships[0].emotional_valence == "+2|friendly"
+    assert result.created_relationships[0].emotional_valence == "+2|friendly"
+    assert cur.character_relationships[0]["emotional_valence"] == "+2|friendly"
+    assert cur.character_relationships[0]["valence_current"] == Decimal(2) / Decimal(
+        "5.5"
+    )
 
 
 def test_patron_user_affirmed_functions_write_pair_tags() -> None:

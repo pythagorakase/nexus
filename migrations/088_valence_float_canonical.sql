@@ -97,7 +97,9 @@ BEGIN
         NEW.emotional_valence :=
             fn_character_valence_literal(NEW.valence_current);
     ELSIF NEW.emotional_valence IS DISTINCT FROM OLD.emotional_valence THEN
-        -- Legacy/authored literal writes re-enter through their rung center.
+        -- A changed authored literal re-enters through its new rung center.
+        -- Reasserting the current projection is intentionally a no-op so an
+        -- off-center canonical float retains its intra-rung drift position.
         NEW.valence_current :=
             fn_character_valence_from_literal(NEW.emotional_valence::text);
         NEW.emotional_valence :=
@@ -109,8 +111,10 @@ $$;
 
 COMMENT ON FUNCTION fn_derive_character_relationship_valence() IS
     'Single write-boundary authority for character relationship valence. '
-    'Legacy literal writes derive the canonical float; float-first writes '
-    'derive the compatibility literal, and the float wins if both change.';
+    'A changed authored literal re-enters at the new rung center; reasserting '
+    'the currently projected literal is a no-op that preserves off-center '
+    'intra-rung float drift. Float-first writes derive the compatibility '
+    'literal, and the float wins if both representations change.';
 
 DROP TRIGGER IF EXISTS trg_character_relationships_valence_boundary
     ON character_relationships;
@@ -121,8 +125,11 @@ CREATE TRIGGER trg_character_relationships_valence_boundary
 
 COMMENT ON TRIGGER trg_character_relationships_valence_boundary
     ON character_relationships IS
-    'Canonical valence write boundary. PostgreSQL fires same-kind triggers '
-    'alphabetically, so this trigger runs before '
+    'Canonical valence write boundary: changed literal writes re-center; '
+    'same-projection literal reassertions preserve intra-rung float drift; '
+    'float writes project the literal and win when both representations '
+    'change. PostgreSQL fires same-kind triggers alphabetically, so this '
+    'trigger runs before '
     'trg_version_character_relationships. The versioning trigger still '
     'captures to_jsonb(OLD), so its pre-image contract is unchanged.';
 
