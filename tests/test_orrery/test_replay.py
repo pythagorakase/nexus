@@ -505,6 +505,191 @@ def test_need_fulfillment_replay_matches_production_applier() -> None:
         conn.close()
 
 
+def test_window_born_character_fulfillment_preserves_applicability_marker() -> None:
+    """Replay mirrors the need rows created by the character INSERT trigger."""
+
+    conn = _connect()
+    try:
+        with conn.cursor() as cur:
+            head = _head_chunk(cur)
+            base_id = capture_state_checkpoint_sync(cur, chunk_id=head, label="manual")
+            probe_chunk = _fabricate_chunk(
+                cur,
+                _next_world_time(cur),
+                created_offset_minutes=1,
+            )
+
+            cur.execute("INSERT INTO entities (kind) VALUES ('character') RETURNING id")
+            char_entity = int(cur.fetchone()[0])
+            cur.execute(
+                """
+                INSERT INTO characters (name, entity_id)
+                VALUES (%s, %s)
+                """,
+                (f"Replay Birth {char_entity}", char_entity),
+            )
+            payload = {
+                "type": "thirst",
+                "quality": "probe_drink",
+                "discharge_debt": 2.0,
+            }
+            _apply_need_fulfillment_sync(
+                cur,
+                actor_entity_id=char_entity,
+                fulfillment=dict(payload),
+                template_id="replay_birth_probe",
+                source_chunk_id=probe_chunk,
+                need_tuning=load_need_tuning(),
+            )
+            _insert_resolution(
+                cur,
+                probe_chunk,
+                char_entity,
+                {"need.fulfill": payload},
+            )
+            capture_state_checkpoint_sync(cur, chunk_id=probe_chunk, label="manual")
+
+            cur.execute(
+                """
+                SELECT metadata FROM character_need_states
+                WHERE character_entity_id = %s AND need_type = 'thirst'
+                """,
+                (char_entity,),
+            )
+            live_metadata = cur.fetchone()[0]
+            assert live_metadata == {
+                "synced_by": "need_applicability",
+                "last_fulfillment": payload,
+            }
+
+            at_probe = reconstruct_state_at_sync(
+                cur, probe_chunk, base_checkpoint_id=base_id
+            )
+            replayed = _section_row(
+                at_probe.state["character_need_states"],
+                character_entity_id=char_entity,
+                need_type="thirst",
+            )
+            assert replayed is not None
+            assert replayed["metadata"] == live_metadata
+
+            verdicts = verify_checkpoints_sync(cur)
+            probe_pair = [v for v in verdicts if v.target_chunk_id == probe_chunk]
+            assert len(probe_pair) == 1
+            assert probe_pair[0].drifts == []
+    finally:
+        conn.rollback()
+        conn.close()
+
+
+def test_tag_applicability_before_fulfillment_preserves_marker() -> None:
+    """A tag-triggered fresh need row exists before same-window fulfillment."""
+
+    conn = _connect()
+    try:
+        with conn.cursor() as cur:
+            _, char_entity, _, _ = _probe_character(cur)
+            base_time = _next_world_time(cur)
+            base_chunk = _fabricate_chunk(cur, base_time)
+            cur.execute("SELECT id FROM tags WHERE tag = 'inorganic'")
+            immunity_tag_id = cur.fetchone()[0]
+            cur.execute(
+                """
+                INSERT INTO entity_tags (
+                    entity_id, tag_id, source_kind, source_chunk_id
+                ) VALUES (%s, %s, 'template', %s) RETURNING id
+                """,
+                (char_entity, immunity_tag_id, base_chunk),
+            )
+            immunity_row_id = cur.fetchone()[0]
+            cur.execute(
+                """
+                SELECT count(*) FROM character_need_states
+                WHERE character_entity_id = %s AND need_type = 'hunger'
+                """,
+                (char_entity,),
+            )
+            assert cur.fetchone()[0] == 0
+            base_id = capture_state_checkpoint_sync(
+                cur, chunk_id=base_chunk, label="manual"
+            )
+
+            clear_chunk = _fabricate_chunk(cur, base_time + timedelta(hours=6))
+            cur.execute(
+                "UPDATE entity_tags SET cleared_at = now() WHERE id = %s",
+                (immunity_row_id,),
+            )
+            cur.execute(
+                """
+                INSERT INTO tag_clearance_log (
+                    entity_tag_id, mechanism, source_chunk_id
+                ) VALUES (%s, 'authored', %s)
+                """,
+                (immunity_row_id, clear_chunk),
+            )
+
+            fulfill_chunk = _fabricate_chunk(cur, base_time + timedelta(hours=12))
+            payload = {
+                "type": "hunger",
+                "quality": "post_immunity_meal",
+                "discharge_debt": 3.0,
+            }
+            _apply_need_fulfillment_sync(
+                cur,
+                actor_entity_id=char_entity,
+                fulfillment=dict(payload),
+                template_id="replay_tag_probe",
+                source_chunk_id=fulfill_chunk,
+                need_tuning=load_need_tuning(),
+            )
+            _insert_resolution(
+                cur,
+                fulfill_chunk,
+                char_entity,
+                {"need.fulfill": payload},
+            )
+            target_id = capture_state_checkpoint_sync(
+                cur, chunk_id=fulfill_chunk, label="manual"
+            )
+
+            cur.execute(
+                """
+                SELECT metadata FROM character_need_states
+                WHERE character_entity_id = %s AND need_type = 'hunger'
+                """,
+                (char_entity,),
+            )
+            live_metadata = cur.fetchone()[0]
+            assert live_metadata == {
+                "synced_by": "need_applicability",
+                "last_fulfillment": payload,
+            }
+
+            at_target = reconstruct_state_at_sync(
+                cur, fulfill_chunk, base_checkpoint_id=base_id
+            )
+            replayed = _section_row(
+                at_target.state["character_need_states"],
+                character_entity_id=char_entity,
+                need_type="hunger",
+            )
+            assert replayed is not None
+            assert replayed["metadata"] == live_metadata
+
+            verdicts = verify_checkpoints_sync(cur)
+            probe_pair = [
+                verdict
+                for verdict in verdicts
+                if verdict.base_checkpoint_id == base_id
+                and verdict.target_checkpoint_id == target_id
+            ]
+            assert len(probe_pair) == 1
+            assert probe_pair[0].drifts == []
+    finally:
+        conn.rollback()
+        conn.close()
+
+
 def test_verify_catches_unledgered_scalar_drift() -> None:
     conn = _connect()
     try:
