@@ -17,32 +17,19 @@ All models use Pydantic v2 for validation and serialization.
 
 import json
 import logging
-from typing import List, Optional, Dict, Any, Union, Literal
+from typing import Any, Dict, List, Literal, Optional, Union
+
 from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
 from pydantic.json_schema import SkipJsonSchema
-from datetime import datetime
 
 # Import all database ENUMs
 from nexus.agents.logon.apex_enums import (
-    AgentType,
     EmotionalValence,
-    EntityType,
-    FactionMemberRole,
-    FactionRelationshipType,
-    ItemType,
-    LogLevel,
-    ModelName,
     PlaceReferenceType,
     PlaceType,
-    Provider,
-    QueryCategory,
-    ReasoningEffort,
     ReferenceType,
     RelationshipType,
-    ThreatDomain,
-    ThreatLifecycle,
     WorldLayerType,
-    get_active_entity_types,
 )
 from nexus.agents.orrery.tag_schemas import OrreryTagBestowal
 
@@ -67,8 +54,8 @@ class Coordinates(BaseModel):
     to water).
     """
 
-    lat: float = Field(description="Latitude (-90 to 90)")
-    lon: float = Field(description="Longitude (-180 to 180)")
+    lat: float = Field(ge=-90, le=90, description="Latitude (-90 to 90)")
+    lon: float = Field(ge=-180, le=180, description="Longitude (-180 to 180)")
 
     model_config = ConfigDict(extra="forbid")
 
@@ -135,7 +122,9 @@ class CharacterTraits(BaseModel):
     )
     wildcard_description: Optional[str] = Field(
         default=None,
-        description="What this trait means - capability, possession, relationship, or curse",
+        description=(
+            "What this trait means - capability, possession, relationship, " "or curse"
+        ),
     )
 
     @model_validator(mode="before")
@@ -170,7 +159,10 @@ class PlaceDetails(BaseModel):
 
     category: Optional[str] = Field(
         default=None,
-        description="Narrative category: settlement, wilderness, dungeon, building, district, landmark, road, border",
+        description=(
+            "Narrative category: settlement, wilderness, dungeon, building, "
+            "district, landmark, road, border"
+        ),
     )
     size: Optional[str] = Field(
         default=None,
@@ -291,7 +283,10 @@ class NewCharacter(BaseModel):
     )
     personality: Optional[str] = Field(
         default=None,
-        description="Personality traits and quirks (prose format, e.g., 'Methodical problem-solver. Paranoid about digital traces.')",
+        description=(
+            "Personality traits and quirks (prose format, e.g., 'Methodical "
+            "problem-solver. Paranoid about digital traces.')"
+        ),
     )
     emotional_state: Optional[str] = Field(
         default=None, description="Current emotional state"
@@ -328,7 +323,7 @@ class NewCharacter(BaseModel):
 class NewPlace(BaseModel):
     """
     Schema for introducing a new place - aligned with DB schema.
-    Zone is calculated from coordinates post-creation (not an input field).
+    Zone is resolved from coordinates or inherited from the story-active place.
     """
 
     name: str = Field(description="Place name")
@@ -354,11 +349,17 @@ class NewPlace(BaseModel):
     )
     coordinates: Optional[Coordinates] = Field(
         default=None,
-        description="Geographic coordinates (lat/lon on Earth-shaped planet). Zone calculated from this.",
+        description=(
+            "Geographic coordinates (lat/lon on Earth-shaped planet). Zone "
+            "calculated from this."
+        ),
     )
     inhabitants: Optional[List[int]] = Field(
         default_factory=list,
-        description="Character IDs of inhabitants (usually empty for newly introduced places)",
+        description=(
+            "Character IDs of inhabitants (usually empty for newly "
+            "introduced places)"
+        ),
     )
     extra_data: Optional[PlaceDetails] = Field(
         default=None,
@@ -438,7 +439,9 @@ class NewFaction(BaseModel):
     )
     extra_data: Optional[FactionDetails] = Field(
         default=None,
-        description="Additional faction attributes (leader, members, allies, rivals, etc.)",
+        description=(
+            "Additional faction attributes (leader, members, allies, " "rivals, etc.)"
+        ),
     )
     orrery_tags: Optional[OrreryTagBestowal] = Field(
         default=None,
@@ -523,6 +526,13 @@ class NewEntityDeclaration(BaseModel):
             "row summary)."
         ),
     )
+    coordinates: Optional[Coordinates] = Field(
+        default=None,
+        description=(
+            "Optional real-Earth coordinates for a declared place. Ignored "
+            "for character and faction declarations."
+        ),
+    )
     tag_hints: List[str] = Field(
         default_factory=list,
         description=(
@@ -538,6 +548,14 @@ class NewEntityDeclaration(BaseModel):
             "entity to another named entity."
         ),
     )
+
+    @model_validator(mode="after")
+    def coordinates_are_place_only(self) -> "NewEntityDeclaration":
+        """Reject GIS data on non-place declarations instead of dropping it."""
+
+        if self.coordinates is not None and self.kind != "place":
+            raise ValueError("coordinates are only valid for place declarations")
+        return self
 
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
@@ -592,13 +610,19 @@ class PlaceReference(BaseModel):
     )
     # How it appears in this chunk (REQUIRED for junction table)
     reference_type: PlaceReferenceType = Field(
-        description="How the place is referenced: setting (primary location), mentioned (referenced but not visited), or transit (passed through)"
+        description=(
+            "How the place is referenced: setting (primary location), "
+            "mentioned (referenced but not visited), or transit (passed through)"
+        )
     )
     # Optional evidence field (matches junction table)
     evidence: Optional[str] = Field(
         default=None,
         max_length=500,
-        description="Optional text evidence for this place reference (e.g., specific quote or context)",
+        description=(
+            "Optional text evidence for this place reference (e.g., specific "
+            "quote or context)"
+        ),
     )
 
     @model_validator(mode="after")
@@ -673,7 +697,10 @@ class ChronologyUpdate(BaseModel):
 
     episode_transition: Literal["continue", "new_episode", "new_season"] = Field(
         default="continue",
-        description="Episode/season transition: continue current, new episode, or new season (which also starts new episode)",
+        description=(
+            "Episode/season transition: continue current, new episode, or "
+            "new season (which also starts new episode)"
+        ),
     )
 
     # LLM-friendly time fields (more natural than seconds)
@@ -698,7 +725,10 @@ class ChronologyUpdate(BaseModel):
     time_delta_description: Optional[str] = Field(
         default=None,
         max_length=100,
-        description="Human-readable time passage (e.g., 'two hours later', 'the next morning')",
+        description=(
+            "Human-readable time passage (e.g., 'two hours later', 'the next "
+            "morning')"
+        ),
     )
 
     @model_validator(mode="after")
@@ -729,7 +759,17 @@ class ChunkMetadataUpdate(BaseModel):
     )
     world_layer: WorldLayerType = Field(
         default=WorldLayerType.PRIMARY,
-        description="Whether the in-world clock advances normally this chunk - almost always 'primary'. Default to 'primary' for any normal in-world scene where time moves forward with the chunk's time_delta. Only deviate for: 'flashback' (a scene set in the past - the clock is not advancing forward), 'atemporal' (the in-world clock does not apply - dream/hallucination sequences, or realms where time doesn't behave normally such as strange or alien dimensions), 'extradiegetic' (the user is addressing you out-of-game - no in-world time passes).",
+        description=(
+            "Whether the in-world clock advances normally this chunk - almost "
+            "always 'primary'. Default to 'primary' for any normal in-world "
+            "scene where time moves forward with the chunk's time_delta. Only "
+            "deviate for: 'flashback' (a scene set in the past - the clock is "
+            "not advancing forward), 'atemporal' (the in-world clock does not "
+            "apply - dream/hallucination sequences, or realms where time "
+            "doesn't behave normally such as strange or alien dimensions), "
+            "'extradiegetic' (the user is addressing you out-of-game - no "
+            "in-world time passes)."
+        ),
     )
 
     model_config = ConfigDict(extra="forbid")
@@ -1198,7 +1238,10 @@ class StorytellerResponseBootstrap(StorytellerResponseBase):
     choices: List[str] = Field(
         min_length=2,
         max_length=4,
-        description="Player choices (2-4 options). Each should be a complete, actionable option written from player perspective.",
+        description=(
+            "Player choices (2-4 options). Each should be a complete, "
+            "actionable option written from player perspective."
+        ),
     )
 
     model_config = ConfigDict(extra="forbid")
@@ -1211,7 +1254,10 @@ class StorytellerResponseMinimal(StorytellerResponseBase):
     choices: List[str] = Field(
         min_length=2,
         max_length=4,
-        description="Player choices (2-4 options). Each should be a complete, actionable option written from player perspective.",
+        description=(
+            "Player choices (2-4 options). Each should be a complete, "
+            "actionable option written from player perspective."
+        ),
     )
     referenced_entities: Optional[ReferencedEntities] = Field(
         default=None, description="Entities referenced in narrative"
@@ -1239,7 +1285,10 @@ class StorytellerResponseStandard(StorytellerResponseBase):
     choices: List[str] = Field(
         min_length=2,
         max_length=4,
-        description="Player choices (2-4 options). Each should be a complete, actionable option written from player perspective.",
+        description=(
+            "Player choices (2-4 options). Each should be a complete, "
+            "actionable option written from player perspective."
+        ),
     )
     chunk_metadata: ChunkMetadataUpdate = Field(description="Essential chunk metadata")
     referenced_entities: ReferencedEntities = Field(
@@ -1271,7 +1320,10 @@ class StorytellerResponseExtended(StorytellerResponseBase):
     choices: List[str] = Field(
         min_length=2,
         max_length=4,
-        description="Player choices (2-4 options). Each should be a complete, actionable option written from player perspective.",
+        description=(
+            "Player choices (2-4 options). Each should be a complete, "
+            "actionable option written from player perspective."
+        ),
     )
     chunk_metadata: ChunkMetadataUpdate = Field(description="Essential chunk metadata")
     referenced_entities: ReferencedEntities = Field(

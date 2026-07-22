@@ -126,6 +126,7 @@ class TraitCompilerCursor:
         self.entity_pair_tags: list[dict[str, Any]] = []
         self.character_relationships: list[dict[str, Any]] = []
         self.fail_relationship = fail_relationship
+        self.story_zone = 77
         self.rowcount = 0
         self._next_row: Optional[Any] = None
         self._next_rows: list[Any] = []
@@ -232,14 +233,20 @@ class TraitCompilerCursor:
             self.rowcount = 1
             return
 
+        if normalized.startswith("SELECT P.ZONE FROM GLOBAL_VARIABLES"):
+            self._next_row = (self.story_zone,)
+            self.rowcount = 1
+            return
+
         if "TRAIT_COMPILER:INSERT_PLACE_STUB" in normalized:
-            name, _summary, _status, extra_data = params
+            name, _summary, _status, extra_data, zone = params
             row_id = max(self.places, default=0) + 1
             entity_id = 2000 + row_id
             self.places[row_id] = {
                 "entity_id": entity_id,
                 "name": name,
                 "extra_data": json.loads(extra_data),
+                "zone": zone,
             }
             self._next_row = (row_id, entity_id)
             self.rowcount = 1

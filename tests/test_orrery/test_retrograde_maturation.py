@@ -602,6 +602,129 @@ def test_maturation_persistence_uses_injected_epistemics_settings(
     assert manifest["persisted"] is True
 
 
+def test_required_geo_runs_expansion_when_seed_selection_is_empty(
+    monkeypatch: Any,
+) -> None:
+    """A place point is authored even when R5 selects no history seeds."""
+
+    class Cursor:
+        def __init__(self) -> None:
+            self.executed: list[tuple[str, Any]] = []
+
+        def __enter__(self) -> "Cursor":
+            return self
+
+        def __exit__(self, *_args: Any) -> bool:
+            return False
+
+        def execute(self, sql: str, params: Any = None) -> None:
+            self.executed.append((sql, params))
+
+    class Connection:
+        def __init__(self) -> None:
+            self.cursor_obj = Cursor()
+
+        def __enter__(self) -> "Connection":
+            return self
+
+        def __exit__(self, *_args: Any) -> bool:
+            return False
+
+        def cursor(self, *_args: Any, **_kwargs: Any) -> Cursor:
+            return self.cursor_obj
+
+    settings = retrograde_maturation.load_settings_as_dict()
+    typed_settings = Settings.model_validate(
+        {
+            key: value
+            for key, value in settings.items()
+            if key not in {"Agent Settings", "API Settings"}
+        }
+    )
+    expansion_calls: list[dict[str, Any]] = []
+    applied_coordinates: list[Mapping[str, Any]] = []
+
+    monkeypatch.setattr(
+        "nexus.api.slot_utils.require_slot_dbname", lambda slot: "save_02"
+    )
+    monkeypatch.setattr(retrograde_maturation, "_entity_event_count", lambda *_: 0)
+    monkeypatch.setattr(
+        retrograde_maturation,
+        "_load_job_context",
+        lambda *_args, **_kwargs: {"entity_summary": "A remote station."},
+    )
+    monkeypatch.setattr(
+        retrograde_maturation,
+        "_load_story_setting",
+        lambda *_: {"genre": "noir"},
+    )
+    monkeypatch.setattr(
+        "nexus.agents.orrery.retrograde_vocabulary.enumerate_seed_eligible_vocabulary",
+        lambda _dbname: object(),
+    )
+    monkeypatch.setattr(
+        retrograde_maturation,
+        "build_runtime_maturation_packet",
+        lambda **_kwargs: {"geo_authoring": {"required": True}},
+    )
+    monkeypatch.setattr(
+        "nexus.agents.orrery.retrograde_seed_candidates.run_seed_stage",
+        lambda **_kwargs: {
+            "model": "seed-model",
+            "seed_candidate_response": {"selected_seed_ids": []},
+        },
+    )
+
+    def generate_expansion(**kwargs: Any) -> dict[str, Any]:
+        expansion_calls.append(kwargs)
+        return {
+            "model": "expansion-model",
+            "retrograde_expansion_plan": {
+                "coordinates": {"lat": 50.0, "lon": 50.0},
+                "event_plan": [],
+                "thread_plan": [],
+                "entity_tag_plan": [],
+                "pair_tag_plan": [],
+                "relationship_plan": [],
+                "death_plan": [],
+            },
+        }
+
+    monkeypatch.setattr(
+        "nexus.agents.orrery.retrograde_expansion.generate_expansion_with_skald",
+        generate_expansion,
+    )
+    monkeypatch.setattr(
+        retrograde_maturation,
+        "_apply_maturation_coordinates",
+        lambda _cur, **kwargs: applied_coordinates.append(kwargs["expansion_payload"]),
+    )
+
+    manifest = _mature_one(
+        Connection(),
+        row={
+            "job_id": 8,
+            "entity_id": 78,
+            "entity_kind": "place",
+            "entity_subtype_id": 18,
+            "entity_name": "Remote Observatory",
+            "requesting_chunk_id": 102,
+            "declaration": {"summary": "A remote station."},
+            "result_manifest": {},
+            "slot": "2",
+        },
+        cfg=OrreryRetrogradeMaturationSettings(),
+        settings_dict=settings,
+        settings=typed_settings,
+        slot=2,
+    )
+
+    assert len(expansion_calls) == 1
+    assert applied_coordinates[0]["coordinates"] == {"lat": 50.0, "lon": 50.0}
+    assert manifest["coordinates_persisted"] is True
+    assert manifest["skipped"] == "no_seeds_selected"
+
+
 # ============================================================================
 # PostgreSQL-Gated Queue Tests (save_02, always rolled back)
 # ============================================================================

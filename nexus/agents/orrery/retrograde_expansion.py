@@ -7,6 +7,8 @@ from typing import Annotated, Any, Literal, Mapping, Optional, cast
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from nexus.agents.logon.apex_schema import Coordinates
+from nexus.agents.orrery.geo_authoring import geo_prompt_from_context
 from nexus.agents.orrery.retrograde_junctions import resolve_junctions
 from nexus.agents.orrery.retrograde_packet import (
     CORE_ENTITIES_HEADING,
@@ -334,6 +336,13 @@ class RetrogradeExpansionWireResponse(BaseModel):
     )
     thread_plan: list[RetrogradeExpansionWireThreadPlan] = Field(default_factory=list)
     coverage_notes: list[str] = Field(default_factory=list)
+    coordinates: Optional[Coordinates] = Field(
+        default=None,
+        description=(
+            "For a maturation-target place that lacks coordinates, its "
+            "plausible real-Earth point; otherwise null."
+        ),
+    )
 
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
@@ -345,8 +354,10 @@ class RetrogradeExpansionPlanResponse(BaseModel):
         RETROGRADE_EXPANSION_RESPONSE_SCHEMA_VERSION
     )
     selected_seed_ids: list[str] = Field(
-        min_length=1,
-        description="Selected seed ids considered by this expansion.",
+        description=(
+            "Selected seed ids considered by this expansion; empty is valid "
+            "for required geo-only maturation."
+        ),
     )
     event_plan: list[RetrogradeExpansionEventPlan] = Field(default_factory=list)
     entity_tag_plan: list[RetrogradeExpansionEntityTagPlan] = Field(
@@ -359,6 +370,10 @@ class RetrogradeExpansionPlanResponse(BaseModel):
     death_plan: list[RetrogradeExpansionDeathPlan] = Field(default_factory=list)
     thread_plan: list[RetrogradeExpansionThreadPlan] = Field(default_factory=list)
     coverage_notes: list[str] = Field(default_factory=list)
+    coordinates: Optional[Coordinates] = Field(
+        default=None,
+        description="Authored coordinates for a place maturation target.",
+    )
     commit_readiness: RetrogradeExpansionCommitReadiness = Field(
         default_factory=RetrogradeExpansionCommitReadiness
     )
@@ -509,6 +524,7 @@ def _expand_wire_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
         "death_plan": death_plan,
         "thread_plan": thread_plan,
         "coverage_notes": data.get("coverage_notes") or [],
+        "coordinates": data.get("coordinates"),
     }
 
 
@@ -568,6 +584,9 @@ def render_expansion_prompt(
         "hard_validation_rules": _hard_validation_rules(),
         "response_contract": _prompt_response_contract(),
     }
+    geo_prompt = geo_prompt_from_context(packet)
+    if geo_prompt is not None:
+        prompt_payload["geo_authoring"] = geo_prompt
     return (
         "You are Skald-as-weaver for Retrograde R6 expansion.\n"
         "Weave the selected seeds into a sparse history web with row-shaped "
@@ -630,6 +649,7 @@ def validate_expansion_plan(
         payload,
         selected_seed_ids=list(candidates.selected_seed_ids),
     )
+    geo_authoring = packet.get("geo_authoring")
     issues = _expansion_contract_issues(
         response=response,
         selected_seed_ids=selected_seed_ids,
@@ -638,6 +658,14 @@ def validate_expansion_plan(
         known_entity_keys=_packet_known_entity_keys(packet),
         max_new_entity_stubs=_budget_entity_stub_cap(seed_generation_request),
     )
+    if (
+        isinstance(geo_authoring, Mapping)
+        and geo_authoring.get("required")
+        and response.coordinates is None
+    ):
+        issues.append(
+            "coordinates are required when packet.geo_authoring.required is true"
+        )
     if issues:
         formatted = "\n".join(f"- {issue}" for issue in issues)
         raise RetrogradeExpansionValidationError(formatted)
