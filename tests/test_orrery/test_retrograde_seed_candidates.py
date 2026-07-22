@@ -14,6 +14,7 @@ from nexus.agents.orrery.retrograde_seed_candidates import (
     SEED_CANDIDATE_RESPONSE_SCHEMA_VERSION,
     RetrogradeSeedCandidateResponse,
     RetrogradeSeedCandidateValidationError,
+    RetrogradeProjectIntent,
     coerce_seed_candidate_response_payload,
     render_seed_generation_prompt,
     render_seed_selection_prompt,
@@ -66,6 +67,42 @@ def test_seed_candidate_prompt_embeds_schema_and_allowed_vocabulary() -> None:
     assert "knows_location" in prompt
     assert "single_entity_tag_refs" in prompt
     assert "character|scholar" in prompt
+    assert "project_intent_policy" in prompt
+    assert "at most two candidates" in prompt
+
+
+@pytest.mark.parametrize(
+    ("project_type", "target_ref"),
+    [
+        ("build_venture", "Vale"),
+        ("pursue_romance", None),
+        ("court_patron", None),
+        ("seek_redemption", None),
+        ("recruit_ally", None),
+    ],
+)
+def test_project_intent_rejects_migration_incompatible_targets(
+    project_type: str,
+    target_ref: str | None,
+) -> None:
+    with pytest.raises(ValidationError):
+        RetrogradeProjectIntent.model_validate(
+            {
+                "project_type": project_type,
+                "target_ref": target_ref,
+                "rationale": "Long-arc pressure.",
+            }
+        )
+
+
+def test_project_intent_rejects_unknown_type() -> None:
+    with pytest.raises(ValidationError):
+        RetrogradeProjectIntent.model_validate(
+            {
+                "project_type": "conquer_world",
+                "rationale": "Not in the closed vocabulary.",
+            }
+        )
 
 
 def test_seed_candidate_wire_schema_constrains_kind_tag_refs() -> None:

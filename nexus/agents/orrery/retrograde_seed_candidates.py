@@ -26,6 +26,15 @@ SEED_CANDIDATE_RESPONSE_SCHEMA_VERSION: SeedCandidateSchemaVersion = (
     "orrery_retrograde_seed_candidates.v0"
 )
 
+RetrogradeProjectType = Literal[
+    "plan_relocation",
+    "recruit_ally",
+    "build_venture",
+    "pursue_romance",
+    "court_patron",
+    "seek_redemption",
+]
+
 
 class RetrogradeSeedCandidateValidationError(ValueError):
     """Raised when a seed candidate response is shaped correctly but illegal."""
@@ -205,6 +214,42 @@ class RetrogradeWireClaimedEdge(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
 
+class RetrogradeProjectIntent(BaseModel):
+    """Optional long-arc project implied by one generated seed."""
+
+    project_type: RetrogradeProjectType
+    target_ref: Optional[EntityRef] = Field(
+        default=None,
+        description="Compact character/place ref when the project type needs one.",
+    )
+    rationale: str = Field(min_length=1, max_length=500)
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    @model_validator(mode="after")
+    def _validate_typed_target(self) -> "RetrogradeProjectIntent":
+        validate_project_target_shape(
+            project_type=self.project_type,
+            target_ref=self.target_ref,
+            context="project intent",
+        )
+        return self
+
+
+class RetrogradeWireProjectIntent(BaseModel):
+    """Provider-facing twin of :class:`RetrogradeProjectIntent`."""
+
+    project_type: RetrogradeProjectType
+    target_ref: str = Field(
+        default="",
+        max_length=ENTITY_REF_MAX_LENGTH,
+        description="Compact target ref, or an empty string when targetless.",
+    )
+    rationale: str = Field(min_length=1, max_length=500)
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+
 class RetrogradeWireSeedCandidate(BaseModel):
     """Provider-facing seed candidate with compact mechanical refs."""
 
@@ -218,6 +263,7 @@ class RetrogradeWireSeedCandidate(BaseModel):
     )
     defer_or_reject_if: list[str] = Field(default_factory=list)
     claimed_edges: list[RetrogradeWireClaimedEdge] = Field(default_factory=list)
+    project_intent: Optional[RetrogradeWireProjectIntent] = None
 
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
@@ -293,6 +339,10 @@ class RetrogradeSeedCandidate(BaseModel):
             "One or two dangling edges from the request's candidate_graph "
             "that this seed claims and resolves."
         ),
+    )
+    project_intent: Optional[RetrogradeProjectIntent] = Field(
+        default=None,
+        description="Rare optional project generator carried into R6 weaving.",
     )
 
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
@@ -491,6 +541,19 @@ def render_seed_generation_prompt(
         "coverage_functions": seed_generation_request.get("coverage_functions", []),
         "candidate_graph": seed_generation_request.get("candidate_graph", {}),
         "selection_rubric": seed_generation_request.get("selection_rubric", {}),
+        "project_intent_policy": {
+            "optional": True,
+            "rarity": "At most two candidates per cast should carry an intent.",
+            "unresolved_ledger": ["court_patron", "seek_redemption"],
+            "trait_bound_hook": [
+                "build_venture",
+                "pursue_romance",
+                "recruit_ally",
+            ],
+            "target_refs": (
+                "Use the same compact entity-ref language as mechanical_hints."
+            ),
+        },
         "prompt_sections": seed_generation_request.get("prompt_sections", []),
         "response_contract": _prompt_response_contract(),
     }
@@ -510,6 +573,9 @@ def render_seed_generation_prompt(
         "name and required kind.\n"
         "Keep summaries, rationales, and rejection conditions compact.\n"
         "If a mechanical hint cannot satisfy the hard validation rules, omit it.\n"
+        "Project intent is optional and rare: propose it only for a seed serving "
+        "the listed unresolved_ledger or trait_bound_hook functions, and use it "
+        "on at most two candidates in the cast.\n"
         "Return JSON only. Unknown mechanical primitives are invalid.\n\n"
         "RETROGRADE_SEED_GENERATION_REQUEST:\n"
         f"{json.dumps(prompt_payload, indent=2, sort_keys=True)}"
@@ -632,6 +698,12 @@ def _expand_wire_seed_candidate_payload(payload: Mapping[str, Any]) -> dict[str,
         hints = candidate_row.get("mechanical_hints")
         if isinstance(hints, Mapping):
             candidate_row["mechanical_hints"] = _expand_wire_mechanical_hints(hints)
+        project_intent = candidate_row.get("project_intent")
+        if isinstance(project_intent, Mapping):
+            candidate_row["project_intent"] = {
+                **dict(project_intent),
+                "target_ref": _none_if_empty(project_intent.get("target_ref")),
+            }
         expanded_candidates.append(candidate_row)
 
     data["candidates"] = expanded_candidates
@@ -720,6 +792,24 @@ def _none_if_empty(value: Any) -> Any:
     if value == "":
         return None
     return value
+
+
+def validate_project_target_shape(
+    *,
+    project_type: str,
+    target_ref: Optional[str],
+    context: str,
+) -> None:
+    character_targeted = {
+        "recruit_ally",
+        "pursue_romance",
+        "court_patron",
+        "seek_redemption",
+    }
+    if project_type == "build_venture" and target_ref is not None:
+        raise ValueError(f"{context} build_venture forbids a target_ref")
+    if project_type in character_targeted and target_ref is None:
+        raise ValueError(f"{context} {project_type} requires a target_ref")
 
 
 def _literal_or_str(values: list[str]) -> Any:
@@ -950,7 +1040,6 @@ def _candidate_contract_issues(
         issues.append(
             f"{candidate_prefix} uses unknown coverage functions {unknown_coverage}"
         )
-
     events_by_ref: dict[str, RetrogradeSeedEventHint] = {}
     duplicate_event_refs = _duplicates(
         [event.event_ref for event in candidate.mechanical_hints.events]
@@ -1198,6 +1287,7 @@ def _prompt_response_contract() -> dict[str, Any]:
             "mechanical_hints",
             "defer_or_reject_if",
             "claimed_edges",
+            "project_intent",
         ],
         "mechanical_hint_fields": [
             "events",
@@ -1212,6 +1302,7 @@ def _prompt_response_contract() -> dict[str, Any]:
                 "subject_kind|object_kind|relationship_type"
             ),
             "claimed_edges": ("edge_id, open_endpoint_name, open_endpoint_kind"),
+            "project_intent": "project_type, target_ref, rationale",
             "absence": "Use empty strings for absent supporting_event_ref/rationale.",
         },
     }

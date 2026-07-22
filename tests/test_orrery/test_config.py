@@ -25,6 +25,7 @@ from nexus.config.settings_models import (
     OrreryRevealSettings,
     OrrerySettings,
     OrreryRetrogradeMaturationSettings,
+    OrreryRetrogradeProjectSettings,
     OrreryRetrogradeWeirdGenreBands,
     OrreryRetrogradeWeirdSettings,
     OrrerySunhelmSettings,
@@ -446,3 +447,16 @@ def test_orrery_maturation_accepts_equal_generation_and_selection() -> None:
         generate_candidates=2, select_target=2
     )
     assert settings.generate_candidates == 2
+
+
+def test_retrograde_projects_default_off_and_require_positive_cap() -> None:
+    assert OrreryRetrogradeProjectSettings().enabled is False
+    with pytest.raises(ValidationError):
+        OrreryRetrogradeProjectSettings(max_seeded_projects=0)
+
+
+def test_shipped_retrograde_projects_are_enabled() -> None:
+    settings = load_settings("nexus.toml")
+    assert settings.orrery is not None
+    assert settings.orrery.retrograde.projects.enabled is True
+    assert settings.orrery.retrograde.projects.max_seeded_projects == 3

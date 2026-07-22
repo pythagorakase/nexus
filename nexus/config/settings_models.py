@@ -1796,6 +1796,22 @@ class OrreryRetrogradeWizardSettings(BaseModel):
     )
 
 
+class OrreryRetrogradeProjectSettings(BaseModel):
+    """Wizard-time project seeding controls."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = Field(
+        default=False,
+        description="Allow R6 project intents to seed stage-one project rows.",
+    )
+    max_seeded_projects: int = Field(
+        default=3,
+        gt=0,
+        description="Positive cast-wide cap after per-character arbitration.",
+    )
+
+
 class OrreryRetrogradeJunctionCountSettings(BaseModel):
     """Shared-entity junction counts by player-facing weirdness level."""
 
@@ -1996,6 +2012,9 @@ class OrreryRetrogradeSettings(BaseModel):
     )
     wizard: OrreryRetrogradeWizardSettings = Field(
         default_factory=OrreryRetrogradeWizardSettings
+    )
+    projects: OrreryRetrogradeProjectSettings = Field(
+        default_factory=OrreryRetrogradeProjectSettings
     )
     graph: OrreryRetrogradeGraphSettings = Field(
         default_factory=OrreryRetrogradeGraphSettings

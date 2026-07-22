@@ -13,6 +13,8 @@ new-story wizard fires at the ready -> narrative transition:
    as the wizard transition writes, so a blocked persistence rolls back the
    whole world and the slot stays in wizard-ready for a loud, retryable
    failure -- a history-less world can never silently enter narrative mode.
+   Its final in-transaction write is a genesis checkpoint at the synthetic
+   prologue, making wizard-born projection rows an honest replay base.
 3. ``embed_retrograde_history_summaries`` runs the summary embedding lifecycle
    for the new rows after the transaction commits.
 4. ``build_wizard_history_surface`` projects the persistence manifest into
@@ -26,6 +28,7 @@ the API can expose them while the transition request is in flight.
 
 from __future__ import annotations
 
+import json
 import logging
 import threading
 import time
@@ -34,6 +37,7 @@ from typing import Any, Callable, Mapping, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from nexus.agents.orrery.retrograde_markers import RETROGRADE_PROLOGUE_MARKER
 from nexus.config.settings_models import (
     OrreryRetrogradeRetrievalSettings,
     OrreryRetrogradeWizardSettings,
@@ -250,6 +254,7 @@ def persist_retrograde_history(
     epistemics_settings = settings.orrery.epistemics
 
     _emit(progress, "persistence", {})
+    _raise_if_genesis_checkpoint_exists(cur)
     dry_manifest = build_retrograde_persistence_plan(
         cur,
         packet=bundle.packet,
@@ -262,6 +267,9 @@ def persist_retrograde_history(
         summaries_enabled=retrieval_settings.summaries_enabled,
         recorded_at_chunk_id=recorded_at_chunk_id,
         epistemics_settings=epistemics_settings,
+        project_seeding_enabled=settings.orrery.retrograde.projects.enabled,
+        max_seeded_projects=(settings.orrery.retrograde.projects.max_seeded_projects),
+        project_settings=settings.orrery.projects,
     )
 
     blockers = list(dry_manifest["execute_blockers"])
@@ -308,13 +316,64 @@ def persist_retrograde_history(
         summaries_enabled=retrieval_settings.summaries_enabled,
         recorded_at_chunk_id=recorded_at_chunk_id,
         epistemics_settings=epistemics_settings,
+        project_seeding_enabled=settings.orrery.retrograde.projects.enabled,
+        max_seeded_projects=(settings.orrery.retrograde.projects.max_seeded_projects),
+        project_settings=settings.orrery.projects,
     )
+    from nexus.agents.orrery.reconstruction import capture_state_checkpoint_sync
+
+    prologue_chunk_id = manifest["prologue_anchor"]["chunk_id"]
+    if prologue_chunk_id is None:
+        raise RuntimeError("Retrograde persistence produced no prologue chunk")
+    checkpoint_id = capture_state_checkpoint_sync(
+        cur,
+        chunk_id=int(prologue_chunk_id),
+        label="genesis",
+    )
+    if checkpoint_id is None:
+        raise RuntimeError(
+            "Genesis checkpoint capture returned no id for prologue chunk "
+            f"{prologue_chunk_id}; capture_state_checkpoint_sync reports this "
+            "only when that (chunk_id, label='genesis') checkpoint already exists"
+        )
+    manifest["genesis_checkpoint"] = {
+        "id": checkpoint_id,
+        "chunk_id": int(prologue_chunk_id),
+        "label": "genesis",
+    }
     logger.info(
         "Retrograde persistence executed for slot %s: %s",
         bundle.slot,
         manifest["counters"],
     )
     return manifest
+
+
+def _raise_if_genesis_checkpoint_exists(cur: Any) -> None:
+    """Reject wizard persistence against an already-snapshotted prologue."""
+
+    cur.execute(
+        """
+        /* orrery:retrograde:genesis_invariant */
+        SELECT sc.id, sc.chunk_id
+        FROM state_checkpoints AS sc
+        JOIN narrative_chunks AS nc ON nc.id = sc.chunk_id
+        WHERE sc.label = 'genesis'
+          AND nc.authorial_directives @> %s::jsonb
+        ORDER BY nc.id
+        LIMIT 1
+        """,
+        (json.dumps([RETROGRADE_PROLOGUE_MARKER]),),
+    )
+    row = cur.fetchone()
+    if row is None:
+        return
+    checkpoint_id = int(row[0] if not hasattr(row, "keys") else row["id"])
+    prologue_chunk_id = int(row[1] if not hasattr(row, "keys") else row["chunk_id"])
+    raise RuntimeError(
+        "Retrograde genesis invariant violated: checkpoint "
+        f"{checkpoint_id} already exists at prologue chunk {prologue_chunk_id}"
+    )
 
 
 def embed_retrograde_history_summaries(
@@ -397,6 +456,8 @@ def build_wizard_history_surface(
         "woven_seeds": sum(1 for status in thread_statuses if status == "woven"),
         "deferred_seeds": sum(1 for status in thread_statuses if status == "deferred"),
         "rejected_seeds": sum(1 for status in thread_statuses if status == "rejected"),
+        "projects": counters.get("projects_inserted", 0)
+        + counters.get("projects_would_insert", 0),
     }
     return {
         "weird_level": bundle.weird.get("level"),

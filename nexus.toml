@@ -549,6 +549,13 @@ transition_timeout_seconds = 900
 # process-local registry. Run the API single-worker, or accept that status
 # polls answered by a non-writing worker report stage "idle" mid-transition.
 
+[orrery.retrograde.projects]
+# Wizard-time long-arc generation is opt-in in the model and enabled in the
+# shipped configuration. Every accepted intent starts on its first stage.
+enabled = true
+# Cast-wide bound after deterministic one-project-per-character arbitration.
+max_seeded_projects = 3
+
 [orrery.retrograde.graph]
 # R3 candidate-graph sampling calibration (issue #442). The graph rolls
 # dangling-edge ingredients the seed model must reconcile; these knobs set
