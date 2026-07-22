@@ -675,6 +675,7 @@ def sample_anchor(
             need_tuning=None,
             project_settings=orrery_settings.get("projects"),
             epistemics_settings=orrery_settings.get("epistemics"),
+            weather_settings=orrery_settings.get("weather"),
             world_time_override=world_time_override,
         )
         override_locations, override_labels = resolve_location_overrides(

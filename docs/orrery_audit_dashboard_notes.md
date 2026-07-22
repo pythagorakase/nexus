@@ -32,7 +32,9 @@ So the next step is not "invent explainability"; it is **connect the existing ex
   unversioned `character_relationships` projection after excluding inactive
   character endpoints
 - pair tags from `entity_pair_tags WHERE cleared_at IS NULL`
-- travel states, routine anchors, faction memberships, weather (a static story-seed value) — all current, no as-of variant
+- travel states, routine anchors, and faction memberships — all current, no as-of variant
+- weather from the anchor world clock plus the anchor chunk's stored scene
+  override — deterministic and honestly rewindable
 
 So "load slot 2, set clock to chunk 1400" shows a 1400-era roster, events, and clock wrapped around today's tags, positions, and relationships. The historical roster makes the chimera *more* convincing, not less — for an audit tool that is a correctness trap.
 
@@ -55,7 +57,8 @@ The original caveat — "confirm rows carry a chunk-id bestowal key" — **resol
 | Relationships/trust/orbit distance | Impossible by schema; near-static in practice — label as unversioned. Orbit distance is a derived current projection, not an independently versioned axis. |
 | Position/activity | Impossible for Skald-driven changes (no instrumentation); replayable for Orrery-driven changes via `orrery_resolutions.state_delta` |
 | Need debt | Fully replayable from `orrery_resolutions` deltas |
-| Travel state, routine anchors, faction membership, weather | No history; frozen in every mode |
+| Travel state, routine anchors, faction membership | No history; frozen in every mode |
+| Weather | Derived from anchor world time; scene override stored per chunk |
 
 Two standing rules fall out: **never use wall clocks as chunk proxies** (retrograde backfill wrote months of world time at one wall-clock instant; as-of predicates must be world-time based via `chunk_metadata.world_time`, which is fully populated), and **provenance is per-row, not global** (`source_kind` × has-world-time × has-clearance-log determines whether each tag's as-of answer is exact, approximate, or unknowable — a single "position approximate" flag is too coarse).
 

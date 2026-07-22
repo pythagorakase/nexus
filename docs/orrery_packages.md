@@ -42,7 +42,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
   - **AND:**
     - actor is in `subterranean` place class
     - actor is in `transit` place class
-  - weather is one of [rain]
+  - actor observes weather in [rain]
 
 **Does:** activity → "hiding from active pursuit"; adds `off_grid` to actor
 **Event:** `evade_pursuit`
@@ -2311,7 +2311,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
   - actor is in transit
   - **OR:**
     - actor travel risk is one of [high, extreme]
-    - weather is one of [rain, snow, fog]
+    - actor observes weather in [rain, snow, fog]
 
 **Does:** activity → "delayed in transit"; records travel delay
 **Event:** `travel_delayed`
@@ -3177,7 +3177,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 **When:**
 
 - **AND:**
-  - weather is one of [clear, warm]
+  - actor observes weather in [clear, warm]
   - **NOT:** actor is in `subterranean` place class
 
 **Does:** activity → "walking under open sky"

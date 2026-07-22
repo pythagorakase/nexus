@@ -77,6 +77,7 @@ from nexus.agents.orrery.substrate import (
     project_overdue_hours,
     project_target_is,
     project_target_is_active,
+    weather_for_actor,
 )
 
 
@@ -1360,12 +1361,14 @@ def _time_of_day_in(match: re.Match, state: WorldState, bindings: Bindings) -> d
 @_resolver("weather_is")
 def _weather_is(match: re.Match, state: WorldState, bindings: Bindings) -> dict:
     candidates = match["values"].split(",")
-    matched = [state.weather] if state.weather in candidates else []
+    actor_id = _entity(bindings, Slot.ACTOR.value)
+    observed_weather = weather_for_actor(state, bindings)
+    matched = [observed_weather] if observed_weather in candidates else []
     return _evidence(
         "weather_is",
         params={"weather": candidates},
-        entities={},
-        observed={"weather": state.weather},
+        entities={Slot.ACTOR.value: actor_id},
+        observed={"actor_weather": observed_weather},
         matched=matched,
         result=bool(matched),
     )

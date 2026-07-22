@@ -513,6 +513,7 @@ def explain_dry_run(
     epistemics_settings: Optional[Any] = None,
     fanout_settings: Optional[Any] = None,
     contagion_settings: Optional[Any] = None,
+    weather_settings: Optional[Any] = None,
 ) -> ExplainedTickReport:
     """Hydrate, bind, and explain Orrery packages without database writes.
 
@@ -547,6 +548,7 @@ def explain_dry_run(
         project_settings=project_settings,
         epistemics_settings=epistemics_policy,
         contagion_settings=contagion_settings,
+        weather_settings=weather_settings,
     )
 
     templates_list = list(configure_project_magnitudes(templates, project_policy))

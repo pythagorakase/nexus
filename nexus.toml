@@ -291,6 +291,21 @@ fan_out_cap = 6
 # this feature is disabled because it is a propagation correctness invariant.
 enabled = true
 
+[orrery.weather]
+enabled = true
+period_hours = 6
+
+[orrery.weather.climates]
+lagoon_wet = ["rain", "rain", "fog", "warm", "rain", "clear", "warm", "rain"]
+temperate = ["clear", "clear", "rain", "fog", "clear", "warm", "clear", "rain"]
+cold = ["snow", "clear", "fog", "snow", "clear", "snow", "clear", "fog"]
+
+[orrery.weather.seed_climates]
+rain = "lagoon_wet"
+snow = "cold"
+fog = "temperate"
+clear = "temperate"
+
 [orrery.selection]
 # Branch selection inside a fired package: "stochastic" softmax-samples all
 # passing branches by magnitude (PRNG seeded on per-resolution persisted

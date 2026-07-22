@@ -150,6 +150,13 @@ contradiction, never adjudicate which is true. Freshly revealed entries are
 scene-relevant beats worth considering now, without requiring immediate
 exposition. If older knowledge was omitted, treat the digest as incomplete.
 
+### Scene Conditions
+
+`SCENE CONDITIONS` gives the anchor scene's ambient weather and time of day.
+Treat the derived weather as physical continuity. Override it only for a
+deliberate dramatic effect by setting `chunk_metadata.scene_weather`; the
+override is local to this scene, while weather elsewhere remains derived.
+
 ---
 
 ## Output: Narrative and State

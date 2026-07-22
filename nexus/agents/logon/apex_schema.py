@@ -771,6 +771,13 @@ class ChunkMetadataUpdate(BaseModel):
             "in-world time passes)."
         ),
     )
+    scene_weather: Optional[Literal["clear", "rain", "fog", "snow", "warm"]] = Field(
+        default=None,
+        description=(
+            "Optional anchor-scene weather override for deliberate dramatic "
+            "effect; omit to keep derived local weather."
+        ),
+    )
 
     model_config = ConfigDict(extra="forbid")
 

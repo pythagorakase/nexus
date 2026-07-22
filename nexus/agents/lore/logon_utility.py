@@ -558,6 +558,15 @@ class LogonUtility:
                 sections.append(location_line)
             sections.append("")
 
+        scene_conditions = context.get("scene_conditions") or {}
+        if scene_conditions:
+            sections.append("=== SCENE CONDITIONS ===")
+            sections.append(f"Weather: {scene_conditions.get('weather', 'unknown')}")
+            sections.append(
+                f"Time of day: {scene_conditions.get('time_of_day', 'unknown')}"
+            )
+            sections.append("")
+
         # Add warm slice
         if context.get("warm_slice"):
             sections.append("=== RECENT NARRATIVE ===")

@@ -378,6 +378,8 @@ class WorldState:
     time_of_day: str = "midday"
     world_time: Optional[datetime] = None
     weather: str = "clear"
+    place_weather: Mapping[int, str] = field(default_factory=dict)
+    localized_weather_enabled: bool = False
     current_tick: int = 0
 
     def __post_init__(self) -> None:
@@ -2002,13 +2004,36 @@ def time_of_day_in(*times: str) -> Condition:
     return _named(_condition, f"time_of_day_in({','.join(times)})")
 
 
+def weather_for_actor(state: WorldState, bindings: Bindings) -> Optional[str]:
+    """Return the bound actor's local weather, or ``None`` when unlocated.
+
+    An actor actively in transit observes the origin place's departure
+    weather.  This keeps travel gates deterministic while the actor has no
+    intermediate stored place.
+    """
+
+    actor_id = _slot_entity(bindings, Slot.ACTOR)
+    if actor_id is None:
+        return None
+    travel = state.travel_states.get(actor_id)
+    if travel is not None and travel.status == "in_transit":
+        place_id = travel.origin_place_id
+    else:
+        place_id = state.locations.get(actor_id)
+    if place_id is None:
+        return None
+    if not state.localized_weather_enabled:
+        return state.weather
+    return state.place_weather.get(place_id)
+
+
 def weather_is(*weather_values: str) -> Condition:
-    """Return whether current weather is in the given set."""
+    """Return whether the bound actor's observed weather is in the set."""
 
     candidates = frozenset(weather_values)
 
-    def _condition(state: WorldState, _bindings: Bindings) -> bool:
-        return state.weather in candidates
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        return weather_for_actor(state, bindings) in candidates
 
     return _named(_condition, f"weather_is({','.join(weather_values)})")
 

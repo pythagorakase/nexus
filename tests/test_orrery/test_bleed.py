@@ -524,6 +524,32 @@ async def test_assemble_context_payload_reuses_orrery_proposal_anchor() -> None:
 
 
 @pytest.mark.asyncio
+async def test_assemble_context_payload_attaches_scene_conditions() -> None:
+    """The resolved anchor weather and time reach the Storyteller payload."""
+
+    session = FakeSession()
+    manager = TurnCycleManager(FakeLore(_settings(), session))
+    context = TurnContext(
+        turn_id="t1",
+        user_input="Continue.",
+        start_time=0,
+        warm_slice=[],
+    )
+    context.orrery_proposal = SimpleNamespace(
+        anchor_chunk_id=77,
+        pressure_count=0,
+        scene_conditions={"weather": "warm", "time_of_day": "afternoon"},
+    )
+
+    await manager.assemble_context_payload(context)
+
+    assert context.context_payload["scene_conditions"] == {
+        "weather": "warm",
+        "time_of_day": "afternoon",
+    }
+
+
+@pytest.mark.asyncio
 async def test_call_apex_ai_records_bleed_offers_after_generation_success() -> None:
     """Surfacing bookkeeping is written only after LOGON returns a response."""
 

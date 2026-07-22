@@ -13,6 +13,7 @@ from typing import Optional, Any, List
 from psycopg2.extras import RealDictCursor
 
 from nexus.agents.logon.apex_schema import (
+    ChunkMetadataUpdate,
     ChronologyUpdate,
     ReferencedEntities,
     PlaceReference,
@@ -46,6 +47,56 @@ from nexus.api.choice_handling import (
 )
 
 logger = logging.getLogger("nexus.api.commit_handler_sync")
+
+
+def insert_chunk_metadata_sync(
+    cur: Any,
+    *,
+    chunk_id: int,
+    season: int,
+    episode: int,
+    scene: int,
+    world_layer: str,
+    time_delta: Optional[Any],
+    generation_date: datetime,
+    slug: str,
+    generation_model: Optional[str],
+    scene_weather: Optional[str],
+) -> None:
+    """Insert chunk metadata, including a non-null scene weather override."""
+
+    metadata_values = (
+        chunk_id,
+        season,
+        episode,
+        scene,
+        world_layer,
+        time_delta,
+        generation_date,
+        slug,
+        generation_model,
+    )
+    if scene_weather is None:
+        cur.execute(
+            """
+            INSERT INTO chunk_metadata (
+                chunk_id, season, episode, scene, world_layer,
+                time_delta, generation_date, slug, generation_model
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            metadata_values,
+        )
+    else:
+        cur.execute(
+            """
+            INSERT INTO chunk_metadata (
+                chunk_id, season, episode, scene, world_layer,
+                time_delta, generation_date, slug, generation_model,
+                scene_weather
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            (*metadata_values, scene_weather),
+        )
 
 
 def _json_dumps_model(value: Any) -> Optional[str]:
@@ -425,6 +476,7 @@ def commit_incubator_to_database_sync(
             faction_refs = resolve_faction_references_sync(ref_entities.factions, conn)
 
             # Step 4: Convert metadata
+            metadata_update = ChunkMetadataUpdate(**incubator["metadata_updates"])
             chronology_data = incubator["metadata_updates"].get("chronology", {})
             chronology = ChronologyUpdate(**chronology_data)
             db_meta = chronology_to_db_values(
@@ -489,24 +541,18 @@ def commit_incubator_to_database_sync(
                     f"{db_meta['scene']:03d}"
                 )
 
-                cur.execute(
-                    """
-                    INSERT INTO chunk_metadata (
-                        chunk_id, season, episode, scene, world_layer,
-                        time_delta, generation_date, slug, generation_model
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """,
-                    (
-                        chunk_id,
-                        db_meta["season"],
-                        db_meta["episode"],
-                        db_meta["scene"],
-                        world_layer,
-                        db_meta["time_delta"],
-                        datetime.utcnow(),
-                        slug,
-                        incubator.get("generation_model"),
-                    ),
+                insert_chunk_metadata_sync(
+                    cur,
+                    chunk_id=chunk_id,
+                    season=db_meta["season"],
+                    episode=db_meta["episode"],
+                    scene=db_meta["scene"],
+                    world_layer=world_layer,
+                    time_delta=db_meta["time_delta"],
+                    generation_date=datetime.utcnow(),
+                    slug=slug,
+                    generation_model=incubator.get("generation_model"),
+                    scene_weather=metadata_update.scene_weather,
                 )
                 logger.info("Created metadata for chunk %s: %s", chunk_id, slug)
 
