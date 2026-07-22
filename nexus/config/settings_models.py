@@ -686,6 +686,7 @@ class OrreryCompositionSettings(BaseModel):
 
     hostile_source_enabled: bool = False
     roster_source_enabled: bool = False
+    acquaintance_source_enabled: bool = False
     roster_reach: int = Field(default=2, ge=1, le=4)
 
 

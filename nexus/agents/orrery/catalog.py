@@ -118,6 +118,13 @@ _register(
     ),
 )
 _register(
+    r"has_status_in_scope\((?P<subj>\w+)->(?P<scope>\w+)\)",
+    lambda m: (
+        f"{_slot(m.group('subj'))} has a `status:*` pair tag to "
+        f"{_slot(m.group('scope'))}"
+    ),
+)
+_register(
     r"has_pair_tag_to_current_location\((?P<tag>[^@()]+)@(?P<slot>\w+)\)",
     lambda m: (
         f"{_slot(m.group('slot'))} has `{m.group('tag')}` pair tag "
@@ -347,6 +354,13 @@ _register(
     ),
 )
 _register(
+    r"has_any_relationship\((?P<a>\w+)<->(?P<b>\w+)\)",
+    lambda m: (
+        f"a relationship row exists between {_slot(m.group('a'))} and "
+        f"{_slot(m.group('b'))} in either direction"
+    ),
+)
+_register(
     r"has_symmetric_relationship_of_type\("
     r"(?P<type>[^,()]+),(?P<a>\w+)<->(?P<b>\w+)\)",
     lambda m: (
@@ -565,6 +579,10 @@ def _render_state_delta(delta: Mapping[str, Any]) -> str:
             hours = value.get("hours") if isinstance(value, Mapping) else None
             duration = f" for {hours} world-hours" if hours is not None else ""
             parts.append(f"sets actor mood to `{mood}`{duration}")
+            continue
+        if key == "status.bestow":
+            level = value.get("level") if isinstance(value, Mapping) else value
+            parts.append(f"bestows actor `status:{level}` in bound faction")
             continue
         if key in ("entity_tags.add", "entity_tags_target.add"):
             target = "actor" if key == "entity_tags.add" else "target"
@@ -886,6 +904,9 @@ def _collect_vocabulary(
             if branch.event_type:
                 events.add(branch.event_type)
             for key, value in branch.state_delta.items():
+                if key == "status.bestow" and isinstance(value, Mapping):
+                    pair_tags.add(f"status:{value.get('level')}")
+                    continue
                 if key in (
                     "entity_pair_tags_target.clear_inbound",
                     "entity_pair_tags.add_outbound",

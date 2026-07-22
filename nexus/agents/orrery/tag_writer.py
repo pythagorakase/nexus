@@ -1117,7 +1117,7 @@ def apply_pair_tag_bestowal(
     if tag.startswith("status:"):
         raise ValueError(
             f"pair_tag {tag!r} belongs to the exclusive status ladder; "
-            "use apply_status_pair_tag_bestowal"
+            "use apply_status_pair_tag_bestowal (templates use status.bestow)"
         )
     if subject_entity_id == object_entity_id:
         raise ValueError(
@@ -1340,6 +1340,120 @@ def apply_status_pair_tag_bestowal(
         source_chunk_id=source_chunk_id,
         template_id=template_id,
     )
+
+
+async def apply_status_pair_tag_bestowal_async(
+    conn: Any,
+    *,
+    subject_entity_id: int,
+    scope_faction_entity_id: int,
+    subject_kind: str,
+    level: str,
+    source_kind: str = "skald_inline",
+    world_time: Optional[datetime] = None,
+    source_chunk_id: Optional[int] = None,
+    template_id: Optional[str] = None,
+) -> bool:
+    """Async twin of :func:`apply_status_pair_tag_bestowal`."""
+
+    tag = status_tag_for_level(level)
+    _validate_source_kind(source_kind)
+    if subject_entity_id == scope_faction_entity_id:
+        raise ValueError(
+            f"pair_tag {tag!r} requires distinct subject and object; "
+            "got subject_entity_id == scope_faction_entity_id == "
+            f"{subject_entity_id}"
+        )
+    row = await conn.fetchrow(
+        """
+        SELECT id, subject_kinds, object_kinds
+        FROM pair_tags
+        WHERE tag = $1 AND NOT deprecated
+        """,
+        tag,
+    )
+    if row is None:
+        raise ValueError(f"Unknown or deprecated pair_tag {tag!r}")
+    pair_tag_id = _row_value(row, "id", 0)
+    scope_row = await conn.fetchrow(
+        "SELECT kind::text AS kind FROM entities WHERE id = $1",
+        scope_faction_entity_id,
+    )
+    if scope_row is None:
+        raise ValueError(
+            "Status scope_faction_entity_id="
+            f"{scope_faction_entity_id} does not resolve on the entities spine"
+        )
+    actual_scope_kind = str(_row_value(scope_row, "kind", 0))
+    if actual_scope_kind != "faction":
+        raise ValueError(
+            "Status scope_faction_entity_id="
+            f"{scope_faction_entity_id} has actual kind {actual_scope_kind!r}; "
+            "expected 'faction'"
+        )
+    _validate_pair_tag_kinds(
+        tag=tag,
+        subject_kind=subject_kind,
+        object_kind="faction",
+        subject_kinds=_row_value(row, "subject_kinds", 1),
+        object_kinds=_row_value(row, "object_kinds", 2),
+    )
+    if world_time is None:
+        if source_chunk_id is not None:
+            world_time = await _chunk_world_time_async(conn, source_chunk_id)
+        else:
+            world_time = await _load_world_time_async(conn)
+
+    cleared_rows = await conn.fetch(
+        """
+        UPDATE entity_pair_tags ept
+        SET cleared_at = now()
+        FROM pair_tags pt
+        WHERE ept.pair_tag_id = pt.id
+          AND ept.subject_entity_id = $1
+          AND ept.object_entity_id = $2
+          AND pt.tag = ANY($3)
+          AND ept.cleared_at IS NULL
+        RETURNING ept.id
+        """,
+        subject_entity_id,
+        scope_faction_entity_id,
+        sorted(STATUS_TAGS - {tag}),
+    )
+    for cleared_row in cleared_rows:
+        await conn.execute(
+            """
+            INSERT INTO tag_clearance_log (
+                entity_pair_tag_id, mechanism, cleared_at_world_time,
+                justification, source_chunk_id
+            ) VALUES ($1, 'authored', $2, $3::jsonb, $4)
+            """,
+            _row_value(cleared_row, "id", 0),
+            world_time,
+            json.dumps({"reason": "status_ladder_replace"}),
+            source_chunk_id,
+        )
+    inserted = await conn.fetchrow(
+        """
+        INSERT INTO entity_pair_tags (
+            subject_entity_id, object_entity_id, pair_tag_id,
+            applied_at_world_time, source_kind, source_chunk_id, template_id
+        )
+        VALUES ($1, $2, $3, $4, $5::entity_tag_source_kind, $6, $7)
+        ON CONFLICT (subject_entity_id, object_entity_id, pair_tag_id)
+          WHERE cleared_at IS NULL
+          DO NOTHING
+        RETURNING id
+        """,
+        subject_entity_id,
+        scope_faction_entity_id,
+        pair_tag_id,
+        world_time,
+        source_kind,
+        source_chunk_id,
+        template_id,
+    )
+    return inserted is not None
 
 
 def clear_pair_tag(

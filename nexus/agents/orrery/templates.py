@@ -23,6 +23,7 @@ from nexus.agents.orrery.substrate import (
     has_any_intimacy_suppressor,
     has_any_current_tag,
     has_any_pair_tag,
+    has_any_relationship,
     has_any_status_at_or_above,
     has_any_tag,
     has_contact_of_kind,
@@ -34,6 +35,7 @@ from nexus.agents.orrery.substrate import (
     has_need_debt_at_or_above,
     has_pair_tag,
     has_pair_tag_to_current_location,
+    has_status_in_scope,
     has_relationship_of_type,
     has_symmetric_relationship_of_type,
     has_tag,
@@ -47,6 +49,8 @@ from nexus.agents.orrery.substrate import (
     knows_recent_event,
     lacks_pair_tag,
     project_due,
+    project_faction_is,
+    project_faction_is_active,
     project_target_is,
     project_target_is_active,
     recent_event,
@@ -4353,6 +4357,59 @@ RECREATE = Template(
 )
 
 
+MAKE_ACQUAINTANCE = Template(
+    id="make_acquaintance",
+    priority=5,
+    drive_band=DriveBand.ANCHORED_ROUTINE,
+    blurb="Two strangers in the same place exchange names and a first word.",
+    required_slots=(Slot.ACTOR, Slot.TARGET),
+    forms_acquaintances=True,
+    package_gate=AND(
+        has_minimal_context(Slot.ACTOR),
+        has_minimal_context(Slot.TARGET),
+        co_located(Slot.ACTOR, Slot.TARGET),
+        NOT(has_any_relationship(Slot.ACTOR, Slot.TARGET)),
+        lacks_pair_tag("contact:social", Slot.ACTOR, Slot.TARGET),
+        lacks_pair_tag("contact:social", Slot.TARGET, Slot.ACTOR),
+        NOT(
+            has_any_pair_tag(
+                "hostile_to",
+                "hunting",
+                subject_slot=Slot.ACTOR,
+                object_slot=Slot.TARGET,
+            )
+        ),
+        NOT(
+            has_any_pair_tag(
+                "hostile_to",
+                "hunting",
+                subject_slot=Slot.TARGET,
+                object_slot=Slot.ACTOR,
+            )
+        ),
+    ),
+    branches=(
+        Branch(
+            label="Exchange names",
+            conditions=ALWAYS,
+            narrative_stub=(
+                "{actor} and {target} keep arriving at the same small moment. "
+                "One of them offers a name; the other answers, and strangers "
+                "become people who can speak again."
+            ),
+            state_delta={
+                "entity_pair_tags.add_outbound": ["contact:social"],
+                "entity_pair_tags.add_inbound": ["contact:social"],
+            },
+            event_type="contact_made",
+            changed_fields=("entity_pair_tags",),
+            magnitude=0.08,
+            promotable=False,
+        ),
+    ),
+)
+
+
 START_RELOCATION_PLAN = Template(
     id="start_relocation_plan",
     priority=17,
@@ -5713,6 +5770,330 @@ ADVANCE_COURT_PATRON = Template(
 )
 
 
+START_COURT_PATRON_FACTION = Template(
+    id="start_court_patron_faction",
+    priority=17,
+    drive_band=DriveBand.PROJECT_IDENTITY,
+    priority_override_rationale=(
+        "Courting an institution is a deliberate project opening, not ambient "
+        "membership or routine social maintenance."
+    ),
+    blurb="An off-screen character begins earning a faction's notice.",
+    required_slots=(Slot.ACTOR, Slot.FACTION),
+    courts_factions=True,
+    binds_project_faction=True,
+    package_gate=AND(
+        project_due("start", project_type="court_patron"),
+        has_minimal_context(),
+        at_routine_anchor("home"),
+        NOT(is_in_transit()),
+        NOT(is_constrained()),
+        NOT(
+            OR(
+                has_need_debt_at_or_above("sleep", 8),
+                has_need_debt_at_or_above("thirst", 2),
+                has_need_debt_at_or_above("hunger", 4),
+            )
+        ),
+        NOT(has_status_in_scope(Slot.ACTOR, Slot.FACTION)),
+    ),
+    branches=(
+        Branch(
+            label="Begin seeking the faction's notice",
+            conditions=ALWAYS,
+            narrative_stub=(
+                "{actor} stops waiting for {faction} to notice them by chance. "
+                "They choose a first service that the institution will have to "
+                "recognize."
+            ),
+            state_delta={
+                "project.start": {
+                    "project_type": "court_patron",
+                    "stage": "gaining_notice",
+                    "milestone": True,
+                }
+            },
+            event_type="court_patron_started",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.stage",
+                "character_project_states.target_faction_entity_id",
+                "character_project_states.next_eligible_at_world_time",
+            ),
+            magnitude=0.40,
+        ),
+    ),
+)
+
+
+ADVANCE_COURT_PATRON_FACTION = Template(
+    id="advance_court_patron_faction",
+    priority=47,
+    drive_band=DriveBand.PROJECT_IDENTITY,
+    priority_override_rationale=(
+        "A due institutional patronage effort shares the established project "
+        "continuation slot."
+    ),
+    blurb=(
+        "A due faction patronage effort gains notice, proves worth, secures "
+        "standing, stalls, is refused, or ends."
+    ),
+    required_slots=(Slot.ACTOR, Slot.FACTION),
+    binds_project_faction=True,
+    package_gate=AND(
+        project_due("ready", project_type="court_patron"),
+        project_faction_is(Slot.FACTION),
+        NOT(is_in_transit()),
+        NOT(is_constrained()),
+        NOT(
+            OR(
+                has_need_debt_at_or_above("sleep", 8),
+                has_need_debt_at_or_above("thirst", 2),
+                has_need_debt_at_or_above("hunger", 4),
+            )
+        ),
+    ),
+    branches=(
+        Branch(
+            label="End a patronage effort whose faction is no longer available",
+            conditions=NOT(project_faction_is_active(Slot.FACTION)),
+            narrative_stub=(
+                "{faction} is no longer an institution whose favor can answer. "
+                "{actor} closes the effort instead of serving an empty name."
+            ),
+            state_delta={
+                "project.abandon": {
+                    "reason": "target_inactive_or_non_faction",
+                    "milestone": True,
+                }
+            },
+            event_type="court_patron_abandoned",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.source_chunk_id",
+            ),
+            magnitude=0.40,
+            preemptive=True,
+        ),
+        Branch(
+            label="Secure standing in the faction",
+            conditions=AND(
+                project_due("completion", project_type="court_patron"),
+                trust_at_least(2, Slot.FACTION, Slot.ACTOR),
+                NOT(
+                    has_any_pair_tag(
+                        "hostile_to",
+                        "hunting",
+                        subject_slot=Slot.ACTOR,
+                        object_slot=Slot.FACTION,
+                    )
+                ),
+                NOT(
+                    has_any_pair_tag(
+                        "hostile_to",
+                        "hunting",
+                        subject_slot=Slot.FACTION,
+                        object_slot=Slot.ACTOR,
+                    )
+                ),
+            ),
+            narrative_stub=(
+                "{faction} finally answers {actor}'s service with a place in "
+                "its ranks. The standing is junior, but it is real."
+            ),
+            # This is the C-faction introduction mechanism: status:junior
+            # makes the patron an institutional composition source next tick.
+            state_delta={
+                "project.complete": {"milestone": True},
+                "status.bestow": {"level": "junior"},
+            },
+            event_type="court_patron_completed",
+            changed_fields=(
+                "character_project_states.status",
+                "entity_pair_tags",
+            ),
+            magnitude=0.40,
+            preemptive=True,
+        ),
+        Branch(
+            label="Withdraw after the faction turns hostile",
+            conditions=OR(
+                has_any_pair_tag(
+                    "hostile_to",
+                    "hunting",
+                    subject_slot=Slot.ACTOR,
+                    object_slot=Slot.FACTION,
+                ),
+                has_any_pair_tag(
+                    "hostile_to",
+                    "hunting",
+                    subject_slot=Slot.FACTION,
+                    object_slot=Slot.ACTOR,
+                ),
+                trust_below(-1, Slot.FACTION, Slot.ACTOR),
+            ),
+            narrative_stub=(
+                "{faction}'s answer is refusal or danger. {actor} abandons the "
+                "bid before service becomes humiliation."
+            ),
+            state_delta={
+                "project.abandon": {
+                    "reason": "target_spurned_or_hostile",
+                    "milestone": True,
+                },
+                "mood.set": {"mood": "sour"},
+            },
+            event_type="court_patron_abandoned",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.source_chunk_id",
+                "entity_tags",
+            ),
+            magnitude=0.40,
+            preemptive=True,
+        ),
+        Branch(
+            label="Let the institutional bid go",
+            conditions=project_due("abandon", project_type="court_patron"),
+            narrative_stub=(
+                "Delay has become its own refusal. {actor} stops spending effort "
+                "on standing that never comes within reach."
+            ),
+            state_delta={
+                "project.abandon": {"reason": "stalled_or_overdue", "milestone": True}
+            },
+            event_type="court_patron_abandoned",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.source_chunk_id",
+            ),
+            magnitude=0.40,
+            preemptive=True,
+        ),
+        Branch(
+            label="Turn notice into a chance to prove worth to the faction",
+            conditions=project_due(
+                "gaining_notice_milestone", project_type="court_patron"
+            ),
+            narrative_stub=(
+                "{faction} has noticed {actor}. Attention now becomes a test of "
+                "whether usefulness survives scrutiny and inconvenience."
+            ),
+            state_delta={
+                "project.advance": {
+                    "stage": "proving_worth",
+                    "set_progress": 0.0,
+                    "milestone": True,
+                }
+            },
+            event_type="court_patron_milestone",
+            changed_fields=(
+                "character_project_states.stage",
+                "character_project_states.progress",
+                "character_project_states.stall_count",
+            ),
+            magnitude=0.40,
+            preemptive=True,
+        ),
+        Branch(
+            label="Ask proven worth to become standing",
+            conditions=project_due(
+                "proving_worth_milestone", project_type="court_patron"
+            ),
+            narrative_stub=(
+                "{actor} has supplied proof instead of promises. The remaining "
+                "question is whether {faction} will recognize it as standing."
+            ),
+            state_delta={
+                "project.advance": {
+                    "stage": "securing_favor",
+                    "set_progress": 0.0,
+                    "milestone": True,
+                }
+            },
+            event_type="court_patron_milestone",
+            changed_fields=(
+                "character_project_states.stage",
+                "character_project_states.progress",
+                "character_project_states.stall_count",
+            ),
+            magnitude=0.40,
+            preemptive=True,
+        ),
+        Branch(
+            label="Lose institutional ground through neglect",
+            conditions=project_due("neglected", project_type="court_patron"),
+            narrative_stub=(
+                "Inattention erodes the impression {actor} worked to create. "
+                "The bid for standing stalls and must recover its momentum."
+            ),
+            state_delta={"project.stall": {"increment": 1}},
+            event_type="court_patron_stalled",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.stall_count",
+                "character_project_states.next_eligible_at_world_time",
+            ),
+            magnitude=0.10,
+            promotable=False,
+            preemptive=True,
+        ),
+        Branch(
+            label="Make useful work visible to the faction",
+            conditions=project_due("gaining_notice", project_type="court_patron"),
+            narrative_stub=(
+                "{actor} places one useful act where {faction} must register both "
+                "its value and the judgment behind it."
+            ),
+            state_delta={"project.advance": {"progress_delta": 0.35}},
+            event_type="court_patron_progressed",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.progress",
+                "character_project_states.next_eligible_at_world_time",
+            ),
+            magnitude=0.18,
+            promotable=False,
+        ),
+        Branch(
+            label="Prove reliable under institutional scrutiny",
+            conditions=project_due("proving_worth", project_type="court_patron"),
+            narrative_stub=(
+                "{actor} accepts a consequential task and performs it cleanly, "
+                "giving {faction} evidence that usefulness is not a pose."
+            ),
+            state_delta={"project.advance": {"progress_delta": 0.35}},
+            event_type="court_patron_progressed",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.progress",
+                "character_project_states.next_eligible_at_world_time",
+            ),
+            magnitude=0.18,
+            promotable=False,
+        ),
+        Branch(
+            label="Make the next claim on standing legible",
+            conditions=ALWAYS,
+            narrative_stub=(
+                "{actor} makes one more service, request, or allegiance explicit, "
+                "bringing {faction}'s answer closer without pretending it is owed."
+            ),
+            state_delta={"project.advance": {"progress_delta": 0.25}},
+            event_type="court_patron_progressed",
+            changed_fields=(
+                "character_project_states.status",
+                "character_project_states.progress",
+                "character_project_states.next_eligible_at_world_time",
+            ),
+            magnitude=0.16,
+            promotable=False,
+            mood_affinities={"elated": 1.5},
+        ),
+    ),
+)
+
+
 START_SEEK_REDEMPTION = Template(
     id="start_seek_redemption",
     priority=17,
@@ -6335,6 +6716,7 @@ BUILTIN_TEMPLATES = (
     ADVANCE_BUILD_VENTURE,
     ADVANCE_PURSUE_ROMANCE,
     ADVANCE_COURT_PATRON,
+    ADVANCE_COURT_PATRON_FACTION,
     ADVANCE_SEEK_REDEMPTION,
     ACT_ON_INTEL,
     UNCOVER_PAST,
@@ -6358,11 +6740,13 @@ BUILTIN_TEMPLATES = (
     STROLL,
     UPKEEP,
     RECREATE,
+    MAKE_ACQUAINTANCE,
     START_RELOCATION_PLAN,
     START_RECRUIT_ALLY,
     START_BUILD_VENTURE,
     START_PURSUE_ROMANCE,
     START_COURT_PATRON,
+    START_COURT_PATRON_FACTION,
     START_SEEK_REDEMPTION,
     MAINTAIN_COVER,
 )

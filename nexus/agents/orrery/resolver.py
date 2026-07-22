@@ -1225,6 +1225,77 @@ def compose_actor_target_bindings(
     )
 
 
+def compose_acquaintance_bindings(
+    session: Any,
+    *,
+    anchor_chunk_id: Optional[int],
+    actor_ids: Iterable[int],
+) -> Tuple[Bindings, ...]:
+    """Compose canonical off-screen stranger pairs sharing one place.
+
+    Same-zone pairs were ruled out as a shared composition source because that
+    would widen every package boundary. This is the narrower ruled mechanism:
+    same-place pairs feed only templates opting into ``forms_acquaintances``.
+    """
+
+    actor_id_set = set(actor_ids)
+    present_actor_ids = _present_actor_ids_at_anchor(
+        session, anchor_chunk_id=anchor_chunk_id
+    )
+    actor_id_set -= present_actor_ids
+    if not actor_id_set:
+        return ()
+    candidate_pairs = {
+        (int(row["actor_entity_id"]), int(row["target_entity_id"]))
+        for row in session.execute(
+            text(
+                """
+                /* orrery:acquaintance_bindings_same_place */
+                SELECT c1.entity_id AS actor_entity_id,
+                       c2.entity_id AS target_entity_id
+                FROM characters c1
+                JOIN characters c2
+                  ON c2.current_location = c1.current_location
+                 AND c1.entity_id < c2.entity_id
+                JOIN entities e1 ON e1.id = c1.entity_id
+                JOIN entities e2 ON e2.id = c2.entity_id
+                WHERE c1.current_location IS NOT NULL
+                  AND e1.kind = 'character'
+                  AND e2.kind = 'character'
+                  AND e1.is_active = true
+                  AND e2.is_active = true
+                  AND (
+                      c1.entity_id = ANY(:actor_ids)
+                      OR c2.entity_id = ANY(:actor_ids)
+                  )
+                """
+            ),
+            {"actor_ids": sorted(actor_id_set)},
+        ).mappings()
+        if int(row["actor_entity_id"]) not in present_actor_ids
+        and int(row["target_entity_id"]) not in present_actor_ids
+    }
+    pairs: list[tuple[int, int]] = []
+    used_entity_ids: set[int] = set()
+    for lower_id, higher_id in sorted(candidate_pairs):
+        if lower_id in used_entity_ids or higher_id in used_entity_ids:
+            continue
+        if lower_id in actor_id_set:
+            actor_id, target_id = lower_id, higher_id
+        elif higher_id in actor_id_set:
+            actor_id, target_id = higher_id, lower_id
+        else:
+            continue
+        # Cap fanout at one introduction per entity per tick: besides keeping
+        # pair volume bounded, a character cannot narratively form several
+        # distinct first acquaintances in the same off-screen beat.
+        used_entity_ids.update((actor_id, target_id))
+        pairs.append((actor_id, target_id))
+    return tuple(
+        {Slot.ACTOR: actor_id, Slot.TARGET: target_id} for actor_id, target_id in pairs
+    )
+
+
 def compose_actor_faction_bindings(
     session: Any,
     *,
@@ -1788,6 +1859,19 @@ def compose_actor_target_routes(
             include_hostile_edges=True,
         )
         add_routes(hostile_bindings, hostile_templates)
+
+    acquaintance_templates = tuple(
+        template for template in templates_tuple if template.forms_acquaintances
+    )
+    if acquaintance_templates and _weather_setting(
+        composition_settings, "acquaintance_source_enabled", False
+    ):
+        acquaintance_bindings = compose_acquaintance_bindings(
+            session,
+            anchor_chunk_id=anchor_chunk_id,
+            actor_ids=actor_id_set,
+        )
+        add_routes(acquaintance_bindings, acquaintance_templates)
 
     project_templates = tuple(
         template for template in templates_tuple if template.binds_project_target
@@ -2584,20 +2668,28 @@ def _materialize_project_delta(
     raw_start = delta.get("project.start")
     if raw_start is not None:
         start_payload = dict(raw_start) if isinstance(raw_start, Mapping) else {}
-        if start_payload.get("project_type") in {
+        project_type = start_payload.get("project_type")
+        if project_type in {
             "recruit_ally",
             "pursue_romance",
-            "court_patron",
             "seek_redemption",
         }:
             target = resolution.bindings.get(Slot.TARGET)
             if not isinstance(target, int):
                 raise ValueError(
-                    f"{start_payload.get('project_type')} project.start requires "
-                    "target binding"
+                    f"{project_type} project.start requires target binding"
                 )
             start_payload["target_character_entity_id"] = target
-        if resolution.binds_project_faction:
+        if project_type == "court_patron":
+            target = resolution.bindings.get(Slot.TARGET)
+            faction = resolution.bindings.get(Slot.FACTION)
+            if isinstance(target, int):
+                start_payload["target_character_entity_id"] = target
+            elif Slot.TARGET not in resolution.bindings and isinstance(faction, int):
+                start_payload["target_faction_entity_id"] = faction
+            else:
+                raise ValueError("court_patron project.start requires target binding")
+        elif resolution.binds_project_faction:
             faction = resolution.bindings.get(Slot.FACTION)
             if not isinstance(faction, int):
                 raise ValueError("faction-bound project.start requires faction binding")

@@ -61,9 +61,18 @@ from nexus.agents.orrery.substrate import (
     coerce_project_policy,
     WorldState,
 )
+from nexus.agents.orrery.status_family import (
+    STATUS_LEVEL_RANKS,
+    STATUS_TAGS,
+    has_any_status,
+    level_from_status_tag,
+    normalize_status_level,
+)
 from nexus.agents.orrery.tag_writer import (
     apply_exclusive_tag_bestowal,
     apply_exclusive_tag_bestowal_async,
+    apply_status_pair_tag_bestowal,
+    apply_status_pair_tag_bestowal_async,
 )
 
 
@@ -81,6 +90,7 @@ SUPPORTED_STATE_DELTA_KEYS = frozenset(
         "entity_pair_tags_target.clear_inbound",
         "need.fulfill",
         "mood.set",
+        "status.bestow",
         "travel.start",
         "travel.advance",
         "travel.arrive",
@@ -105,6 +115,7 @@ REPLACEMENT_STATE_DELTA_ALIASES = {
     "entity_pair_tags_clear_outbound": "entity_pair_tags.clear_outbound",
     "entity_pair_tags_target_clear_inbound": ("entity_pair_tags_target.clear_inbound"),
     "mood_set": "mood.set",
+    "status_bestow": "status.bestow",
 }
 
 
@@ -503,6 +514,11 @@ def commit_orrery_tick_sync(
             )
             actor_entity_id = _scalar_entity_binding(draft.bindings, "actor")
             target_entity_id = _scalar_entity_binding(draft.bindings, "target")
+            event_target_entity_id = target_entity_id
+            if event_target_entity_id is None:
+                event_target_entity_id = _scalar_entity_binding(
+                    draft.bindings, "faction"
+                )
 
             if adjudicated.adjudication is not None:
                 adjudication_count += 1
@@ -607,7 +623,7 @@ def commit_orrery_tick_sync(
                 tick_chunk_id=tick_chunk_id,
                 resolution_id=resolution_id,
                 actor_entity_id=actor_entity_id,
-                target_entity_id=target_entity_id,
+                target_entity_id=event_target_entity_id,
                 world_layer=world_layer,
                 signal_detection=signal_detection,
                 epistemics_settings=epistemics_policy,
@@ -780,6 +796,9 @@ async def commit_orrery_tick_async(
         )
         actor_entity_id = _scalar_entity_binding(draft.bindings, "actor")
         target_entity_id = _scalar_entity_binding(draft.bindings, "target")
+        event_target_entity_id = target_entity_id
+        if event_target_entity_id is None:
+            event_target_entity_id = _scalar_entity_binding(draft.bindings, "faction")
 
         if adjudicated.adjudication is not None:
             adjudication_count += 1
@@ -882,7 +901,7 @@ async def commit_orrery_tick_async(
             tick_chunk_id=tick_chunk_id,
             resolution_id=resolution_id,
             actor_entity_id=actor_entity_id,
-            target_entity_id=target_entity_id,
+            target_entity_id=event_target_entity_id,
             world_layer=world_layer,
             signal_detection=signal_detection,
             epistemics_settings=epistemics_policy,
@@ -1655,6 +1674,77 @@ def _project_payload_with_bound_faction(
     return data
 
 
+def _status_bestowal_payload(draft: OrreryResolutionDraft) -> tuple[str, str]:
+    """Validate and return the sanctioned template status level and mode."""
+
+    payload = draft.state_delta["status.bestow"]
+    if not isinstance(payload, Mapping):
+        raise ValueError("status.bestow requires an object payload with level")
+    if not set(payload) <= {"level", "mode"} or "level" not in payload:
+        raise ValueError(
+            "status.bestow payload must contain level and optional mode only"
+        )
+    level = payload.get("level")
+    if not isinstance(level, str) or not level.strip():
+        raise ValueError("status.bestow level must be a non-empty string")
+    normalized_level = normalize_status_level(level)
+    mode = payload.get("mode", "floor")
+    if mode not in {"floor", "set"}:
+        raise ValueError(
+            f"Unknown status.bestow mode {mode!r}; expected 'floor' or 'set'"
+        )
+    return normalized_level, str(mode)
+
+
+def _status_bestowal_should_apply(
+    current_levels: Iterable[str], *, level: str, mode: str
+) -> bool:
+    """Return whether the verb should invoke the replace-semantics writer."""
+
+    if mode == "set":
+        return True
+    desired_rank = STATUS_LEVEL_RANKS[normalize_status_level(level)]
+    return all(
+        STATUS_LEVEL_RANKS[normalize_status_level(current)] < desired_rank
+        for current in current_levels
+    )
+
+
+async def _status_levels_async(
+    conn: Any, *, subject_entity_id: int, scope_faction_entity_id: int
+) -> tuple[str, ...]:
+    """Load active status levels for the async verb applier."""
+
+    rows = await conn.fetch(
+        """
+        SELECT pt.tag
+        FROM entity_pair_tags ept
+        JOIN pair_tags pt ON pt.id = ept.pair_tag_id
+        WHERE ept.subject_entity_id = $1
+          AND ept.object_entity_id = $2
+          AND ept.cleared_at IS NULL
+          AND NOT pt.deprecated
+          AND pt.tag = ANY($3)
+        """,
+        subject_entity_id,
+        scope_faction_entity_id,
+        sorted(STATUS_TAGS),
+    )
+    return tuple(level_from_status_tag(str(_row_get(row, "tag", 0))) for row in rows)
+
+
+def _status_bestowal_faction(draft: OrreryResolutionDraft) -> int:
+    """Return the resolution's required faction binding for status.bestow."""
+
+    faction_id = draft.bindings.get("faction")
+    if not isinstance(faction_id, int):
+        raise ValueError(
+            f"status.bestow in template {draft.template_id!r} requires a "
+            "FACTION binding"
+        )
+    return faction_id
+
+
 def _apply_state_delta_sync(
     cur: Any,
     draft: OrreryResolutionDraft,
@@ -1846,6 +1936,34 @@ def _apply_state_delta_sync(
             policy=mood_policy,
         )
         tag_mutations += mood_mutations
+    if "status.bestow" in draft.state_delta:
+        level, mode = _status_bestowal_payload(draft)
+        faction_id = _status_bestowal_faction(draft)
+        current_level = (
+            has_any_status(
+                cur,
+                subject_entity_id=actor_entity_id,
+                scope_faction_entity_id=faction_id,
+            )
+            if mode == "floor"
+            else None
+        )
+        if _status_bestowal_should_apply(
+            (() if current_level is None else (current_level,)),
+            level=level,
+            mode=mode,
+        ):
+            changed = apply_status_pair_tag_bestowal(
+                cur,
+                subject_entity_id=actor_entity_id,
+                scope_faction_entity_id=faction_id,
+                subject_kind="character",
+                level=level,
+                source_kind="template",
+                source_chunk_id=source_chunk_id,
+                template_id=draft.template_id,
+            )
+            tag_mutations += int(changed)
     project_applied: Optional[dict[str, Any]] = None
     if "project.start" in draft.state_delta:
         project_applied = _apply_project_start_sync(
@@ -2127,6 +2245,34 @@ async def _apply_state_delta_async(
             policy=mood_policy,
         )
         tag_mutations += mood_mutations
+    if "status.bestow" in draft.state_delta:
+        level, mode = _status_bestowal_payload(draft)
+        faction_id = _status_bestowal_faction(draft)
+        current_levels = (
+            await _status_levels_async(
+                conn,
+                subject_entity_id=actor_entity_id,
+                scope_faction_entity_id=faction_id,
+            )
+            if mode == "floor"
+            else ()
+        )
+        if _status_bestowal_should_apply(
+            current_levels,
+            level=level,
+            mode=mode,
+        ):
+            changed = await apply_status_pair_tag_bestowal_async(
+                conn,
+                subject_entity_id=actor_entity_id,
+                scope_faction_entity_id=faction_id,
+                subject_kind="character",
+                level=level,
+                source_kind="template",
+                source_chunk_id=source_chunk_id,
+                template_id=draft.template_id,
+            )
+            tag_mutations += int(changed)
     project_applied: Optional[dict[str, Any]] = None
     if "project.start" in draft.state_delta:
         project_applied = await _apply_project_start_async(
@@ -2834,12 +2980,7 @@ def _apply_project_start_sync(
         raise ValueError("project.start faction target must be an entity id")
     if project_type == "plan_relocation" and target_character_entity_id is not None:
         raise ValueError("plan_relocation project.start forbids a character target")
-    if project_type in {
-        "recruit_ally",
-        "pursue_romance",
-        "court_patron",
-        "seek_redemption",
-    }:
+    if project_type in {"recruit_ally", "pursue_romance", "seek_redemption"}:
         if target_place_id is not None:
             raise ValueError(f"{project_type} project.start forbids a place target")
         if not isinstance(target_character_entity_id, int):
@@ -2847,10 +2988,20 @@ def _apply_project_start_sync(
                 f"{project_type} project.start requires a character target"
             )
         if (
-            project_type in {"pursue_romance", "court_patron", "seek_redemption"}
+            project_type in {"pursue_romance", "seek_redemption"}
             and target_faction_entity_id is not None
         ):
             raise ValueError(f"{project_type} project.start forbids a faction target")
+    if project_type == "court_patron":
+        if target_place_id is not None:
+            raise ValueError("court_patron project.start forbids a place target")
+        character_target = isinstance(target_character_entity_id, int)
+        faction_target = isinstance(target_faction_entity_id, int)
+        if character_target == faction_target:
+            raise ValueError(
+                "court_patron project.start requires exactly one character "
+                "or faction target"
+            )
     if project_type == "build_venture" and any(
         target is not None
         for target in (
@@ -2925,12 +3076,7 @@ async def _apply_project_start_async(
         raise ValueError("project.start faction target must be an entity id")
     if project_type == "plan_relocation" and target_character_entity_id is not None:
         raise ValueError("plan_relocation project.start forbids a character target")
-    if project_type in {
-        "recruit_ally",
-        "pursue_romance",
-        "court_patron",
-        "seek_redemption",
-    }:
+    if project_type in {"recruit_ally", "pursue_romance", "seek_redemption"}:
         if target_place_id is not None:
             raise ValueError(f"{project_type} project.start forbids a place target")
         if not isinstance(target_character_entity_id, int):
@@ -2938,10 +3084,20 @@ async def _apply_project_start_async(
                 f"{project_type} project.start requires a character target"
             )
         if (
-            project_type in {"pursue_romance", "court_patron", "seek_redemption"}
+            project_type in {"pursue_romance", "seek_redemption"}
             and target_faction_entity_id is not None
         ):
             raise ValueError(f"{project_type} project.start forbids a faction target")
+    if project_type == "court_patron":
+        if target_place_id is not None:
+            raise ValueError("court_patron project.start forbids a place target")
+        character_target = isinstance(target_character_entity_id, int)
+        faction_target = isinstance(target_faction_entity_id, int)
+        if character_target == faction_target:
+            raise ValueError(
+                "court_patron project.start requires exactly one character "
+                "or faction target"
+            )
     if project_type == "build_venture" and any(
         target is not None
         for target in (
@@ -3343,17 +3499,19 @@ def _validate_project_completion(
         if project["target_faction_entity_id"] is not None:
             raise ValueError("pursue_romance completion forbids a faction target")
     if project_type == "court_patron":
-        patron_id = project["target_character_entity_id"]
-        if patron_id is None:
-            raise ValueError("court_patron completion requires its character target")
-        if target_entity_id != patron_id:
+        character_patron_id = project["target_character_entity_id"]
+        faction_patron_id = project["target_faction_entity_id"]
+        if (character_patron_id is None) == (faction_patron_id is None):
+            raise ValueError(
+                "court_patron completion requires exactly one character or "
+                "faction target"
+            )
+        if character_patron_id is not None and target_entity_id != character_patron_id:
             raise ValueError(
                 "court_patron completion target binding does not match its patron"
             )
         if project["target_place_id"] is not None:
             raise ValueError("court_patron completion forbids a place target")
-        if project["target_faction_entity_id"] is not None:
-            raise ValueError("court_patron completion forbids a faction target")
     if project_type == "seek_redemption":
         wronged_party_id = project["target_character_entity_id"]
         if wronged_party_id is None:
@@ -4185,14 +4343,15 @@ def _apply_project_complete_sync(
             source_chunk_id=source_chunk_id,
         )
     elif project["project_type"] == "court_patron":
-        assert target_entity_id is not None
-        relationship_mutation = _upsert_court_patron_relationship_sync(
-            cur,
-            actor_entity_id=actor_entity_id,
-            target_entity_id=target_entity_id,
-            template_id=template_id,
-            source_chunk_id=source_chunk_id,
-        )
+        if project["target_character_entity_id"] is not None:
+            assert target_entity_id is not None
+            relationship_mutation = _upsert_court_patron_relationship_sync(
+                cur,
+                actor_entity_id=actor_entity_id,
+                target_entity_id=target_entity_id,
+                template_id=template_id,
+                source_chunk_id=source_chunk_id,
+            )
     elif project["project_type"] == "seek_redemption":
         assert target_entity_id is not None
         relationship_mutation = _upsert_reconciled_relationship_sync(
@@ -4279,14 +4438,15 @@ async def _apply_project_complete_async(
             source_chunk_id=source_chunk_id,
         )
     elif project["project_type"] == "court_patron":
-        assert target_entity_id is not None
-        relationship_mutation = await _upsert_court_patron_relationship_async(
-            conn,
-            actor_entity_id=actor_entity_id,
-            target_entity_id=target_entity_id,
-            template_id=template_id,
-            source_chunk_id=source_chunk_id,
-        )
+        if project["target_character_entity_id"] is not None:
+            assert target_entity_id is not None
+            relationship_mutation = await _upsert_court_patron_relationship_async(
+                conn,
+                actor_entity_id=actor_entity_id,
+                target_entity_id=target_entity_id,
+                template_id=template_id,
+                source_chunk_id=source_chunk_id,
+            )
     elif project["project_type"] == "seek_redemption":
         assert target_entity_id is not None
         relationship_mutation = await _upsert_reconciled_relationship_async(
@@ -5397,7 +5557,8 @@ def _add_outbound_pair_tag_sync(
     if tag.startswith("status:"):
         raise ValueError(
             f"pair_tag {tag!r} belongs to the exclusive status ladder and "
-            "cannot be added by a template outbound-pair state delta"
+            "cannot be added by a raw outbound-pair state delta; use "
+            "status.bestow"
         )
     pair_tag_id = _registered_pair_tag_id_sync(cur, tag)
     cur.execute(
@@ -5608,7 +5769,8 @@ async def _add_outbound_pair_tag_async(
     if tag.startswith("status:"):
         raise ValueError(
             f"pair_tag {tag!r} belongs to the exclusive status ladder and "
-            "cannot be added by a template outbound-pair state delta"
+            "cannot be added by a raw outbound-pair state delta; use "
+            "status.bestow"
         )
     pair_tag_id = await _registered_pair_tag_id_async(conn, tag)
     world_time = await _chunk_world_time_async(conn, source_chunk_id)

@@ -26,7 +26,12 @@ from nexus.agents.orrery.substrate import (
     WorldState,
     evaluate,
 )
-from nexus.agents.orrery.templates import ADVANCE_COURT_PATRON, START_COURT_PATRON
+from nexus.agents.orrery.templates import (
+    ADVANCE_COURT_PATRON,
+    ADVANCE_COURT_PATRON_FACTION,
+    START_COURT_PATRON,
+    START_COURT_PATRON_FACTION,
+)
 from nexus.api.slot_utils import get_slot_db_url
 
 ACTOR = 10
@@ -40,6 +45,7 @@ POLICY = ProjectPolicy(
     abandon_after_stalled_world_hours=168.0,
 )
 BINDINGS = {Slot.ACTOR: ACTOR, Slot.TARGET: TARGET}
+FACTION_BINDINGS = {Slot.ACTOR: ACTOR, Slot.FACTION: FACTION}
 
 
 def _start_state(**changes: Any) -> WorldState:
@@ -93,6 +99,78 @@ def _advance_state(project: ProjectState, **changes: Any) -> WorldState:
     }
     values.update(changes)
     return WorldState(**values)
+
+
+def _faction_project(
+    *,
+    stage: str = "gaining_notice",
+    progress: float = 0.0,
+    target_active: bool = True,
+) -> ProjectState:
+    return ProjectState(
+        id=8,
+        project_type="court_patron",
+        status="active",
+        stage=stage,
+        target_faction_entity_id=FACTION,
+        target_faction_is_active=target_active,
+        progress=progress,
+        next_eligible_at_world_time=NOW,
+        source_chunk_id=100,
+    )
+
+
+def test_faction_entry_and_completion_contract() -> None:
+    """Faction patronage is roster-opted, status-free, and circle-closing."""
+
+    start_state = _start_state(pair_tags={})
+    started = evaluate(
+        START_COURT_PATRON_FACTION,
+        start_state,
+        FACTION_BINDINGS,
+    )
+    assert started.passes
+    assert START_COURT_PATRON_FACTION.courts_factions
+    assert START_COURT_PATRON_FACTION.binds_project_faction
+    assert started.state_delta["project.start"]["project_type"] == "court_patron"
+    assert not evaluate(
+        START_COURT_PATRON_FACTION,
+        _start_state(pair_tags={(ACTOR, FACTION): frozenset({"status:junior"})}),
+        FACTION_BINDINGS,
+    ).passes
+
+    completed = evaluate(
+        ADVANCE_COURT_PATRON_FACTION,
+        _advance_state(
+            _faction_project(stage="securing_favor", progress=1.0),
+            trust={(FACTION, ACTOR): 2},
+        ),
+        FACTION_BINDINGS,
+    )
+    assert completed.passes
+    assert completed.state_delta == {
+        "project.complete": {"milestone": True},
+        "status.bestow": {"level": "junior"},
+    }
+
+
+def test_patron_continuations_route_by_stored_target_shape() -> None:
+    """Character and faction continuations cannot cross-evaluate."""
+
+    character_state = _advance_state(_project())
+    faction_state = _advance_state(_faction_project())
+    assert evaluate(ADVANCE_COURT_PATRON, character_state, BINDINGS).passes
+    assert not evaluate(
+        ADVANCE_COURT_PATRON_FACTION,
+        character_state,
+        FACTION_BINDINGS,
+    ).passes
+    assert evaluate(
+        ADVANCE_COURT_PATRON_FACTION,
+        faction_state,
+        FACTION_BINDINGS,
+    ).passes
+    assert not evaluate(ADVANCE_COURT_PATRON, faction_state, BINDINGS).passes
 
 
 def test_entry_gate_power_marker_or_clause_and_contract() -> None:

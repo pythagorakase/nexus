@@ -11,6 +11,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
 from nexus.agents.orrery.audit import explain_dry_run
+from nexus.agents.orrery.events import commit_orrery_tick_sync
 from nexus.agents.orrery.resolver import (
     compose_actor_faction_bindings,
     compose_actor_faction_routes,
@@ -31,7 +32,12 @@ from nexus.agents.orrery.substrate import (
     WorldState,
     evaluate,
 )
-from nexus.agents.orrery.templates import START_SEEK_REDEMPTION
+from nexus.agents.orrery.templates import (
+    MAKE_ACQUAINTANCE,
+    START_PURSUE_ROMANCE,
+    START_RECRUIT_ALLY,
+    START_SEEK_REDEMPTION,
+)
 from nexus.api.slot_utils import get_slot_db_url
 
 
@@ -39,6 +45,7 @@ pytestmark = pytest.mark.requires_postgres
 
 LIVE_SLOT = 5
 COMPOSITION = {
+    "acquaintance_source_enabled": True,
     "hostile_source_enabled": True,
     "roster_source_enabled": True,
     "roster_reach": 2,
@@ -421,3 +428,192 @@ def test_live_widened_sources_keep_resolver_and_audit_in_parity(
     }
     assert widened_expected <= production
     assert audited == production
+
+
+def test_live_acquaintance_writes_mutual_contact_and_feeds_next_tick(
+    composition_db: dict[str, Any],
+) -> None:
+    """One same-place introduction becomes a mutual social source next tick."""
+
+    session = composition_db["session"]
+    actor = composition_db["entities"]["actor"]
+    stranger = composition_db["entities"]["far_member"]
+    empty_place = session.execute(
+        text(
+            """
+            SELECT p.id
+            FROM places p
+            LEFT JOIN characters c ON c.current_location = p.id
+            GROUP BY p.id
+            HAVING count(c.id) = 0
+            ORDER BY p.id
+            LIMIT 1
+            """
+        )
+    ).scalar_one_or_none()
+    if empty_place is None:
+        pytest.skip("save_05 needs one place without active character rows")
+    session.execute(
+        text(
+            """
+            UPDATE characters
+            SET current_location = :place_id
+            WHERE entity_id IN (:actor, :stranger)
+            """
+        ),
+        {"place_id": int(empty_place), "actor": actor, "stranger": stranger},
+    )
+    session.flush()
+    kwargs = {
+        "anchor_chunk_id": None,
+        "window_chunks": 30,
+        "composition_settings": COMPOSITION,
+    }
+    proposal = resolve_dry_run(session, (MAKE_ACQUAINTANCE,), **kwargs)
+    report = explain_dry_run(session, (MAKE_ACQUAINTANCE,), **kwargs)
+    expected_bindings = {"actor": min(actor, stranger), "target": max(actor, stranger)}
+    drafts = [
+        draft
+        for draft in proposal.resolutions
+        if draft.template_id == MAKE_ACQUAINTANCE.id
+        and draft.bindings == expected_bindings
+    ]
+    assert len(drafts) == 1
+    audited = {
+        (stack.winner_id, tuple(sorted(stack.bindings.items())))
+        for actor_report in report.actors
+        for stack in actor_report.two_party_stacks
+    }
+    assert (
+        MAKE_ACQUAINTANCE.id,
+        tuple(sorted(expected_bindings.items())),
+    ) in audited
+
+    raw = session.connection().connection.driver_connection
+    result = commit_orrery_tick_sync(
+        raw,
+        proposal,
+        tick_chunk_id=int(
+            session.execute(text("SELECT max(id) FROM narrative_chunks")).scalar_one()
+        ),
+    )
+    assert result.tag_mutation_count >= 2
+    session.expire_all()
+    rows = session.execute(
+        text(
+            """
+            SELECT ept.subject_entity_id, ept.object_entity_id, pt.tag
+            FROM entity_pair_tags ept
+            JOIN pair_tags pt ON pt.id = ept.pair_tag_id
+            WHERE ept.cleared_at IS NULL
+              AND pt.tag = 'contact:social'
+              AND ept.subject_entity_id IN (:actor, :stranger)
+              AND ept.object_entity_id IN (:actor, :stranger)
+            ORDER BY ept.subject_entity_id, ept.object_entity_id
+            """
+        ),
+        {"actor": actor, "stranger": stranger},
+    ).all()
+    assert rows == [
+        (min(actor, stranger), max(actor, stranger), "contact:social"),
+        (max(actor, stranger), min(actor, stranger), "contact:social"),
+    ]
+    assert (
+        session.execute(
+            text(
+                """
+            SELECT count(*)
+            FROM world_events we
+            WHERE we.tick_chunk_id = (SELECT max(id) FROM narrative_chunks)
+              AND we.event_type = 'contact_made'
+              AND we.actor_entity_id = :actor
+              AND we.target_entity_id = :target
+            """
+            ),
+            expected_bindings,
+        ).scalar_one()
+        == 1
+    )
+
+    next_tick_routes = compose_actor_target_routes(
+        session,
+        state=WorldState(),
+        templates=(START_RECRUIT_ALLY, START_PURSUE_ROMANCE),
+        anchor_chunk_id=None,
+        window_chunks=30,
+        actor_ids={expected_bindings["actor"]},
+        composition_settings=COMPOSITION,
+    )
+    routed = next(
+        route
+        for route in next_tick_routes
+        if route[0]
+        == {
+            Slot.ACTOR: expected_bindings["actor"],
+            Slot.TARGET: expected_bindings["target"],
+        }
+    )
+    assert routed[1] == (START_RECRUIT_ALLY, START_PURSUE_ROMANCE)
+
+
+@pytest.mark.parametrize(
+    "rebuff",
+    ("relationship", "contact", "hostile", "different_place"),
+)
+def test_live_acquaintance_rebuffs_prior_ties_and_separation(
+    composition_db: dict[str, Any],
+    rebuff: str,
+) -> None:
+    """Every ruled exclusion blocks the specific live-schema pair."""
+
+    session = composition_db["session"]
+    actor = composition_db["entities"]["actor"]
+    if rebuff == "relationship":
+        target = composition_db["entities"]["near_member"]
+    elif rebuff == "hostile":
+        target = composition_db["entities"]["hostile_target"]
+    else:
+        target = composition_db["entities"]["far_member"]
+    place_ids = [
+        int(value)
+        for value in session.execute(
+            text("SELECT id FROM places ORDER BY id LIMIT 2")
+        ).scalars()
+    ]
+    if len(place_ids) < 2:
+        pytest.skip("save_05 needs two places for acquaintance exclusions")
+    actor_place = place_ids[0]
+    target_place = place_ids[1] if rebuff == "different_place" else actor_place
+    session.execute(
+        text(
+            """
+            UPDATE characters
+            SET current_location = CASE
+                WHEN entity_id = :actor THEN :actor_place
+                ELSE :target_place
+            END
+            WHERE entity_id IN (:actor, :target)
+            """
+        ),
+        {
+            "actor": actor,
+            "target": target,
+            "actor_place": actor_place,
+            "target_place": target_place,
+        },
+    )
+    if rebuff == "contact":
+        _insert_pair_tag(session, target, actor, "contact:social")
+    session.flush()
+    proposal = resolve_dry_run(
+        session,
+        (MAKE_ACQUAINTANCE,),
+        anchor_chunk_id=None,
+        window_chunks=30,
+        composition_settings=COMPOSITION,
+    )
+    canonical = {"actor": min(actor, target), "target": max(actor, target)}
+    assert not any(
+        draft.template_id == MAKE_ACQUAINTANCE.id and draft.bindings == canonical
+        for draft in proposal.resolutions
+    )

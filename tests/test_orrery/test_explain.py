@@ -196,3 +196,57 @@ def test_single_passing_branch_does_not_claim_mood_affinity_weighting() -> None:
 
     assert explanation.chosen_branch == "only"
     assert explanation.branches[0].applied_mood_affinity is None
+
+
+@pytest.mark.parametrize(
+    ("required_slots", "bindings", "expected_target"),
+    (
+        (
+            (Slot.ACTOR, Slot.TARGET),
+            {Slot.ACTOR: 1, Slot.TARGET: 2},
+            {"target_character_entity_id": 2},
+        ),
+        (
+            (Slot.ACTOR, Slot.FACTION),
+            {Slot.ACTOR: 1, Slot.FACTION: 3},
+            {"target_faction_entity_id": 3},
+        ),
+    ),
+)
+def test_explain_materializes_polymorphic_patron_target(
+    required_slots: tuple[Slot, ...],
+    bindings: dict[Slot, int],
+    expected_target: dict[str, int],
+) -> None:
+    """Dashboard explanations expose the same commit-ready target shape."""
+
+    template = Template(
+        id="explain_polymorphic_patron",
+        priority=1,
+        drive_band=DriveBand.PROJECT_IDENTITY,
+        blurb="Explain polymorphic patron materialization.",
+        required_slots=required_slots,
+        package_gate=ALWAYS,
+        branches=(
+            Branch(
+                "start",
+                ALWAYS,
+                "{actor} courts a patron.",
+                state_delta={
+                    "project.start": {
+                        "project_type": "court_patron",
+                        "stage": "gaining_notice",
+                    }
+                },
+            ),
+        ),
+        binds_project_faction=Slot.FACTION in required_slots,
+    )
+
+    explanation = explain_template(template, WorldState(), bindings)
+
+    assert explanation.state_delta["project.start"] == {
+        "project_type": "court_patron",
+        "stage": "gaining_notice",
+        **expected_target,
+    }
