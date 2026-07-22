@@ -133,9 +133,11 @@ def enumerate_status_above(
 
     results: list[tuple[int, str]] = []
     for scope_id, levels in by_scope.items():
-        level = _highest_status_level(levels)
-        if level is not None and status_at_or_above_level(level, threshold_level):
-            results.append((scope_id, level))
+        highest_level = _highest_status_level(levels)
+        if highest_level is not None and status_at_or_above_level(
+            highest_level, threshold_level
+        ):
+            results.append((scope_id, highest_level))
     return sorted(results)
 
 

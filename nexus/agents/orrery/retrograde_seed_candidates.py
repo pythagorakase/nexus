@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from types import GenericAlias
 from typing import Annotated, Any, Literal, Mapping, Optional, Sequence, cast
 
 from pydantic import BaseModel, ConfigDict, Field, create_model, model_validator
@@ -460,10 +461,10 @@ def seed_candidate_wire_response_model(
     mechanical_hints_model = create_model(
         "RetrogradeWireMechanicalHintsRuntime",
         __base__=RetrogradeWireMechanicalHints,
-        events=(list[event_hint_model], Field(default_factory=list)),
-        single_entity_tags=(list[single_tag_model], Field(default_factory=list)),
-        pair_tags=(list[pair_tag_model], Field(default_factory=list)),
-        relationships=(list[relationship_model], Field(default_factory=list)),
+        events=_runtime_list_field(event_hint_model),
+        single_entity_tags=_runtime_list_field(single_tag_model),
+        pair_tags=_runtime_list_field(pair_tag_model),
+        relationships=_runtime_list_field(relationship_model),
     )
     coverage_type = _literal_or_str(_coverage_function_ids(seed_generation_request))
     graph = seed_generation_request.get("candidate_graph") or {}
@@ -494,17 +495,17 @@ def seed_candidate_wire_response_model(
     candidate_model = create_model(
         "RetrogradeWireSeedCandidateRuntime",
         __base__=RetrogradeWireSeedCandidate,
-        coverage_functions=(list[coverage_type], Field(default_factory=list)),
+        coverage_functions=_runtime_list_field(coverage_type),
         mechanical_hints=(
             mechanical_hints_model,
             Field(default_factory=mechanical_hints_model),
         ),
-        claimed_edges=(list[claimed_edge_model], Field(default_factory=list)),
+        claimed_edges=_runtime_list_field(claimed_edge_model),
     )
     return create_model(
         "RetrogradeWireSeedCandidateResponseRuntime",
         __base__=RetrogradeWireSeedCandidateResponse,
-        candidates=(list[candidate_model], Field(default_factory=list)),
+        candidates=_runtime_list_field(candidate_model),
     )
 
 
@@ -820,6 +821,18 @@ def _literal_or_str(values: list[str]) -> Any:
     if not unique_values:
         return str
     return Literal.__getitem__(unique_values)
+
+
+def _runtime_list_field(item_type: Any) -> tuple[GenericAlias, Any]:
+    """Build a list field for a runtime-generated Pydantic item type."""
+
+    return GenericAlias(list, item_type), Field(default_factory=_empty_runtime_list)
+
+
+def _empty_runtime_list() -> list[Any]:
+    """Return an empty value for a runtime-generated list field."""
+
+    return []
 
 
 def _coverage_function_ids(seed_generation_request: Mapping[str, Any]) -> list[str]:
@@ -1576,14 +1589,8 @@ def select_seed_candidates_with_skald(
     selection_model = create_model(
         "RetrogradeSeedSelectionResponseRuntime",
         __base__=RetrogradeSeedSelectionResponse,
-        selected_seed_ids=(
-            list[_literal_or_str(candidate_ids)],
-            Field(default_factory=list),
-        ),
-        rejected_seed_ids=(
-            list[_literal_or_str(candidate_ids)],
-            Field(default_factory=list),
-        ),
+        selected_seed_ids=_runtime_list_field(_literal_or_str(candidate_ids)),
+        rejected_seed_ids=_runtime_list_field(_literal_or_str(candidate_ids)),
     )
 
     selected_model = model_name or get_new_story_model()

@@ -1371,6 +1371,7 @@ def compose_actor_faction_bindings(
             pairs.add((object_id, subject_id))
 
     if include_rosters:
+        assert orbit_distance is not None
         live_rosters = sorted(
             {
                 (int(row["member_id"]), int(row["faction_id"]))
