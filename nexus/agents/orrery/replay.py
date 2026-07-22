@@ -113,6 +113,15 @@ MATURATION_PROJECT_STARTED_TYPES = {
     "seek_redemption_started": "seek_redemption",
 }
 
+# Step 8.55 captures the checkpoint before Step 8.6 persists maturation
+# starts in the same accepted-chunk transaction. A base-chunk maturation
+# start is therefore absent from the base checkpoint and must replay, while a
+# target-chunk start is absent from the target checkpoint and must not replay.
+# Ordinary Skald/resolution writes precede Step 8.55, so they use the opposite
+# edges: base-exclusive and target-inclusive.
+CHECKPOINTED_WRITE_WINDOW_SQL = "{column} > %(base)s AND {column} <= %(target)s"
+MATURATION_PROJECT_START_WINDOW_SQL = "{column} >= %(base)s AND {column} < %(target)s"
+
 # Composite natural keys, verbatim column order (faction_relationships
 # enforces faction1_id < faction2_id; character_relationships only c1 <> c2
 # — never re-canonicalize when re-inserting delete pre-images).
@@ -527,12 +536,18 @@ class _Replayer:
 
         if base_chunk < self.target_chunk_id:
             for chunk_id in self._window_chunks(base_chunk):
-                self._apply_skald_rows(chunk_id, characters, places, result)
-                self._apply_orrery_resolutions(
-                    chunk_id, characters, needs, travel, projects, result
-                )
+                if base_chunk < chunk_id <= self.target_chunk_id:
+                    self._apply_skald_rows(chunk_id, characters, places, result)
+                    self._apply_orrery_resolutions(
+                        chunk_id, characters, needs, travel, projects, result
+                    )
                 self._apply_maturation_project_starts(
-                    chunk_id, characters, projects, travel, result
+                    chunk_id,
+                    base_chunk,
+                    characters,
+                    projects,
+                    travel,
+                    result,
                 )
 
         tag_workings, tag_touched_entities = self._replay_tags(
@@ -936,17 +951,26 @@ class _Replayer:
         )
 
     def _window_chunks(self, base_chunk: int) -> list[int]:
+        checkpointed_state_window = CHECKPOINTED_WRITE_WINDOW_SQL.format(
+            column="source_chunk_id"
+        )
+        checkpointed_resolution_window = CHECKPOINTED_WRITE_WINDOW_SQL.format(
+            column="tick_chunk_id"
+        )
+        maturation_start_window = MATURATION_PROJECT_START_WINDOW_SQL.format(
+            column="tick_chunk_id"
+        )
         self.cur.execute(
-            """
+            f"""
             SELECT DISTINCT chunk_id FROM (
                 SELECT source_chunk_id AS chunk_id FROM state_delta_log
-                WHERE source_chunk_id > %(base)s AND source_chunk_id <= %(n)s
+                WHERE {checkpointed_state_window}
                 UNION
                 SELECT tick_chunk_id FROM orrery_resolutions
-                WHERE tick_chunk_id > %(base)s AND tick_chunk_id <= %(n)s
+                WHERE {checkpointed_resolution_window}
                 UNION
                 SELECT tick_chunk_id FROM world_events
-                WHERE tick_chunk_id > %(base)s AND tick_chunk_id <= %(n)s
+                WHERE {maturation_start_window}
                   AND event_type = ANY(%(started_types)s)
                   AND (
                         source::text = 'maturation'
@@ -961,7 +985,7 @@ class _Replayer:
             """,
             {
                 "base": base_chunk,
-                "n": self.target_chunk_id,
+                "target": self.target_chunk_id,
                 "started_types": list(MATURATION_PROJECT_STARTED_TYPES),
             },
         )
@@ -1179,6 +1203,7 @@ class _Replayer:
     def _apply_maturation_project_starts(
         self,
         chunk_id: int,
+        base_chunk: int,
         characters: dict[int, dict[str, Any]],
         projects: dict[Any, dict[str, Any]],
         travel: dict[int, dict[str, Any]],
@@ -1186,12 +1211,16 @@ class _Replayer:
     ) -> None:
         """Replay only runtime maturation's applied project-start snapshots."""
 
+        maturation_start_window = MATURATION_PROJECT_START_WINDOW_SQL.format(
+            column="tick_chunk_id"
+        )
         self.cur.execute(
-            """
+            f"""
             SELECT id, event_type, actor_entity_id, payload
             FROM world_events
-            WHERE tick_chunk_id = %s
-              AND event_type = ANY(%s)
+            WHERE tick_chunk_id = %(chunk)s
+              AND {maturation_start_window}
+              AND event_type = ANY(%(started_types)s)
               AND (
                     source::text = 'maturation'
                     OR (
@@ -1203,7 +1232,12 @@ class _Replayer:
                   )
             ORDER BY id
             """,
-            (chunk_id, list(MATURATION_PROJECT_STARTED_TYPES)),
+            {
+                "chunk": chunk_id,
+                "base": base_chunk,
+                "target": self.target_chunk_id,
+                "started_types": list(MATURATION_PROJECT_STARTED_TYPES),
+            },
         )
         event_rows = self.cur.fetchall()
         by_entity = {row["entity_id"]: row for row in characters.values()}

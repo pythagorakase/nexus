@@ -1966,8 +1966,13 @@ def _load_persisted_retrograde_event_sources(cur: Any) -> list[dict[str, Any]]:
         FROM world_events AS we
         LEFT JOIN retrograde_summaries AS rs ON rs.world_event_id = we.id
         WHERE we.source = 'retrograde'::event_source_kind
+          -- Project-start events are mechanical projection provenance, not
+          -- generated history prose. Wizard and maturation starts share this
+          -- exclusion; neither carries canonical summary/chronology fields.
+          AND we.event_type <> ALL(%s)
         ORDER BY we.id
-        """
+        """,
+        (list(PROJECT_STARTED_EVENT_TYPES.values()),),
     )
     sources = []
     for row in cur.fetchall():
