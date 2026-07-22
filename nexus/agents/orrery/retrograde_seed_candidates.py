@@ -541,19 +541,22 @@ def render_seed_generation_prompt(
         "coverage_functions": seed_generation_request.get("coverage_functions", []),
         "candidate_graph": seed_generation_request.get("candidate_graph", {}),
         "selection_rubric": seed_generation_request.get("selection_rubric", {}),
-        "project_intent_policy": {
-            "optional": True,
-            "rarity": "At most two candidates per cast should carry an intent.",
-            "unresolved_ledger": ["court_patron", "seek_redemption"],
-            "trait_bound_hook": [
-                "build_venture",
-                "pursue_romance",
-                "recruit_ally",
-            ],
-            "target_refs": (
-                "Use the same compact entity-ref language as mechanical_hints."
-            ),
-        },
+        "project_intent_policy": seed_generation_request.get(
+            "project_intent_policy",
+            {
+                "optional": True,
+                "rarity": "At most two candidates per cast should carry an intent.",
+                "unresolved_ledger": ["court_patron", "seek_redemption"],
+                "trait_bound_hook": [
+                    "build_venture",
+                    "pursue_romance",
+                    "recruit_ally",
+                ],
+                "target_refs": (
+                    "Use the same compact entity-ref language as mechanical_hints."
+                ),
+            },
+        ),
         "prompt_sections": seed_generation_request.get("prompt_sections", []),
         "response_contract": _prompt_response_contract(),
     }

@@ -10,11 +10,15 @@ from uuid import uuid4
 
 import psycopg2
 import pytest
+from pydantic import ValidationError
 
 from nexus.agents.orrery.events import _apply_state_delta_sync
 from nexus.agents.orrery.needs import load_need_tuning
 from nexus.agents.orrery.reconstruction import capture_state_checkpoint_sync
-from nexus.agents.orrery.replay import verify_checkpoints_sync
+from nexus.agents.orrery.replay import (
+    reconstruct_state_at_sync,
+    verify_checkpoints_sync,
+)
 from nexus.agents.orrery.resolver import OrreryResolutionDraft
 from nexus.agents.orrery.retrograde_expansion import (
     RETROGRADE_EXPANSION_RESPONSE_SCHEMA_VERSION,
@@ -25,6 +29,7 @@ from nexus.agents.orrery.retrograde_orchestrator import (
     RetrogradeGenerationBundle,
     persist_retrograde_history,
 )
+from nexus.agents.orrery.retrograde_maturation import _persist_maturation_expansion
 from nexus.agents.orrery.retrograde_persistence import (
     PROJECT_FIRST_STAGES,
     PROJECT_STARTED_EVENT_TYPES,
@@ -38,7 +43,13 @@ from nexus.agents.orrery.retrograde_vocabulary import (
     SeedEligibleVocabulary,
     enumerate_seed_eligible_vocabulary,
 )
-from nexus.agents.orrery.substrate import coerce_project_policy
+from nexus.agents.orrery.substrate import (
+    ProjectState,
+    Slot,
+    WorldState,
+    coerce_project_policy,
+)
+from nexus.agents.orrery.templates import ADVANCE_BUILD_VENTURE
 from nexus.api.slot_utils import get_slot_db_url
 from nexus.config import load_settings
 
@@ -541,6 +552,345 @@ def test_wizard_genesis_checkpoint_carries_seeded_project_through_replay(
         assert len(pair) == 1
         assert pair[0].base_chunk_id == prologue_chunk
         assert pair[0].drifts == []
+
+
+def test_maturation_seeds_only_target_actor_and_logs_advisory_drops(
+    project_db: dict[str, Any],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Runtime arbitration admits one target-owned project and nothing else."""
+
+    db = project_db
+    actor_id, actor = db["characters"][0]
+    foreign = db["characters"][1][1]
+    specs = [
+        ("seed_foreign", "build_venture", foreign, None),
+        ("seed_target", "build_venture", actor, None),
+        ("seed_second", "build_venture", actor, None),
+    ]
+    packet, seeds, expansion = _contracts(db["vocabulary"], specs)
+    with db["conn"].cursor() as cur:
+        request_chunk = _fabricate_chunk(cur, _next_world_time(cur))
+        caplog.set_level(logging.WARNING)
+        manifest = _persist_maturation_expansion(
+            cur,
+            packet=packet,
+            seed_response=seeds,
+            expansion_payload=expansion,
+            row={
+                "job_id": 531001,
+                "entity_id": actor_id,
+                "requesting_chunk_id": request_chunk,
+            },
+            slot=2,
+            dbname="save_02",
+            settings=load_settings(),
+            summaries_enabled=False,
+        )
+
+        assert [row["status"] for row in manifest["project_rows"]] == [
+            "dropped_foreign_actor",
+            "inserted",
+            "dropped_cap",
+        ]
+        assert manifest["counters"]["projects_inserted"] == 1
+        assert "Maturation job 531001" in caplog.text
+        assert "seed_foreign" in caplog.text
+        assert "seed_second" in caplog.text
+
+        inserted = manifest["project_rows"][1]
+        cur.execute(
+            """
+            SELECT event_type, source::text, tick_chunk_id, payload
+            FROM world_events WHERE id = %s
+            """,
+            (inserted["started_event_id"],),
+        )
+        event_type, source, tick_chunk_id, payload = cur.fetchone()
+        assert event_type == "build_venture_started"
+        # event_source_kind has no maturation label; payload provenance is the
+        # bounded discriminator while canonical Retrograde storage stays valid.
+        assert source == "retrograde"
+        assert tick_chunk_id == request_chunk
+        assert payload["source"] == "maturation"
+        assert payload["retrograde_event_ref"].startswith("maturation_job_531001_")
+        assert set(payload["applied"]) == {
+            "project_type",
+            "status",
+            "stage",
+            "target_place_id",
+            "target_character_entity_id",
+            "target_faction_entity_id",
+            "progress",
+            "stall_count",
+            "next_eligible_at_world_time",
+            "source_chunk_id",
+        }
+        assert payload["applied"]["source_chunk_id"] == request_chunk
+
+
+def test_maturation_shared_writer_validation_raises(
+    project_db: dict[str, Any],
+) -> None:
+    """Target shape, dead participant, and unresolved actor stay fail-fast."""
+
+    db = project_db
+    actor_id, actor = db["characters"][0]
+    target = db["characters"][8][1]
+    settings = load_settings()
+
+    cases: list[tuple[str, dict[str, Any], dict[str, Any], str]] = []
+
+    packet, seeds, expansion = _contracts(
+        db["vocabulary"], [("seed_bad_shape", "build_venture", actor, None)]
+    )
+    seeds["candidates"][0]["project_intent"]["target_ref"] = target
+    expansion["project_plan"][0]["target_ref"] = target
+    cases.append(("bad shape", seeds, expansion, "build_venture.*target"))
+
+    packet_dead, seeds_dead, expansion_dead = _contracts(
+        db["vocabulary"], [("seed_dead", "build_venture", actor, None)]
+    )
+    expansion_dead["death_plan"] = [
+        {
+            "entity_ref": actor,
+            "entity_kind": "character",
+            "cause_event_ref": expansion_dead["event_plan"][0]["event_ref"],
+        }
+    ]
+    cases.append(("dead actor", seeds_dead, expansion_dead, "death_plan"))
+
+    packet_missing, seeds_missing, expansion_missing = _contracts(
+        db["vocabulary"],
+        [("seed_missing_actor", "build_venture", "No Such Actor", None)],
+    )
+    cases.append(
+        (
+            "missing actor",
+            seeds_missing,
+            expansion_missing,
+            "unresolvable actor",
+        )
+    )
+
+    with db["conn"].cursor() as cur:
+        request_chunk = _fabricate_chunk(cur, _next_world_time(cur))
+        for label, case_seeds, case_expansion, match in cases:
+            case_packet = {
+                "bad shape": packet,
+                "dead actor": packet_dead,
+                "missing actor": packet_missing,
+            }[label]
+            with pytest.raises((ValueError, ValidationError), match=match):
+                _persist_maturation_expansion(
+                    cur,
+                    packet=case_packet,
+                    seed_response=case_seeds,
+                    expansion_payload=case_expansion,
+                    row={
+                        "job_id": 531002,
+                        "entity_id": actor_id,
+                        "requesting_chunk_id": request_chunk,
+                    },
+                    slot=2,
+                    dbname="save_02",
+                    settings=settings,
+                    summaries_enabled=False,
+                )
+
+
+def test_maturation_disabled_config_drops_intent_loudly(
+    project_db: dict[str, Any],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    db = project_db
+    actor_id, actor = db["characters"][0]
+    packet, seeds, expansion = _contracts(
+        db["vocabulary"], [("seed_disabled", "build_venture", actor, None)]
+    )
+    settings = load_settings()
+    assert settings.orrery is not None
+    disabled_retrograde = settings.orrery.retrograde.model_copy(
+        update={
+            "projects": settings.orrery.retrograde.projects.model_copy(
+                update={"enabled": False}
+            )
+        }
+    )
+    disabled_settings = settings.model_copy(
+        update={
+            "orrery": settings.orrery.model_copy(
+                update={"retrograde": disabled_retrograde}
+            )
+        }
+    )
+    with db["conn"].cursor() as cur:
+        request_chunk = _fabricate_chunk(cur, _next_world_time(cur))
+        caplog.set_level(logging.WARNING)
+        manifest = _persist_maturation_expansion(
+            cur,
+            packet=packet,
+            seed_response=seeds,
+            expansion_payload=expansion,
+            row={
+                "job_id": 531003,
+                "entity_id": actor_id,
+                "requesting_chunk_id": request_chunk,
+            },
+            slot=2,
+            dbname="save_02",
+            settings=disabled_settings,
+            summaries_enabled=False,
+        )
+    assert manifest["counters"]["projects_dropped_disabled"] == 1
+    assert "Maturation job 531003" in caplog.text
+    assert "seed_disabled" in caplog.text
+    assert "project seeding is disabled" in caplog.text
+
+
+def test_maturation_project_replays_exactly_and_hydrates_continuation(
+    project_db: dict[str, Any],
+) -> None:
+    """A mid-arc start survives a later checkpoint with no project drift."""
+
+    db = project_db
+    actor_id, actor = db["characters"][0]
+    packet, seeds, expansion = _contracts(
+        db["vocabulary"], [("seed_mid_arc", "build_venture", actor, None)]
+    )
+    settings = load_settings()
+    assert settings.orrery is not None
+    with db["conn"].cursor() as cur:
+        base_time = _next_world_time(cur)
+        base_chunk = _fabricate_chunk(cur, base_time)
+        base_id = capture_state_checkpoint_sync(
+            cur, chunk_id=base_chunk, label="manual"
+        )
+        assert base_id is not None
+
+        request_chunk = _fabricate_chunk(cur, base_time + timedelta(hours=1))
+        manifest = _persist_maturation_expansion(
+            cur,
+            packet=packet,
+            seed_response=seeds,
+            expansion_payload=expansion,
+            row={
+                "job_id": 531004,
+                "entity_id": actor_id,
+                "requesting_chunk_id": request_chunk,
+            },
+            slot=2,
+            dbname="save_02",
+            settings=settings,
+            summaries_enabled=False,
+        )
+        project_row = next(
+            row for row in manifest["project_rows"] if row["status"] == "inserted"
+        )
+        due_time = project_row["next_eligible_at_world_time"]
+
+        state = WorldState(
+            is_active={actor_id: True},
+            project_states={
+                actor_id: ProjectState(
+                    id=int(project_row["project_id"]),
+                    project_type="build_venture",
+                    status="active",
+                    stage="laying_groundwork",
+                    progress=0.0,
+                    stall_count=0,
+                    next_eligible_at_world_time=due_time,
+                    source_chunk_id=request_chunk,
+                )
+            },
+            project_policy=coerce_project_policy(settings.orrery.projects),
+            world_time=due_time,
+        )
+        bindings = {Slot.ACTOR: actor_id}
+        assert ADVANCE_BUILD_VENTURE.package_gate(state, bindings)
+        assert any(
+            branch.label == "Make the venture legible"
+            and branch.conditions(state, bindings)
+            for branch in ADVANCE_BUILD_VENTURE.branches
+        )
+
+        advance_chunk = _fabricate_chunk(cur, due_time)
+        _apply_project_advance(
+            cur,
+            chunk_id=advance_chunk,
+            actor_entity_id=actor_id,
+            project_settings=settings.orrery.projects,
+        )
+        target_id = capture_state_checkpoint_sync(
+            cur, chunk_id=advance_chunk, label="manual"
+        )
+        assert target_id is not None
+
+        replayed = reconstruct_state_at_sync(
+            cur, advance_chunk, base_checkpoint_id=base_id
+        )
+        assert not any(
+            section == "character_project_states"
+            for section, _row_id in replayed.uncertain_rows
+        )
+        pair = [
+            verdict
+            for verdict in verify_checkpoints_sync(cur)
+            if verdict.base_checkpoint_id == base_id
+            and verdict.target_checkpoint_id == target_id
+        ]
+        assert len(pair) == 1
+        assert pair[0].drifts == []
+
+
+def test_maturation_started_event_requires_applied_projection_in_replay(
+    project_db: dict[str, Any],
+) -> None:
+    db = project_db
+    actor_id, _actor = db["characters"][0]
+    with db["conn"].cursor() as cur:
+        base_time = _next_world_time(cur)
+        base_chunk = _fabricate_chunk(cur, base_time)
+        base_id = capture_state_checkpoint_sync(
+            cur, chunk_id=base_chunk, label="manual"
+        )
+        assert base_id is not None
+        event_chunk = _fabricate_chunk(cur, base_time + timedelta(hours=1))
+        cur.execute(
+            """
+            INSERT INTO world_events (
+                event_type, tick_chunk_id, actor_entity_id, world_layer,
+                source, changed_fields, payload
+            ) VALUES (
+                'build_venture_started', %s, %s,
+                'primary'::world_layer_type,
+                'retrograde'::event_source_kind,
+                ARRAY['character_project_states'],
+                %s::jsonb
+            )
+            """,
+            (
+                event_chunk,
+                actor_id,
+                json.dumps(
+                    {
+                        "source": "maturation",
+                        "retrograde_event_ref": (
+                            "maturation_job_531005_project_missing_applied"
+                        ),
+                    }
+                ),
+            ),
+        )
+        with pytest.raises(ValueError, match="missing its required applied"):
+            reconstruct_state_at_sync(cur, event_chunk, base_checkpoint_id=base_id)
+
+
+def _next_world_time(cur: Any) -> datetime:
+    cur.execute("SELECT max(world_time) FROM chunk_metadata")
+    value = cur.fetchone()[0]
+    assert value is not None
+    return value + timedelta(hours=24)
 
 
 def _all_type_specs(db: Mapping[str, Any]) -> list[tuple[str, str, str, str | None]]:
