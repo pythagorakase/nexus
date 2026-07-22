@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 import pytest
 
+from nexus.agents.orrery.audit import explain_dry_run
 from nexus.agents.lore.utils.turn_context import TurnContext
 from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
 from nexus.agents.orrery.resolver import (
@@ -88,7 +89,9 @@ class FakeSession:
         present_actor_rows=None,
         actor_target_relationship_rows=None,
         actor_target_social_contact_rows=None,
+        actor_target_hostile_edge_rows=None,
         actor_faction_pair_tag_rows=None,
+        actor_faction_roster_rows=None,
         entity_name_rows=None,
         need_debt_rows=None,
         travel_state_rows=None,
@@ -136,7 +139,9 @@ class FakeSession:
         self.present_actor_rows = present_actor_rows or []
         self.actor_target_relationship_rows = actor_target_relationship_rows or []
         self.actor_target_social_contact_rows = actor_target_social_contact_rows or []
+        self.actor_target_hostile_edge_rows = actor_target_hostile_edge_rows or []
         self.actor_faction_pair_tag_rows = actor_faction_pair_tag_rows or []
+        self.actor_faction_roster_rows = actor_faction_roster_rows or []
         self.entity_name_rows = entity_name_rows or [
             {"id": 1, "name": "Mara"},
             {"id": 2, "name": "Vale"},
@@ -170,6 +175,7 @@ class FakeSession:
         self.max_chunk_id = max_chunk_id
         self.max_id_queries = 0
         self.world_time_queries = 0
+        self.executed_sql: list[str] = []
 
     def __enter__(self):
         return self
@@ -179,6 +185,7 @@ class FakeSession:
 
     def execute(self, statement, _params=None):
         sql = str(statement)
+        self.executed_sql.append(sql)
         if "/* orrery:epistemics_hydration:backstory_availability */" in sql:
             return FakeResult([{"available": True}])
         if "/* orrery:entity_activity */" in sql:
@@ -279,12 +286,28 @@ class FakeSession:
             assert "pt.tag = 'contact:social'" in sql
             assert "ept.cleared_at IS NULL" in sql
             return FakeResult(self.actor_target_social_contact_rows)
+        if "/* orrery:actor_target_bindings_hostile_edges */" in sql:
+            assert "pt.tag IN ('hostile_to', 'hunting')" in sql
+            assert "es.kind = 'character'" in sql
+            assert "et.kind = 'character'" in sql
+            return FakeResult(self.actor_target_hostile_edge_rows)
         if "/* orrery:actor_faction_bindings_institutional_pair_tags */" in sql:
             assert "pt.tag LIKE 'status:%'" in sql
             assert "'obligation', 'handles', 'authority_over'" in sql
             assert "ept.cleared_at IS NULL" in sql
             assert "NOT pt.deprecated" in sql
             return FakeResult(self.actor_faction_pair_tag_rows)
+        if "/* orrery:actor_faction_bindings_rosters */" in sql:
+            assert "pt.tag LIKE 'status:%'" in sql
+            assert "relationship_scope = 'character'" in sql
+            reach = _params["roster_reach"]
+            return FakeResult(
+                [
+                    row
+                    for row in self.actor_faction_roster_rows
+                    if row.get("depth", 0) <= reach
+                ]
+            )
         if "/* orrery:entity_names */" in sql:
             return FakeResult(self.entity_name_rows)
         if "/* orrery:need_debt_scores */" in sql:
@@ -2354,6 +2377,242 @@ def test_compose_actor_target_bindings_includes_directed_social_contacts() -> No
 
     pairs = {(b[Slot.ACTOR], b[Slot.TARGET]) for b in bindings}
     assert pairs == {(1, 2)}
+
+
+def test_hostile_edges_compose_both_orderings_and_route_only_opted_templates() -> None:
+    """Hostile character pairs are symmetric candidates with isolated stacks."""
+
+    opted = Template(
+        id="hostility_opted",
+        priority=10,
+        drive_band=DriveBand.PROJECT_IDENTITY,
+        blurb="Hostility source fixture.",
+        required_slots=(Slot.ACTOR, Slot.TARGET),
+        package_gate=ALWAYS,
+        branches=(Branch("act", ALWAYS, "{actor} faces {target}."),),
+        composes_from_hostility=True,
+    )
+    legacy = Template(
+        id="hostility_legacy",
+        priority=9,
+        drive_band=DriveBand.PROJECT_IDENTITY,
+        blurb="Legacy relationship-only fixture.",
+        required_slots=(Slot.ACTOR, Slot.TARGET),
+        package_gate=ALWAYS,
+        branches=(Branch("act", ALWAYS, "{actor} ignores {target}."),),
+    )
+    session = FakeSession(
+        actor_target_hostile_edge_rows=[{"source_entity_id": 1, "target_entity_id": 2}]
+    )
+
+    bindings = compose_actor_target_bindings(
+        session,
+        anchor_chunk_id=100,
+        window_chunks=30,
+        actor_ids={1, 2},
+        include_hostile_edges=True,
+    )
+    assert {(binding[Slot.ACTOR], binding[Slot.TARGET]) for binding in bindings} == {
+        (1, 2),
+        (2, 1),
+    }
+
+    routes = compose_actor_target_routes(
+        session,
+        state=WorldState(),
+        templates=(legacy, opted),
+        anchor_chunk_id=100,
+        window_chunks=30,
+        actor_ids={1, 2},
+        composition_settings={"hostile_source_enabled": True},
+    )
+    assert [
+        (
+            route[0][Slot.ACTOR],
+            route[0][Slot.TARGET],
+            tuple(template.id for template in route[1]),
+        )
+        for route in routes
+    ] == [(1, 2, ("hostility_opted",)), (2, 1, ("hostility_opted",))]
+
+
+def test_roster_routes_respect_reach_and_only_admit_courting_templates() -> None:
+    """Roster factions cross the authored boundary only within configured reach."""
+
+    courting = Template(
+        id="roster_courting",
+        priority=10,
+        drive_band=DriveBand.PROJECT_IDENTITY,
+        blurb="Roster courtship fixture.",
+        required_slots=(Slot.ACTOR, Slot.FACTION),
+        package_gate=ALWAYS,
+        branches=(Branch("act", ALWAYS, "{actor} courts {faction}."),),
+        courts_factions=True,
+    )
+    legacy = Template(
+        id="roster_legacy",
+        priority=9,
+        drive_band=DriveBand.PROJECT_IDENTITY,
+        blurb="Direct-institution-only fixture.",
+        required_slots=(Slot.ACTOR, Slot.FACTION),
+        package_gate=ALWAYS,
+        branches=(Branch("act", ALWAYS, "{actor} avoids {faction}."),),
+    )
+    session = FakeSession(
+        actor_faction_roster_rows=[
+            {"actor_id": 1, "faction_id": 9, "depth": 2},
+            {"actor_id": 1, "faction_id": 10, "depth": 3},
+        ]
+    )
+
+    routes = compose_actor_faction_routes(
+        session,
+        state=WorldState(),
+        templates=(legacy, courting),
+        anchor_chunk_id=100,
+        window_chunks=30,
+        actor_ids={1},
+        composition_settings={
+            "roster_source_enabled": True,
+            "roster_reach": 2,
+        },
+    )
+    assert [
+        (
+            route[0][Slot.ACTOR],
+            route[0][Slot.FACTION],
+            tuple(template.id for template in route[1]),
+        )
+        for route in routes
+    ] == [(1, 9, ("roster_courting",))]
+
+    empty_routes = compose_actor_faction_routes(
+        FakeSession(),
+        state=WorldState(),
+        templates=(courting,),
+        anchor_chunk_id=100,
+        window_chunks=30,
+        actor_ids={1},
+        composition_settings={"roster_source_enabled": True, "roster_reach": 4},
+    )
+    assert empty_routes == ()
+
+
+def test_disabled_composition_sources_are_byte_identical_to_legacy() -> None:
+    """Default-off source settings preserve the exact legacy proposal payload."""
+
+    template = Template(
+        id="disabled_source_fixture",
+        priority=10,
+        drive_band=DriveBand.PROJECT_IDENTITY,
+        blurb="Disabled-source fixture.",
+        required_slots=(Slot.ACTOR, Slot.TARGET),
+        package_gate=ALWAYS,
+        branches=(Branch("act", ALWAYS, "{actor} meets {target}."),),
+        composes_from_hostility=True,
+    )
+    rows = [{"source_entity_id": 1, "target_entity_id": 2}]
+    legacy_session = FakeSession(actor_target_hostile_edge_rows=rows)
+    disabled_session = FakeSession(actor_target_hostile_edge_rows=rows)
+    legacy = resolve_dry_run(
+        legacy_session,
+        (template,),
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+    disabled = resolve_dry_run(
+        disabled_session,
+        (template,),
+        anchor_chunk_id=100,
+        window_chunks=30,
+        composition_settings={
+            "hostile_source_enabled": False,
+            "roster_source_enabled": False,
+            "roster_reach": 2,
+        },
+    )
+
+    disabled_payload = disabled.to_dict()
+    legacy_payload = legacy.to_dict()
+    disabled_payload.pop("generated_at")
+    legacy_payload.pop("generated_at")
+    assert disabled_payload == legacy_payload
+    assert disabled_session.executed_sql == legacy_session.executed_sql
+    assert not any("hostile_edges" in sql for sql in disabled_session.executed_sql)
+
+
+def test_enabled_composition_sources_keep_production_and_audit_in_parity() -> None:
+    """Resolver and explained dry-run dispatch both widened sources identically."""
+
+    hostile = Template(
+        id="hostile_parity",
+        priority=10,
+        drive_band=DriveBand.PROJECT_IDENTITY,
+        blurb="Hostile parity fixture.",
+        required_slots=(Slot.ACTOR, Slot.TARGET),
+        package_gate=ALWAYS,
+        branches=(Branch("act", ALWAYS, "{actor} faces {target}."),),
+        composes_from_hostility=True,
+    )
+    roster = Template(
+        id="roster_parity",
+        priority=10,
+        drive_band=DriveBand.PROJECT_IDENTITY,
+        blurb="Roster parity fixture.",
+        required_slots=(Slot.ACTOR, Slot.FACTION),
+        package_gate=ALWAYS,
+        branches=(Branch("act", ALWAYS, "{actor} courts {faction}."),),
+        courts_factions=True,
+    )
+    settings = {
+        "hostile_source_enabled": True,
+        "roster_source_enabled": True,
+        "roster_reach": 2,
+    }
+
+    def session() -> FakeSession:
+        return FakeSession(
+            actor_target_hostile_edge_rows=[
+                {"source_entity_id": 1, "target_entity_id": 2}
+            ],
+            actor_faction_roster_rows=[{"actor_id": 1, "faction_id": 9, "depth": 2}],
+            entity_name_rows=[
+                {"id": 1, "name": "Mara"},
+                {"id": 2, "name": "Vale"},
+                {"id": 9, "name": "The Court"},
+            ],
+        )
+
+    proposal = resolve_dry_run(
+        session(),
+        (hostile, roster),
+        anchor_chunk_id=100,
+        window_chunks=30,
+        composition_settings=settings,
+    )
+    report = explain_dry_run(
+        session(),
+        (hostile, roster),
+        anchor_chunk_id=100,
+        window_chunks=30,
+        composition_settings=settings,
+    )
+    production = {
+        (draft.template_id, tuple(sorted(draft.bindings.items())))
+        for draft in proposal.resolutions
+    }
+    audited = {
+        (stack.winner_id, tuple(sorted(stack.bindings.items())))
+        for stack in report.actors[0].two_party_stacks
+    }
+    assert (
+        audited
+        == production
+        == {
+            ("hostile_parity", (("actor", 1), ("target", 2))),
+            ("roster_parity", (("actor", 1), ("faction", 9))),
+        }
+    )
 
 
 def test_actor_target_routes_preserve_contact_only_recruitment_continuity() -> None:

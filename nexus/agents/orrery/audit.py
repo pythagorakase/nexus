@@ -515,6 +515,7 @@ def explain_dry_run(
     contagion_settings: Optional[Any] = None,
     weather_settings: Optional[Any] = None,
     mood_settings: Optional[Any] = None,
+    composition_settings: Optional[Any] = None,
 ) -> ExplainedTickReport:
     """Hydrate, bind, and explain Orrery packages without database writes.
 
@@ -608,6 +609,7 @@ def explain_dry_run(
             window_chunks=window_chunks,
             actor_ids=actor_ids,
             target_presence="offscreen",
+            composition_settings=composition_settings,
         )
         if pressure_templates:
             present_pair_routes = compose_actor_target_routes(
@@ -618,6 +620,7 @@ def explain_dry_run(
                 window_chunks=window_chunks,
                 actor_ids=actor_ids,
                 target_presence="present",
+                composition_settings=composition_settings,
             )
 
     if actor_faction_templates:
@@ -628,6 +631,7 @@ def explain_dry_run(
             anchor_chunk_id=anchor_chunk_id,
             window_chunks=window_chunks,
             actor_ids=actor_ids,
+            composition_settings=composition_settings,
         )
 
     if actor_target_faction_templates:
@@ -639,6 +643,7 @@ def explain_dry_run(
             window_chunks=window_chunks,
             actor_ids=actor_ids,
             target_presence="offscreen",
+            composition_settings=composition_settings,
         )
         triple_pressure_templates = [
             template
@@ -655,6 +660,7 @@ def explain_dry_run(
                 window_chunks=window_chunks,
                 actor_ids=actor_ids,
                 target_presence="present",
+                composition_settings=composition_settings,
             )
 
     present_actor_ids = _present_actor_ids_at_anchor(

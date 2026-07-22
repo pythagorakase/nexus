@@ -2412,6 +2412,13 @@ class Template:
     # this authoring metadata on Template prevents one package's broader
     # starting substrate from changing every other two-party package.
     starts_from_social_contact: bool = False
+    # Hostile-only character pairs are another shared candidate source, but
+    # only authored packages may evaluate them. Faction-endpoint hostility is
+    # deliberately not a composition source until a desire names the faction.
+    composes_from_hostility: bool = False
+    # Roster-derived factions are visible through nearby members only to
+    # packages authored to court institutions across that broader boundary.
+    courts_factions: bool = False
     # Character-targeted project continuations bind TARGET from the durable
     # open-project projection. This remains valid if the contact or
     # relationship edge that originally sourced the project later clears.

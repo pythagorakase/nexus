@@ -77,6 +77,7 @@ def _production_proposal(slot: int) -> tuple[Optional[int], OrreryTickProposal]:
                 project_settings=orrery.get("projects"),
                 epistemics_settings=orrery.get("epistemics"),
                 fanout_settings=orrery.get("fanout"),
+                composition_settings=orrery.get("composition"),
             )
     finally:
         engine.dispose()

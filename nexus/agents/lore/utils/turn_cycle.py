@@ -683,6 +683,7 @@ class TurnCycleManager:
                 contagion_settings=orrery_settings.get("contagion"),
                 weather_settings=orrery_settings.get("weather"),
                 mood_settings=orrery_settings.get("mood"),
+                composition_settings=orrery_settings.get("composition"),
             )
 
         turn_context.orrery_proposal = proposal

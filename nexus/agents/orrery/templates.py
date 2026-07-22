@@ -2910,14 +2910,13 @@ CONSULT_RIVAL = Template(
     # (rival_consulted from the meaningful branches, contact_made from the
     # ALWAYS fallback). Without the rival_consulted cooldown the high-
     # magnitude branches could refire next tick — caught by Codex on PR #223.
-    # The fraught-tie OR deliberately spans rivalry, open enmity, and
-    # `complex` history — the blurb's contract is "people who do not
-    # trust each other," not the narrow rival label.
+    # #530 review: favorable `complex` now records reconciliation, so it is
+    # not itself a fraught tie. Genuine distrust remains covered by the
+    # adjacent trust_below arm.
     package_gate=AND(
         OR(
             has_relationship_of_type("rival"),
             has_symmetric_relationship_of_type("enemy"),
-            has_relationship_of_type("complex"),
             trust_below(0),
         ),
         OR(
@@ -5725,6 +5724,7 @@ START_SEEK_REDEMPTION = Template(
     blurb="An off-screen character begins making amends to someone they wronged.",
     required_slots=(Slot.ACTOR, Slot.TARGET),
     starts_from_social_contact=True,
+    composes_from_hostility=True,
     package_gate=AND(
         project_due("start", project_type="seek_redemption"),
         has_minimal_context(),
@@ -5742,16 +5742,9 @@ START_SEEK_REDEMPTION = Template(
             trust_below(0, Slot.TARGET, Slot.ACTOR),
             has_symmetric_relationship_of_type("enemy", Slot.ACTOR, Slot.TARGET),
             has_symmetric_relationship_of_type("rival", Slot.ACTOR, Slot.TARGET),
-            # Reachability contour: candidate pairs compose from relationship
-            # rows (any type) and contact:social edges, never from hostile
-            # pair tags alone. This arm therefore fires only when the pair
-            # composed via one of those routes and the hostile edge is the
-            # sole EVIDENCE (e.g. a hunting edge atop a neutral-valence
-            # relationship row). A pair whose only connection is a hostile
-            # edge does not compose — deliberately: a wrong worth redeeming
-            # with no relationship row is data-shape-poor, and widening the
-            # shared composer for that corner would touch every two-party
-            # package.
+            # #530 reachability contour closed by the ruled hostile source:
+            # this directed evidence can now source the pair even when no
+            # relationship row or social-contact edge exists.
             has_any_pair_tag(
                 "hostile_to",
                 "hunting",

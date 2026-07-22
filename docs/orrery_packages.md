@@ -1831,7 +1831,6 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
   - **OR:**
     - actor has `rival` relationship to target
     - actor and target share `enemy` relationship (either direction)
-    - actor has `complex` relationship to target
     - trust actor→target < 0
   - **OR:**
     - recent `compliance_alert` event in last 10 ticks
@@ -3793,7 +3792,6 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `captor`
 - `chosen_kin`
 - `companion`
-- `complex`
 - `comrade`
 - `enemy`
 - `family`

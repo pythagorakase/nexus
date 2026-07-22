@@ -253,6 +253,12 @@ enabled = true
 [orrery.binding]
 window_chunks = 30
 
+[orrery.composition]
+# Shared binding sources remain model-default-off for legacy configurations.
+hostile_source_enabled = true
+roster_source_enabled = true
+roster_reach = 2
+
 [orrery.contagion]
 enabled = true
 
