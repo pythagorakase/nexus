@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Sequence
+from typing import Any, Literal, Sequence
 
 from nexus.agents.logon.apex_schema import NewEntityDeclaration
 from nexus.agents.orrery.tag_schemas import OrreryTagBestowal
@@ -62,7 +62,7 @@ def collect_new_entity_declaration_vocabulary_issues(
                 continue
 
             if endpoint_kind is not None and tag_is_valid:
-                other_role = (
+                other_role: Literal["subject", "object"] = (
                     "object" if hint.declared_entity_role == "subject" else "subject"
                 )
                 try:

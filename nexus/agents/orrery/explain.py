@@ -327,6 +327,7 @@ def explain_template(
                 passes
                 and weighting_ran
                 and not branch.preemptive
+                and mood is not None
                 and mood in branch.mood_affinities
             ):
                 affinity = {

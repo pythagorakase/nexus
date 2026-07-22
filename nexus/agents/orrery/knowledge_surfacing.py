@@ -142,7 +142,7 @@ def _query_rows(
 
     is_sqlalchemy = type(session_or_cur).__module__.startswith("sqlalchemy")
     if is_sqlalchemy:
-        statement = text(
+        sqlalchemy_statement = text(
             sql.format(
                 anchor=":anchor_chunk_id",
                 window=":window_chunks",
@@ -151,7 +151,7 @@ def _query_rows(
             )
         )
         result = session_or_cur.execute(
-            statement,
+            sqlalchemy_statement,
             {
                 "anchor_chunk_id": anchor_chunk_id,
                 "window_chunks": recent_reveal_window_chunks,
@@ -161,14 +161,14 @@ def _query_rows(
         )
         return [dict(row) for row in result.mappings()]
 
-    statement = sql.format(
+    cursor_statement = sql.format(
         anchor="%s",
         window="%s",
         present_ids="%s",
         limit="%s",
     )
     session_or_cur.execute(
-        statement,
+        cursor_statement,
         (
             anchor_chunk_id,
             recent_reveal_window_chunks,
