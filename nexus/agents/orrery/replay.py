@@ -539,7 +539,13 @@ class _Replayer:
                 if base_chunk < chunk_id <= self.target_chunk_id:
                     self._apply_skald_rows(chunk_id, characters, places, result)
                     self._apply_orrery_resolutions(
-                        chunk_id, characters, needs, travel, projects, result
+                        chunk_id,
+                        characters,
+                        needs,
+                        travel,
+                        projects,
+                        born_entities,
+                        result,
                     )
                 self._apply_maturation_project_starts(
                     chunk_id,
@@ -1095,6 +1101,7 @@ class _Replayer:
         needs: dict[tuple[int, str], dict[str, Any]],
         travel: dict[int, dict[str, Any]],
         projects: dict[Any, dict[str, Any]],
+        born_entities: set[int],
         result: ReplayResult,
     ) -> None:
         self.cur.execute(
@@ -1137,6 +1144,7 @@ class _Replayer:
                     delta["need.fulfill"],
                     world_time,
                     needs,
+                    actor_entity_id in born_entities,
                     result,
                 )
             for project_key in (
@@ -1476,6 +1484,7 @@ class _Replayer:
         raw_payload: Any,
         world_time: Optional[datetime],
         needs: dict[tuple[int, str], dict[str, Any]],
+        applicability_initialized: bool,
         result: ReplayResult,
     ) -> None:
         payload = _coerce_need_payload(raw_payload)
@@ -1490,7 +1499,15 @@ class _Replayer:
                 "last_evaluated_at": _isoformat(world_time),
                 "last_evaluated_chunk_id": None,
                 "last_fulfilled_at": None,
-                "metadata": {},
+                # Production's character INSERT trigger creates applicable
+                # need rows before any later resolution can fulfill them.
+                # Window-born characters are seeded without those un-ledgered
+                # rows, so mirror the trigger's fresh-row marker here.
+                "metadata": (
+                    {"synced_by": "need_applicability"}
+                    if applicability_initialized
+                    else {}
+                ),
             }
         row = needs[key]
         last_evaluated = row.get("last_evaluated_at")
