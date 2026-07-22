@@ -238,6 +238,106 @@ def test_writer_dedup_cap_disabled_and_unresolvable_are_loud(
             )
 
 
+def test_cap_dropped_projects_do_not_claim_actor_keys(
+    project_db: dict[str, Any],
+) -> None:
+    """Cap rejects never become false duplicate-actor winners."""
+
+    db = project_db
+    specs = [
+        ("seed_a", "build_venture", db["characters"][0][1], None),
+        ("seed_b1", "build_venture", db["characters"][1][1], None),
+        ("seed_b2", "build_venture", db["characters"][1][1], None),
+    ]
+    packet, seeds, expansion = _contracts(db["vocabulary"], specs)
+    with db["conn"].cursor() as cur:
+        manifest = build_retrograde_persistence_plan(
+            cur,
+            packet=packet,
+            seed_candidate_response=seeds,
+            expansion_plan_payload=expansion,
+            slot=2,
+            dbname="save_02",
+            dry_run=False,
+            project_seeding_enabled=True,
+            max_seeded_projects=1,
+            project_settings=load_settings().orrery.projects,
+        )
+
+    assert [row["status"] for row in manifest["project_rows"]] == [
+        "inserted",
+        "dropped_cap",
+        "dropped_cap",
+    ]
+    assert manifest["counters"]["projects_inserted"] == 1
+    assert manifest["counters"]["projects_dropped_cap"] == 2
+    assert manifest["counters"]["projects_dropped_duplicate_actor"] == 0
+    assert all(
+        row.get("winning_seed_id") is None for row in manifest["project_rows"][1:]
+    )
+
+
+def test_dropped_project_targets_do_not_create_entity_stubs(
+    project_db: dict[str, Any],
+) -> None:
+    """Only accepted project targets participate in entity stub planning."""
+
+    db = project_db
+    nonce = uuid4().hex[:10]
+    accepted_target = f"Accepted Target {nonce}"
+    dropped_target = f"Dropped Target {nonce}"
+    specs = [
+        (
+            "seed_accepted_stub",
+            "recruit_ally",
+            db["characters"][0][1],
+            accepted_target,
+        ),
+        (
+            "seed_dropped_stub",
+            "recruit_ally",
+            db["characters"][1][1],
+            dropped_target,
+        ),
+    ]
+    packet, seeds, expansion = _contracts(db["vocabulary"], specs)
+    with db["conn"].cursor() as cur:
+        manifest = build_retrograde_persistence_plan(
+            cur,
+            packet=packet,
+            seed_candidate_response=seeds,
+            expansion_plan_payload=expansion,
+            slot=2,
+            dbname="save_02",
+            dry_run=False,
+            create_missing_entities=True,
+            project_seeding_enabled=True,
+            max_seeded_projects=1,
+            project_settings=load_settings().orrery.projects,
+        )
+        cur.execute(
+            "SELECT name FROM characters WHERE name = ANY(%s) ORDER BY name",
+            ([accepted_target, dropped_target],),
+        )
+        created_names = [str(row[0]) for row in cur.fetchall()]
+
+    project_stub_rows = [
+        row
+        for row in manifest["entity_stub_rows"]
+        if any(
+            source["plan"] == "project_plan" and source["role"] == "target"
+            for source in row["sources"]
+        )
+    ]
+    assert [(row["entity_ref"], row["status"]) for row in project_stub_rows] == [
+        (accepted_target, "inserted")
+    ]
+    assert dropped_target not in {
+        row["entity_ref"] for row in manifest["entity_stub_rows"]
+    }
+    assert created_names == [accepted_target]
+
+
 def test_seek_redemption_requires_target_to_actor_negative_valence(
     project_db: dict[str, Any],
 ) -> None:
@@ -314,6 +414,16 @@ def test_wizard_genesis_checkpoint_carries_seeded_project_through_replay(
         )
         base_id = manifest["genesis_checkpoint"]["id"]
         prologue_chunk = manifest["genesis_checkpoint"]["chunk_id"]
+        with pytest.raises(
+            RuntimeError,
+            match=rf"checkpoint {base_id} already exists at prologue chunk "
+            rf"{prologue_chunk}",
+        ):
+            persist_retrograde_history(
+                cur,
+                bundle=bundle,
+                settings=settings,
+            )
         cur.execute(
             """
             SELECT state -> 'character_project_states'

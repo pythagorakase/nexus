@@ -740,7 +740,9 @@ class FakeRetrogradePersistenceCursor:
     def execute(self, sql: str, params: Optional[Any] = None) -> None:
         self.statements.append(sql)
         self.params.append(params)
-        if "orrery:retrograde:prologue_chunk" in sql:
+        if "orrery:retrograde:genesis_invariant" in sql:
+            self._result = []
+        elif "orrery:retrograde:prologue_chunk" in sql:
             self._result = []
         elif "orrery:retrograde:entity_catalog" in sql:
             rows = [

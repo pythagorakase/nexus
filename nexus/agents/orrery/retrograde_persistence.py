@@ -94,6 +94,14 @@ class _TagRecord:
     entity_kinds: frozenset[str]
 
 
+@dataclass(frozen=True, slots=True)
+class _ProjectRefDecision:
+    """Ref-level project arbitration result shared by stubs and row planning."""
+
+    status: str
+    winning_seed_id: Optional[str] = None
+
+
 def build_retrograde_persistence_plan(
     cur: Any,
     *,
@@ -131,6 +139,16 @@ def build_retrograde_persistence_plan(
         packet=packet,
         seed_candidate_response=seed_candidate_response,
     )
+    if max_seeded_projects <= 0:
+        raise ValueError("max_seeded_projects must be positive")
+    project_ref_decisions = (
+        _arbitrate_project_refs(
+            expansion,
+            max_seeded_projects=max_seeded_projects,
+        )
+        if project_seeding_enabled
+        else {}
+    )
     existing_prologue_id = _find_prologue_chunk_id(cur)
     entity_index = _load_entity_index(cur)
     event_types = _load_event_types(cur)
@@ -144,8 +162,6 @@ def build_retrograde_persistence_plan(
         else None
     )
     project_policy = coerce_project_policy(project_settings)
-    if max_seeded_projects <= 0:
-        raise ValueError("max_seeded_projects must be positive")
 
     manifest = _build_plan(
         cur,
@@ -169,6 +185,7 @@ def build_retrograde_persistence_plan(
         epistemics_settings=epistemics_settings,
         project_seeding_enabled=project_seeding_enabled,
         max_seeded_projects=max_seeded_projects,
+        project_ref_decisions=project_ref_decisions,
         project_policy=project_policy,
         base_timestamp=base_timestamp,
     )
@@ -214,6 +231,7 @@ def build_retrograde_persistence_plan(
         epistemics_settings=epistemics_settings,
         project_seeding_enabled=project_seeding_enabled,
         max_seeded_projects=max_seeded_projects,
+        project_ref_decisions=project_ref_decisions,
         project_policy=project_policy,
         base_timestamp=base_timestamp,
     )
@@ -242,6 +260,7 @@ def _build_plan(
     epistemics_settings: Optional[Any],
     project_seeding_enabled: bool,
     max_seeded_projects: int,
+    project_ref_decisions: Mapping[str, _ProjectRefDecision],
     project_policy: ProjectPolicy,
     base_timestamp: Any,
 ) -> dict[str, Any]:
@@ -259,7 +278,7 @@ def _build_plan(
         entity_index=entity_index,
         create_missing_entities=create_missing_entities,
         inserted_stub_keys=inserted_stub_keys,
-        include_projects=project_seeding_enabled,
+        project_ref_decisions=project_ref_decisions,
     )
     creatable_refs = frozenset(
         (row["entity_kind"], normalize_entity_ref(row["entity_ref"]))
@@ -346,6 +365,7 @@ def _build_plan(
         dry_run=dry_run,
         enabled=project_seeding_enabled,
         max_seeded_projects=max_seeded_projects,
+        project_ref_decisions=project_ref_decisions,
         project_policy=project_policy,
         base_timestamp=base_timestamp,
         prologue_chunk_id=prologue_chunk_id,
@@ -991,6 +1011,7 @@ def _plan_project_rows(
     dry_run: bool,
     enabled: bool,
     max_seeded_projects: int,
+    project_ref_decisions: Mapping[str, _ProjectRefDecision],
     project_policy: ProjectPolicy,
     base_timestamp: Any,
     prologue_chunk_id: Optional[int],
@@ -1026,8 +1047,7 @@ def _plan_project_rows(
         raise ValueError("Retrograde project seeding requires global base_timestamp")
 
     rows: list[dict[str, Any]] = []
-    accepted_by_actor: dict[tuple[str, Any], str] = {}
-    accepted_count = 0
+    accepted_by_entity_id: dict[int, str] = {}
     for project in expansion.project_plan:
         actor = _resolve_entity(
             project.actor_ref,
@@ -1036,32 +1056,29 @@ def _plan_project_rows(
             role="project_actor",
             creatable_refs=creatable_refs,
         )
-        _require_project_resolution(project, actor, role="actor")
-        actor_key: tuple[str, Any]
-        if actor["resolution"] == "resolved":
-            actor_key = ("entity_id", int(actor["entity_id"]))
-        else:
-            actor_key = ("ref", normalize_entity_ref(project.actor_ref))
-        winning_seed = accepted_by_actor.get(actor_key)
-        if winning_seed is not None:
+        decision = project_ref_decisions.get(project.seed_id)
+        if decision is None:
+            raise AssertionError(
+                f"Missing ref-level arbitration for project seed {project.seed_id!r}"
+            )
+        if decision.status == "dropped_duplicate_actor":
             logger.warning(
                 "Retrograde project seed %s dropped for actor %s; seed %s won "
                 "first in R6 project_plan order",
                 project.seed_id,
                 project.actor_ref,
-                winning_seed,
+                decision.winning_seed_id,
             )
             rows.append(
                 _dropped_project_row(
                     project,
                     status="dropped_duplicate_actor",
                     actor=actor,
-                    winning_seed_id=winning_seed,
+                    winning_seed_id=decision.winning_seed_id,
                 )
             )
             continue
-        accepted_by_actor[actor_key] = project.seed_id
-        if accepted_count >= max_seeded_projects:
+        if decision.status == "dropped_cap":
             logger.warning(
                 "Retrograde project seed %s dropped: cast-wide cap %s already met",
                 project.seed_id,
@@ -1075,6 +1092,21 @@ def _plan_project_rows(
                 )
             )
             continue
+        if decision.status != "accepted":
+            raise AssertionError(
+                f"Unknown project ref arbitration status {decision.status!r}"
+            )
+
+        _require_project_resolution(project, actor, role="actor")
+        actor_entity_id = actor.get("entity_id")
+        if actor_entity_id is not None:
+            winning_seed = accepted_by_entity_id.get(int(actor_entity_id))
+            if winning_seed is not None:
+                raise ValueError(
+                    f"Retrograde project seeds {winning_seed!r} and "
+                    f"{project.seed_id!r} use distinct actor refs that resolve "
+                    f"to duplicate entity id {actor_entity_id}"
+                )
 
         target_kind = (
             "place" if project.project_type == "plan_relocation" else "character"
@@ -1175,8 +1207,37 @@ def _plan_project_rows(
                     "started_event_id": started_event_id,
                 }
             )
-        accepted_count += 1
+        if actor_entity_id is not None:
+            accepted_by_entity_id[int(actor_entity_id)] = project.seed_id
     return rows
+
+
+def _arbitrate_project_refs(
+    expansion: RetrogradeExpansionPlanResponse,
+    *,
+    max_seeded_projects: int,
+) -> dict[str, _ProjectRefDecision]:
+    """Choose project seeds by normalized actor ref, then cast-wide cap."""
+
+    decisions: dict[str, _ProjectRefDecision] = {}
+    accepted_by_actor_ref: dict[str, str] = {}
+    accepted_count = 0
+    for project in expansion.project_plan:
+        actor_key = normalize_entity_ref(project.actor_ref)
+        winning_seed = accepted_by_actor_ref.get(actor_key)
+        if winning_seed is not None:
+            decisions[project.seed_id] = _ProjectRefDecision(
+                status="dropped_duplicate_actor",
+                winning_seed_id=winning_seed,
+            )
+            continue
+        if accepted_count >= max_seeded_projects:
+            decisions[project.seed_id] = _ProjectRefDecision(status="dropped_cap")
+            continue
+        decisions[project.seed_id] = _ProjectRefDecision(status="accepted")
+        accepted_by_actor_ref[actor_key] = project.seed_id
+        accepted_count += 1
+    return decisions
 
 
 def _dropped_project_row(
@@ -2409,11 +2470,11 @@ def _plan_entity_stubs(
     entity_index: Mapping[tuple[str, str], Sequence[_EntityRecord]],
     create_missing_entities: bool,
     inserted_stub_keys: frozenset[tuple[str, str]],
-    include_projects: bool,
+    project_ref_decisions: Mapping[str, _ProjectRefDecision],
 ) -> list[dict[str, Any]]:
     refs = _collect_expansion_entity_refs(
         expansion,
-        include_projects=include_projects,
+        project_ref_decisions=project_ref_decisions,
     )
     rows = []
     for key, ref in sorted(refs.items()):
@@ -2443,7 +2504,7 @@ def _plan_entity_stubs(
 def _collect_expansion_entity_refs(
     expansion: RetrogradeExpansionPlanResponse,
     *,
-    include_projects: bool,
+    project_ref_decisions: Mapping[str, _ProjectRefDecision],
 ) -> dict[tuple[str, str], dict[str, Any]]:
     refs: dict[tuple[str, str], dict[str, Any]] = {}
 
@@ -2538,7 +2599,10 @@ def _collect_expansion_entity_refs(
             },
         )
 
-    for project in expansion.project_plan if include_projects else []:
+    for project in expansion.project_plan:
+        decision = project_ref_decisions.get(project.seed_id)
+        if decision is None or decision.status != "accepted":
+            continue
         add_ref(
             project.actor_ref,
             "character",

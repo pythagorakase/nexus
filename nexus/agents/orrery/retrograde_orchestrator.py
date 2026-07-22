@@ -28,6 +28,7 @@ the API can expose them while the transition request is in flight.
 
 from __future__ import annotations
 
+import json
 import logging
 import threading
 import time
@@ -36,6 +37,7 @@ from typing import Any, Callable, Mapping, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from nexus.agents.orrery.retrograde_markers import RETROGRADE_PROLOGUE_MARKER
 from nexus.config.settings_models import (
     OrreryRetrogradeRetrievalSettings,
     OrreryRetrogradeWizardSettings,
@@ -252,6 +254,7 @@ def persist_retrograde_history(
     epistemics_settings = settings.orrery.epistemics
 
     _emit(progress, "persistence", {})
+    _raise_if_genesis_checkpoint_exists(cur)
     dry_manifest = build_retrograde_persistence_plan(
         cur,
         packet=bundle.packet,
@@ -328,15 +331,11 @@ def persist_retrograde_history(
         label="genesis",
     )
     if checkpoint_id is None:
-        cur.execute(
-            "SELECT id FROM state_checkpoints "
-            "WHERE chunk_id = %s AND label = 'genesis'",
-            (prologue_chunk_id,),
+        raise RuntimeError(
+            "Genesis checkpoint capture returned no id for prologue chunk "
+            f"{prologue_chunk_id}; capture_state_checkpoint_sync reports this "
+            "only when that (chunk_id, label='genesis') checkpoint already exists"
         )
-        row = cur.fetchone()
-        if row is None:
-            raise RuntimeError("Genesis checkpoint insert reported no row")
-        checkpoint_id = int(row[0] if not hasattr(row, "keys") else row["id"])
     manifest["genesis_checkpoint"] = {
         "id": checkpoint_id,
         "chunk_id": int(prologue_chunk_id),
@@ -348,6 +347,33 @@ def persist_retrograde_history(
         manifest["counters"],
     )
     return manifest
+
+
+def _raise_if_genesis_checkpoint_exists(cur: Any) -> None:
+    """Reject wizard persistence against an already-snapshotted prologue."""
+
+    cur.execute(
+        """
+        /* orrery:retrograde:genesis_invariant */
+        SELECT sc.id, sc.chunk_id
+        FROM state_checkpoints AS sc
+        JOIN narrative_chunks AS nc ON nc.id = sc.chunk_id
+        WHERE sc.label = 'genesis'
+          AND nc.authorial_directives @> %s::jsonb
+        ORDER BY nc.id
+        LIMIT 1
+        """,
+        (json.dumps([RETROGRADE_PROLOGUE_MARKER]),),
+    )
+    row = cur.fetchone()
+    if row is None:
+        return
+    checkpoint_id = int(row[0] if not hasattr(row, "keys") else row["id"])
+    prologue_chunk_id = int(row[1] if not hasattr(row, "keys") else row["chunk_id"])
+    raise RuntimeError(
+        "Retrograde genesis invariant violated: checkpoint "
+        f"{checkpoint_id} already exists at prologue chunk {prologue_chunk_id}"
+    )
 
 
 def embed_retrograde_history_summaries(
