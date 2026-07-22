@@ -9,6 +9,7 @@ from hashlib import sha256
 import json
 import math
 import random
+from types import MappingProxyType
 from typing import Any, Callable, Dict, Iterable, Literal, Mapping, Optional, Tuple
 
 from nexus.agents.orrery.communication import CommunicationGraph
@@ -384,23 +385,97 @@ class WorldState:
     localized_weather_enabled: bool = False
     mood_enabled: bool = False
     current_tick: int = 0
+    _recent_events_by_type: Mapping[str, Tuple[EventRecord, ...]] = field(
+        init=False, repr=False, compare=False
+    )
+    _recent_events_by_actor: Mapping[int, Tuple[EventRecord, ...]] = field(
+        init=False, repr=False, compare=False
+    )
+    _recent_events_by_target: Mapping[int, Tuple[EventRecord, ...]] = field(
+        init=False, repr=False, compare=False
+    )
+    _outbound_pair_tags_by_entity: Mapping[int, frozenset[str]] = field(
+        init=False, repr=False, compare=False
+    )
+    _inbound_pair_tags_by_entity: Mapping[int, frozenset[str]] = field(
+        init=False, repr=False, compare=False
+    )
 
     def __post_init__(self) -> None:
-        """Premerge common possession for directly constructed test states."""
+        """Build immutable derived reads for one canonical state snapshot."""
 
-        if self.possessed_claim_knowledge_by_entity:
-            return
-        common_by_claim_id = {
-            record.claim_id: record for record in self.common_claim_knowledge
-        }
-        possessed: dict[int, Tuple[ClaimKnowledge, ...]] = {}
-        for entity_id, explicit_records in self.claim_knowledge_by_entity.items():
-            by_claim_id = dict(common_by_claim_id)
-            by_claim_id.update({record.claim_id: record for record in explicit_records})
-            possessed[entity_id] = tuple(
-                by_claim_id[claim_id] for claim_id in sorted(by_claim_id)
-            )
-        object.__setattr__(self, "possessed_claim_knowledge_by_entity", possessed)
+        if not self.possessed_claim_knowledge_by_entity:
+            common_by_claim_id = {
+                record.claim_id: record for record in self.common_claim_knowledge
+            }
+            possessed: dict[int, Tuple[ClaimKnowledge, ...]] = {}
+            for entity_id, explicit_records in self.claim_knowledge_by_entity.items():
+                by_claim_id = dict(common_by_claim_id)
+                by_claim_id.update(
+                    {record.claim_id: record for record in explicit_records}
+                )
+                possessed[entity_id] = tuple(
+                    by_claim_id[claim_id] for claim_id in sorted(by_claim_id)
+                )
+            object.__setattr__(self, "possessed_claim_knowledge_by_entity", possessed)
+
+        events_by_type: dict[str, list[EventRecord]] = {}
+        events_by_actor: dict[int, list[EventRecord]] = {}
+        events_by_target: dict[int, list[EventRecord]] = {}
+        for event in self.recent_events:
+            events_by_type.setdefault(event.event_type, []).append(event)
+            if event.actor_entity_id is not None:
+                events_by_actor.setdefault(event.actor_entity_id, []).append(event)
+            if event.target_entity_id is not None:
+                events_by_target.setdefault(event.target_entity_id, []).append(event)
+
+        outbound_pair_tags: dict[int, set[str]] = {}
+        inbound_pair_tags: dict[int, set[str]] = {}
+        for (subject_id, object_id), tags in self.pair_tags.items():
+            outbound_pair_tags.setdefault(subject_id, set()).update(tags)
+            inbound_pair_tags.setdefault(object_id, set()).update(tags)
+
+        object.__setattr__(
+            self,
+            "_recent_events_by_type",
+            MappingProxyType(
+                {key: tuple(events) for key, events in events_by_type.items()}
+            ),
+        )
+        object.__setattr__(
+            self,
+            "_recent_events_by_actor",
+            MappingProxyType(
+                {key: tuple(events) for key, events in events_by_actor.items()}
+            ),
+        )
+        object.__setattr__(
+            self,
+            "_recent_events_by_target",
+            MappingProxyType(
+                {key: tuple(events) for key, events in events_by_target.items()}
+            ),
+        )
+        object.__setattr__(
+            self,
+            "_outbound_pair_tags_by_entity",
+            MappingProxyType(
+                {
+                    entity_id: frozenset(tags)
+                    for entity_id, tags in outbound_pair_tags.items()
+                }
+            ),
+        )
+        object.__setattr__(
+            self,
+            "_inbound_pair_tags_by_entity",
+            MappingProxyType(
+                {
+                    entity_id: frozenset(tags)
+                    for entity_id, tags in inbound_pair_tags.items()
+                }
+            ),
+        )
 
 
 def _slot_entity(bindings: Bindings, slot: Slot) -> Optional[int]:
@@ -419,17 +494,36 @@ def _is_in_transit(state: WorldState, entity_id: int) -> bool:
 
 
 def _has_outbound_pair_tag(state: WorldState, entity_id: int, pair_tag: str) -> bool:
-    return any(
-        subject_id == entity_id and pair_tag in tags
-        for (subject_id, _object_id), tags in state.pair_tags.items()
-    )
+    return pair_tag in state._outbound_pair_tags_by_entity.get(entity_id, frozenset())
 
 
 def _has_inbound_pair_tag(state: WorldState, entity_id: int, pair_tag: str) -> bool:
-    return any(
-        object_id == entity_id and pair_tag in tags
-        for (_subject_id, object_id), tags in state.pair_tags.items()
-    )
+    return pair_tag in state._inbound_pair_tags_by_entity.get(entity_id, frozenset())
+
+
+def _recent_event_candidates(
+    state: WorldState,
+    *,
+    event_type: Optional[str] = None,
+    actor_id: Optional[int] = None,
+    target_id: Optional[int] = None,
+) -> Tuple[EventRecord, ...]:
+    """Return the smallest applicable event bucket, preserving source order."""
+
+    candidates = state.recent_events
+    if event_type is not None:
+        typed = state._recent_events_by_type.get(event_type, ())
+        if len(typed) < len(candidates):
+            candidates = typed
+    if actor_id is not None:
+        acted = state._recent_events_by_actor.get(actor_id, ())
+        if len(acted) < len(candidates):
+            candidates = acted
+    if target_id is not None:
+        targeted = state._recent_events_by_target.get(target_id, ())
+        if len(targeted) < len(candidates):
+            candidates = targeted
+    return candidates
 
 
 def _possessed_claim_knowledge(
@@ -2161,7 +2255,12 @@ def recent_event(
         if target_slot is not None and target_id is None:
             return False
         cutoff = state.current_tick - within_ticks
-        for event in state.recent_events:
+        for event in _recent_event_candidates(
+            state,
+            event_type=event_type,
+            actor_id=actor_id,
+            target_id=target_id,
+        ):
             if event.tick < cutoff:
                 continue
             if event_type is not None and event.event_type != event_type:
@@ -2217,7 +2316,12 @@ def knows_recent_event(
         known_events: frozenset[int] = frozenset()
         if knower_id is not None:
             known_events = state.awareness_by_entity.get(knower_id, frozenset())
-        for event in state.recent_events:
+        for event in _recent_event_candidates(
+            state,
+            event_type=event_type,
+            actor_id=actor_id,
+            target_id=target_id,
+        ):
             if event.tick < cutoff:
                 continue
             if event_type is not None and event.event_type != event_type:
@@ -2276,7 +2380,12 @@ def since_last_event_at_least(
         if target_slot is not None and target_id is None:
             return False
         latest_tick: Optional[int] = None
-        for event in state.recent_events:
+        for event in _recent_event_candidates(
+            state,
+            event_type=event_type,
+            actor_id=actor_id,
+            target_id=target_id,
+        ):
             if event.event_type != event_type:
                 continue
             if event.actor_entity_id != actor_id:
@@ -2325,7 +2434,12 @@ def count_recent_events_at_least(
             return False
         cutoff = state.current_tick - within_ticks
         count = 0
-        for event in state.recent_events:
+        for event in _recent_event_candidates(
+            state,
+            event_type=event_type,
+            actor_id=actor_id,
+            target_id=target_id,
+        ):
             if event.tick < cutoff:
                 continue
             if event.event_type != event_type:
