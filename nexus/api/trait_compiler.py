@@ -9,6 +9,7 @@ from decimal import Decimal
 from typing import Any, Iterable, Optional
 
 from nexus.agents.logon.apex_enums import EmotionalValence
+from nexus.agents.orrery.geo import story_active_zone
 from nexus.agents.orrery.status_family import (
     normalize_status_level,
     status_tag_for_level,
@@ -1503,13 +1504,14 @@ def _insert_character_stub(
 def _insert_place_stub(
     cur: Any, *, name: str, trait: str, role: str
 ) -> tuple[int, int]:
+    zone_id = story_active_zone(cur)
     cur.execute(
         """
         /* trait_compiler:insert_place_stub */
         INSERT INTO places (
-            name, type, summary, current_status, extra_data
+            name, type, summary, current_status, extra_data, zone
         )
-        VALUES (%s, 'other'::place_type, %s, %s, %s::jsonb)
+        VALUES (%s, 'other'::place_type, %s, %s, %s::jsonb, %s)
         RETURNING id, entity_id
         """,
         (
@@ -1517,6 +1519,7 @@ def _insert_place_stub(
             _stub_summary(name, "place"),
             "latent in compiled trait backstory",
             json.dumps(_stub_extra_data(trait=trait, role=role)),
+            zone_id,
         ),
     )
     row = cur.fetchone()

@@ -15,6 +15,7 @@ from nexus.agents.orrery.epistemics import (
     mechanical_claim_summary,
     mint_claim_for_event,
 )
+from nexus.agents.orrery.geo import story_active_zone
 from nexus.agents.orrery.retrograde_expansion import (
     RetrogradeExpansionDeathPlan,
     RetrogradeExpansionEventPlan,
@@ -2101,19 +2102,21 @@ def _insert_place_stub(
     entity_ref: str,
     sources: Any,
 ) -> None:
+    zone_id = story_active_zone(cur)
     cur.execute(
         """
         /* orrery:retrograde:insert_place_stub */
         INSERT INTO places (
-            name, type, summary, current_status, extra_data
+            name, type, summary, current_status, extra_data, zone
         )
-        VALUES (%s, 'other'::place_type, %s, %s, %s::jsonb)
+        VALUES (%s, 'other'::place_type, %s, %s, %s::jsonb, %s)
         """,
         (
             entity_ref,
             _stub_summary(entity_ref, "place"),
             "latent in generated backstory",
             json.dumps(_stub_extra_data(sources)),
+            zone_id,
         ),
     )
 

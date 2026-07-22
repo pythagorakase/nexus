@@ -9,7 +9,7 @@ Handles time conversion, episode/season calculation, and entity resolution.
 import json
 import logging
 from datetime import timedelta
-from typing import Optional, Tuple, List, Dict, Any
+from typing import Any, List, Optional, Tuple
 import asyncpg
 from nexus.agents.logon.apex_schema import (
     ChronologyUpdate,
@@ -19,11 +19,12 @@ from nexus.agents.logon.apex_schema import (
     NewCharacter,
     NewPlace,
     NewFaction,
-    PlaceReferenceType,
-    ReferenceType,
-    ReferencedEntities
 )
 from nexus.agents.orrery.tag_writer import apply_tag_bestowal_async
+from nexus.agents.orrery.geo import (
+    resolve_zone_for_point_async,
+    story_active_zone_async,
+)
 
 logger = logging.getLogger("nexus.api.db_converters")
 
@@ -42,10 +43,11 @@ def _json_dumps_model(value: Any) -> Optional[str]:
 # Time Conversion Functions
 # ============================================================================
 
+
 def time_fields_to_interval(
     minutes: Optional[int] = None,
     hours: Optional[int] = None,
-    days: Optional[int] = None
+    days: Optional[int] = None,
 ) -> Optional[timedelta]:
     """
     Convert LLM-friendly time fields to PostgreSQL interval.
@@ -61,11 +63,7 @@ def time_fields_to_interval(
     if all(f is None for f in [minutes, hours, days]):
         return None
 
-    return timedelta(
-        days=days or 0,
-        hours=hours or 0,
-        minutes=minutes or 0
-    )
+    return timedelta(days=days or 0, hours=hours or 0, minutes=minutes or 0)
 
 
 def interval_to_time_fields(interval: timedelta) -> Tuple[int, int, int]:
@@ -95,10 +93,9 @@ def interval_to_time_fields(interval: timedelta) -> Tuple[int, int, int]:
 # Episode/Season Conversion
 # ============================================================================
 
+
 def chronology_to_db_values(
-    chronology: ChronologyUpdate,
-    current_season: int,
-    current_episode: int
+    chronology: ChronologyUpdate, current_season: int, current_episode: int
 ) -> dict:
     """
     Convert ChronologyUpdate (transitions) to absolute DB values.
@@ -126,19 +123,14 @@ def chronology_to_db_values(
     time_delta = time_fields_to_interval(
         minutes=chronology.time_delta_minutes,
         hours=chronology.time_delta_hours,
-        days=chronology.time_delta_days
+        days=chronology.time_delta_days,
     )
 
-    return {
-        "season": new_season,
-        "episode": new_episode,
-        "time_delta": time_delta
-    }
+    return {"season": new_season, "episode": new_episode, "time_delta": time_delta}
 
 
 async def resolve_place_references(
-    place_references: List[PlaceReference],
-    conn: asyncpg.Connection
+    place_references: List[PlaceReference], conn: asyncpg.Connection
 ) -> List[dict]:
     """
     Resolve place references to place IDs, creating new places as needed.
@@ -179,21 +171,20 @@ async def resolve_place_references(
             place_id = await create_new_place(conn, ref.new_place)
 
         # Step 2: Build junction table entry
-        resolved_refs.append({
-            "place_id": place_id,
-            "reference_type": ref.reference_type.value,
-            "evidence": ref.evidence
-        })
+        resolved_refs.append(
+            {
+                "place_id": place_id,
+                "reference_type": ref.reference_type.value,
+                "evidence": ref.evidence,
+            }
+        )
 
     return resolved_refs
 
 
 async def lookup_place_by_name(conn: asyncpg.Connection, name: str) -> Optional[int]:
     """Look up place ID by name"""
-    result = await conn.fetchval(
-        "SELECT id FROM places WHERE name = $1",
-        name
-    )
+    result = await conn.fetchval("SELECT id FROM places WHERE name = $1", name)
     return result
 
 
@@ -204,21 +195,43 @@ async def create_new_place(conn: asyncpg.Connection, new_place: NewPlace) -> int
     Returns:
         ID of newly created place
     """
-    # Insert place
-    place_id = await conn.fetchval("""
+    place_type = new_place.type.value if new_place.type else None
+    coordinates = None if place_type == "virtual" else new_place.coordinates
+    if coordinates is None:
+        zone_id = await story_active_zone_async(conn)
+    else:
+        zone_id = await resolve_zone_for_point_async(
+            conn,
+            longitude=coordinates.lon,
+            latitude=coordinates.lat,
+        )
+
+    place_id = await conn.fetchval(
+        """
         INSERT INTO places (
             name, type, summary, history, current_status, secrets,
-            extra_data
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+            extra_data, zone, coordinates
+        ) VALUES (
+            $1, $2, $3, $4, $5, $6, $7, $8,
+            CASE
+                WHEN $9::double precision IS NULL THEN NULL
+                ELSE ST_SetSRID(
+                    ST_MakePoint($9, $10, 0, 0), 4326
+                )::geography
+            END
+        )
         RETURNING id
     """,
         new_place.name,
-        new_place.type.value if new_place.type else None,
+        place_type,
         new_place.summary,
         new_place.history,
         new_place.current_status,
         new_place.secrets,
         _json_dumps_model(new_place.extra_data),
+        zone_id,
+        coordinates.lon if coordinates else None,
+        coordinates.lat if coordinates else None,
     )
 
     return place_id
@@ -228,9 +241,9 @@ async def create_new_place(conn: asyncpg.Connection, new_place: NewPlace) -> int
 # Character Reference Resolution
 # ============================================================================
 
+
 async def resolve_character_references(
-    character_references: List[CharacterReference],
-    conn: asyncpg.Connection
+    character_references: List[CharacterReference], conn: asyncpg.Connection
 ) -> List[dict]:
     """
     Resolve character references, creating new characters as needed.
@@ -264,20 +277,18 @@ async def resolve_character_references(
             char_id = await create_new_character(conn, ref.new_character)
 
         # Build junction table entry
-        resolved_refs.append({
-            "character_id": char_id,
-            "reference": ref.reference_type.value
-        })
+        resolved_refs.append(
+            {"character_id": char_id, "reference": ref.reference_type.value}
+        )
 
     return resolved_refs
 
 
-async def lookup_character_by_name(conn: asyncpg.Connection, name: str) -> Optional[int]:
+async def lookup_character_by_name(
+    conn: asyncpg.Connection, name: str
+) -> Optional[int]:
     """Look up character ID by name"""
-    result = await conn.fetchval(
-        "SELECT id FROM characters WHERE name = $1",
-        name
-    )
+    result = await conn.fetchval("SELECT id FROM characters WHERE name = $1", name)
     return result
 
 
@@ -290,14 +301,16 @@ async def create_new_character(conn: asyncpg.Connection, new_char: NewCharacter)
     # Validate location exists
     if new_char.current_location:
         location_exists = await conn.fetchval(
-            "SELECT id FROM places WHERE id = $1",
-            new_char.current_location
+            "SELECT id FROM places WHERE id = $1", new_char.current_location
         )
         if not location_exists:
-            raise ValueError(f"Place ID {new_char.current_location} not found for character location")
+            raise ValueError(
+                f"Place ID {new_char.current_location} not found for character location"
+            )
 
     # Insert character
-    char_id = await conn.fetchval("""
+    char_id = await conn.fetchval(
+        """
         INSERT INTO characters (
             name, summary, appearance, background, personality,
             emotional_state, current_activity, current_location, extra_data
@@ -322,9 +335,9 @@ async def create_new_character(conn: asyncpg.Connection, new_char: NewCharacter)
 # Faction Reference Resolution
 # ============================================================================
 
+
 async def resolve_faction_references(
-    faction_references: List[FactionReference],
-    conn: asyncpg.Connection
+    faction_references: List[FactionReference], conn: asyncpg.Connection
 ) -> List[dict]:
     """
     Resolve faction references, creating new factions as needed.
@@ -357,19 +370,14 @@ async def resolve_faction_references(
             faction_id = await create_new_faction(conn, ref.new_faction)
 
         # Build junction table entry
-        resolved_refs.append({
-            "faction_id": faction_id
-        })
+        resolved_refs.append({"faction_id": faction_id})
 
     return resolved_refs
 
 
 async def lookup_faction_by_name(conn: asyncpg.Connection, name: str) -> Optional[int]:
     """Look up faction ID by name"""
-    result = await conn.fetchval(
-        "SELECT id FROM factions WHERE name = $1",
-        name
-    )
+    result = await conn.fetchval("SELECT id FROM factions WHERE name = $1", name)
     return result
 
 
@@ -378,17 +386,20 @@ async def create_new_faction(conn: asyncpg.Connection, new_faction: NewFaction) 
     # Validate primary_location exists
     if new_faction.primary_location:
         location_exists = await conn.fetchval(
-            "SELECT id FROM places WHERE id = $1",
-            new_faction.primary_location
+            "SELECT id FROM places WHERE id = $1", new_faction.primary_location
         )
         if not location_exists:
-            raise ValueError(f"Place ID {new_faction.primary_location} not found for faction location")
+            raise ValueError(
+                f"Place ID {new_faction.primary_location} not found for "
+                "faction location"
+            )
 
     await conn.execute("LOCK TABLE factions IN SHARE ROW EXCLUSIVE MODE")
     faction_id = await conn.fetchval("SELECT COALESCE(MAX(id), 0) + 1 FROM factions")
 
     # Insert faction
-    faction_id = await conn.fetchval("""
+    faction_id = await conn.fetchval(
+        """
         INSERT INTO factions (
             id, name, summary, primary_location, extra_data
         ) VALUES ($1, $2, $3, $4, $5)

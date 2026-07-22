@@ -21,6 +21,7 @@ from nexus.agents.logon.apex_schema import (
     StateUpdates,
 )
 from nexus.agents.orrery.events import commit_orrery_tick_sync
+from nexus.agents.orrery.geo import resolve_zone_for_point, story_active_zone
 from nexus.agents.orrery.retrograde_maturation import (
     enqueue_declared_entity_maturations,
 )
@@ -106,24 +107,47 @@ def resolve_place_references_sync(
 
 
 def create_new_place_sync(cur, new_place):
-    """Create a new place synchronously"""
-    # Insert place
+    """Create a new place with the shared real-Earth GIS invariant."""
+
+    place_type = new_place.type.value if new_place.type else None
+    coordinates = None if place_type == "virtual" else new_place.coordinates
+    if coordinates is None:
+        zone_id = story_active_zone(cur)
+    else:
+        zone_id = resolve_zone_for_point(
+            cur,
+            longitude=coordinates.lon,
+            latitude=coordinates.lat,
+        )
+
     cur.execute(
         """
         INSERT INTO places (
             name, type, summary, history, current_status, secrets,
-            extra_data
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+            extra_data, zone, coordinates
+        ) VALUES (
+            %s, %s, %s, %s, %s, %s, %s, %s,
+            CASE
+                WHEN %s IS NULL THEN NULL
+                ELSE ST_SetSRID(
+                    ST_MakePoint(%s, %s, 0, 0), 4326
+                )::geography
+            END
+        )
         RETURNING id, entity_id
     """,
         (
             new_place.name,
-            new_place.type.value if new_place.type else None,
+            place_type,
             new_place.summary,
             new_place.history,
             new_place.current_status,
             new_place.secrets,
             _json_dumps_model(new_place.extra_data),
+            zone_id,
+            coordinates.lon if coordinates else None,
+            coordinates.lon if coordinates else None,
+            coordinates.lat if coordinates else None,
         ),
     )
 

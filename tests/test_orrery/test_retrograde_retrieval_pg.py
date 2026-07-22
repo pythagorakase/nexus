@@ -149,6 +149,41 @@ def test_entity_stub_inserts_match_disposable_schema(disposable_cursor: Any) -> 
     """Stub INSERT column lists stay aligned with the migrated template."""
 
     cur = disposable_cursor
+    cur.execute("INSERT INTO layers DEFAULT VALUES RETURNING id")
+    layer_id = cur.fetchone()["id"]
+    cur.execute(
+        "INSERT INTO zones (name, layer) VALUES ('Test Story Zone', %s) "
+        "RETURNING id",
+        (layer_id,),
+    )
+    zone_id = cur.fetchone()["id"]
+    cur.execute(
+        """
+        INSERT INTO places (name, type, zone)
+        VALUES ('Test Story Place', 'fixed_location', %s)
+        RETURNING id
+        """,
+        (zone_id,),
+    )
+    place_id = cur.fetchone()["id"]
+    cur.execute(
+        """
+        INSERT INTO characters (name, current_location)
+        VALUES ('Test Protagonist', %s)
+        RETURNING id
+        """,
+        (place_id,),
+    )
+    character_id = cur.fetchone()["id"]
+    cur.execute(
+        """
+        INSERT INTO global_variables (id, user_character)
+        VALUES (true, %s)
+        ON CONFLICT (id) DO UPDATE
+        SET user_character = EXCLUDED.user_character
+        """,
+        (character_id,),
+    )
     suffix = uuid.uuid4().hex[:8]
     sources = [{"plan": "event_plan", "event_ref": suffix, "role": "actor"}]
     faction_name = f"Disposable Faction {suffix}"

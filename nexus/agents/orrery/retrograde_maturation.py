@@ -43,6 +43,7 @@ from nexus.agents.logon.apex_schema import NewEntityDeclaration
 from nexus.agents.orrery.declaration_validation import (
     collect_new_entity_declaration_vocabulary_issues,
 )
+from nexus.agents.orrery.geo import resolve_zone_for_point, story_active_zone
 from nexus.agents.orrery.retrograde_vocabulary import SeedEligibleVocabulary
 from nexus.agents.orrery.status_family import STATUS_TAGS, level_from_status_tag
 from nexus.agents.orrery.tag_schemas import OrreryTagBestowal
@@ -348,13 +349,37 @@ def _insert_declared_stub(
         )
     elif declaration.kind == "place":
         _sync_id_sequence(cur, "places")
+        coordinates = declaration.coordinates
+        if coordinates is None:
+            zone_id = story_active_zone(cur)
+        else:
+            zone_id = resolve_zone_for_point(
+                cur,
+                longitude=coordinates.lon,
+                latitude=coordinates.lat,
+            )
         cur.execute(
             """
-            INSERT INTO places (name, type, summary)
-            VALUES (%s, 'fixed_location', %s)
+            INSERT INTO places (name, type, summary, zone, coordinates)
+            VALUES (
+                %s, 'fixed_location', %s, %s,
+                CASE
+                    WHEN %s IS NULL THEN NULL
+                    ELSE ST_SetSRID(
+                        ST_MakePoint(%s, %s, 0, 0), 4326
+                    )::geography
+                END
+            )
             RETURNING id, entity_id
             """,
-            (declaration.name, declaration.summary),
+            (
+                declaration.name,
+                declaration.summary,
+                zone_id,
+                coordinates.lon if coordinates else None,
+                coordinates.lon if coordinates else None,
+                coordinates.lat if coordinates else None,
+            ),
         )
     else:
         cur.execute("LOCK TABLE factions IN SHARE ROW EXCLUSIVE MODE")
@@ -701,6 +726,11 @@ def _mature_one(
                 recorded_at_chunk_id=int(row["requesting_chunk_id"]),
                 epistemics_settings=settings.orrery.epistemics,
             )
+            _apply_maturation_coordinates(
+                cur,
+                row=row,
+                expansion_payload=expansion_payload,
+            )
             persistence_elapsed = time.monotonic() - persistence_started
             total_elapsed = time.monotonic() - started
             manifest = _base_manifest(row, cfg)
@@ -858,6 +888,7 @@ def build_runtime_maturation_packet(
             "declared_pair_tag_hints": declaration.get("pair_tag_hints") or [],
         },
     }
+    geo_context = context.get("geo_authoring")
     scaffolds = {
         "core_entities": [target_card, *context.get("scene_entities", [])],
         "named_seed_npcs": [],
@@ -948,6 +979,7 @@ def build_runtime_maturation_packet(
         "dbname": dbname,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "maturation_target": target_card,
+        "geo_authoring": geo_context,
         "declaration": declaration,
         "requesting_chunk_id": int(row["requesting_chunk_id"]),
         "weird": weird,
@@ -1080,17 +1112,41 @@ def _load_job_context(
     """Load scoped prompt material: entity summary, chunk excerpt, anchors."""
 
     table = _SUBTYPE_TABLES[str(row["entity_kind"])]
-    cur.execute(
-        f"SELECT summary FROM {table} WHERE id = %s",
-        (row["entity_subtype_id"],),
-    )
+    if row["entity_kind"] == "place":
+        cur.execute(
+            """
+            SELECT p.summary AS entity_summary,
+                   p.name AS place_name,
+                   p.coordinates,
+                   z.name AS zone_name,
+                   z.summary AS zone_summary
+            FROM places p
+            JOIN zones z ON z.id = p.zone
+            WHERE p.id = %s
+            """,
+            (row["entity_subtype_id"],),
+        )
+    else:
+        cur.execute(
+            f"SELECT summary AS entity_summary FROM {table} WHERE id = %s",
+            (row["entity_subtype_id"],),
+        )
     entity_row = cur.fetchone()
     if entity_row is None:
         raise ValueError(
             f"Maturation job {row['job_id']} references missing "
             f"{row['entity_kind']} id {row['entity_subtype_id']}"
         )
-    entity_summary = _row_value(entity_row, "summary", 0)
+    entity_summary = _row_value(entity_row, "entity_summary", 0)
+    geo_authoring = None
+    if row["entity_kind"] == "place":
+        geo_authoring = {
+            "required": _row_value(entity_row, "coordinates", 2) is None,
+            "place_name": _row_value(entity_row, "place_name", 1),
+            "place_summary": entity_summary,
+            "zone_name": _row_value(entity_row, "zone_name", 3),
+            "zone_summary": _row_value(entity_row, "zone_summary", 4),
+        }
 
     cur.execute(
         "SELECT raw_text FROM narrative_chunks WHERE id = %s",
@@ -1164,7 +1220,42 @@ def _load_job_context(
         "entity_summary": entity_summary,
         "chunk_excerpt": excerpt,
         "scene_entities": scene_entities,
+        "geo_authoring": geo_authoring,
     }
+
+
+def _apply_maturation_coordinates(
+    cur: Any,
+    *,
+    row: Mapping[str, Any],
+    expansion_payload: Mapping[str, Any],
+) -> None:
+    """Persist and re-zone authored coordinates for a maturing place stub."""
+
+    if row["entity_kind"] != "place":
+        return
+    raw = expansion_payload.get("coordinates")
+    if not isinstance(raw, Mapping):
+        return
+    longitude = float(raw["lon"])
+    latitude = float(raw["lat"])
+    zone_id = resolve_zone_for_point(
+        cur,
+        longitude=longitude,
+        latitude=latitude,
+    )
+    cur.execute(
+        """
+        UPDATE places
+        SET coordinates = ST_SetSRID(
+                ST_MakePoint(%s, %s, 0, 0), 4326
+            )::geography,
+            zone = %s
+        WHERE id = %s
+          AND coordinates IS NULL
+        """,
+        (longitude, latitude, zone_id, row["entity_subtype_id"]),
+    )
 
 
 def _excerpt_around_name(raw_text: str, *, name: str, max_chars: int) -> str:
