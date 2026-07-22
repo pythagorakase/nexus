@@ -1233,6 +1233,7 @@ def compose_actor_faction_bindings(
     actor_ids: Optional[Iterable[int]] = None,
     include_rosters: bool = False,
     roster_reach: int = 2,
+    orbit_distance: Optional[Mapping[tuple[int, int], int]] = None,
 ) -> Tuple[Bindings, ...]:
     """Compose ACTOR+FACTION bindings from active institutional pair tags.
 
@@ -1242,6 +1243,8 @@ def compose_actor_faction_bindings(
     enumeration; template entry predicates own those semantic choices.
     """
 
+    if include_rosters and orbit_distance is None:
+        raise ValueError("orbit_distance is required when include_rosters=True")
     if actor_ids is None:
         actor_only = compose_actor_bindings(
             session,
@@ -1297,96 +1300,55 @@ def compose_actor_faction_bindings(
             pairs.add((object_id, subject_id))
 
     if include_rosters:
-        for row in session.execute(
-            text(
-                """
-                /* orrery:actor_faction_bindings_rosters */
-                WITH RECURSIVE relationship_edges AS (
-                    SELECT er.source_entity_id, er.target_entity_id
-                    FROM entity_relationships_v er
-                    JOIN entities source_entity
-                      ON source_entity.id = er.source_entity_id
-                    JOIN entities target_entity
-                      ON target_entity.id = er.target_entity_id
-                    WHERE er.relationship_scope = 'character'
-                      AND source_entity.kind = 'character'
-                      AND target_entity.kind = 'character'
-                      AND source_entity.is_active = true
-                      AND target_entity.is_active = true
-                ), reachable(actor_id, member_id, depth, path) AS (
-                    SELECT actor.id, actor.id, 0, ARRAY[actor.id]
-                    FROM entities actor
-                    WHERE actor.id = ANY(:actor_ids)
-                      AND actor.kind = 'character'
-                      AND actor.is_active = true
-                    UNION ALL
-                    SELECT reachable.actor_id,
-                           CASE
-                               WHEN edge.source_entity_id = reachable.member_id
-                               THEN edge.target_entity_id
-                               ELSE edge.source_entity_id
-                           END,
-                           reachable.depth + 1,
-                           reachable.path || CASE
-                               WHEN edge.source_entity_id = reachable.member_id
-                               THEN edge.target_entity_id
-                               ELSE edge.source_entity_id
-                           END
-                    FROM reachable
-                    JOIN relationship_edges edge
-                      ON edge.source_entity_id = reachable.member_id
-                      OR edge.target_entity_id = reachable.member_id
-                    WHERE reachable.depth < :roster_reach
-                      AND NOT CASE
-                          WHEN edge.source_entity_id = reachable.member_id
-                          THEN edge.target_entity_id
-                          ELSE edge.source_entity_id
-                      END = ANY(reachable.path)
-                ), live_rosters AS (
-                    SELECT DISTINCT
-                           CASE
-                               WHEN subject_entity.kind = 'character'
-                               THEN subject_entity.id
-                               ELSE object_entity.id
-                           END AS member_id,
-                           CASE
-                               WHEN subject_entity.kind = 'faction'
-                               THEN subject_entity.id
-                               ELSE object_entity.id
-                           END AS faction_id
-                    FROM entity_pair_tags ept
-                    JOIN pair_tags pt ON pt.id = ept.pair_tag_id
-                    JOIN entities subject_entity
-                      ON subject_entity.id = ept.subject_entity_id
-                    JOIN entities object_entity
-                      ON object_entity.id = ept.object_entity_id
-                    WHERE pt.tag LIKE 'status:%'
-                      AND NOT pt.deprecated
-                      AND ept.cleared_at IS NULL
-                      AND subject_entity.is_active = true
-                      AND object_entity.is_active = true
-                      AND (
-                          (subject_entity.kind = 'character'
-                           AND object_entity.kind = 'faction')
-                          OR (subject_entity.kind = 'faction'
-                              AND object_entity.kind = 'character')
-                      )
-                )
-                SELECT DISTINCT reachable.actor_id, live_rosters.faction_id
-                FROM reachable
-                JOIN live_rosters
-                  ON live_rosters.member_id = reachable.member_id
-                WHERE reachable.depth <= :roster_reach
-                """
-            ),
+        live_rosters = sorted(
             {
-                "actor_ids": sorted(actor_id_set),
-                "roster_reach": roster_reach,
-            },
-        ).mappings():
-            # A power becomes court-able through someone the actor knows
-            # belongs to it; reach is neutral relationship-graph distance.
-            pairs.add((int(row["actor_id"]), int(row["faction_id"])))
+                (int(row["member_id"]), int(row["faction_id"]))
+                for row in session.execute(
+                    text(
+                        """
+                        /* orrery:actor_faction_bindings_rosters */
+                        SELECT DISTINCT
+                               CASE
+                                   WHEN subject_entity.kind = 'character'
+                                   THEN subject_entity.id
+                                   ELSE object_entity.id
+                               END AS member_id,
+                               CASE
+                                   WHEN subject_entity.kind = 'faction'
+                                   THEN subject_entity.id
+                                   ELSE object_entity.id
+                               END AS faction_id
+                        FROM entity_pair_tags ept
+                        JOIN pair_tags pt ON pt.id = ept.pair_tag_id
+                        JOIN entities subject_entity
+                          ON subject_entity.id = ept.subject_entity_id
+                        JOIN entities object_entity
+                          ON object_entity.id = ept.object_entity_id
+                        WHERE pt.tag LIKE 'status:%'
+                          AND NOT pt.deprecated
+                          AND ept.cleared_at IS NULL
+                          AND subject_entity.is_active = true
+                          AND object_entity.is_active = true
+                          AND (
+                              (subject_entity.kind = 'character'
+                               AND object_entity.kind = 'faction')
+                              OR (subject_entity.kind = 'faction'
+                                  AND object_entity.kind = 'character')
+                          )
+                        """
+                    )
+                ).mappings()
+            }
+        )
+        for actor_id in sorted(actor_id_set):
+            for member_id, faction_id in live_rosters:
+                # Roster reach is relative_orbit_distance <= reach by
+                # construction: this is the same canonical mapping read by
+                # evidence predicates. Review found SQL path enumeration
+                # explodes on dense graphs, so do not recurse here.
+                distance = orbit_distance.get((actor_id, member_id))
+                if distance is not None and distance <= roster_reach:
+                    pairs.add((actor_id, faction_id))
 
     return tuple(
         {Slot.ACTOR: actor_id, Slot.FACTION: faction_id}
@@ -1405,6 +1367,7 @@ def compose_actor_target_faction_bindings(
     include_hostile_edges: bool = False,
     include_rosters: bool = False,
     roster_reach: int = 2,
+    orbit_distance: Optional[Mapping[tuple[int, int], int]] = None,
 ) -> Tuple[Bindings, ...]:
     """Compose the deterministic product of target and faction candidates."""
 
@@ -1435,6 +1398,7 @@ def compose_actor_target_faction_bindings(
         actor_ids=actor_id_set,
         include_rosters=include_rosters,
         roster_reach=roster_reach,
+        orbit_distance=orbit_distance,
     )
     targets_by_actor: dict[int, set[int]] = {}
     for binding in target_bindings:
@@ -1575,6 +1539,7 @@ def compose_actor_faction_routes(
             actor_ids=actor_id_set,
             include_rosters=True,
             roster_reach=roster_reach,
+            orbit_distance=state.orbit_distance,
         )
         if roster_enabled and any(t.courts_factions for t in templates_tuple)
         else ()
@@ -1692,6 +1657,7 @@ def compose_actor_target_faction_routes(
             actor_ids=actor_id_set,
             include_rosters=True,
             roster_reach=roster_reach,
+            orbit_distance=state.orbit_distance,
         )
         if roster_enabled and any(t.courts_factions for t in templates_tuple)
         else ()

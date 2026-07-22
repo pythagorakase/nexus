@@ -16,6 +16,7 @@ from nexus.agents.orrery.resolver import (
     compose_actor_faction_routes,
     compose_actor_target_bindings,
     compose_actor_target_routes,
+    hydrate_world_state,
     resolve_dry_run,
 )
 from nexus.agents.orrery.substrate import (
@@ -145,6 +146,7 @@ def composition_db() -> Iterator[dict[str, Any]]:
             "hostile_target",
             "near_member",
             "far_member",
+            "beyond_member",
             "unreachable_member",
         ):
             entity_id = int(
@@ -177,7 +179,7 @@ def composition_db() -> Iterator[dict[str, Any]]:
             characters[label] = character_id
 
         factions: dict[str, int] = {}
-        for label in ("near", "far", "unreachable", "no_roster"):
+        for label in ("near", "far", "beyond", "unreachable", "no_roster"):
             factions[label] = int(
                 session.execute(
                     text(
@@ -208,6 +210,9 @@ def composition_db() -> Iterator[dict[str, Any]]:
         _insert_relationship(
             session, characters["near_member"], characters["far_member"]
         )
+        _insert_relationship(
+            session, characters["far_member"], characters["beyond_member"]
+        )
         _insert_pair_tag(
             session,
             entities["hostile_target"],
@@ -220,6 +225,12 @@ def composition_db() -> Iterator[dict[str, Any]]:
         )
         _insert_pair_tag(
             session, entities["far_member"], factions["far"], "status:senior"
+        )
+        _insert_pair_tag(
+            session,
+            entities["beyond_member"],
+            factions["beyond"],
+            "status:senior",
         )
         _insert_pair_tag(
             session,
@@ -317,6 +328,11 @@ def test_live_roster_source_respects_reach_roster_liveness_and_opt_in(
     session = composition_db["session"]
     actor = composition_db["entities"]["actor"]
     factions = composition_db["factions"]
+    state = hydrate_world_state(
+        session,
+        anchor_chunk_id=None,
+        window_chunks=30,
+    )
     at_one = compose_actor_faction_bindings(
         session,
         anchor_chunk_id=None,
@@ -324,6 +340,7 @@ def test_live_roster_source_respects_reach_roster_liveness_and_opt_in(
         actor_ids={actor},
         include_rosters=True,
         roster_reach=1,
+        orbit_distance=state.orbit_distance,
     )
     at_two = compose_actor_faction_bindings(
         session,
@@ -332,6 +349,7 @@ def test_live_roster_source_respects_reach_roster_liveness_and_opt_in(
         actor_ids={actor},
         include_rosters=True,
         roster_reach=2,
+        orbit_distance=state.orbit_distance,
     )
     assert {binding[Slot.FACTION] for binding in at_one} == {factions["near"]}
     assert {binding[Slot.FACTION] for binding in at_two} == {
@@ -339,11 +357,12 @@ def test_live_roster_source_respects_reach_roster_liveness_and_opt_in(
         factions["far"],
     }
     assert factions["unreachable"] not in {binding[Slot.FACTION] for binding in at_two}
+    assert factions["beyond"] not in {binding[Slot.FACTION] for binding in at_two}
     assert factions["no_roster"] not in {binding[Slot.FACTION] for binding in at_two}
 
     routes = compose_actor_faction_routes(
         session,
-        state=WorldState(),
+        state=state,
         templates=(ROSTER_LEGACY_TEMPLATE, ROSTER_TEMPLATE),
         anchor_chunk_id=None,
         window_chunks=30,

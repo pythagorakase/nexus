@@ -299,15 +299,13 @@ class FakeSession:
             return FakeResult(self.actor_faction_pair_tag_rows)
         if "/* orrery:actor_faction_bindings_rosters */" in sql:
             assert "pt.tag LIKE 'status:%'" in sql
-            assert "relationship_scope = 'character'" in sql
-            reach = _params["roster_reach"]
-            return FakeResult(
-                [
-                    row
-                    for row in self.actor_faction_roster_rows
-                    if row.get("depth", 0) <= reach
-                ]
-            )
+            assert "NOT pt.deprecated" in sql
+            assert "ept.cleared_at IS NULL" in sql
+            assert "subject_entity.is_active = true" in sql
+            assert "object_entity.is_active = true" in sql
+            assert "WITH RECURSIVE" not in sql
+            assert "entity_relationships_v" not in sql
+            return FakeResult(self.actor_faction_roster_rows)
         if "/* orrery:entity_names */" in sql:
             return FakeResult(self.entity_name_rows)
         if "/* orrery:need_debt_scores */" in sql:
@@ -2228,6 +2226,21 @@ def test_compose_actor_faction_bindings_is_distinct_and_ordered() -> None:
     )
 
 
+def test_roster_bindings_require_canonical_orbit_distance() -> None:
+    """Roster reach is undefined without the hydrated canonical metric."""
+
+    with pytest.raises(
+        ValueError, match="orbit_distance is required when include_rosters=True"
+    ):
+        compose_actor_faction_bindings(
+            FakeSession(),
+            anchor_chunk_id=100,
+            window_chunks=30,
+            actor_ids={1},
+            include_rosters=True,
+        )
+
+
 def test_compose_actor_target_faction_bindings_is_cartesian_product() -> None:
     """Triple composition reuses target candidates and products factions."""
 
@@ -2460,14 +2473,14 @@ def test_roster_routes_respect_reach_and_only_admit_courting_templates() -> None
     )
     session = FakeSession(
         actor_faction_roster_rows=[
-            {"actor_id": 1, "faction_id": 9, "depth": 2},
-            {"actor_id": 1, "faction_id": 10, "depth": 3},
+            {"member_id": 2, "faction_id": 9},
+            {"member_id": 3, "faction_id": 10},
         ]
     )
 
     routes = compose_actor_faction_routes(
         session,
-        state=WorldState(),
+        state=WorldState(orbit_distance={(1, 1): 0, (1, 2): 2, (1, 3): 3}),
         templates=(legacy, courting),
         anchor_chunk_id=100,
         window_chunks=30,
@@ -2575,7 +2588,12 @@ def test_enabled_composition_sources_keep_production_and_audit_in_parity() -> No
             actor_target_hostile_edge_rows=[
                 {"source_entity_id": 1, "target_entity_id": 2}
             ],
-            actor_faction_roster_rows=[{"actor_id": 1, "faction_id": 9, "depth": 2}],
+            orbit_rows=[
+                {"source_entity_id": 1, "target_entity_id": None},
+                {"source_entity_id": 1, "target_entity_id": 3},
+                {"source_entity_id": 3, "target_entity_id": 2},
+            ],
+            actor_faction_roster_rows=[{"member_id": 2, "faction_id": 9}],
             entity_name_rows=[
                 {"id": 1, "name": "Mara"},
                 {"id": 2, "name": "Vale"},
