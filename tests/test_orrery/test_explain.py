@@ -17,8 +17,18 @@ from nexus.agents.orrery.explain import (
     ConditionTrace,
     StackExplanation,
     explain_stack,
+    explain_template,
 )
-from nexus.agents.orrery.substrate import evaluate_stack
+from nexus.agents.orrery.substrate import (
+    ALWAYS,
+    Branch,
+    BranchSelection,
+    DriveBand,
+    Slot,
+    Template,
+    WorldState,
+    evaluate_stack,
+)
 from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
 
 
@@ -153,3 +163,36 @@ def test_non_fired_templates_null_magnitude_and_event_in_payload() -> None:
     assert fired
     for template in fired:
         assert template["magnitude"] is not None
+
+
+def test_single_passing_branch_does_not_claim_mood_affinity_weighting() -> None:
+    """Explain records affinity only when stochastic weighting actually runs."""
+
+    template = Template(
+        id="single_passing_affinity",
+        priority=1,
+        drive_band=DriveBand.ANCHORED_ROUTINE,
+        blurb="One eligible branch.",
+        required_slots=(Slot.ACTOR,),
+        package_gate=ALWAYS,
+        branches=(
+            Branch(
+                "only",
+                ALWAYS,
+                "{actor} acts.",
+                mood_affinities={"elated": 2.0},
+            ),
+        ),
+    )
+    explanation = explain_template(
+        template,
+        WorldState(
+            ephemeral_tags={1: frozenset({"elated"})},
+            mood_enabled=True,
+        ),
+        {Slot.ACTOR: 1},
+        BranchSelection(mode="stochastic", temperature=1.0),
+    )
+
+    assert explanation.chosen_branch == "only"
+    assert explanation.branches[0].applied_mood_affinity is None

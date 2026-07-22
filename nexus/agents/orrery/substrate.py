@@ -181,6 +181,8 @@ _FAME_PREDICATE_NAME_PREFIXES: Tuple[str, ...] = (
     "fame_at_or_above(",
     "fame_below(",
 )
+MOOD_VALUES: frozenset[str] = frozenset({"elated", "sour", "restless", "grim"})
+_MOOD_PREDICATE_NAME_PREFIXES: Tuple[str, ...] = ("mood_is(",)
 
 
 @dataclass(frozen=True, slots=True)
@@ -380,6 +382,7 @@ class WorldState:
     weather: Optional[str] = "clear"
     place_weather: Mapping[int, str] = field(default_factory=dict)
     localized_weather_enabled: bool = False
+    mood_enabled: bool = False
     current_tick: int = 0
 
     def __post_init__(self) -> None:
@@ -691,6 +694,56 @@ def fame_below(tier: str, slot: Slot = Slot.ACTOR) -> Condition:
         )
 
     return _named(_condition, f"fame_below({normalized}@{slot.value})")
+
+
+def active_mood(
+    state: WorldState, bindings: Bindings, slot: Slot = Slot.ACTOR
+) -> Optional[str]:
+    """Return one active mechanical mood for a slot-bound character.
+
+    Mood is an exclusive ephemeral category. Multiple values indicate corrupt
+    hydrated state and are refused rather than resolved by arbitrary order.
+    Disabled mood mechanics always read as absent.
+    """
+
+    if not state.mood_enabled:
+        return None
+    entity_id = _slot_entity(bindings, slot)
+    if entity_id is None:
+        return None
+    present = sorted(MOOD_VALUES & state.ephemeral_tags.get(entity_id, frozenset()))
+    if len(present) > 1:
+        raise ValueError(
+            f"Entity {entity_id} holds multiple active moods {present}; "
+            "mood is an exclusive category"
+        )
+    return present[0] if present else None
+
+
+def mood_is(*moods: str, slot: Slot = Slot.ACTOR) -> Condition:
+    """Test a slot-bound character's active mechanical mood.
+
+    Stage-2/3 vocabulary only: package-entry gates may not read mood. When
+    ``[orrery.mood]`` is disabled the predicate always returns ``False``.
+    """
+
+    if not moods:
+        raise ValueError("mood_is requires at least one mood")
+    normalized = tuple(str(mood).strip() for mood in moods)
+    unknown = sorted(set(normalized) - MOOD_VALUES)
+    if unknown:
+        raise ValueError(
+            f"Unknown mood value(s) {unknown}; expected one of {sorted(MOOD_VALUES)}"
+        )
+    candidates = frozenset(normalized)
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        return active_mood(state, bindings, slot) in candidates
+
+    return _named(
+        _condition,
+        f"mood_is({','.join(normalized)}@{slot.value})",
+    )
 
 
 def resources_at_or_above(tier: str, slot: Slot = Slot.ACTOR) -> Condition:
@@ -2322,6 +2375,9 @@ class Branch:
     event_type: Optional[str] = None
     changed_fields: Tuple[str, ...] = ()
     magnitude: float = 0.0
+    # Stochastic-only softmax multipliers keyed by the actor's mechanical
+    # mood. They change selection weight, never magnitude/promotion salience.
+    mood_affinities: Mapping[str, float] = field(default_factory=dict)
     scene_pressure_stub: Optional[str] = None
     # A second, additive world-event emission: the signal an act gives off
     # (threat_issued, compliance_alert, ...) alongside the deed's own
@@ -2585,14 +2641,28 @@ def select_branch(
     if selection.temperature == 0:
         return max(passing, key=lambda branch: branch.magnitude), considered
 
-    # Softmax over magnitude, shifted for numerical stability.
+    # Softmax over magnitude, shifted for numerical stability. Mood changes
+    # only the stochastic weight after magnitude/temperature conversion; the
+    # authored magnitude remains untouched for promotion and Bleed salience.
     peak = max(branch.magnitude for branch in passing)
     weights = [
         math.exp((branch.magnitude - peak) / selection.temperature)
+        * mood_affinity_multiplier(branch, state, bindings)
         for branch in passing
     ]
     rng = _selection_rng(digest, state.current_tick, template.id, selection.seed_salt)
     return rng.choices(passing, weights=weights, k=1)[0], considered
+
+
+def mood_affinity_multiplier(
+    branch: Branch, state: WorldState, bindings: Bindings
+) -> float:
+    """Return the actor-mood multiplier applied to stochastic branch weight."""
+
+    mood = active_mood(state, bindings)
+    if mood is None:
+        return 1.0
+    return float(branch.mood_affinities.get(mood, 1.0))
 
 
 def evaluate(
@@ -2954,6 +3024,47 @@ def validate_no_fame_in_entry_gates(templates: Iterable[Template]) -> None:
             "Fame predicates are stage-2/3 only and must not appear in "
             "package gates (issue #282 stage contract): " + ", ".join(sorted(offenders))
         )
+
+
+def validate_no_mood_in_entry_gates(templates: Iterable[Template]) -> None:
+    """Enforce mood as stage-2/3 vocabulary, never a package-entry gate."""
+
+    offenders: list[str] = []
+    for template in templates:
+        for leaf in _condition_tree_leaves(template.package_gate):
+            name = getattr(leaf, "__name__", "")
+            if name.startswith(_MOOD_PREDICATE_NAME_PREFIXES):
+                offenders.append(f"{template.id}: {name}")
+    if offenders:
+        raise ValueError(
+            "Mood predicates are stage-2/3 only and must not appear in "
+            "package gates (issue #480 stage contract): " + ", ".join(sorted(offenders))
+        )
+
+
+def validate_mood_affinities(templates: Iterable[Template]) -> None:
+    """Validate the closed mood vocabulary and bounded stochastic weights."""
+
+    offenders: list[str] = []
+    for template in templates:
+        for branch in template.branches:
+            unknown = sorted(set(branch.mood_affinities) - MOOD_VALUES)
+            if unknown:
+                offenders.append(
+                    f"{template.id}/{branch.label}: unknown moods {unknown}"
+                )
+            for mood, value in branch.mood_affinities.items():
+                if isinstance(value, bool) or not isinstance(value, (int, float)):
+                    offenders.append(
+                        f"{template.id}/{branch.label}: {mood}={value!r} is not numeric"
+                    )
+                elif not 0 < float(value) <= 8:
+                    offenders.append(
+                        f"{template.id}/{branch.label}: {mood}={value!r} "
+                        "must be in (0, 8]"
+                    )
+    if offenders:
+        raise ValueError("Invalid mood affinities: " + "; ".join(offenders))
 
 
 def drive_band_priority_warnings(templates: Iterable[Template]) -> Tuple[str, ...]:

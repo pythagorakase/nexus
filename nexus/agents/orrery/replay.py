@@ -14,6 +14,9 @@ produces. Sections and their replay sources:
   ``orrery_resolutions.state_delta`` are deliberately ignored: the same
   commit already wrote them to the provenance tables (double-entry), and
   ``need.fulfill``'s derived severity tags exist *only* in provenance.
+  ``mood.set`` additionally reapplies its exact entity-tag snapshot, repairing
+  the known provenance gap where replace-policy reapplication overwrites a
+  live row's source chunk in place.
 - the three relationship tables — backward from the *current* rows,
   unwinding ``relationship_versions`` pre-images (``id DESC``), then
   dropping rows whose ``created_at`` postdates chunk N (INSERTs never fire
@@ -137,6 +140,7 @@ TAG_DELTA_KEYS = frozenset(
         "entity_pair_tags.add_inbound",
         "entity_pair_tags.clear_outbound",
         "entity_pair_tags_target.clear_inbound",
+        "mood.set",
     }
 )
 
@@ -1564,34 +1568,35 @@ class _Replayer:
             ("entity_pair_tags", "entity_pair_tag_id"),
         ):
             working = {row["id"]: dict(row) for row in base_state[section]}
-            self.cur.execute(
-                f"""
-                SELECT to_jsonb(t) FROM {section} t
-                WHERE t.source_chunk_id > %s AND t.source_chunk_id <= %s
-                """,
-                (base_chunk, self.target_chunk_id),
-            )
-            for (row_json,) in self.cur.fetchall():
-                row = _as_document(row_json)
-                # Active-at-N normalization: a row cleared after N was live
-                # at N; the checkpoint shape stores active rows with NULL
-                # cleared_at.
-                row["cleared_at"] = None
-                working[row["id"]] = row
-                if section == "entity_tags":
-                    touched_entities.add(row["entity_id"])
-            self.cur.execute(
-                f"""
-                SELECT {log_column} FROM tag_clearance_log
-                WHERE {log_column} IS NOT NULL
-                  AND source_chunk_id > %s AND source_chunk_id <= %s
-                """,
-                (base_chunk, self.target_chunk_id),
-            )
-            for (tag_row_id,) in self.cur.fetchall():
-                removed = working.pop(tag_row_id, None)
-                if removed is not None and section == "entity_tags":
-                    touched_entities.add(removed["entity_id"])
+            if section == "entity_tags":
+                touched_entities.update(
+                    self._replay_entity_tag_events(working, base_chunk=base_chunk)
+                )
+            else:
+                self.cur.execute(
+                    f"""
+                    SELECT to_jsonb(t) FROM {section} t
+                    WHERE t.source_chunk_id > %s AND t.source_chunk_id <= %s
+                    """,
+                    (base_chunk, self.target_chunk_id),
+                )
+                for (row_json,) in self.cur.fetchall():
+                    row = _as_document(row_json)
+                    # Active-at-N normalization: a row cleared after N was live
+                    # at N; the checkpoint shape stores active rows with NULL
+                    # cleared_at.
+                    row["cleared_at"] = None
+                    working[row["id"]] = row
+                self.cur.execute(
+                    f"""
+                    SELECT {log_column} FROM tag_clearance_log
+                    WHERE {log_column} IS NOT NULL
+                      AND source_chunk_id > %s AND source_chunk_id <= %s
+                    """,
+                    (base_chunk, self.target_chunk_id),
+                )
+                for (tag_row_id,) in self.cur.fetchall():
+                    working.pop(tag_row_id, None)
 
             # Best-effort inclusion of un-keyed bestowals inside the window
             # (mid-commit new-entity bestowals, Step 8.6 tag hints, offline
@@ -1650,6 +1655,181 @@ class _Replayer:
                 )
             workings[section] = working
         return workings, touched_entities
+
+    def _replay_entity_tag_events(
+        self,
+        working: dict[int, dict[str, Any]],
+        *,
+        base_chunk: int,
+    ) -> set[int]:
+        """Replay keyed bestowals, clearances, and mood snapshots in order."""
+
+        self.cur.execute(
+            "SELECT id, tag FROM tags WHERE category = 'mood' AND NOT deprecated"
+        )
+        mood_tag_ids = {int(tag_id): str(tag) for tag_id, tag in self.cur.fetchall()}
+        timeline: list[tuple[int, int, int, str, Any]] = []
+
+        self.cur.execute(
+            """
+            SELECT source_chunk_id, id, to_jsonb(et)
+            FROM entity_tags et
+            WHERE source_chunk_id > %s AND source_chunk_id <= %s
+            """,
+            (base_chunk, self.target_chunk_id),
+        )
+        bestowal_rows = self.cur.fetchall()
+        timeline.extend(
+            (int(chunk_id), 0, int(row_id), "bestowal", row_json)
+            for chunk_id, row_id, row_json in bestowal_rows
+        )
+        self.cur.execute(
+            """
+            SELECT source_chunk_id, id, entity_tag_id
+            FROM tag_clearance_log
+            WHERE entity_tag_id IS NOT NULL
+              AND source_chunk_id > %s AND source_chunk_id <= %s
+            """,
+            (base_chunk, self.target_chunk_id),
+        )
+        clearance_rows = self.cur.fetchall()
+        timeline.extend(
+            (int(chunk_id), 1, int(log_id), "clearance", int(entity_tag_id))
+            for chunk_id, log_id, entity_tag_id in clearance_rows
+        )
+        self.cur.execute(
+            """
+            SELECT tick_chunk_id, id, actor_entity_id, state_delta
+            FROM orrery_resolutions
+            WHERE tick_chunk_id > %s
+              AND tick_chunk_id <= %s
+              AND state_delta ? 'mood.set'
+            """,
+            (base_chunk, self.target_chunk_id),
+        )
+        resolution_rows = self.cur.fetchall()
+        timeline.extend(
+            (
+                int(chunk_id),
+                2,
+                int(resolution_id),
+                "mood_snapshot",
+                (int(actor_entity_id), raw_delta),
+            )
+            for chunk_id, resolution_id, actor_entity_id, raw_delta in resolution_rows
+        )
+
+        touched: set[int] = set()
+        for chunk_id, _phase, _event_id, event_kind, payload in sorted(timeline):
+            if event_kind == "bestowal":
+                row = _as_document(payload)
+                row["cleared_at"] = None
+                working[int(row["id"])] = row
+                touched.add(int(row["entity_id"]))
+            elif event_kind == "clearance":
+                removed = working.pop(payload, None)
+                if removed is not None:
+                    touched.add(int(removed["entity_id"]))
+            else:
+                actor_entity_id, raw_delta = payload
+                if self._apply_mood_snapshot(
+                    working,
+                    chunk_id=chunk_id,
+                    actor_entity_id=actor_entity_id,
+                    raw_delta=raw_delta,
+                    mood_tag_ids=mood_tag_ids,
+                ):
+                    touched.add(actor_entity_id)
+        return touched
+
+    def _replay_mood_snapshots(
+        self,
+        working: dict[int, dict[str, Any]],
+        *,
+        base_chunk: int,
+    ) -> set[int]:
+        """Replay exact mood projections from resolution applied snapshots."""
+
+        self.cur.execute(
+            """
+            SELECT tick_chunk_id, actor_entity_id, state_delta
+            FROM orrery_resolutions
+            WHERE tick_chunk_id > %s
+              AND tick_chunk_id <= %s
+              AND state_delta ? 'mood.set'
+            ORDER BY tick_chunk_id, id
+            """,
+            (base_chunk, self.target_chunk_id),
+        )
+        resolutions = self.cur.fetchall()
+        if not resolutions:
+            return set()
+        self.cur.execute(
+            "SELECT id, tag FROM tags WHERE category = 'mood' AND NOT deprecated"
+        )
+        mood_tag_ids = {int(tag_id): str(tag) for tag_id, tag in self.cur.fetchall()}
+        touched: set[int] = set()
+        for chunk_id, actor_entity_id, raw_delta in resolutions:
+            if self._apply_mood_snapshot(
+                working,
+                chunk_id=int(chunk_id),
+                actor_entity_id=int(actor_entity_id),
+                raw_delta=raw_delta,
+                mood_tag_ids=mood_tag_ids,
+            ):
+                touched.add(int(actor_entity_id))
+        return touched
+
+    @staticmethod
+    def _apply_mood_snapshot(
+        working: dict[int, dict[str, Any]],
+        *,
+        chunk_id: int,
+        actor_entity_id: int,
+        raw_delta: Any,
+        mood_tag_ids: dict[int, str],
+    ) -> bool:
+        """Validate and apply one exact resolution mood projection."""
+
+        delta = _as_document(raw_delta)
+        payload = delta.get("mood.set")
+        if not isinstance(payload, dict):
+            raise ValueError(f"mood.set at chunk {chunk_id} is not an applied mapping")
+        applied = payload.get("applied")
+        if not isinstance(applied, dict):
+            raise ValueError(
+                f"mood.set at chunk {chunk_id} is missing its applied snapshot"
+            )
+        if applied.get("skipped") == "mood_disabled":
+            return False
+        mood = applied.get("mood")
+        projection = applied.get("entity_tag")
+        if mood not in mood_tag_ids.values() or not isinstance(projection, dict):
+            raise ValueError(
+                f"mood.set at chunk {chunk_id} has an invalid applied projection"
+            )
+        row = dict(projection)
+        row_id = int(row.get("id") or 0)
+        tag_id = int(row.get("tag_id") or 0)
+        if (
+            row_id <= 0
+            or int(row.get("entity_id") or 0) != actor_entity_id
+            or mood_tag_ids.get(tag_id) != mood
+            or row.get("expires_at_world_time") != applied.get("expires_at_world_time")
+        ):
+            raise ValueError(
+                f"mood.set at chunk {chunk_id} carries an inconsistent "
+                "applied entity-tag snapshot"
+            )
+        for existing_id, existing in list(working.items()):
+            if (
+                int(existing.get("entity_id") or 0) == actor_entity_id
+                and int(existing.get("tag_id") or 0) in mood_tag_ids
+            ):
+                del working[existing_id]
+        row["cleared_at"] = None
+        working[row_id] = row
+        return True
 
     # -- need-applicability trigger mirror ------------------------------------
 

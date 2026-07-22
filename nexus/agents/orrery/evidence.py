@@ -64,6 +64,7 @@ from nexus.agents.orrery.substrate import (
     Bindings,
     Slot,
     WorldState,
+    active_mood,
     _at_routine_anchor,
     _is_in_transit,
     _possessed_claim_knowledge,
@@ -374,6 +375,26 @@ _tier_resolver(
     "resources_at_or_above", RESOURCES_TIER_RANKS, DEFAULT_RESOURCES_TIER, True
 )
 _tier_resolver("resources_below", RESOURCES_TIER_RANKS, DEFAULT_RESOURCES_TIER, False)
+
+
+@_resolver("mood_is")
+def _mood_is(match: re.Match, state: WorldState, bindings: Bindings) -> dict:
+    slot = match["slot"]
+    candidates = match["values"].split(",")
+    entity_id = _entity(bindings, slot)
+    observed_mood = active_mood(state, bindings, Slot(slot))
+    matched = [observed_mood] if observed_mood in candidates else []
+    return _evidence(
+        "mood_is",
+        params={"moods": candidates, "slot": slot},
+        entities={slot: entity_id},
+        observed={
+            "mood_enabled": state.mood_enabled,
+            "active_mood": observed_mood,
+        },
+        matched=matched,
+        result=entity_id is not None and bool(matched),
+    )
 
 
 # ---------------------------------------------------------------------------

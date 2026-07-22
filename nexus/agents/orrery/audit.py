@@ -514,6 +514,7 @@ def explain_dry_run(
     fanout_settings: Optional[Any] = None,
     contagion_settings: Optional[Any] = None,
     weather_settings: Optional[Any] = None,
+    mood_settings: Optional[Any] = None,
 ) -> ExplainedTickReport:
     """Hydrate, bind, and explain Orrery packages without database writes.
 
@@ -549,6 +550,7 @@ def explain_dry_run(
         epistemics_settings=epistemics_policy,
         contagion_settings=contagion_settings,
         weather_settings=weather_settings,
+        mood_settings=mood_settings,
     )
 
     templates_list = list(configure_project_magnitudes(templates, project_policy))
@@ -1199,15 +1201,22 @@ def entity_context(
         text(
             """
             /* orrery_audit:entity_tags */
-            SELECT entity_id, tag, category, is_ephemeral, source_kind::text
-                   AS source_kind, template_id, applied_at,
-                   applied_at_world_time, source_chunk_id
-            FROM entity_tags_current
-            WHERE entity_id = ANY(:ids)
-            ORDER BY entity_id, tag
+            SELECT etc.entity_id, etc.tag, etc.category, etc.is_ephemeral,
+                   etc.source_kind::text AS source_kind, etc.template_id,
+                   etc.applied_at, etc.applied_at_world_time,
+                   etc.source_chunk_id
+            FROM entity_tags_current etc
+            JOIN entity_tags et ON et.id = etc.entity_tag_id
+            WHERE etc.entity_id = ANY(:ids)
+              AND (
+                  :current_world_time IS NULL
+                  OR et.expires_at_world_time IS NULL
+                  OR et.expires_at_world_time > :current_world_time
+              )
+            ORDER BY etc.entity_id, etc.tag
             """
         ),
-        {"ids": ids},
+        {"ids": ids, "current_world_time": world_time},
     ).mappings():
         tag = row["tag"]
         tags_by_entity.setdefault(row["entity_id"], []).append(
@@ -1516,12 +1525,18 @@ def entity_context(
                 SELECT p.id AS place_id, etc.tag
                 FROM places p
                 JOIN entity_tags_current etc ON etc.entity_id = p.entity_id
+                JOIN entity_tags et ON et.id = etc.entity_tag_id
                 WHERE p.id = ANY(:place_ids)
                   AND etc.entity_kind = 'place'
                   AND etc.category IN ({_LOCATION_CLASS_CATEGORY_SQL})
+                  AND (
+                      :current_world_time IS NULL
+                      OR et.expires_at_world_time IS NULL
+                      OR et.expires_at_world_time > :current_world_time
+                  )
                 """
             ),
-            {"place_ids": place_ids},
+            {"place_ids": place_ids, "current_world_time": world_time},
         ).mappings():
             place_classes.setdefault(row["place_id"], set()).add(row["tag"])
     for row in place_rows.values():

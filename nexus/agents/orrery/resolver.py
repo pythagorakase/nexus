@@ -50,6 +50,7 @@ from nexus.agents.orrery.substrate import (
     Template,
     TravelState,
     WorldState,
+    active_mood,
     binding_hash,
     evaluate_stack,
 )
@@ -225,7 +226,7 @@ class OrreryTickProposal:
     epistemics_settings: Mapping[str, Any] = field(
         default_factory=lambda: {"enabled": False}
     )
-    scene_conditions: Mapping[str, str] = field(default_factory=dict)
+    scene_conditions: Mapping[str, Any] = field(default_factory=dict)
     generated_at: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
@@ -394,6 +395,37 @@ def _load_active_entity_ids(session: Any) -> tuple[int, ...]:
     )
 
 
+def _load_current_entity_tags(
+    session: Any, *, current_world_time: Optional[datetime]
+) -> tuple[dict[int, set[str]], dict[int, set[str]]]:
+    """Hydrate tags honestly at the anchor's world time.
+
+    The durable sweep remains responsible for clearing expired rows. This
+    read-side filter prevents an unswept time-cleared tag from gating behavior
+    after its diegetic expiry.
+    """
+
+    tags: dict[int, set[str]] = {}
+    ephemeral_tags: dict[int, set[str]] = {}
+    for row in session.execute(
+        text(
+            """
+            /* orrery:current_tags */
+            SELECT etc.entity_id, etc.tag, etc.is_ephemeral
+            FROM entity_tags_current etc
+            JOIN entity_tags et ON et.id = etc.entity_tag_id
+            WHERE :current_world_time IS NULL
+               OR et.expires_at_world_time IS NULL
+               OR et.expires_at_world_time > :current_world_time
+            """
+        ),
+        {"current_world_time": current_world_time},
+    ).mappings():
+        target = ephemeral_tags if row["is_ephemeral"] else tags
+        target.setdefault(row["entity_id"], set()).add(row["tag"])
+    return tags, ephemeral_tags
+
+
 def hydrate_world_state(
     session: Any,
     *,
@@ -406,6 +438,7 @@ def hydrate_world_state(
     epistemics_settings: Optional[Any] = None,
     contagion_settings: Optional[Any] = None,
     weather_settings: Optional[Any] = None,
+    mood_settings: Optional[Any] = None,
 ) -> WorldState:
     """Hydrate the read-side Orrery state snapshot from database tables.
 
@@ -417,6 +450,10 @@ def hydrate_world_state(
     need_tuning = coerce_need_tuning(need_tuning)
     project_policy = coerce_project_policy(project_settings)
     epistemics_policy = coerce_epistemics_policy(epistemics_settings)
+    world_time = world_time_override or _load_world_time(
+        session, anchor_chunk_id=anchor_chunk_id
+    )
+    mood_enabled = bool(_weather_setting(mood_settings, "enabled", False))
 
     is_active = {
         int(row["id"]): bool(row["is_active"])
@@ -432,19 +469,9 @@ def hydrate_world_state(
         ).mappings()
     }
 
-    tags: dict[int, set[str]] = {}
-    ephemeral_tags: dict[int, set[str]] = {}
-    for row in session.execute(
-        text(
-            """
-            /* orrery:current_tags */
-            SELECT entity_id, tag, is_ephemeral
-            FROM entity_tags_current
-            """
-        )
-    ).mappings():
-        target = ephemeral_tags if row["is_ephemeral"] else tags
-        target.setdefault(row["entity_id"], set()).add(row["tag"])
+    tags, ephemeral_tags = _load_current_entity_tags(
+        session, current_world_time=world_time
+    )
 
     locations = {
         row["entity_id"]: row["current_location"]
@@ -484,10 +511,17 @@ def hydrate_world_state(
                    false AS is_primary
             FROM places p
             JOIN entity_tags_current etc ON etc.entity_id = p.entity_id
+            JOIN entity_tags et ON et.id = etc.entity_tag_id
             WHERE etc.entity_kind = 'place'
               AND etc.category IN ({_LOCATION_CLASS_CATEGORY_SQL})
+              AND (
+                  :current_world_time IS NULL
+                  OR et.expires_at_world_time IS NULL
+                  OR et.expires_at_world_time > :current_world_time
+              )
             """
-        )
+        ),
+        {"current_world_time": world_time},
     ).mappings():
         place_id = row["id"]
         class_name = row["location_class"]
@@ -599,9 +633,6 @@ def hydrate_world_state(
             ),
             anchor_chunk_id=anchor_chunk_id,
         )
-    world_time = world_time_override or _load_world_time(
-        session, anchor_chunk_id=anchor_chunk_id
-    )
     communication_graph = communication_graph_for_settings(
         session, contagion_settings, world_time=world_time
     )
@@ -693,6 +724,7 @@ def hydrate_world_state(
         weather=weather,
         place_weather=place_weather,
         localized_weather_enabled=bool(weather_enabled),
+        mood_enabled=mood_enabled,
         current_tick=anchor_chunk_id or 0,
     )
 
@@ -885,6 +917,7 @@ def compose_actor_bindings(
     """Compose ACTOR-only bindings for recently relevant off-screen characters."""
 
     actor_ids: set[int] = set()
+    current_world_time = _load_world_time(session, anchor_chunk_id=anchor_chunk_id)
     present_actor_ids = _present_actor_ids_at_anchor(
         session, anchor_chunk_id=anchor_chunk_id
     )
@@ -942,12 +975,19 @@ def compose_actor_bindings(
             /* orrery:actor_bindings_ephemeral */
             SELECT DISTINCT etc.entity_id
             FROM entity_tags_current etc
+            JOIN entity_tags et ON et.id = etc.entity_tag_id
             JOIN entities e ON e.id = etc.entity_id
             WHERE etc.is_ephemeral = true
               AND e.kind = 'character'
               AND e.is_active = true
+              AND (
+                  :current_world_time IS NULL
+                  OR et.expires_at_world_time IS NULL
+                  OR et.expires_at_world_time > :current_world_time
+              )
             """
-        )
+        ),
+        {"current_world_time": current_world_time},
     ).mappings():
         actor_ids.add(row["entity_id"])
 
@@ -1759,6 +1799,7 @@ def resolve_dry_run(
     fanout_settings: Optional[Any] = None,
     contagion_settings: Optional[Any] = None,
     weather_settings: Optional[Any] = None,
+    mood_settings: Optional[Any] = None,
 ) -> OrreryTickProposal:
     """Hydrate, bind, and evaluate Orrery packages without database writes."""
 
@@ -1786,6 +1827,7 @@ def resolve_dry_run(
         epistemics_settings=epistemics_policy,
         contagion_settings=contagion_settings,
         weather_settings=weather_settings,
+        mood_settings=mood_settings,
     )
 
     templates_list = list(configure_project_magnitudes(templates, project_policy))
@@ -2029,15 +2071,32 @@ def resolve_dry_run(
         | {bindings[Slot.ACTOR] for bindings, _templates in present_routes}
     )
 
-    # Scene conditions are a localized-weather contract. Disabled mode retains
-    # legacy predicate behavior but must not leak new prompt context; likewise,
-    # a clockless/anchorless localized snapshot stays wholly unknown rather
-    # than attaching a fabricated time-only condition.
-    scene_conditions = (
-        {"weather": state.weather, "time_of_day": state.time_of_day}
-        if state.localized_weather_enabled and state.weather is not None
-        else {}
-    )
+    # Weather and mood are independent scene-condition channels. Disabled
+    # mechanics do not leak prompt context; mood names are included only for
+    # explicitly present characters carrying an active mechanical mood.
+    scene_conditions: dict[str, Any] = {}
+    if state.localized_weather_enabled and state.weather is not None:
+        scene_conditions.update(
+            {"weather": state.weather, "time_of_day": state.time_of_day}
+        )
+    if state.mood_enabled:
+        present_actor_ids = _present_actor_ids_at_anchor(
+            session, anchor_chunk_id=anchor_chunk_id
+        )
+        present_names = _load_entity_names(session, present_actor_ids)
+        moods = [
+            {
+                "entity_id": entity_id,
+                "name": present_names[entity_id],
+                "mood": mood,
+            }
+            for entity_id in sorted(present_actor_ids)
+            if entity_id in present_names
+            if (mood := active_mood(state, {Slot.ACTOR: entity_id}, slot=Slot.ACTOR))
+            is not None
+        ]
+        if moods:
+            scene_conditions["moods"] = moods
     return OrreryTickProposal(
         anchor_chunk_id=anchor_chunk_id,
         actor_count=len(unique_actors),

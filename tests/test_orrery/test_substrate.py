@@ -55,7 +55,15 @@ from nexus.agents.orrery.substrate import (
     travel_purpose_is,
     validate_always_fallbacks,
 )
-from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
+from nexus.agents.orrery.templates import (
+    ADVANCE_BUILD_VENTURE,
+    ADVANCE_COURT_PATRON,
+    ADVANCE_PURSUE_ROMANCE,
+    ADVANCE_SEEK_REDEMPTION,
+    BUILTIN_TEMPLATES,
+    EXTRACT_VENGEANCE,
+    RECREATE,
+)
 
 
 _SINCE_LAST_EVENT_RE = re.compile(r"since_last_event_at_least\(([^,()]+),")
@@ -80,6 +88,31 @@ def test_builtin_templates_have_always_fallbacks() -> None:
     """Built-in templates must end in a deterministic fallback branch."""
 
     validate_always_fallbacks(BUILTIN_TEMPLATES)
+
+
+def test_builtin_mood_affinity_consumers_cover_requested_read_channels() -> None:
+    """Mood reads bias vengeance, aspiration progress, romance, and recreation."""
+
+    def branch(template: Template, label: str) -> Branch:
+        return next(item for item in template.branches if item.label == label)
+
+    assert branch(
+        EXTRACT_VENGEANCE, "Strike directly when opportunity opens"
+    ).mood_affinities == {"restless": 2.0, "grim": 1.5}
+    # The rebuffed arm stays preemptive with NO affinity: a rebuff is a
+    # deterministic guard (the recruit_ally withdraw-arm contract), never
+    # a stochastic lean.
+    rebuffed = branch(ADVANCE_PURSUE_ROMANCE, "Withdraw after being rebuffed")
+    assert rebuffed.mood_affinities == {}
+    assert rebuffed.preemptive is True
+    assert branch(RECREATE, "Find games and company").mood_affinities == {"elated": 1.5}
+    for template in (
+        ADVANCE_PURSUE_ROMANCE,
+        ADVANCE_COURT_PATRON,
+        ADVANCE_SEEK_REDEMPTION,
+        ADVANCE_BUILD_VENTURE,
+    ):
+        assert template.branches[-1].mood_affinities == {"elated": 1.5}
 
 
 def test_gate_cooldown_chain_covers_branch_events() -> None:

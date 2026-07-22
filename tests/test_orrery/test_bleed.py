@@ -550,6 +550,30 @@ async def test_assemble_context_payload_attaches_scene_conditions() -> None:
 
 
 @pytest.mark.asyncio
+async def test_assemble_context_payload_preserves_scene_moods() -> None:
+    """Present-character mood context reaches the Storyteller unchanged."""
+
+    session = FakeSession()
+    manager = TurnCycleManager(FakeLore(_settings(), session))
+    context = TurnContext(
+        turn_id="t1", user_input="Continue.", start_time=0, warm_slice=[]
+    )
+    context.orrery_proposal = SimpleNamespace(
+        anchor_chunk_id=77,
+        pressure_count=0,
+        scene_conditions={
+            "moods": [{"entity_id": 1, "name": "Mara", "mood": "restless"}]
+        },
+    )
+
+    await manager.assemble_context_payload(context)
+
+    assert context.context_payload["scene_conditions"] == {
+        "moods": [{"entity_id": 1, "name": "Mara", "mood": "restless"}]
+    }
+
+
+@pytest.mark.asyncio
 async def test_call_apex_ai_records_bleed_offers_after_generation_success() -> None:
     """Surfacing bookkeeping is written only after LOGON returns a response."""
 

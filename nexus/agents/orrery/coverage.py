@@ -382,6 +382,7 @@ def analyze_coverage(
     fanout_settings: Optional[Any] = None,
     contagion_settings: Optional[Any] = None,
     weather_settings: Optional[Any] = None,
+    mood_settings: Optional[Any] = None,
 ) -> dict[str, Any]:
     """Aggregate explained resolution coverage across historical anchors.
 
@@ -428,6 +429,7 @@ def analyze_coverage(
             fanout_settings=fanout_settings,
             contagion_settings=contagion_settings,
             weather_settings=weather_settings,
+            mood_settings=mood_settings,
         )
         anchors.append(_tally_report(report, tallies, gap_counts))
         entity_names.update(report.entity_names)

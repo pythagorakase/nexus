@@ -156,6 +156,8 @@ exposition. If older knowledge was omitted, treat the digest as incomplete.
 Treat the derived weather as physical continuity. Override it only for a
 deliberate dramatic effect by setting `chunk_metadata.scene_weather`; the
 override is local to this scene, while weather elsewhere remains derived.
+Moods are mechanical dispositions: color character behavior, but do not recite
+the mood labels in narration.
 
 ---
 

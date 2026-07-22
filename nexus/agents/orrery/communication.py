@@ -65,10 +65,16 @@ _CULTURE_TAGS_SQL = """
     /* orrery:communication_culture_tags */
     SELECT etc.entity_id, etc.category, etc.tag
     FROM entity_tags_current etc
+    JOIN entity_tags et ON et.id = etc.entity_tag_id
     JOIN entities institution ON institution.id = etc.entity_id
     WHERE institution.kind = 'faction'
       AND institution.is_active = true
       AND etc.category IN ('operational_secrecy', 'operational_mode')
+      AND (
+          CAST(:current_world_time AS timestamptz) IS NULL
+          OR et.expires_at_world_time IS NULL
+          OR et.expires_at_world_time > CAST(:current_world_time AS timestamptz)
+      )
     ORDER BY etc.entity_id, etc.category, etc.tag
 """
 
@@ -141,12 +147,18 @@ def _fetch_mappings(session_or_cur: Any, sql: str) -> list[dict[str, Any]]:
     result = session_or_cur.execute(sql)
     if result is not None and hasattr(result, "mappings"):
         return [dict(row) for row in result.mappings()]
-    description = getattr(session_or_cur, "description", None)
+    return _rows_from_dbapi_cursor(session_or_cur)
+
+
+def _rows_from_dbapi_cursor(cur: Any) -> list[dict[str, Any]]:
+    """Materialize the current DB-API cursor result as dictionaries."""
+
+    description = getattr(cur, "description", None)
     if description is None:
         raise TypeError(
             "session_or_cur must be a SQLAlchemy session/connection or DB-API cursor"
         )
-    rows = session_or_cur.fetchall()
+    rows = cur.fetchall()
     if rows and isinstance(rows[0], Mapping):
         return [dict(row) for row in rows]
     column_names = [column[0] for column in description]
@@ -296,14 +308,30 @@ async def _channel_rows_async(conn: Any) -> list[dict[str, Any]]:
     return await _fetch_mappings_async(conn, _CHANNEL_SQL)
 
 
-def _culture_tags_by_institution(session_or_cur: Any) -> dict[int, Tuple[str, ...]]:
-    return _culture_tags_from_rows(_fetch_mappings(session_or_cur, _CULTURE_TAGS_SQL))
+def _culture_tags_by_institution(
+    session_or_cur: Any, *, world_time: Optional[datetime]
+) -> dict[int, Tuple[str, ...]]:
+    if type(session_or_cur).__module__.startswith("sqlalchemy"):
+        rows = session_or_cur.execute(
+            text(_CULTURE_TAGS_SQL), {"current_world_time": world_time}
+        )
+        return _culture_tags_from_rows([dict(row) for row in rows.mappings()])
+    session_or_cur.execute(
+        _CULTURE_TAGS_SQL.replace(":current_world_time", "%s"),
+        (world_time, world_time),
+    )
+    return _culture_tags_from_rows(_rows_from_dbapi_cursor(session_or_cur))
 
 
 async def _culture_tags_by_institution_async(
     conn: Any,
+    *,
+    world_time: Optional[datetime],
 ) -> dict[int, Tuple[str, ...]]:
-    return _culture_tags_from_rows(await _fetch_mappings_async(conn, _CULTURE_TAGS_SQL))
+    sql = _CULTURE_TAGS_SQL.replace(":current_world_time", "$1")
+    return _culture_tags_from_rows(
+        [dict(row) for row in await conn.fetch(sql, world_time)]
+    )
 
 
 def _culture_tags_from_rows(
@@ -385,20 +413,26 @@ def _channel_directions(
 
 
 def _channel_edges(
-    session_or_cur: Any, settings: OrreryContagionSettings
+    session_or_cur: Any,
+    settings: OrreryContagionSettings,
+    *,
+    world_time: Optional[datetime],
 ) -> list[CommunicationEdge]:
     registered_tags = _registered_channel_tags(session_or_cur)
-    culture_tags = _culture_tags_by_institution(session_or_cur)
+    culture_tags = _culture_tags_by_institution(session_or_cur, world_time=world_time)
     return _channel_edges_from_rows(
         _channel_rows(session_or_cur), registered_tags, culture_tags, settings
     )
 
 
 async def _channel_edges_async(
-    conn: Any, settings: OrreryContagionSettings
+    conn: Any,
+    settings: OrreryContagionSettings,
+    *,
+    world_time: Optional[datetime],
 ) -> list[CommunicationEdge]:
     registered_tags = await _registered_channel_tags_async(conn)
-    culture_tags = await _culture_tags_by_institution_async(conn)
+    culture_tags = await _culture_tags_by_institution_async(conn, world_time=world_time)
     return _channel_edges_from_rows(
         await _channel_rows_async(conn), registered_tags, culture_tags, settings
     )
@@ -451,18 +485,16 @@ def assemble_communication_graph(
 ) -> CommunicationGraph:
     """Assemble the immutable communication graph without database writes.
 
-    ``world_time`` is accepted now so Stage 2c can consume the same assembly
-    boundary for world-clock frontier calculations. Stage 2b performs no age
-    or scope gating, so the value cannot alter the graph yet.
+    Culture tags use the same world-clock boundary as the graph consumer, so
+    expired-unswept ephemeral rows cannot affect channel latency.
     """
 
-    del world_time
     config = coerce_contagion_settings(settings)
     if not config.enabled:
         return CommunicationGraph()
     _validate_dyad_overrides(session_or_cur, config.dyad_overrides)
     edges = _dyad_edges(session_or_cur, config)
-    edges.extend(_channel_edges(session_or_cur, config))
+    edges.extend(_channel_edges(session_or_cur, config, world_time=world_time))
     return CommunicationGraph(edges=tuple(sorted(edges, key=_edge_sort_key)))
 
 
@@ -474,13 +506,12 @@ async def assemble_communication_graph_async(
 ) -> CommunicationGraph:
     """Asyncpg twin of :func:`assemble_communication_graph`."""
 
-    del world_time
     config = coerce_contagion_settings(settings)
     if not config.enabled:
         return CommunicationGraph()
     await _validate_dyad_overrides_async(conn, config.dyad_overrides)
     edges = await _dyad_edges_async(conn, config)
-    edges.extend(await _channel_edges_async(conn, config))
+    edges.extend(await _channel_edges_async(conn, config, world_time=world_time))
     return CommunicationGraph(edges=tuple(sorted(edges, key=_edge_sort_key)))
 
 
