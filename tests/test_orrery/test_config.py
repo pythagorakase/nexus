@@ -221,6 +221,7 @@ def test_composition_defaults_off_and_validates_roster_reach() -> None:
     defaults = OrreryCompositionSettings()
     assert defaults.hostile_source_enabled is False
     assert defaults.roster_source_enabled is False
+    assert defaults.acquaintance_source_enabled is False
     assert defaults.roster_reach == 2
     payload = load_settings("nexus.toml").orrery.model_dump()
     payload.pop("composition")

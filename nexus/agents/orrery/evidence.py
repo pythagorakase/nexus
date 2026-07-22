@@ -563,6 +563,25 @@ def _has_any_status_at_or_above(
     )
 
 
+@_resolver("has_status_in_scope")
+def _has_status_in_scope(
+    match: re.Match, state: WorldState, bindings: Bindings
+) -> dict:
+    subject_slot, scope_slot = match["subj"], match["scope"]
+    subject_id = _entity(bindings, subject_slot)
+    scope_id = _entity(bindings, scope_slot)
+    edge = _edge_tags(state, subject_id, scope_id)
+    matched = sorted(tag for tag in edge if tag.startswith(STATUS_TAG_PREFIX))
+    return _evidence(
+        "has_status_in_scope",
+        params={"subject_slot": subject_slot, "scope_slot": scope_slot},
+        entities={subject_slot: subject_id, scope_slot: scope_id},
+        observed={"edge_tags": sorted(edge)},
+        matched=matched,
+        result=subject_id is not None and scope_id is not None and bool(matched),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Composite context predicates
 # ---------------------------------------------------------------------------
@@ -1271,6 +1290,41 @@ def _has_relationship_of_type(
         result=(
             source is not None and target is not None and relationship_type in edge
         ),
+    )
+
+
+@_resolver("has_any_relationship")
+def _has_any_relationship(
+    match: re.Match, state: WorldState, bindings: Bindings
+) -> dict:
+    slot_a, slot_b = match["a"], match["b"]
+    entity_a = _entity(bindings, slot_a)
+    entity_b = _entity(bindings, slot_b)
+    forward = (
+        state.relationship_types.get((entity_a, entity_b), frozenset())
+        if entity_a is not None and entity_b is not None
+        else frozenset()
+    )
+    reverse = (
+        state.relationship_types.get((entity_b, entity_a), frozenset())
+        if entity_a is not None and entity_b is not None
+        else frozenset()
+    )
+    matched = [
+        {"direction": f"{slot_a}->{slot_b}", "types": sorted(forward)},
+        {"direction": f"{slot_b}->{slot_a}", "types": sorted(reverse)},
+    ]
+    matched = [entry for entry in matched if entry["types"]]
+    return _evidence(
+        "has_any_relationship",
+        params={"slot_a": slot_a, "slot_b": slot_b},
+        entities={slot_a: entity_a, slot_b: entity_b},
+        observed={
+            "forward_types": sorted(forward),
+            "reverse_types": sorted(reverse),
+        },
+        matched=matched,
+        result=entity_a is not None and entity_b is not None and bool(matched),
     )
 
 

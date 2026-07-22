@@ -545,6 +545,28 @@ def has_any_pair_tag(
     )
 
 
+def has_status_in_scope(
+    subject_slot: Slot = Slot.ACTOR,
+    scope_slot: Slot = Slot.FACTION,
+) -> Condition:
+    """Return whether the subject has any active status level in one scope."""
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        subject_id = _slot_entity(bindings, subject_slot)
+        scope_id = _slot_entity(bindings, scope_slot)
+        if subject_id is None or scope_id is None:
+            return False
+        return any(
+            tag.startswith(STATUS_TAG_PREFIX)
+            for tag in state.pair_tags.get((subject_id, scope_id), frozenset())
+        )
+
+    return _named(
+        _condition,
+        f"has_status_in_scope({subject_slot.value}->{scope_slot.value})",
+    )
+
+
 def has_pair_tag_to_current_location(tag: str, slot: Slot = Slot.ACTOR) -> Condition:
     """Return whether a slot-bound entity has ``tag`` to its current place."""
 
@@ -1403,15 +1425,17 @@ def project_due(
                 project.target_place_id is not None
                 if project_type == "plan_relocation"
                 else (
-                    project.target_character_entity_id is not None
-                    if project_type
-                    in {
-                        "recruit_ally",
-                        "pursue_romance",
-                        "court_patron",
-                        "seek_redemption",
-                    }
-                    else True
+                    (
+                        project.target_character_entity_id is not None
+                        or project.target_faction_entity_id is not None
+                    )
+                    if project_type == "court_patron"
+                    else (
+                        project.target_character_entity_id is not None
+                        if project_type
+                        in {"recruit_ally", "pursue_romance", "seek_redemption"}
+                        else True
+                    )
                 )
             )
             return (
@@ -1424,15 +1448,17 @@ def project_due(
                 project.target_place_id is not None
                 if project_type == "plan_relocation"
                 else (
-                    project.target_character_entity_id is not None
-                    if project_type
-                    in {
-                        "recruit_ally",
-                        "pursue_romance",
-                        "court_patron",
-                        "seek_redemption",
-                    }
-                    else True
+                    (
+                        project.target_character_entity_id is not None
+                        or project.target_faction_entity_id is not None
+                    )
+                    if project_type == "court_patron"
+                    else (
+                        project.target_character_entity_id is not None
+                        if project_type
+                        in {"recruit_ally", "pursue_romance", "seek_redemption"}
+                        else True
+                    )
                 )
             )
             return (
@@ -1935,6 +1961,28 @@ def has_relationship_of_type(
     )
 
 
+def has_any_relationship(
+    slot_a: Slot = Slot.ACTOR,
+    slot_b: Slot = Slot.TARGET,
+) -> Condition:
+    """Return whether any relationship row exists in either direction."""
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        entity_a = _slot_entity(bindings, slot_a)
+        entity_b = _slot_entity(bindings, slot_b)
+        if entity_a is None or entity_b is None:
+            return False
+        return bool(
+            state.relationship_types.get((entity_a, entity_b), frozenset())
+            or state.relationship_types.get((entity_b, entity_a), frozenset())
+        )
+
+    return _named(
+        _condition,
+        f"has_any_relationship({slot_a.value}<->{slot_b.value})",
+    )
+
+
 def has_symmetric_relationship_of_type(
     relationship_type: str,
     slot_a: Slot = Slot.ACTOR,
@@ -2419,6 +2467,9 @@ class Template:
     # Roster-derived factions are visible through nearby members only to
     # packages authored to court institutions across that broader boundary.
     courts_factions: bool = False
+    # Same-place stranger pairs are a deliberately narrow introduction source
+    # exposed only to the one package that authors the acquaintance itself.
+    forms_acquaintances: bool = False
     # Character-targeted project continuations bind TARGET from the durable
     # open-project projection. This remains valid if the contact or
     # relationship edge that originally sourced the project later clears.

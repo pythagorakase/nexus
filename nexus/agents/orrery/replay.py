@@ -129,7 +129,8 @@ SKALD_SCALAR_FIELDS = frozenset(
 )
 
 # Delta keys whose effects live entirely in the tag provenance tables;
-# replaying them here would double-count.
+# replaying them here would double-count. ``status.bestow`` is the sanctioned
+# exclusive status writer, but its rows and clearances use the same provenance.
 TAG_DELTA_KEYS = frozenset(
     {
         "entity_tags.add",
@@ -141,6 +142,7 @@ TAG_DELTA_KEYS = frozenset(
         "entity_pair_tags.clear_outbound",
         "entity_pair_tags_target.clear_inbound",
         "mood.set",
+        "status.bestow",
     }
 )
 

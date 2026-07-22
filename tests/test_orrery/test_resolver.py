@@ -17,6 +17,7 @@ from nexus.agents.orrery.resolver import (
     compose_actor_faction_routes,
     compose_actor_target_faction_bindings,
     compose_actor_target_routes,
+    compose_acquaintance_bindings,
     hydrate_world_state,
     resolve_dry_run,
 )
@@ -31,6 +32,7 @@ from nexus.agents.orrery.substrate import (
     Slot,
     Template,
     WorldState,
+    evaluate,
     trust_at_least,
     trust_below,
     weather_is,
@@ -38,6 +40,7 @@ from nexus.agents.orrery.substrate import (
 from nexus.agents.orrery.templates import (
     ADVANCE_RECRUIT_ALLY,
     BUILTIN_TEMPLATES,
+    MAKE_ACQUAINTANCE,
     START_RECRUIT_ALLY,
 )
 from nexus.config.settings_models import OrreryWeatherSettings
@@ -90,6 +93,7 @@ class FakeSession:
         actor_target_relationship_rows=None,
         actor_target_social_contact_rows=None,
         actor_target_hostile_edge_rows=None,
+        acquaintance_same_place_rows=None,
         actor_faction_pair_tag_rows=None,
         actor_faction_roster_rows=None,
         entity_name_rows=None,
@@ -140,6 +144,7 @@ class FakeSession:
         self.actor_target_relationship_rows = actor_target_relationship_rows or []
         self.actor_target_social_contact_rows = actor_target_social_contact_rows or []
         self.actor_target_hostile_edge_rows = actor_target_hostile_edge_rows or []
+        self.acquaintance_same_place_rows = acquaintance_same_place_rows or []
         self.actor_faction_pair_tag_rows = actor_faction_pair_tag_rows or []
         self.actor_faction_roster_rows = actor_faction_roster_rows or []
         self.entity_name_rows = entity_name_rows or [
@@ -291,6 +296,10 @@ class FakeSession:
             assert "es.kind = 'character'" in sql
             assert "et.kind = 'character'" in sql
             return FakeResult(self.actor_target_hostile_edge_rows)
+        if "/* orrery:acquaintance_bindings_same_place */" in sql:
+            assert "c1.entity_id < c2.entity_id" in sql
+            assert "c2.current_location = c1.current_location" in sql
+            return FakeResult(self.acquaintance_same_place_rows)
         if "/* orrery:actor_faction_bindings_institutional_pair_tags */" in sql:
             assert "pt.tag LIKE 'status:%'" in sql
             assert "'obligation', 'handles', 'authority_over'" in sql
@@ -2552,6 +2561,86 @@ def test_disabled_composition_sources_are_byte_identical_to_legacy() -> None:
     assert disabled_payload == legacy_payload
     assert disabled_session.executed_sql == legacy_session.executed_sql
     assert not any("hostile_edges" in sql for sql in disabled_session.executed_sql)
+
+
+def test_acquaintance_source_is_canonical_opted_in_and_default_off() -> None:
+    """Same-place strangers compose once and only for the introduction."""
+
+    rows = [{"actor_entity_id": 1, "target_entity_id": 2}]
+    enabled_session = FakeSession(acquaintance_same_place_rows=rows)
+    bindings = compose_acquaintance_bindings(
+        enabled_session,
+        anchor_chunk_id=100,
+        actor_ids={1, 2},
+    )
+    assert bindings == ({Slot.ACTOR: 1, Slot.TARGET: 2},)
+
+    routes = compose_actor_target_routes(
+        enabled_session,
+        state=WorldState(),
+        templates=(MAKE_ACQUAINTANCE,),
+        anchor_chunk_id=100,
+        window_chunks=30,
+        actor_ids={1, 2},
+        composition_settings={"acquaintance_source_enabled": True},
+    )
+    assert routes == ((bindings[0], (MAKE_ACQUAINTANCE,)),)
+
+    disabled_session = FakeSession(acquaintance_same_place_rows=rows)
+    assert (
+        compose_actor_target_routes(
+            disabled_session,
+            state=WorldState(),
+            templates=(MAKE_ACQUAINTANCE,),
+            anchor_chunk_id=100,
+            window_chunks=30,
+            actor_ids={1, 2},
+            composition_settings={"acquaintance_source_enabled": False},
+        )
+        == ()
+    )
+    assert not any(
+        "acquaintance_bindings_same_place" in sql
+        for sql in disabled_session.executed_sql
+    )
+
+
+def test_acquaintance_gate_rebuffs_prior_ties_and_accepts_strangers() -> None:
+    """Relationship, contact, or hostility makes the pair ineligible."""
+
+    base = WorldState(locations={1: 10, 2: 10})
+    bindings = {Slot.ACTOR: 1, Slot.TARGET: 2}
+    assert evaluate(MAKE_ACQUAINTANCE, base, bindings).passes
+    assert not evaluate(
+        MAKE_ACQUAINTANCE,
+        WorldState(
+            locations=base.locations,
+            relationship_types={(2, 1): frozenset({"associate"})},
+        ),
+        bindings,
+    ).passes
+    for edge in ((1, 2), (2, 1)):
+        assert not evaluate(
+            MAKE_ACQUAINTANCE,
+            WorldState(
+                locations=base.locations,
+                pair_tags={edge: frozenset({"contact:social"})},
+            ),
+            bindings,
+        ).passes
+        assert not evaluate(
+            MAKE_ACQUAINTANCE,
+            WorldState(
+                locations=base.locations,
+                pair_tags={edge: frozenset({"hostile_to"})},
+            ),
+            bindings,
+        ).passes
+    assert not evaluate(
+        MAKE_ACQUAINTANCE,
+        WorldState(locations={1: 10, 2: 11}),
+        bindings,
+    ).passes
 
 
 def test_enabled_composition_sources_keep_production_and_audit_in_parity() -> None:

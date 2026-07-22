@@ -1158,6 +1158,8 @@ def _plan_project_rows(
                 if target_kind == "character" and target
                 else None
             ),
+            # Retrograde Stage A deliberately remains character-target-only;
+            # live faction patronage enters through the Stage 2 composer.
             "target_faction_entity_id": None,
             "stage": PROJECT_FIRST_STAGES[project.project_type],
             "progress": 0,

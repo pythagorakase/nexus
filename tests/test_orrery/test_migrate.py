@@ -177,6 +177,35 @@ def test_court_patron_migration_replaces_named_five_type_constraints() -> None:
     assert migration_sql.count("court_patron_") >= 6
 
 
+def test_polymorphic_patron_migration_carries_six_type_constraints() -> None:
+    """Migration 096 carries 087 and widens only COURT_PATRON's target."""
+
+    migration_sql = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "096_polymorphic_patron.sql"
+    ).read_text()
+    for name in (
+        "character_project_states_project_type_check",
+        "character_project_states_stage_by_type_check",
+        "character_project_states_target_by_type_check",
+        "character_project_states_completed_target_check",
+    ):
+        assert f"DROP CONSTRAINT IF EXISTS {name}" in migration_sql
+        assert f"ADD CONSTRAINT {name}" in migration_sql
+        assert f"COMMENT ON CONSTRAINT {name}" in migration_sql
+    for project_type in (
+        "plan_relocation",
+        "recruit_ally",
+        "build_venture",
+        "pursue_romance",
+        "court_patron",
+        "seek_redemption",
+    ):
+        assert migration_sql.count(f"project_type = '{project_type}'") >= 3
+    assert "exactly one character or faction patron" in migration_sql
+
+
 def test_seek_redemption_migration_replaces_named_six_type_constraints() -> None:
     """Migration 087 preserves 086 and adds strict wronged-party targeting."""
 

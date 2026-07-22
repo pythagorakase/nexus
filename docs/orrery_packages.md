@@ -1596,6 +1596,132 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 ---
 
+## ADVANCE_COURT_PATRON_FACTION — priority 47
+
+> A due faction patronage effort gains notice, proves worth, secures standing, stalls, is refused, or ends.
+
+**Drive band:** project identity — A due institutional patronage effort shares the established project continuation slot.
+**Slots:** ACTOR, FACTION
+
+**Gate:**
+
+- **AND:**
+  - actor `court_patron` project passes `ready` due-state
+  - faction is the project's stored institution
+  - **NOT:** actor is in transit
+  - **NOT:** actor is constrained or immobilized
+  - **NOT:**
+    - **OR:**
+      - actor has `sleep` debt ≥ 8
+      - actor has `thirst` debt ≥ 2
+      - actor has `hunger` debt ≥ 4
+
+### Branch 1 — End a patronage effort whose faction is no longer available  *(mag 0.4)* · **preemptive**
+
+**When:**
+
+- **NOT:** faction is the project's active stored institution
+
+**Does:** applies project `abandon` transition
+**Event:** `court_patron_abandoned`
+
+> {faction} is no longer an institution whose favor can answer. {actor} closes the effort instead of serving an empty name.
+
+### Branch 2 — Secure standing in the faction  *(mag 0.4)* · **preemptive**
+
+**When:**
+
+- **AND:**
+  - actor `court_patron` project passes `completion` due-state
+  - trust faction→actor ≥ 2
+  - **NOT:** actor has any of [`hostile_to`, `hunting`] pair tags to faction
+  - **NOT:** faction has any of [`hostile_to`, `hunting`] pair tags to actor
+
+**Does:** applies project `complete` transition; bestows actor `status:junior` in bound faction
+**Event:** `court_patron_completed`
+
+> {faction} finally answers {actor}'s service with a place in its ranks. The standing is junior, but it is real.
+
+### Branch 3 — Withdraw after the faction turns hostile  *(mag 0.4)* · **preemptive**
+
+**When:**
+
+- **OR:**
+  - actor has any of [`hostile_to`, `hunting`] pair tags to faction
+  - faction has any of [`hostile_to`, `hunting`] pair tags to actor
+  - trust faction→actor < -1
+
+**Does:** applies project `abandon` transition; sets actor mood to `sour`
+**Event:** `court_patron_abandoned`
+
+> {faction}'s answer is refusal or danger. {actor} abandons the bid before service becomes humiliation.
+
+### Branch 4 — Let the institutional bid go  *(mag 0.4)* · **preemptive**
+
+**When:** actor `court_patron` project passes `abandon` due-state
+
+**Does:** applies project `abandon` transition
+**Event:** `court_patron_abandoned`
+
+> Delay has become its own refusal. {actor} stops spending effort on standing that never comes within reach.
+
+### Branch 5 — Turn notice into a chance to prove worth to the faction  *(mag 0.4)* · **preemptive**
+
+**When:** actor `court_patron` project passes `gaining_notice_milestone` due-state
+
+**Does:** applies project `advance` transition
+**Event:** `court_patron_milestone`
+
+> {faction} has noticed {actor}. Attention now becomes a test of whether usefulness survives scrutiny and inconvenience.
+
+### Branch 6 — Ask proven worth to become standing  *(mag 0.4)* · **preemptive**
+
+**When:** actor `court_patron` project passes `proving_worth_milestone` due-state
+
+**Does:** applies project `advance` transition
+**Event:** `court_patron_milestone`
+
+> {actor} has supplied proof instead of promises. The remaining question is whether {faction} will recognize it as standing.
+
+### Branch 7 — Lose institutional ground through neglect  *(mag 0.1)* · **preemptive** · **not promotable**
+
+**When:** actor `court_patron` project passes `neglected` due-state
+
+**Does:** applies project `stall` transition
+**Event:** `court_patron_stalled`
+
+> Inattention erodes the impression {actor} worked to create. The bid for standing stalls and must recover its momentum.
+
+### Branch 8 — Make useful work visible to the faction  *(mag 0.18)* · **not promotable**
+
+**When:** actor `court_patron` project passes `gaining_notice` due-state
+
+**Does:** applies project `advance` transition
+**Event:** `court_patron_progressed`
+
+> {actor} places one useful act where {faction} must register both its value and the judgment behind it.
+
+### Branch 9 — Prove reliable under institutional scrutiny  *(mag 0.18)* · **not promotable**
+
+**When:** actor `court_patron` project passes `proving_worth` due-state
+
+**Does:** applies project `advance` transition
+**Event:** `court_patron_progressed`
+
+> {actor} accepts a consequential task and performs it cleanly, giving {faction} evidence that usefulness is not a pose.
+
+### Branch 10 — Make the next claim on standing legible  *(mag 0.16)* · **not promotable**
+
+**When:** *(always)*
+
+**Does:** applies project `advance` transition
+**Mood affinity:** stochastic selection weight only — `elated` × 1.5
+**Event:** `court_patron_progressed`
+
+> {actor} makes one more service, request, or allegiance explicit, bringing {faction}'s answer closer without pretending it is owed.
+
+---
+
 ## ADVANCE_SEEK_REDEMPTION — priority 47
 
 > A due attempt at redemption owns the wrong, makes amends, seeks forgiveness, stalls, is thrown back, or ends.
@@ -2748,6 +2874,39 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 ---
 
+## START_COURT_PATRON_FACTION — priority 17
+
+> An off-screen character begins earning a faction's notice.
+
+**Drive band:** project identity — Courting an institution is a deliberate project opening, not ambient membership or routine social maintenance.
+**Slots:** ACTOR, FACTION
+
+**Gate:**
+
+- **AND:**
+  - actor `court_patron` project passes `start` due-state
+  - actor has enough hydrated context
+  - actor is at `home` anchor
+  - **NOT:** actor is in transit
+  - **NOT:** actor is constrained or immobilized
+  - **NOT:**
+    - **OR:**
+      - actor has `sleep` debt ≥ 8
+      - actor has `thirst` debt ≥ 2
+      - actor has `hunger` debt ≥ 4
+  - **NOT:** actor has a `status:*` pair tag to faction
+
+### Branch 1 — Begin seeking the faction's notice  *(mag 0.4)*
+
+**When:** *(always)*
+
+**Does:** applies project `start` transition
+**Event:** `court_patron_started`
+
+> {actor} stops waiting for {faction} to notice them by chance. They choose a first service that the institution will have to recognize.
+
+---
+
 ## START_SEEK_REDEMPTION — priority 17
 
 > An off-screen character begins making amends to someone they wronged.
@@ -3402,6 +3561,36 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 ---
 
+## MAKE_ACQUAINTANCE — priority 5
+
+> Two strangers in the same place exchange names and a first word.
+
+**Drive band:** anchored routine
+**Slots:** ACTOR, TARGET
+
+**Gate:**
+
+- **AND:**
+  - actor has enough hydrated context
+  - target has enough hydrated context
+  - actor and target are co-located
+  - **NOT:** a relationship row exists between actor and target in either direction
+  - actor lacks `contact:social` pair tag to target
+  - target lacks `contact:social` pair tag to actor
+  - **NOT:** actor has any of [`hostile_to`, `hunting`] pair tags to target
+  - **NOT:** target has any of [`hostile_to`, `hunting`] pair tags to actor
+
+### Branch 1 — Exchange names  *(mag 0.08)* · **not promotable**
+
+**When:** *(always)*
+
+**Does:** adds outbound `contact:social` pair tag to target; adds inbound `contact:social` pair tag from target to actor
+**Event:** `contact_made`
+
+> {actor} and {target} keep arriving at the same small moment. One of them offers a name; the other answers, and strangers become people who can speak again.
+
+---
+
 ## MAINTAIN_COVER — priority 0
 
 > Specific public-cover maintenance, not a universal fallback.
@@ -3667,6 +3856,7 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `obligation`
 - `resides_at`
 - `sponsors`
+- `status:junior`
 
 ### Event types
 
