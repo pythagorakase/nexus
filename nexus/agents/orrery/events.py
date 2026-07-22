@@ -61,6 +61,13 @@ from nexus.agents.orrery.substrate import (
     coerce_project_policy,
     WorldState,
 )
+from nexus.agents.orrery.status_family import (
+    STATUS_LEVEL_RANKS,
+    STATUS_TAGS,
+    has_any_status,
+    level_from_status_tag,
+    normalize_status_level,
+)
 from nexus.agents.orrery.tag_writer import (
     apply_exclusive_tag_bestowal,
     apply_exclusive_tag_bestowal_async,
@@ -1667,18 +1674,63 @@ def _project_payload_with_bound_faction(
     return data
 
 
-def _status_bestowal_level(draft: OrreryResolutionDraft) -> str:
-    """Validate the sanctioned template status payload and return its level."""
+def _status_bestowal_payload(draft: OrreryResolutionDraft) -> tuple[str, str]:
+    """Validate and return the sanctioned template status level and mode."""
 
     payload = draft.state_delta["status.bestow"]
     if not isinstance(payload, Mapping):
         raise ValueError("status.bestow requires an object payload with level")
-    if set(payload) != {"level"}:
-        raise ValueError("status.bestow payload must contain only level")
+    if not set(payload) <= {"level", "mode"} or "level" not in payload:
+        raise ValueError(
+            "status.bestow payload must contain level and optional mode only"
+        )
     level = payload.get("level")
     if not isinstance(level, str) or not level.strip():
         raise ValueError("status.bestow level must be a non-empty string")
-    return level
+    normalized_level = normalize_status_level(level)
+    mode = payload.get("mode", "floor")
+    if mode not in {"floor", "set"}:
+        raise ValueError(
+            f"Unknown status.bestow mode {mode!r}; expected 'floor' or 'set'"
+        )
+    return normalized_level, str(mode)
+
+
+def _status_bestowal_should_apply(
+    current_levels: Iterable[str], *, level: str, mode: str
+) -> bool:
+    """Return whether the verb should invoke the replace-semantics writer."""
+
+    if mode == "set":
+        return True
+    desired_rank = STATUS_LEVEL_RANKS[normalize_status_level(level)]
+    return all(
+        STATUS_LEVEL_RANKS[normalize_status_level(current)] < desired_rank
+        for current in current_levels
+    )
+
+
+async def _status_levels_async(
+    conn: Any, *, subject_entity_id: int, scope_faction_entity_id: int
+) -> tuple[str, ...]:
+    """Load active status levels for the async verb applier."""
+
+    rows = await conn.fetch(
+        """
+        SELECT pt.tag
+        FROM entity_pair_tags ept
+        JOIN pair_tags pt ON pt.id = ept.pair_tag_id
+        WHERE ept.subject_entity_id = $1
+          AND ept.object_entity_id = $2
+          AND ept.cleared_at IS NULL
+          AND NOT pt.deprecated
+          AND pt.tag = ANY($3)
+        """,
+        subject_entity_id,
+        scope_faction_entity_id,
+        sorted(STATUS_TAGS),
+    )
+    return tuple(level_from_status_tag(str(_row_get(row, "tag", 0))) for row in rows)
 
 
 def _status_bestowal_faction(draft: OrreryResolutionDraft) -> int:
@@ -1885,17 +1937,33 @@ def _apply_state_delta_sync(
         )
         tag_mutations += mood_mutations
     if "status.bestow" in draft.state_delta:
-        changed = apply_status_pair_tag_bestowal(
-            cur,
-            subject_entity_id=actor_entity_id,
-            scope_faction_entity_id=_status_bestowal_faction(draft),
-            subject_kind="character",
-            level=_status_bestowal_level(draft),
-            source_kind="template",
-            source_chunk_id=source_chunk_id,
-            template_id=draft.template_id,
+        level, mode = _status_bestowal_payload(draft)
+        faction_id = _status_bestowal_faction(draft)
+        current_level = (
+            has_any_status(
+                cur,
+                subject_entity_id=actor_entity_id,
+                scope_faction_entity_id=faction_id,
+            )
+            if mode == "floor"
+            else None
         )
-        tag_mutations += int(changed)
+        if _status_bestowal_should_apply(
+            (() if current_level is None else (current_level,)),
+            level=level,
+            mode=mode,
+        ):
+            changed = apply_status_pair_tag_bestowal(
+                cur,
+                subject_entity_id=actor_entity_id,
+                scope_faction_entity_id=faction_id,
+                subject_kind="character",
+                level=level,
+                source_kind="template",
+                source_chunk_id=source_chunk_id,
+                template_id=draft.template_id,
+            )
+            tag_mutations += int(changed)
     project_applied: Optional[dict[str, Any]] = None
     if "project.start" in draft.state_delta:
         project_applied = _apply_project_start_sync(
@@ -2178,17 +2246,33 @@ async def _apply_state_delta_async(
         )
         tag_mutations += mood_mutations
     if "status.bestow" in draft.state_delta:
-        changed = await apply_status_pair_tag_bestowal_async(
-            conn,
-            subject_entity_id=actor_entity_id,
-            scope_faction_entity_id=_status_bestowal_faction(draft),
-            subject_kind="character",
-            level=_status_bestowal_level(draft),
-            source_kind="template",
-            source_chunk_id=source_chunk_id,
-            template_id=draft.template_id,
+        level, mode = _status_bestowal_payload(draft)
+        faction_id = _status_bestowal_faction(draft)
+        current_levels = (
+            await _status_levels_async(
+                conn,
+                subject_entity_id=actor_entity_id,
+                scope_faction_entity_id=faction_id,
+            )
+            if mode == "floor"
+            else ()
         )
-        tag_mutations += int(changed)
+        if _status_bestowal_should_apply(
+            current_levels,
+            level=level,
+            mode=mode,
+        ):
+            changed = await apply_status_pair_tag_bestowal_async(
+                conn,
+                subject_entity_id=actor_entity_id,
+                scope_faction_entity_id=faction_id,
+                subject_kind="character",
+                level=level,
+                source_kind="template",
+                source_chunk_id=source_chunk_id,
+                template_id=draft.template_id,
+            )
+            tag_mutations += int(changed)
     project_applied: Optional[dict[str, Any]] = None
     if "project.start" in draft.state_delta:
         project_applied = await _apply_project_start_async(

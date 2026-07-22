@@ -29,6 +29,7 @@ from typing import Any, Iterable, List, Mapping, Optional, Tuple
 
 from nexus.agents.orrery.catalog import _render_predicate_name
 from nexus.agents.orrery.evidence import resolve_evidence
+from nexus.agents.orrery.resolver import _materialize_project_delta
 from nexus.agents.orrery.substrate import (
     Bindings,
     BranchSelection,
@@ -376,7 +377,7 @@ def explain_template(
         signal_event_type=truth.signal_event_type,
         narrative_stub=truth.narrative_stub,
         binding_hash=truth.binding_hash,
-        state_delta=dict(truth.state_delta),
+        state_delta=dict(_materialize_project_delta(truth, state)),
         changed_fields=truth.changed_fields,
         scene_pressure_stub=truth.scene_pressure_stub,
     )

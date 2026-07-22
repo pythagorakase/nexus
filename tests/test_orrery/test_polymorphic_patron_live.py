@@ -20,6 +20,7 @@ from nexus.agents.orrery.resolver import (
     OrreryResolutionDraft,
     compose_actor_faction_bindings,
     compose_actor_faction_routes,
+    resolve_dry_run,
 )
 from nexus.agents.orrery.substrate import (
     ALWAYS,
@@ -67,11 +68,17 @@ def patron_circle_db() -> Iterator[dict[str, Any]]:
             ).scalars()
         ]
         actor, member, faction = entity_ids
+        place_id = int(
+            session.execute(
+                text("SELECT id FROM places ORDER BY id LIMIT 1")
+            ).scalar_one()
+        )
         session.execute(
             text(
                 """
-                INSERT INTO characters (name, entity_id)
-                VALUES (:actor_name, :actor), (:member_name, :member)
+                INSERT INTO characters (name, entity_id, current_location)
+                VALUES (:actor_name, :actor, :place_id),
+                       (:member_name, :member, NULL)
                 """
             ),
             {
@@ -79,7 +86,52 @@ def patron_circle_db() -> Iterator[dict[str, Any]]:
                 "actor": actor,
                 "member_name": f"patron-circle-{token}-member",
                 "member": member,
+                "place_id": place_id,
             },
+        )
+        character_ids = tuple(
+            int(value)
+            for value in session.execute(
+                text(
+                    """
+                    SELECT id FROM characters
+                    WHERE entity_id IN (:actor, :member)
+                    ORDER BY entity_id
+                    """
+                ),
+                {"actor": actor, "member": member},
+            ).scalars()
+        )
+        actor_character, member_character = character_ids
+        session.execute(
+            text(
+                """
+                INSERT INTO character_relationships (
+                    character1_id, character2_id, relationship_type,
+                    emotional_valence, dynamic, recent_events, history
+                ) VALUES (
+                    :actor, :member, 'associate', '+1|fixture',
+                    'The member can introduce the actor to the institution.',
+                    'No persistent events.',
+                    'Created for the polymorphic patron live proof.'
+                )
+                """
+            ),
+            {"actor": actor_character, "member": member_character},
+        )
+        session.execute(
+            text(
+                """
+                INSERT INTO character_routine_anchors (
+                    character_entity_id, anchor_type, place_id,
+                    mobility_policy, source
+                ) VALUES (
+                    :actor, 'home', :place_id, 'fixed_place',
+                    'test_polymorphic_patron_live'
+                )
+                """
+            ),
+            {"actor": actor, "place_id": place_id},
         )
         session.execute(
             text(
@@ -123,7 +175,7 @@ def patron_circle_db() -> Iterator[dict[str, Any]]:
         engine.dispose()
 
 
-def _apply(db: dict[str, Any], draft: OrreryResolutionDraft) -> None:
+def _apply(db: dict[str, Any], draft: OrreryResolutionDraft) -> int:
     with db["raw"].cursor() as cur:
         resolution_id = _insert_resolution_sync(
             cur,
@@ -133,7 +185,7 @@ def _apply(db: dict[str, Any], draft: OrreryResolutionDraft) -> None:
             brief=draft.narrative_stub,
         )
         assert resolution_id is not None
-        _apply_state_delta_sync(
+        return _apply_state_delta_sync(
             cur,
             draft,
             resolution_id=resolution_id,
@@ -142,6 +194,28 @@ def _apply(db: dict[str, Any], draft: OrreryResolutionDraft) -> None:
             source_chunk_id=db["chunk"],
             need_tuning=load_need_tuning(),
             project_policy=POLICY,
+        )
+
+
+def _seed_mid_project_status(db: dict[str, Any], level: str) -> None:
+    with db["raw"].cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO entity_pair_tags (
+                subject_entity_id, object_entity_id, pair_tag_id,
+                source_kind, source_chunk_id, template_id
+            )
+            SELECT %s, %s, pt.id, 'template', %s,
+                   'test_mid_project_status_gain'
+            FROM pair_tags pt
+            WHERE pt.tag = %s AND NOT pt.deprecated
+            """,
+            (
+                db["actor"],
+                db["faction"],
+                db["chunk"],
+                f"status:{level}",
+            ),
         )
 
 
@@ -170,23 +244,31 @@ def test_roster_start_to_status_completion_closes_institutional_circle(
         for route in roster_routes
     )
 
-    base = OrreryResolutionDraft(
-        template_id="start_court_patron_faction",
-        priority=17,
-        binding_hash="faction-start",
-        bindings={"actor": actor, "faction": faction},
-        branch_label="Begin seeking the faction's notice",
-        narrative_stub="The actor courts the faction.",
-        state_delta={
-            "project.start": {
-                "project_type": "court_patron",
-                "stage": "gaining_notice",
-                "milestone": True,
-            }
+    proposal = resolve_dry_run(
+        db["session"],
+        (START_COURT_PATRON_FACTION,),
+        anchor_chunk_id=db["chunk"],
+        window_chunks=30,
+        project_settings=POLICY,
+        composition_settings={
+            "roster_source_enabled": True,
+            "roster_reach": 2,
         },
-        magnitude=0.4,
     )
+    base = next(
+        draft
+        for draft in proposal.resolutions
+        if draft.template_id == START_COURT_PATRON_FACTION.id
+        and draft.bindings == {"actor": actor, "faction": faction}
+    )
+    assert base.state_delta["project.start"] == {
+        "project_type": "court_patron",
+        "stage": "gaining_notice",
+        "milestone": True,
+        "target_faction_entity_id": faction,
+    }
     _apply(db, base)
+    _seed_mid_project_status(db, "respected")
     _apply(
         db,
         replace(
@@ -217,7 +299,7 @@ def test_roster_start_to_status_completion_closes_institutional_circle(
             },
         ),
     )
-    _apply(
+    completion_mutations = _apply(
         db,
         replace(
             base,
@@ -229,6 +311,7 @@ def test_roster_start_to_status_completion_closes_institutional_circle(
             },
         ),
     )
+    assert completion_mutations == 0
 
     with db["raw"].cursor() as cur:
         cur.execute(
@@ -250,8 +333,8 @@ def test_roster_start_to_status_completion_closes_institutional_circle(
             "completed",
             None,
             faction,
-            "status:junior",
-            "advance_court_patron_faction",
+            "status:respected",
+            "test_mid_project_status_gain",
         )
 
     institutional = compose_actor_faction_bindings(

@@ -204,6 +204,16 @@ def test_polymorphic_patron_migration_carries_six_type_constraints() -> None:
     ):
         assert migration_sql.count(f"project_type = '{project_type}'") >= 3
     assert "exactly one character or faction patron" in migration_sql
+    assert (
+        "COMMENT ON COLUMN character_project_states.target_character_entity_id"
+        in migration_sql
+    )
+    assert (
+        "COMMENT ON COLUMN character_project_states.target_faction_entity_id"
+        in migration_sql
+    )
+    assert "target_faction_entity_id is NULL" in migration_sql
+    assert "target_character_entity_id is NULL" in migration_sql
 
 
 def test_seek_redemption_migration_replaces_named_six_type_constraints() -> None:

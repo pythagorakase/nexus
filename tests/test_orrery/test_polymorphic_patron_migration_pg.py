@@ -106,3 +106,24 @@ def test_polymorphic_patron_constraints_accept_xor_and_reject_other_shapes(
         comments = [row[0] for row in cur.fetchall()]
         assert len(comments) == 2
         assert all("character or faction" in comment for comment in comments)
+        cur.execute(
+            """
+            SELECT a.attname, col_description(a.attrelid, a.attnum)
+            FROM pg_attribute a
+            WHERE a.attrelid = 'character_project_states'::regclass
+              AND a.attname IN (
+                  'target_character_entity_id',
+                  'target_faction_entity_id'
+              )
+            ORDER BY a.attname
+            """
+        )
+        column_comments = dict(cur.fetchall())
+        assert (
+            "target_faction_entity_id is NULL"
+            in column_comments["target_character_entity_id"]
+        )
+        assert (
+            "target_character_entity_id is NULL"
+            in column_comments["target_faction_entity_id"]
+        )

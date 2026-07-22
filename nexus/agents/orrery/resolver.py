@@ -1245,7 +1245,7 @@ def compose_acquaintance_bindings(
     actor_id_set -= present_actor_ids
     if not actor_id_set:
         return ()
-    pairs = {
+    candidate_pairs = {
         (int(row["actor_entity_id"]), int(row["target_entity_id"]))
         for row in session.execute(
             text(
@@ -1275,9 +1275,24 @@ def compose_acquaintance_bindings(
         if int(row["actor_entity_id"]) not in present_actor_ids
         and int(row["target_entity_id"]) not in present_actor_ids
     }
+    pairs: list[tuple[int, int]] = []
+    used_entity_ids: set[int] = set()
+    for lower_id, higher_id in sorted(candidate_pairs):
+        if lower_id in used_entity_ids or higher_id in used_entity_ids:
+            continue
+        if lower_id in actor_id_set:
+            actor_id, target_id = lower_id, higher_id
+        elif higher_id in actor_id_set:
+            actor_id, target_id = higher_id, lower_id
+        else:
+            continue
+        # Cap fanout at one introduction per entity per tick: besides keeping
+        # pair volume bounded, a character cannot narratively form several
+        # distinct first acquaintances in the same off-screen beat.
+        used_entity_ids.update((actor_id, target_id))
+        pairs.append((actor_id, target_id))
     return tuple(
-        {Slot.ACTOR: actor_id, Slot.TARGET: target_id}
-        for actor_id, target_id in sorted(pairs)
+        {Slot.ACTOR: actor_id, Slot.TARGET: target_id} for actor_id, target_id in pairs
     )
 
 
@@ -2653,20 +2668,28 @@ def _materialize_project_delta(
     raw_start = delta.get("project.start")
     if raw_start is not None:
         start_payload = dict(raw_start) if isinstance(raw_start, Mapping) else {}
-        if start_payload.get("project_type") in {
+        project_type = start_payload.get("project_type")
+        if project_type in {
             "recruit_ally",
             "pursue_romance",
-            "court_patron",
             "seek_redemption",
         }:
             target = resolution.bindings.get(Slot.TARGET)
             if not isinstance(target, int):
                 raise ValueError(
-                    f"{start_payload.get('project_type')} project.start requires "
-                    "target binding"
+                    f"{project_type} project.start requires target binding"
                 )
             start_payload["target_character_entity_id"] = target
-        if resolution.binds_project_faction:
+        if project_type == "court_patron":
+            target = resolution.bindings.get(Slot.TARGET)
+            faction = resolution.bindings.get(Slot.FACTION)
+            if isinstance(target, int):
+                start_payload["target_character_entity_id"] = target
+            elif Slot.TARGET not in resolution.bindings and isinstance(faction, int):
+                start_payload["target_faction_entity_id"] = faction
+            else:
+                raise ValueError("court_patron project.start requires target binding")
+        elif resolution.binds_project_faction:
             faction = resolution.bindings.get(Slot.FACTION)
             if not isinstance(faction, int):
                 raise ValueError("faction-bound project.start requires faction binding")

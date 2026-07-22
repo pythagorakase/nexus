@@ -85,6 +85,39 @@ def _apply(db: dict[str, Any], draft: OrreryResolutionDraft) -> int:
         )
 
 
+def _seed_status(db: dict[str, Any], level: str) -> None:
+    with db["conn"].cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO entity_pair_tags (
+                subject_entity_id, object_entity_id, pair_tag_id,
+                source_kind, template_id
+            )
+            SELECT %s, %s, pt.id, 'template', 'status_bestow_seed'
+            FROM pair_tags pt
+            WHERE pt.tag = %s AND NOT pt.deprecated
+            """,
+            (db["actor"], db["faction"], f"status:{level}"),
+        )
+
+
+def _active_status(db: dict[str, Any]) -> str:
+    with db["conn"].cursor() as cur:
+        cur.execute(
+            """
+            SELECT pt.tag
+            FROM entity_pair_tags ept
+            JOIN pair_tags pt ON pt.id = ept.pair_tag_id
+            WHERE ept.subject_entity_id = %s
+              AND ept.object_entity_id = %s
+              AND ept.cleared_at IS NULL
+              AND pt.tag LIKE 'status:%%'
+            """,
+            (db["actor"], db["faction"]),
+        )
+        return str(cur.fetchone()[0])
+
+
 def test_status_bestow_writes_exclusive_pair_tag_with_provenance(
     status_delta_db: dict[str, Any],
 ) -> None:
@@ -154,3 +187,46 @@ def test_status_bestow_and_raw_status_fail_loudly(
                 need_tuning=load_need_tuning(),
                 project_policy=ProjectPolicy(enabled=True),
             )
+
+
+def test_status_bestow_floor_prevents_demotion_and_set_replaces_both_ways(
+    status_delta_db: dict[str, Any],
+) -> None:
+    db = status_delta_db
+    _seed_status(db, "respected")
+
+    assert _apply(db, _draft(db, {"status.bestow": {"level": "junior"}})) == 0
+    assert _active_status(db) == "status:respected"
+
+    assert (
+        _apply(
+            db,
+            _draft(
+                db,
+                {"status.bestow": {"level": "junior", "mode": "set"}},
+            ),
+        )
+        == 1
+    )
+    assert _active_status(db) == "status:junior"
+
+    assert (
+        _apply(
+            db,
+            _draft(
+                db,
+                {"status.bestow": {"level": "respected", "mode": "set"}},
+            ),
+        )
+        == 1
+    )
+    assert _active_status(db) == "status:respected"
+
+    with pytest.raises(ValueError, match="Unknown status.bestow mode"):
+        _apply(
+            db,
+            _draft(
+                db,
+                {"status.bestow": {"level": "junior", "mode": "lower"}},
+            ),
+        )

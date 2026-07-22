@@ -2605,6 +2605,33 @@ def test_acquaintance_source_is_canonical_opted_in_and_default_off() -> None:
     )
 
 
+def test_acquaintance_source_caps_popular_entity_and_keeps_hydrated_actor() -> None:
+    """Ten hydrated strangers cannot fan out through one outside entity."""
+
+    popular_entity = 1
+    hydrated_strangers = set(range(10, 20))
+    session = FakeSession(
+        acquaintance_same_place_rows=[
+            {
+                "actor_entity_id": popular_entity,
+                "target_entity_id": stranger,
+            }
+            for stranger in sorted(hydrated_strangers)
+        ]
+    )
+
+    bindings = compose_acquaintance_bindings(
+        session,
+        anchor_chunk_id=100,
+        actor_ids=hydrated_strangers,
+    )
+
+    assert bindings == ({Slot.ACTOR: 10, Slot.TARGET: popular_entity},)
+    assert all(binding[Slot.ACTOR] in hydrated_strangers for binding in bindings)
+    endpoints = [entity_id for binding in bindings for entity_id in binding.values()]
+    assert len(endpoints) == len(set(endpoints))
+
+
 def test_acquaintance_gate_rebuffs_prior_ties_and_accepts_strangers() -> None:
     """Relationship, contact, or hostility makes the pair ineligible."""
 

@@ -118,3 +118,7 @@ COMMENT ON CONSTRAINT character_project_states_target_by_type_check
 COMMENT ON CONSTRAINT character_project_states_completed_target_check
     ON character_project_states IS
     'Completed targeted projects retain their target; COURT_PATRON retains its character or faction patron.';
+COMMENT ON COLUMN character_project_states.target_character_entity_id IS
+    'Character target required by RECRUIT_ALLY, PURSUE_ROMANCE, and SEEK_REDEMPTION; COURT_PATRON sets this exactly when target_faction_entity_id is NULL.';
+COMMENT ON COLUMN character_project_states.target_faction_entity_id IS
+    'Immutable faction target for faction-bound projects; COURT_PATRON sets this exactly when target_character_entity_id is NULL.';
