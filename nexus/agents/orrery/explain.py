@@ -286,7 +286,26 @@ def explain_template(
             selection=selection,
         )
         chosen_branch = chosen.label if chosen is not None else None
-        for branch, considered in zip(template.branches, considered_flags):
+        branch_results = [
+            bool(branch.conditions(state, bindings)) if considered else False
+            for branch, considered in zip(template.branches, considered_flags)
+        ]
+        weighting_ran = (
+            selection is not None
+            and selection.mode == "stochastic"
+            and selection.temperature > 0
+            and chosen is not None
+            and not chosen.preemptive
+            and sum(
+                passes
+                for branch, passes in zip(template.branches, branch_results)
+                if not branch.preemptive
+            )
+            > 1
+        )
+        for branch, considered, passes in zip(
+            template.branches, considered_flags, branch_results
+        ):
             if not considered:
                 branch_traces.append(
                     BranchTrace(
@@ -301,14 +320,11 @@ def explain_template(
                 )
                 continue
             branch_trace = trace_condition(branch.conditions, state, bindings)
-            passes = bool(branch.conditions(state, bindings))
             affinity = None
             mood = active_mood(state, bindings)
             if (
                 passes
-                and selection is not None
-                and selection.mode == "stochastic"
-                and selection.temperature > 0
+                and weighting_ran
                 and not branch.preemptive
                 and mood in branch.mood_affinities
             ):

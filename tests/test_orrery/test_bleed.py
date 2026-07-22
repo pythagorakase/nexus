@@ -561,13 +561,15 @@ async def test_assemble_context_payload_preserves_scene_moods() -> None:
     context.orrery_proposal = SimpleNamespace(
         anchor_chunk_id=77,
         pressure_count=0,
-        scene_conditions={"moods": {"Mara": "restless"}},
+        scene_conditions={
+            "moods": [{"entity_id": 1, "name": "Mara", "mood": "restless"}]
+        },
     )
 
     await manager.assemble_context_payload(context)
 
     assert context.context_payload["scene_conditions"] == {
-        "moods": {"Mara": "restless"}
+        "moods": [{"entity_id": 1, "name": "Mara", "mood": "restless"}]
     }
 
 

@@ -801,9 +801,17 @@ def _fetch_legacy_tag_rows(cur: Any) -> list[LegacyTagRow]:
             etc.category,
             etc.tag
         FROM entity_tags_current etc
+        JOIN entity_tags et ON et.id = etc.entity_tag_id
         JOIN factions f ON f.entity_id = etc.entity_id
         WHERE etc.entity_kind = 'faction'
           AND etc.category = ANY(%s)
+          AND (
+              (SELECT max(world_time) FROM chunk_metadata) IS NULL
+              OR et.expires_at_world_time IS NULL
+              OR et.expires_at_world_time > (
+                  SELECT max(world_time) FROM chunk_metadata
+              )
+          )
         ORDER BY f.id, etc.category, etc.tag
         """,
         (list(LEGACY_TAG_CATEGORIES),),

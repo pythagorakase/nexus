@@ -4433,6 +4433,7 @@ def _apply_travel_start_sync(
                 cur,
                 actor_entity_id=actor_entity_id,
                 anchor_type=str(destination_anchor),
+                current_world_time=world_time,
             )
         else:
             destination_classes = _destination_place_classes(data)
@@ -4441,6 +4442,7 @@ def _apply_travel_start_sync(
                     cur,
                     origin_place_id=int(origin_place_id),
                     location_classes=destination_classes,
+                    current_world_time=world_time,
                 )
             else:
                 destination_place_id = _planned_destination_sync(cur, actor_entity_id)
@@ -4538,6 +4540,7 @@ async def _apply_travel_start_async(
                 conn,
                 actor_entity_id=actor_entity_id,
                 anchor_type=str(destination_anchor),
+                current_world_time=world_time,
             )
         else:
             destination_classes = _destination_place_classes(data)
@@ -4546,6 +4549,7 @@ async def _apply_travel_start_async(
                     conn,
                     origin_place_id=int(origin_place_id),
                     location_classes=destination_classes,
+                    current_world_time=world_time,
                 )
             else:
                 destination_place_id = await _planned_destination_async(
@@ -4905,6 +4909,7 @@ def _load_or_create_need_debt_sync(
         cur,
         actor_entity_id=actor_entity_id,
         need_type=need_type,
+        current_world_time=world_time,
     ):
         raise ValueError(
             f"Orrery need {need_type!r} does not apply to actor {actor_entity_id}"
@@ -4958,6 +4963,7 @@ async def _load_or_create_need_debt_async(
         conn,
         actor_entity_id=actor_entity_id,
         need_type=need_type,
+        current_world_time=world_time,
     ):
         raise ValueError(
             f"Orrery need {need_type!r} does not apply to actor {actor_entity_id}"
@@ -5004,14 +5010,21 @@ def _need_applies_to_entity_sync(
     *,
     actor_entity_id: int,
     need_type: str,
+    current_world_time: Any,
 ) -> bool:
     cur.execute(
         """
         SELECT etc.tag
         FROM entity_tags_current etc
+        JOIN entity_tags et ON et.id = etc.entity_tag_id
         WHERE etc.entity_id = %s
+          AND (
+              %s IS NULL
+              OR et.expires_at_world_time IS NULL
+              OR et.expires_at_world_time > %s
+          )
         """,
-        (actor_entity_id,),
+        (actor_entity_id, current_world_time, current_world_time),
     )
     return need_applies_to_tags(
         need_type,
@@ -5024,14 +5037,22 @@ async def _need_applies_to_entity_async(
     *,
     actor_entity_id: int,
     need_type: str,
+    current_world_time: Any,
 ) -> bool:
     rows = await conn.fetch(
         """
         SELECT etc.tag
         FROM entity_tags_current etc
+        JOIN entity_tags et ON et.id = etc.entity_tag_id
         WHERE etc.entity_id = $1
+          AND (
+              $2 IS NULL
+              OR et.expires_at_world_time IS NULL
+              OR et.expires_at_world_time > $2
+          )
         """,
         actor_entity_id,
+        current_world_time,
     )
     return need_applies_to_tags(
         need_type,
@@ -6189,6 +6210,7 @@ def _routine_anchor_destination_sync(
     *,
     actor_entity_id: int,
     anchor_type: str,
+    current_world_time: Any,
 ) -> Optional[int]:
     cur.execute(
         """
@@ -6214,10 +6236,14 @@ def _routine_anchor_destination_sync(
             cur,
             actor_entity_id=actor_entity_id,
             anchor_type="home",
+            current_world_time=current_world_time,
         )
     if policy == "zone_resolved" and zone_id is not None:
         return _routine_zone_destination_sync(
-            cur, zone_id=int(zone_id), anchor_type=anchor_type
+            cur,
+            zone_id=int(zone_id),
+            anchor_type=anchor_type,
+            current_world_time=current_world_time,
         )
     return None
 
@@ -6227,6 +6253,7 @@ def _routine_zone_destination_sync(
     *,
     zone_id: int,
     anchor_type: str,
+    current_world_time: Any,
 ) -> Optional[int]:
     preferred_tags = (
         ("dwelling", "haven")
@@ -6248,12 +6275,26 @@ def _routine_zone_destination_sync(
           ON etc.entity_id = p.entity_id
          AND etc.category = 'place_function'
          AND etc.tag = ANY(%s)
+         AND EXISTS (
+             SELECT 1 FROM entity_tags et
+             WHERE et.id = etc.entity_tag_id
+               AND (
+                   %s IS NULL
+                   OR et.expires_at_world_time IS NULL
+                   OR et.expires_at_world_time > %s
+               )
+         )
         WHERE p.zone = %s
         GROUP BY p.id
         ORDER BY CASE WHEN count(etc.tag) > 0 THEN 0 ELSE 1 END, p.id
         LIMIT 1
         """,
-        (list(preferred_tags), zone_id),
+        (
+            list(preferred_tags),
+            current_world_time,
+            current_world_time,
+            zone_id,
+        ),
     )
     row = cur.fetchone()
     return _row_get(row, "id", 0) if row else None
@@ -6264,6 +6305,7 @@ def _location_class_destination_sync(
     *,
     origin_place_id: int,
     location_classes: tuple[str, ...],
+    current_world_time: Any,
 ) -> Optional[int]:
     cur.execute(
         """
@@ -6274,6 +6316,15 @@ def _location_class_destination_sync(
           ON etc.entity_id = p.entity_id
          AND etc.category = ANY(%s)
          AND etc.tag = ANY(%s)
+         AND EXISTS (
+             SELECT 1 FROM entity_tags et
+             WHERE et.id = etc.entity_tag_id
+               AND (
+                   %s IS NULL
+                   OR et.expires_at_world_time IS NULL
+                   OR et.expires_at_world_time > %s
+               )
+         )
         WHERE p.id <> %s
           AND (p.type::text = ANY(%s) OR etc.tag IS NOT NULL)
         -- Collapse multiple matching tags per place before preferring same-zone
@@ -6290,6 +6341,8 @@ def _location_class_destination_sync(
             origin_place_id,
             list(LOCATION_CLASS_TAG_CATEGORIES),
             list(location_classes),
+            current_world_time,
+            current_world_time,
             origin_place_id,
             list(location_classes),
         ),
@@ -6315,6 +6368,7 @@ async def _routine_anchor_destination_async(
     *,
     actor_entity_id: int,
     anchor_type: str,
+    current_world_time: Any,
 ) -> Optional[int]:
     row = await conn.fetchrow(
         """
@@ -6340,12 +6394,14 @@ async def _routine_anchor_destination_async(
             conn,
             actor_entity_id=actor_entity_id,
             anchor_type="home",
+            current_world_time=current_world_time,
         )
     if policy == "zone_resolved" and zone_id is not None:
         return await _routine_zone_destination_async(
             conn,
             zone_id=int(zone_id),
             anchor_type=anchor_type,
+            current_world_time=current_world_time,
         )
     return None
 
@@ -6355,6 +6411,7 @@ async def _routine_zone_destination_async(
     *,
     zone_id: int,
     anchor_type: str,
+    current_world_time: Any,
 ) -> Optional[int]:
     preferred_tags = (
         ("dwelling", "haven")
@@ -6376,12 +6433,22 @@ async def _routine_zone_destination_async(
           ON etc.entity_id = p.entity_id
          AND etc.category = 'place_function'
          AND etc.tag = ANY($1::text[])
-        WHERE p.zone = $2
+         AND EXISTS (
+             SELECT 1 FROM entity_tags et
+             WHERE et.id = etc.entity_tag_id
+               AND (
+                   $2 IS NULL
+                   OR et.expires_at_world_time IS NULL
+                   OR et.expires_at_world_time > $2
+               )
+         )
+        WHERE p.zone = $3
         GROUP BY p.id
         ORDER BY CASE WHEN count(etc.tag) > 0 THEN 0 ELSE 1 END, p.id
         LIMIT 1
         """,
         list(preferred_tags),
+        current_world_time,
         zone_id,
     )
 
@@ -6391,6 +6458,7 @@ async def _location_class_destination_async(
     *,
     origin_place_id: int,
     location_classes: tuple[str, ...],
+    current_world_time: Any,
 ) -> Optional[int]:
     return await conn.fetchval(
         """
@@ -6401,6 +6469,15 @@ async def _location_class_destination_async(
           ON etc.entity_id = p.entity_id
          AND etc.category = ANY($2::text[])
          AND etc.tag = ANY($3::text[])
+         AND EXISTS (
+             SELECT 1 FROM entity_tags et
+             WHERE et.id = etc.entity_tag_id
+               AND (
+                   $4 IS NULL
+                   OR et.expires_at_world_time IS NULL
+                   OR et.expires_at_world_time > $4
+               )
+         )
         WHERE p.id <> $1
           AND (p.type::text = ANY($3::text[]) OR etc.tag IS NOT NULL)
         -- Collapse multiple matching tags per place before preferring same-zone
@@ -6416,6 +6493,7 @@ async def _location_class_destination_async(
         origin_place_id,
         list(LOCATION_CLASS_TAG_CATEGORIES),
         list(location_classes),
+        current_world_time,
     )
 
 

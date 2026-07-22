@@ -16,6 +16,7 @@ from nexus.agents.orrery.events import (
     MoodPolicy,
     _apply_state_delta_async,
     _apply_state_delta_sync,
+    _sweep_expired_entity_tags_sync,
 )
 from nexus.agents.orrery.explain import explain_template
 from nexus.agents.orrery.needs import coerce_need_tuning
@@ -23,6 +24,7 @@ from nexus.agents.orrery.replay import _Replayer
 from nexus.agents.orrery.resolver import (
     OrreryResolutionDraft,
     _load_current_entity_tags,
+    compose_actor_bindings,
 )
 from nexus.agents.orrery.substrate import (
     ALWAYS,
@@ -83,7 +85,8 @@ def _schema_sql() -> str:
         CREATE TABLE tag_clearance_log (
             id bigserial PRIMARY KEY, entity_tag_id bigint,
             mechanism text NOT NULL, cleared_at_world_time timestamptz,
-            justification jsonb, source_chunk_id bigint
+            triggering_event_id bigint, justification jsonb,
+            source_chunk_id bigint
         );
         CREATE TABLE chunk_metadata (
             chunk_id bigint PRIMARY KEY, world_time timestamptz
@@ -191,11 +194,21 @@ def test_set_displace_expire_snapshot_and_replay() -> None:
             assert next(iter(working.values()))["id"] == applied["entity_tag"]["id"]
             cur.execute(
                 "INSERT INTO chunk_metadata VALUES (3, %s)",
-                (NOW + timedelta(hours=2),),
+                (NOW + timedelta(hours=13),),
+            )
+            assert _sweep_expired_entity_tags_sync(cur, source_chunk_id=3) == 1
+            replayer.target_chunk_id = 3
+            working = {}
+            assert replayer._replay_entity_tag_events(working, base_chunk=0) == {11}
+            assert working == {}
+
+            cur.execute(
+                "INSERT INTO chunk_metadata VALUES (4, %s)",
+                (NOW + timedelta(hours=14),),
             )
             cur.execute("SAVEPOINT before_unknown_mood")
             with pytest.raises(ValueError, match="Unknown mood"):
-                _apply_sync(cur, _draft("wistful"), 3)
+                _apply_sync(cur, _draft("wistful"), 4)
             cur.execute("ROLLBACK TO SAVEPOINT before_unknown_mood")
     finally:
         conn.rollback()
@@ -336,6 +349,72 @@ def test_expired_unswept_mood_does_not_hydrate_or_bias() -> None:
             selection=BranchSelection(mode="stochastic", temperature=1.0),
         )
         assert chosen.label == control.label
+    finally:
+        transaction.rollback()
+        connection.close()
+        engine.dispose()
+
+
+def test_expired_unswept_tag_does_not_source_actor_binding() -> None:
+    """An expired ephemeral tag cannot make an otherwise irrelevant actor run."""
+
+    engine = create_engine(get_slot_db_url(slot=5), future=True)
+    connection = engine.connect()
+    transaction = connection.begin()
+    schema = f"mood_binding_{uuid.uuid4().hex}"
+    try:
+        connection.exec_driver_sql(f'CREATE SCHEMA "{schema}"')
+        connection.exec_driver_sql(f'SET LOCAL search_path = "{schema}", public')
+        connection.exec_driver_sql(
+            """
+            CREATE TABLE entities (
+                id bigint PRIMARY KEY, kind text NOT NULL, is_active boolean NOT NULL
+            );
+            INSERT INTO entities VALUES (11, 'character', true);
+            CREATE TABLE chunk_metadata (
+                chunk_id bigint PRIMARY KEY, world_time timestamptz
+            );
+            INSERT INTO chunk_metadata VALUES (1, '2073-05-03 12:00:00+00');
+            CREATE TABLE chunk_entity_references_v (
+                entity_id bigint, reference_type text, chunk_id bigint
+            );
+            CREATE TABLE world_events (
+                actor_entity_id bigint, target_entity_id bigint,
+                tick_chunk_id bigint, world_layer text,
+                superseded_by_event_id bigint
+            );
+            CREATE TABLE entity_tags (
+                id bigint PRIMARY KEY, entity_id bigint,
+                expires_at_world_time timestamptz, cleared_at timestamptz
+            );
+            INSERT INTO entity_tags VALUES (
+                1, 11, '2073-05-03 11:00:00+00', NULL
+            );
+            CREATE VIEW entity_tags_current AS
+            SELECT id AS entity_tag_id, entity_id, true AS is_ephemeral
+            FROM entity_tags WHERE cleared_at IS NULL;
+            CREATE TABLE pair_tags (
+                id bigint PRIMARY KEY, tag text, is_ephemeral boolean,
+                deprecated boolean
+            );
+            CREATE TABLE entity_pair_tags (
+                object_entity_id bigint, subject_entity_id bigint,
+                pair_tag_id bigint, cleared_at timestamptz
+            );
+            CREATE TABLE character_routine_anchors (
+                character_entity_id bigint, mobility_policy text
+            );
+            CREATE TABLE characters (id bigint PRIMARY KEY, entity_id bigint);
+            CREATE TABLE chunk_character_references (
+                chunk_id bigint, character_id bigint, reference text
+            );
+            """
+        )
+        with Session(connection) as session:
+            bindings = compose_actor_bindings(
+                session, anchor_chunk_id=1, window_chunks=1
+            )
+        assert bindings == ()
     finally:
         transaction.rollback()
         connection.close()

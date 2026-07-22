@@ -230,6 +230,17 @@ def fetch_all_factions_with_references(
                ON etc.entity_id = f.entity_id
               AND etc.entity_kind = 'faction'
               AND etc.category IN ({FACTION_TAG_CONTEXT_CATEGORY_SQL})
+              AND EXISTS (
+                    SELECT 1 FROM entity_tags et
+                    WHERE et.id = etc.entity_tag_id
+                      AND (
+                            (SELECT max(world_time) FROM chunk_metadata) IS NULL
+                            OR et.expires_at_world_time IS NULL
+                            OR et.expires_at_world_time > (
+                                SELECT max(world_time) FROM chunk_metadata
+                            )
+                          )
+                  )
         GROUP BY f.id
         ORDER BY f.name
     """
@@ -275,6 +286,17 @@ def fetch_all_factions_with_references(
                    ON etc.entity_id = f.entity_id
                   AND etc.entity_kind = 'faction'
                   AND etc.category IN ({FACTION_TAG_CONTEXT_CATEGORY_SQL})
+                  AND EXISTS (
+                        SELECT 1 FROM entity_tags et
+                        WHERE et.id = etc.entity_tag_id
+                          AND (
+                                (SELECT max(world_time) FROM chunk_metadata) IS NULL
+                                OR et.expires_at_world_time IS NULL
+                                OR et.expires_at_world_time > (
+                                    SELECT max(world_time) FROM chunk_metadata
+                                )
+                              )
+                      )
             WHERE f.id = ANY(:ids)
             GROUP BY f.id
             ORDER BY f.name

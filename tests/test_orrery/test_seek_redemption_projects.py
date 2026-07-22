@@ -229,6 +229,12 @@ def test_full_ladder(state: WorldState, label: str, delta_key: str) -> None:
             "entity_tags_target.remove": ["grudge_active"],
             "mood.set": {"mood": "elated"},
         }
+        assert result.changed_fields == (
+            "character_project_states.status",
+            "entity_tags",
+            "character_relationships.relationship_type",
+            "character_relationships.emotional_valence",
+        )
 
 
 def test_completion_needs_no_trust_recovery_and_yields_to_hostility() -> None:

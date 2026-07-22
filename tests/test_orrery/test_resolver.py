@@ -251,6 +251,9 @@ class FakeSession:
             assert "superseded_by_event_id IS NULL" in sql
             return FakeResult(self.event_actor_rows)
         if "/* orrery:actor_bindings_ephemeral */" in sql:
+            assert "JOIN entity_tags et" in sql
+            assert "et.expires_at_world_time > :current_world_time" in sql
+            assert _params["current_world_time"] in {None, self.world_time}
             return FakeResult(self.ephemeral_actor_rows)
         if "/* orrery:actor_bindings_inbound_ephemeral_pair_tags */" in sql:
             assert "pt.is_ephemeral = true" in sql
@@ -1270,7 +1273,7 @@ def test_disabled_weather_omits_scene_conditions() -> None:
 
 
 def test_scene_conditions_include_only_present_active_moods() -> None:
-    """Mechanical moods attach by present-character name and honor disable."""
+    """Mechanical moods retain same-named present entities and honor disable."""
 
     session = FakeSession(
         tag_rows=[
@@ -1279,6 +1282,10 @@ def test_scene_conditions_include_only_present_active_moods() -> None:
             {"entity_id": 3, "tag": "restless", "is_ephemeral": True},
         ],
         present_actor_rows=[{"entity_id": 1}, {"entity_id": 2}],
+        entity_name_rows=[
+            {"id": 1, "name": "Mara"},
+            {"id": 2, "name": "Mara"},
+        ],
     )
     enabled = resolve_dry_run(
         session,
@@ -1297,7 +1304,12 @@ def test_scene_conditions_include_only_present_active_moods() -> None:
         mood_settings={"enabled": False},
     )
 
-    assert enabled.scene_conditions == {"moods": {"Mara": "elated", "Vale": "grim"}}
+    assert enabled.scene_conditions == {
+        "moods": [
+            {"entity_id": 1, "name": "Mara", "mood": "elated"},
+            {"entity_id": 2, "name": "Mara", "mood": "grim"},
+        ]
+    }
     assert disabled.scene_conditions == {}
 
 

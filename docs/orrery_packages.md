@@ -229,6 +229,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
   - actor has any of [`vendetta_holder`, `violent_history`]
 
 **Does:** activity → "executing retaliation"; adds `recently_violent` to actor; sets actor mood to `restless`
+**Mood affinity:** stochastic selection weight only — `grim` × 1.5, `restless` × 2
 **Event:** `retaliation_executed`
 
 > {actor} moves on {target} in the moment the corridor clears — no warning, no negotiation, the years of waiting compressed into the time it takes to close a few meters of distance.
@@ -1336,6 +1337,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 **When:** *(always)*
 
 **Does:** applies project `advance` transition
+**Mood affinity:** stochastic selection weight only — `elated` × 1.5
 **Event:** `build_venture_progressed`
 
 > {actor} finishes one of the unglamorous tasks between backing and opening: a roster, a schedule, a key, a supply line, or the first promise to a customer.
@@ -1461,6 +1463,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 **When:** *(always)*
 
 **Does:** applies project `advance` transition
+**Mood affinity:** stochastic selection weight only — `elated` × 1.5
 **Event:** `pursue_romance_progressed`
 
 > {actor} makes one more part of their intention legible, leaving {target} room for an answer that is genuinely theirs.
@@ -1586,6 +1589,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 **When:** *(always)*
 
 **Does:** applies project `advance` transition
+**Mood affinity:** stochastic selection weight only — `elated` × 1.5
 **Event:** `court_patron_progressed`
 
 > {actor} makes one more service, request, or allegiance explicit, bringing {target}'s answer closer without pretending it is owed.
@@ -1710,6 +1714,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 **When:** *(always)*
 
 **Does:** applies project `advance` transition
+**Mood affinity:** stochastic selection weight only — `elated` × 1.5
 **Event:** `seek_redemption_progressed`
 
 > {actor} continues the work without treating forgiveness as a debt {target} now owes them.
@@ -3364,6 +3369,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
   - **NOT:** actor is hidden or off-grid
 
 **Does:** activity → "at games in company"
+**Mood affinity:** stochastic selection weight only — `elated` × 1.5
 **Event:** `recreation_taken`
 
 > {actor} joins whatever the room is playing at — dice, cards, darts, argument — for stakes small enough to laugh about and company good enough to stay for.

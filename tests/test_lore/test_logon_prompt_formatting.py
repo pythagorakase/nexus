@@ -294,11 +294,16 @@ def test_context_prompt_renders_mechanical_moods_without_unknown_weather() -> No
     prompt = LogonUtility({})._format_context_prompt(
         {
             "user_input": "Continue.",
-            "scene_conditions": {"moods": {"Mara": "grim", "Zed": "elated"}},
+            "scene_conditions": {
+                "moods": [
+                    {"entity_id": 7, "name": "Mara", "mood": "grim"},
+                    {"entity_id": 12, "name": "Mara", "mood": "elated"},
+                ]
+            },
         }
     )
 
-    assert "Moods: Mara: grim, Zed: elated" in prompt
+    assert "Moods: Mara: grim, Mara: elated" in prompt
     assert "Weather: unknown" not in prompt
     assert "Time of day: unknown" not in prompt
 

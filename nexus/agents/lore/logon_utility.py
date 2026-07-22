@@ -565,10 +565,10 @@ class LogonUtility:
                 sections.append(f"Weather: {scene_conditions['weather']}")
             if "time_of_day" in scene_conditions:
                 sections.append(f"Time of day: {scene_conditions['time_of_day']}")
-            moods = scene_conditions.get("moods") or {}
+            moods = scene_conditions.get("moods") or []
             if moods:
                 rendered_moods = ", ".join(
-                    f"{name}: {mood}" for name, mood in sorted(moods.items())
+                    f"{entry['name']}: {entry['mood']}" for entry in moods
                 )
                 sections.append(f"Moods: {rendered_moods}")
             sections.append("")

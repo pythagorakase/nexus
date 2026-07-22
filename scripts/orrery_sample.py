@@ -195,7 +195,16 @@ def fetch_actor_sources(
             """
             SELECT DISTINCT etc.entity_id, etc.tag
             FROM entity_tags_current etc
-            WHERE etc.entity_id = ANY(:ids) AND etc.is_ephemeral = true
+            JOIN entity_tags et ON et.id = etc.entity_tag_id
+            WHERE etc.entity_id = ANY(:ids)
+              AND etc.is_ephemeral = true
+              AND (
+                  (SELECT max(world_time) FROM chunk_metadata) IS NULL
+                  OR et.expires_at_world_time IS NULL
+                  OR et.expires_at_world_time > (
+                      SELECT max(world_time) FROM chunk_metadata
+                  )
+              )
             """
         ),
         {"ids": list(actor_ids)},

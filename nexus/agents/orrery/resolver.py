@@ -917,6 +917,7 @@ def compose_actor_bindings(
     """Compose ACTOR-only bindings for recently relevant off-screen characters."""
 
     actor_ids: set[int] = set()
+    current_world_time = _load_world_time(session, anchor_chunk_id=anchor_chunk_id)
     present_actor_ids = _present_actor_ids_at_anchor(
         session, anchor_chunk_id=anchor_chunk_id
     )
@@ -974,12 +975,19 @@ def compose_actor_bindings(
             /* orrery:actor_bindings_ephemeral */
             SELECT DISTINCT etc.entity_id
             FROM entity_tags_current etc
+            JOIN entity_tags et ON et.id = etc.entity_tag_id
             JOIN entities e ON e.id = etc.entity_id
             WHERE etc.is_ephemeral = true
               AND e.kind = 'character'
               AND e.is_active = true
+              AND (
+                  :current_world_time IS NULL
+                  OR et.expires_at_world_time IS NULL
+                  OR et.expires_at_world_time > :current_world_time
+              )
             """
-        )
+        ),
+        {"current_world_time": current_world_time},
     ).mappings():
         actor_ids.add(row["entity_id"])
 
@@ -2076,13 +2084,17 @@ def resolve_dry_run(
             session, anchor_chunk_id=anchor_chunk_id
         )
         present_names = _load_entity_names(session, present_actor_ids)
-        moods = {
-            present_names[entity_id]: mood
+        moods = [
+            {
+                "entity_id": entity_id,
+                "name": present_names[entity_id],
+                "mood": mood,
+            }
             for entity_id in sorted(present_actor_ids)
             if entity_id in present_names
             if (mood := active_mood(state, {Slot.ACTOR: entity_id}, slot=Slot.ACTOR))
             is not None
-        }
+        ]
         if moods:
             scene_conditions["moods"] = moods
     return OrreryTickProposal(

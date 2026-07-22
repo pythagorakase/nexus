@@ -340,6 +340,8 @@ class RecordingCursor:
                 origin_place_id,
                 _categories,
                 location_classes,
+                _world_time_null_check,
+                _world_time_expiry_check,
                 excluded_place_id,
                 _type_classes,
             ) = params
@@ -1703,6 +1705,7 @@ def test_sync_malformed_home_work_from_home_anchor_fails_closed() -> None:
             cursor,
             actor_entity_id=1,
             anchor_type="home",
+            current_world_time=cursor.world_time,
         )
         is None
     )
@@ -1731,6 +1734,7 @@ async def test_async_routine_anchor_destination_resolves_work_from_home() -> Non
         conn,
         actor_entity_id=1,
         anchor_type="work",
+        current_world_time=None,
     )
 
     assert destination == 7
@@ -1755,6 +1759,7 @@ async def test_async_routine_anchor_destination_resolves_zone() -> None:
         conn,
         actor_entity_id=1,
         anchor_type="home",
+        current_world_time=None,
     )
 
     assert destination == 42
@@ -1770,6 +1775,7 @@ async def test_async_location_class_destination_resolves_place() -> None:
         conn,
         origin_place_id=99,
         location_classes=("meeting", "commerce"),
+        current_world_time=None,
     )
 
     assert destination == 42
@@ -1793,6 +1799,7 @@ async def test_async_malformed_home_work_from_home_anchor_fails_closed() -> None
         conn,
         actor_entity_id=1,
         anchor_type="home",
+        current_world_time=None,
     )
 
     assert destination is None

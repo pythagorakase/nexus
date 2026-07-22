@@ -797,6 +797,7 @@ EXTRACT_VENGEANCE = Template(
                 "world_events",
             ),
             magnitude=0.85,
+            mood_affinities={"restless": 2.0, "grim": 1.5},
             scene_pressure_stub=(
                 "{actor}'s grudge is close enough to {target}'s current scene "
                 "to become immediate pressure. Treat it as a possible threat, "
@@ -4294,6 +4295,7 @@ RECREATE = Template(
             event_type="recreation_taken",
             changed_fields=("character.current_activity",),
             magnitude=0.15,
+            mood_affinities={"elated": 1.5},
         ),
         Branch(
             label="Lose an hour to the loved thing",
@@ -5202,6 +5204,10 @@ ADVANCE_PURSUE_ROMANCE = Template(
                 "entity_tags",
             ),
             magnitude=0.40,
+            # Deliberately preemptive with NO affinity: a rebuff is a
+            # deterministic guard (the family contract recruit_ally's
+            # withdraw arm shares), never a stochastic lean — affinities
+            # are inert on preemptive arms by design.
             preemptive=True,
         ),
         Branch(
@@ -5345,6 +5351,7 @@ ADVANCE_PURSUE_ROMANCE = Template(
             ),
             magnitude=0.16,
             promotable=False,
+            mood_affinities={"elated": 1.5},
         ),
     ),
 )
@@ -5701,6 +5708,7 @@ ADVANCE_COURT_PATRON = Template(
             ),
             magnitude=0.16,
             promotable=False,
+            mood_affinities={"elated": 1.5},
         ),
     ),
 )
@@ -5876,7 +5884,6 @@ ADVANCE_SEEK_REDEMPTION = Template(
                 "entity_tags",
                 "character_relationships.relationship_type",
                 "character_relationships.emotional_valence",
-                "entity_tags",
             ),
             magnitude=0.40,
             preemptive=True,
@@ -6058,6 +6065,7 @@ ADVANCE_SEEK_REDEMPTION = Template(
             ),
             magnitude=0.16,
             promotable=False,
+            mood_affinities={"elated": 1.5},
         ),
     ),
 )
@@ -6314,6 +6322,7 @@ ADVANCE_BUILD_VENTURE = Template(
             ),
             magnitude=0.16,
             promotable=False,
+            mood_affinities={"elated": 1.5},
         ),
     ),
 )
