@@ -164,6 +164,54 @@ def test_project_plan_carries_exact_woven_seed_intent() -> None:
     assert response.project_plan[0].seed_id == "seed_001"
 
 
+@pytest.mark.parametrize(
+    ("death_ref", "issue"),
+    [
+        ("MARA", "actor_ref 'Mara' appears in death_plan"),
+        ("VALE", "character target_ref 'Vale' appears in death_plan"),
+    ],
+)
+def test_project_plan_rejects_participant_in_death_plan(
+    death_ref: str,
+    issue: str,
+) -> None:
+    vocabulary = _expansion_test_vocabulary()
+    packet = _packet(vocabulary)
+    seed_response = _seed_response(vocabulary)
+    seed_response["candidates"][0]["project_intent"] = {
+        "project_type": "court_patron",
+        "target_ref": "Vale",
+        "rationale": "The old debt can become patronage.",
+    }
+    payload = _valid_expansion(vocabulary)
+    payload["event_plan"][0]["participants"].append(
+        {"entity_ref": "Vale", "entity_kind": "character", "role": "target"}
+    )
+    payload["death_plan"] = [
+        {
+            "entity_ref": death_ref,
+            "entity_kind": "character",
+            "cause_event_ref": "retro_event_001",
+        }
+    ]
+    payload["project_plan"] = [
+        {
+            "seed_id": "seed_001",
+            "project_type": "court_patron",
+            "actor_ref": "Mara",
+            "target_ref": "Vale",
+            "rationale": "Mara courts Vale's backing.",
+        }
+    ]
+
+    with pytest.raises(RetrogradeExpansionValidationError, match=issue):
+        validate_expansion_plan(
+            payload=payload,
+            packet=packet,
+            seed_candidate_response=seed_response,
+        )
+
+
 def test_woven_seed_must_note_dropped_project_intent() -> None:
     vocabulary = _expansion_test_vocabulary()
     packet = _packet(vocabulary)

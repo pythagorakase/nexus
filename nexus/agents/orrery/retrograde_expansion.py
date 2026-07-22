@@ -958,6 +958,11 @@ def _project_plan_issues(
     issues: list[str] = []
     threads_by_seed = {thread.seed_id: thread for thread in response.thread_plan}
     projects_by_seed = {project.seed_id: project for project in response.project_plan}
+    dead_character_refs = {
+        normalize_entity_ref(death.entity_ref)
+        for death in response.death_plan
+        if death.entity_kind == "character"
+    }
     for project in response.project_plan:
         candidate = candidates_by_id.get(project.seed_id)
         if candidate is None or project.seed_id not in response.selected_seed_ids:
@@ -986,6 +991,25 @@ def _project_plan_issues(
             issues.append(
                 f"project plan seed {project.seed_id!r} changes target_ref "
                 f"from {intent.target_ref!r} to {project.target_ref!r}"
+            )
+        if normalize_entity_ref(project.actor_ref) in dead_character_refs:
+            issues.append(
+                f"project plan seed {project.seed_id!r} actor_ref "
+                f"{project.actor_ref!r} appears in death_plan"
+            )
+        if (
+            project.project_type
+            in {
+                "recruit_ally",
+                "pursue_romance",
+                "court_patron",
+                "seek_redemption",
+            }
+            and planned_target in dead_character_refs
+        ):
+            issues.append(
+                f"project plan seed {project.seed_id!r} character target_ref "
+                f"{project.target_ref!r} appears in death_plan"
             )
         thread = threads_by_seed.get(project.seed_id)
         if thread is not None and thread.status != "woven":

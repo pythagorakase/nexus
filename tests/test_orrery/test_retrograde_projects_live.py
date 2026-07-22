@@ -18,6 +18,8 @@ from nexus.agents.orrery.replay import verify_checkpoints_sync
 from nexus.agents.orrery.resolver import OrreryResolutionDraft
 from nexus.agents.orrery.retrograde_expansion import (
     RETROGRADE_EXPANSION_RESPONSE_SCHEMA_VERSION,
+    RetrogradeExpansionPlanResponse,
+    RetrogradeProjectPlan,
 )
 from nexus.agents.orrery.retrograde_orchestrator import (
     RetrogradeGenerationBundle,
@@ -26,6 +28,7 @@ from nexus.agents.orrery.retrograde_orchestrator import (
 from nexus.agents.orrery.retrograde_persistence import (
     PROJECT_FIRST_STAGES,
     PROJECT_STARTED_EVENT_TYPES,
+    _validate_project_start_dependencies,
     build_retrograde_persistence_plan,
 )
 from nexus.agents.orrery.retrograde_seed_candidates import (
@@ -374,6 +377,79 @@ def test_seek_redemption_requires_target_to_actor_negative_valence(
                 project_seeding_enabled=True,
                 project_settings=load_settings().orrery.projects,
             )
+
+
+def test_writer_rejects_project_participants_in_death_plan(
+    project_db: dict[str, Any],
+) -> None:
+    db = project_db
+    actor_id, actor_ref = db["characters"][0]
+    target_id, target_ref = db["characters"][8]
+    elsewhere_ref = db["characters"][9][1]
+    project = RetrogradeProjectPlan.model_validate(
+        {
+            "seed_id": "seed_dead_participant",
+            "project_type": "court_patron",
+            "actor_ref": actor_ref,
+            "target_ref": target_ref,
+            "rationale": "The patronage arc starts at stage one.",
+        }
+    )
+    actor = {
+        "resolution": "resolved",
+        "entity_id": actor_id,
+        "entity_ref": actor_ref,
+    }
+    target = {
+        "resolution": "resolved",
+        "entity_id": target_id,
+        "entity_ref": target_ref,
+    }
+
+    def expansion_with_death(entity_ref: str) -> RetrogradeExpansionPlanResponse:
+        return RetrogradeExpansionPlanResponse.model_validate(
+            {
+                "selected_seed_ids": [project.seed_id],
+                "death_plan": [
+                    {
+                        "entity_ref": entity_ref,
+                        "entity_kind": "character",
+                    }
+                ],
+                "project_plan": [project.model_dump(mode="json")],
+            }
+        )
+
+    with db["conn"].cursor() as cur:
+        with pytest.raises(
+            ValueError,
+            match="seed_dead_participant.*actor_ref.*death_plan",
+        ):
+            _validate_project_start_dependencies(
+                cur,
+                expansion=expansion_with_death(actor_ref.upper()),
+                project=project,
+                actor=actor,
+                target=target,
+            )
+        with pytest.raises(
+            ValueError,
+            match="seed_dead_participant.*character target_ref.*death_plan",
+        ):
+            _validate_project_start_dependencies(
+                cur,
+                expansion=expansion_with_death(target_ref.upper()),
+                project=project,
+                actor=actor,
+                target=target,
+            )
+        _validate_project_start_dependencies(
+            cur,
+            expansion=expansion_with_death(elsewhere_ref),
+            project=project,
+            actor=actor,
+            target=target,
+        )
 
 
 def test_wizard_genesis_checkpoint_carries_seeded_project_through_replay(

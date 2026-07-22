@@ -1278,6 +1278,33 @@ def _validate_project_start_dependencies(
     actor: Mapping[str, Any],
     target: Optional[Mapping[str, Any]],
 ) -> None:
+    dead_character_refs = {
+        normalize_entity_ref(death.entity_ref)
+        for death in expansion.death_plan
+        if death.entity_kind == "character"
+    }
+    # Resolver project loading joins actor entities with e.is_active = true, so
+    # a dead actor would leave an open project row invisible to gameplay.
+    if normalize_entity_ref(project.actor_ref) in dead_character_refs:
+        raise ValueError(
+            f"Retrograde project seed {project.seed_id!r} actor_ref "
+            f"{project.actor_ref!r} appears in death_plan"
+        )
+    if (
+        project.project_type
+        in {
+            "recruit_ally",
+            "pursue_romance",
+            "court_patron",
+            "seek_redemption",
+        }
+        and project.target_ref is not None
+        and normalize_entity_ref(project.target_ref) in dead_character_refs
+    ):
+        raise ValueError(
+            f"Retrograde project seed {project.seed_id!r} character target_ref "
+            f"{project.target_ref!r} appears in death_plan"
+        )
     if actor["resolution"] == "resolved":
         existing_id = _existing_open_project_id(cur, int(actor["entity_id"]))
         if existing_id is not None:
