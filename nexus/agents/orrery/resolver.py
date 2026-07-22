@@ -1488,21 +1488,11 @@ def compose_project_faction_bindings(
     )
 
 
-def _composition_setting(settings: Optional[Any], name: str, default: Any) -> Any:
-    """Read one composition setting from mapping or model-shaped config."""
-
-    if settings is None:
-        return default
-    if isinstance(settings, Mapping):
-        return settings.get(name, default)
-    return getattr(settings, name, default)
-
-
 def _roster_composition_settings(settings: Optional[Any]) -> tuple[bool, int]:
     """Return validated roster-source enablement and relationship reach."""
 
-    enabled = bool(_composition_setting(settings, "roster_source_enabled", False))
-    reach = int(_composition_setting(settings, "roster_reach", 2))
+    enabled = bool(_weather_setting(settings, "roster_source_enabled", False))
+    reach = int(_weather_setting(settings, "roster_reach", 2))
     if not 1 <= reach <= 4:
         raise ValueError("roster_reach must be between 1 and 4")
     return enabled, reach
@@ -1615,7 +1605,7 @@ def compose_actor_target_faction_routes(
         if any(template.starts_from_social_contact for template in templates_tuple)
         else ()
     )
-    hostile_enabled = _composition_setting(
+    hostile_enabled = _weather_setting(
         composition_settings, "hostile_source_enabled", False
     )
     hostile_targets = (
@@ -1786,7 +1776,7 @@ def compose_actor_target_routes(
     hostile_templates = tuple(
         template for template in templates_tuple if template.composes_from_hostility
     )
-    if hostile_templates and _composition_setting(
+    if hostile_templates and _weather_setting(
         composition_settings, "hostile_source_enabled", False
     ):
         hostile_bindings = compose_actor_target_bindings(
