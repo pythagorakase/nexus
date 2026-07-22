@@ -118,6 +118,12 @@ def build_retrograde_persistence_plan(
     project_seeding_enabled: bool = False,
     max_seeded_projects: int = 3,
     project_settings: Optional[Any] = None,
+    project_start_chunk_id: Optional[int] = None,
+    project_event_origin: str = RETROGRADE_SOURCE_KIND,
+    project_event_ref_prefix: Optional[str] = None,
+    expected_project_actor_entity_id: Optional[int] = None,
+    project_actor_allowed: bool = True,
+    project_log_context: Optional[str] = None,
 ) -> dict[str, Any]:
     """Build or apply a canonical persistence plan for a Retrograde expansion.
 
@@ -141,26 +147,40 @@ def build_retrograde_persistence_plan(
     )
     if max_seeded_projects <= 0:
         raise ValueError("max_seeded_projects must be positive")
+    if project_event_origin != RETROGRADE_SOURCE_KIND:
+        if not project_event_ref_prefix:
+            raise ValueError(
+                "Runtime Retrograde project starts require an event-ref prefix"
+            )
+        if expected_project_actor_entity_id is None:
+            raise ValueError(
+                "Runtime Retrograde project starts require an expected actor"
+            )
+    existing_prologue_id = _find_prologue_chunk_id(cur)
+    entity_index = _load_entity_index(cur)
     project_ref_decisions = (
         _arbitrate_project_refs(
             expansion,
             max_seeded_projects=max_seeded_projects,
+            entity_index=entity_index,
+            expected_actor_entity_id=expected_project_actor_entity_id,
+            expected_actor_allowed=project_actor_allowed,
         )
         if project_seeding_enabled
         else {}
     )
-    existing_prologue_id = _find_prologue_chunk_id(cur)
-    entity_index = _load_entity_index(cur)
     event_types = _load_event_types(cur)
     tag_records = _load_tag_records(cur)
     pair_tag_ids = _load_pair_tag_ids(cur)
     source_blockers = _source_kind_blockers(cur)
     world_time = _load_world_time(cur)
-    base_timestamp = (
-        _load_base_timestamp(cur)
-        if project_seeding_enabled and expansion.project_plan
-        else None
-    )
+    base_timestamp = None
+    if project_seeding_enabled and expansion.project_plan:
+        base_timestamp = (
+            _load_chunk_world_time(cur, project_start_chunk_id)
+            if project_start_chunk_id is not None
+            else _load_base_timestamp(cur)
+        )
     project_policy = coerce_project_policy(project_settings)
 
     manifest = _build_plan(
@@ -188,6 +208,10 @@ def build_retrograde_persistence_plan(
         project_ref_decisions=project_ref_decisions,
         project_policy=project_policy,
         base_timestamp=base_timestamp,
+        project_start_chunk_id=project_start_chunk_id,
+        project_event_origin=project_event_origin,
+        project_event_ref_prefix=project_event_ref_prefix,
+        project_log_context=project_log_context,
     )
     if dry_run:
         return manifest
@@ -234,6 +258,10 @@ def build_retrograde_persistence_plan(
         project_ref_decisions=project_ref_decisions,
         project_policy=project_policy,
         base_timestamp=base_timestamp,
+        project_start_chunk_id=project_start_chunk_id,
+        project_event_origin=project_event_origin,
+        project_event_ref_prefix=project_event_ref_prefix,
+        project_log_context=project_log_context,
     )
 
 
@@ -263,6 +291,10 @@ def _build_plan(
     project_ref_decisions: Mapping[str, _ProjectRefDecision],
     project_policy: ProjectPolicy,
     base_timestamp: Any,
+    project_start_chunk_id: Optional[int],
+    project_event_origin: str,
+    project_event_ref_prefix: Optional[str],
+    project_log_context: Optional[str],
 ) -> dict[str, Any]:
     counters: Counter[str] = Counter()
     reference_issues: list[dict[str, Any]] = []
@@ -368,10 +400,13 @@ def _build_plan(
         project_ref_decisions=project_ref_decisions,
         project_policy=project_policy,
         base_timestamp=base_timestamp,
-        prologue_chunk_id=prologue_chunk_id,
         entity_index=entity_index,
         creatable_refs=creatable_refs,
         event_types=event_types,
+        source_chunk_id=project_start_chunk_id or prologue_chunk_id,
+        event_origin=project_event_origin,
+        event_ref_prefix=project_event_ref_prefix,
+        log_context=project_log_context,
     )
     for project_row in project_rows:
         counters[f"projects_{project_row['status']}"] += 1
@@ -444,6 +479,7 @@ def _build_plan(
         "projects_dropped_disabled",
         "projects_dropped_duplicate_actor",
         "projects_dropped_cap",
+        "projects_dropped_foreign_actor",
         "entity_stubs_would_insert",
         "entity_stubs_inserted",
         "entity_stubs_already_present",
@@ -1014,10 +1050,13 @@ def _plan_project_rows(
     project_ref_decisions: Mapping[str, _ProjectRefDecision],
     project_policy: ProjectPolicy,
     base_timestamp: Any,
-    prologue_chunk_id: Optional[int],
     entity_index: Mapping[tuple[str, str], Sequence[_EntityRecord]],
     creatable_refs: frozenset[tuple[str, str]],
     event_types: set[str],
+    source_chunk_id: Optional[int],
+    event_origin: str,
+    event_ref_prefix: Optional[str],
+    log_context: Optional[str],
 ) -> list[dict[str, Any]]:
     """Plan or insert typed stage-one projects after relationship persistence."""
 
@@ -1027,7 +1066,8 @@ def _plan_project_rows(
         disabled_rows = []
         for project in expansion.project_plan:
             logger.warning(
-                "Retrograde project seed %s dropped: project seeding is disabled",
+                "%s project seed %s dropped: project seeding is disabled",
+                log_context or "Retrograde",
                 project.seed_id,
             )
             disabled_rows.append(
@@ -1061,6 +1101,27 @@ def _plan_project_rows(
             raise AssertionError(
                 f"Missing ref-level arbitration for project seed {project.seed_id!r}"
             )
+        if decision.status == "invalid_actor":
+            raise ValueError(
+                f"Retrograde project seed {project.seed_id!r} has unresolvable "
+                f"actor ref {project.actor_ref!r} at maturation arbitration"
+            )
+        if decision.status == "dropped_foreign_actor":
+            logger.warning(
+                "%s project seed %s dropped: actor %s resolves outside the "
+                "maturation target",
+                log_context or "Retrograde",
+                project.seed_id,
+                project.actor_ref,
+            )
+            rows.append(
+                _dropped_project_row(
+                    project,
+                    status="dropped_foreign_actor",
+                    actor=actor,
+                )
+            )
+            continue
         if decision.status == "dropped_duplicate_actor":
             logger.warning(
                 "Retrograde project seed %s dropped for actor %s; seed %s won "
@@ -1079,11 +1140,19 @@ def _plan_project_rows(
             )
             continue
         if decision.status == "dropped_cap":
-            logger.warning(
-                "Retrograde project seed %s dropped: cast-wide cap %s already met",
-                project.seed_id,
-                max_seeded_projects,
-            )
+            if log_context:
+                logger.warning(
+                    "%s project seed %s dropped: maturation accepts at most one "
+                    "project",
+                    log_context,
+                    project.seed_id,
+                )
+            else:
+                logger.warning(
+                    "Retrograde project seed %s dropped: cast-wide cap %s already met",
+                    project.seed_id,
+                    max_seeded_projects,
+                )
             rows.append(
                 _dropped_project_row(
                     project,
@@ -1165,7 +1234,7 @@ def _plan_project_rows(
             "progress": 0,
             "stall_count": 0,
             "next_eligible_at_world_time": next_eligible,
-            "source_chunk_id": prologue_chunk_id,
+            "source_chunk_id": source_chunk_id,
             "started_event_type": started_event_type,
         }
         if dry_run:
@@ -1178,9 +1247,9 @@ def _plan_project_rows(
                 }
             )
         else:
-            if prologue_chunk_id is None or actor["resolution"] != "resolved":
+            if source_chunk_id is None or actor["resolution"] != "resolved":
                 raise AssertionError(
-                    "project refs and prologue must resolve on execute"
+                    "project refs and source chunk must resolve on execute"
                 )
             if target is not None and target["resolution"] != "resolved":
                 raise AssertionError("project target must resolve on execute")
@@ -1191,7 +1260,7 @@ def _plan_project_rows(
                 target=target,
                 stage=PROJECT_FIRST_STAGES[project.project_type],
                 next_eligible=next_eligible,
-                prologue_chunk_id=prologue_chunk_id,
+                source_chunk_id=source_chunk_id,
             )
             started_event_id = _insert_project_started_event(
                 cur,
@@ -1199,7 +1268,14 @@ def _plan_project_rows(
                 actor=actor,
                 target=target,
                 event_type=started_event_type,
-                prologue_chunk_id=prologue_chunk_id,
+                source_chunk_id=source_chunk_id,
+                event_origin=event_origin,
+                event_ref=(
+                    f"{event_ref_prefix}_project_{project.seed_id}"
+                    if event_ref_prefix
+                    else None
+                ),
+                next_eligible=next_eligible,
             )
             rows.append(
                 {
@@ -1218,6 +1294,9 @@ def _arbitrate_project_refs(
     expansion: RetrogradeExpansionPlanResponse,
     *,
     max_seeded_projects: int,
+    entity_index: Optional[Mapping[tuple[str, str], Sequence[_EntityRecord]]] = None,
+    expected_actor_entity_id: Optional[int] = None,
+    expected_actor_allowed: bool = True,
 ) -> dict[str, _ProjectRefDecision]:
     """Choose project seeds by normalized actor ref, then cast-wide cap."""
 
@@ -1225,6 +1304,32 @@ def _arbitrate_project_refs(
     accepted_by_actor_ref: dict[str, str] = {}
     accepted_count = 0
     for project in expansion.project_plan:
+        if expected_actor_entity_id is not None:
+            if not expected_actor_allowed:
+                decisions[project.seed_id] = _ProjectRefDecision(
+                    status="dropped_foreign_actor"
+                )
+                continue
+            if entity_index is None:
+                raise AssertionError("maturation arbitration requires entity index")
+            actor = _resolve_entity(
+                project.actor_ref,
+                "character",
+                entity_index,
+                role="project_actor",
+                creatable_refs=frozenset(),
+            )
+            if actor["resolution"] != "resolved":
+                decisions[project.seed_id] = _ProjectRefDecision(status="invalid_actor")
+                continue
+            if int(actor["entity_id"]) != expected_actor_entity_id:
+                decisions[project.seed_id] = _ProjectRefDecision(
+                    status="dropped_foreign_actor"
+                )
+                continue
+            if accepted_count >= max_seeded_projects:
+                decisions[project.seed_id] = _ProjectRefDecision(status="dropped_cap")
+                continue
         actor_key = normalize_entity_ref(project.actor_ref)
         winning_seed = accepted_by_actor_ref.get(actor_key)
         if winning_seed is not None:
@@ -1398,7 +1503,7 @@ def _insert_seeded_project(
     target: Optional[Mapping[str, Any]],
     stage: str,
     next_eligible: Any,
-    prologue_chunk_id: int,
+    source_chunk_id: int,
 ) -> int:
     target_place_id = target.get("place_id") if target else None
     target_character_entity_id = (
@@ -1424,7 +1529,7 @@ def _insert_seeded_project(
             target_place_id,
             target_character_entity_id,
             next_eligible,
-            prologue_chunk_id,
+            source_chunk_id,
         ),
     )
     return int(_row_value(cur.fetchone(), "id", 0))
@@ -1437,7 +1542,10 @@ def _insert_project_started_event(
     actor: Mapping[str, Any],
     target: Optional[Mapping[str, Any]],
     event_type: str,
-    prologue_chunk_id: int,
+    source_chunk_id: int,
+    event_origin: str,
+    event_ref: Optional[str],
+    next_eligible: Any,
 ) -> int:
     target_character_entity_id = (
         target.get("entity_id")
@@ -1455,6 +1563,29 @@ def _insert_project_started_event(
         "actor": project.actor_ref,
         "target": project.target_ref,
     }
+    if event_origin != RETROGRADE_SOURCE_KIND:
+        payload.update(
+            {
+                "source": event_origin,
+                "retrograde_event_ref": event_ref,
+                "applied": {
+                    "project_type": project.project_type,
+                    "status": "active",
+                    "stage": PROJECT_FIRST_STAGES[project.project_type],
+                    "target_place_id": location_id,
+                    "target_character_entity_id": target_character_entity_id,
+                    "target_faction_entity_id": None,
+                    "progress": 0.0,
+                    "stall_count": 0,
+                    "next_eligible_at_world_time": next_eligible.isoformat(),
+                    "source_chunk_id": source_chunk_id,
+                },
+            }
+        )
+    # Migration 060 registers only the canonical ``retrograde`` enum label.
+    # Runtime maturation is therefore distinguished by the applied payload's
+    # source plus namespaced event ref; adding a new enum label would require
+    # the migration/catalog change that Stage B explicitly excludes.
     cur.execute(
         """
         /* orrery:retrograde:insert_project_started_event */
@@ -1468,7 +1599,7 @@ def _insert_project_started_event(
         """,
         (
             event_type,
-            prologue_chunk_id,
+            source_chunk_id,
             actor["entity_id"],
             target_character_entity_id,
             location_id,
@@ -1835,8 +1966,13 @@ def _load_persisted_retrograde_event_sources(cur: Any) -> list[dict[str, Any]]:
         FROM world_events AS we
         LEFT JOIN retrograde_summaries AS rs ON rs.world_event_id = we.id
         WHERE we.source = 'retrograde'::event_source_kind
+          -- Project-start events are mechanical projection provenance, not
+          -- generated history prose. Wizard and maturation starts share this
+          -- exclusion; neither carries canonical summary/chronology fields.
+          AND we.event_type <> ALL(%s)
         ORDER BY we.id
-        """
+        """,
+        (list(PROJECT_STARTED_EVENT_TYPES.values()),),
     )
     sources = []
     for row in cur.fetchall():
@@ -2491,6 +2627,22 @@ def _load_base_timestamp(cur: Any) -> Any:
     if row is None:
         return None
     return _row_value(row, "base_timestamp", 0)
+
+
+def _load_chunk_world_time(cur: Any, chunk_id: int) -> Any:
+    """Load the accepted story time that anchors a runtime project start."""
+
+    cur.execute(
+        """
+        /* orrery:retrograde:project_start_world_time */
+        SELECT world_time FROM chunk_metadata WHERE chunk_id = %s
+        """,
+        (chunk_id,),
+    )
+    row = cur.fetchone()
+    if row is None or _row_value(row, "world_time", 0) is None:
+        raise ValueError(f"Retrograde project start chunk {chunk_id} has no world_time")
+    return _row_value(row, "world_time", 0)
 
 
 def _plan_entity_stubs(

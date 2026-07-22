@@ -360,6 +360,12 @@ def test_runtime_maturation_packet_sizes_graph_from_its_own_budget() -> None:
     )
     request = packet["seed_generation_request"]
     assert request["budget"]["generate_candidates"] == cfg.generate_candidates
+    assert request["project_intent_policy"]["rarity"] == (
+        "The maturation target may propose at most one project."
+    )
+    assert "Test Subject" in request["project_intent_policy"]["actor_rule"]
+    assert "AT MOST ONE project" in packet["seed_generation_prompt"]
+    assert "MUST be the maturation target" in packet["seed_generation_prompt"]
     edges = request["candidate_graph"]["dangling_edges"]
     expected_max = max(2, ceil(cfg.generate_candidates * 1.5))
     assert len(edges) <= expected_max

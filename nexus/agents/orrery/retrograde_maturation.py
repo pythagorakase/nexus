@@ -750,25 +750,19 @@ def _mature_one(
         )
         return manifest
 
-    from nexus.agents.orrery.retrograde_persistence import (
-        build_retrograde_persistence_plan,
-    )
-
     persistence_started = time.monotonic()
     with conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            persistence = build_retrograde_persistence_plan(
+            persistence = _persist_maturation_expansion(
                 cur,
                 packet=packet,
-                seed_candidate_response=seed_response,
-                expansion_plan_payload=expansion_payload,
+                seed_response=seed_response,
+                expansion_payload=expansion_payload,
+                row=row,
                 slot=_slot_int(slot, row.get("slot")),
                 dbname=dbname,
-                dry_run=False,
-                create_missing_entities=True,
                 summaries_enabled=retrieval.summaries_enabled,
-                recorded_at_chunk_id=int(row["requesting_chunk_id"]),
-                epistemics_settings=settings.orrery.epistemics,
+                settings=settings,
             )
             _apply_maturation_coordinates(
                 cur,
@@ -991,6 +985,19 @@ def build_runtime_maturation_packet(
             1, round(cfg.generate_candidates / cfg.select_target)
         ),
     }
+    request["project_intent_policy"] = {
+        "optional": True,
+        "rarity": "The maturation target may propose at most one project.",
+        "actor_rule": (
+            f"actor_ref must name the maturation target exactly: "
+            f"{row['entity_name']}"
+        ),
+        "target_rule": (
+            "Use the existing per-type Retrograde target shapes. COURT_PATRON "
+            "must target a character; faction patronage is deliberately not "
+            "seeded here."
+        ),
+    }
     request["prompt_sections"] = list(request["prompt_sections"]) + [
         {
             "heading": "Maturation directive",
@@ -1007,6 +1014,11 @@ def build_runtime_maturation_packet(
                 (
                     "Implied entities get minimum viable mechanical weight "
                     "only; never recursive histories."
+                ),
+                (
+                    "The maturation target may propose AT MOST ONE project. "
+                    "Its actor_ref MUST be the maturation target; no other "
+                    "entity may receive a runtime-maturation project."
                 ),
             ],
         }
@@ -1031,6 +1043,52 @@ def build_runtime_maturation_packet(
         "seed_generation_request": request,
         "seed_generation_prompt": prompt,
     }
+
+
+def _persist_maturation_expansion(
+    cur: Any,
+    *,
+    packet: Mapping[str, Any],
+    seed_response: Mapping[str, Any],
+    expansion_payload: Mapping[str, Any],
+    row: Mapping[str, Any],
+    slot: int,
+    dbname: str,
+    settings: Settings,
+    summaries_enabled: bool,
+) -> dict[str, Any]:
+    """Apply one maturation expansion through the shared Retrograde writer."""
+
+    if settings.orrery is None:
+        raise ValueError("settings.orrery is required for Retrograde maturation")
+    from nexus.agents.orrery.retrograde_persistence import (
+        build_retrograde_persistence_plan,
+    )
+
+    return build_retrograde_persistence_plan(
+        cur,
+        packet=packet,
+        seed_candidate_response=seed_response,
+        expansion_plan_payload=expansion_payload,
+        slot=slot,
+        dbname=dbname,
+        dry_run=False,
+        create_missing_entities=True,
+        summaries_enabled=summaries_enabled,
+        recorded_at_chunk_id=int(row["requesting_chunk_id"]),
+        epistemics_settings=settings.orrery.epistemics,
+        project_seeding_enabled=settings.orrery.retrograde.projects.enabled,
+        max_seeded_projects=1,
+        project_settings=settings.orrery.projects,
+        project_start_chunk_id=int(row["requesting_chunk_id"]),
+        project_event_origin="maturation",
+        project_event_ref_prefix=(
+            f"{MATURATION_EVENT_REF_PREFIX}_{int(row['job_id'])}"
+        ),
+        expected_project_actor_entity_id=int(row["entity_id"]),
+        project_actor_allowed=(row.get("entity_kind", "character") == "character"),
+        project_log_context=f"Maturation job {int(row['job_id'])}",
+    )
 
 
 def namespace_expansion_event_refs(
