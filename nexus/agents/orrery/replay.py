@@ -533,6 +533,14 @@ class _Replayer:
             project.setdefault("target_faction_entity_id", None)
 
         born_entities = self._seed_window_births(characters, places, result)
+        character_entities = {
+            row["entity_id"]
+            for row in characters.values()
+            if row.get("entity_id") is not None
+        }
+        _, made_applicable_at = self._need_applicability_transitions(
+            character_entities, base_chunk, base_state
+        )
 
         if base_chunk < self.target_chunk_id:
             for chunk_id in self._window_chunks(base_chunk):
@@ -545,6 +553,7 @@ class _Replayer:
                         travel,
                         projects,
                         born_entities,
+                        made_applicable_at,
                         result,
                     )
                 self._apply_maturation_project_starts(
@@ -1102,6 +1111,7 @@ class _Replayer:
         travel: dict[int, dict[str, Any]],
         projects: dict[Any, dict[str, Any]],
         born_entities: set[int],
+        made_applicable_at: dict[tuple[int, str], int],
         result: ReplayResult,
     ) -> None:
         self.cur.execute(
@@ -1145,6 +1155,7 @@ class _Replayer:
                     world_time,
                     needs,
                     actor_entity_id in born_entities,
+                    made_applicable_at,
                     result,
                 )
             for project_key in (
@@ -1484,7 +1495,8 @@ class _Replayer:
         raw_payload: Any,
         world_time: Optional[datetime],
         needs: dict[tuple[int, str], dict[str, Any]],
-        applicability_initialized: bool,
+        born_in_window: bool,
+        made_applicable_at: dict[tuple[int, str], int],
         result: ReplayResult,
     ) -> None:
         payload = _coerce_need_payload(raw_payload)
@@ -1492,6 +1504,10 @@ class _Replayer:
         key = (actor_entity_id, need_type)
         row_key = f"{actor_entity_id}:{need_type}"
         if key not in needs:
+            activation_chunk = made_applicable_at.get(key)
+            tag_initialized = (
+                activation_chunk is not None and activation_chunk <= chunk_id
+            )
             needs[key] = {
                 "character_entity_id": actor_entity_id,
                 "need_type": need_type,
@@ -1499,16 +1515,35 @@ class _Replayer:
                 "last_evaluated_at": _isoformat(world_time),
                 "last_evaluated_chunk_id": None,
                 "last_fulfilled_at": None,
-                # Production's character INSERT trigger creates applicable
-                # need rows before any later resolution can fulfill them.
-                # Window-born characters are seeded without those un-ledgered
-                # rows, so mirror the trigger's fresh-row marker here.
+                # Production's character INSERT and tag-change triggers create
+                # applicable need rows before a later resolution can fulfill
+                # them. Replay has neither un-ledgered row, so mirror the
+                # trigger's fresh-row marker for proven initializations only.
                 "metadata": (
                     {"synced_by": "need_applicability"}
-                    if applicability_initialized
+                    if born_in_window or tag_initialized
                     else {}
                 ),
             }
+            if (
+                tag_initialized
+                and activation_chunk is not None
+                and activation_chunk < chunk_id
+            ):
+                # The tag trigger anchored the fresh row to MAX(world_time)
+                # at its un-ledgered firing instant. Static replay cannot know
+                # which future chunk_metadata rows existed at that instant,
+                # so the debt accrued before this fulfillment is unknowable.
+                result.unreproducible.add(
+                    ("character_need_states", row_key, "debt_score")
+                )
+                result.add_note(
+                    "character_need_states",
+                    f"tag applicability initialized {row_key} before chunk "
+                    f"{chunk_id}; pre-fulfillment debt accrual is "
+                    "unreproducible",
+                    approximate=True,
+                )
         row = needs[key]
         last_evaluated = row.get("last_evaluated_at")
         if isinstance(last_evaluated, str):
@@ -2028,7 +2063,7 @@ class _Replayer:
                 (list(tag_ids),),
             )
             tag_names = dict(self.cur.fetchall())
-        went_inapplicable = self._needs_that_toggled_inapplicable(
+        went_inapplicable, _ = self._need_applicability_transitions(
             affected_entities & character_entities, base_chunk, base_state
         )
 
@@ -2064,38 +2099,39 @@ class _Replayer:
                     result.unreproducible.add(
                         ("character_need_states", row_key, "last_evaluated_at")
                     )
-                elif need in applicable and key in needs and key in went_inapplicable:
-                    # Applicability toggled off then back on inside the
-                    # window: production deleted the row and re-inserted a
-                    # FRESH one; the checkpoint-inherited contents are stale.
-                    fulfilled_after = (
-                        needs[key].get("last_evaluated_chunk_id") or 0
-                    ) > base_chunk
-                    needs[key] = {
-                        "character_entity_id": entity_id,
-                        "need_type": need,
-                        "debt_score": 0.0,
-                        "last_evaluated_at": None,
-                        "last_evaluated_chunk_id": None,
-                        "last_fulfilled_at": None,
-                        "metadata": {"synced_by": "need_applicability"},
-                    }
-                    reset += 1
-                    columns = ["last_evaluated_at"]
-                    if fulfilled_after:
-                        # A need.fulfill also landed in the window; whether
-                        # it hit the pre-toggle or post-toggle row is not
-                        # reconstructable from the ledger's chunk grain.
-                        columns += [
-                            "debt_score",
-                            "last_evaluated_chunk_id",
-                            "last_fulfilled_at",
-                            "metadata",
-                        ]
-                    for column in columns:
-                        result.unreproducible.add(
-                            ("character_need_states", row_key, column)
-                        )
+                elif need in applicable and key in needs:
+                    if key in went_inapplicable:
+                        # Applicability toggled off then back on inside the
+                        # window: production deleted the row and re-inserted a
+                        # FRESH one; the checkpoint-inherited contents are stale.
+                        fulfilled_after = (
+                            needs[key].get("last_evaluated_chunk_id") or 0
+                        ) > base_chunk
+                        needs[key] = {
+                            "character_entity_id": entity_id,
+                            "need_type": need,
+                            "debt_score": 0.0,
+                            "last_evaluated_at": None,
+                            "last_evaluated_chunk_id": None,
+                            "last_fulfilled_at": None,
+                            "metadata": {"synced_by": "need_applicability"},
+                        }
+                        reset += 1
+                        columns = ["last_evaluated_at"]
+                        if fulfilled_after:
+                            # A need.fulfill also landed in the window; whether
+                            # it hit the pre-toggle or post-toggle row is not
+                            # reconstructable from the ledger's chunk grain.
+                            columns += [
+                                "debt_score",
+                                "last_evaluated_chunk_id",
+                                "last_fulfilled_at",
+                                "metadata",
+                            ]
+                        for column in columns:
+                            result.unreproducible.add(
+                                ("character_need_states", row_key, column)
+                            )
                 elif need not in applicable and key in needs:
                     del needs[key]
                     deleted += 1
@@ -2120,20 +2156,21 @@ class _Replayer:
                 approximate=False,
             )
 
-    def _needs_that_toggled_inapplicable(
+    def _need_applicability_transitions(
         self,
         entities: set[int],
         base_chunk: int,
         base_state: dict[str, Any],
-    ) -> set[tuple[int, str]]:
-        """(entity, need) pairs whose applicability went FALSE at some point
-        in the window, per a chronological walk of chunk-keyed immunity-tag
-        bestowals and clearances. An immunity tag both bestowed and cleared
-        in the SAME chunk counts as a toggle (the trigger fires per
-        statement; intra-chunk order is not reconstructable)."""
+    ) -> tuple[set[tuple[int, str]], dict[tuple[int, str], int]]:
+        """Return false transitions and first later applicability chunks.
+
+        The chronological walk uses chunk-keyed immunity-tag bestowals and
+        clearances. An immunity tag both bestowed and cleared in the SAME
+        chunk counts as a toggle because the trigger fires per statement.
+        """
 
         if not entities:
-            return set()
+            return set(), {}
         all_immunity = frozenset().union(*NEED_IMMUNITY_TAGS.values())
         self.cur.execute(
             "SELECT id, tag FROM tags WHERE tag = ANY(%s)",
@@ -2141,7 +2178,7 @@ class _Replayer:
         )
         immunity_by_id: dict[int, str] = dict(self.cur.fetchall())
         if not immunity_by_id:
-            return set()
+            return set(), {}
 
         current: dict[int, set[str]] = {entity: set() for entity in entities}
         for row in base_state["entity_tags"]:
@@ -2187,19 +2224,32 @@ class _Replayer:
         for entity_id, tag_id, chunk in self.cur.fetchall():
             _event(entity_id, chunk)[1].add(immunity_by_id[tag_id])
 
-        toggled: set[tuple[int, str]] = set()
-        for (entity_id, _chunk), (added, cleared) in sorted(
+        went_inapplicable: set[tuple[int, str]] = set()
+        made_applicable_at: dict[tuple[int, str], int] = {}
+        for (entity_id, chunk), (added, cleared) in sorted(
             events.items(), key=lambda item: (item[0][0], item[0][1])
         ):
             transient = added & cleared
             state = current[entity_id]
+            applicable_before = {
+                need: need_applies_to_tags(need, state) for need in NEED_TYPES
+            }
             state |= added
             state -= cleared
             for need in NEED_TYPES:
                 immunity = NEED_IMMUNITY_TAGS[need]
-                if immunity & state or immunity & transient:
-                    toggled.add((entity_id, need))
-        return toggled
+                applicable_after = need_applies_to_tags(need, state)
+                transiently_inapplicable = bool(immunity & transient)
+                key = (entity_id, need)
+                if applicable_before[need] and (
+                    not applicable_after or transiently_inapplicable
+                ):
+                    went_inapplicable.add(key)
+                if applicable_after and (
+                    not applicable_before[need] or transiently_inapplicable
+                ):
+                    made_applicable_at.setdefault(key, chunk)
+        return went_inapplicable, made_applicable_at
 
     # -- relationship unwind ---------------------------------------------------
 
