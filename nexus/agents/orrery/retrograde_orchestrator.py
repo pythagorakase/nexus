@@ -13,6 +13,8 @@ new-story wizard fires at the ready -> narrative transition:
    as the wizard transition writes, so a blocked persistence rolls back the
    whole world and the slot stays in wizard-ready for a loud, retryable
    failure -- a history-less world can never silently enter narrative mode.
+   Its final in-transaction write is a genesis checkpoint at the synthetic
+   prologue, making wizard-born projection rows an honest replay base.
 3. ``embed_retrograde_history_summaries`` runs the summary embedding lifecycle
    for the new rows after the transaction commits.
 4. ``build_wizard_history_surface`` projects the persistence manifest into
@@ -262,6 +264,9 @@ def persist_retrograde_history(
         summaries_enabled=retrieval_settings.summaries_enabled,
         recorded_at_chunk_id=recorded_at_chunk_id,
         epistemics_settings=epistemics_settings,
+        project_seeding_enabled=settings.orrery.retrograde.projects.enabled,
+        max_seeded_projects=(settings.orrery.retrograde.projects.max_seeded_projects),
+        project_settings=settings.orrery.projects,
     )
 
     blockers = list(dry_manifest["execute_blockers"])
@@ -308,7 +313,35 @@ def persist_retrograde_history(
         summaries_enabled=retrieval_settings.summaries_enabled,
         recorded_at_chunk_id=recorded_at_chunk_id,
         epistemics_settings=epistemics_settings,
+        project_seeding_enabled=settings.orrery.retrograde.projects.enabled,
+        max_seeded_projects=(settings.orrery.retrograde.projects.max_seeded_projects),
+        project_settings=settings.orrery.projects,
     )
+    from nexus.agents.orrery.reconstruction import capture_state_checkpoint_sync
+
+    prologue_chunk_id = manifest["prologue_anchor"]["chunk_id"]
+    if prologue_chunk_id is None:
+        raise RuntimeError("Retrograde persistence produced no prologue chunk")
+    checkpoint_id = capture_state_checkpoint_sync(
+        cur,
+        chunk_id=int(prologue_chunk_id),
+        label="genesis",
+    )
+    if checkpoint_id is None:
+        cur.execute(
+            "SELECT id FROM state_checkpoints "
+            "WHERE chunk_id = %s AND label = 'genesis'",
+            (prologue_chunk_id,),
+        )
+        row = cur.fetchone()
+        if row is None:
+            raise RuntimeError("Genesis checkpoint insert reported no row")
+        checkpoint_id = int(row[0] if not hasattr(row, "keys") else row["id"])
+    manifest["genesis_checkpoint"] = {
+        "id": checkpoint_id,
+        "chunk_id": int(prologue_chunk_id),
+        "label": "genesis",
+    }
     logger.info(
         "Retrograde persistence executed for slot %s: %s",
         bundle.slot,
@@ -397,6 +430,8 @@ def build_wizard_history_surface(
         "woven_seeds": sum(1 for status in thread_statuses if status == "woven"),
         "deferred_seeds": sum(1 for status in thread_statuses if status == "deferred"),
         "rejected_seeds": sum(1 for status in thread_statuses if status == "rejected"),
+        "projects": counters.get("projects_inserted", 0)
+        + counters.get("projects_would_insert", 0),
     }
     return {
         "weird_level": bundle.weird.get("level"),

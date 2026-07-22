@@ -883,6 +883,12 @@ class FakeRetrogradePersistenceCursor:
             self.deactivated_entity_ids.append(entity_id)
             self.inactive_entity_ids.add(entity_id)
             self._result = []
+        elif "SELECT to_regclass" in sql:
+            self._result = [{"checkpoint_table": "backstory_secrets"}]
+        elif "jsonb_agg(to_jsonb(t))" in sql:
+            self._result = [{"state": []}]
+        elif "INSERT INTO state_checkpoints" in sql:
+            self._result = [{"id": 904}]
         else:
             raise AssertionError(f"Unexpected SQL: {sql}")
 

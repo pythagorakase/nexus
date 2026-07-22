@@ -15,6 +15,8 @@ from nexus.agents.orrery.retrograde_packet import (
     NAMED_SEED_NPCS_HEADING,
 )
 from nexus.agents.orrery.retrograde_seed_candidates import (
+    RetrogradeProjectType,
+    validate_project_target_shape,
     validate_seed_candidate_response,
 )
 from nexus.agents.orrery.retrograde_vocabulary import (
@@ -222,6 +224,43 @@ class RetrogradeExpansionDeathPlan(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
 
+class RetrogradeProjectPlan(BaseModel):
+    """One stage-one project start carried forward from a woven seed."""
+
+    seed_id: str = Field(min_length=1)
+    project_type: RetrogradeProjectType
+    actor_ref: EntityRef
+    target_ref: Optional[EntityRef] = None
+    rationale: str = Field(min_length=1, max_length=700)
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    @model_validator(mode="after")
+    def _validate_typed_target(self) -> "RetrogradeProjectPlan":
+        validate_project_target_shape(
+            project_type=self.project_type,
+            target_ref=self.target_ref,
+            context=f"project plan for seed {self.seed_id!r}",
+        )
+        return self
+
+
+class RetrogradeWireProjectPlan(BaseModel):
+    """Provider-facing twin of :class:`RetrogradeProjectPlan`."""
+
+    seed_id: str = Field(min_length=1)
+    project_type: RetrogradeProjectType
+    actor_ref: EntityRef
+    target_ref: str = Field(
+        default="",
+        max_length=ENTITY_REF_MAX_LENGTH,
+        description="Compact target ref, or an empty string when targetless.",
+    )
+    rationale: str = Field(min_length=1, max_length=700)
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+
 class RetrogradeExpansionThreadPlan(BaseModel):
     """Accounting for one selected seed after R6 weaving."""
 
@@ -334,6 +373,7 @@ class RetrogradeExpansionWireResponse(BaseModel):
     mechanical_plan: list[RetrogradeExpansionWireMechanicPlan] = Field(
         default_factory=list
     )
+    project_plan: list[RetrogradeWireProjectPlan] = Field(default_factory=list)
     thread_plan: list[RetrogradeExpansionWireThreadPlan] = Field(default_factory=list)
     coverage_notes: list[str] = Field(default_factory=list)
     coordinates: Optional[Coordinates] = Field(
@@ -368,6 +408,7 @@ class RetrogradeExpansionPlanResponse(BaseModel):
         default_factory=list
     )
     death_plan: list[RetrogradeExpansionDeathPlan] = Field(default_factory=list)
+    project_plan: list[RetrogradeProjectPlan] = Field(default_factory=list)
     thread_plan: list[RetrogradeExpansionThreadPlan] = Field(default_factory=list)
     coverage_notes: list[str] = Field(default_factory=list)
     coordinates: Optional[Coordinates] = Field(
@@ -409,6 +450,14 @@ class RetrogradeExpansionPlanResponse(BaseModel):
             raise ValueError(
                 f"Duplicate death_plan entities: {sorted(duplicate_deaths)}"
             )
+        duplicate_project_seeds = _duplicates(
+            [project.seed_id for project in self.project_plan]
+        )
+        if duplicate_project_seeds:
+            raise ValueError(
+                "Duplicate project_plan seed_id values: "
+                f"{sorted(duplicate_project_seeds)}"
+            )
         return self
 
 
@@ -449,6 +498,13 @@ def _expand_wire_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
 
     data = dict(payload)
     if "mechanical_plan" not in data:
+        data["project_plan"] = [
+            {
+                **dict(project),
+                "target_ref": _none_if_empty(project.get("target_ref")),
+            }
+            for project in data.get("project_plan") or []
+        ]
         return data
 
     event_plan = []
@@ -516,12 +572,19 @@ def _expand_wire_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
         row["note"] = _none_if_empty(row.get("note"))
         thread_plan.append(row)
 
+    project_plan = []
+    for project in data.get("project_plan") or []:
+        row = dict(project)
+        row["target_ref"] = _none_if_empty(row.get("target_ref"))
+        project_plan.append(row)
+
     return {
         "event_plan": event_plan,
         "entity_tag_plan": entity_tag_plan,
         "pair_tag_plan": pair_tag_plan,
         "relationship_plan": relationship_plan,
         "death_plan": death_plan,
+        "project_plan": project_plan,
         "thread_plan": thread_plan,
         "coverage_notes": data.get("coverage_notes") or [],
         "coordinates": data.get("coordinates"),
@@ -608,6 +671,9 @@ def render_expansion_prompt(
         "invalid.\n"
         "If a mechanical plan cannot satisfy the hard validation rules, omit "
         "that mechanical item or reject/defer the seed.\n"
+        "For each woven seed with project_intent, carry that exact intent into "
+        "project_plan with a character actor_ref. If you drop the intent, omit "
+        "the project row and explain the drop in that seed's thread note.\n"
         "Return JSON only.\n\n"
         "RETROGRADE_EXPANSION_REQUEST:\n"
         f"{json.dumps(prompt_payload, indent=2, sort_keys=True)}"
@@ -655,6 +721,9 @@ def validate_expansion_plan(
         selected_seed_ids=selected_seed_ids,
         selected_junctions=selected_junctions,
         vocabulary=vocabulary,
+        candidates_by_id={
+            candidate.seed_id: candidate for candidate in candidates.candidates
+        },
         known_entity_keys=_packet_known_entity_keys(packet),
         max_new_entity_stubs=_budget_entity_stub_cap(seed_generation_request),
     )
@@ -746,6 +815,7 @@ def _expansion_contract_issues(
     selected_seed_ids: set[str],
     selected_junctions: list[dict[str, Any]],
     vocabulary: SeedEligibleVocabulary,
+    candidates_by_id: Mapping[str, Any],
     known_entity_keys: Optional[set[tuple[str, str]]] = None,
     max_new_entity_stubs: Optional[int] = None,
 ) -> list[str]:
@@ -843,6 +913,13 @@ def _expansion_contract_issues(
             )
         )
 
+    issues.extend(
+        _project_plan_issues(
+            response=response,
+            candidates_by_id=candidates_by_id,
+        )
+    )
+
     events_by_ref = {event.event_ref: event for event in response.event_plan}
     for death in response.death_plan:
         issues.extend(
@@ -868,6 +945,65 @@ def _expansion_contract_issues(
         )
     )
     issues.extend(_commit_readiness_issues(response.commit_readiness))
+    return issues
+
+
+def _project_plan_issues(
+    *,
+    response: RetrogradeExpansionPlanResponse,
+    candidates_by_id: Mapping[str, Any],
+) -> list[str]:
+    """Keep R6 project rows faithful to the selected seed intent."""
+
+    issues: list[str] = []
+    threads_by_seed = {thread.seed_id: thread for thread in response.thread_plan}
+    projects_by_seed = {project.seed_id: project for project in response.project_plan}
+    for project in response.project_plan:
+        candidate = candidates_by_id.get(project.seed_id)
+        if candidate is None or project.seed_id not in response.selected_seed_ids:
+            issues.append(
+                f"project plan references non-selected seed {project.seed_id!r}"
+            )
+            continue
+        intent = candidate.project_intent
+        if intent is None:
+            issues.append(
+                f"project plan seed {project.seed_id!r} has no project_intent"
+            )
+            continue
+        if project.project_type != intent.project_type:
+            issues.append(
+                f"project plan seed {project.seed_id!r} changes project_type "
+                f"from {intent.project_type!r} to {project.project_type!r}"
+            )
+        planned_target = (
+            normalize_entity_ref(project.target_ref) if project.target_ref else None
+        )
+        intended_target = (
+            normalize_entity_ref(intent.target_ref) if intent.target_ref else None
+        )
+        if planned_target != intended_target:
+            issues.append(
+                f"project plan seed {project.seed_id!r} changes target_ref "
+                f"from {intent.target_ref!r} to {project.target_ref!r}"
+            )
+        thread = threads_by_seed.get(project.seed_id)
+        if thread is not None and thread.status != "woven":
+            issues.append(
+                f"project plan seed {project.seed_id!r} is {thread.status}, not woven"
+            )
+
+    for seed_id in response.selected_seed_ids:
+        candidate = candidates_by_id.get(seed_id)
+        if candidate is None or candidate.project_intent is None:
+            continue
+        thread = threads_by_seed.get(seed_id)
+        if thread is None or thread.status != "woven" or seed_id in projects_by_seed:
+            continue
+        if not thread.note:
+            issues.append(
+                f"woven seed {seed_id!r} drops project_intent without a thread note"
+            )
     return issues
 
 
@@ -927,6 +1063,13 @@ def _collect_plan_entity_keys(
         )
     for death in response.death_plan:
         keys.add((death.entity_kind, normalize_entity_ref(death.entity_ref)))
+    for project in response.project_plan:
+        keys.add(("character", normalize_entity_ref(project.actor_ref)))
+        if project.target_ref:
+            target_kind = (
+                "place" if project.project_type == "plan_relocation" else "character"
+            )
+            keys.add((target_kind, normalize_entity_ref(project.target_ref)))
     return keys
 
 
@@ -1370,6 +1513,10 @@ def _hard_validation_rules() -> list[str]:
             "rows; express faction/place pressure through events or pair tags."
         ),
         (
+            "project_plan may carry only a woven selected seed's exact "
+            "project_intent; explain any dropped woven intent in thread_plan.note."
+        ),
+        (
             "Entity refs (subject_ref, object_ref, location_ref) "
             f"are proper names of at most {ENTITY_REF_MAX_LENGTH} characters "
             "-- never sentences or descriptive phrases. New implied entities "
@@ -1385,8 +1532,16 @@ def _prompt_response_contract() -> dict[str, Any]:
         "top_level_fields": [
             "event_plan",
             "mechanical_plan",
+            "project_plan",
             "thread_plan",
             "coverage_notes",
+        ],
+        "project_plan_fields": [
+            "seed_id",
+            "project_type",
+            "actor_ref",
+            "target_ref",
+            "rationale",
         ],
         "mechanical_plan_fields": {
             "common": ["plan", "subject_ref", "subject_kind", "source_event_ref"],

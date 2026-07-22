@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import json
+import logging
 import re
 from typing import Any, Mapping, Optional, Sequence
 
@@ -22,6 +23,7 @@ from nexus.agents.orrery.retrograde_expansion import (
     RetrogradeExpansionParticipant,
     RetrogradeExpansionPlanResponse,
     RetrogradeExpansionRelationshipPlan,
+    RetrogradeProjectPlan,
     validate_expansion_plan,
 )
 from nexus.agents.orrery.retrograde_markers import (
@@ -29,7 +31,10 @@ from nexus.agents.orrery.retrograde_markers import (
 )
 from nexus.agents.orrery.retrograde_vocabulary import normalize_entity_ref
 from nexus.agents.orrery.status_family import STATUS_TAGS, level_from_status_tag
+from nexus.agents.orrery.substrate import ProjectPolicy, coerce_project_policy
 from nexus.agents.orrery.tag_writer import apply_status_pair_tag_bestowal
+
+logger = logging.getLogger(__name__)
 
 RETROGRADE_PERSISTENCE_SCHEMA_VERSION = "orrery_retrograde_persistence_plan.v1"
 RETROGRADE_SOURCE_KIND = "retrograde"
@@ -44,6 +49,22 @@ RETROGRADE_PROLOGUE_STORYTELLER_TEXT = (
 )
 EVENT_ROLE_KINDS = frozenset({"actor", "target", "observer", "beneficiary", "witness"})
 MATURATION_EVENT_REF_PATTERN = re.compile(r"^maturation_job_(?P<job_id>[1-9]\d*)_")
+PROJECT_STARTED_EVENT_TYPES = {
+    "plan_relocation": "relocation_plan_started",
+    "recruit_ally": "recruit_ally_started",
+    "build_venture": "build_venture_started",
+    "pursue_romance": "pursue_romance_started",
+    "court_patron": "court_patron_started",
+    "seek_redemption": "seek_redemption_started",
+}
+PROJECT_FIRST_STAGES = {
+    "plan_relocation": "saving",
+    "recruit_ally": "sounding_out",
+    "build_venture": "laying_groundwork",
+    "pursue_romance": "testing_waters",
+    "court_patron": "gaining_notice",
+    "seek_redemption": "owning_the_wrong",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,6 +107,9 @@ def build_retrograde_persistence_plan(
     summaries_enabled: bool = True,
     recorded_at_chunk_id: Optional[int] = None,
     epistemics_settings: Optional[Any] = None,
+    project_seeding_enabled: bool = False,
+    max_seeded_projects: int = 3,
+    project_settings: Optional[Any] = None,
 ) -> dict[str, Any]:
     """Build or apply a canonical persistence plan for a Retrograde expansion.
 
@@ -114,6 +138,14 @@ def build_retrograde_persistence_plan(
     pair_tag_ids = _load_pair_tag_ids(cur)
     source_blockers = _source_kind_blockers(cur)
     world_time = _load_world_time(cur)
+    base_timestamp = (
+        _load_base_timestamp(cur)
+        if project_seeding_enabled and expansion.project_plan
+        else None
+    )
+    project_policy = coerce_project_policy(project_settings)
+    if max_seeded_projects <= 0:
+        raise ValueError("max_seeded_projects must be positive")
 
     manifest = _build_plan(
         cur,
@@ -135,6 +167,10 @@ def build_retrograde_persistence_plan(
         recorded_at_chunk_id=recorded_at_chunk_id,
         pair_tag_source_chunk_id=recorded_at_chunk_id,
         epistemics_settings=epistemics_settings,
+        project_seeding_enabled=project_seeding_enabled,
+        max_seeded_projects=max_seeded_projects,
+        project_policy=project_policy,
+        base_timestamp=base_timestamp,
     )
     if dry_run:
         return manifest
@@ -176,6 +212,10 @@ def build_retrograde_persistence_plan(
         recorded_at_chunk_id=effective_recorded_at_chunk_id,
         pair_tag_source_chunk_id=recorded_at_chunk_id,
         epistemics_settings=epistemics_settings,
+        project_seeding_enabled=project_seeding_enabled,
+        max_seeded_projects=max_seeded_projects,
+        project_policy=project_policy,
+        base_timestamp=base_timestamp,
     )
 
 
@@ -200,6 +240,10 @@ def _build_plan(
     recorded_at_chunk_id: Optional[int],
     pair_tag_source_chunk_id: Optional[int],
     epistemics_settings: Optional[Any],
+    project_seeding_enabled: bool,
+    max_seeded_projects: int,
+    project_policy: ProjectPolicy,
+    base_timestamp: Any,
 ) -> dict[str, Any]:
     counters: Counter[str] = Counter()
     reference_issues: list[dict[str, Any]] = []
@@ -215,6 +259,7 @@ def _build_plan(
         entity_index=entity_index,
         create_missing_entities=create_missing_entities,
         inserted_stub_keys=inserted_stub_keys,
+        include_projects=project_seeding_enabled,
     )
     creatable_refs = frozenset(
         (row["entity_kind"], normalize_entity_ref(row["entity_ref"]))
@@ -292,6 +337,25 @@ def _build_plan(
         reference_issues.extend(planned.pop("_reference_issues"))
         relationship_issues.extend(planned.pop("_relationship_issues"))
 
+    # Project starts are a dedicated projection step. On execute, entity stubs
+    # and relationship rows already exist; they never pass through event/tag
+    # planning even though each accepted start emits a ledger-visible event.
+    project_rows = _plan_project_rows(
+        cur,
+        expansion=expansion,
+        dry_run=dry_run,
+        enabled=project_seeding_enabled,
+        max_seeded_projects=max_seeded_projects,
+        project_policy=project_policy,
+        base_timestamp=base_timestamp,
+        prologue_chunk_id=prologue_chunk_id,
+        entity_index=entity_index,
+        creatable_refs=creatable_refs,
+        event_types=event_types,
+    )
+    for project_row in project_rows:
+        counters[f"projects_{project_row['status']}"] += 1
+
     # Deaths plan after events so cause_world_event_id can link to freshly
     # inserted world_events rows on execute.
     death_rows = []
@@ -355,6 +419,11 @@ def _build_plan(
         "relationships_inserted",
         "relationships_already_present",
         "relationships_blocked",
+        "projects_would_insert",
+        "projects_inserted",
+        "projects_dropped_disabled",
+        "projects_dropped_duplicate_actor",
+        "projects_dropped_cap",
         "entity_stubs_would_insert",
         "entity_stubs_inserted",
         "entity_stubs_already_present",
@@ -393,6 +462,7 @@ def _build_plan(
         "entity_tag_rows": entity_tag_rows,
         "pair_tag_rows": pair_tag_rows,
         "relationship_rows": relationship_rows,
+        "project_rows": project_rows,
         "death_rows": death_rows,
         "summary_rows": summary_rows,
         "retrieval": {
@@ -912,6 +982,424 @@ def _plan_relationship_row(
         character2_id=int(object_character_id),
     )
     return {**base, "status": "inserted"}
+
+
+def _plan_project_rows(
+    cur: Any,
+    *,
+    expansion: RetrogradeExpansionPlanResponse,
+    dry_run: bool,
+    enabled: bool,
+    max_seeded_projects: int,
+    project_policy: ProjectPolicy,
+    base_timestamp: Any,
+    prologue_chunk_id: Optional[int],
+    entity_index: Mapping[tuple[str, str], Sequence[_EntityRecord]],
+    creatable_refs: frozenset[tuple[str, str]],
+    event_types: set[str],
+) -> list[dict[str, Any]]:
+    """Plan or insert typed stage-one projects after relationship persistence."""
+
+    if not expansion.project_plan:
+        return []
+    if not enabled:
+        disabled_rows = []
+        for project in expansion.project_plan:
+            logger.warning(
+                "Retrograde project seed %s dropped: project seeding is disabled",
+                project.seed_id,
+            )
+            disabled_rows.append(
+                {
+                    **project.model_dump(mode="json"),
+                    "status": "dropped_disabled",
+                    "project_id": None,
+                    "started_event_id": None,
+                }
+            )
+        return disabled_rows
+    if not project_policy.enabled:
+        raise ValueError(
+            "Retrograde project seeding requires configured [orrery.projects] policy"
+        )
+    if base_timestamp is None:
+        raise ValueError("Retrograde project seeding requires global base_timestamp")
+
+    rows: list[dict[str, Any]] = []
+    accepted_by_actor: dict[tuple[str, Any], str] = {}
+    accepted_count = 0
+    for project in expansion.project_plan:
+        actor = _resolve_entity(
+            project.actor_ref,
+            "character",
+            entity_index,
+            role="project_actor",
+            creatable_refs=creatable_refs,
+        )
+        _require_project_resolution(project, actor, role="actor")
+        actor_key: tuple[str, Any]
+        if actor["resolution"] == "resolved":
+            actor_key = ("entity_id", int(actor["entity_id"]))
+        else:
+            actor_key = ("ref", normalize_entity_ref(project.actor_ref))
+        winning_seed = accepted_by_actor.get(actor_key)
+        if winning_seed is not None:
+            logger.warning(
+                "Retrograde project seed %s dropped for actor %s; seed %s won "
+                "first in R6 project_plan order",
+                project.seed_id,
+                project.actor_ref,
+                winning_seed,
+            )
+            rows.append(
+                _dropped_project_row(
+                    project,
+                    status="dropped_duplicate_actor",
+                    actor=actor,
+                    winning_seed_id=winning_seed,
+                )
+            )
+            continue
+        accepted_by_actor[actor_key] = project.seed_id
+        if accepted_count >= max_seeded_projects:
+            logger.warning(
+                "Retrograde project seed %s dropped: cast-wide cap %s already met",
+                project.seed_id,
+                max_seeded_projects,
+            )
+            rows.append(
+                _dropped_project_row(
+                    project,
+                    status="dropped_cap",
+                    actor=actor,
+                )
+            )
+            continue
+
+        target_kind = (
+            "place" if project.project_type == "plan_relocation" else "character"
+        )
+        target = None
+        if project.target_ref is not None:
+            target = _resolve_entity(
+                project.target_ref,
+                target_kind,
+                entity_index,
+                role="project_target",
+                creatable_refs=creatable_refs,
+            )
+            _require_project_resolution(project, target, role="target")
+        if (
+            target is not None
+            and actor.get("resolution") == "resolved"
+            and target.get("resolution") == "resolved"
+            and actor.get("entity_id") == target.get("entity_id")
+        ):
+            raise ValueError(
+                f"Retrograde project seed {project.seed_id!r} targets its actor"
+            )
+
+        _validate_project_start_dependencies(
+            cur,
+            expansion=expansion,
+            project=project,
+            actor=actor,
+            target=target,
+        )
+        started_event_type = PROJECT_STARTED_EVENT_TYPES[project.project_type]
+        if started_event_type not in event_types:
+            raise ValueError(
+                f"Retrograde project seed {project.seed_id!r} requires missing "
+                f"event type {started_event_type!r}"
+            )
+        next_eligible = base_timestamp + timedelta(
+            hours=project_policy.advance_interval_hours
+        )
+        base = {
+            **project.model_dump(mode="json"),
+            "actor": actor,
+            "target": target,
+            "character_entity_id": actor.get("entity_id"),
+            "target_place_id": target.get("place_id") if target else None,
+            "target_character_entity_id": (
+                target.get("entity_id")
+                if target_kind == "character" and target
+                else None
+            ),
+            "target_faction_entity_id": None,
+            "stage": PROJECT_FIRST_STAGES[project.project_type],
+            "progress": 0,
+            "stall_count": 0,
+            "next_eligible_at_world_time": next_eligible,
+            "source_chunk_id": prologue_chunk_id,
+            "started_event_type": started_event_type,
+        }
+        if dry_run:
+            rows.append(
+                {
+                    **base,
+                    "status": "would_insert",
+                    "project_id": None,
+                    "started_event_id": None,
+                }
+            )
+        else:
+            if prologue_chunk_id is None or actor["resolution"] != "resolved":
+                raise AssertionError(
+                    "project refs and prologue must resolve on execute"
+                )
+            if target is not None and target["resolution"] != "resolved":
+                raise AssertionError("project target must resolve on execute")
+            project_id = _insert_seeded_project(
+                cur,
+                project=project,
+                actor=actor,
+                target=target,
+                stage=PROJECT_FIRST_STAGES[project.project_type],
+                next_eligible=next_eligible,
+                prologue_chunk_id=prologue_chunk_id,
+            )
+            started_event_id = _insert_project_started_event(
+                cur,
+                project=project,
+                actor=actor,
+                target=target,
+                event_type=started_event_type,
+                prologue_chunk_id=prologue_chunk_id,
+            )
+            rows.append(
+                {
+                    **base,
+                    "status": "inserted",
+                    "project_id": project_id,
+                    "started_event_id": started_event_id,
+                }
+            )
+        accepted_count += 1
+    return rows
+
+
+def _dropped_project_row(
+    project: RetrogradeProjectPlan,
+    *,
+    status: str,
+    actor: Mapping[str, Any],
+    winning_seed_id: Optional[str] = None,
+) -> dict[str, Any]:
+    return {
+        **project.model_dump(mode="json"),
+        "status": status,
+        "actor": dict(actor),
+        "winning_seed_id": winning_seed_id,
+        "project_id": None,
+        "started_event_id": None,
+    }
+
+
+def _require_project_resolution(
+    project: RetrogradeProjectPlan,
+    resolved: Mapping[str, Any],
+    *,
+    role: str,
+) -> None:
+    if resolved["resolution"] not in {"resolved", "stub_pending"}:
+        raise ValueError(
+            f"Retrograde project seed {project.seed_id!r} has unresolvable "
+            f"{role} ref {resolved['entity_ref']!r}: {resolved['reason']}"
+        )
+
+
+def _validate_project_start_dependencies(
+    cur: Any,
+    *,
+    expansion: RetrogradeExpansionPlanResponse,
+    project: RetrogradeProjectPlan,
+    actor: Mapping[str, Any],
+    target: Optional[Mapping[str, Any]],
+) -> None:
+    if actor["resolution"] == "resolved":
+        existing_id = _existing_open_project_id(cur, int(actor["entity_id"]))
+        if existing_id is not None:
+            raise ValueError(
+                f"Retrograde project seed {project.seed_id!r} actor "
+                f"{project.actor_ref!r} already has open project {existing_id}"
+            )
+    if project.project_type != "seek_redemption":
+        return
+    if target is None:
+        raise AssertionError("seek_redemption target shape was not validated")
+    if not _has_redemption_wrong(
+        cur,
+        expansion=expansion,
+        actor=actor,
+        target=target,
+    ):
+        raise ValueError(
+            f"Retrograde project seed {project.seed_id!r} seek_redemption "
+            "requires a TARGET->ACTOR wary-or-worse relationship"
+        )
+
+
+def _existing_open_project_id(cur: Any, actor_entity_id: int) -> Optional[int]:
+    cur.execute(
+        """
+        /* orrery:retrograde:existing_open_project */
+        SELECT id FROM character_project_states
+        WHERE character_entity_id = %s
+          AND status IN ('active', 'paused', 'stalled')
+        ORDER BY id LIMIT 1
+        """,
+        (actor_entity_id,),
+    )
+    row = cur.fetchone()
+    return int(_row_value(row, "id", 0)) if row is not None else None
+
+
+def _has_redemption_wrong(
+    cur: Any,
+    *,
+    expansion: RetrogradeExpansionPlanResponse,
+    actor: Mapping[str, Any],
+    target: Mapping[str, Any],
+) -> bool:
+    if actor["resolution"] == "resolved" and target["resolution"] == "resolved":
+        cur.execute(
+            """
+            /* orrery:retrograde:redemption_relationship */
+            SELECT cr.emotional_valence::text
+            FROM character_relationships cr
+            JOIN characters target_c ON target_c.id = cr.character1_id
+            JOIN characters actor_c ON actor_c.id = cr.character2_id
+            WHERE target_c.entity_id = %s AND actor_c.entity_id = %s
+            LIMIT 1
+            """,
+            (target["entity_id"], actor["entity_id"]),
+        )
+        row = cur.fetchone()
+        if row is not None:
+            return _is_wary_or_worse(str(_row_value(row, "emotional_valence", 0)))
+
+    actor_ref = normalize_entity_ref(str(actor["entity_ref"]))
+    target_ref = normalize_entity_ref(str(target["entity_ref"]))
+    for relationship in expansion.relationship_plan:
+        if (
+            relationship.subject_kind == "character"
+            and relationship.object_kind == "character"
+            and normalize_entity_ref(relationship.subject_ref) == target_ref
+            and normalize_entity_ref(relationship.object_ref) == actor_ref
+            and _is_wary_or_worse(
+                _default_emotional_valence(relationship.relationship_type)
+            )
+        ):
+            return True
+    return False
+
+
+def _is_wary_or_worse(value: str) -> bool:
+    match = re.match(r"^([+-]?\d+)\|", value)
+    return match is not None and int(match.group(1)) <= -1
+
+
+def _insert_seeded_project(
+    cur: Any,
+    *,
+    project: RetrogradeProjectPlan,
+    actor: Mapping[str, Any],
+    target: Optional[Mapping[str, Any]],
+    stage: str,
+    next_eligible: Any,
+    prologue_chunk_id: int,
+) -> int:
+    target_place_id = target.get("place_id") if target else None
+    target_character_entity_id = (
+        target.get("entity_id")
+        if target is not None and project.project_type != "plan_relocation"
+        else None
+    )
+    cur.execute(
+        """
+        /* orrery:retrograde:insert_seeded_project */
+        INSERT INTO character_project_states (
+            character_entity_id, project_type, status, stage,
+            target_place_id, target_character_entity_id,
+            target_faction_entity_id, progress, stall_count,
+            next_eligible_at_world_time, source_chunk_id
+        ) VALUES (%s, %s, 'active', %s, %s, %s, NULL, 0, 0, %s, %s)
+        RETURNING id
+        """,
+        (
+            actor["entity_id"],
+            project.project_type,
+            stage,
+            target_place_id,
+            target_character_entity_id,
+            next_eligible,
+            prologue_chunk_id,
+        ),
+    )
+    return int(_row_value(cur.fetchone(), "id", 0))
+
+
+def _insert_project_started_event(
+    cur: Any,
+    *,
+    project: RetrogradeProjectPlan,
+    actor: Mapping[str, Any],
+    target: Optional[Mapping[str, Any]],
+    event_type: str,
+    prologue_chunk_id: int,
+) -> int:
+    target_character_entity_id = (
+        target.get("entity_id")
+        if target is not None and project.project_type != "plan_relocation"
+        else None
+    )
+    location_id = (
+        target.get("place_id")
+        if target is not None and project.project_type == "plan_relocation"
+        else None
+    )
+    payload = {
+        "seed_ids": [project.seed_id],
+        "project_intent": True,
+        "actor": project.actor_ref,
+        "target": project.target_ref,
+    }
+    cur.execute(
+        """
+        /* orrery:retrograde:insert_project_started_event */
+        INSERT INTO world_events (
+            event_type, tick_chunk_id, actor_entity_id, target_entity_id,
+            location_id, world_layer, source, changed_fields, payload
+        ) VALUES (
+            %s, %s, %s, %s, %s, 'primary'::world_layer_type,
+            'retrograde'::event_source_kind, %s, %s::jsonb
+        ) RETURNING id
+        """,
+        (
+            event_type,
+            prologue_chunk_id,
+            actor["entity_id"],
+            target_character_entity_id,
+            location_id,
+            ["character_project_states"],
+            json.dumps(payload),
+        ),
+    )
+    event_id = int(_row_value(cur.fetchone(), "id", 0))
+    participants = [("actor", int(actor["entity_id"]))]
+    if target_character_entity_id is not None:
+        participants.append(("target", int(target_character_entity_id)))
+    for role, entity_id in participants:
+        cur.execute(
+            """
+            INSERT INTO world_event_entities (event_id, role, entity_id)
+            VALUES (%s, %s::event_role_kind, %s)
+            ON CONFLICT DO NOTHING
+            """,
+            (event_id, role, entity_id),
+        )
+    return event_id
 
 
 def _plan_death_row(
@@ -1902,14 +2390,31 @@ def _load_world_time(cur: Any) -> Any:
     return _row_value(row, "world_time", 0)
 
 
+def _load_base_timestamp(cur: Any) -> Any:
+    cur.execute(
+        """
+        /* orrery:retrograde:base_timestamp */
+        SELECT base_timestamp FROM global_variables WHERE id = true
+        """
+    )
+    row = cur.fetchone()
+    if row is None:
+        return None
+    return _row_value(row, "base_timestamp", 0)
+
+
 def _plan_entity_stubs(
     *,
     expansion: RetrogradeExpansionPlanResponse,
     entity_index: Mapping[tuple[str, str], Sequence[_EntityRecord]],
     create_missing_entities: bool,
     inserted_stub_keys: frozenset[tuple[str, str]],
+    include_projects: bool,
 ) -> list[dict[str, Any]]:
-    refs = _collect_expansion_entity_refs(expansion)
+    refs = _collect_expansion_entity_refs(
+        expansion,
+        include_projects=include_projects,
+    )
     rows = []
     for key, ref in sorted(refs.items()):
         matches = list(entity_index.get(key, []))
@@ -1937,6 +2442,8 @@ def _plan_entity_stubs(
 
 def _collect_expansion_entity_refs(
     expansion: RetrogradeExpansionPlanResponse,
+    *,
+    include_projects: bool,
 ) -> dict[tuple[str, str], dict[str, Any]]:
     refs: dict[tuple[str, str], dict[str, Any]] = {}
 
@@ -2030,6 +2537,30 @@ def _collect_expansion_entity_refs(
                 "role": "object",
             },
         )
+
+    for project in expansion.project_plan if include_projects else []:
+        add_ref(
+            project.actor_ref,
+            "character",
+            source={
+                "plan": "project_plan",
+                "seed_id": project.seed_id,
+                "role": "actor",
+            },
+        )
+        if project.target_ref:
+            target_kind = (
+                "place" if project.project_type == "plan_relocation" else "character"
+            )
+            add_ref(
+                project.target_ref,
+                target_kind,
+                source={
+                    "plan": "project_plan",
+                    "seed_id": project.seed_id,
+                    "role": "target",
+                },
+            )
 
     for death in expansion.death_plan:
         add_ref(

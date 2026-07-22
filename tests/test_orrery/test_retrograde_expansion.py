@@ -12,6 +12,7 @@ from nexus.agents.orrery.retrograde_expansion import (
     RETROGRADE_EXPANSION_RESPONSE_SCHEMA_VERSION,
     RetrogradeExpansionWireResponse,
     RetrogradeExpansionValidationError,
+    RetrogradeProjectPlan,
     coerce_expansion_response_payload,
     render_expansion_prompt,
     validate_expansion_plan,
@@ -55,6 +56,7 @@ def test_wire_expansion_response_omits_deterministic_fields() -> None:
     assert set(schema["properties"]) == {
         "event_plan",
         "mechanical_plan",
+        "project_plan",
         "thread_plan",
         "coverage_notes",
         "coordinates",
@@ -131,6 +133,83 @@ def test_wire_expansion_response_coerces_to_full_contract() -> None:
     assert len(response.entity_tag_plan) == 1
     assert len(response.pair_tag_plan) == 1
     assert len(response.relationship_plan) == 1
+
+
+def test_project_plan_carries_exact_woven_seed_intent() -> None:
+    vocabulary = _expansion_test_vocabulary()
+    packet = _packet(vocabulary)
+    seed_response = _seed_response(vocabulary)
+    seed_response["candidates"][0]["project_intent"] = {
+        "project_type": "court_patron",
+        "target_ref": "Vale",
+        "rationale": "The old debt can become patronage.",
+    }
+    payload = _valid_expansion(vocabulary)
+    payload["project_plan"] = [
+        {
+            "seed_id": "seed_001",
+            "project_type": "court_patron",
+            "actor_ref": "Mara",
+            "target_ref": "Vale",
+            "rationale": "Mara courts Vale's backing.",
+        }
+    ]
+
+    response = validate_expansion_plan(
+        payload=payload,
+        packet=packet,
+        seed_candidate_response=seed_response,
+    )
+
+    assert response.project_plan[0].seed_id == "seed_001"
+
+
+def test_woven_seed_must_note_dropped_project_intent() -> None:
+    vocabulary = _expansion_test_vocabulary()
+    packet = _packet(vocabulary)
+    seed_response = _seed_response(vocabulary)
+    seed_response["candidates"][0]["project_intent"] = {
+        "project_type": "build_venture",
+        "target_ref": None,
+        "rationale": "The seed supports a venture.",
+    }
+    payload = _valid_expansion(vocabulary)
+
+    with pytest.raises(
+        RetrogradeExpansionValidationError,
+        match="drops project_intent without a thread note",
+    ):
+        validate_expansion_plan(
+            payload=payload,
+            packet=packet,
+            seed_candidate_response=seed_response,
+        )
+
+
+def test_project_plan_rejects_forbidden_target_shape() -> None:
+    with pytest.raises(ValidationError):
+        RetrogradeProjectPlan.model_validate(
+            {
+                "seed_id": "seed_001",
+                "project_type": "build_venture",
+                "actor_ref": "Mara",
+                "target_ref": "Vale",
+                "rationale": "Venture targets are forbidden.",
+            }
+        )
+
+
+def test_project_plan_rejects_unknown_type() -> None:
+    with pytest.raises(ValidationError):
+        RetrogradeProjectPlan.model_validate(
+            {
+                "seed_id": "seed_001",
+                "project_type": "conquer_world",
+                "actor_ref": "Mara",
+                "target_ref": None,
+                "rationale": "Not in the closed project vocabulary.",
+            }
+        )
 
 
 def test_maturation_geo_prompt_and_coordinates_share_r6_schema() -> None:
