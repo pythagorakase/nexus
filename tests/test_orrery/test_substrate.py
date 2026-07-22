@@ -1,5 +1,6 @@
 """Tests for the Orrery pure-Python behavior substrate."""
 
+from dataclasses import replace
 from datetime import datetime, timezone
 import re
 from typing import Any
@@ -12,6 +13,7 @@ from nexus.agents.orrery.substrate import (
     Branch,
     CompoundCondition,
     DriveBand,
+    EventRecord,
     PresentTargetPolicy,
     RoutineAnchor,
     Slot,
@@ -45,6 +47,7 @@ from nexus.agents.orrery.substrate import (
     in_location_class,
     is_constrained,
     is_hidden,
+    knows_recent_event,
     lacks_pair_tag,
     recent_event,
     relationship_is_asymmetric,
@@ -332,6 +335,31 @@ def test_contact_kind_predicate_reads_outbound_kind_specific_edges() -> None:
     assert has_contact_of_kind("lodging")(state, {Slot.ACTOR: 2})
     assert not has_contact_of_kind("intimate")(state, {Slot.ACTOR: 1})
     assert not has_contact_of_kind("social")(state, {Slot.TARGET: 1})
+
+
+def test_pair_tag_indexes_preserve_direction_and_rebuild_on_replace() -> None:
+    """Aggregate indexes dedupe tags without changing directed semantics."""
+
+    state = WorldState(
+        pair_tags={
+            (1, 2): frozenset({"contact:social", "ally"}),
+            (1, 3): frozenset({"contact:social"}),
+            (4, 2): frozenset({"hunting"}),
+        }
+    )
+
+    assert has_contact_of_kind("social")(state, {Slot.ACTOR: 1})
+    assert not has_contact_of_kind("social")(state, {Slot.ACTOR: 2})
+    assert has_inbound_pair_tag("hunting")(state, {Slot.ACTOR: 2})
+    assert not has_inbound_pair_tag("hunting")(state, {Slot.ACTOR: 4})
+
+    replaced = replace(
+        state,
+        pair_tags={(5, 1): frozenset({"contact:intimate"})},
+    )
+    assert not has_contact_of_kind("social")(replaced, {Slot.ACTOR: 1})
+    assert has_contact_of_kind("intimate")(replaced, {Slot.ACTOR: 5})
+    assert has_inbound_pair_tag("contact:intimate")(replaced, {Slot.ACTOR: 1})
 
 
 def test_contact_pair_tag_for_kind_rejects_unknown_kind() -> None:
@@ -842,6 +870,138 @@ def test_recent_event_can_filter_by_changed_fields() -> None:
         changed_fields_any_of=("character.emotional_state",),
         actor_slot=Slot.ACTOR,
     )(state, {Slot.ACTOR: 1})
+
+
+def test_indexed_event_predicates_preserve_semantics() -> None:
+    """Narrowed buckets retain windows, roles, counts, and awareness gates."""
+
+    bindings = {Slot.ACTOR: 99, Slot.FACTION: 1, Slot.TARGET: 2}
+    empty = WorldState(current_tick=10)
+    assert not recent_event("signal")(empty, bindings)
+    assert since_last_event_at_least("signal", 5)(empty, bindings)
+    assert not count_recent_events_at_least("signal", within_ticks=5, min_count=1)(
+        empty, bindings
+    )
+
+    state = WorldState(
+        recent_events=(
+            EventRecord(
+                event_id=1,
+                event_type="signal",
+                tick=4,
+                actor_entity_id=1,
+                target_entity_id=2,
+                changed_fields=("character.current_location",),
+            ),
+            EventRecord(
+                event_id=2,
+                event_type="signal",
+                tick=5,
+                actor_entity_id=1,
+                target_entity_id=2,
+                changed_fields=("character.current_location",),
+            ),
+            EventRecord(
+                event_id=3,
+                event_type="signal",
+                tick=7,
+                actor_entity_id=1,
+                target_entity_id=2,
+                changed_fields=("character.current_activity",),
+            ),
+            EventRecord(
+                event_id=4,
+                event_type="signal",
+                tick=9,
+                actor_entity_id=3,
+                target_entity_id=2,
+                changed_fields=("character.current_location",),
+            ),
+            EventRecord(
+                event_id=5,
+                event_type="other",
+                tick=10,
+                actor_entity_id=1,
+                target_entity_id=2,
+                changed_fields=("character.current_location",),
+            ),
+        ),
+        claimed_event_scopes={1: "private", 2: "private", 3: "private"},
+        awareness_by_entity={99: frozenset({2})},
+        epistemics_enabled=True,
+        current_tick=10,
+    )
+
+    location_signal = recent_event(
+        "signal",
+        within_ticks=5,
+        actor_slot=Slot.FACTION,
+        target_slot=Slot.TARGET,
+        changed_fields_any_of=("character.current_location",),
+    )
+    assert location_signal(state, bindings), "the cutoff tick is inclusive"
+    assert not recent_event(
+        "signal",
+        within_ticks=4,
+        actor_slot=Slot.FACTION,
+        target_slot=Slot.TARGET,
+        changed_fields_any_of=("character.current_location",),
+    )(state, bindings)
+    assert not location_signal(state, {**bindings, Slot.FACTION: 4})
+
+    known_location_signal = knows_recent_event(
+        "signal",
+        within_ticks=5,
+        actor_slot=Slot.FACTION,
+        target_slot=Slot.TARGET,
+        changed_fields_any_of=("character.current_location",),
+    )
+    assert known_location_signal(state, bindings)
+    assert not known_location_signal(
+        replace(state, awareness_by_entity={99: frozenset()}), bindings
+    )
+    assert not knows_recent_event(
+        "signal",
+        within_ticks=5,
+        actor_slot=Slot.FACTION,
+        target_slot=Slot.TARGET,
+        changed_fields_any_of=("character.current_activity",),
+    )(state, bindings)
+
+    assert count_recent_events_at_least(
+        "signal",
+        within_ticks=6,
+        min_count=3,
+        actor_slot=Slot.FACTION,
+        target_slot=Slot.TARGET,
+    )(state, bindings)
+    assert not count_recent_events_at_least(
+        "signal",
+        within_ticks=5,
+        min_count=3,
+        actor_slot=Slot.FACTION,
+        target_slot=Slot.TARGET,
+    )(state, bindings)
+    assert since_last_event_at_least(
+        "signal", 3, actor_slot=Slot.FACTION, target_slot=Slot.TARGET
+    )(state, bindings)
+    assert not since_last_event_at_least(
+        "signal", 4, actor_slot=Slot.FACTION, target_slot=Slot.TARGET
+    )(state, bindings)
+
+    replacement = replace(
+        state,
+        recent_events=(
+            EventRecord(
+                event_type="replacement",
+                tick=10,
+                actor_entity_id=1,
+                target_entity_id=2,
+            ),
+        ),
+    )
+    assert not recent_event("signal")(replacement, bindings)
+    assert recent_event("replacement")(replacement, bindings)
 
 
 def test_recent_event_preserves_actor_target_roles() -> None:
