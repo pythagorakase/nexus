@@ -221,10 +221,13 @@ def test_full_ladder(state: WorldState, label: str, delta_key: str) -> None:
     )
     assert result.branch_label == label
     assert delta_key in result.state_delta
+    if label == "Abandon amends that are thrown back":
+        assert result.state_delta["mood.set"] == {"mood": "grim"}
     if delta_key == "project.complete":
         assert result.state_delta == {
             "project.complete": {"milestone": True},
             "entity_tags_target.remove": ["grudge_active"],
+            "mood.set": {"mood": "elated"},
         }
 
 

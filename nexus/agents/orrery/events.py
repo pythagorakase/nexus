@@ -9,7 +9,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 from hashlib import sha256
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 import json
 from typing import Any, Mapping, Optional
 
@@ -55,10 +55,15 @@ from nexus.agents.orrery.routing import (
     shortest_route,
 )
 from nexus.agents.orrery.substrate import (
+    MOOD_VALUES,
     ProjectPolicy,
     SUPPORTED_TRAVEL_PURPOSES,
     coerce_project_policy,
     WorldState,
+)
+from nexus.agents.orrery.tag_writer import (
+    apply_exclusive_tag_bestowal,
+    apply_exclusive_tag_bestowal_async,
 )
 
 
@@ -75,6 +80,7 @@ SUPPORTED_STATE_DELTA_KEYS = frozenset(
         "entity_pair_tags.clear_outbound",
         "entity_pair_tags_target.clear_inbound",
         "need.fulfill",
+        "mood.set",
         "travel.start",
         "travel.advance",
         "travel.arrive",
@@ -98,7 +104,35 @@ REPLACEMENT_STATE_DELTA_ALIASES = {
     "entity_pair_tags_add_inbound": "entity_pair_tags.add_inbound",
     "entity_pair_tags_clear_outbound": "entity_pair_tags.clear_outbound",
     "entity_pair_tags_target_clear_inbound": ("entity_pair_tags_target.clear_inbound"),
+    "mood_set": "mood.set",
 }
+
+
+@dataclass(frozen=True, slots=True)
+class MoodPolicy:
+    """Commit-time mechanical mood policy."""
+
+    enabled: bool = False
+    duration_hours: float = 12.0
+
+
+def coerce_mood_policy(raw: Any) -> MoodPolicy:
+    """Coerce ``[orrery.mood]`` settings without weakening validation."""
+
+    if raw is None:
+        return MoodPolicy()
+    if isinstance(raw, Mapping):
+        enabled = bool(raw.get("enabled", False))
+        duration = raw.get("duration_hours", 12.0)
+    else:
+        enabled = bool(raw.enabled)
+        duration = raw.duration_hours
+    if isinstance(duration, bool) or not isinstance(duration, (int, float)):
+        raise ValueError("orrery.mood.duration_hours must be a positive number")
+    duration_hours = float(duration)
+    if duration_hours <= 0:
+        raise ValueError("orrery.mood.duration_hours must be greater than zero")
+    return MoodPolicy(enabled=enabled, duration_hours=duration_hours)
 
 
 @dataclass(frozen=True)
@@ -363,6 +397,7 @@ def commit_orrery_tick_sync(
     prompt_settings: Optional[Any] = None,
     ecology_settings: Optional[Any] = None,
     project_settings: Optional[Any] = None,
+    mood_settings: Optional[Any] = None,
     epistemics_settings: Optional[Any] = None,
     contagion_settings: Optional[Any] = None,
     distortion_settings: Optional[Any] = None,
@@ -374,6 +409,7 @@ def commit_orrery_tick_sync(
 
     signal_detection = coerce_signal_detection(ecology_settings)
     project_policy = coerce_project_policy(project_settings)
+    mood_policy = coerce_mood_policy(mood_settings)
     coerced = coerce_proposal(proposal)
     effective_epistemics_settings = epistemics_settings
     if effective_epistemics_settings is None and coerced is not None:
@@ -563,6 +599,7 @@ def commit_orrery_tick_sync(
                 source_chunk_id=tick_chunk_id,
                 need_tuning=need_tuning,
                 project_policy=project_policy,
+                mood_policy=mood_policy,
             )
             event_id = _emit_world_event_sync(
                 cur,
@@ -636,6 +673,7 @@ async def commit_orrery_tick_async(
     prompt_settings: Optional[Any] = None,
     ecology_settings: Optional[Any] = None,
     project_settings: Optional[Any] = None,
+    mood_settings: Optional[Any] = None,
     epistemics_settings: Optional[Any] = None,
     contagion_settings: Optional[Any] = None,
     distortion_settings: Optional[Any] = None,
@@ -647,6 +685,7 @@ async def commit_orrery_tick_async(
 
     signal_detection = coerce_signal_detection(ecology_settings)
     project_policy = coerce_project_policy(project_settings)
+    mood_policy = coerce_mood_policy(mood_settings)
     coerced = coerce_proposal(proposal)
     effective_epistemics_settings = epistemics_settings
     if effective_epistemics_settings is None and coerced is not None:
@@ -835,6 +874,7 @@ async def commit_orrery_tick_async(
             source_chunk_id=tick_chunk_id,
             need_tuning=need_tuning,
             project_policy=project_policy,
+            mood_policy=mood_policy,
         )
         event_id = await _emit_world_event_async(
             conn,
@@ -1625,6 +1665,7 @@ def _apply_state_delta_sync(
     source_chunk_id: int,
     need_tuning: NeedTuning,
     project_policy: ProjectPolicy,
+    mood_policy: MoodPolicy = MoodPolicy(),
 ) -> int:
     if not draft.state_delta:
         return 0
@@ -1638,6 +1679,7 @@ def _apply_state_delta_sync(
 
     tag_mutations = 0
     applied_pair_tag_mutations: list[dict[str, Any]] = []
+    mood_applied: Optional[dict[str, Any]] = None
     project_keys = [key for key in draft.state_delta if key.startswith("project.")]
     if len(project_keys) > 1:
         raise ValueError(
@@ -1795,6 +1837,15 @@ def _apply_state_delta_sync(
             source_chunk_id=source_chunk_id,
             need_tuning=need_tuning,
         )
+    if "mood.set" in draft.state_delta:
+        mood_applied, mood_mutations = _apply_mood_set_sync(
+            cur,
+            actor_entity_id=actor_entity_id,
+            raw_payload=draft.state_delta["mood.set"],
+            source_chunk_id=source_chunk_id,
+            policy=mood_policy,
+        )
+        tag_mutations += mood_mutations
     project_applied: Optional[dict[str, Any]] = None
     if "project.start" in draft.state_delta:
         project_applied = _apply_project_start_sync(
@@ -1878,6 +1929,12 @@ def _apply_state_delta_sync(
             payload=draft.state_delta["travel.arrive"],
             source_chunk_id=source_chunk_id,
         )
+    if mood_applied is not None:
+        _update_resolution_mood_applied_sync(
+            cur,
+            resolution_id=resolution_id,
+            applied=mood_applied,
+        )
     return tag_mutations
 
 
@@ -1891,6 +1948,7 @@ async def _apply_state_delta_async(
     source_chunk_id: int,
     need_tuning: NeedTuning,
     project_policy: ProjectPolicy,
+    mood_policy: MoodPolicy = MoodPolicy(),
 ) -> int:
     if not draft.state_delta:
         return 0
@@ -1904,6 +1962,7 @@ async def _apply_state_delta_async(
 
     tag_mutations = 0
     applied_pair_tag_mutations: list[dict[str, Any]] = []
+    mood_applied: Optional[dict[str, Any]] = None
     project_keys = [key for key in draft.state_delta if key.startswith("project.")]
     if len(project_keys) > 1:
         raise ValueError(
@@ -2059,6 +2118,15 @@ async def _apply_state_delta_async(
             source_chunk_id=source_chunk_id,
             need_tuning=need_tuning,
         )
+    if "mood.set" in draft.state_delta:
+        mood_applied, mood_mutations = await _apply_mood_set_async(
+            conn,
+            actor_entity_id=actor_entity_id,
+            raw_payload=draft.state_delta["mood.set"],
+            source_chunk_id=source_chunk_id,
+            policy=mood_policy,
+        )
+        tag_mutations += mood_mutations
     project_applied: Optional[dict[str, Any]] = None
     if "project.start" in draft.state_delta:
         project_applied = await _apply_project_start_async(
@@ -2142,7 +2210,238 @@ async def _apply_state_delta_async(
             payload=draft.state_delta["travel.arrive"],
             source_chunk_id=source_chunk_id,
         )
+    if mood_applied is not None:
+        await _update_resolution_mood_applied_async(
+            conn,
+            resolution_id=resolution_id,
+            applied=mood_applied,
+        )
     return tag_mutations
+
+
+def _coerce_mood_set(raw: Any, policy: MoodPolicy) -> tuple[str, float]:
+    """Validate one closed-vocabulary ``mood.set`` payload."""
+
+    if not isinstance(raw, Mapping):
+        raise ValueError("mood.set must be a mapping")
+    unknown_keys = set(raw) - {"mood", "hours"}
+    if unknown_keys:
+        raise ValueError(f"mood.set contains unknown keys: {sorted(unknown_keys)}")
+    mood = str(raw.get("mood") or "").strip()
+    if mood not in MOOD_VALUES:
+        raise ValueError(
+            f"Unknown mood {mood!r}; expected one of {sorted(MOOD_VALUES)}"
+        )
+    hours = raw.get("hours", policy.duration_hours)
+    if isinstance(hours, bool) or not isinstance(hours, (int, float)):
+        raise ValueError("mood.set hours must be a positive number")
+    duration_hours = float(hours)
+    if duration_hours <= 0:
+        raise ValueError("mood.set hours must be greater than zero")
+    return mood, duration_hours
+
+
+def _json_snapshot(value: Any) -> Any:
+    """Normalize DB-returned values for a durable JSONB applied projection."""
+
+    if isinstance(value, datetime):
+        return value.astimezone(timezone.utc).isoformat()
+    if isinstance(value, str) and "T" in value:
+        try:
+            parsed = datetime.fromisoformat(value)
+        except ValueError:
+            pass
+        else:
+            if parsed.tzinfo is not None:
+                return parsed.astimezone(timezone.utc).isoformat()
+    if isinstance(value, Mapping):
+        return {str(key): _json_snapshot(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_snapshot(item) for item in value]
+    return value
+
+
+def _apply_mood_set_sync(
+    cur: Any,
+    *,
+    actor_entity_id: int,
+    raw_payload: Any,
+    source_chunk_id: int,
+    policy: MoodPolicy,
+) -> tuple[dict[str, Any], int]:
+    """Apply exclusive mood replacement and return its replay snapshot."""
+
+    mood, duration_hours = _coerce_mood_set(raw_payload, policy)
+    if not policy.enabled:
+        return {"skipped": "mood_disabled"}, 0
+
+    cur.execute(
+        "SELECT world_time FROM chunk_metadata WHERE chunk_id = %s",
+        (source_chunk_id,),
+    )
+    world_row = cur.fetchone()
+    world_time = _row_get(world_row, "world_time", 0) if world_row else None
+    if world_time is None:
+        raise ValueError(
+            f"mood.set at chunk {source_chunk_id} requires a known world_time"
+        )
+    cur.execute(
+        """
+        SELECT t.tag
+        FROM entity_tags et
+        JOIN tags t ON t.id = et.tag_id
+        WHERE et.entity_id = %s
+          AND t.category = 'mood'
+          AND t.tag <> %s
+          AND et.cleared_at IS NULL
+        ORDER BY et.id
+        FOR UPDATE OF et
+        """,
+        (actor_entity_id, mood),
+    )
+    displaced = [str(_row_get(row, "tag", 0)) for row in cur.fetchall()]
+    changed = apply_exclusive_tag_bestowal(
+        cur,
+        entity_id=actor_entity_id,
+        entity_kind="character",
+        tag=mood,
+        source_kind="template",
+        world_time=world_time,
+        source_chunk_id=source_chunk_id,
+        duration_override=timedelta(hours=duration_hours),
+    )
+    cur.execute(
+        """
+        SELECT to_jsonb(et) AS entity_tag
+        FROM entity_tags et
+        JOIN tags t ON t.id = et.tag_id
+        WHERE et.entity_id = %s
+          AND t.tag = %s
+          AND et.cleared_at IS NULL
+        """,
+        (actor_entity_id, mood),
+    )
+    row = cur.fetchone()
+    if row is None:
+        raise RuntimeError("mood.set writer produced no active entity tag row")
+    raw_entity_tag = _row_get(row, "entity_tag", 0)
+    if isinstance(raw_entity_tag, str):
+        raw_entity_tag = json.loads(raw_entity_tag)
+    entity_tag = _json_snapshot(raw_entity_tag)
+    applied = {
+        "mood": mood,
+        "displaced_mood": displaced[0] if len(displaced) == 1 else None,
+        "displaced_moods": displaced,
+        "expires_at_world_time": entity_tag["expires_at_world_time"],
+        "entity_tag": entity_tag,
+    }
+    return applied, len(displaced) + int(changed)
+
+
+async def _apply_mood_set_async(
+    conn: Any,
+    *,
+    actor_entity_id: int,
+    raw_payload: Any,
+    source_chunk_id: int,
+    policy: MoodPolicy,
+) -> tuple[dict[str, Any], int]:
+    """Async twin of :func:`_apply_mood_set_sync`."""
+
+    mood, duration_hours = _coerce_mood_set(raw_payload, policy)
+    if not policy.enabled:
+        return {"skipped": "mood_disabled"}, 0
+    world_time = await conn.fetchval(
+        "SELECT world_time FROM chunk_metadata WHERE chunk_id = $1",
+        source_chunk_id,
+    )
+    if world_time is None:
+        raise ValueError(
+            f"mood.set at chunk {source_chunk_id} requires a known world_time"
+        )
+    displaced_rows = await conn.fetch(
+        """
+        SELECT t.tag
+        FROM entity_tags et
+        JOIN tags t ON t.id = et.tag_id
+        WHERE et.entity_id = $1
+          AND t.category = 'mood'
+          AND t.tag <> $2
+          AND et.cleared_at IS NULL
+        ORDER BY et.id
+        FOR UPDATE OF et
+        """,
+        actor_entity_id,
+        mood,
+    )
+    displaced = [str(_row_get(row, "tag", 0)) for row in displaced_rows]
+    changed = await apply_exclusive_tag_bestowal_async(
+        conn,
+        entity_id=actor_entity_id,
+        entity_kind="character",
+        tag=mood,
+        source_kind="template",
+        world_time=world_time,
+        source_chunk_id=source_chunk_id,
+        duration_override=timedelta(hours=duration_hours),
+    )
+    row = await conn.fetchrow(
+        """
+        SELECT to_jsonb(et) AS entity_tag
+        FROM entity_tags et
+        JOIN tags t ON t.id = et.tag_id
+        WHERE et.entity_id = $1
+          AND t.tag = $2
+          AND et.cleared_at IS NULL
+        """,
+        actor_entity_id,
+        mood,
+    )
+    if row is None:
+        raise RuntimeError("mood.set writer produced no active entity tag row")
+    raw_entity_tag = _row_get(row, "entity_tag", 0)
+    if isinstance(raw_entity_tag, str):
+        raw_entity_tag = json.loads(raw_entity_tag)
+    entity_tag = _json_snapshot(raw_entity_tag)
+    applied = {
+        "mood": mood,
+        "displaced_mood": displaced[0] if len(displaced) == 1 else None,
+        "displaced_moods": displaced,
+        "expires_at_world_time": entity_tag["expires_at_world_time"],
+        "entity_tag": entity_tag,
+    }
+    return applied, len(displaced) + int(changed)
+
+
+def _update_resolution_mood_applied_sync(
+    cur: Any, *, resolution_id: int, applied: Mapping[str, Any]
+) -> None:
+    cur.execute(
+        """
+        UPDATE orrery_resolutions
+        SET state_delta = jsonb_set(
+            state_delta, '{mood.set,applied}', %s::jsonb, true
+        )
+        WHERE id = %s
+        """,
+        (json.dumps(dict(applied)), resolution_id),
+    )
+
+
+async def _update_resolution_mood_applied_async(
+    conn: Any, *, resolution_id: int, applied: Mapping[str, Any]
+) -> None:
+    await conn.execute(
+        """
+        UPDATE orrery_resolutions
+        SET state_delta = jsonb_set(
+            state_delta, '{mood.set,applied}', $1::jsonb, true
+        )
+        WHERE id = $2
+        """,
+        json.dumps(dict(applied)),
+        resolution_id,
+    )
 
 
 def _coerce_need_fulfillment(raw: Any) -> dict[str, Any]:

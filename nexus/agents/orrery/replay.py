@@ -14,6 +14,9 @@ produces. Sections and their replay sources:
   ``orrery_resolutions.state_delta`` are deliberately ignored: the same
   commit already wrote them to the provenance tables (double-entry), and
   ``need.fulfill``'s derived severity tags exist *only* in provenance.
+  ``mood.set`` additionally reapplies its exact entity-tag snapshot, repairing
+  the known provenance gap where replace-policy reapplication overwrites a
+  live row's source chunk in place.
 - the three relationship tables — backward from the *current* rows,
   unwinding ``relationship_versions`` pre-images (``id DESC``), then
   dropping rows whose ``created_at`` postdates chunk N (INSERTs never fire
@@ -137,6 +140,7 @@ TAG_DELTA_KEYS = frozenset(
         "entity_pair_tags.add_inbound",
         "entity_pair_tags.clear_outbound",
         "entity_pair_tags_target.clear_inbound",
+        "mood.set",
     }
 )
 
@@ -1649,7 +1653,82 @@ class _Replayer:
                     approximate=True,
                 )
             workings[section] = working
+        touched_entities.update(
+            self._replay_mood_snapshots(workings["entity_tags"], base_chunk=base_chunk)
+        )
         return workings, touched_entities
+
+    def _replay_mood_snapshots(
+        self,
+        working: dict[int, dict[str, Any]],
+        *,
+        base_chunk: int,
+    ) -> set[int]:
+        """Replay exact mood projections from resolution applied snapshots."""
+
+        self.cur.execute(
+            """
+            SELECT tick_chunk_id, actor_entity_id, state_delta
+            FROM orrery_resolutions
+            WHERE tick_chunk_id > %s
+              AND tick_chunk_id <= %s
+              AND state_delta ? 'mood.set'
+            ORDER BY tick_chunk_id, id
+            """,
+            (base_chunk, self.target_chunk_id),
+        )
+        resolutions = self.cur.fetchall()
+        if not resolutions:
+            return set()
+        self.cur.execute(
+            "SELECT id, tag FROM tags WHERE category = 'mood' AND NOT deprecated"
+        )
+        mood_tag_ids = {int(tag_id): str(tag) for tag_id, tag in self.cur.fetchall()}
+        touched: set[int] = set()
+        for chunk_id, actor_entity_id, raw_delta in resolutions:
+            delta = _as_document(raw_delta)
+            payload = delta.get("mood.set")
+            if not isinstance(payload, dict):
+                raise ValueError(
+                    f"mood.set at chunk {chunk_id} is not an applied mapping"
+                )
+            applied = payload.get("applied")
+            if not isinstance(applied, dict):
+                raise ValueError(
+                    f"mood.set at chunk {chunk_id} is missing its applied snapshot"
+                )
+            if applied.get("skipped") == "mood_disabled":
+                continue
+            mood = applied.get("mood")
+            projection = applied.get("entity_tag")
+            if mood not in mood_tag_ids.values() or not isinstance(projection, dict):
+                raise ValueError(
+                    f"mood.set at chunk {chunk_id} has an invalid applied projection"
+                )
+            row = dict(projection)
+            row_id = int(row.get("id") or 0)
+            tag_id = int(row.get("tag_id") or 0)
+            if (
+                row_id <= 0
+                or int(row.get("entity_id") or 0) != actor_entity_id
+                or mood_tag_ids.get(tag_id) != mood
+                or row.get("expires_at_world_time")
+                != applied.get("expires_at_world_time")
+            ):
+                raise ValueError(
+                    f"mood.set at chunk {chunk_id} carries an inconsistent "
+                    "applied entity-tag snapshot"
+                )
+            for existing_id, existing in list(working.items()):
+                if (
+                    int(existing.get("entity_id") or 0) == actor_entity_id
+                    and int(existing.get("tag_id") or 0) in mood_tag_ids
+                ):
+                    del working[existing_id]
+            row["cleared_at"] = None
+            working[row_id] = row
+            touched.add(actor_entity_id)
+        return touched
 
     # -- need-applicability trigger mirror ------------------------------------
 

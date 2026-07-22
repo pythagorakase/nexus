@@ -306,6 +306,12 @@ snow = "cold"
 fog = "temperate"
 clear = "temperate"
 
+[orrery.mood]
+# Mechanical affect is opt-in in the model but enabled for the shipped slot
+# configuration. Branch outcomes replace the actor's one mood for 12 world-hours.
+enabled = true
+duration_hours = 12
+
 [orrery.selection]
 # Branch selection inside a fired package: "stochastic" softmax-samples all
 # passing branches by magnitude (PRNG seeded on per-resolution persisted

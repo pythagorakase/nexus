@@ -81,6 +81,7 @@ from nexus.agents.orrery.substrate import (
     knows_recent_event,
     lacks_pair_tag,
     lacks_tag,
+    mood_is,
     project_due,
     project_faction_is,
     project_faction_is_active,
@@ -116,7 +117,7 @@ RICH_STATE = WorldState(
         TARGET: frozenset({"seeking_identity"}),
         3: frozenset({"public_role"}),
     },
-    ephemeral_tags={ACTOR: frozenset({"grieving", "wound_3_severe"})},
+    ephemeral_tags={ACTOR: frozenset({"grieving", "wound_3_severe", "elated"})},
     locations={ACTOR: 101, TARGET: 101, 3: 101, 4: 102},
     activities={ACTOR: "keeping watch"},
     trust={(ACTOR, TARGET): 2, (TARGET, ACTOR): 1},
@@ -183,6 +184,7 @@ RICH_STATE = WorldState(
     time_of_day="night",
     world_time=datetime(2073, 5, 3, 11, 30),
     weather="rain",
+    mood_enabled=True,
     current_tick=100,
 )
 
@@ -203,6 +205,7 @@ FACTORY_SWEEP = [
     has_severity_tag_at_or_above("wound", 2),
     fame_at_or_above("known"),
     fame_below("renowned"),
+    mood_is("elated", "restless"),
     resources_at_or_above("comfortable"),
     resources_below("magnate"),
     has_pair_tag("contact:social"),

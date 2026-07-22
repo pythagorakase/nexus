@@ -19,6 +19,7 @@ from nexus.config.settings_models import (
     OrreryDriftSettings,
     OrreryEpistemicsSettings,
     OrreryKnowledgeSettings,
+    OrreryMoodSettings,
     OrreryPromoteSettings,
     OrreryRevealSettings,
     OrrerySettings,
@@ -57,6 +58,8 @@ def test_orrery_settings_resolve_model_reference() -> None:
     assert settings.orrery.contagion.culture_profiles["cellular_clandestine"] == 4.0
     assert settings.orrery.contagion.guards.age_horizon == timedelta(days=14)
     assert settings.orrery.distortion.enabled is True
+    assert settings.orrery.mood.enabled is True
+    assert settings.orrery.mood.duration_hours == 12.0
     expected_model = settings.global_.model.api_models["anthropic"].roles["default"]
     assert settings.orrery.narration.model_ref == expected_model
     assert settings.orrery.promote.provider is None
@@ -205,6 +208,17 @@ def test_drift_defaults_off_when_block_is_absent() -> None:
     payload = load_settings("nexus.toml").orrery.model_dump()
     payload.pop("drift")
     assert OrrerySettings.model_validate(payload).drift.enabled is False
+
+
+def test_mood_defaults_off_and_requires_positive_duration() -> None:
+    """Legacy configs cannot silently opt in and invalid expiry is loud."""
+
+    assert OrreryMoodSettings().enabled is False
+    payload = load_settings("nexus.toml").orrery.model_dump()
+    payload.pop("mood")
+    assert OrrerySettings.model_validate(payload).mood.enabled is False
+    with pytest.raises(ValidationError, match="greater than 0"):
+        OrreryMoodSettings(duration_hours=0)
 
 
 def test_reveal_defaults_off_when_block_is_absent() -> None:

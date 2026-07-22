@@ -778,6 +778,15 @@ class OrreryWeatherSettings(BaseModel):
         return self
 
 
+class OrreryMoodSettings(BaseModel):
+    """Mechanical affect settings for ``[orrery.mood]``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    duration_hours: float = Field(default=12.0, gt=0.0)
+
+
 _CONTAGION_DURATION_RE = re.compile(r"^(?P<amount>\d+(?:\.\d+)?)(?P<unit>[smhdw])$")
 _CONTAGION_DURATION_SECONDS = {
     "s": 1,
@@ -2151,6 +2160,7 @@ class OrrerySettings(BaseModel):
     enabled: bool = True
     binding: OrreryBindingSettings = Field(default_factory=OrreryBindingSettings)
     weather: OrreryWeatherSettings = Field(default_factory=OrreryWeatherSettings)
+    mood: OrreryMoodSettings = Field(default_factory=OrreryMoodSettings)
     contagion: OrreryContagionSettings = Field(default_factory=OrreryContagionSettings)
     distortion: OrreryDistortionSettings = Field(
         default_factory=OrreryDistortionSettings

@@ -1269,6 +1269,38 @@ def test_disabled_weather_omits_scene_conditions() -> None:
     assert proposal.scene_conditions == {}
 
 
+def test_scene_conditions_include_only_present_active_moods() -> None:
+    """Mechanical moods attach by present-character name and honor disable."""
+
+    session = FakeSession(
+        tag_rows=[
+            {"entity_id": 1, "tag": "elated", "is_ephemeral": True},
+            {"entity_id": 2, "tag": "grim", "is_ephemeral": True},
+            {"entity_id": 3, "tag": "restless", "is_ephemeral": True},
+        ],
+        present_actor_rows=[{"entity_id": 1}, {"entity_id": 2}],
+    )
+    enabled = resolve_dry_run(
+        session,
+        (),
+        anchor_chunk_id=100,
+        window_chunks=30,
+        weather_settings={"enabled": False},
+        mood_settings={"enabled": True},
+    )
+    disabled = resolve_dry_run(
+        session,
+        (),
+        anchor_chunk_id=100,
+        window_chunks=30,
+        weather_settings={"enabled": False},
+        mood_settings={"enabled": False},
+    )
+
+    assert enabled.scene_conditions == {"moods": {"Mara": "elated", "Vale": "grim"}}
+    assert disabled.scene_conditions == {}
+
+
 def test_weather_override_uses_displayed_protagonist_place_for_occupants() -> None:
     """A stale setting reference cannot redirect the displayed scene override."""
 

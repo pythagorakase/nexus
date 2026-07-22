@@ -379,6 +379,86 @@ def apply_exclusive_tag_bestowal(
     )
 
 
+async def apply_exclusive_tag_bestowal_async(
+    conn: Any,
+    *,
+    entity_id: int,
+    entity_kind: str,
+    tag: str,
+    source_kind: str = "skald_inline",
+    world_time: Optional[datetime] = None,
+    source_chunk_id: Optional[int] = None,
+    duration_override: Optional[timedelta] = None,
+) -> bool:
+    """Async twin of :func:`apply_exclusive_tag_bestowal`."""
+
+    _validate_source_kind(source_kind)
+    if entity_kind not in VALID_ENTITY_KINDS:
+        raise ValueError(
+            f"Unknown entity_kind={entity_kind!r}; expected one of "
+            f"{sorted(VALID_ENTITY_KINDS)}"
+        )
+
+    allowed = await _lookup_allowed_categories_async(conn, entity_kind)
+    if not allowed:
+        raise ValueError(
+            f"No Orrery tag categories registered for entity_kind={entity_kind!r}"
+        )
+
+    canonical_name, tag_row = await _lookup_canonical_tag_async(conn, tag)
+    category = _row_value(tag_row, "category", 1)
+    _validate_allowed_category(
+        category=category,
+        allowed=allowed,
+        tag_name=canonical_name,
+        entity_kind=entity_kind,
+    )
+    tag_id = _row_value(tag_row, "id", 0)
+    reapplication_policy = _row_value(tag_row, "reapplication_policy", 3)
+
+    if world_time is None:
+        if source_chunk_id is not None:
+            world_time = await _chunk_world_time_async(conn, source_chunk_id)
+        else:
+            world_time = await _load_world_time_async(conn)
+
+    sibling_rows = await conn.fetch(
+        """
+        SELECT et.tag_id
+        FROM entity_tags et
+        JOIN tags t ON t.id = et.tag_id
+        WHERE et.entity_id = $1
+          AND t.category = $2
+          AND t.id <> $3
+          AND et.cleared_at IS NULL
+        ORDER BY et.id
+        FOR UPDATE OF et
+        """,
+        entity_id,
+        category,
+        tag_id,
+    )
+    for row in sibling_rows:
+        await _clear_entity_tag_async(
+            conn,
+            entity_id=entity_id,
+            tag_id=_row_value(row, "tag_id", 0),
+            world_time=world_time,
+            source_chunk_id=source_chunk_id,
+            reason="exclusive_ladder_replace",
+        )
+    return await _insert_entity_tag_async(
+        conn,
+        entity_id=entity_id,
+        tag_id=tag_id,
+        source_kind=source_kind,
+        world_time=world_time,
+        source_chunk_id=source_chunk_id,
+        duration_override=duration_override,
+        reapplication_policy=reapplication_policy,
+    )
+
+
 def _lookup_allowed_categories(cur: Any, entity_kind: str) -> set[str]:
     cur.execute(
         """

@@ -220,6 +220,10 @@ def test_full_ladder_and_terminals(
     )
     assert result.branch_label == label
     assert delta_key in result.state_delta
+    if label == "Declare the feeling and be answered":
+        assert result.state_delta["mood.set"] == {"mood": "elated"}
+    if label == "Withdraw after being rebuffed":
+        assert result.state_delta["mood.set"] == {"mood": "sour"}
     if label in {
         "Offer another honest opening",
         "Build closeness through chosen time",

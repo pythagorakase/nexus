@@ -172,6 +172,10 @@ def test_full_branch_ladder_traversal(
     )
     assert resolution.branch_label == expected_label
     assert delta_key in resolution.state_delta
+    if expected_label == "Open the doors":
+        assert resolution.state_delta["mood.set"] == {"mood": "elated"}
+    if expected_label == "Let the venture go":
+        assert resolution.state_delta["mood.set"] == {"mood": "grim"}
     if expected_label in {
         "Make the venture legible",
         "Secure one more commitment",

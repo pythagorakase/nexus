@@ -288,6 +288,21 @@ def test_context_prompt_renders_anchor_scene_conditions() -> None:
     assert "Time of day: evening" in prompt
 
 
+def test_context_prompt_renders_mechanical_moods_without_unknown_weather() -> None:
+    """Mood-only scene context renders names without fabricated ambience."""
+
+    prompt = LogonUtility({})._format_context_prompt(
+        {
+            "user_input": "Continue.",
+            "scene_conditions": {"moods": {"Mara": "grim", "Zed": "elated"}},
+        }
+    )
+
+    assert "Moods: Mara: grim, Zed: elated" in prompt
+    assert "Weather: unknown" not in prompt
+    assert "Time of day: unknown" not in prompt
+
+
 @pytest.mark.parametrize("truncated", [False, True])
 def test_context_prompt_renders_world_knowledge_without_answer_keys(
     truncated: bool,

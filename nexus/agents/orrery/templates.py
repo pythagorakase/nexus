@@ -65,7 +65,9 @@ from nexus.agents.orrery.substrate import (
     travel_risk_is,
     trust_at_least,
     trust_below,
+    validate_mood_affinities,
     validate_no_fame_in_entry_gates,
+    validate_no_mood_in_entry_gates,
     weather_is,
 )
 
@@ -785,6 +787,7 @@ EXTRACT_VENGEANCE = Template(
             state_delta={
                 "character.current_activity": "executing retaliation",
                 "entity_tags.add": ["recently_violent"],
+                "mood.set": {"mood": "restless"},
             },
             event_type="retaliation_executed",
             signal_event_type="threat_issued",
@@ -5151,12 +5154,14 @@ ADVANCE_PURSUE_ROMANCE = Template(
             state_delta={
                 "project.complete": {"milestone": True},
                 "entity_pair_tags.add_outbound": ["contact:intimate"],
+                "mood.set": {"mood": "elated"},
             },
             event_type="pursue_romance_completed",
             changed_fields=(
                 "character_project_states.status",
                 "entity_pair_tags",
                 "character_relationships.relationship_type",
+                "entity_tags",
             ),
             magnitude=0.40,
             preemptive=True,
@@ -5187,12 +5192,14 @@ ADVANCE_PURSUE_ROMANCE = Template(
                 "project.abandon": {
                     "reason": "target_rebuffed_or_hostile",
                     "milestone": True,
-                }
+                },
+                "mood.set": {"mood": "sour"},
             },
             event_type="pursue_romance_abandoned",
             changed_fields=(
                 "character_project_states.status",
                 "character_project_states.source_chunk_id",
+                "entity_tags",
             ),
             magnitude=0.40,
             preemptive=True,
@@ -5546,12 +5553,14 @@ ADVANCE_COURT_PATRON = Template(
                 "project.abandon": {
                     "reason": "target_spurned_or_hostile",
                     "milestone": True,
-                }
+                },
+                "mood.set": {"mood": "sour"},
             },
             event_type="court_patron_abandoned",
             changed_fields=(
                 "character_project_states.status",
                 "character_project_states.source_chunk_id",
+                "entity_tags",
             ),
             magnitude=0.40,
             preemptive=True,
@@ -5859,6 +5868,7 @@ ADVANCE_SEEK_REDEMPTION = Template(
             state_delta={
                 "project.complete": {"milestone": True},
                 "entity_tags_target.remove": ["grudge_active"],
+                "mood.set": {"mood": "elated"},
             },
             event_type="seek_redemption_completed",
             changed_fields=(
@@ -5866,6 +5876,7 @@ ADVANCE_SEEK_REDEMPTION = Template(
                 "entity_tags",
                 "character_relationships.relationship_type",
                 "character_relationships.emotional_valence",
+                "entity_tags",
             ),
             magnitude=0.40,
             preemptive=True,
@@ -5896,12 +5907,14 @@ ADVANCE_SEEK_REDEMPTION = Template(
                 "project.abandon": {
                     "reason": "amends_spurned_or_hostility_hardened",
                     "milestone": True,
-                }
+                },
+                "mood.set": {"mood": "grim"},
             },
             event_type="seek_redemption_abandoned",
             changed_fields=(
                 "character_project_states.status",
                 "character_project_states.source_chunk_id",
+                "entity_tags",
             ),
             magnitude=0.40,
             preemptive=True,
@@ -6144,6 +6157,7 @@ ADVANCE_BUILD_VENTURE = Template(
             state_delta={
                 "project.complete": {"milestone": True},
                 "entity_tags.add": ["proprietor"],
+                "mood.set": {"mood": "elated"},
             },
             event_type="build_venture_completed",
             changed_fields=(
@@ -6165,12 +6179,14 @@ ADVANCE_BUILD_VENTURE = Template(
                 "project.abandon": {
                     "reason": "stalled_or_overdue",
                     "milestone": True,
-                }
+                },
+                "mood.set": {"mood": "grim"},
             },
             event_type="build_venture_abandoned",
             changed_fields=(
                 "character_project_states.status",
                 "character_project_states.source_chunk_id",
+                "entity_tags",
             ),
             magnitude=0.40,
             preemptive=True,
@@ -6354,3 +6370,5 @@ BUILTIN_TEMPLATES = (
 # fame-gated template added to this catalog raises immediately rather than
 # relying on test coverage.
 validate_no_fame_in_entry_gates(BUILTIN_TEMPLATES)
+validate_no_mood_in_entry_gates(BUILTIN_TEMPLATES)
+validate_mood_affinities(BUILTIN_TEMPLATES)

@@ -1091,6 +1091,15 @@ def _copy_if_present(
         target[target_key or key] = value
 
 
+class OrreryMoodSet(BaseModel):
+    """Closed mechanical mood write used by Orrery replacement deltas."""
+
+    mood: Literal["elated", "sour", "restless", "grim"]
+    hours: Optional[float] = Field(default=None, gt=0)
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class OrreryReplacementStateDelta(BaseModel):
     """
     Limited Orrery state delta Skald may substitute for a proposed resolution.
@@ -1122,6 +1131,10 @@ class OrreryReplacementStateDelta(BaseModel):
     entity_pair_tags_target_clear_inbound: List[str] = Field(
         default_factory=list,
         description="Replacement inbound target pair-tags to clear",
+    )
+    mood_set: Optional[OrreryMoodSet] = Field(
+        default=None,
+        description="Replacement actor mood with optional world-hour duration",
     )
 
     model_config = ConfigDict(extra="forbid")

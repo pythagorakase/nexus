@@ -41,6 +41,7 @@ from nexus.agents.orrery.substrate import (
     Template,
     WorldState,
     binding_hash,
+    active_mood,
     evaluate,
     select_branch,
     select_package,
@@ -99,6 +100,7 @@ class BranchTrace:
     result: bool
     selected: bool
     trace: Optional[ConditionTrace] = None
+    applied_mood_affinity: Optional[Mapping[str, Any]] = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -109,6 +111,11 @@ class BranchTrace:
             "result": self.result,
             "selected": self.selected,
             "trace": self.trace.to_dict() if self.trace is not None else None,
+            "applied_mood_affinity": (
+                dict(self.applied_mood_affinity)
+                if self.applied_mood_affinity is not None
+                else None
+            ),
         }
 
 
@@ -295,6 +302,20 @@ def explain_template(
                 continue
             branch_trace = trace_condition(branch.conditions, state, bindings)
             passes = bool(branch.conditions(state, bindings))
+            affinity = None
+            mood = active_mood(state, bindings)
+            if (
+                passes
+                and selection is not None
+                and selection.mode == "stochastic"
+                and selection.temperature > 0
+                and not branch.preemptive
+                and mood in branch.mood_affinities
+            ):
+                affinity = {
+                    "mood": mood,
+                    "multiplier": float(branch.mood_affinities[mood]),
+                }
             branch_traces.append(
                 BranchTrace(
                     label=branch.label,
@@ -304,6 +325,7 @@ def explain_template(
                     result=passes,
                     selected=chosen is not None and branch.label == chosen.label,
                     trace=branch_trace,
+                    applied_mood_affinity=affinity,
                 )
             )
 

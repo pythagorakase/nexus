@@ -193,6 +193,14 @@ _register(
     ),
 )
 _register(
+    r"mood_is\((?P<values>[^@()]+)@(?P<slot>\w+)\)",
+    lambda m: (
+        f"{_slot(m.group('slot'))}'s active mood is one of ["
+        + ", ".join(f"`{value}`" for value in m.group("values").split(","))
+        + "]"
+    ),
+)
+_register(
     r"resources_at_or_above\((?P<tier>[^@()]+)@(?P<slot>\w+)\)",
     lambda m: (
         f"{_slot(m.group('slot'))}'s own resources are `{m.group('tier')}` or better"
@@ -552,6 +560,12 @@ def _render_state_delta(delta: Mapping[str, Any]) -> str:
         if key == "character.current_activity":
             parts.append(f'activity → "{value}"')
             continue
+        if key == "mood.set":
+            mood = value.get("mood") if isinstance(value, Mapping) else value
+            hours = value.get("hours") if isinstance(value, Mapping) else None
+            duration = f" for {hours} world-hours" if hours is not None else ""
+            parts.append(f"sets actor mood to `{mood}`{duration}")
+            continue
         if key in ("entity_tags.add", "entity_tags_target.add"):
             target = "actor" if key == "entity_tags.add" else "target"
             tags = ", ".join(f"`{t}`" for t in value)
@@ -689,6 +703,14 @@ def _render_branch(idx: int, branch: Branch) -> List[str]:
     lines.append("")
     if branch.state_delta:
         lines.append(f"**Does:** {_render_state_delta(branch.state_delta)}")
+    if branch.mood_affinities:
+        rendered = ", ".join(
+            f"`{mood}` × {multiplier:g}"
+            for mood, multiplier in sorted(branch.mood_affinities.items())
+        )
+        lines.append(
+            "**Mood affinity:** stochastic selection weight only — " + rendered
+        )
     if branch.event_type:
         lines.append(f"**Event:** `{branch.event_type}`")
     if branch.narrative_stub:

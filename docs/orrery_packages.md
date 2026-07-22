@@ -228,7 +228,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
   - **NOT:** 2+ other entities co-located with target
   - actor has any of [`vendetta_holder`, `violent_history`]
 
-**Does:** activity → "executing retaliation"; adds `recently_violent` to actor
+**Does:** activity → "executing retaliation"; adds `recently_violent` to actor; sets actor mood to `restless`
 **Event:** `retaliation_executed`
 
 > {actor} moves on {target} in the moment the corridor clears — no warning, no negotiation, the years of waiting compressed into the time it takes to close a few meters of distance.
@@ -1272,7 +1272,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 **When:** actor `build_venture` project passes `completion` due-state
 
-**Does:** applies project `complete` transition; adds `proprietor` to actor
+**Does:** applies project `complete` transition; adds `proprietor` to actor; sets actor mood to `elated`
 **Event:** `build_venture_completed`
 
 > The preparations stop being preparations. {actor} opens the doors, takes responsibility for what happens beyond them, and becomes the proprietor of something now alive in the world.
@@ -1281,7 +1281,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 **When:** actor `build_venture` project passes `abandon` due-state
 
-**Does:** applies project `abandon` transition
+**Does:** applies project `abandon` transition; sets actor mood to `grim`
 **Event:** `build_venture_abandoned`
 
 > {actor} admits that the venture has become an obligation to an unopened future. They release it rather than feed another season into delay.
@@ -1383,7 +1383,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
   - **NOT:** actor has any of [`hostile_to`, `hunting`] pair tags to target
   - **NOT:** target has any of [`hostile_to`, `hunting`] pair tags to actor
 
-**Does:** applies project `complete` transition; adds outbound `contact:intimate` pair tag to target and upserts the actor→target `romantic` relationship
+**Does:** applies project `complete` transition; adds outbound `contact:intimate` pair tag to target and upserts the actor→target `romantic` relationship; sets actor mood to `elated`
 **Event:** `pursue_romance_completed`
 
 > {actor} finally names what has grown between them, and {target} answers with warmth of their own. The courtship becomes a relationship both can recognize.
@@ -1397,7 +1397,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
   - target has any of [`hostile_to`, `hunting`] pair tags to actor
   - trust target→actor < -1
 
-**Does:** applies project `abandon` transition
+**Does:** applies project `abandon` transition; sets actor mood to `sour`
 **Event:** `pursue_romance_abandoned`
 
 > {target}'s answer closes the possibility, whether through plain refusal, disapproval, or danger. {actor} stops pursuing what is not mutual.
@@ -1522,7 +1522,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
   - target has any of [`hostile_to`, `hunting`] pair tags to actor
   - trust target→actor < -1
 
-**Does:** applies project `abandon` transition
+**Does:** applies project `abandon` transition; sets actor mood to `sour`
 **Event:** `court_patron_abandoned`
 
 > {target}'s answer is rejection, contempt, or danger. {actor} abandons the bid for favor before deference becomes humiliation.
@@ -1632,7 +1632,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
   - **NOT:** actor has any of [`hostile_to`, `hunting`] pair tags to target
   - **NOT:** target has any of [`hostile_to`, `hunting`] pair tags to actor
 
-**Does:** applies project `complete` transition and upserts the actor→target `complex` relationship with `+1|favorable` valence; removes `grudge_active` from target
+**Does:** applies project `complete` transition and upserts the actor→target `complex` relationship with `+1|favorable` valence; removes `grudge_active` from target; sets actor mood to `elated`
 **Event:** `seek_redemption_completed`
 
 > {target} accepts what {actor} has done to make amends. The history remains complicated, but it no longer dictates only hostility between them.
@@ -1646,7 +1646,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
   - actor has any of [`hostile_to`, `hunting`] pair tags to target
   - target has any of [`hostile_to`, `hunting`] pair tags to actor
 
-**Does:** applies project `abandon` transition
+**Does:** applies project `abandon` transition; sets actor mood to `grim`
 **Event:** `seek_redemption_abandoned`
 
 > The amends are thrown back in {actor}'s face. Whether the answer is hardened resentment or fresh hostility, {target} will not accept reconciliation on these terms.

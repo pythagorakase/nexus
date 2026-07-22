@@ -240,6 +240,8 @@ def test_full_ladder(state: WorldState, label: str, delta_key: str) -> None:
     )
     assert result.branch_label == label
     assert delta_key in result.state_delta
+    if label == "Withdraw after being spurned":
+        assert result.state_delta["mood.set"] == {"mood": "sour"}
     if delta_key == "project.complete":
         assert result.state_delta == {
             "project.complete": {"milestone": True},
