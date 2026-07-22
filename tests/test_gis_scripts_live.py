@@ -11,6 +11,7 @@ from psycopg2.extras import RealDictCursor
 
 from nexus.api.slot_utils import get_slot_db_url
 from scripts.gis_backfill import (
+    apply_backfill,
     format_dry_run,
     load_candidates,
     load_zone_assignments,
@@ -70,6 +71,11 @@ def script_conn() -> Iterator[Any]:
                     'Boundary Gap',
                     'A deliberately boundary-less audit row.',
                     NULL
+                ), (
+                    30,
+                    'Far Zone',
+                    'A remote region far from the protagonist.',
+                    ST_Multi(ST_MakeEnvelope(48, 48, 52, 52, 4326))
                 );
                 INSERT INTO places (
                     id, name, summary, type, zone, coordinates
@@ -94,6 +100,15 @@ def script_conn() -> Iterator[Any]:
                     'virtual',
                     NULL,
                     NULL
+                ), (
+                    103,
+                    'Far Coordinated Place',
+                    'A mapped physical place whose zone was lost.',
+                    'fixed_location',
+                    NULL,
+                    ST_SetSRID(
+                        ST_MakePoint(50, 50, 0, 0), 4326
+                    )::geography
                 );
                 INSERT INTO characters (
                     id, name, current_location, extra_data
@@ -126,8 +141,9 @@ def test_gis_hygiene_plain_table_output_contract(script_conn: Any) -> None:
     assert "Placeless Witness | retrograde" in report
     assert "Unlocated non-virtual places (1)" in report
     assert "Missing Point" in report
-    assert "Zone-less places (2)" in report
+    assert "Zone-less places (3)" in report
     assert "Virtual Forum" in report
+    assert "Far Coordinated Place" in report
     assert "Boundary-less zones (1)" in report
     assert "20 | Boundary Gap" in report
 
@@ -138,16 +154,46 @@ def test_gis_backfill_dry_run_plan_is_pure(script_conn: Any) -> None:
         candidates = load_candidates(cur)
     report = format_dry_run(5, candidates, assignments)
 
-    assert len(candidates) == 1
+    assert len(candidates) == 2
     assert len(assignments) == 2
-    assert candidates[0].zone_id == 10
-    assert candidates[0].needs_zone_write is True
+    missing_point = next(row for row in candidates if row.place_id == 101)
+    coordinated = next(row for row in candidates if row.place_id == 103)
+    assert missing_point.zone_id == 10
+    assert missing_point.needs_zone_write is True
+    assert coordinated.zone_id == 30
+    assert coordinated.needs_coordinate_authoring is False
     assert "coordinates: MODEL_CALL_ON_APPLY" in report
+    assert "coordinates: EXISTING_POINT_GEOMETRY" in report
     assert "Virtual Forum (virtual) | assign story zone 10" in report
     with script_conn.cursor() as cur:
         cur.execute("SELECT zone, coordinates FROM places WHERE id = 101")
         row = cur.fetchone()
     assert row == {"zone": None, "coordinates": None}
+
+
+def test_gis_backfill_resolves_existing_point_without_model_call(
+    script_conn: Any,
+    monkeypatch: Any,
+) -> None:
+    with script_conn.cursor() as cur:
+        candidate = next(row for row in load_candidates(cur) if row.place_id == 103)
+        monkeypatch.setattr(
+            "scripts.gis_backfill.author_place_coordinates",
+            lambda **_kwargs: (_ for _ in ()).throw(
+                AssertionError("existing coordinates must not call the model")
+            ),
+        )
+        apply_backfill(
+            cur,
+            candidates=[candidate],
+            zone_assignments=[],
+            model="unused",
+            max_tokens=1,
+        )
+        cur.execute("SELECT zone FROM places WHERE id = 103")
+        row = cur.fetchone()
+
+    assert row == {"zone": 30}
 
 
 def test_gis_backfill_refuses_frozen_slots(capsys: Any) -> None:

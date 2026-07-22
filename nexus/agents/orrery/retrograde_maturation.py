@@ -666,7 +666,13 @@ def _mature_one(
     seed_elapsed = time.monotonic() - seed_started
     seed_response = seed_result["seed_candidate_response"]
 
-    if not seed_response.get("selected_seed_ids"):
+    selected_seed_ids = seed_response.get("selected_seed_ids") or []
+    geo_authoring = packet.get("geo_authoring")
+    geo_authoring_required = bool(
+        isinstance(geo_authoring, Mapping) and geo_authoring.get("required")
+    )
+
+    if not selected_seed_ids and not geo_authoring_required:
         manifest = _base_manifest(row, cfg)
         manifest.update(
             {
@@ -705,6 +711,44 @@ def _mature_one(
         expansion_result["retrograde_expansion_plan"],
         prefix=f"{MATURATION_EVENT_REF_PREFIX}_{row['job_id']}",
     )
+
+    if not selected_seed_ids:
+        with conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                _apply_maturation_coordinates(
+                    cur,
+                    row=row,
+                    expansion_payload=expansion_payload,
+                )
+                total_elapsed = time.monotonic() - started
+                manifest = _base_manifest(row, cfg)
+                manifest.update(
+                    {
+                        "persisted": False,
+                        "coordinates_persisted": True,
+                        "skipped": "no_seeds_selected",
+                        "seed_model": seed_result["model"],
+                        "expansion_model": expansion_result["model"],
+                        "timings_seconds": {
+                            "seed": round(seed_elapsed, 2),
+                            "expansion": round(expansion_elapsed, 2),
+                            "total": round(total_elapsed, 2),
+                        },
+                        "budget_exceeded": total_elapsed > cfg.budget_seconds,
+                    }
+                )
+                _mark_maturation_succeeded(
+                    cur,
+                    job_id=row["job_id"],
+                    manifest=manifest,
+                )
+        logger.info(
+            "Maturation job %s authored required coordinates for %r with "
+            "no selected history seeds",
+            row["job_id"],
+            row["entity_name"],
+        )
+        return manifest
 
     from nexus.agents.orrery.retrograde_persistence import (
         build_retrograde_persistence_plan,
@@ -1121,7 +1165,11 @@ def _load_job_context(
                    z.name AS zone_name,
                    z.summary AS zone_summary
             FROM places p
-            JOIN zones z ON z.id = p.zone
+            -- LEFT JOIN: pre-hygiene stubs may lack a zone; a zone-less
+            -- place is a real place awaiting geo authoring, not a missing
+            -- entity (the required-geo path zones it after coordinates
+            -- are authored).
+            LEFT JOIN zones z ON z.id = p.zone
             WHERE p.id = %s
             """,
             (row["entity_subtype_id"],),

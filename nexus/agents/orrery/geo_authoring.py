@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from html import escape
 from pathlib import Path
 from typing import Any, Mapping, Optional
 
@@ -36,10 +37,14 @@ def render_geo_authoring_prompt(
 
     prompt = _PROMPT_PATH.read_text(encoding="utf-8")
     replacements = {
-        "{{PLACE_NAME}}": place_name,
-        "{{PLACE_SUMMARY}}": place_summary or "(no summary supplied)",
-        "{{ZONE_NAME}}": zone_name,
-        "{{ZONE_SUMMARY}}": zone_summary or "(no zone summary supplied)",
+        "{{PLACE_NAME}}": escape(place_name, quote=False),
+        "{{PLACE_SUMMARY}}": escape(
+            place_summary or "(no summary supplied)", quote=False
+        ),
+        "{{ZONE_NAME}}": escape(zone_name, quote=False),
+        "{{ZONE_SUMMARY}}": escape(
+            zone_summary or "(no zone summary supplied)", quote=False
+        ),
     }
     for marker, value in replacements.items():
         prompt = prompt.replace(marker, value)

@@ -21,7 +21,7 @@ FROZEN_SLOTS = frozenset({1, 2})
 
 @dataclass(frozen=True)
 class BackfillCandidate:
-    """One physical place needing a model-authored point."""
+    """One physical place needing a point or a geometry-resolved zone."""
 
     place_id: int
     name: str
@@ -30,6 +30,14 @@ class BackfillCandidate:
     zone_name: str
     zone_summary: str | None
     needs_zone_write: bool
+    longitude: float | None
+    latitude: float | None
+
+    @property
+    def needs_coordinate_authoring(self) -> bool:
+        """Return whether this place still needs a model-authored point."""
+
+        return self.longitude is None or self.latitude is None
 
 
 @dataclass(frozen=True)
@@ -50,6 +58,7 @@ def load_zone_assignments(cur: Any) -> list[ZoneAssignment]:
         SELECT id, name, type::text AS type
         FROM places
         WHERE zone IS NULL
+          AND (type::text = 'virtual' OR coordinates IS NULL)
         ORDER BY id
         """
     )
@@ -73,21 +82,40 @@ def load_candidates(cur: Any) -> list[BackfillCandidate]:
 
     cur.execute(
         """
-        SELECT id, name, summary, zone
+        SELECT id,
+               name,
+               summary,
+               zone,
+               ST_X(coordinates::geometry) AS longitude,
+               ST_Y(coordinates::geometry) AS latitude
         FROM places
         WHERE type::text <> 'virtual'
-          AND coordinates IS NULL
+          AND (coordinates IS NULL OR zone IS NULL)
         ORDER BY id
         """
     )
     places = cur.fetchall()
     if not places:
         return []
-    active_zone = story_active_zone(cur)
+    active_zone: int | None = None
     candidates = []
     for place in places:
         place = dict(place)
-        zone_id = int(place["zone"] or active_zone)
+        longitude = place["longitude"]
+        latitude = place["latitude"]
+        if longitude is not None and latitude is not None:
+            zone_id = resolve_zone_for_point(
+                cur,
+                longitude=float(longitude),
+                latitude=float(latitude),
+            )
+        else:
+            if place["zone"] is not None:
+                zone_id = int(place["zone"])
+            else:
+                if active_zone is None:
+                    active_zone = story_active_zone(cur)
+                zone_id = active_zone
         cur.execute(
             "SELECT name, summary FROM zones WHERE id = %s",
             (zone_id,),
@@ -107,6 +135,8 @@ def load_candidates(cur: Any) -> list[BackfillCandidate]:
                 zone_name=str(zone["name"]),
                 zone_summary=zone["summary"],
                 needs_zone_write=place["zone"] is None,
+                longitude=None if longitude is None else float(longitude),
+                latitude=None if latitude is None else float(latitude),
             )
         )
     return candidates
@@ -128,17 +158,17 @@ def format_dry_run(
     if not candidates:
         lines.append("No physical places need coordinates.")
         return "\n".join(lines)
-    assignment_ids = {assignment.place_id for assignment in zone_assignments}
+    # Zone writes are fully enumerated in the assignment section above;
+    # candidate lines carry only the zone context the authoring call sees.
     for candidate in candidates:
-        zone_note = (
-            " + assign story zone"
-            if candidate.needs_zone_write and candidate.place_id not in assignment_ids
-            else ""
-        )
         lines.append(
             f"place {candidate.place_id}: {candidate.name} | "
-            f"zone {candidate.zone_id}: {candidate.zone_name}{zone_note} | "
-            "coordinates: MODEL_CALL_ON_APPLY"
+            f"zone {candidate.zone_id}: {candidate.zone_name} | "
+            + (
+                "coordinates: MODEL_CALL_ON_APPLY"
+                if candidate.needs_coordinate_authoring
+                else "coordinates: EXISTING_POINT_GEOMETRY"
+            )
         )
     return "\n".join(lines)
 
@@ -164,6 +194,24 @@ def apply_backfill(
         )
 
     for candidate in candidates:
+        if not candidate.needs_coordinate_authoring:
+            assert candidate.longitude is not None
+            assert candidate.latitude is not None
+            zone_id = resolve_zone_for_point(
+                cur,
+                longitude=candidate.longitude,
+                latitude=candidate.latitude,
+            )
+            cur.execute(
+                "UPDATE places SET zone = %s WHERE id = %s AND zone IS NULL",
+                (zone_id, candidate.place_id),
+            )
+            print(
+                f"Resolved existing point for {candidate.name} "
+                f"(id={candidate.place_id}) to zone {zone_id}; "
+                f"updated {cur.rowcount} row"
+            )
+            continue
         print(f"Authoring coordinates for {candidate.name} (id={candidate.place_id})")
         response = author_place_coordinates(
             model=model,

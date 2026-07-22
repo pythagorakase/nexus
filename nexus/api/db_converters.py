@@ -206,7 +206,7 @@ async def create_new_place(conn: asyncpg.Connection, new_place: NewPlace) -> int
             latitude=coordinates.lat,
         )
 
-    place_id = await conn.fetchval(
+    place_row = await conn.fetchrow(
         """
         INSERT INTO places (
             name, type, summary, history, current_status, secrets,
@@ -220,7 +220,7 @@ async def create_new_place(conn: asyncpg.Connection, new_place: NewPlace) -> int
                 )::geography
             END
         )
-        RETURNING id
+        RETURNING id, entity_id
     """,
         new_place.name,
         place_type,
@@ -234,6 +234,16 @@ async def create_new_place(conn: asyncpg.Connection, new_place: NewPlace) -> int
         coordinates.lat if coordinates else None,
     )
 
+    place_id = int(place_row["id"])
+    counters = await apply_tag_bestowal_async(
+        conn,
+        entity_id=int(place_row["entity_id"]),
+        entity_kind="place",
+        bestowal=getattr(new_place, "orrery_tags", None),
+        source_kind="skald_inline",
+    )
+    if any(counters.values()):
+        logger.info(f"Tag bestowal place/{place_id}: {counters}")
     return place_id
 
 

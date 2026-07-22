@@ -354,8 +354,10 @@ class RetrogradeExpansionPlanResponse(BaseModel):
         RETROGRADE_EXPANSION_RESPONSE_SCHEMA_VERSION
     )
     selected_seed_ids: list[str] = Field(
-        min_length=1,
-        description="Selected seed ids considered by this expansion.",
+        description=(
+            "Selected seed ids considered by this expansion; empty is valid "
+            "for required geo-only maturation."
+        ),
     )
     event_plan: list[RetrogradeExpansionEventPlan] = Field(default_factory=list)
     entity_tag_plan: list[RetrogradeExpansionEntityTagPlan] = Field(
@@ -647,6 +649,7 @@ def validate_expansion_plan(
         payload,
         selected_seed_ids=list(candidates.selected_seed_ids),
     )
+    geo_authoring = packet.get("geo_authoring")
     issues = _expansion_contract_issues(
         response=response,
         selected_seed_ids=selected_seed_ids,
@@ -655,6 +658,14 @@ def validate_expansion_plan(
         known_entity_keys=_packet_known_entity_keys(packet),
         max_new_entity_stubs=_budget_entity_stub_cap(seed_generation_request),
     )
+    if (
+        isinstance(geo_authoring, Mapping)
+        and geo_authoring.get("required")
+        and response.coordinates is None
+    ):
+        issues.append(
+            "coordinates are required when packet.geo_authoring.required is true"
+        )
     if issues:
         formatted = "\n".join(f"- {issue}" for issue in issues)
         raise RetrogradeExpansionValidationError(formatted)
