@@ -379,7 +379,9 @@ _register(
 )
 _register(
     r"weather_is\((?P<values>[^)]+)\)",
-    lambda m: f"weather is one of [{', '.join(m.group('values').split(','))}]",
+    lambda m: (
+        "actor observes weather in [" + ", ".join(m.group("values").split(",")) + "]"
+    ),
 )
 
 

@@ -322,6 +322,7 @@ async def post_resolve(request: OrreryResolveRequest) -> dict[str, Any]:
                 epistemics_settings=orrery.get("epistemics"),
                 fanout_settings=orrery.get("fanout"),
                 contagion_settings=orrery.get("contagion"),
+                weather_settings=orrery.get("weather"),
             )
         except OverrideValidationError as exc:
             # Override validation (unknown vocab, no-op toggles) is caller
@@ -413,6 +414,7 @@ async def post_coverage(request: OrreryCoverageRequest) -> dict[str, Any]:
             epistemics_settings=orrery.get("epistemics"),
             fanout_settings=orrery.get("fanout"),
             contagion_settings=orrery.get("contagion"),
+            weather_settings=orrery.get("weather"),
         )
 
 

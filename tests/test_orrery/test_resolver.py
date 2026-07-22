@@ -32,12 +32,17 @@ from nexus.agents.orrery.substrate import (
     WorldState,
     trust_at_least,
     trust_below,
+    weather_is,
 )
 from nexus.agents.orrery.templates import (
     ADVANCE_RECRUIT_ALLY,
     BUILTIN_TEMPLATES,
     START_RECRUIT_ALLY,
 )
+from nexus.config.settings_models import OrreryWeatherSettings
+
+
+_DEFAULT_WORLD_TIME = object()
 
 
 class FakeResult:
@@ -91,7 +96,8 @@ class FakeSession:
         routine_anchor_rows=None,
         win_history_rows=None,
         intertitle_row=None,
-        world_time=None,
+        local_weather_row=None,
+        world_time=_DEFAULT_WORLD_TIME,
         weather="",
         max_chunk_id=100,
     ):
@@ -141,16 +147,25 @@ class FakeSession:
         self.project_state_rows = project_state_rows or []
         self.routine_anchor_rows = routine_anchor_rows or []
         self.win_history_rows = win_history_rows or []
+        self.world_time = (
+            datetime(2073, 10, 31, 12, tzinfo=timezone.utc)
+            if world_time is _DEFAULT_WORLD_TIME
+            else world_time
+        )
         self.intertitle_row = intertitle_row or {
             "season": 1,
             "episode": 1,
             "scene": 1,
             "world_layer": "primary",
-            "world_time": self.world_time if hasattr(self, "world_time") else None,
+            "world_time": self.world_time,
             "location_name": "The Commons",
             "location_geom": "SRID=4326;POINT(-90.0725 29.9320 0 0)",
         }
-        self.world_time = world_time or datetime(2073, 10, 31, 12, tzinfo=timezone.utc)
+        self.local_weather_row = local_weather_row or {
+            "seed_weather": weather,
+            "anchor_place_id": 10,
+            "scene_weather": None,
+        }
         self.weather = weather
         self.max_chunk_id = max_chunk_id
         self.max_id_queries = 0
@@ -302,6 +317,11 @@ class FakeSession:
             return FakeResult([{"world_time": self.world_time}])
         if "/* orrery:seed_weather */" in sql:
             return FakeResult([{"weather": self.weather}])
+        if "/* orrery:local_weather_context */" in sql:
+            assert "active_place.id AS anchor_place_id" in sql
+            assert "active_place.id = protagonist.current_location" in sql
+            assert "place_chunk_references" not in sql
+            return FakeResult([self.local_weather_row])
         if "SELECT max(nc.id) AS max_id" in sql:
             assert "orrery:retrograde_prologue_anchor" in sql
             self.max_id_queries += 1
@@ -1188,6 +1208,111 @@ def test_hydrate_world_state_populates_trust_from_valence_magnitude() -> None:
     assert state.trust[(2, 1)] == -3
     assert state.relationship_types[(1, 2)] == frozenset({"comrade"})
     assert state.relationship_types[(2, 1)] == frozenset({"rival"})
+
+
+def _localized_weather_settings() -> dict:
+    settings = OrreryWeatherSettings().model_dump()
+    settings["enabled"] = True
+    return settings
+
+
+@pytest.mark.parametrize(
+    ("anchor_chunk_id", "world_time"),
+    [
+        (None, datetime(2073, 10, 31, 12, tzinfo=timezone.utc)),
+        (100, None),
+    ],
+)
+def test_local_weather_refuses_incomplete_story_clock(
+    anchor_chunk_id, world_time, caplog
+) -> None:
+    """Anchorless and clockless scenes stay unknown instead of using 1970."""
+
+    caplog.set_level("DEBUG", logger="nexus.agents.orrery.resolver")
+    session = FakeSession(world_time=world_time)
+    settings = _localized_weather_settings()
+
+    state = hydrate_world_state(
+        session,
+        anchor_chunk_id=anchor_chunk_id,
+        window_chunks=30,
+        weather_settings=settings,
+    )
+    proposal = resolve_dry_run(
+        session,
+        (),
+        anchor_chunk_id=anchor_chunk_id,
+        window_chunks=30,
+        weather_settings=settings,
+    )
+
+    assert state.weather is None
+    assert state.place_weather == {}
+    assert not weather_is("clear", "rain", "fog", "snow", "warm")(
+        state, {Slot.ACTOR: 1}
+    )
+    assert proposal.scene_conditions == {}
+    assert "Refusing localized weather derivation" in caplog.text
+
+
+def test_disabled_weather_omits_scene_conditions() -> None:
+    """FIX 4: the localized prompt contract does not attach when disabled."""
+
+    proposal = resolve_dry_run(
+        FakeSession(weather="rain"),
+        (),
+        anchor_chunk_id=100,
+        window_chunks=30,
+        weather_settings={"enabled": False},
+    )
+
+    assert proposal.scene_conditions == {}
+
+
+def test_weather_override_uses_displayed_protagonist_place_for_occupants() -> None:
+    """A stale setting reference cannot redirect the displayed scene override."""
+
+    session = FakeSession(
+        location_rows=[
+            {"entity_id": 1, "current_location": 10},
+            {"entity_id": 2, "current_location": 10},
+            {"entity_id": 3, "current_location": 20},
+        ],
+        location_class_rows=[
+            {
+                "id": 10,
+                "place_entity_id": 1000,
+                "zone_id": 1,
+                "location_class": "fixed_location",
+                "is_primary": True,
+            },
+            {
+                "id": 20,
+                "place_entity_id": 2000,
+                "zone_id": 2,
+                "location_class": "fixed_location",
+                "is_primary": True,
+            },
+        ],
+        local_weather_row={
+            "seed_weather": "clear",
+            "anchor_place_id": 10,
+            "scene_weather": "warm",
+            "stale_setting_place_id": 20,
+        },
+    )
+
+    state = hydrate_world_state(
+        session,
+        anchor_chunk_id=100,
+        window_chunks=30,
+        weather_settings=_localized_weather_settings(),
+    )
+
+    assert state.weather == "warm"
+    assert state.place_weather[10] == "warm"
+    assert weather_is("warm")(state, {Slot.ACTOR: 1})
+    assert weather_is("warm")(state, {Slot.ACTOR: 2})
 
 
 def test_hydrate_world_state_uses_stable_trust_magnitude_for_duplicate_pairs() -> None:

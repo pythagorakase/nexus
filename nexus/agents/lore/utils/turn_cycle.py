@@ -681,6 +681,7 @@ class TurnCycleManager:
                 epistemics_settings=orrery_settings.get("epistemics"),
                 fanout_settings=orrery_settings.get("fanout"),
                 contagion_settings=orrery_settings.get("contagion"),
+                weather_settings=orrery_settings.get("weather"),
             )
 
         turn_context.orrery_proposal = proposal
@@ -723,6 +724,9 @@ class TurnCycleManager:
             return None
         from sqlalchemy import text as _text
 
+        # Keep this protagonist.current_location authority in lockstep with
+        # resolver._load_local_weather; the displayed place and anchor-scene
+        # weather override must describe the same physical scene.
         row = (
             session.execute(
                 _text(
@@ -862,6 +866,10 @@ class TurnCycleManager:
             turn_context.context_payload["orrery_joint_beats"] = [
                 beat.to_dict() for beat in proposal.joint_beats
             ]
+
+        scene_conditions = getattr(proposal, "scene_conditions", {}) if proposal else {}
+        if scene_conditions:
+            turn_context.context_payload["scene_conditions"] = dict(scene_conditions)
 
         if turn_context.bleed_menu:
             turn_context.context_payload["orrery_bleed_menu"] = [

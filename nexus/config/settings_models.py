@@ -679,6 +679,105 @@ class OrreryBindingSettings(BaseModel):
     window_chunks: int = Field(default=30, ge=1)
 
 
+def _default_weather_climates() -> Dict[str, List[str]]:
+    return {
+        "lagoon_wet": [
+            "rain",
+            "rain",
+            "fog",
+            "warm",
+            "rain",
+            "clear",
+            "warm",
+            "rain",
+        ],
+        "temperate": [
+            "clear",
+            "clear",
+            "rain",
+            "fog",
+            "clear",
+            "warm",
+            "clear",
+            "rain",
+        ],
+        "cold": [
+            "snow",
+            "clear",
+            "fog",
+            "snow",
+            "clear",
+            "snow",
+            "clear",
+            "fog",
+        ],
+    }
+
+
+def _default_seed_climates() -> Dict[str, str]:
+    return {
+        "rain": "lagoon_wet",
+        "snow": "cold",
+        "fog": "temperate",
+        "clear": "temperate",
+    }
+
+
+class OrreryWeatherSettings(BaseModel):
+    """Derived per-region weather rotations for ``[orrery.weather]``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    period_hours: int = Field(default=6, ge=1)
+    climates: Dict[str, List[str]] = Field(default_factory=_default_weather_climates)
+    seed_climates: Dict[str, str] = Field(default_factory=_default_seed_climates)
+
+    @model_validator(mode="after")
+    def _validate_weather_contract(self) -> "OrreryWeatherSettings":
+        from nexus.agents.orrery.weather import WEATHER_VALUES
+
+        if not self.climates:
+            raise ValueError("orrery.weather.climates must not be empty")
+        for climate_name, sequence in self.climates.items():
+            if not climate_name.strip():
+                raise ValueError("orrery.weather climate names must be non-empty")
+            if not sequence:
+                raise ValueError(
+                    f"orrery.weather.climates.{climate_name} must not be empty"
+                )
+            invalid = sorted(set(sequence) - WEATHER_VALUES)
+            if invalid:
+                raise ValueError(
+                    f"orrery.weather.climates.{climate_name} contains unknown "
+                    f"weather values: {invalid}"
+                )
+        seed_classifications = WEATHER_VALUES - {"warm"}
+        missing_seed_keys = seed_classifications - set(self.seed_climates)
+        if missing_seed_keys:
+            raise ValueError(
+                "orrery.weather.seed_climates must map every seed classification; "
+                f"missing {sorted(missing_seed_keys)}"
+            )
+        unknown_seed_keys = set(self.seed_climates) - seed_classifications
+        if unknown_seed_keys:
+            raise ValueError(
+                "orrery.weather.seed_climates contains unknown weather values: "
+                f"{sorted(unknown_seed_keys)}"
+            )
+        missing_targets = {
+            target
+            for target in self.seed_climates.values()
+            if target not in self.climates
+        }
+        if missing_targets:
+            raise ValueError(
+                "orrery.weather.seed_climates targets unknown climates: "
+                f"{sorted(missing_targets)}"
+            )
+        return self
+
+
 _CONTAGION_DURATION_RE = re.compile(r"^(?P<amount>\d+(?:\.\d+)?)(?P<unit>[smhdw])$")
 _CONTAGION_DURATION_SECONDS = {
     "s": 1,
@@ -2051,6 +2150,7 @@ class OrrerySettings(BaseModel):
 
     enabled: bool = True
     binding: OrreryBindingSettings = Field(default_factory=OrreryBindingSettings)
+    weather: OrreryWeatherSettings = Field(default_factory=OrreryWeatherSettings)
     contagion: OrreryContagionSettings = Field(default_factory=OrreryContagionSettings)
     distortion: OrreryDistortionSettings = Field(
         default_factory=OrreryDistortionSettings

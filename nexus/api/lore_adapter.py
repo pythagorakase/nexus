@@ -241,6 +241,14 @@ def extract_metadata_updates(response: StoryTurnResponse) -> Dict[str, Any]:
                 else metadata.world_layer or "primary"
             )
 
+        # The Skald's in-scene weather override must survive extraction or
+        # the chunk_metadata.scene_weather column is write-only-NULL in
+        # production (every response field that skips this function is
+        # silently dropped before commit).
+        scene_weather = getattr(metadata, "scene_weather", None)
+        if scene_weather is not None:
+            metadata_updates["scene_weather"] = scene_weather
+
     return metadata_updates
 
 

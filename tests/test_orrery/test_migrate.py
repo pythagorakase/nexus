@@ -363,6 +363,22 @@ def test_claim_awareness_knower_index_supports_per_turn_digest() -> None:
     assert "per-turn Storyteller knowledge digest" in migration_sql
 
 
+def test_scene_weather_migration_adds_closed_override_contract() -> None:
+    """Migration 094 stores only the ruled five-value weather vocabulary."""
+
+    migration_sql = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "094_scene_weather_override.sql"
+    ).read_text()
+
+    assert "ADD COLUMN scene_weather text NULL" in migration_sql
+    assert "chunk_metadata_scene_weather_check" in migration_sql
+    for weather in ("clear", "rain", "fog", "snow", "warm"):
+        assert f"'{weather}'" in migration_sql
+    assert "NULL means derived local weather governs" in migration_sql
+
+
 def test_retrograde_persistence_migration_adds_distinct_sources() -> None:
     """Retrograde canonical writes need explicit event and tag provenance."""
 

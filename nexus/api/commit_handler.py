@@ -14,6 +14,7 @@ from typing import Optional, Dict, Any, List
 import asyncpg
 
 from nexus.agents.logon.apex_schema import (
+    ChunkMetadataUpdate,
     ChronologyUpdate,
     ReferencedEntities,
     StateUpdates,
@@ -145,6 +146,7 @@ async def insert_chunk_metadata(
     time_delta: Optional[Any],
     generation_date: Optional[datetime] = None,
     generation_model: Optional[str] = None,
+    scene_weather: Optional[str] = None,
 ) -> None:
     """
     Insert metadata for a chunk.
@@ -153,23 +155,44 @@ async def insert_chunk_metadata(
     slug = f"S{season:02d}E{episode:02d}_{scene:03d}"
     generation_timestamp = generation_date or datetime.utcnow()
 
-    await conn.execute(
-        """
-        INSERT INTO chunk_metadata (
-            chunk_id, season, episode, scene, world_layer,
-            time_delta, generation_date, slug, generation_model
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-        """,
-        chunk_id,
-        season,
-        episode,
-        scene,
-        world_layer,
-        time_delta,
-        generation_timestamp,
-        slug,
-        generation_model,
-    )
+    if scene_weather is None:
+        await conn.execute(
+            """
+            INSERT INTO chunk_metadata (
+                chunk_id, season, episode, scene, world_layer,
+                time_delta, generation_date, slug, generation_model
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            """,
+            chunk_id,
+            season,
+            episode,
+            scene,
+            world_layer,
+            time_delta,
+            generation_timestamp,
+            slug,
+            generation_model,
+        )
+    else:
+        await conn.execute(
+            """
+            INSERT INTO chunk_metadata (
+                chunk_id, season, episode, scene, world_layer,
+                time_delta, generation_date, slug, generation_model,
+                scene_weather
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            """,
+            chunk_id,
+            season,
+            episode,
+            scene,
+            world_layer,
+            time_delta,
+            generation_timestamp,
+            slug,
+            generation_model,
+            scene_weather,
+        )
     logger.info(f"Created metadata for chunk {chunk_id}: {slug}")
 
 
@@ -492,6 +515,7 @@ async def commit_incubator_to_database(
             faction_refs = await resolve_faction_references(ref_entities.factions, conn)
 
             # Step 4: Convert metadata
+            metadata_update = ChunkMetadataUpdate(**incubator["metadata_updates"])
             chronology_data = incubator["metadata_updates"].get("chronology", {})
             chronology = ChronologyUpdate(**chronology_data)
             db_meta = chronology_to_db_values(
@@ -541,6 +565,7 @@ async def commit_incubator_to_database(
                 world_layer=world_layer,
                 time_delta=db_meta["time_delta"],
                 generation_model=incubator.get("generation_model"),
+                scene_weather=metadata_update.scene_weather,
             )
 
             # Step 7: Insert junction table references

@@ -273,6 +273,21 @@ def test_context_prompt_includes_orrery_bleed_menu_controls() -> None:
     assert "[digital] Mara: street cameras briefly lose Mara" in prompt
 
 
+def test_context_prompt_renders_anchor_scene_conditions() -> None:
+    """Recognized scene conditions render as plain Storyteller context."""
+
+    prompt = LogonUtility({})._format_context_prompt(
+        {
+            "user_input": "Continue.",
+            "scene_conditions": {"weather": "fog", "time_of_day": "evening"},
+        }
+    )
+
+    assert "=== SCENE CONDITIONS ===" in prompt
+    assert "Weather: fog" in prompt
+    assert "Time of day: evening" in prompt
+
+
 @pytest.mark.parametrize("truncated", [False, True])
 def test_context_prompt_renders_world_knowledge_without_answer_keys(
     truncated: bool,
