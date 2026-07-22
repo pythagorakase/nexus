@@ -1068,6 +1068,7 @@ def compose_actor_target_bindings(
     actor_ids: Optional[Iterable[int]] = None,
     target_presence: str = "offscreen",
     include_social_contacts: bool = False,
+    include_hostile_edges: bool = False,
 ) -> Tuple[Bindings, ...]:
     """Compose ACTOR+TARGET bindings from actors' relational neighborhoods.
 
@@ -1077,8 +1078,9 @@ def compose_actor_target_bindings(
     reverse) so templates with symmetric semantics see both orderings. When
     ``include_social_contacts`` is true, current directed ``contact:social``
     edges are unioned into that base pool for templates that explicitly opt
-    into social-contact starts. Gate predicates with asymmetric semantics
-    (handler/asset) filter via role-explicit OR clauses.
+    into social-contact starts. ``include_hostile_edges`` adds active
+    character-only ``hostile_to`` and ``hunting`` edges in both orderings.
+    Gate predicates with asymmetric semantics filter via role-explicit arms.
 
     When actor_ids is provided (typical: resolve_dry_run threads through
     the actor set it already computed), this skips the redundant
@@ -1188,6 +1190,35 @@ def compose_actor_target_bindings(
                 reverse=False,
             )
 
+    if include_hostile_edges:
+        for row in session.execute(
+            text(
+                """
+                /* orrery:actor_target_bindings_hostile_edges */
+                SELECT ept.subject_entity_id AS source_entity_id,
+                       ept.object_entity_id AS target_entity_id
+                FROM entity_pair_tags ept
+                JOIN pair_tags pt ON pt.id = ept.pair_tag_id
+                JOIN entities es ON es.id = ept.subject_entity_id
+                JOIN entities et ON et.id = ept.object_entity_id
+                WHERE pt.tag IN ('hostile_to', 'hunting')
+                  AND NOT pt.deprecated
+                  AND ept.cleared_at IS NULL
+                  AND es.kind = 'character'
+                  AND et.kind = 'character'
+                  AND es.is_active = true
+                  AND et.is_active = true
+                """
+            )
+        ).mappings():
+            # Faction-endpoint hostility deliberately composes nothing until
+            # an authored desire names that faction.
+            add_candidate(
+                int(row["source_entity_id"]),
+                int(row["target_entity_id"]),
+                reverse=True,
+            )
+
     return tuple(
         {Slot.ACTOR: actor_id, Slot.TARGET: target_id}
         for actor_id, target_id in sorted(pairs)
@@ -1200,6 +1231,9 @@ def compose_actor_faction_bindings(
     anchor_chunk_id: Optional[int],
     window_chunks: int,
     actor_ids: Optional[Iterable[int]] = None,
+    include_rosters: bool = False,
+    roster_reach: int = 2,
+    orbit_distance: Optional[Mapping[tuple[int, int], int]] = None,
 ) -> Tuple[Bindings, ...]:
     """Compose ACTOR+FACTION bindings from active institutional pair tags.
 
@@ -1209,6 +1243,8 @@ def compose_actor_faction_bindings(
     enumeration; template entry predicates own those semantic choices.
     """
 
+    if include_rosters and orbit_distance is None:
+        raise ValueError("orbit_distance is required when include_rosters=True")
     if actor_ids is None:
         actor_only = compose_actor_bindings(
             session,
@@ -1223,6 +1259,8 @@ def compose_actor_faction_bindings(
     )
     if not actor_id_set:
         return ()
+    if include_rosters and not 1 <= roster_reach <= 4:
+        raise ValueError("roster_reach must be between 1 and 4")
 
     pairs: set[tuple[int, int]] = set()
     for row in session.execute(
@@ -1261,6 +1299,57 @@ def compose_actor_faction_bindings(
         if object_id in actor_id_set and row["subject_kind"] == "faction":
             pairs.add((object_id, subject_id))
 
+    if include_rosters:
+        live_rosters = sorted(
+            {
+                (int(row["member_id"]), int(row["faction_id"]))
+                for row in session.execute(
+                    text(
+                        """
+                        /* orrery:actor_faction_bindings_rosters */
+                        SELECT DISTINCT
+                               CASE
+                                   WHEN subject_entity.kind = 'character'
+                                   THEN subject_entity.id
+                                   ELSE object_entity.id
+                               END AS member_id,
+                               CASE
+                                   WHEN subject_entity.kind = 'faction'
+                                   THEN subject_entity.id
+                                   ELSE object_entity.id
+                               END AS faction_id
+                        FROM entity_pair_tags ept
+                        JOIN pair_tags pt ON pt.id = ept.pair_tag_id
+                        JOIN entities subject_entity
+                          ON subject_entity.id = ept.subject_entity_id
+                        JOIN entities object_entity
+                          ON object_entity.id = ept.object_entity_id
+                        WHERE pt.tag LIKE 'status:%'
+                          AND NOT pt.deprecated
+                          AND ept.cleared_at IS NULL
+                          AND subject_entity.is_active = true
+                          AND object_entity.is_active = true
+                          AND (
+                              (subject_entity.kind = 'character'
+                               AND object_entity.kind = 'faction')
+                              OR (subject_entity.kind = 'faction'
+                                  AND object_entity.kind = 'character')
+                          )
+                        """
+                    )
+                ).mappings()
+            }
+        )
+        for actor_id in sorted(actor_id_set):
+            for member_id, faction_id in live_rosters:
+                # Roster reach is relative_orbit_distance <= reach by
+                # construction: this is the same canonical mapping read by
+                # evidence predicates. Review found SQL path enumeration
+                # explodes on dense graphs, so do not recurse here.
+                distance = orbit_distance.get((actor_id, member_id))
+                if distance is not None and distance <= roster_reach:
+                    pairs.add((actor_id, faction_id))
+
     return tuple(
         {Slot.ACTOR: actor_id, Slot.FACTION: faction_id}
         for actor_id, faction_id in sorted(pairs)
@@ -1275,6 +1364,10 @@ def compose_actor_target_faction_bindings(
     actor_ids: Optional[Iterable[int]] = None,
     target_presence: str = "offscreen",
     include_social_contacts: bool = False,
+    include_hostile_edges: bool = False,
+    include_rosters: bool = False,
+    roster_reach: int = 2,
+    orbit_distance: Optional[Mapping[tuple[int, int], int]] = None,
 ) -> Tuple[Bindings, ...]:
     """Compose the deterministic product of target and faction candidates."""
 
@@ -1296,12 +1389,16 @@ def compose_actor_target_faction_bindings(
         actor_ids=actor_id_set,
         target_presence=target_presence,
         include_social_contacts=include_social_contacts,
+        include_hostile_edges=include_hostile_edges,
     )
     faction_bindings = compose_actor_faction_bindings(
         session,
         anchor_chunk_id=anchor_chunk_id,
         window_chunks=window_chunks,
         actor_ids=actor_id_set,
+        include_rosters=include_rosters,
+        roster_reach=roster_reach,
+        orbit_distance=orbit_distance,
     )
     targets_by_actor: dict[int, set[int]] = {}
     for binding in target_bindings:
@@ -1391,6 +1488,16 @@ def compose_project_faction_bindings(
     )
 
 
+def _roster_composition_settings(settings: Optional[Any]) -> tuple[bool, int]:
+    """Return validated roster-source enablement and relationship reach."""
+
+    enabled = bool(_weather_setting(settings, "roster_source_enabled", False))
+    reach = int(_weather_setting(settings, "roster_reach", 2))
+    if not 1 <= reach <= 4:
+        raise ValueError("roster_reach must be between 1 and 4")
+    return enabled, reach
+
+
 def compose_actor_faction_routes(
     session: Any,
     *,
@@ -1399,6 +1506,7 @@ def compose_actor_faction_routes(
     anchor_chunk_id: Optional[int],
     window_chunks: int,
     actor_ids: Iterable[int],
+    composition_settings: Optional[Any] = None,
 ) -> Tuple[tuple[Bindings, Tuple[Template, ...]], ...]:
     """Route institutional and stored-project faction bindings by template."""
 
@@ -1412,6 +1520,20 @@ def compose_actor_faction_routes(
         window_chunks=window_chunks,
         actor_ids=actor_id_set,
     )
+    roster_enabled, roster_reach = _roster_composition_settings(composition_settings)
+    roster = (
+        compose_actor_faction_bindings(
+            session,
+            anchor_chunk_id=anchor_chunk_id,
+            window_chunks=window_chunks,
+            actor_ids=actor_id_set,
+            include_rosters=True,
+            roster_reach=roster_reach,
+            orbit_distance=state.orbit_distance,
+        )
+        if roster_enabled and any(t.courts_factions for t in templates_tuple)
+        else ()
+    )
     project = compose_project_faction_bindings(
         session,
         state=state,
@@ -1424,9 +1546,12 @@ def compose_actor_faction_routes(
     project_pairs = {
         (binding[Slot.ACTOR], binding[Slot.FACTION]) for binding in project
     }
+    roster_pairs = {(binding[Slot.ACTOR], binding[Slot.FACTION]) for binding in roster}
     template_ids_by_pair: dict[tuple[int, int], set[str]] = {}
     for template in templates_tuple:
         allowed = set(institutional_pairs)
+        if template.courts_factions:
+            allowed.update(roster_pairs)
         if template.binds_project_faction:
             allowed.update(project_pairs)
         for pair in allowed:
@@ -1453,6 +1578,7 @@ def compose_actor_target_faction_routes(
     window_chunks: int,
     actor_ids: Iterable[int],
     target_presence: str = "offscreen",
+    composition_settings: Optional[Any] = None,
 ) -> Tuple[tuple[Bindings, Tuple[Template, ...]], ...]:
     """Route target-candidate products with institutional/project factions."""
 
@@ -1479,6 +1605,22 @@ def compose_actor_target_faction_routes(
         if any(template.starts_from_social_contact for template in templates_tuple)
         else ()
     )
+    hostile_enabled = _weather_setting(
+        composition_settings, "hostile_source_enabled", False
+    )
+    hostile_targets = (
+        compose_actor_target_bindings(
+            session,
+            anchor_chunk_id=anchor_chunk_id,
+            window_chunks=window_chunks,
+            actor_ids=actor_id_set,
+            target_presence=target_presence,
+            include_hostile_edges=True,
+        )
+        if hostile_enabled
+        and any(template.composes_from_hostility for template in templates_tuple)
+        else ()
+    )
     project_targets = (
         compose_project_target_bindings(
             session,
@@ -1495,6 +1637,20 @@ def compose_actor_target_faction_routes(
         anchor_chunk_id=anchor_chunk_id,
         window_chunks=window_chunks,
         actor_ids=actor_id_set,
+    )
+    roster_enabled, roster_reach = _roster_composition_settings(composition_settings)
+    roster_factions = (
+        compose_actor_faction_bindings(
+            session,
+            anchor_chunk_id=anchor_chunk_id,
+            window_chunks=window_chunks,
+            actor_ids=actor_id_set,
+            include_rosters=True,
+            roster_reach=roster_reach,
+            orbit_distance=state.orbit_distance,
+        )
+        if roster_enabled and any(t.courts_factions for t in templates_tuple)
+        else ()
     )
     project_factions = (
         compose_project_faction_bindings(
@@ -1517,8 +1673,10 @@ def compose_actor_target_faction_routes(
 
     relationship_by_actor = candidates_by_actor(relationship_targets, Slot.TARGET)
     social_by_actor = candidates_by_actor(social_targets, Slot.TARGET)
+    hostile_by_actor = candidates_by_actor(hostile_targets, Slot.TARGET)
     project_target_by_actor = candidates_by_actor(project_targets, Slot.TARGET)
     institutional_by_actor = candidates_by_actor(institutional_factions, Slot.FACTION)
+    roster_by_actor = candidates_by_actor(roster_factions, Slot.FACTION)
     project_faction_by_actor = candidates_by_actor(project_factions, Slot.FACTION)
 
     template_ids_by_triple: dict[tuple[int, int, int], set[str]] = {}
@@ -1527,9 +1685,13 @@ def compose_actor_target_faction_routes(
             targets = set(relationship_by_actor.get(actor_id, ()))
             if template.starts_from_social_contact:
                 targets.update(social_by_actor.get(actor_id, ()))
+            if template.composes_from_hostility:
+                targets.update(hostile_by_actor.get(actor_id, ()))
             if template.binds_project_target:
                 targets.update(project_target_by_actor.get(actor_id, ()))
             factions = set(institutional_by_actor.get(actor_id, ()))
+            if template.courts_factions:
+                factions.update(roster_by_actor.get(actor_id, ()))
             if template.binds_project_faction:
                 factions.update(project_faction_by_actor.get(actor_id, ()))
             for target_id in targets:
@@ -1564,14 +1726,15 @@ def compose_actor_target_routes(
     window_chunks: int,
     actor_ids: Iterable[int],
     target_presence: str = "offscreen",
+    composition_settings: Optional[Any] = None,
 ) -> Tuple[tuple[Bindings, Tuple[Template, ...]], ...]:
     """Route each ACTOR/TARGET binding to its authorized template stack.
 
     Relationship-backed pairs retain the complete two-party stack and its
-    normal priority competition. Social-contact-only and project-target-only
-    pairs admit only templates that explicitly opt into those broader binding
-    sources. When sources overlap, their template sets are unioned and
-    evaluated once in original stack order.
+    normal priority competition. Social-contact-only, hostile-only, and
+    project-target-only pairs admit only templates that explicitly opt into
+    those broader binding sources. Overlapping source template sets are
+    unioned and evaluated once in original stack order.
     """
 
     templates_tuple = tuple(templates)
@@ -1609,6 +1772,22 @@ def compose_actor_target_routes(
             include_social_contacts=True,
         )
         add_routes(social_bindings, social_templates)
+
+    hostile_templates = tuple(
+        template for template in templates_tuple if template.composes_from_hostility
+    )
+    if hostile_templates and _weather_setting(
+        composition_settings, "hostile_source_enabled", False
+    ):
+        hostile_bindings = compose_actor_target_bindings(
+            session,
+            anchor_chunk_id=anchor_chunk_id,
+            window_chunks=window_chunks,
+            actor_ids=actor_id_set,
+            target_presence=target_presence,
+            include_hostile_edges=True,
+        )
+        add_routes(hostile_bindings, hostile_templates)
 
     project_templates = tuple(
         template for template in templates_tuple if template.binds_project_target
@@ -1800,6 +1979,7 @@ def resolve_dry_run(
     contagion_settings: Optional[Any] = None,
     weather_settings: Optional[Any] = None,
     mood_settings: Optional[Any] = None,
+    composition_settings: Optional[Any] = None,
 ) -> OrreryTickProposal:
     """Hydrate, bind, and evaluate Orrery packages without database writes."""
 
@@ -1893,6 +2073,7 @@ def resolve_dry_run(
             window_chunks=window_chunks,
             actor_ids=actor_ids,
             target_presence="offscreen",
+            composition_settings=composition_settings,
         )
         for bindings, routed_templates in offscreen_routes:
             resolution = evaluate_stack(
@@ -1921,6 +2102,7 @@ def resolve_dry_run(
                 window_chunks=window_chunks,
                 actor_ids=actor_ids,
                 target_presence="present",
+                composition_settings=composition_settings,
             )
             for bindings, routed_templates in present_routes:
                 resolution = evaluate_stack(
@@ -1942,6 +2124,7 @@ def resolve_dry_run(
             anchor_chunk_id=anchor_chunk_id,
             window_chunks=window_chunks,
             actor_ids=actor_ids,
+            composition_settings=composition_settings,
         )
         offscreen_routes += faction_routes
         for bindings, routed_templates in faction_routes:
@@ -1965,6 +2148,7 @@ def resolve_dry_run(
             window_chunks=window_chunks,
             actor_ids=actor_ids,
             target_presence="offscreen",
+            composition_settings=composition_settings,
         )
         offscreen_routes += triple_routes
         for bindings, routed_templates in triple_routes:
@@ -1994,6 +2178,7 @@ def resolve_dry_run(
                 window_chunks=window_chunks,
                 actor_ids=actor_ids,
                 target_presence="present",
+                composition_settings=composition_settings,
             )
             present_routes += triple_pressure_routes
             for bindings, routed_templates in triple_pressure_routes:

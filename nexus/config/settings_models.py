@@ -679,6 +679,16 @@ class OrreryBindingSettings(BaseModel):
     window_chunks: int = Field(default=30, ge=1)
 
 
+class OrreryCompositionSettings(BaseModel):
+    """Opt-in shared binding sources for Orrery package composition."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    hostile_source_enabled: bool = False
+    roster_source_enabled: bool = False
+    roster_reach: int = Field(default=2, ge=1, le=4)
+
+
 def _default_weather_climates() -> Dict[str, List[str]]:
     return {
         "lagoon_wet": [
@@ -2159,6 +2169,9 @@ class OrrerySettings(BaseModel):
 
     enabled: bool = True
     binding: OrreryBindingSettings = Field(default_factory=OrreryBindingSettings)
+    composition: OrreryCompositionSettings = Field(
+        default_factory=OrreryCompositionSettings
+    )
     weather: OrreryWeatherSettings = Field(default_factory=OrreryWeatherSettings)
     mood: OrreryMoodSettings = Field(default_factory=OrreryMoodSettings)
     contagion: OrreryContagionSettings = Field(default_factory=OrreryContagionSettings)

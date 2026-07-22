@@ -14,6 +14,7 @@ from nexus.api.new_story_schemas import Genre
 from nexus.config.settings_models import (
     OrreryBleedSettings,
     OrreryContagionSettings,
+    OrreryCompositionSettings,
     OrreryDashboardSettings,
     OrreryDistortionSettings,
     OrreryDriftSettings,
@@ -47,6 +48,9 @@ def test_orrery_settings_resolve_model_reference() -> None:
     assert settings.orrery is not None
     assert settings.orrery.enabled is True
     assert settings.orrery.binding.window_chunks == 30
+    assert settings.orrery.composition.hostile_source_enabled is True
+    assert settings.orrery.composition.roster_source_enabled is True
+    assert settings.orrery.composition.roster_reach == 2
     assert settings.orrery.contagion.dyad_tiers.trusting == timedelta(hours=24)
     assert settings.orrery.contagion.dyad_tiers.neutral == timedelta(hours=96)
     assert settings.orrery.contagion.dyad_tiers.hostile is None
@@ -208,6 +212,23 @@ def test_drift_defaults_off_when_block_is_absent() -> None:
     payload = load_settings("nexus.toml").orrery.model_dump()
     payload.pop("drift")
     assert OrrerySettings.model_validate(payload).drift.enabled is False
+
+
+def test_composition_defaults_off_and_validates_roster_reach() -> None:
+    """Legacy configs stay byte-stable and invalid roster depth fails loud."""
+
+    defaults = OrreryCompositionSettings()
+    assert defaults.hostile_source_enabled is False
+    assert defaults.roster_source_enabled is False
+    assert defaults.roster_reach == 2
+    payload = load_settings("nexus.toml").orrery.model_dump()
+    payload.pop("composition")
+    legacy = OrrerySettings.model_validate(payload).composition
+    assert legacy == defaults
+    with pytest.raises(ValidationError, match="greater than or equal to 1"):
+        OrreryCompositionSettings(roster_reach=0)
+    with pytest.raises(ValidationError, match="less than or equal to 4"):
+        OrreryCompositionSettings(roster_reach=5)
 
 
 def test_mood_defaults_off_and_requires_positive_duration() -> None:

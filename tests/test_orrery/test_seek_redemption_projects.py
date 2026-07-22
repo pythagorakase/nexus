@@ -21,6 +21,7 @@ from nexus.agents.orrery.needs import load_need_tuning
 from nexus.agents.orrery.resolver import OrreryResolutionDraft
 from nexus.agents.orrery.substrate import (
     BranchSelection,
+    EventRecord,
     ProjectPolicy,
     ProjectState,
     RoutineAnchor,
@@ -29,7 +30,11 @@ from nexus.agents.orrery.substrate import (
     WorldState,
     evaluate,
 )
-from nexus.agents.orrery.templates import ADVANCE_SEEK_REDEMPTION, START_SEEK_REDEMPTION
+from nexus.agents.orrery.templates import (
+    ADVANCE_SEEK_REDEMPTION,
+    CONSULT_RIVAL,
+    START_SEEK_REDEMPTION,
+)
 from nexus.api.slot_utils import get_slot_db_url
 
 ACTOR = 10
@@ -115,11 +120,27 @@ def test_entry_gate_wronged_party_evidence_or_clause_and_contract() -> None:
     result = evaluate(START_SEEK_REDEMPTION, arms[0], BINDINGS)
     assert START_SEEK_REDEMPTION.required_slots == (Slot.ACTOR, Slot.TARGET)
     assert START_SEEK_REDEMPTION.starts_from_social_contact is True
+    assert START_SEEK_REDEMPTION.composes_from_hostility is True
     assert result.state_delta["project.start"] == {
         "project_type": "seek_redemption",
         "stage": "owning_the_wrong",
         "milestone": True,
     }
+
+
+def test_consult_rival_excludes_reconciled_complex_but_keeps_distrust() -> None:
+    """#530: favorable reconciliation is not rivalry; negative trust still is."""
+
+    shared = {
+        "relationship_types": {(ACTOR, TARGET): frozenset({"complex"})},
+        "recent_events": (EventRecord(event_type="threat_issued", tick=100),),
+        "current_tick": 100,
+    }
+    reconciled = WorldState(trust={(ACTOR, TARGET): 1}, **shared)
+    distrusting = WorldState(trust={(ACTOR, TARGET): -1}, **shared)
+
+    assert evaluate(CONSULT_RIVAL, reconciled, BINDINGS).passes is False
+    assert evaluate(CONSULT_RIVAL, distrusting, BINDINGS).passes is True
 
 
 def test_entry_gate_requires_wronged_party_evidence_and_blocks_actor_hostility() -> (
