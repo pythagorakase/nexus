@@ -6,6 +6,7 @@ from collections import deque
 from collections.abc import Iterable as IterableABC
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
+import logging
 from typing import Any, Iterable, Mapping, Optional, Protocol, Sequence, Tuple, TypeVar
 
 from sqlalchemy import text
@@ -28,7 +29,6 @@ from nexus.agents.orrery.weather import (
     WeatherContext,
     classify_weather,
     climate_for_seed,
-    derive_weather,
     weather_at,
 )
 from nexus.agents.orrery.substrate import (
@@ -61,6 +61,8 @@ from nexus.agents.orrery.needs import (
     need_applies_to_tags,
     severity_for_debt,
 )
+
+logger = logging.getLogger(__name__)
 
 LOCATION_CLASS_TAG_CATEGORIES: tuple[str, ...] = (
     "place_function",
@@ -2027,6 +2029,15 @@ def resolve_dry_run(
         | {bindings[Slot.ACTOR] for bindings, _templates in present_routes}
     )
 
+    # Scene conditions are a localized-weather contract. Disabled mode retains
+    # legacy predicate behavior but must not leak new prompt context; likewise,
+    # a clockless/anchorless localized snapshot stays wholly unknown rather
+    # than attaching a fabricated time-only condition.
+    scene_conditions = (
+        {"weather": state.weather, "time_of_day": state.time_of_day}
+        if state.localized_weather_enabled and state.weather is not None
+        else {}
+    )
     return OrreryTickProposal(
         anchor_chunk_id=anchor_chunk_id,
         actor_count=len(unique_actors),
@@ -2039,10 +2050,7 @@ def resolve_dry_run(
             "claim_event_types": sorted(epistemics_policy.claim_event_types),
             "aware_roles": sorted(epistemics_policy.aware_roles),
         },
-        scene_conditions={
-            "weather": state.weather,
-            "time_of_day": state.time_of_day,
-        },
+        scene_conditions=scene_conditions,
     )
 
 
@@ -2212,8 +2220,17 @@ def _load_local_weather(
     locations: Mapping[int, int],
     location_zones: Mapping[int, int],
     weather_settings: Any,
-) -> tuple[str, dict[int, str]]:
+) -> tuple[Optional[str], dict[int, str]]:
     """Hydrate derived weather for all located actors and the anchor place."""
+
+    if anchor_chunk_id is None or world_time is None:
+        logger.debug(
+            "Refusing localized weather derivation without a complete story "
+            "clock: anchor_chunk_id=%r world_time=%r; weather remains unknown",
+            anchor_chunk_id,
+            world_time,
+        )
+        return None, {}
 
     row = (
         session.execute(
@@ -2221,20 +2238,11 @@ def _load_local_weather(
                 """
                 /* orrery:local_weather_context */
                 SELECT gv.setting #>> '{story_seed,weather}' AS seed_weather,
-                       anchor_place.place_id AS anchor_place_id,
-                       cm.scene_weather,
-                       active_place.zone AS story_active_zone
+                       active_place.id AS anchor_place_id,
+                       cm.scene_weather
                 FROM global_variables gv
                 LEFT JOIN chunk_metadata cm
                   ON cm.chunk_id = :anchor_chunk_id
-                LEFT JOIN LATERAL (
-                    SELECT pcr.place_id
-                    FROM place_chunk_references pcr
-                    WHERE pcr.chunk_id <= :anchor_chunk_id
-                      AND pcr.reference_type = 'setting'
-                    ORDER BY pcr.chunk_id DESC, pcr.place_id
-                    LIMIT 1
-                ) anchor_place ON true
                 LEFT JOIN characters protagonist
                   ON protagonist.id = gv.user_character
                 LEFT JOIN places active_place
@@ -2251,7 +2259,9 @@ def _load_local_weather(
     climate_name = climate_for_seed(seed_weather, weather_settings)
     anchor_place_id = (row or {}).get("anchor_place_id")
     scene_weather = (row or {}).get("scene_weather")
-    effective_time = world_time or datetime(1970, 1, 1, tzinfo=timezone.utc)
+    # Keep this protagonist.current_location authority in lockstep with
+    # TurnCycleManager._load_intertitle; the override belongs to the displayed
+    # place and therefore to every physical occupant hydrated at that place.
     context = WeatherContext(
         settings=weather_settings,
         climate_name=climate_name,
@@ -2265,18 +2275,18 @@ def _load_local_weather(
     resolved = {
         place_id: observed
         for place_id in sorted(hydrated_place_ids)
-        if (observed := weather_at(place_id, effective_time, context)) is not None
+        if (observed := weather_at(place_id, world_time, context)) is not None
     }
     anchor_weather = (
         resolved.get(anchor_place_id) if anchor_place_id is not None else None
     )
     if anchor_weather is None:
-        story_active_zone = (row or {}).get("story_active_zone")
-        if story_active_zone is None:
-            raise ValueError(
-                "Cannot resolve anchor weather: no anchor place or " "story-active zone"
-            )
-        anchor_weather = derive_weather(int(story_active_zone), effective_time, context)
+        logger.debug(
+            "Localized weather remains unknown for protagonist place %r at "
+            "anchor chunk %r; no override or current zone resolved",
+            anchor_place_id,
+            anchor_chunk_id,
+        )
     return anchor_weather, resolved
 
 

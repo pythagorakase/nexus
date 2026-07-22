@@ -8,12 +8,14 @@ branches never chosen, the statically dead gate arms, and slot data-quality
 findings (NULL bestowal world times, wall-clock backfill epochs).
 
 Honesty: hydration at a historical anchor rewinds recent event ids, the clock,
-derived weather, the actor roster, and the need-debt accrual tail; the
-claims/awareness overlay, tags, pair tags, relationships, positions, travel,
-and routine anchors are **current projections**. Relationship orbit distance
-is likewise derived from that current relationship projection at hydration
-time. Every payload carries :data:`HYDRATION_HONESTY` verbatim so the UI can
-render the per-axis label instead of implying a clean rewind.
+the actor roster, and the need-debt accrual tail; the claims/awareness overlay,
+tags, pair tags, relationships, positions, travel, routine anchors, and weather
+are **current projections**. Weather uses the rewound clock but today's
+unversioned place-to-zone assignment, so it cannot honestly be called rewound.
+Relationship orbit distance is likewise derived from the current relationship
+projection at hydration time. Every payload carries :data:`HYDRATION_HONESTY`
+verbatim so the UI can render the per-axis label instead of implying a clean
+rewind.
 
 Never-chosen branches here mean "never selected across the analyzed window."
 That is weaker than "dead behind its gate" (which needs exhaustive branch
@@ -44,7 +46,6 @@ HYDRATION_HONESTY: Mapping[str, Tuple[str, ...]] = {
         "recent_events",
         "world_time",
         "time_of_day",
-        "weather",
         "actor_roster",
         "need_debt_accrual",
     ),
@@ -62,6 +63,9 @@ HYDRATION_HONESTY: Mapping[str, Tuple[str, ...]] = {
         "faction_memberships",
         "claimed_event_scopes",
         "claim_awareness",
+        # Zone assignment is unversioned: historical anchors combine their
+        # rewound clock with today's place.zone projection.
+        "weather",
     ),
 }
 

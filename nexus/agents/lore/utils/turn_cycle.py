@@ -724,6 +724,9 @@ class TurnCycleManager:
             return None
         from sqlalchemy import text as _text
 
+        # Keep this protagonist.current_location authority in lockstep with
+        # resolver._load_local_weather; the displayed place and anchor-scene
+        # weather override must describe the same physical scene.
         row = (
             session.execute(
                 _text(

@@ -9,6 +9,7 @@ from nexus.agents.orrery.weather import (
     climate_for_seed,
     derive_weather,
 )
+from nexus.agents.orrery.substrate import Slot, TravelState, WorldState, weather_is
 from nexus.config.settings_models import OrreryWeatherSettings
 
 
@@ -58,6 +59,31 @@ def test_derivation_changes_only_at_period_boundaries() -> None:
 )
 def test_story_seed_classification_selects_climate(seed: str, expected: str) -> None:
     assert climate_for_seed(seed, OrreryWeatherSettings()) == expected
+
+
+@pytest.mark.parametrize("seed", ["snow", "snowstorm", "thundersnow"])
+def test_snow_literals_select_cold_climate_before_storm_tokens(seed: str) -> None:
+    assert climate_for_seed(seed, OrreryWeatherSettings()) == "cold"
+
+
+def test_disabled_weather_keeps_global_parity_for_every_actor() -> None:
+    """Legacy GLOBAL weather ignores location completeness when disabled."""
+
+    fixture = {
+        "weather": "rain",
+        "locations": {1: 10},
+        "place_weather": {10: "rain"},
+        "travel_states": {3: TravelState(status="in_transit", origin_place_id=None)},
+    }
+    disabled = WorldState(**fixture, localized_weather_enabled=False)
+    enabled = WorldState(**fixture, localized_weather_enabled=True)
+
+    for actor_id in (1, 2, 3):
+        assert weather_is("rain")(disabled, {Slot.ACTOR: actor_id})
+
+    assert weather_is("rain")(enabled, {Slot.ACTOR: 1})
+    assert not weather_is("rain")(enabled, {Slot.ACTOR: 2})
+    assert not weather_is("rain")(enabled, {Slot.ACTOR: 3})
 
 
 @pytest.mark.parametrize(

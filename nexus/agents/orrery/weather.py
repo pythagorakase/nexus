@@ -41,10 +41,12 @@ def classify_weather(raw_weather: str) -> str:
     """Bucket a story-seed weather description into the closed vocabulary."""
 
     weather = raw_weather.lower()
-    if any(token in weather for token in ("rain", "sleet", "storm", "thunder")):
-        return "rain"
+    # Snow compounds must win before the generic storm/thunder tokens so
+    # ``snowstorm`` and ``thundersnow`` select the cold climate.
     if "snow" in weather:
         return "snow"
+    if any(token in weather for token in ("rain", "sleet", "storm", "thunder")):
+        return "rain"
     if "fog" in weather:
         return "fog"
     return "clear"

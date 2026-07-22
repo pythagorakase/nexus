@@ -377,7 +377,7 @@ class WorldState:
     epistemics_enabled: bool = False
     time_of_day: str = "midday"
     world_time: Optional[datetime] = None
-    weather: str = "clear"
+    weather: Optional[str] = "clear"
     place_weather: Mapping[int, str] = field(default_factory=dict)
     localized_weather_enabled: bool = False
     current_tick: int = 0
@@ -2005,13 +2005,17 @@ def time_of_day_in(*times: str) -> Condition:
 
 
 def weather_for_actor(state: WorldState, bindings: Bindings) -> Optional[str]:
-    """Return the bound actor's local weather, or ``None`` when unlocated.
+    """Return the bound actor's effective weather.
 
     An actor actively in transit observes the origin place's departure
     weather.  This keeps travel gates deterministic while the actor has no
-    intermediate stored place.
+    intermediate stored place.  With localization disabled, the legacy global
+    scalar applies before location resolution, including placeless actors and
+    transit rows with a NULL origin.
     """
 
+    if not state.localized_weather_enabled:
+        return state.weather
     actor_id = _slot_entity(bindings, Slot.ACTOR)
     if actor_id is None:
         return None
@@ -2022,8 +2026,6 @@ def weather_for_actor(state: WorldState, bindings: Bindings) -> Optional[str]:
         place_id = state.locations.get(actor_id)
     if place_id is None:
         return None
-    if not state.localized_weather_enabled:
-        return state.weather
     return state.place_weather.get(place_id)
 
 

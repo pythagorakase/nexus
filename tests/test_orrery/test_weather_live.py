@@ -11,7 +11,11 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
 from nexus.agents.orrery.resolver import hydrate_world_state
-from nexus.agents.orrery.weather import climate_for_seed, derive_weather
+from nexus.agents.orrery.weather import (
+    classify_weather,
+    climate_for_seed,
+    derive_weather,
+)
 from nexus.agents.orrery.substrate import (
     Slot,
     TravelState,
@@ -120,14 +124,15 @@ def test_live_anchor_override_and_disabled_mode() -> None:
             connection.execute(
                 text(
                     """
-                SELECT cm.chunk_id, pcr.place_id
+                SELECT cm.chunk_id, active_place.id AS place_id
                 FROM chunk_metadata cm
-                JOIN place_chunk_references pcr
-                  ON pcr.chunk_id = cm.chunk_id
-                 AND pcr.reference_type = 'setting'
-                JOIN places p ON p.id = pcr.place_id
+                JOIN global_variables gv ON gv.id = true
+                JOIN characters protagonist
+                  ON protagonist.id = gv.user_character
+                JOIN places active_place
+                  ON active_place.id = protagonist.current_location
                 WHERE cm.world_time IS NOT NULL
-                  AND p.zone IS NOT NULL
+                  AND active_place.zone IS NOT NULL
                 ORDER BY cm.chunk_id DESC
                 LIMIT 1
                 """
@@ -174,6 +179,7 @@ def test_live_anchor_override_and_disabled_mode() -> None:
         assert localized.place_weather[anchor_place_id] == "warm"
         assert disabled.place_weather == {}
         assert not disabled.localized_weather_enabled
+        assert disabled.weather == classify_weather(seed_weather)
 
         remote = next(
             (

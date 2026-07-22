@@ -141,7 +141,7 @@ class ExplainedTickReport:
     window_chunks: int
     world_time: Optional[datetime]
     time_of_day: str
-    weather: str
+    weather: Optional[str]
     actor_count: int
     actors: Tuple[ActorGroupExplanation, ...]
     need_pressures: Tuple[OrreryScenePressureDraft, ...]
