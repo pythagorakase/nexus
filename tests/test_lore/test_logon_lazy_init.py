@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, cast, Dict
 
 import pytest
 
 from nexus.agents.logon.apex_schema import (
     StorytellerResponseBootstrap,
-    StorytellerResponseExtended,
-    StorytellerResponseMinimal,
 )
+from nexus.agents.logon.skald_wire import SkaldTurnWire
 from nexus.agents.lore.lore import LORE
 from nexus.agents.lore.logon_utility import LogonUtility
 
@@ -30,7 +29,7 @@ class _DummyProvider:
     def __init__(self) -> None:
         self.calls = 0
         self.completion_calls = 0
-        self.schema_models = []
+        self.schema_models: list[type] = []
 
     def get_completion(self, prompt: str) -> _DummyResponse:
         self.completion_calls += 1
@@ -38,20 +37,25 @@ class _DummyProvider:
 
     def get_structured_completion(
         self, prompt: str, schema_model: type
-    ) -> tuple[StorytellerResponseMinimal, _DummyResponse]:
+    ) -> tuple[Any, _DummyResponse]:
         self.calls += 1
         self.schema_models.append(schema_model)
-        return self._response(prompt), _DummyResponse(prompt)
+        return self._response(prompt, schema_model), _DummyResponse(prompt)
 
     async def get_structured_completion_async(
         self, prompt: str, schema_model: type
-    ) -> tuple[StorytellerResponseMinimal, _DummyResponse]:
+    ) -> tuple[Any, _DummyResponse]:
         self.calls += 1
         self.schema_models.append(schema_model)
-        return self._response(prompt), _DummyResponse(prompt)
+        return self._response(prompt, schema_model), _DummyResponse(prompt)
 
-    def _response(self, prompt: str) -> StorytellerResponseMinimal:
-        return StorytellerResponseMinimal(
+    def _response(self, prompt: str, schema_model: type) -> Any:
+        response_type = (
+            StorytellerResponseBootstrap
+            if schema_model is StorytellerResponseBootstrap
+            else SkaldTurnWire
+        )
+        return response_type(
             narrative=f"dummy:{prompt[:20]}",
             choices=[
                 "Continue.",
@@ -69,7 +73,7 @@ class _FailingProvider:
 
     async def get_structured_completion_async(
         self, prompt: str, schema_model: type
-    ) -> tuple[StorytellerResponseMinimal, _DummyResponse]:
+    ) -> tuple[Any, _DummyResponse]:
         self.structured_calls += 1
         raise RuntimeError("structured boom")
 
@@ -86,7 +90,7 @@ def patched_provider(monkeypatch: pytest.MonkeyPatch) -> Dict[str, int]:
 
     def _fake_initialize(self: LogonUtility, is_bootstrap: bool | None = None) -> None:
         init_calls["count"] += 1
-        self.provider = _DummyProvider()
+        self.provider = cast(Any, _DummyProvider())
         self._provider_bootstrap_mode = (
             self.bootstrap_mode if is_bootstrap is None else is_bootstrap
         )
@@ -101,7 +105,7 @@ def patched_provider(monkeypatch: pytest.MonkeyPatch) -> Dict[str, int]:
 
 
 def _minimal_payload(*, is_bootstrap: bool = False) -> Dict[str, Any]:
-    payload = {
+    payload: Dict[str, Any] = {
         "user_input": "Test",
         "warm_slice": {"chunks": []},
         "entity_data": {},
@@ -157,7 +161,7 @@ def test_logon_initializes_on_first_use(patched_provider: Dict[str, int]) -> Non
     assert patched_provider["count"] == 1
     assert isinstance(lore.logon.provider, _DummyProvider)
     assert lore.logon.provider.calls == 1
-    assert lore.logon.provider.schema_models == [StorytellerResponseExtended]
+    assert lore.logon.provider.schema_models == [SkaldTurnWire]
     assert response.narrative.startswith("dummy:")
     assert response.generation_model == "dummy-model"
 
@@ -168,14 +172,14 @@ async def test_logon_async_generation_uses_structured_provider() -> None:
 
     provider = _DummyProvider()
     logon = LogonUtility({}, model_override="dummy-model")
-    logon.provider = provider
+    logon.provider = cast(Any, provider)
     logon._provider_bootstrap_mode = False
 
     response = await logon.generate_narrative_async(_minimal_payload())
 
     assert provider.calls == 1
     assert provider.completion_calls == 0
-    assert provider.schema_models == [StorytellerResponseExtended]
+    assert provider.schema_models == [SkaldTurnWire]
     assert response.narrative.startswith("dummy:")
     assert len(response.choices) == 2
     assert response.generation_model == "dummy-model"
@@ -187,14 +191,14 @@ async def test_logon_async_generation_uses_bootstrap_schema_for_bootstrap() -> N
 
     provider = _DummyProvider()
     logon = LogonUtility({}, model_override="dummy-model")
-    logon.provider = provider
+    logon.provider = cast(Any, provider)
     logon._provider_bootstrap_mode = True
 
     response = await logon.generate_narrative_async(_minimal_payload(is_bootstrap=True))
 
     assert provider.calls == 1
     assert provider.completion_calls == 0
-    # _DummyProvider always returns Minimal; this test verifies schema selection.
+    # The dummy mirrors the requested contract; this verifies schema selection.
     assert provider.schema_models == [StorytellerResponseBootstrap]
     assert response.narrative.startswith("dummy:")
     assert response.generation_model == "dummy-model"
@@ -209,13 +213,13 @@ async def test_logon_stamps_model_exposed_by_last_successful_attempt() -> None:
 
         async def get_structured_completion_async(
             self, prompt: str, schema_model: type
-        ) -> tuple[StorytellerResponseMinimal, _DummyResponse]:
+        ) -> tuple[Any, _DummyResponse]:
             self.model = "successful-attempt-model"
             return await super().get_structured_completion_async(prompt, schema_model)
 
     provider = RetrySwitchingProvider()
     logon = LogonUtility({}, model_override="first-attempt-model")
-    logon.provider = provider
+    logon.provider = cast(Any, provider)
     logon._provider_bootstrap_mode = False
 
     response = await logon.generate_narrative_async(_minimal_payload())
@@ -229,7 +233,7 @@ async def test_logon_structured_failure_does_not_call_plain_text_fallback() -> N
 
     provider = _FailingProvider()
     logon = LogonUtility({}, model_override="dummy-model")
-    logon.provider = provider
+    logon.provider = cast(Any, provider)
     logon._provider_bootstrap_mode = False
 
     with pytest.raises(RuntimeError, match="structured boom"):
@@ -248,7 +252,7 @@ def test_context_bootstrap_mode_does_not_mutate_logon_instance(
 
     def _fake_initialize(self: LogonUtility, is_bootstrap: bool | None = None) -> None:
         initialized_modes.append(is_bootstrap)
-        self.provider = _DummyProvider()
+        self.provider = cast(Any, _DummyProvider())
         self._provider_bootstrap_mode = (
             self.bootstrap_mode if is_bootstrap is None else is_bootstrap
         )

@@ -151,32 +151,19 @@ class NewEntityDeclaration(BaseModel):
     summary: str = Field(
         min_length=1,
         max_length=500,
-        description=(
-            "One-line summary of who/what this entity is (becomes the stub "
-            "row summary)."
-        ),
+        description="One-line summary used for the entity's stub row.",
     )
     coordinates: Optional[Coordinates] = Field(
         default=None,
-        description=(
-            "Optional real-Earth coordinates for a declared place. Ignored "
-            "for character and faction declarations."
-        ),
+        description="Optional real-Earth coordinates for a declared place.",
     )
     tag_hints: List[str] = Field(
         default_factory=list,
-        description=(
-            "Optional registered single-entity tag names for the stub's "
-            "minimum viable tag set. Validated against the live tags "
-            "registry; unregistered names are hard errors."
-        ),
+        description="Registered single-entity tag names for the new stub.",
     )
     pair_tag_hints: List[NewEntityPairTagHint] = Field(
         default_factory=list,
-        description=(
-            "Optional registered pair-tag hints connecting the declared "
-            "entity to another named entity."
-        ),
+        description="Registered pair-tag hints connecting the declared entity.",
     )
 
     @model_validator(mode="after")
@@ -232,19 +219,13 @@ class PlaceReference(BaseModel):
     )
     # How it appears in this chunk (REQUIRED for junction table)
     reference_type: PlaceReferenceType = Field(
-        description=(
-            "How the place is referenced: setting (primary location), "
-            "mentioned (referenced but not visited), or transit (passed through)"
-        )
+        description="Place role: setting, mentioned, or transit."
     )
     # Optional evidence field (matches junction table)
     evidence: Optional[str] = Field(
         default=None,
         max_length=500,
-        description=(
-            "Optional text evidence for this place reference (e.g., specific "
-            "quote or context)"
-        ),
+        description="Optional evidence supporting this place reference.",
     )
 
     @model_validator(mode="after")
@@ -325,10 +306,7 @@ class ChronologyUpdate(BaseModel):
 
     episode_transition: Literal["continue", "new_episode", "new_season"] = Field(
         default="continue",
-        description=(
-            "Episode/season transition: continue current, new episode, or "
-            "new season (which also starts new episode)"
-        ),
+        description="Continue, start a new episode, or start a new season.",
     )
 
     # LLM-friendly time fields (more natural than seconds)
@@ -353,10 +331,7 @@ class ChronologyUpdate(BaseModel):
     time_delta_description: Optional[str] = Field(
         default=None,
         max_length=100,
-        description=(
-            "Human-readable time passage (e.g., 'two hours later', 'the next "
-            "morning')"
-        ),
+        description="Human-readable description of the elapsed time.",
     )
 
     @model_validator(mode="after")
@@ -387,24 +362,11 @@ class ChunkMetadataUpdate(BaseModel):
     )
     world_layer: WorldLayerType = Field(
         default=WorldLayerType.PRIMARY,
-        description=(
-            "Whether the in-world clock advances normally this chunk - almost "
-            "always 'primary'. Default to 'primary' for any normal in-world "
-            "scene where time moves forward with the chunk's time_delta. Only "
-            "deviate for: 'flashback' (a scene set in the past - the clock is "
-            "not advancing forward), 'atemporal' (the in-world clock does not "
-            "apply - dream/hallucination sequences, or realms where time "
-            "doesn't behave normally such as strange or alien dimensions), "
-            "'extradiegetic' (the user is addressing you out-of-game - no "
-            "in-world time passes)."
-        ),
+        description="Narrative clock layer; use primary for normal scenes.",
     )
     scene_weather: Optional[Literal["clear", "rain", "fog", "snow", "warm"]] = Field(
         default=None,
-        description=(
-            "Optional anchor-scene weather override for deliberate dramatic "
-            "effect; omit to keep derived local weather."
-        ),
+        description="Optional anchor-scene weather override.",
     )
 
     model_config = ConfigDict(extra="forbid")
@@ -433,19 +395,11 @@ class CharacterStateUpdate(BaseModel):
     )
     extra_observations: List[NamedObservation] = Field(
         default_factory=list,
-        description=(
-            "Additional observations for extra_data JSONB as strict key/value "
-            "entries."
-        ),
+        description="Strict key/value observations for extra_data JSONB.",
     )
     orrery_tags: Optional[OrreryTagBestowal] = Field(
         default=None,
-        description=(
-            "Tag deltas for this character. Use applied_tags to apply registered tags "
-            "(e.g., they were just cursed → cursed), tags_to_clear to retire "
-            "ephemerals that no longer apply (e.g., the geas was lifted). "
-            "Use only registered tag names."
-        ),
+        description="Registered tag deltas for this character.",
     )
 
     @field_validator("extra_observations", mode="before")
@@ -509,15 +463,12 @@ class LocationStateUpdate(BaseModel):
         default=None, description="Current conditions at location"
     )
     notable_changes: Optional[List[str]] = Field(
-        default_factory=list, description="Notable changes since last visit"
+        default_factory=list,  # type: ignore[arg-type]
+        description="Notable changes since last visit",
     )
     orrery_tags: Optional[OrreryTagBestowal] = Field(
         default=None,
-        description=(
-            "Tag deltas for this place. Use applied_tags to add registered "
-            "semantic place tags, and tags_to_clear to retire ones that no "
-            "longer apply (e.g., a haven is now compromised)."
-        ),
+        description="Registered tag deltas for this place.",
     )
 
 
@@ -533,11 +484,8 @@ class FactionStateUpdate(BaseModel):
         default=None, description="Faction name (if ID unknown)"
     )
     recent_actions: Optional[List[str]] = Field(
-        default_factory=list,
-        description=(
-            "Recent faction actions for narrative context. Persist durable "
-            "facts through world_events or accepted Orrery tags."
-        ),
+        default_factory=list,  # type: ignore[arg-type]
+        description="Recent faction actions for narrative context.",
     )
     stance_changes: List[FactionStanceChange] = Field(
         default_factory=list,
@@ -545,12 +493,7 @@ class FactionStateUpdate(BaseModel):
     )
     orrery_tags: Optional[OrreryTagBestowal] = Field(
         default=None,
-        description=(
-            "Tag deltas for this faction. Use applied_tags to add registered "
-            "faction tags such as ideology, resource_base, legitimacy, "
-            "operational_mode, power_status, or agenda values; use "
-            "tags_to_clear to retire active tags that no longer apply."
-        ),
+        description="Registered tag deltas for this faction.",
     )
 
     @field_validator("stance_changes", mode="before")
@@ -588,135 +531,7 @@ class StateUpdates(BaseModel):
         default_factory=list, description="Faction state updates"
     )
 
-    @model_validator(mode="before")
-    @classmethod
-    def expand_compact_updates(cls, data: Any) -> Any:
-        """Accept Anthropic's compact scalar wire shape for state updates."""
-
-        if not isinstance(data, dict) or "updates" not in data:
-            return data
-
-        expanded = {
-            "characters": list(data.get("characters") or []),
-            "relationships": list(data.get("relationships") or []),
-            "locations": list(data.get("locations") or []),
-            "factions": list(data.get("factions") or []),
-        }
-        for raw_update in data.get("updates") or []:
-            if not isinstance(raw_update, dict):
-                continue
-            kind = raw_update.get("kind")
-            if kind == "character":
-                update = _compact_character_state_update(raw_update)
-                if update:
-                    expanded["characters"].append(update)
-            elif kind == "place":
-                update = _compact_location_state_update(raw_update)
-                if update:
-                    expanded["locations"].append(update)
-            elif kind == "faction":
-                update = _compact_faction_state_update(raw_update)
-                if update:
-                    expanded["factions"].append(update)
-            elif kind == "relationship":
-                update = _compact_relationship_update(raw_update)
-                if update:
-                    expanded["relationships"].append(update)
-        return expanded
-
     model_config = ConfigDict(extra="forbid")
-
-
-def _compact_character_state_update(row: Dict[str, Any]) -> Dict[str, Any]:
-    update: Dict[str, Any] = {}
-    _copy_if_present(row, update, "entity_id", "character_id")
-    name = row.get("name") or row.get("character_name")
-    if name:
-        update["character_name"] = str(name)
-    status = row.get("status")
-    if status and "current_activity" not in row:
-        update["current_activity"] = str(status)
-    _copy_if_present(row, update, "current_location")
-    _copy_if_present(row, update, "current_activity")
-    _copy_if_present(row, update, "emotional_state")
-    _apply_compact_orrery_tags(row, update)
-    return update
-
-
-def _compact_location_state_update(row: Dict[str, Any]) -> Dict[str, Any]:
-    update: Dict[str, Any] = {}
-    _copy_if_present(row, update, "entity_id", "place_id")
-    name = row.get("name") or row.get("place_name")
-    if name:
-        update["place_name"] = str(name)
-    status = row.get("status")
-    if status and "current_conditions" not in row:
-        update["current_conditions"] = str(status)
-    _copy_if_present(row, update, "current_conditions")
-    notable_change = row.get("notable_change") or row.get("status")
-    if notable_change:
-        update["notable_changes"] = [str(notable_change)]
-    _apply_compact_orrery_tags(row, update)
-    return update
-
-
-def _compact_faction_state_update(row: Dict[str, Any]) -> Dict[str, Any]:
-    update: Dict[str, Any] = {}
-    _copy_if_present(row, update, "entity_id", "faction_id")
-    name = row.get("name") or row.get("faction_name")
-    if name:
-        update["faction_name"] = str(name)
-    recent_action = row.get("recent_action") or row.get("status")
-    if recent_action:
-        update["recent_actions"] = [str(recent_action)]
-    target = row.get("stance_target")
-    stance = row.get("stance")
-    if target and stance:
-        update["stance_changes"] = [{"target": str(target), "stance": str(stance)}]
-    _apply_compact_orrery_tags(row, update)
-    return update
-
-
-def _compact_relationship_update(row: Dict[str, Any]) -> Dict[str, Any]:
-    update: Dict[str, Any] = {}
-    _copy_if_present(row, update, "entity_id", "character1_id")
-    _copy_if_present(row, update, "other_entity_id", "character2_id")
-    name = row.get("name") or row.get("character1_name")
-    other_name = row.get("other_name") or row.get("character2_name")
-    if name:
-        update["character1_name"] = str(name)
-    if other_name:
-        update["character2_name"] = str(other_name)
-    _copy_if_present(row, update, "relationship_type")
-    _copy_if_present(row, update, "emotional_valence")
-    _copy_if_present(row, update, "dynamic")
-    _copy_if_present(row, update, "recent_events")
-    return update
-
-
-def _apply_compact_orrery_tags(
-    row: Dict[str, Any],
-    update: Dict[str, Any],
-) -> None:
-    tag_add = row.get("tag_add")
-    tag_clear = row.get("tag_clear")
-    if not tag_add and not tag_clear:
-        return
-    update["orrery_tags"] = {
-        "applied_tags": [str(tag_add)] if tag_add else [],
-        "tags_to_clear": [str(tag_clear)] if tag_clear else [],
-    }
-
-
-def _copy_if_present(
-    source: Dict[str, Any],
-    target: Dict[str, Any],
-    key: str,
-    target_key: Optional[str] = None,
-) -> None:
-    value = source.get(key)
-    if value is not None and value != "":
-        target[target_key or key] = value
 
 
 class OrreryMoodSet(BaseModel):
@@ -792,11 +607,7 @@ class OrreryAdjudication(BaseModel):
     )
     replacement_state_delta: Optional[OrreryReplacementStateDelta] = Field(
         default=None,
-        description=(
-            "Optional limited Orrery delta to commit instead of the proposal. "
-            "If omitted for replace, commit assumes Skald handled the replacement "
-            "through normal state_updates or prose."
-        ),
+        description="Limited Orrery delta replacing the proposal.",
     )
     replacement_event_type: Optional[str] = Field(
         default=None,
