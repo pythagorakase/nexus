@@ -1096,12 +1096,12 @@ async def responses_create(request: ResponsesRequest):
 
     # Exact routing: the structured-output tool's schema says which
     # Storyteller response the caller validates against. Turn requests
-    # (SkaldTurnWire) carry state_updates; bootstrap requests
+    # (SkaldTurnWire) carry updates; bootstrap requests
     # (StorytellerResponseBootstrap) do not.
     output_fields = _requested_output_properties(request)
     if output_fields:
         final_result_tool = _requested_output_uses_final_result_tool(request)
-        if "state_updates" in output_fields:
+        if "updates" in output_fields:
             logger.info(
                 "[MOCK] Skald turn wire requested (%d Orrery proposals)",
                 len(proposal_ids),

@@ -6,10 +6,9 @@ closed-vocabulary tag writers hard-error on unknown names -- but they run
 inside the chunk COMMIT transaction, where the only outcome is a dead player
 turn (M9 gate finding).
 
-This module walks a parsed storyteller response and validates every
-``orrery_tags`` bestowal and declaration hint against the live registry, so
-LOGON's structured output validator can hand the issues back to the model as a
-retry while the model still owns the turn.
+This module walks a parsed storyteller response and validates every sparse tag
+delta and declaration hint against the live registry, so LOGON's structured
+output validator can hand issues back to the model while it still owns the turn.
 """
 
 from __future__ import annotations
@@ -65,6 +64,24 @@ def _bestowal_sites(response: Any) -> List[Tuple[str, str, OrreryTagBestowal]]:
     """Yield (path, entity_kind, bestowal) triples from a parsed response."""
 
     sites: List[Tuple[str, str, OrreryTagBestowal]] = []
+
+    for index, update in enumerate(getattr(response, "updates", None) or []):
+        entity_kind = getattr(update, "kind", None)
+        if entity_kind not in {"character", "place", "faction"}:
+            continue
+        tags_add = getattr(update, "tags_add", None)
+        tags_clear = getattr(update, "tags_clear", None)
+        if tags_add is not None or tags_clear is not None:
+            sites.append(
+                (
+                    f"updates[{index}]",
+                    entity_kind,
+                    OrreryTagBestowal(
+                        applied_tags=tags_add or [],
+                        tags_to_clear=tags_clear or [],
+                    ),
+                )
+            )
 
     state_updates = getattr(response, "state_updates", None)
     if state_updates is not None:
@@ -193,8 +210,8 @@ def build_storyteller_tag_validator(dbname: Optional[str]) -> Optional[Any]:
             )
             raise ModelRetry(
                 "Your Orrery tags, new-entity declaration hints, or replacement "
-                "event types failed closed-registry validation. For applied_tags, "
-                "tags_to_clear, and tag_hints, use bare registered tag names only "
+                "event types failed closed-registry validation. For tags_add, "
+                "tags_clear, and tag_hints, use bare registered tag names only "
                 "(e.g. 'comfortable'), never 'category:name' composites. For "
                 "pair_tag_hints, use the exact registered pair-tag name; pair tags "
                 "may contain colons (e.g. 'contact:social'). For "

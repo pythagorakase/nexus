@@ -171,14 +171,14 @@ def _storyteller_response(
     *,
     tag_hints: Optional[List[str]] = None,
     pair_tag_hints: Optional[List[dict[str, str]]] = None,
-    state_updates: Optional[dict[str, Any]] = None,
+    updates: Optional[List[dict[str, Any]]] = None,
     orrery_adjudications: Optional[List[dict[str, Any]]] = None,
 ) -> SkaldTurnWire:
     return SkaldTurnWire.model_validate(
         {
             "narrative": "Marra Kest steps out from behind the sluice gate.",
             "choices": ["Question Marra.", "Keep walking."],
-            "state_updates": state_updates or {},
+            "updates": updates or [],
             "orrery_adjudications": orrery_adjudications or [],
             "new_entities": [
                 {
@@ -198,23 +198,14 @@ def _state_updates_with_tag(
     name: str,
     field_name: str,
     tag_name: str,
-) -> dict[str, Any]:
-    """Build one canonical nested state update with an Orrery tag delta."""
+) -> List[dict[str, Any]]:
+    """Build one semantic update with an Orrery tag delta."""
 
-    collection_by_kind = {
-        "character": ("characters", "character_name"),
-        "place": ("locations", "place_name"),
-        "faction": ("factions", "faction_name"),
-    }
-    collection, name_field = collection_by_kind[kind]
-    return {
-        collection: [
-            {
-                name_field: name,
-                "orrery_tags": {field_name: [tag_name]},
-            }
-        ]
-    }
+    wire_field = {
+        "applied_tags": "tags_add",
+        "tags_to_clear": "tags_clear",
+    }[field_name]
+    return [{"kind": kind, "name": name, wire_field: [tag_name]}]
 
 
 def test_valid_bestowals_produce_no_issues() -> None:
@@ -301,7 +292,7 @@ def test_cached_catalog_validates_single_tags_per_kind_and_field(
     canonical_field: str,
 ) -> None:
     valid = _storyteller_response(
-        state_updates=_state_updates_with_tag(
+        updates=_state_updates_with_tag(
             kind,
             f"Known {kind}",
             canonical_field,
@@ -309,7 +300,7 @@ def test_cached_catalog_validates_single_tags_per_kind_and_field(
         )
     )
     invalid = _storyteller_response(
-        state_updates=_state_updates_with_tag(
+        updates=_state_updates_with_tag(
             kind,
             f"Known {kind}",
             canonical_field,
@@ -601,7 +592,7 @@ async def test_storyteller_validator_attributes_declaration_failure_to_model_ret
         )
 
     assert "new_entities[0].tag_hints" in exc_info.value.message
-    assert "For applied_tags, tags_to_clear, and tag_hints" in exc_info.value.message
+    assert "For tags_add, tags_clear, and tag_hints" in exc_info.value.message
     assert "pair tags may contain colons" in exc_info.value.message
     assert "'contact:social'" in exc_info.value.message
     assert "resubmit the complete response" in exc_info.value.message
@@ -658,17 +649,14 @@ async def test_storyteller_validator_reads_each_catalog_once_per_attempt(
                 "declared_entity_role": "subject",
             }
         ],
-        state_updates={
-            "characters": [
-                {
-                    "character_name": "Brena Tideloft",
-                    "orrery_tags": {
-                        "applied_tags": ["human"],
-                        "tags_to_clear": ["perceptive"],
-                    },
-                }
-            ]
-        },
+        updates=[
+            {
+                "kind": "character",
+                "name": "Brena Tideloft",
+                "tags_add": ["human"],
+                "tags_clear": ["perceptive"],
+            }
+        ],
         orrery_adjudications=[
             {
                 "proposal_id": "proposal-1",
@@ -909,7 +897,7 @@ def _retry_boundary_response(
 ) -> SkaldTurnWire:
     if boundary == "character_applied_tags":
         return _storyteller_response(
-            state_updates=_state_updates_with_tag(
+            updates=_state_updates_with_tag(
                 "character",
                 "Brena Tideloft",
                 "applied_tags",
@@ -918,7 +906,7 @@ def _retry_boundary_response(
         )
     if boundary == "place_tags_to_clear":
         return _storyteller_response(
-            state_updates=_state_updates_with_tag(
+            updates=_state_updates_with_tag(
                 "place",
                 "The Lower Sluice",
                 "tags_to_clear",
@@ -927,7 +915,7 @@ def _retry_boundary_response(
         )
     if boundary == "faction_applied_tags":
         return _storyteller_response(
-            state_updates=_state_updates_with_tag(
+            updates=_state_updates_with_tag(
                 "faction",
                 "The Sluice Guild",
                 "applied_tags",
@@ -962,9 +950,9 @@ def _retry_boundary_response(
 @pytest.mark.parametrize(
     ("boundary", "failure_path"),
     [
-        ("character_applied_tags", "state_updates.characters[0]"),
-        ("place_tags_to_clear", "state_updates.locations[0]"),
-        ("faction_applied_tags", "state_updates.factions[0]"),
+        ("character_applied_tags", "updates[0]"),
+        ("place_tags_to_clear", "updates[0]"),
+        ("faction_applied_tags", "updates[0]"),
         ("tag_hints", "new_entities[0].tag_hints"),
         ("pair_tag_hints", "new_entities[0].pair_tag_hints[0].tag"),
         (

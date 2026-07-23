@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Tuple
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import BaseModel
 
 from nexus.api import mock_openai
 from nexus.api.new_story_schemas import (
@@ -90,7 +91,7 @@ def _fixture_rows() -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
     return cache_row, trait_rows
 
 
-def _responses_tool(name: str, schema: type) -> Dict[str, Any]:
+def _responses_tool(name: str, schema: type[BaseModel]) -> Dict[str, Any]:
     """Build a pydantic-ai Responses-format function tool."""
 
     return {
@@ -212,7 +213,7 @@ def mock_rows(monkeypatch) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
     ],
 )
 def test_responses_wizard_artifact_returns_submission_function_call(
-    mock_rows, tool_name: str, schema: type
+    mock_rows, tool_name: str, schema: type[BaseModel]
 ) -> None:
     """A normal wizard turn invokes the phase's flattened submission tool."""
 
@@ -258,7 +259,7 @@ def test_responses_wizard_artifact_returns_submission_function_call(
 def test_responses_wizard_transition_returns_phase_specific_intro(
     mock_rows,
     tool_name: str,
-    schema: type,
+    schema: type[BaseModel],
     transition_message: str,
     expected_copy: str,
 ) -> None:
@@ -286,10 +287,10 @@ def test_responses_wizard_transition_returns_phase_specific_intro(
     assert expected_copy in wizard_response.message.lower()
 
 
-def test_responses_non_wizard_extended_storyteller_route_is_unchanged(
+def test_responses_non_wizard_skald_turn_route_is_unchanged(
     mock_rows,
 ) -> None:
-    """Wizard precedence must not disturb state-update storyteller routing."""
+    """Wizard precedence must not disturb semantic-update storyteller routing."""
 
     response = TestClient(mock_openai.app).post(
         "/v1/responses",
@@ -301,7 +302,7 @@ def test_responses_non_wizard_extended_storyteller_route_is_unchanged(
                     "name": "final_result",
                     "parameters": {
                         "type": "object",
-                        "properties": {"state_updates": {"type": "object"}},
+                        "properties": {"updates": {"type": "array"}},
                     },
                     "strict": True,
                 }
@@ -314,7 +315,7 @@ def test_responses_non_wizard_extended_storyteller_route_is_unchanged(
     tool_call = response.json()["output"][0]
     assert tool_call["type"] == "function_call"
     assert tool_call["name"] == "final_result"
-    assert "state_updates" in json.loads(tool_call["arguments"])
+    assert json.loads(tool_call["arguments"])["narrative"].startswith("[TEST MODE]")
 
 
 @pytest.mark.parametrize(
