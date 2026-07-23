@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from typing import Any, cast, List, Literal, Optional, Tuple
 
 import pytest
+import tiktoken
 from pydantic_ai import ModelRetry
 
 from nexus.agents.logon.apex_schema import (
@@ -1158,7 +1159,17 @@ def test_description_diet_walks_nested_schema_without_mutating_input() -> None:
                 "type": "integer",
             },
         },
-        "examples": [long_description],
+        "default": {
+            "description": long_description,
+            "kept": 1,
+        },
+        "enum": [
+            {
+                "description": long_description,
+                "kept": 2,
+            }
+        ],
+        "examples": [{"description": long_description, "kept": 3}],
         "x-description": long_description,
     }
 
@@ -1169,7 +1180,9 @@ def test_description_diet_walks_nested_schema_without_mutating_input() -> None:
     assert "description" not in dieted["properties"]["nested"]["prefixItems"][0]
     assert dieted["$defs"]["Kept"]["description"] == "Short definition hint."
     assert "description" not in dieted["$defs"]["Dieted"]
-    assert dieted["examples"] == [long_description]
+    assert dieted["default"] == schema["default"]
+    assert dieted["enum"] == schema["enum"]
+    assert dieted["examples"] == schema["examples"]
     assert dieted["x-description"] == long_description
     assert schema["properties"]["nested"]["description"] == long_description
 
@@ -1178,14 +1191,26 @@ def test_extended_openai_wire_schema_meets_description_diet_budget() -> None:
     undieted = strict_json_schema(StorytellerResponseExtended)
     text_format = storyteller_openai_text_format(StorytellerResponseExtended)
     dieted = text_format["schema"]
-    undieted_bytes = json.dumps(undieted, sort_keys=True, separators=(",", ":")).encode(
-        "utf-8"
+    undieted_wire = json.dumps(
+        undieted,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
     )
-    dieted_bytes = json.dumps(dieted, sort_keys=True, separators=(",", ":")).encode(
-        "utf-8"
+    dieted_wire = json.dumps(
+        dieted,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
     )
+    undieted_bytes = undieted_wire.encode("utf-8")
+    dieted_bytes = dieted_wire.encode("utf-8")
+    encoding = tiktoken.get_encoding("o200k_base")
+    undieted_tokens = encoding.encode(undieted_wire)
+    dieted_tokens = encoding.encode(dieted_wire)
 
     assert len(undieted_bytes) - len(dieted_bytes) >= EXTENDED_SCHEMA_MIN_BYTE_SAVINGS
+    assert len(undieted_tokens) - len(dieted_tokens) >= 2_000
     assert set(dieted["properties"]) >= {
         "narrative",
         "choices",
@@ -1194,6 +1219,19 @@ def test_extended_openai_wire_schema_meets_description_diet_budget() -> None:
     }
     assert "OrreryTagBestowal" in dieted["$defs"]
     assert "applied_tags" in dieted["$defs"]["OrreryTagBestowal"]["properties"]
+    assert (
+        "registered event type"
+        in dieted["$defs"]["OrreryAdjudication"]["properties"][
+            "replacement_event_type"
+        ]["description"]
+    )
+    assert (
+        "directed pair tag"
+        in dieted["$defs"]["NewEntityPairTagHint"]["properties"][
+            "declared_entity_role"
+        ]["description"]
+    )
+    assert "Earth's physical geography" in dieted["$defs"]["Coordinates"]["description"]
     assert b"never a bare list of strings" in undieted_bytes
     assert b"never a bare list of strings" not in dieted_bytes
 
