@@ -871,6 +871,12 @@ def test_sync_logon_reads_and_supplies_parent_baseline(
         return BASELINE
 
     monkeypatch.setattr(logon_utility, "read_presence_baseline", fake_read)
+    monkeypatch.setattr(logon_utility, "read_user_character_id", lambda _dbname: 1)
+    monkeypatch.setattr(
+        logon_utility,
+        "format_contextual_tag_library",
+        lambda _dbname, *, context: "",
+    )
     utility = LogonUtility(
         {},
         dbname="save_05",
@@ -915,6 +921,12 @@ async def test_async_logon_reads_and_supplies_parent_baseline(
         return BASELINE
 
     monkeypatch.setattr(logon_utility, "read_presence_baseline_async", fake_read)
+    monkeypatch.setattr(logon_utility, "read_user_character_id", lambda _dbname: 1)
+    monkeypatch.setattr(
+        logon_utility,
+        "format_contextual_tag_library",
+        lambda _dbname, *, context: "",
+    )
     utility = LogonUtility(
         {},
         dbname="save_05",

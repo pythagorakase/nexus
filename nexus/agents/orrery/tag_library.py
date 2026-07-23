@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
+from hashlib import sha256
 import os
 import re
 from typing import Optional, Sequence
@@ -26,6 +27,33 @@ class TagLibraryEntry:
     description: str
     category_description: str
     prompt_order: int
+
+
+@dataclass(frozen=True, slots=True)
+class TagLibraryContext:
+    """Scene state that selects which registered tags receive descriptions."""
+
+    present_entity_ids: list[int]
+    proposal_tag_names: set[str]
+    has_pending_proposals: bool
+
+
+@dataclass(frozen=True, slots=True)
+class TagCategoryEntry:
+    """One prompt-facing category in the closed tag taxonomy."""
+
+    entity_kind: str
+    category: str
+    description: str
+    prompt_order: int
+
+
+@dataclass(frozen=True, slots=True)
+class PairTagLibraryEntry:
+    """One registered directed pair-tag exposed to Skald."""
+
+    tag: str
+    description: str
 
 
 def read_tag_library(
@@ -76,6 +104,36 @@ def read_tag_library(
                     is_ephemeral=bool(row["is_ephemeral"]),
                     description=str(row["description"] or ""),
                     category_description=str(row["category_description"] or ""),
+                    prompt_order=int(row["prompt_order"]),
+                )
+                for row in cur.fetchall()
+            ]
+    finally:
+        conn.close()
+
+
+def read_tag_categories(dbname: Optional[str] = None) -> list[TagCategoryEntry]:
+    """Read the complete prompt-facing category taxonomy."""
+
+    conn = _connect(dbname)
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    entity_kind::text AS entity_kind,
+                    category,
+                    description,
+                    prompt_order
+                FROM tag_category_registry
+                ORDER BY entity_kind::text, prompt_order, category
+                """
+            )
+            return [
+                TagCategoryEntry(
+                    entity_kind=str(row["entity_kind"]),
+                    category=str(row["category"]),
+                    description=str(row["description"] or ""),
                     prompt_order=int(row["prompt_order"]),
                 )
                 for row in cur.fetchall()
@@ -141,6 +199,71 @@ def read_pair_tag_library(dbname: Optional[str] = None) -> list[str]:
         conn.close()
 
 
+def read_pair_tag_entries(
+    dbname: Optional[str] = None,
+) -> list[PairTagLibraryEntry]:
+    """Read active pair-tag names and their short semantic descriptions."""
+
+    conn = _connect(dbname)
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT tag, description
+                FROM pair_tags
+                WHERE deprecated = FALSE
+                ORDER BY tag
+                """
+            )
+            return [
+                PairTagLibraryEntry(
+                    tag=str(row["tag"]),
+                    description=str(row["description"] or ""),
+                )
+                for row in cur.fetchall()
+            ]
+    finally:
+        conn.close()
+
+
+def read_current_entity_tag_names(
+    dbname: Optional[str],
+    *,
+    entity_ids: Sequence[int],
+) -> set[str]:
+    """Read current tags through Orrery's canonical entity-tags read model."""
+
+    normalized_ids = sorted(
+        {
+            int(entity_id)
+            for entity_id in entity_ids
+            if not isinstance(entity_id, bool) and int(entity_id) > 0
+        }
+    )
+    if not normalized_ids:
+        return set()
+
+    conn = _connect(dbname)
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT DISTINCT etc.tag
+                FROM entity_tags_current AS etc
+                JOIN entity_tags AS et ON et.id = etc.entity_tag_id
+                JOIN tags AS t ON t.id = et.tag_id
+                WHERE etc.entity_id = ANY(%s::bigint[])
+                  AND t.deprecated = FALSE
+                  AND t.synonym_for IS NULL
+                ORDER BY etc.tag
+                """,
+                (normalized_ids,),
+            )
+            return {str(row["tag"]) for row in cur.fetchall()}
+    finally:
+        conn.close()
+
+
 def format_tag_library_for_prompt(
     dbname: Optional[str] = None,
     *,
@@ -196,6 +319,160 @@ def format_tag_library_for_prompt(
     return "\n".join(lines).rstrip()
 
 
+def format_contextual_tag_library(
+    dbname: Optional[str],
+    *,
+    context: TagLibraryContext,
+) -> str:
+    """Render a complete name index with scene-contextual descriptions."""
+
+    entries = read_tag_library(dbname)
+    categories = read_tag_categories(dbname)
+    pair_entries = read_pair_tag_entries(dbname)
+    event_types = read_event_types(dbname)
+    active_tag_names = read_current_entity_tag_names(
+        dbname,
+        entity_ids=context.present_entity_ids,
+    )
+
+    by_kind: dict[str, dict[str, list[TagLibraryEntry]]] = defaultdict(
+        lambda: defaultdict(list)
+    )
+    entries_by_name: dict[str, list[TagLibraryEntry]] = defaultdict(list)
+    for entry in entries:
+        by_kind[entry.entity_kind][entry.category].append(entry)
+        entries_by_name[entry.tag].append(entry)
+
+    categories_by_kind: dict[str, list[TagCategoryEntry]] = defaultdict(list)
+    for category in categories:
+        categories_by_kind[category.entity_kind].append(category)
+
+    pair_tag_names = [entry.tag for entry in pair_entries]
+    digest = _registry_digest(
+        tag_names=[entry.tag for entry in entries],
+        pair_tag_names=pair_tag_names,
+        event_types=event_types,
+    )
+    lines = [
+        "## Current Orrery Tag Library",
+        "",
+        f"registry digest: {digest}",
+        "",
+        "Every registered single-entity tag appears in the complete index; "
+        "descriptions are expanded only for tags relevant to this scene.",
+        "",
+        "### Category Taxonomy",
+        "",
+    ]
+
+    for entity_kind in ("character", "place", "faction"):
+        kind_categories = categories_by_kind.get(entity_kind, [])
+        if not kind_categories:
+            continue
+        lines.extend([f"#### {entity_kind.title()}", ""])
+        for category in sorted(
+            kind_categories,
+            key=lambda item: (item.prompt_order, item.category),
+        ):
+            description = _clean_description(category.description)
+            if description:
+                lines.append(f"- {category.category} — {description}")
+            else:
+                lines.append(f"- {category.category}")
+        lines.append("")
+
+    lines.extend(["### Complete Tag-Name Index", ""])
+    for entity_kind in ("character", "place", "faction"):
+        kind_categories = categories_by_kind.get(entity_kind, [])
+        if not kind_categories:
+            continue
+        lines.extend([f"#### {entity_kind.title()} Tags", ""])
+        for category in sorted(
+            kind_categories,
+            key=lambda item: (item.prompt_order, item.category),
+        ):
+            names = ", ".join(
+                entry.tag
+                for entry in by_kind.get(entity_kind, {}).get(category.category, [])
+            )
+            lines.append(f"- {category.category} — {names or '(none)'}")
+        lines.append("")
+
+    lines.extend(["### Pair-Tag Names", ""])
+    if pair_entries:
+        for pair_entry in pair_entries:
+            description = _short_description(pair_entry.description)
+            if description:
+                lines.append(f"- `{pair_entry.tag}` — {description}")
+            else:
+                lines.append(f"- `{pair_entry.tag}`")
+    else:
+        lines.append("(none)")
+    lines.append("")
+
+    if context.has_pending_proposals:
+        lines.extend(
+            [
+                "### Event-Type Names",
+                "",
+                ", ".join(event_types) or "(none)",
+                "",
+            ]
+        )
+
+    relevant_names = active_tag_names | set(context.proposal_tag_names)
+    relevant_entries = [
+        entry
+        for tag_name in sorted(relevant_names)
+        for entry in entries_by_name.get(tag_name, [])
+    ]
+    lines.extend(["### Scene-Relevant Tags", ""])
+    if relevant_entries:
+        for entry in sorted(
+            relevant_entries,
+            key=lambda item: (
+                _kind_order(item.entity_kind),
+                item.prompt_order,
+                item.category,
+                item.tag,
+            ),
+        ):
+            lines.append(
+                f"- {entry.entity_kind}/{entry.category}: {_format_tag_entry(entry)}"
+            )
+    else:
+        lines.append(
+            "No present entity or pending proposal currently selects a full tag entry."
+        )
+
+    return "\n".join(lines).rstrip()
+
+
+def _registry_digest(
+    *,
+    tag_names: Sequence[str],
+    pair_tag_names: Sequence[str],
+    event_types: Sequence[str],
+) -> str:
+    """Return a stable short digest over every closed vocabulary name."""
+
+    digest_lines = [
+        *(f"tag:{name}" for name in sorted(tag_names)),
+        *(f"pair:{name}" for name in sorted(pair_tag_names)),
+        *(f"event:{name}" for name in sorted(event_types)),
+    ]
+    return sha256("\n".join(digest_lines).encode("utf-8")).hexdigest()[:12]
+
+
+def _kind_order(entity_kind: str) -> int:
+    """Return stable prompt ordering for registered entity kinds."""
+
+    try:
+        return ("character", "place", "faction").index(entity_kind)
+    except ValueError:
+        return 1000
+
+
 def _normalize_entity_kinds(
     entity_kinds: Optional[Sequence[str]],
 ) -> Optional[tuple[str, ...]]:
@@ -228,6 +505,13 @@ def _clean_description(description: str, *, max_length: int = 140) -> str:
     if len(cleaned) <= max_length:
         return cleaned
     return f"{cleaned[: max_length - 3].rstrip()}..."
+
+
+def _short_description(description: str, *, max_length: int = 140) -> str:
+    """Return a one-line description only when it is already inexpensive."""
+
+    cleaned = " ".join(description.split())
+    return cleaned if len(cleaned) <= max_length else ""
 
 
 def _connect(dbname: Optional[str]):

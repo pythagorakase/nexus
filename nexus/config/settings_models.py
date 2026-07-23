@@ -2467,6 +2467,15 @@ class MemorySettings(BaseModel):
 # =============================================================================
 
 
+class APEXTagLibrarySettings(BaseModel):
+    """Prompt exposure and repair controls for the closed tag vocabulary."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    contextual: bool = True
+    suggestion_limit: int = Field(default=3, ge=0)
+
+
 class APEXSettings(BaseModel):
     """APEX API configuration for story generation."""
 
@@ -2476,6 +2485,7 @@ class APEXSettings(BaseModel):
     model: str
     reasoning_effort: str = Field(..., pattern="^(low|medium|high)$")
     max_output_tokens: int = Field(..., ge=1)
+    tag_library: APEXTagLibrarySettings = Field(default_factory=APEXTagLibrarySettings)
     structured_output_retries: int = Field(
         default=3,
         ge=0,

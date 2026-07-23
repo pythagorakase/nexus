@@ -84,6 +84,23 @@ def test_summaries_follow_the_storyteller_by_default():
     assert settings.summaries.model == settings.apex.model
 
 
+def test_apex_tag_library_settings_round_trip() -> None:
+    """Context selection and repair limits survive validated serialization."""
+
+    raw = _nexus_toml_dict()
+    raw["apex"]["tag_library"] = {
+        "contextual": False,
+        "suggestion_limit": 2,
+    }
+
+    settings = Settings(**raw)
+    dumped = settings.model_dump()
+
+    assert settings.apex.tag_library.contextual is False
+    assert settings.apex.tag_library.suggestion_limit == 2
+    assert dumped["apex"]["tag_library"] == raw["apex"]["tag_library"]
+
+
 def test_summaries_follow_anthropic_storyteller_with_registry_route():
     """A native Anthropic storyteller remains the default summarizer."""
     raw = _nexus_toml_dict()
@@ -471,7 +488,9 @@ def test_gateway_cors_origins_parse_and_accessor_returns_default() -> None:
 
 def test_remote_cloudflare_access_references_parse_from_shipped_config() -> None:
     """Remote Access configuration contains account names, never credentials."""
-    remote = load_settings("nexus.toml").runtime.remote
+    runtime = load_settings("nexus.toml").runtime
+    assert runtime is not None
+    remote = runtime.remote
 
     assert remote is not None
     assert remote.base_url == "https://nexus.pythagora.net"

@@ -901,7 +901,7 @@ def _retry_boundary_response(
                 "character",
                 "Brena Tideloft",
                 "applied_tags",
-                "human" if valid else "haven",
+                "human" if valid else "humam",
             )
         )
     if boundary == "place_tags_to_clear":
@@ -923,12 +923,12 @@ def _retry_boundary_response(
             )
         )
     if boundary == "tag_hints":
-        return _storyteller_response(tag_hints=["human" if valid else "invented:tag"])
+        return _storyteller_response(tag_hints=["human" if valid else "humam"])
     if boundary == "pair_tag_hints":
         return _storyteller_response(
             pair_tag_hints=[
                 {
-                    "tag": "protects" if valid else "invented_pair_tag",
+                    "tag": "protects" if valid else "protectz",
                     "other_entity_name": "The Lower Sluice",
                     "declared_entity_role": "subject",
                 }
@@ -940,7 +940,7 @@ def _retry_boundary_response(
                 {
                     "proposal_id": "proposal-1",
                     "action": "replace",
-                    "replacement_event_type": ("slept" if valid else "invented_event"),
+                    "replacement_event_type": ("slept" if valid else "sleptt"),
                 }
             ]
         )
@@ -948,16 +948,17 @@ def _retry_boundary_response(
 
 
 @pytest.mark.parametrize(
-    ("boundary", "failure_path"),
+    ("boundary", "failure_path", "expected_suggestion"),
     [
-        ("character_applied_tags", "updates[0]"),
-        ("place_tags_to_clear", "updates[0]"),
-        ("faction_applied_tags", "updates[0]"),
-        ("tag_hints", "new_entities[0].tag_hints"),
-        ("pair_tag_hints", "new_entities[0].pair_tag_hints[0].tag"),
+        ("character_applied_tags", "updates[0]", "human"),
+        ("place_tags_to_clear", "updates[0]", None),
+        ("faction_applied_tags", "updates[0]", None),
+        ("tag_hints", "new_entities[0].tag_hints", "human"),
+        ("pair_tag_hints", "new_entities[0].pair_tag_hints[0].tag", "protects"),
         (
             "replacement_event_type",
             "orrery_adjudications[0].replacement_event_type",
+            "slept",
         ),
     ],
 )
@@ -965,6 +966,7 @@ def test_each_catalog_boundary_consumes_retry_and_returns_valid_output_unchanged
     monkeypatch: pytest.MonkeyPatch,
     boundary: str,
     failure_path: str,
+    expected_suggestion: Optional[str],
 ) -> None:
     """Every moved catalog is enforced inside the bounded provider retry."""
 
@@ -1009,6 +1011,12 @@ def test_each_catalog_boundary_consumes_retry_and_returns_valid_output_unchanged
     assert len(prompts) == 2
     assert "=== STRUCTURED OUTPUT RETRY ===" in prompts[1]
     assert failure_path in prompts[1]
+    if expected_suggestion is not None:
+        assert f"did you mean: {expected_suggestion}" in prompts[1]
+    if boundary in {"character_applied_tags", "tag_hints"}:
+        retry_issue = prompts[1].split("did you mean:", 1)[1]
+        assert "haven" not in retry_issue
+        assert "loyalist" not in retry_issue
 
 
 @pytest.mark.asyncio
