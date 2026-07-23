@@ -12,6 +12,7 @@ from pydantic import BaseModel, ValidationError
 from nexus.agents.logon.apex_schema import (
     ChunkMetadataUpdate,
     Coordinates,
+    LocationStateUpdate,
     NewEntityPairTagHint,
     OrreryAdjudication,
     ReferencedEntities,
@@ -280,6 +281,16 @@ def test_lenient_sparse_round_trip_has_no_scaffold_keys() -> None:
     assert hydrated.reasoning is None
 
 
+def test_location_state_update_rejects_misspelled_current_status() -> None:
+    with pytest.raises(ValidationError, match="current_status"):
+        LocationStateUpdate.model_validate(
+            {
+                "place_name": "The Lower Sluice",
+                "current_status": "Floodwater rising between the stacks.",
+            }
+        )
+
+
 def _compact_schema_json(schema: dict[str, Any]) -> str:
     return json.dumps(
         schema,
@@ -323,6 +334,30 @@ def _schema_descriptions(value: Any) -> set[str]:
         for nested in value:
             descriptions.update(_schema_descriptions(nested))
     return descriptions
+
+
+def test_lenient_wire_closes_every_object_schema_node() -> None:
+    """No wire-reachable object may silently discard unknown provider keys."""
+
+    open_object_nodes: list[str] = []
+
+    def visit(value: Any, path: str) -> None:
+        if isinstance(value, dict):
+            node_type = value.get("type")
+            is_object = node_type == "object" or (
+                isinstance(node_type, list) and "object" in node_type
+            )
+            if is_object and value.get("additionalProperties") is not False:
+                open_object_nodes.append(path)
+            for key, nested in value.items():
+                visit(nested, f"{path}.{key}")
+        elif isinstance(value, list):
+            for index, nested in enumerate(value):
+                visit(nested, f"{path}[{index}]")
+
+    visit(skald_wire_lenient_schema(), "$")
+
+    assert open_object_nodes == []
 
 
 def test_wire_schema_size_and_description_budget() -> None:

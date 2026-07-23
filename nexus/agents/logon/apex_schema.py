@@ -471,6 +471,8 @@ class LocationStateUpdate(BaseModel):
         description="Registered tag deltas for this place.",
     )
 
+    model_config = ConfigDict(extra="forbid")
+
 
 class FactionStateUpdate(BaseModel):
     """

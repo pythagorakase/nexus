@@ -6,11 +6,12 @@ import pytest
 
 from nexus.agents.logon.apex_schema import (
     StorytellerResponseBootstrap,
-    StorytellerResponseExtended,
 )
+from nexus.agents.logon.skald_wire import SkaldTurnWire
 from nexus.api.mock_openai import (
     ResponsesRequest,
     _collect_text,
+    _mock_storyteller_response,
     _requested_output_properties,
     responses_create,
 )
@@ -33,6 +34,17 @@ def _native_text_format(schema_model) -> dict:
     return {"format": openai_response_text_format(schema_model)}
 
 
+def test_mock_non_bootstrap_payload_is_sparse_skald_wire() -> None:
+    """TEST turns track the provider wire and exercise optional omissions."""
+
+    payload = _mock_storyteller_response("")
+
+    wire = SkaldTurnWire.model_validate(payload)
+
+    assert set(payload) == {"narrative", "choices"}
+    assert wire.model_dump(exclude_unset=True, mode="json") == payload
+
+
 @pytest.mark.asyncio
 async def test_mock_responses_returns_orrery_adjudication_fixture() -> None:
     """TEST mode can force defer, void, and replace without live API calls."""
@@ -50,7 +62,7 @@ async def test_mock_responses_returns_orrery_adjudication_fixture() -> None:
     )
 
     payload = json.loads(response["output_text"])
-    parsed = StorytellerResponseExtended.model_validate(payload)
+    parsed = SkaldTurnWire.model_validate(payload)
 
     assert [item.action for item in parsed.orrery_adjudications] == [
         "defer",
@@ -90,7 +102,7 @@ async def test_mock_responses_single_orrery_proposal_only_defers() -> None:
     )
 
     payload = json.loads(response["output_text"])
-    parsed = StorytellerResponseExtended.model_validate(payload)
+    parsed = SkaldTurnWire.model_validate(payload)
 
     assert [item.action for item in parsed.orrery_adjudications] == ["defer"]
     assert parsed.orrery_adjudications[0].proposal_id == "sleep_pressure:aaa"
@@ -149,18 +161,18 @@ async def test_mock_responses_prioritizes_orrery_fixture_over_cached_story() -> 
 
 @pytest.mark.asyncio
 async def test_mock_responses_routes_turn_schema_without_orrery_proposals() -> None:
-    """A turn request with no Orrery section still gets an Extended payload.
+    """A turn request with no Orrery section still gets a wire payload.
 
     Regression for the issue #401 reproduction blocker: keyword routing sent
     proposal-free turn requests to the bootstrap-shaped payload, which fails
-    StorytellerResponseExtended validation and stalls TEST-mode turn loops.
+    turn-wire validation and stalls TEST-mode turn loops.
     """
 
     response = await responses_create(
         ResponsesRequest(
             model="TEST",
             input=[{"role": "user", "content": "Continue the protagonist story."}],
-            tools=[_final_result_tool(StorytellerResponseExtended)],
+            tools=[_final_result_tool(SkaldTurnWire)],
         )
     )
 
@@ -170,7 +182,7 @@ async def test_mock_responses_routes_turn_schema_without_orrery_proposals() -> N
 
     payload = json.loads(response["output_text"])
     assert json.loads(tool_call["arguments"]) == payload
-    parsed = StorytellerResponseExtended.model_validate(payload)
+    parsed = SkaldTurnWire.model_validate(payload)
     assert parsed.narrative.startswith("[TEST MODE]")
     assert parsed.orrery_adjudications == []
 
@@ -183,7 +195,7 @@ async def test_mock_responses_routes_turn_schema_as_native_text_format() -> None
         ResponsesRequest(
             model="TEST",
             input=[{"role": "user", "content": "Continue the protagonist story."}],
-            text=_native_text_format(StorytellerResponseExtended),
+            text=_native_text_format(SkaldTurnWire),
         )
     )
 
@@ -191,7 +203,7 @@ async def test_mock_responses_routes_turn_schema_as_native_text_format() -> None
     assert message["type"] == "message"
 
     payload = json.loads(response["output_text"])
-    parsed = StorytellerResponseExtended.model_validate(payload)
+    parsed = SkaldTurnWire.model_validate(payload)
     assert parsed.narrative.startswith("[TEST MODE]")
     assert parsed.orrery_adjudications == []
 
@@ -250,7 +262,7 @@ def test_requested_output_properties_extracts_schema_fields() -> None:
     native_request = ResponsesRequest(
         model="TEST",
         input=[],
-        text=_native_text_format(StorytellerResponseExtended),
+        text=_native_text_format(SkaldTurnWire),
     )
     native_fields = _requested_output_properties(native_request)
     assert "state_updates" in native_fields
