@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal, Sequence
+from typing import AbstractSet, Any, Literal, Mapping, Optional, Sequence
 
 from nexus.agents.logon.apex_schema import NewEntityDeclaration
 from nexus.agents.orrery.tag_schemas import OrreryTagBestowal
@@ -15,6 +15,9 @@ from nexus.agents.orrery.tag_writer import (
 def collect_new_entity_declaration_vocabulary_issues(
     cur: Any,
     declarations: Sequence[NewEntityDeclaration],
+    *,
+    tag_names_by_kind: Optional[Mapping[str, AbstractSet[str]]] = None,
+    pair_tag_names: Optional[AbstractSet[str]] = None,
 ) -> list[str]:
     """Return path-qualified vocabulary issues without mutating the database.
 
@@ -28,28 +31,45 @@ def collect_new_entity_declaration_vocabulary_issues(
         path = f"new_entities[{declaration_index}]"
 
         if declaration.tag_hints:
-            bestowal = OrreryTagBestowal(applied_tags=list(declaration.tag_hints))
-            for issue in validate_tag_bestowal(
-                cur,
-                entity_kind=declaration.kind,
-                bestowal=bestowal,
-            ):
-                detail = issue.removeprefix("applied_tags: ")
-                issues.append(f"{path}.tag_hints: {detail}")
+            if tag_names_by_kind is None:
+                bestowal = OrreryTagBestowal(applied_tags=list(declaration.tag_hints))
+                tag_issues = validate_tag_bestowal(
+                    cur,
+                    entity_kind=declaration.kind,
+                    bestowal=bestowal,
+                )
+                for issue in tag_issues:
+                    detail = issue.removeprefix("applied_tags: ")
+                    issues.append(f"{path}.tag_hints: {detail}")
+            else:
+                allowed_tags = tag_names_by_kind.get(declaration.kind, set())
+                for tag_name in declaration.tag_hints:
+                    if tag_name not in allowed_tags:
+                        issues.append(
+                            f"{path}.tag_hints: Unknown or "
+                            f"entity-kind-incompatible tag {tag_name!r} for "
+                            f"{declaration.kind!r}"
+                        )
 
         for hint_index, hint in enumerate(declaration.pair_tag_hints):
             hint_path = f"{path}.pair_tag_hints[{hint_index}]"
             tag_is_valid = True
-            try:
-                validate_pair_tag_endpoint(
-                    cur,
-                    tag=hint.tag,
-                    entity_kind=declaration.kind,
-                    role=hint.declared_entity_role,
-                )
-            except ValueError as exc:
+            if pair_tag_names is not None and hint.tag not in pair_tag_names:
                 tag_is_valid = False
-                issues.append(f"{hint_path}.tag: {exc}")
+                issues.append(
+                    f"{hint_path}.tag: Unknown or deprecated pair_tag {hint.tag!r}"
+                )
+            else:
+                try:
+                    validate_pair_tag_endpoint(
+                        cur,
+                        tag=hint.tag,
+                        entity_kind=declaration.kind,
+                        role=hint.declared_entity_role,
+                    )
+                except ValueError as exc:
+                    tag_is_valid = False
+                    issues.append(f"{hint_path}.tag: {exc}")
 
             endpoint_kind, endpoint_issue = _resolve_hint_endpoint_kind(
                 cur,
