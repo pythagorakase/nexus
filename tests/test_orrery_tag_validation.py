@@ -37,7 +37,14 @@ from scripts.api_anthropic import AnthropicProvider
 from scripts.api_openai import OpenAIProvider
 
 
-EXTENDED_SCHEMA_MIN_BYTE_SAVINGS = 8_000
+# Recalibrated after #557 removed the dossier subtrees (which carried much of
+# the long-description weight the diet originally counted): the diet now saves
+# ~7.3KB / ~1,469 tokens on the dossier-free schema. Guards stay binding
+# against a no-op transform; the absolute ceiling holds the combined campaign
+# result (measured 20,666 bytes dieted).
+EXTENDED_SCHEMA_MIN_BYTE_SAVINGS = 6_000
+EXTENDED_SCHEMA_MIN_TOKEN_SAVINGS = 1_200
+EXTENDED_SCHEMA_DIETED_MAX_BYTES = 21_500
 
 
 class FakeRegistryCursor:
@@ -1201,7 +1208,11 @@ def test_extended_openai_wire_schema_meets_description_diet_budget() -> None:
     dieted_tokens = encoding.encode(dieted_wire)
 
     assert len(undieted_bytes) - len(dieted_bytes) >= EXTENDED_SCHEMA_MIN_BYTE_SAVINGS
-    assert len(undieted_tokens) - len(dieted_tokens) >= 2_000
+    assert (
+        len(undieted_tokens) - len(dieted_tokens)
+        >= EXTENDED_SCHEMA_MIN_TOKEN_SAVINGS
+    )
+    assert len(dieted_bytes) <= EXTENDED_SCHEMA_DIETED_MAX_BYTES
     assert set(dieted["properties"]) >= {
         "narrative",
         "choices",
