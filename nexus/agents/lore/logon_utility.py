@@ -32,6 +32,7 @@ from nexus.agents.logon.skald_wire import (  # noqa: E402
     skald_wire_strict_text_format,
 )
 from nexus.agents.orrery.tag_library import (  # noqa: E402
+    EntityRowReference,
     TagLibraryContext,
     format_contextual_tag_library,
     format_tag_library_for_prompt,
@@ -50,6 +51,12 @@ _PROPOSAL_TAG_DELTA_KEYS = frozenset(
         "entity_tags_target.remove",
     }
 )
+# The remaining closed-vocabulary carriers in SUPPORTED_STATE_DELTA_KEYS are
+# pair-tag operations: entity_pair_tags.{add_inbound,add_outbound,
+# clear_outbound}, entity_pair_tags_target.clear_inbound, and status.bestow
+# (which writes status:<level>). Pair tags have their own name index and no
+# single-entity Tier-2 descriptions, so they are intentionally not extracted
+# here.
 
 
 def proposal_tag_names_from_payload(context_payload: Mapping[str, Any]) -> set[str]:
@@ -73,6 +80,11 @@ def proposal_tag_names_from_payload(context_payload: Mapping[str, Any]) -> set[s
                 for value in values
                 if value is not None and str(value).strip()
             )
+        mood_set = state_delta.get("mood.set")
+        if isinstance(mood_set, Mapping):
+            mood = mood_set.get("mood")
+            if mood is not None and str(mood).strip():
+                tag_names.add(str(mood).strip())
     return tag_names
 
 
@@ -1184,22 +1196,35 @@ class LogonUtility:
                 "Contextual Orrery tag library requires a presence baseline"
             )
 
-        entity_ids = [
-            reference.id for reference in baseline.present if reference.id is not None
+        entity_refs = [
+            EntityRowReference(kind=reference.kind, row_id=reference.id)
+            for reference in baseline.present
+            if reference.id is not None
         ]
         if baseline.setting is not None and baseline.setting.id is not None:
-            entity_ids.append(baseline.setting.id)
+            entity_refs.append(
+                EntityRowReference(
+                    kind=baseline.setting.kind,
+                    row_id=baseline.setting.id,
+                )
+            )
         user_character_id = read_user_character_id(self.dbname)
         if user_character_id is not None:
-            entity_ids.append(user_character_id)
+            entity_refs.append(
+                EntityRowReference(
+                    kind="character",
+                    row_id=user_character_id,
+                )
+            )
 
         imminent_activity = context.get("orrery_imminent_activity") or []
         return format_contextual_tag_library(
             self.dbname,
             context=TagLibraryContext(
-                present_entity_ids=list(dict.fromkeys(entity_ids)),
+                present_entity_refs=list(dict.fromkeys(entity_refs)),
                 proposal_tag_names=proposal_tag_names_from_payload(context),
                 has_pending_proposals=bool(imminent_activity),
+                anchor_chunk_id=self._parent_chunk_id(context),
             ),
         )
 

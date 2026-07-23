@@ -388,6 +388,23 @@ def test_registered_new_entity_hints_produce_no_issues() -> None:
     )
 
 
+def test_duplicate_invalid_hints_each_receive_bounded_suggestions() -> None:
+    response = _storyteller_response(tag_hints=["humna", "humna"])
+
+    issues = collect_orrery_tag_issues(
+        response,
+        FakeRegistryCursor(),
+        vocabulary=_test_vocabulary(),
+        suggestion_limit=1,
+    )
+
+    assert len(issues) == 2
+    assert all(issue.count("did you mean:") == 1 for issue in issues)
+    for issue in issues:
+        suggestions = issue.split("did you mean:", 1)[1].split(",")
+        assert len(suggestions) <= 1
+
+
 def test_replacement_event_type_uses_cached_catalog() -> None:
     valid = _storyteller_response(
         orrery_adjudications=[

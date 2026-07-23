@@ -210,7 +210,11 @@ def _annotate_matching_issue(
 
     annotated = list(issues)
     for index, issue in enumerate(annotated):
-        if issue.startswith(prefix) and repr(value) in issue:
+        if (
+            issue.startswith(prefix)
+            and repr(value) in issue
+            and "; did you mean:" not in issue
+        ):
             annotated[index] = _with_near_misses(
                 issue,
                 value=value,

@@ -404,7 +404,13 @@ def test_context_prompt_includes_contextual_tag_library(monkeypatch) -> None:
                         "entity_tags_target.remove": ["off_grid"],
                         "character.current_activity": "waiting",
                     },
-                }
+                },
+                {
+                    "proposal_id": "proposal-2",
+                    "state_delta": {
+                        "mood.set": {"mood": "restless"},
+                    },
+                },
             ],
         },
         presence_baseline=baseline,
@@ -412,9 +418,21 @@ def test_context_prompt_includes_contextual_tag_library(monkeypatch) -> None:
 
     assert "=== ORRERY TAG LIBRARY ===\nCONTEXTUAL LIBRARY" in prompt
     assert len(captured) == 1
-    assert captured[0].present_entity_ids == [7, 12, 99]
-    assert captured[0].proposal_tag_names == {"wounded", "off_grid"}
+    assert [
+        (reference.kind, reference.row_id)
+        for reference in captured[0].present_entity_refs
+    ] == [
+        ("character", 7),
+        ("place", 12),
+        ("character", 99),
+    ]
+    assert captured[0].proposal_tag_names == {
+        "wounded",
+        "off_grid",
+        "restless",
+    }
     assert captured[0].has_pending_proposals is True
+    assert captured[0].anchor_chunk_id == 44
 
 
 def test_bootstrap_context_keeps_full_tag_library(monkeypatch) -> None:

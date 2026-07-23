@@ -3,17 +3,27 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from contextlib import contextmanager
 from dataclasses import dataclass
 from hashlib import sha256
 import os
 import re
-from typing import Optional, Sequence
+from typing import Iterator, Literal, Optional, Sequence
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import Session
+
+from nexus.agents.orrery.resolver import (
+    load_anchor_world_time,
+    load_current_entity_tags,
+)
+from nexus.api.slot_utils import get_slot_db_url
 
 VALID_ENTITY_KINDS = frozenset({"character", "faction", "place"})
 _SLOT_DB_RE = re.compile(r"^save_0[1-5]$")
+EntityKind = Literal["character", "faction", "place"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,12 +40,27 @@ class TagLibraryEntry:
 
 
 @dataclass(frozen=True, slots=True)
-class TagLibraryContext:
-    """Scene state that selects which registered tags receive descriptions."""
+class EntityRowReference:
+    """One kind-scoped subtype row ID, before canonical entity translation."""
 
-    present_entity_ids: list[int]
+    kind: EntityKind
+    row_id: int
+
+
+@dataclass(frozen=True, slots=True)
+class TagLibraryContext:
+    """Scene state that selects which registered tags receive descriptions.
+
+    ``present_entity_refs`` deliberately carries kind-scoped subtype row IDs.
+    The active-tag lookup owns translation to ``entities.id`` so no caller can
+    accidentally pass a character/place/faction row ID as a canonical entity
+    ID.
+    """
+
+    present_entity_refs: list[EntityRowReference]
     proposal_tag_names: set[str]
     has_pending_proposals: bool
+    anchor_chunk_id: Optional[int] = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -229,39 +254,39 @@ def read_pair_tag_entries(
 def read_current_entity_tag_names(
     dbname: Optional[str],
     *,
-    entity_ids: Sequence[int],
+    entity_refs: Sequence[EntityRowReference],
+    anchor_chunk_id: Optional[int],
 ) -> set[str]:
-    """Read current tags through Orrery's canonical entity-tags read model."""
+    """Read active tags for kind-scoped subtype rows at the anchor world time.
 
-    normalized_ids = sorted(
-        {
-            int(entity_id)
-            for entity_id in entity_ids
-            if not isinstance(entity_id, bool) and int(entity_id) > 0
-        }
-    )
-    if not normalized_ids:
+    Translation from ``characters.id`` / ``places.id`` / ``factions.id`` to
+    canonical ``entities.id`` happens here, in one query. Callers therefore
+    cannot accidentally select an unrelated canonical entity with the same
+    numeric ID.
+    """
+
+    normalized_refs = _normalize_entity_refs(entity_refs)
+    if not normalized_refs:
         return set()
 
-    conn = _connect(dbname)
-    try:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT DISTINCT etc.tag
-                FROM entity_tags_current AS etc
-                JOIN entity_tags AS et ON et.id = etc.entity_tag_id
-                JOIN tags AS t ON t.id = et.tag_id
-                WHERE etc.entity_id = ANY(%s::bigint[])
-                  AND t.deprecated = FALSE
-                  AND t.synonym_for IS NULL
-                ORDER BY etc.tag
-                """,
-                (normalized_ids,),
-            )
-            return {str(row["tag"]) for row in cur.fetchall()}
-    finally:
-        conn.close()
+    with _slot_session(dbname) as session:
+        canonical_ids = _translate_entity_row_refs(session, normalized_refs)
+        if not canonical_ids:
+            return set()
+        world_time = load_anchor_world_time(
+            session,
+            anchor_chunk_id=anchor_chunk_id,
+        )
+        durable, ephemeral = load_current_entity_tags(
+            session,
+            current_world_time=world_time,
+        )
+
+    return {
+        tag
+        for entity_id in canonical_ids
+        for tag in durable.get(entity_id, set()) | ephemeral.get(entity_id, set())
+    }
 
 
 def format_tag_library_for_prompt(
@@ -332,7 +357,8 @@ def format_contextual_tag_library(
     event_types = read_event_types(dbname)
     active_tag_names = read_current_entity_tag_names(
         dbname,
-        entity_ids=context.present_entity_ids,
+        entity_refs=context.present_entity_refs,
+        anchor_chunk_id=context.anchor_chunk_id,
     )
 
     by_kind: dict[str, dict[str, list[TagLibraryEntry]]] = defaultdict(
@@ -488,6 +514,78 @@ def _normalize_entity_kinds(
     return normalized
 
 
+def _normalize_entity_refs(
+    entity_refs: Sequence[EntityRowReference],
+) -> tuple[EntityRowReference, ...]:
+    """Validate and deduplicate kind-scoped subtype row references."""
+
+    normalized: list[EntityRowReference] = []
+    seen: set[EntityRowReference] = set()
+    for reference in entity_refs:
+        if reference.kind not in VALID_ENTITY_KINDS:
+            raise ValueError(
+                f"Unknown Orrery entity kind {reference.kind!r}; "
+                f"expected {sorted(VALID_ENTITY_KINDS)}"
+            )
+        if isinstance(reference.row_id, bool) or reference.row_id <= 0:
+            raise ValueError(
+                "Orrery subtype row IDs must be positive integers, "
+                f"got {reference.row_id!r}"
+            )
+        if reference not in seen:
+            normalized.append(reference)
+            seen.add(reference)
+    return tuple(normalized)
+
+
+def _translate_entity_row_refs(
+    session: Session,
+    entity_refs: Sequence[EntityRowReference],
+) -> tuple[int, ...]:
+    """Translate all kind-scoped subtype row IDs to canonical entity IDs."""
+
+    rows = session.execute(
+        text(
+            """
+            /* orrery:tag_library_entity_id_translation */
+            WITH requested AS (
+                SELECT *
+                FROM unnest(
+                    CAST(:entity_kinds AS text[]),
+                    CAST(:row_ids AS bigint[])
+                ) AS requested(entity_kind, row_id)
+            ),
+            translated AS (
+                SELECT CASE requested.entity_kind
+                           WHEN 'character' THEN characters.entity_id
+                           WHEN 'place' THEN places.entity_id
+                           WHEN 'faction' THEN factions.entity_id
+                       END AS entity_id
+                FROM requested
+                LEFT JOIN characters
+                  ON requested.entity_kind = 'character'
+                 AND characters.id = requested.row_id
+                LEFT JOIN places
+                  ON requested.entity_kind = 'place'
+                 AND places.id = requested.row_id
+                LEFT JOIN factions
+                  ON requested.entity_kind = 'faction'
+                 AND factions.id = requested.row_id
+            )
+            SELECT DISTINCT entity_id
+            FROM translated
+            WHERE entity_id IS NOT NULL
+            ORDER BY entity_id
+            """
+        ),
+        {
+            "entity_kinds": [reference.kind for reference in entity_refs],
+            "row_ids": [reference.row_id for reference in entity_refs],
+        },
+    ).mappings()
+    return tuple(int(row["entity_id"]) for row in rows)
+
+
 def _format_tag_name(tag: str, is_ephemeral: bool) -> str:
     suffix = " (ephemeral)" if is_ephemeral else ""
     return f"`{tag}`{suffix}"
@@ -523,6 +621,27 @@ def _connect(dbname: Optional[str]):
         port=os.environ.get("PGPORT", "5432"),
         cursor_factory=RealDictCursor,
     )
+
+
+@contextmanager
+def _slot_session(dbname: Optional[str]) -> Iterator[Session]:
+    """Open a short read session for canonical Orrery state helpers."""
+
+    resolved = _resolve_dbname(dbname)
+    engine = create_engine(
+        get_slot_db_url(
+            dbname=resolved,
+            user=os.environ.get("PGUSER", "pythagor"),
+            host=os.environ.get("PGHOST", "localhost"),
+            port=int(os.environ.get("PGPORT", "5432")),
+        ),
+        future=True,
+    )
+    try:
+        with Session(engine) as session:
+            yield session
+    finally:
+        engine.dispose()
 
 
 def _resolve_dbname(dbname: Optional[str]) -> str:

@@ -395,10 +395,10 @@ def _load_active_entity_ids(session: Any) -> tuple[int, ...]:
     )
 
 
-def _load_current_entity_tags(
+def load_current_entity_tags(
     session: Any, *, current_world_time: Optional[datetime]
 ) -> tuple[dict[int, set[str]], dict[int, set[str]]]:
-    """Hydrate tags honestly at the anchor's world time.
+    """Hydrate current tags honestly at the anchor's world time.
 
     The durable sweep remains responsible for clearing expired rows. This
     read-side filter prevents an unswept time-cleared tag from gating behavior
@@ -426,6 +426,17 @@ def _load_current_entity_tags(
     return tags, ephemeral_tags
 
 
+def _load_current_entity_tags(
+    session: Any, *, current_world_time: Optional[datetime]
+) -> tuple[dict[int, set[str]], dict[int, set[str]]]:
+    """Backward-compatible private alias for the canonical current-tag read."""
+
+    return load_current_entity_tags(
+        session,
+        current_world_time=current_world_time,
+    )
+
+
 def hydrate_world_state(
     session: Any,
     *,
@@ -450,7 +461,7 @@ def hydrate_world_state(
     need_tuning = coerce_need_tuning(need_tuning)
     project_policy = coerce_project_policy(project_settings)
     epistemics_policy = coerce_epistemics_policy(epistemics_settings)
-    world_time = world_time_override or _load_world_time(
+    world_time = world_time_override or load_anchor_world_time(
         session, anchor_chunk_id=anchor_chunk_id
     )
     mood_enabled = bool(_weather_setting(mood_settings, "enabled", False))
@@ -469,7 +480,7 @@ def hydrate_world_state(
         ).mappings()
     }
 
-    tags, ephemeral_tags = _load_current_entity_tags(
+    tags, ephemeral_tags = load_current_entity_tags(
         session, current_world_time=world_time
     )
 
@@ -2447,9 +2458,11 @@ def _load_time_of_day(world_time: Optional[datetime]) -> str:
     return "night"
 
 
-def _load_world_time(
+def load_anchor_world_time(
     session: Any, *, anchor_chunk_id: Optional[int]
 ) -> Optional[datetime]:
+    """Read the diegetic clock attached to one narrative anchor chunk."""
+
     if anchor_chunk_id is None:
         return None
     row = (
@@ -2468,6 +2481,17 @@ def _load_world_time(
         .first()
     )
     return row["world_time"] if row else None
+
+
+def _load_world_time(
+    session: Any, *, anchor_chunk_id: Optional[int]
+) -> Optional[datetime]:
+    """Backward-compatible private alias for the canonical anchor clock."""
+
+    return load_anchor_world_time(
+        session,
+        anchor_chunk_id=anchor_chunk_id,
+    )
 
 
 def _load_need_debt_scores(
