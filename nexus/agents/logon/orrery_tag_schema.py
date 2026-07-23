@@ -2,14 +2,91 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any, Dict, Mapping, Optional, Type
 
 from pydantic import BaseModel
 
 from nexus.api.native_structured_output import (
     anthropic_output_config,
+    openai_response_text_format,
     strict_json_schema,
 )
+
+# Interim #558 diet until #554 replaces the full wire model. This cutoff removes
+# at least 2,000 o200k tokens from the Extended strict schema while keeping terse
+# leaf-field hints.
+STORYTELLER_WIRE_DESCRIPTION_MAX_LENGTH = 62
+STORYTELLER_WIRE_DESCRIPTION_PROPERTY_KEEP_NAMES = frozenset(
+    {"replacement_event_type", "declared_entity_role"}
+)
+STORYTELLER_WIRE_DESCRIPTION_DEF_KEEP_NAMES = frozenset({"Coordinates"})
+STORYTELLER_WIRE_SCHEMA_INSTANCE_DATA_KEYS = frozenset(
+    {"const", "default", "examples", "enum"}
+)
+
+
+def diet_storyteller_wire_schema(value: Any) -> Any:
+    """Return a copy with overlong JSON Schema descriptions removed."""
+
+    return _diet_storyteller_wire_schema(value, keep_description=False)
+
+
+def _diet_storyteller_wire_schema(value: Any, *, keep_description: bool) -> Any:
+    """Copy and diet one schema node with its immediate description context."""
+
+    if isinstance(value, list):
+        return [
+            _diet_storyteller_wire_schema(item, keep_description=False)
+            for item in value
+        ]
+    if not isinstance(value, dict):
+        return value
+
+    dieted: Dict[str, Any] = {}
+    for key, item in value.items():
+        if key in STORYTELLER_WIRE_SCHEMA_INSTANCE_DATA_KEYS:
+            dieted[key] = deepcopy(item)
+        elif (
+            key == "description"
+            and isinstance(item, str)
+            and len(item) > STORYTELLER_WIRE_DESCRIPTION_MAX_LENGTH
+            and not keep_description
+        ):
+            continue
+        elif key == "properties" and isinstance(item, dict):
+            dieted[key] = {
+                property_name: _diet_storyteller_wire_schema(
+                    property_schema,
+                    keep_description=(
+                        property_name
+                        in STORYTELLER_WIRE_DESCRIPTION_PROPERTY_KEEP_NAMES
+                    ),
+                )
+                for property_name, property_schema in item.items()
+            }
+        elif key == "$defs" and isinstance(item, dict):
+            dieted[key] = {
+                def_name: _diet_storyteller_wire_schema(
+                    def_schema,
+                    keep_description=(
+                        def_name in STORYTELLER_WIRE_DESCRIPTION_DEF_KEEP_NAMES
+                    ),
+                )
+                for def_name, def_schema in item.items()
+            }
+        else:
+            dieted[key] = _diet_storyteller_wire_schema(item, keep_description=False)
+    return dieted
+
+
+def storyteller_openai_text_format(
+    schema_model: Type[BaseModel],
+) -> Dict[str, Any]:
+    """Build the dieted strict OpenAI text.format storyteller payload."""
+
+    dieted_schema = diet_storyteller_wire_schema(strict_json_schema(schema_model))
+    return openai_response_text_format(schema_model, schema=dieted_schema)
 
 
 def storyteller_anthropic_output_config(
