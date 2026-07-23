@@ -13,8 +13,8 @@ from nexus.agents.logon.apex_schema import (
     PlaceReferenceType,
     StorytellerResponseBootstrap,
     create_minimal_response,
-    validate_story_turn_response,
 )
+from nexus.api.storyteller import _coerce_story_response
 
 
 def test_world_layer_type_uses_atemporal_clock_semantics() -> None:
@@ -36,10 +36,12 @@ def test_bootstrap_response_schema_rejects_legacy_directives_and_metadata() -> N
     assert response.choices == ["Step forward.", "Look around."]
 
     with pytest.raises(ValidationError):
-        StorytellerResponseBootstrap(
-            narrative="The story begins.",
-            choices=["Step forward.", "Look around."],
-            authorial_directives=["Retrieve the starting room."],
+        StorytellerResponseBootstrap.model_validate(
+            {
+                "narrative": "The story begins.",
+                "choices": ["Step forward.", "Look around."],
+                "authorial_directives": ["Retrieve the starting room."],
+            }
         )
 
 
@@ -76,23 +78,27 @@ def test_faction_state_update_rejects_legacy_current_activity() -> None:
     """Faction updates should use Orrery tags, not legacy activity columns."""
 
     with pytest.raises(ValidationError):
-        FactionStateUpdate(
-            faction_id=42,
-            current_activity="Watching the station exits.",
+        FactionStateUpdate.model_validate(
+            {
+                "faction_id": 42,
+                "current_activity": "Watching the station exits.",
+            }
         )
 
 
 def test_orrery_adjudication_schema_accepts_replace_delta() -> None:
     """Storyteller responses can rule on Orrery proposals without prose parsing."""
 
-    adjudication = OrreryAdjudication(
-        proposal_id="sleep_pressure:abc123",
-        action="replace",
-        replacement_state_delta={
-            "character_current_activity": "nodding off mid-sentence",
-            "entity_pair_tags_target_clear_inbound": ["hunting"],
-        },
-        replacement_event_type="sleep_need",
+    adjudication = OrreryAdjudication.model_validate(
+        {
+            "proposal_id": "sleep_pressure:abc123",
+            "action": "replace",
+            "replacement_state_delta": {
+                "character_current_activity": "nodding off mid-sentence",
+                "entity_pair_tags_target_clear_inbound": ["hunting"],
+            },
+            "replacement_event_type": "sleep_need",
+        }
     )
 
     assert adjudication.proposal_id == "sleep_pressure:abc123"
@@ -128,14 +134,15 @@ def test_entity_references_require_id_or_name(reference_model, payload) -> None:
     [
         ("characters", "character_name", "new_character"),
         ("places", "place_name", "new_place"),
+        ("factions", "faction_name", "new_faction"),
     ],
 )
-def test_legacy_inline_dossiers_fail_the_entire_fallback_chain(
+def test_api_coercion_rejects_legacy_inline_dossiers_in_extended_payloads(
     collection: str,
     name_field: str,
     legacy_field: str,
 ) -> None:
-    """Legacy dossier fields raise instead of degrading to a smaller response."""
+    """Full legacy responses raise instead of silently degrading to Minimal."""
 
     referenced_entities: dict[str, list[dict[str, object]]] = {
         "characters": [],
@@ -151,10 +158,16 @@ def test_legacy_inline_dossiers_fail_the_entire_fallback_chain(
     referenced_entities[collection] = [reference]
 
     with pytest.raises(ValidationError):
-        validate_story_turn_response(
+        _coerce_story_response(
             {
                 "narrative": "A legacy entity steps into view.",
                 "choices": ["Continue.", "Wait."],
+                "chunk_metadata": {},
                 "referenced_entities": referenced_entities,
+                "state_updates": {},
+                "operations": {},
+                "orrery_adjudications": [],
+                "new_entities": [],
+                "reasoning": "The inline dossier should be rejected.",
             }
         )

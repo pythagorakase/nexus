@@ -46,14 +46,6 @@ from nexus.api.chunk_workflow import (
     build_embedding_scheduler,
     get_default_workflow,
 )
-from nexus.api.retry_handler import (
-    retry_with_backoff,
-    async_retry_with_backoff,
-    DATABASE_RETRY_CONFIG,
-    OPENAI_RETRY_CONFIG,
-    openai_rate_limiter,
-    FallbackChain,
-)
 
 if TYPE_CHECKING:
     from nexus.agents.lore.lore import LORE
@@ -240,12 +232,7 @@ def _coerce_story_response(payload: Any) -> StoryTurnResponse:
     if isinstance(payload, _STORY_RESPONSE_TYPES):
         return payload
     if isinstance(payload, dict):
-        try:
-            return validate_story_turn_response(payload)
-        except Exception:  # pragma: no cover - fallback path
-            logger.debug("Payload validation failed; using minimal response")
-            narrative = payload.get("narrative") or payload.get("text") or str(payload)
-            return create_minimal_response(str(narrative))
+        return validate_story_turn_response(payload)
     return create_minimal_response(str(payload))
 
 
@@ -724,7 +711,7 @@ async def delete_session(
 # New Story Setup Endpoints (headless)
 @app.post("/api/story/new/setup/start", response_model=NewStoryStartResponse)
 def new_story_setup_start(request: NewStoryStartRequest) -> NewStoryStartResponse:
-    """Start a new story setup for a slot (creates conversations thread, clears cache)."""
+    """Start setup for a slot, create its thread, and clear its cache."""
     thread_id = start_new_story_setup(request.slot, model=request.model)
     return NewStoryStartResponse(thread_id=thread_id, slot=request.slot)
 
@@ -801,7 +788,7 @@ def accept_chunk(
     request: ChunkAcceptRequest, background_tasks: BackgroundTasks
 ) -> ChunkAcceptResponse:
     """
-    Accept a Storyteller chunk, finalizing it and triggering embedding for the previous chunk.
+    Accept a Storyteller chunk and trigger embedding for the previous chunk.
 
     This marks the acceptance boundary - the previous chunk becomes immutable and
     embeddings are generated for it.
@@ -875,7 +862,7 @@ def get_chunk_states(
     """
     Get the states of chunks in a range.
 
-    Returns information about chunk states, finalization status, and embedding generation.
+    Returns chunk states, finalization status, and embedding generation.
     """
     if start > end:
         raise HTTPException(

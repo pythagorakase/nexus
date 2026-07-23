@@ -9,7 +9,7 @@ with the existing narrative API.
 import json
 import logging
 from datetime import datetime
-from typing import Optional, Any, List
+from typing import Optional, Any, Dict, List
 from psycopg2.extras import RealDictCursor
 
 from nexus.agents.logon.apex_schema import (
@@ -260,6 +260,7 @@ def commit_incubator_to_database_sync(
             # Step 2: Get parent context
             # Bootstrap case: parent_chunk_id=0 has no metadata, use defaults
             is_bootstrap = incubator["parent_chunk_id"] == 0
+            parent_meta: Dict[str, Any]
             if is_bootstrap:
                 parent_meta = {
                     "season": 1,
@@ -295,18 +296,7 @@ def commit_incubator_to_database_sync(
                         parent_meta["scene"],
                     )
 
-            # Step 3: Resolve entity references
-            # Parse referenced entities from JSONB
-            ref_entities = ReferencedEntities(**incubator["reference_updates"])
-
-            # Create new entities and resolve all to IDs
-            character_refs = resolve_character_references_sync(
-                ref_entities.characters, conn
-            )
-            place_refs = resolve_place_references_sync(ref_entities.places, conn)
-            faction_refs = resolve_faction_references_sync(ref_entities.factions, conn)
-
-            # Step 4: Convert metadata
+            # Step 3: Convert metadata
             metadata_update = ChunkMetadataUpdate(**incubator["metadata_updates"])
             chronology_data = incubator["metadata_updates"].get("chronology", {})
             chronology = ChronologyUpdate(**chronology_data)
@@ -327,7 +317,7 @@ def commit_incubator_to_database_sync(
             # Get world_layer
             world_layer = incubator["metadata_updates"].get("world_layer", "primary")
 
-            # Step 5: Insert narrative chunk
+            # Step 4: Insert narrative chunk
             # Compute finalized text based on any choice selection made in the incubator
             choice_object = incubator.get("choice_object")
             storyteller_text = incubator.get("storyteller_text") or ""
@@ -364,7 +354,37 @@ def commit_incubator_to_database_sync(
                 # (relationship_versions) to the committing chunk.
                 set_commit_chunk_attribution_sync(cur, chunk_id)
 
-            # Step 6: Insert chunk metadata
+            # Step 5: Process declarations before name-reference resolution.
+            maturation_result = enqueue_declared_entity_maturations(
+                conn,
+                declarations=incubator.get("new_entities") or [],
+                chunk_id=chunk_id,
+                raw_text=raw_text,
+                slot=slot,
+            )
+            if maturation_result.declared:
+                logger.info(
+                    "Processed %s new-entity declarations for chunk %s: "
+                    "%s stubs created, %s jobs enqueued, %s already present, "
+                    "%s without engagement signal, %s skipped (disabled)",
+                    maturation_result.declared,
+                    chunk_id,
+                    maturation_result.stubs_created,
+                    maturation_result.jobs_enqueued,
+                    maturation_result.jobs_already_present,
+                    maturation_result.signal_absent,
+                    maturation_result.skipped_disabled,
+                )
+
+            # Step 6: Resolve references, including same-turn declarations.
+            ref_entities = ReferencedEntities(**incubator["reference_updates"])
+            character_refs = resolve_character_references_sync(
+                ref_entities.characters, conn
+            )
+            place_refs = resolve_place_references_sync(ref_entities.places, conn)
+            faction_refs = resolve_faction_references_sync(ref_entities.factions, conn)
+
+            # Step 7: Insert chunk metadata
             with conn.cursor() as cur:
                 # Generate slug (e.g., "S05E06_001")
                 slug = (
@@ -387,7 +407,7 @@ def commit_incubator_to_database_sync(
                 )
                 logger.info("Created metadata for chunk %s: %s", chunk_id, slug)
 
-            # Step 7: Insert junction table references
+            # Step 8: Insert junction table references
             # Insert place references
             if place_refs:
                 with conn.cursor() as cur:
@@ -455,12 +475,12 @@ def commit_incubator_to_database_sync(
                         chunk_id,
                     )
 
-            # Step 8: Update entity states (if provided)
+            # Step 9: Update entity states (if provided)
             if incubator.get("entity_updates"):
                 state_updates = StateUpdates(**incubator["entity_updates"])
                 apply_state_updates_sync(conn, state_updates, source_chunk_id=chunk_id)
 
-            # Step 8.5: Commit Orrery proposal inside the accepted-chunk transaction
+            # Step 9.5: Commit Orrery proposal inside the accepted-chunk transaction
             orrery_result = commit_orrery_tick_sync(
                 conn,
                 incubator.get("orrery_proposal"),
@@ -515,7 +535,7 @@ def commit_incubator_to_database_sync(
                     orrery_result.reveal_count,
                 )
 
-            # Step 8.55: interval state checkpoint (reconstruction bar 7c).
+            # Step 9.55: interval state checkpoint (reconstruction bar 7c).
             # Fresh cursor: the earlier `with conn.cursor()` blocks have
             # closed theirs by this point (review finding on #428).
             checkpoint_interval = _orrery_checkpoint_interval()
@@ -538,33 +558,7 @@ def commit_incubator_to_database_sync(
                                 chunk_id,
                             )
 
-            # Step 8.6: Process Skald new-entity declarations inside the
-            # commit transaction (Retrograde stub maturation outbox, spec
-            # decisions 9/10/12): validate hints, create stubs, and enqueue
-            # durable maturation jobs for declared entities that appear in
-            # the committed chunk.
-            maturation_result = enqueue_declared_entity_maturations(
-                conn,
-                declarations=incubator.get("new_entities") or [],
-                chunk_id=chunk_id,
-                raw_text=raw_text,
-                slot=slot,
-            )
-            if maturation_result.declared:
-                logger.info(
-                    "Processed %s new-entity declarations for chunk %s: "
-                    "%s stubs created, %s jobs enqueued, %s already present, "
-                    "%s without engagement signal, %s skipped (disabled)",
-                    maturation_result.declared,
-                    chunk_id,
-                    maturation_result.stubs_created,
-                    maturation_result.jobs_enqueued,
-                    maturation_result.jobs_already_present,
-                    maturation_result.signal_absent,
-                    maturation_result.skipped_disabled,
-                )
-
-            # Step 9: Clear incubator
+            # Step 10: Clear incubator
             with conn.cursor() as cur:
                 cur.execute(
                     "DELETE FROM incubator WHERE session_id = %s", (session_id,)
@@ -596,9 +590,9 @@ def apply_state_updates_sync(
         # Update character states
         for char_update in state_updates.characters:
             if char_update.character_id:
-                updates = []
-                params = []
-                written_fields = []
+                updates: List[str] = []
+                params: List[Any] = []
+                written_fields: List[tuple[str, Any]] = []
 
                 if char_update.emotional_state:
                     updates.append("emotional_state = %s")

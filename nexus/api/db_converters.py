@@ -8,14 +8,19 @@ Handles time conversion, episode/season calculation, and entity resolution.
 
 import logging
 from datetime import timedelta
-from typing import List, Optional, Tuple
+from typing import List, Mapping, Optional, Sequence, Tuple
 
-import asyncpg
+import asyncpg  # type: ignore[import-untyped]
 from nexus.agents.logon.apex_schema import (
-    ChronologyUpdate,
-    PlaceReference,
     CharacterReference,
+    ChronologyUpdate,
     FactionReference,
+    NewEntityDeclaration,
+    PlaceReference,
+)
+from nexus.agents.orrery.geo import (
+    resolve_zone_for_point_async,
+    story_active_zone_async,
 )
 
 logger = logging.getLogger("nexus.api.db_converters")
@@ -156,6 +161,106 @@ async def lookup_place_by_name(conn: asyncpg.Connection, name: str) -> Optional[
     """Look up place ID by name"""
     result = await conn.fetchval("SELECT id FROM places WHERE name = $1", name)
     return result
+
+
+# ============================================================================
+# Declaration Stub Creation
+# ============================================================================
+
+
+async def create_declared_entity_stubs(
+    declarations: Sequence[Mapping[str, object]], conn: asyncpg.Connection
+) -> int:
+    """Create missing async-commit entity stubs before resolving references."""
+
+    parsed = [
+        NewEntityDeclaration.model_validate(declaration) for declaration in declarations
+    ]
+    created = 0
+
+    for declaration in parsed:
+        table = {
+            "character": "characters",
+            "place": "places",
+            "faction": "factions",
+        }[declaration.kind]
+        rows = await conn.fetch(
+            f"SELECT id FROM {table} WHERE name = $1 ORDER BY id",
+            declaration.name,
+        )
+        if len(rows) > 1:
+            raise ValueError(
+                f"Declared {declaration.kind} name {declaration.name!r} is "
+                f"ambiguous: {len(rows)} existing rows match"
+            )
+        if rows:
+            continue
+
+        if declaration.kind in {"character", "place"}:
+            await conn.execute(
+                f"""
+                SELECT setval(
+                    pg_get_serial_sequence('{table}', 'id'),
+                    GREATEST((SELECT COALESCE(MAX(id), 0) FROM {table}), 1)
+                )
+                """
+            )
+
+        if declaration.kind == "character":
+            await conn.execute(
+                """
+                INSERT INTO characters (name, summary)
+                VALUES ($1, $2)
+                """,
+                declaration.name,
+                declaration.summary,
+            )
+        elif declaration.kind == "place":
+            coordinates = declaration.coordinates
+            if coordinates is None:
+                zone_id = await story_active_zone_async(conn)
+            else:
+                zone_id = await resolve_zone_for_point_async(
+                    conn,
+                    longitude=coordinates.lon,
+                    latitude=coordinates.lat,
+                )
+            await conn.execute(
+                """
+                INSERT INTO places (name, type, summary, zone, coordinates)
+                VALUES (
+                    $1, 'fixed_location', $2, $3,
+                    CASE
+                        WHEN $4::double precision IS NULL THEN NULL
+                        ELSE ST_SetSRID(
+                            ST_MakePoint($4, $5, 0, 0), 4326
+                        )::geography
+                    END
+                )
+                """,
+                declaration.name,
+                declaration.summary,
+                zone_id,
+                coordinates.lon if coordinates else None,
+                coordinates.lat if coordinates else None,
+            )
+        else:
+            await conn.execute("LOCK TABLE factions IN SHARE ROW EXCLUSIVE MODE")
+            next_id = await conn.fetchval(
+                "SELECT COALESCE(MAX(id), 0) + 1 FROM factions"
+            )
+            await conn.execute(
+                """
+                INSERT INTO factions (id, name, summary)
+                VALUES ($1, $2, $3)
+                """,
+                next_id,
+                declaration.name,
+                declaration.summary,
+            )
+        created += 1
+
+    return created
 
 
 # ============================================================================
