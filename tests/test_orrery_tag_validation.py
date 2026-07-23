@@ -22,8 +22,11 @@ from nexus.agents.logon.apex_schema import (
     StorytellerResponseExtended,
 )
 from nexus.agents.logon.orrery_tag_schema import (
+    STORYTELLER_WIRE_DESCRIPTION_MAX_LENGTH,
+    diet_storyteller_wire_schema,
     storyteller_anthropic_compact_schema,
     storyteller_anthropic_output_config,
+    storyteller_openai_text_format,
 )
 from nexus.agents.logon.orrery_tag_validation import (
     StorytellerVocabulary,
@@ -35,6 +38,9 @@ from nexus.agents.orrery.tag_schemas import OrreryTagBestowal
 from nexus.api.native_structured_output import strict_json_schema
 from scripts.api_anthropic import AnthropicProvider
 from scripts.api_openai import OpenAIProvider
+
+
+EXTENDED_SCHEMA_MIN_BYTE_SAVINGS = 8_000
 
 
 class FakeRegistryCursor:
@@ -1125,13 +1131,86 @@ def test_validator_skipped_without_slot_database() -> None:
     assert build_storyteller_tag_validator("save_05") is not None
 
 
-def test_logon_schema_kwargs_keep_openai_plain_and_anthropic_compact() -> None:
+def test_description_diet_walks_nested_schema_without_mutating_input() -> None:
+    long_description = "x" * (STORYTELLER_WIRE_DESCRIPTION_MAX_LENGTH + 1)
+    schema: dict[str, Any] = {
+        "type": "object",
+        "description": "Short root hint.",
+        "properties": {
+            "nested": {
+                "type": "array",
+                "description": long_description,
+                "prefixItems": [
+                    {
+                        "type": "string",
+                        "description": long_description,
+                    }
+                ],
+            }
+        },
+        "$defs": {
+            "Kept": {
+                "description": "Short definition hint.",
+                "type": "string",
+            },
+            "Dieted": {
+                "description": long_description,
+                "type": "integer",
+            },
+        },
+        "examples": [long_description],
+        "x-description": long_description,
+    }
+
+    dieted = diet_storyteller_wire_schema(schema)
+
+    assert dieted["description"] == "Short root hint."
+    assert "description" not in dieted["properties"]["nested"]
+    assert "description" not in dieted["properties"]["nested"]["prefixItems"][0]
+    assert dieted["$defs"]["Kept"]["description"] == "Short definition hint."
+    assert "description" not in dieted["$defs"]["Dieted"]
+    assert dieted["examples"] == [long_description]
+    assert dieted["x-description"] == long_description
+    assert schema["properties"]["nested"]["description"] == long_description
+
+
+def test_extended_openai_wire_schema_meets_description_diet_budget() -> None:
+    undieted = strict_json_schema(StorytellerResponseExtended)
+    text_format = storyteller_openai_text_format(StorytellerResponseExtended)
+    dieted = text_format["schema"]
+    undieted_bytes = json.dumps(undieted, sort_keys=True, separators=(",", ":")).encode(
+        "utf-8"
+    )
+    dieted_bytes = json.dumps(dieted, sort_keys=True, separators=(",", ":")).encode(
+        "utf-8"
+    )
+
+    assert len(undieted_bytes) - len(dieted_bytes) >= EXTENDED_SCHEMA_MIN_BYTE_SAVINGS
+    assert set(dieted["properties"]) >= {
+        "narrative",
+        "choices",
+        "state_updates",
+        "new_entities",
+    }
+    assert "OrreryTagBestowal" in dieted["$defs"]
+    assert "applied_tags" in dieted["$defs"]["OrreryTagBestowal"]["properties"]
+    assert b"never a bare list of strings" in undieted_bytes
+    assert b"never a bare list of strings" not in dieted_bytes
+
+
+def test_logon_schema_kwargs_diet_openai_and_keep_anthropic_compact() -> None:
     from nexus.agents.lore.logon_utility import LogonUtility
 
     utility = LogonUtility({}, dbname="save_05")
     utility._validation_dbname = "save_05"
     utility._provider_wire_type = "openai"
-    assert utility._schema_format_kwargs(StorytellerResponseExtended) == {}
+    kwargs = utility._schema_format_kwargs(StorytellerResponseExtended)
+    assert set(kwargs) == {"text_format"}
+    text_format = kwargs["text_format"]
+    assert text_format["type"] == "json_schema"
+    assert text_format["strict"] is True
+    assert text_format["name"] == "StorytellerResponseExtended"
+    assert "never a bare list of strings" not in json.dumps(text_format["schema"])
 
     utility._provider_wire_type = "anthropic"
     utility._validation_dbname = None

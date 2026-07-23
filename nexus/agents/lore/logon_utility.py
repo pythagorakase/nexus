@@ -487,7 +487,15 @@ class LogonUtility:
             return self._schema_format_cache[schema_model]
 
         kwargs: Dict[str, Any] = {}
-        if self._provider_wire_type == "anthropic":
+        if self._provider_wire_type == "openai":
+            from nexus.agents.logon.orrery_tag_schema import (
+                storyteller_openai_text_format,
+            )
+
+            kwargs = {
+                "text_format": storyteller_openai_text_format(schema_model),
+            }
+        elif self._provider_wire_type == "anthropic":
             from nexus.agents.logon.orrery_tag_schema import (
                 storyteller_anthropic_output_config,
             )

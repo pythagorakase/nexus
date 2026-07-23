@@ -8,8 +8,41 @@ from pydantic import BaseModel
 
 from nexus.api.native_structured_output import (
     anthropic_output_config,
+    openai_response_text_format,
     strict_json_schema,
 )
+
+# Interim #558 diet until #554 replaces the full wire model. This cutoff removes
+# at least 2,000 o200k tokens from the Extended strict schema while keeping terse
+# leaf-field hints.
+STORYTELLER_WIRE_DESCRIPTION_MAX_LENGTH = 70
+
+
+def diet_storyteller_wire_schema(value: Any) -> Any:
+    """Return a copy with overlong JSON Schema descriptions removed."""
+
+    if isinstance(value, list):
+        return [diet_storyteller_wire_schema(item) for item in value]
+    if not isinstance(value, dict):
+        return value
+    return {
+        key: diet_storyteller_wire_schema(item)
+        for key, item in value.items()
+        if not (
+            key == "description"
+            and isinstance(item, str)
+            and len(item) > STORYTELLER_WIRE_DESCRIPTION_MAX_LENGTH
+        )
+    }
+
+
+def storyteller_openai_text_format(
+    schema_model: Type[BaseModel],
+) -> Dict[str, Any]:
+    """Build the dieted strict OpenAI text.format storyteller payload."""
+
+    dieted_schema = diet_storyteller_wire_schema(strict_json_schema(schema_model))
+    return openai_response_text_format(schema_model, schema=dieted_schema)
 
 
 def storyteller_anthropic_output_config(
