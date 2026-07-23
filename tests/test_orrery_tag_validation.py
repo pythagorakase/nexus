@@ -33,6 +33,7 @@ from nexus.agents.logon.orrery_tag_validation import (
 from nexus.agents.orrery.tag_library import TagLibraryEntry
 from nexus.agents.orrery.tag_schemas import OrreryTagBestowal
 from nexus.api.native_structured_output import strict_json_schema
+from scripts.api_anthropic import AnthropicProvider
 from scripts.api_openai import OpenAIProvider
 
 
@@ -730,6 +731,178 @@ def test_provider_repairs_invalid_declaration_inside_structured_retry_budget(
     assert "new_entities[0].tag_hints" in prompts[1]
 
 
+def test_openai_chat_transport_repairs_invalid_declaration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The local-model Chat transport enforces catalog validation and repair."""
+
+    from nexus.api import db_pool
+
+    monkeypatch.setattr(
+        db_pool,
+        "get_connection",
+        lambda _dbname: FakeRegistryConnection(FakeRegistryCursor()),
+    )
+    invalid = _storyteller_response(tag_hints=["invented:tag"])
+    repaired = _storyteller_response(tag_hints=["human"])
+    outputs = [invalid, repaired]
+    prompts: list[str] = []
+
+    class FakeChatCompletions:
+        def create(self, **kwargs: Any) -> Any:
+            prompts.append(kwargs["messages"][-1]["content"])
+            output = outputs.pop(0)
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(content=output.model_dump_json())
+                    )
+                ],
+                usage=SimpleNamespace(prompt_tokens=11, completion_tokens=22),
+            )
+
+    provider = OpenAIProvider(
+        model="local-test-model",
+        api_key="test-key",
+        base_url="http://127.0.0.1:8012/v1",
+        structured_transport="chat_completions",
+        structured_output_retries=1,
+        output_validator=build_storyteller_tag_validator("test_slot"),
+    )
+    provider.client = cast(
+        Any,
+        SimpleNamespace(
+            chat=SimpleNamespace(completions=FakeChatCompletions()),
+        ),
+    )
+
+    parsed, llm_response = provider.get_structured_completion(
+        "Continue the story.",
+        StorytellerResponseExtended,
+    )
+
+    assert parsed == repaired
+    assert llm_response.content == repaired.model_dump_json()
+    assert llm_response.content != invalid.model_dump_json()
+    assert outputs == []
+    assert len(prompts) == 2
+    assert "=== STRUCTURED OUTPUT RETRY ===" in prompts[1]
+    assert "new_entities[0].tag_hints" in prompts[1]
+
+
+def test_anthropic_transport_repairs_invalid_declaration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Anthropic Messages enforces catalog validation inside its retry loop."""
+
+    from nexus.api import db_pool
+
+    monkeypatch.setattr(
+        db_pool,
+        "get_connection",
+        lambda _dbname: FakeRegistryConnection(FakeRegistryCursor()),
+    )
+    invalid = _storyteller_response(tag_hints=["invented:tag"])
+    repaired = _storyteller_response(tag_hints=["human"])
+    outputs = [invalid, repaired]
+    prompts: list[str] = []
+
+    class FakeMessages:
+        def create(self, **kwargs: Any) -> Any:
+            prompts.append(kwargs["messages"][-1]["content"])
+            output = outputs.pop(0)
+            return SimpleNamespace(
+                content=[
+                    SimpleNamespace(type="text", text=output.model_dump_json()),
+                ],
+                usage=SimpleNamespace(input_tokens=33, output_tokens=44),
+            )
+
+    provider = AnthropicProvider(
+        model="claude-sonnet-4-5",
+        api_key="test-key",
+        structured_output_retries=1,
+        output_validator=build_storyteller_tag_validator("test_slot"),
+    )
+    provider.client = cast(
+        Any,
+        SimpleNamespace(beta=SimpleNamespace(messages=FakeMessages())),
+    )
+
+    parsed, llm_response = provider.get_structured_completion(
+        "Continue the story.",
+        StorytellerResponseExtended,
+    )
+
+    assert parsed == repaired
+    assert llm_response.content == repaired.model_dump_json()
+    assert llm_response.content != invalid.model_dump_json()
+    assert outputs == []
+    assert len(prompts) == 2
+    assert "=== STRUCTURED OUTPUT RETRY ===" in prompts[1]
+    assert "new_entities[0].tag_hints" in prompts[1]
+
+
+@pytest.mark.asyncio
+async def test_openai_chat_transport_async_repairs_invalid_declaration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The real async Chat entry point reaches the same catalog validator."""
+
+    from nexus.api import db_pool
+
+    monkeypatch.setattr(
+        db_pool,
+        "get_connection",
+        lambda _dbname: FakeRegistryConnection(FakeRegistryCursor()),
+    )
+    invalid = _storyteller_response(tag_hints=["invented:tag"])
+    repaired = _storyteller_response(tag_hints=["human"])
+    outputs = [invalid, repaired]
+    prompts: list[str] = []
+
+    class FakeChatCompletions:
+        def create(self, **kwargs: Any) -> Any:
+            prompts.append(kwargs["messages"][-1]["content"])
+            output = outputs.pop(0)
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(content=output.model_dump_json())
+                    )
+                ],
+                usage=SimpleNamespace(prompt_tokens=11, completion_tokens=22),
+            )
+
+    provider = OpenAIProvider(
+        model="local-test-model",
+        api_key="test-key",
+        base_url="http://127.0.0.1:8012/v1",
+        structured_transport="chat_completions",
+        structured_output_retries=1,
+        output_validator=build_storyteller_tag_validator("test_slot"),
+    )
+    provider.client = cast(
+        Any,
+        SimpleNamespace(
+            chat=SimpleNamespace(completions=FakeChatCompletions()),
+        ),
+    )
+
+    parsed, llm_response = await provider.get_structured_completion_async(
+        "Continue the story.",
+        StorytellerResponseExtended,
+    )
+
+    assert parsed == repaired
+    assert llm_response.content == repaired.model_dump_json()
+    assert llm_response.content != invalid.model_dump_json()
+    assert outputs == []
+    assert len(prompts) == 2
+    assert "=== STRUCTURED OUTPUT RETRY ===" in prompts[1]
+    assert "new_entities[0].tag_hints" in prompts[1]
+
+
 def _retry_boundary_response(
     boundary: str,
     *,
@@ -1092,6 +1265,12 @@ def _enum_paths(value: Any, path: str = "$") -> dict[str, list[str]]:
     return enums
 
 
+def _compact_schema_bytes(schema: dict[str, Any]) -> bytes:
+    """Serialize a compact schema using the canonical wire comparison form."""
+
+    return json.dumps(schema, separators=(",", ":"), sort_keys=True).encode("utf-8")
+
+
 def test_compact_schema_is_small_structural_and_registry_stable() -> None:
     """Registry identity cannot affect the vocabulary-free compact wire bytes."""
 
@@ -1108,11 +1287,79 @@ def test_compact_schema_is_small_structural_and_registry_stable() -> None:
         None,
     )
     assert schema_a is not None
+    assert schema_b is not None
+    assert schema_none is not None
     assert schema_a == schema_b == schema_none
 
-    serialized = json.dumps(schema_a, separators=(",", ":"), sort_keys=True)
-    assert len(serialized.encode("utf-8")) <= 3500
+    serialized_a = _compact_schema_bytes(schema_a)
+    serialized_b = _compact_schema_bytes(schema_b)
+    serialized_none = _compact_schema_bytes(schema_none)
+    assert serialized_a == serialized_b == serialized_none
+    assert len(serialized_a) <= 3500
     assert _enum_paths(schema_a) == {
+        "$.properties.state_updates.properties.updates.items.properties.kind": [
+            "character",
+            "place",
+            "faction",
+        ],
+        "$.properties.orrery_adjudications.items.properties.action": [
+            "defer",
+            "replace",
+            "void",
+        ],
+        "$.properties.new_entities.items.properties.kind": [
+            "character",
+            "place",
+            "faction",
+        ],
+        (
+            "$.properties.new_entities.items.properties.pair_tag_hints.items."
+            "properties.declared_entity_role"
+        ): ["subject", "object"],
+    }
+
+
+@pytest.mark.requires_postgres
+def test_compact_schema_matches_populated_slot_registry_live() -> None:
+    """A populated save_05 registry cannot alter compact schema wire bytes."""
+
+    import psycopg2
+
+    from nexus.api.slot_utils import get_slot_db_url
+
+    with psycopg2.connect(get_slot_db_url(slot=5)) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    (SELECT count(*) FROM tags
+                     WHERE deprecated = FALSE AND synonym_for IS NULL),
+                    (SELECT count(*) FROM pair_tags WHERE deprecated = FALSE),
+                    (SELECT count(*) FROM event_types WHERE deprecated = FALSE)
+                """
+            )
+            registry_counts = cur.fetchone()
+            assert registry_counts is not None
+            tag_count, pair_tag_count, event_type_count = (
+                int(value) for value in registry_counts
+            )
+
+    assert tag_count > 0, "save_05 must have registered entity tags"
+    assert pair_tag_count > 0, "save_05 must have registered pair tags"
+    assert event_type_count > 0, "save_05 must have registered event types"
+
+    schema_live = storyteller_anthropic_compact_schema(
+        StorytellerResponseExtended,
+        "save_05",
+    )
+    schema_none = storyteller_anthropic_compact_schema(
+        StorytellerResponseExtended,
+        None,
+    )
+    assert schema_live is not None
+    assert schema_none is not None
+    assert _compact_schema_bytes(schema_live) == _compact_schema_bytes(schema_none)
+    assert _enum_paths(schema_live) == {
         "$.properties.state_updates.properties.updates.items.properties.kind": [
             "character",
             "place",
