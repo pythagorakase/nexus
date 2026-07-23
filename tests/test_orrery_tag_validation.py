@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
-from typing import Any, List, Optional, Tuple
+from typing import Any, cast, List, Literal, Optional, Tuple
 
 import pytest
 from pydantic_ai import ModelRetry
@@ -21,16 +22,18 @@ from nexus.agents.logon.apex_schema import (
     StorytellerResponseExtended,
 )
 from nexus.agents.logon.orrery_tag_schema import (
+    storyteller_anthropic_compact_schema,
     storyteller_anthropic_output_config,
-    storyteller_openai_text_format,
-    storyteller_schema_with_runtime_tag_enums,
 )
 from nexus.agents.logon.orrery_tag_validation import (
+    StorytellerVocabulary,
     build_storyteller_tag_validator,
     collect_orrery_tag_issues,
 )
 from nexus.agents.orrery.tag_library import TagLibraryEntry
 from nexus.agents.orrery.tag_schemas import OrreryTagBestowal
+from nexus.api.native_structured_output import strict_json_schema
+from scripts.api_anthropic import AnthropicProvider
 from scripts.api_openai import OpenAIProvider
 
 
@@ -74,7 +77,7 @@ class FakeRegistryCursor:
     def __enter__(self) -> "FakeRegistryCursor":
         return self
 
-    def __exit__(self, *_args: Any) -> bool:
+    def __exit__(self, *_args: Any) -> Literal[False]:
         return False
 
     def execute(self, sql: str, params: Tuple[Any, ...] = ()) -> None:
@@ -90,13 +93,13 @@ class FakeRegistryCursor:
             ]
             self._one = None
         elif "FROM tags" in sql:
-            row = self.tags.get(params[0])
-            self._one = row
-            self._result = [row] if row else []
+            tag_row: Optional[Tuple[Any, ...]] = self.tags.get(params[0])
+            self._one = tag_row
+            self._result = [tag_row] if tag_row else []
         elif "FROM pair_tags" in sql:
-            row = self.pair_tags.get(params[0])
-            self._one = row
-            self._result = [row] if row else []
+            pair_tag_row: Optional[Tuple[Any, ...]] = self.pair_tags.get(params[0])
+            self._one = pair_tag_row
+            self._result = [pair_tag_row] if pair_tag_row else []
         else:
             raise AssertionError(f"Unexpected query: {sql}")
 
@@ -125,17 +128,61 @@ class FakeRegistryConnection:
     def __enter__(self) -> "FakeRegistryConnection":
         return self
 
-    def __exit__(self, *_args: Any) -> bool:
+    def __exit__(self, *_args: Any) -> Literal[False]:
         return False
 
     def cursor(self) -> FakeRegistryCursor:
         return self._cursor
 
 
+def _test_vocabulary() -> StorytellerVocabulary:
+    return StorytellerVocabulary(
+        tag_names_by_kind={
+            "character": frozenset({"human", "perceptive"}),
+            "place": frozenset({"haven"}),
+            "faction": frozenset({"loyalist"}),
+        },
+        pair_tag_names=frozenset({"protects", "contact:social", "status:junior"}),
+        event_types=frozenset({"evade_pursuit", "slept"}),
+    )
+
+
+@pytest.fixture(autouse=True)
+def _stub_storyteller_vocabulary_readers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Keep generation-validator tests offline with deterministic catalogs."""
+
+    from nexus.agents.logon import orrery_tag_validation
+
+    monkeypatch.setattr(
+        orrery_tag_validation,
+        "read_tag_library",
+        lambda _dbname: [
+            _tag_entry("character", "bodyform", "human"),
+            _tag_entry("character", "disposition", "perceptive"),
+            _tag_entry("place", "place_class", "haven"),
+            _tag_entry("faction", "ideology", "loyalist"),
+        ],
+    )
+    monkeypatch.setattr(
+        orrery_tag_validation,
+        "read_pair_tag_library",
+        lambda _dbname: ["protects", "contact:social", "status:junior"],
+    )
+    monkeypatch.setattr(
+        orrery_tag_validation,
+        "read_event_types",
+        lambda _dbname: ["evade_pursuit", "slept"],
+    )
+
+
 def _storyteller_response(
     *,
     tag_hints: Optional[List[str]] = None,
     pair_tag_hints: Optional[List[dict[str, str]]] = None,
+    state_updates: Optional[dict[str, Any]] = None,
+    orrery_adjudications: Optional[List[dict[str, Any]]] = None,
 ) -> StorytellerResponseExtended:
     return StorytellerResponseExtended.model_validate(
         {
@@ -143,9 +190,9 @@ def _storyteller_response(
             "choices": ["Question Marra.", "Keep walking."],
             "chunk_metadata": {},
             "referenced_entities": {},
-            "state_updates": {},
+            "state_updates": state_updates or {},
             "operations": None,
-            "orrery_adjudications": [],
+            "orrery_adjudications": orrery_adjudications or [],
             "new_entities": [
                 {
                     "kind": "character",
@@ -227,6 +274,70 @@ def test_kind_incompatible_tags_are_flagged() -> None:
     assert "haven" in issues[0]
 
 
+@pytest.mark.parametrize(
+    ("kind", "valid_tag", "invalid_tag"),
+    [
+        ("character", "human", "haven"),
+        ("place", "haven", "human"),
+        ("faction", "loyalist", "perceptive"),
+    ],
+)
+@pytest.mark.parametrize(
+    ("wire_field", "canonical_field"),
+    [
+        ("tag_add", "applied_tags"),
+        ("tag_clear", "tags_to_clear"),
+    ],
+)
+def test_cached_catalog_validates_single_tags_per_kind_and_field(
+    kind: str,
+    valid_tag: str,
+    invalid_tag: str,
+    wire_field: str,
+    canonical_field: str,
+) -> None:
+    valid = _storyteller_response(
+        state_updates={
+            "updates": [
+                {
+                    "kind": kind,
+                    "name": f"Known {kind}",
+                    wire_field: valid_tag,
+                }
+            ]
+        }
+    )
+    invalid = _storyteller_response(
+        state_updates={
+            "updates": [
+                {
+                    "kind": kind,
+                    "name": f"Known {kind}",
+                    wire_field: invalid_tag,
+                }
+            ]
+        }
+    )
+
+    assert (
+        collect_orrery_tag_issues(
+            valid,
+            FakeRegistryCursor(),
+            vocabulary=_test_vocabulary(),
+        )
+        == []
+    )
+    issues = collect_orrery_tag_issues(
+        invalid,
+        FakeRegistryCursor(),
+        vocabulary=_test_vocabulary(),
+    )
+    assert len(issues) == 1
+    assert canonical_field in issues[0]
+    assert invalid_tag in issues[0]
+    assert kind in issues[0]
+
+
 def test_new_entity_hint_issues_are_path_qualified_and_aggregated() -> None:
     response = _response(
         new_entities=[
@@ -253,7 +364,11 @@ def test_new_entity_hint_issues_are_path_qualified_and_aggregated() -> None:
         ]
     )
 
-    issues = collect_orrery_tag_issues(response, FakeRegistryCursor())
+    issues = collect_orrery_tag_issues(
+        response,
+        FakeRegistryCursor(),
+        vocabulary=_test_vocabulary(),
+    )
 
     assert len(issues) == 3
     assert issues[0].startswith("new_entities[0].tag_hints:")
@@ -274,7 +389,53 @@ def test_registered_new_entity_hints_produce_no_issues() -> None:
         ],
     )
 
-    assert collect_orrery_tag_issues(response, FakeRegistryCursor()) == []
+    assert (
+        collect_orrery_tag_issues(
+            response,
+            FakeRegistryCursor(),
+            vocabulary=_test_vocabulary(),
+        )
+        == []
+    )
+
+
+def test_replacement_event_type_uses_cached_catalog() -> None:
+    valid = _storyteller_response(
+        orrery_adjudications=[
+            {
+                "proposal_id": "proposal-valid",
+                "action": "replace",
+                "replacement_event_type": "slept",
+            }
+        ]
+    )
+    invalid = _storyteller_response(
+        orrery_adjudications=[
+            {
+                "proposal_id": "proposal-invalid",
+                "action": "replace",
+                "replacement_event_type": "invented_event",
+            }
+        ]
+    )
+
+    assert (
+        collect_orrery_tag_issues(
+            valid,
+            FakeRegistryCursor(),
+            vocabulary=_test_vocabulary(),
+        )
+        == []
+    )
+    issues = collect_orrery_tag_issues(
+        invalid,
+        FakeRegistryCursor(),
+        vocabulary=_test_vocabulary(),
+    )
+    assert issues == [
+        "orrery_adjudications[0].replacement_event_type: Unknown or "
+        "deprecated event type 'invented_event'"
+    ]
 
 
 @pytest.mark.parametrize(
@@ -442,10 +603,84 @@ async def test_storyteller_validator_attributes_declaration_failure_to_model_ret
         )
 
     assert "new_entities[0].tag_hints" in exc_info.value.message
-    assert "For applied_tags and tag_hints" in exc_info.value.message
+    assert "For applied_tags, tags_to_clear, and tag_hints" in exc_info.value.message
     assert "pair tags may contain colons" in exc_info.value.message
     assert "'contact:social'" in exc_info.value.message
     assert "resubmit the complete response" in exc_info.value.message
+
+
+@pytest.mark.asyncio
+async def test_storyteller_validator_reads_each_catalog_once_per_attempt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from nexus.agents.logon import orrery_tag_validation
+    from nexus.api import db_pool
+
+    read_counts = {"tags": 0, "pair_tags": 0, "event_types": 0}
+
+    def read_tags(_dbname: str) -> list[TagLibraryEntry]:
+        read_counts["tags"] += 1
+        return [
+            _tag_entry("character", "bodyform", "human"),
+            _tag_entry("character", "disposition", "perceptive"),
+        ]
+
+    def read_pair_tags(_dbname: str) -> list[str]:
+        read_counts["pair_tags"] += 1
+        return ["protects"]
+
+    def read_registered_event_types(_dbname: str) -> list[str]:
+        read_counts["event_types"] += 1
+        return ["slept"]
+
+    monkeypatch.setattr(orrery_tag_validation, "read_tag_library", read_tags)
+    monkeypatch.setattr(
+        orrery_tag_validation,
+        "read_pair_tag_library",
+        read_pair_tags,
+    )
+    monkeypatch.setattr(
+        orrery_tag_validation,
+        "read_event_types",
+        read_registered_event_types,
+    )
+    monkeypatch.setattr(
+        db_pool,
+        "get_connection",
+        lambda _dbname: FakeRegistryConnection(FakeRegistryCursor()),
+    )
+    validator = build_storyteller_tag_validator("test_slot")
+    assert validator is not None
+    response = _storyteller_response(
+        tag_hints=["human", "perceptive"],
+        pair_tag_hints=[
+            {
+                "tag": "protects",
+                "other_entity_name": "The Lower Sluice",
+                "declared_entity_role": "subject",
+            }
+        ],
+        state_updates={
+            "updates": [
+                {
+                    "kind": "character",
+                    "name": "Brena Tideloft",
+                    "tag_add": "human",
+                    "tag_clear": "perceptive",
+                }
+            ]
+        },
+        orrery_adjudications=[
+            {
+                "proposal_id": "proposal-1",
+                "action": "replace",
+                "replacement_event_type": "slept",
+            }
+        ],
+    )
+
+    assert await validator(SimpleNamespace(retry=0), response) is response
+    assert read_counts == {"tags": 1, "pair_tags": 1, "event_types": 1}
 
 
 def test_provider_repairs_invalid_declaration_inside_structured_retry_budget(
@@ -483,7 +718,7 @@ def test_provider_repairs_invalid_declaration_inside_structured_retry_budget(
         structured_output_retries=1,
         output_validator=build_storyteller_tag_validator("test_slot"),
     )
-    provider.client = SimpleNamespace(responses=FakeResponses())
+    provider.client = cast(Any, SimpleNamespace(responses=FakeResponses()))
 
     parsed, _llm_response = provider.get_structured_completion(
         "Continue the story.", StorytellerResponseExtended
@@ -494,6 +729,308 @@ def test_provider_repairs_invalid_declaration_inside_structured_retry_budget(
     assert len(prompts) == 2
     assert "=== STRUCTURED OUTPUT RETRY ===" in prompts[1]
     assert "new_entities[0].tag_hints" in prompts[1]
+
+
+def test_openai_chat_transport_repairs_invalid_declaration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The local-model Chat transport enforces catalog validation and repair."""
+
+    from nexus.api import db_pool
+
+    monkeypatch.setattr(
+        db_pool,
+        "get_connection",
+        lambda _dbname: FakeRegistryConnection(FakeRegistryCursor()),
+    )
+    invalid = _storyteller_response(tag_hints=["invented:tag"])
+    repaired = _storyteller_response(tag_hints=["human"])
+    outputs = [invalid, repaired]
+    prompts: list[str] = []
+
+    class FakeChatCompletions:
+        def create(self, **kwargs: Any) -> Any:
+            prompts.append(kwargs["messages"][-1]["content"])
+            output = outputs.pop(0)
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(content=output.model_dump_json())
+                    )
+                ],
+                usage=SimpleNamespace(prompt_tokens=11, completion_tokens=22),
+            )
+
+    provider = OpenAIProvider(
+        model="local-test-model",
+        api_key="test-key",
+        base_url="http://127.0.0.1:8012/v1",
+        structured_transport="chat_completions",
+        structured_output_retries=1,
+        output_validator=build_storyteller_tag_validator("test_slot"),
+    )
+    provider.client = cast(
+        Any,
+        SimpleNamespace(
+            chat=SimpleNamespace(completions=FakeChatCompletions()),
+        ),
+    )
+
+    parsed, llm_response = provider.get_structured_completion(
+        "Continue the story.",
+        StorytellerResponseExtended,
+    )
+
+    assert parsed == repaired
+    assert llm_response.content == repaired.model_dump_json()
+    assert llm_response.content != invalid.model_dump_json()
+    assert outputs == []
+    assert len(prompts) == 2
+    assert "=== STRUCTURED OUTPUT RETRY ===" in prompts[1]
+    assert "new_entities[0].tag_hints" in prompts[1]
+
+
+def test_anthropic_transport_repairs_invalid_declaration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Anthropic Messages enforces catalog validation inside its retry loop."""
+
+    from nexus.api import db_pool
+
+    monkeypatch.setattr(
+        db_pool,
+        "get_connection",
+        lambda _dbname: FakeRegistryConnection(FakeRegistryCursor()),
+    )
+    invalid = _storyteller_response(tag_hints=["invented:tag"])
+    repaired = _storyteller_response(tag_hints=["human"])
+    outputs = [invalid, repaired]
+    prompts: list[str] = []
+
+    class FakeMessages:
+        def create(self, **kwargs: Any) -> Any:
+            prompts.append(kwargs["messages"][-1]["content"])
+            output = outputs.pop(0)
+            return SimpleNamespace(
+                content=[
+                    SimpleNamespace(type="text", text=output.model_dump_json()),
+                ],
+                usage=SimpleNamespace(input_tokens=33, output_tokens=44),
+            )
+
+    provider = AnthropicProvider(
+        model="claude-sonnet-4-5",
+        api_key="test-key",
+        structured_output_retries=1,
+        output_validator=build_storyteller_tag_validator("test_slot"),
+    )
+    provider.client = cast(
+        Any,
+        SimpleNamespace(beta=SimpleNamespace(messages=FakeMessages())),
+    )
+
+    parsed, llm_response = provider.get_structured_completion(
+        "Continue the story.",
+        StorytellerResponseExtended,
+    )
+
+    assert parsed == repaired
+    assert llm_response.content == repaired.model_dump_json()
+    assert llm_response.content != invalid.model_dump_json()
+    assert outputs == []
+    assert len(prompts) == 2
+    assert "=== STRUCTURED OUTPUT RETRY ===" in prompts[1]
+    assert "new_entities[0].tag_hints" in prompts[1]
+
+
+@pytest.mark.asyncio
+async def test_openai_chat_transport_async_repairs_invalid_declaration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The real async Chat entry point reaches the same catalog validator."""
+
+    from nexus.api import db_pool
+
+    monkeypatch.setattr(
+        db_pool,
+        "get_connection",
+        lambda _dbname: FakeRegistryConnection(FakeRegistryCursor()),
+    )
+    invalid = _storyteller_response(tag_hints=["invented:tag"])
+    repaired = _storyteller_response(tag_hints=["human"])
+    outputs = [invalid, repaired]
+    prompts: list[str] = []
+
+    class FakeChatCompletions:
+        def create(self, **kwargs: Any) -> Any:
+            prompts.append(kwargs["messages"][-1]["content"])
+            output = outputs.pop(0)
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(content=output.model_dump_json())
+                    )
+                ],
+                usage=SimpleNamespace(prompt_tokens=11, completion_tokens=22),
+            )
+
+    provider = OpenAIProvider(
+        model="local-test-model",
+        api_key="test-key",
+        base_url="http://127.0.0.1:8012/v1",
+        structured_transport="chat_completions",
+        structured_output_retries=1,
+        output_validator=build_storyteller_tag_validator("test_slot"),
+    )
+    provider.client = cast(
+        Any,
+        SimpleNamespace(
+            chat=SimpleNamespace(completions=FakeChatCompletions()),
+        ),
+    )
+
+    parsed, llm_response = await provider.get_structured_completion_async(
+        "Continue the story.",
+        StorytellerResponseExtended,
+    )
+
+    assert parsed == repaired
+    assert llm_response.content == repaired.model_dump_json()
+    assert llm_response.content != invalid.model_dump_json()
+    assert outputs == []
+    assert len(prompts) == 2
+    assert "=== STRUCTURED OUTPUT RETRY ===" in prompts[1]
+    assert "new_entities[0].tag_hints" in prompts[1]
+
+
+def _retry_boundary_response(
+    boundary: str,
+    *,
+    valid: bool,
+) -> StorytellerResponseExtended:
+    if boundary == "character_applied_tags":
+        return _storyteller_response(
+            state_updates={
+                "updates": [
+                    {
+                        "kind": "character",
+                        "name": "Brena Tideloft",
+                        "tag_add": "human" if valid else "haven",
+                    }
+                ]
+            }
+        )
+    if boundary == "place_tags_to_clear":
+        return _storyteller_response(
+            state_updates={
+                "updates": [
+                    {
+                        "kind": "place",
+                        "name": "The Lower Sluice",
+                        "tag_clear": "haven" if valid else "human",
+                    }
+                ]
+            }
+        )
+    if boundary == "faction_applied_tags":
+        return _storyteller_response(
+            state_updates={
+                "updates": [
+                    {
+                        "kind": "faction",
+                        "name": "The Sluice Guild",
+                        "tag_add": "loyalist" if valid else "perceptive",
+                    }
+                ]
+            }
+        )
+    if boundary == "tag_hints":
+        return _storyteller_response(tag_hints=["human" if valid else "invented:tag"])
+    if boundary == "pair_tag_hints":
+        return _storyteller_response(
+            pair_tag_hints=[
+                {
+                    "tag": "protects" if valid else "invented_pair_tag",
+                    "other_entity_name": "The Lower Sluice",
+                    "declared_entity_role": "subject",
+                }
+            ]
+        )
+    if boundary == "replacement_event_type":
+        return _storyteller_response(
+            orrery_adjudications=[
+                {
+                    "proposal_id": "proposal-1",
+                    "action": "replace",
+                    "replacement_event_type": ("slept" if valid else "invented_event"),
+                }
+            ]
+        )
+    raise AssertionError(f"Unknown retry boundary {boundary!r}")
+
+
+@pytest.mark.parametrize(
+    ("boundary", "failure_path"),
+    [
+        ("character_applied_tags", "state_updates.characters[0]"),
+        ("place_tags_to_clear", "state_updates.locations[0]"),
+        ("faction_applied_tags", "state_updates.factions[0]"),
+        ("tag_hints", "new_entities[0].tag_hints"),
+        ("pair_tag_hints", "new_entities[0].pair_tag_hints[0].tag"),
+        (
+            "replacement_event_type",
+            "orrery_adjudications[0].replacement_event_type",
+        ),
+    ],
+)
+def test_each_catalog_boundary_consumes_retry_and_returns_valid_output_unchanged(
+    monkeypatch: pytest.MonkeyPatch,
+    boundary: str,
+    failure_path: str,
+) -> None:
+    """Every moved catalog is enforced inside the bounded provider retry."""
+
+    from nexus.api import db_pool
+
+    cursor = FakeRegistryCursor()
+    monkeypatch.setattr(
+        db_pool,
+        "get_connection",
+        lambda _dbname: FakeRegistryConnection(cursor),
+    )
+    invalid = _retry_boundary_response(boundary, valid=False)
+    valid = _retry_boundary_response(boundary, valid=True)
+    outputs = [invalid, valid]
+    prompts: list[str] = []
+
+    class FakeResponses:
+        def parse(self, **kwargs: Any) -> Any:
+            prompts.append(kwargs["input"][-1]["content"])
+            output = outputs.pop(0)
+            return SimpleNamespace(
+                output_parsed=output,
+                output_text=output.model_dump_json(),
+                usage=SimpleNamespace(input_tokens=11, output_tokens=22),
+            )
+
+    provider = OpenAIProvider(
+        model="gpt-4.1",
+        api_key="test-key",
+        structured_output_retries=1,
+        output_validator=build_storyteller_tag_validator("test_slot"),
+    )
+    provider.client = cast(Any, SimpleNamespace(responses=FakeResponses()))
+
+    parsed, _llm_response = provider.get_structured_completion(
+        "Continue the story.",
+        StorytellerResponseExtended,
+    )
+
+    assert parsed is valid
+    assert outputs == []
+    assert len(prompts) == 2
+    assert "=== STRUCTURED OUTPUT RETRY ===" in prompts[1]
+    assert failure_path in prompts[1]
 
 
 @pytest.mark.asyncio
@@ -512,6 +1049,7 @@ async def test_exhausted_declaration_validation_never_reaches_incubator(
     )
     validator = build_storyteller_tag_validator("test_slot")
     assert validator is not None
+    storyteller_validator = validator
 
     class InvalidDeclarationLore:
         def __init__(self, *_args: Any, **_kwargs: Any) -> None:
@@ -524,7 +1062,7 @@ async def test_exhausted_declaration_validation_never_reaches_incubator(
             note: Optional[str] = None,
         ) -> Any:
             del parent_chunk_id, note
-            return await validator(
+            return await storyteller_validator(
                 SimpleNamespace(retry=1),
                 _storyteller_response(tag_hints=["invented:tag"]),
             )
@@ -587,109 +1125,47 @@ def test_validator_skipped_without_slot_database() -> None:
     assert build_storyteller_tag_validator("save_05") is not None
 
 
-def test_storyteller_schema_uses_runtime_tag_enums(monkeypatch) -> None:
-    """Native LOGON schema constrains Orrery tags by live entity kind."""
+def test_logon_schema_kwargs_keep_openai_plain_and_anthropic_compact() -> None:
+    from nexus.agents.lore.logon_utility import LogonUtility
 
-    from nexus.agents.logon import orrery_tag_schema
-    from nexus.agents.logon.apex_schema import StorytellerResponseExtended
+    utility = LogonUtility({}, dbname="save_05")
+    utility._validation_dbname = "save_05"
+    utility._provider_wire_type = "openai"
+    assert utility._schema_format_kwargs(StorytellerResponseExtended) == {}
 
-    entries = [
-        _tag_entry("character", "bodyform", "human"),
-        _tag_entry("character", "disposition", "perceptive"),
-        _tag_entry("place", "place_class", "haven"),
-        _tag_entry("faction", "ideology", "loyalist"),
-    ]
-    monkeypatch.setattr(
-        orrery_tag_schema,
-        "read_tag_library",
-        lambda _dbname: entries,
-    )
-
-    schema = storyteller_schema_with_runtime_tag_enums(
+    utility._provider_wire_type = "anthropic"
+    utility._validation_dbname = None
+    utility._schema_format_cache = {}
+    kwargs = utility._schema_format_kwargs(StorytellerResponseExtended)
+    assert set(kwargs) == {"output_config"}
+    schema = kwargs["output_config"]["format"]["schema"]
+    assert schema == storyteller_anthropic_compact_schema(
         StorytellerResponseExtended,
-        "save_05",
+        None,
     )
 
-    assert schema is not None
+
+def test_openai_strict_schema_uses_plain_strings_for_live_catalogs() -> None:
+    """The canonical strict wire schema contains no live vocabulary enums."""
+
+    schema = strict_json_schema(StorytellerResponseExtended)
     defs = schema["$defs"]
-    character_tags = defs["OrreryTagBestowalCharacter"]["properties"]["applied_tags"][
-        "items"
-    ]["enum"]
-    place_tags = defs["OrreryTagBestowalPlace"]["properties"]["applied_tags"]["items"][
-        "enum"
+    bestowal_properties = defs["OrreryTagBestowal"]["properties"]
+    assert bestowal_properties["applied_tags"]["items"] == {"type": "string"}
+    assert bestowal_properties["tags_to_clear"]["items"] == {"type": "string"}
+    declaration_properties = defs["NewEntityDeclaration"]["properties"]
+    assert declaration_properties["tag_hints"]["items"] == {"type": "string"}
+    pair_hint_properties = defs["NewEntityPairTagHint"]["properties"]
+    assert "enum" not in pair_hint_properties["tag"]
+    adjudication_properties = defs["OrreryAdjudication"]["properties"]
+    assert adjudication_properties["replacement_event_type"]["anyOf"] == [
+        {"type": "string"},
+        {"type": "null"},
     ]
-    faction_tags = defs["OrreryTagBestowalFaction"]["properties"]["tags_to_clear"][
-        "items"
-    ]["enum"]
-    assert character_tags == ["human", "perceptive"]
-    assert place_tags == ["haven"]
-    assert faction_tags == ["loyalist"]
-    assert (
-        defs["NewCharacter"]["properties"]["orrery_tags"]["anyOf"][0]["$ref"]
-        == "#/$defs/OrreryTagBestowalCharacter"
-    )
-    assert (
-        defs["LocationStateUpdate"]["properties"]["orrery_tags"]["anyOf"][0]["$ref"]
-        == "#/$defs/OrreryTagBestowalPlace"
-    )
-    assert (
-        defs["FactionStateUpdate"]["properties"]["orrery_tags"]["anyOf"][0]["$ref"]
-        == "#/$defs/OrreryTagBestowalFaction"
-    )
 
 
-def test_storyteller_openai_text_format_wraps_runtime_schema(monkeypatch) -> None:
-    from nexus.agents.logon import orrery_tag_schema
-    from nexus.agents.logon.apex_schema import StorytellerResponseExtended
-
-    monkeypatch.setattr(
-        orrery_tag_schema,
-        "read_tag_library",
-        lambda _dbname: [_tag_entry("character", "bodyform", "human")],
-    )
-
-    text_format = storyteller_openai_text_format(
-        StorytellerResponseExtended,
-        "save_05",
-    )
-
-    assert text_format is not None
-    assert text_format["type"] == "json_schema"
-    assert text_format["strict"] is True
-    assert text_format["schema"]["$defs"]["OrreryTagBestowalCharacter"]["properties"][
-        "applied_tags"
-    ]["items"]["enum"] == ["human"]
-
-
-def test_storyteller_anthropic_output_config_uses_compact_extended_schema(
-    monkeypatch,
-) -> None:
+def test_storyteller_anthropic_output_config_uses_compact_extended_schema() -> None:
     """Anthropic extended turns avoid the full DB-mirroring grammar."""
-
-    from nexus.agents.logon import orrery_tag_schema
-    from nexus.agents.logon.apex_schema import StorytellerResponseExtended
-
-    entries = [
-        _tag_entry("character", "bodyform", "human"),
-        _tag_entry("character", "disposition", "perceptive"),
-        _tag_entry("place", "place_class", "haven"),
-        _tag_entry("faction", "ideology", "loyalist"),
-    ]
-    monkeypatch.setattr(
-        orrery_tag_schema,
-        "read_tag_library",
-        lambda _dbname: entries,
-    )
-    monkeypatch.setattr(
-        orrery_tag_schema,
-        "_read_pair_tags",
-        lambda _dbname: ["hiding", "shelters"],
-    )
-    monkeypatch.setattr(
-        orrery_tag_schema,
-        "_read_event_types",
-        lambda _dbname: ["evade_pursuit", "slept"],
-    )
 
     output_config = storyteller_anthropic_output_config(
         StorytellerResponseExtended,
@@ -725,19 +1201,13 @@ def test_storyteller_anthropic_output_config_uses_compact_extended_schema(
         "description": "Registered tag name to apply.",
     }
     entity_schema = schema["properties"]["new_entities"]["items"]
-    assert entity_schema["properties"]["tag_hints"]["items"]["enum"] == [
-        "haven",
-        "human",
-        "loyalist",
-        "perceptive",
-    ]
+    assert entity_schema["properties"]["tag_hints"]["items"] == {"type": "string"}
     pair_tag_schema = entity_schema["properties"]["pair_tag_hints"]["items"]
-    assert pair_tag_schema["properties"]["tag"]["enum"] == ["hiding", "shelters"]
+    assert pair_tag_schema["properties"]["tag"] == {"type": "string"}
     adjudication_schema = schema["properties"]["orrery_adjudications"]["items"]
-    assert adjudication_schema["properties"]["replacement_event_type"]["enum"] == [
-        "evade_pursuit",
-        "slept",
-    ]
+    assert adjudication_schema["properties"]["replacement_event_type"] == {
+        "type": "string"
+    }
 
     response = StorytellerResponseExtended.model_validate(
         {
@@ -780,6 +1250,136 @@ def test_storyteller_anthropic_output_config_uses_compact_extended_schema(
         "perceptive"
     ]
     assert response.new_entities[0].name == "Marra Kest"
+
+
+def _enum_paths(value: Any, path: str = "$") -> dict[str, list[str]]:
+    enums: dict[str, list[str]] = {}
+    if isinstance(value, dict):
+        if "enum" in value:
+            enums[path] = value["enum"]
+        for key, item in value.items():
+            enums.update(_enum_paths(item, f"{path}.{key}"))
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            enums.update(_enum_paths(item, f"{path}[{index}]"))
+    return enums
+
+
+def _compact_schema_bytes(schema: dict[str, Any]) -> bytes:
+    """Serialize a compact schema using the canonical wire comparison form."""
+
+    return json.dumps(schema, separators=(",", ":"), sort_keys=True).encode("utf-8")
+
+
+def test_compact_schema_is_small_structural_and_registry_stable() -> None:
+    """Registry identity cannot affect the vocabulary-free compact wire bytes."""
+
+    schema_a = storyteller_anthropic_compact_schema(
+        StorytellerResponseExtended,
+        "fake_registry_a",
+    )
+    schema_b = storyteller_anthropic_compact_schema(
+        StorytellerResponseExtended,
+        "fake_registry_b",
+    )
+    schema_none = storyteller_anthropic_compact_schema(
+        StorytellerResponseExtended,
+        None,
+    )
+    assert schema_a is not None
+    assert schema_b is not None
+    assert schema_none is not None
+    assert schema_a == schema_b == schema_none
+
+    serialized_a = _compact_schema_bytes(schema_a)
+    serialized_b = _compact_schema_bytes(schema_b)
+    serialized_none = _compact_schema_bytes(schema_none)
+    assert serialized_a == serialized_b == serialized_none
+    assert len(serialized_a) <= 3500
+    assert _enum_paths(schema_a) == {
+        "$.properties.state_updates.properties.updates.items.properties.kind": [
+            "character",
+            "place",
+            "faction",
+        ],
+        "$.properties.orrery_adjudications.items.properties.action": [
+            "defer",
+            "replace",
+            "void",
+        ],
+        "$.properties.new_entities.items.properties.kind": [
+            "character",
+            "place",
+            "faction",
+        ],
+        (
+            "$.properties.new_entities.items.properties.pair_tag_hints.items."
+            "properties.declared_entity_role"
+        ): ["subject", "object"],
+    }
+
+
+@pytest.mark.requires_postgres
+def test_compact_schema_matches_populated_slot_registry_live() -> None:
+    """A populated save_05 registry cannot alter compact schema wire bytes."""
+
+    import psycopg2
+
+    from nexus.api.slot_utils import get_slot_db_url
+
+    with psycopg2.connect(get_slot_db_url(slot=5)) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    (SELECT count(*) FROM tags
+                     WHERE deprecated = FALSE AND synonym_for IS NULL),
+                    (SELECT count(*) FROM pair_tags WHERE deprecated = FALSE),
+                    (SELECT count(*) FROM event_types WHERE deprecated = FALSE)
+                """
+            )
+            registry_counts = cur.fetchone()
+            assert registry_counts is not None
+            tag_count, pair_tag_count, event_type_count = (
+                int(value) for value in registry_counts
+            )
+
+    assert tag_count > 0, "save_05 must have registered entity tags"
+    assert pair_tag_count > 0, "save_05 must have registered pair tags"
+    assert event_type_count > 0, "save_05 must have registered event types"
+
+    schema_live = storyteller_anthropic_compact_schema(
+        StorytellerResponseExtended,
+        "save_05",
+    )
+    schema_none = storyteller_anthropic_compact_schema(
+        StorytellerResponseExtended,
+        None,
+    )
+    assert schema_live is not None
+    assert schema_none is not None
+    assert _compact_schema_bytes(schema_live) == _compact_schema_bytes(schema_none)
+    assert _enum_paths(schema_live) == {
+        "$.properties.state_updates.properties.updates.items.properties.kind": [
+            "character",
+            "place",
+            "faction",
+        ],
+        "$.properties.orrery_adjudications.items.properties.action": [
+            "defer",
+            "replace",
+            "void",
+        ],
+        "$.properties.new_entities.items.properties.kind": [
+            "character",
+            "place",
+            "faction",
+        ],
+        (
+            "$.properties.new_entities.items.properties.pair_tag_hints.items."
+            "properties.declared_entity_role"
+        ): ["subject", "object"],
+    }
 
 
 def _tag_entry(entity_kind: str, category: str, tag: str) -> TagLibraryEntry:

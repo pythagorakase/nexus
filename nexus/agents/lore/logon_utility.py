@@ -8,7 +8,7 @@ import json
 import logging
 import sys
 from pathlib import Path
-from typing import Any, Dict, Mapping, Optional
+from typing import Any, Dict, Literal, Mapping, Optional, cast
 
 import psycopg2
 
@@ -117,7 +117,7 @@ class LogonUtility:
         self.dbname = dbname
         self.model_override = model_override
         self.bootstrap_mode = bootstrap_mode
-        self.provider: Optional[object] = None
+        self.provider: Optional[OpenAIProvider | AnthropicProvider] = None
         self._system_prompt: Optional[str] = None
         self._provider_bootstrap_mode: Optional[bool] = None
         self._provider_wire_type: Optional[str] = None
@@ -302,8 +302,9 @@ class LogonUtility:
         endpoint = get_openai_compatible_endpoint(model)
         base_url = endpoint["base_url"] if endpoint else None
         api_key = endpoint["api_key"] if endpoint else None
-        structured_transport = (
-            endpoint["structured_transport"] if endpoint else "responses"
+        structured_transport = cast(
+            Literal["responses", "chat_completions"],
+            endpoint["structured_transport"] if endpoint else "responses",
         )
         request_timeout = endpoint["request_timeout_seconds"] if endpoint else None
         if base_url:
@@ -418,6 +419,7 @@ class LogonUtility:
     def generate_narrative(self, context_payload: Dict[str, Any]) -> StoryTurnResponse:
         """Generate narrative from context payload with structured output."""
         self._ensure_provider(context_payload)
+        assert self.provider is not None
         # Format the context into a prompt
         prompt = self._format_context_prompt(context_payload)
         schema_model = self._select_response_schema(context_payload)
@@ -445,6 +447,7 @@ class LogonUtility:
     ) -> StoryTurnResponse:
         """Generate narrative from context payload without blocking the event loop."""
         self._ensure_provider(context_payload)
+        assert self.provider is not None
         prompt = self._format_context_prompt(context_payload)
         schema_model = self._select_response_schema(context_payload)
         schema_kwargs = self._schema_format_kwargs(schema_model)
@@ -478,35 +481,22 @@ class LogonUtility:
     def _schema_format_kwargs(self, schema_model: type) -> Dict[str, Any]:
         """Return provider-specific native schema overrides for LOGON."""
 
-        if not self._validation_dbname or not self._provider_wire_type:
+        if not self._provider_wire_type:
             return {}
         if schema_model in self._schema_format_cache:
             return self._schema_format_cache[schema_model]
 
         kwargs: Dict[str, Any] = {}
-        try:
+        if self._provider_wire_type == "anthropic":
             from nexus.agents.logon.orrery_tag_schema import (
                 storyteller_anthropic_output_config,
-                storyteller_openai_text_format,
             )
 
-            if self._provider_wire_type == "anthropic":
-                output_config = storyteller_anthropic_output_config(
-                    schema_model, self._validation_dbname
-                )
-                if output_config is not None:
-                    kwargs = {"output_config": output_config}
-            else:
-                text_format = storyteller_openai_text_format(
-                    schema_model, self._validation_dbname
-                )
-                if text_format is not None:
-                    kwargs = {"text_format": text_format}
-        except Exception as exc:
-            logger.warning(
-                "Failed to build runtime storyteller schema constraints: %s",
-                exc,
+            output_config = storyteller_anthropic_output_config(
+                schema_model, self._validation_dbname
             )
+            if output_config is not None:
+                kwargs = {"output_config": output_config}
 
         self._schema_format_cache[schema_model] = kwargs
         return kwargs
