@@ -149,7 +149,9 @@ def test_lore_keeps_logon_lazy(patched_provider: Dict[str, int]) -> None:
 
 
 @pytest.mark.requires_postgres
-def test_logon_initializes_on_first_use(patched_provider: Dict[str, int]) -> None:
+def test_logon_initializes_on_first_use(
+    patched_provider: Dict[str, int], monkeypatch: pytest.MonkeyPatch
+) -> None:
     """LOGON provider should initialize only when requested."""
 
     lore = LORE(debug=True, enable_logon=True)
@@ -157,7 +159,16 @@ def test_logon_initializes_on_first_use(patched_provider: Dict[str, int]) -> Non
     assert lore.logon is not None
     assert patched_provider["count"] == 0
 
-    response = lore.logon.generate_narrative(_minimal_payload())
+    # This DB-backed utility legitimately demands a parent id for the
+    # presence baseline; the test's subject is provider laziness, so the
+    # reader is stubbed at its consumption seam.
+    monkeypatch.setattr(
+        "nexus.agents.lore.logon_utility.read_presence_baseline",
+        lambda _dbname, _parent_chunk_id: None,
+    )
+    payload = _minimal_payload()
+    payload["metadata"] = {"target_chunk_id": 1}
+    response = lore.logon.generate_narrative(payload)
     assert patched_provider["count"] == 1
     assert isinstance(lore.logon.provider, _DummyProvider)
     assert lore.logon.provider.calls == 1

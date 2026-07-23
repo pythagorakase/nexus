@@ -4,8 +4,10 @@ LOGON Utility - API Communication Handler for LORE
 Manages communication with Apex AI providers (OpenAI, Anthropic, xAI).
 """
 
+import asyncio
 import json
 import logging
+import os
 import sys
 from pathlib import Path
 from typing import Any, Dict, Literal, Mapping, Optional, cast
@@ -22,6 +24,8 @@ from nexus.agents.logon.apex_schema import (  # noqa: E402
     StorytellerResponseBootstrap,
 )
 from nexus.agents.logon.skald_wire import (  # noqa: E402
+    PresenceBaseline,
+    PresenceRef,
     SkaldTurnWire,
     hydrate_skald_turn,
     skald_wire_lenient_schema,
@@ -35,6 +39,78 @@ from nexus.memory.context_state import is_retrograde_summary  # noqa: E402
 from nexus.memory.retrieval_coverage import coerce_chunk_id  # noqa: E402
 
 logger = logging.getLogger("nexus.lore.logon")
+
+
+def read_presence_baseline(
+    dbname: str,
+    parent_chunk_id: int,
+) -> PresenceBaseline:
+    """Read one parent chunk's character roster and setting place."""
+
+    conn = psycopg2.connect(
+        host=os.environ.get("PGHOST", "localhost"),
+        database=dbname,
+        user=os.environ.get("PGUSER", "pythagor"),
+        port=os.environ.get("PGPORT", "5432"),
+    )
+    try:
+        conn.set_session(readonly=True, autocommit=True)
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT c.id, c.name
+                FROM chunk_character_references AS ccr
+                JOIN characters AS c ON c.id = ccr.character_id
+                WHERE ccr.chunk_id = %s
+                  AND ccr.reference::text = 'present'
+                ORDER BY c.id
+                """,
+                (parent_chunk_id,),
+            )
+            present = [
+                PresenceRef(kind="character", id=row[0], name=row[1])
+                for row in cur.fetchall()
+            ]
+            cur.execute(
+                """
+                SELECT p.id, p.name
+                FROM place_chunk_references AS pcr
+                JOIN places AS p ON p.id = pcr.place_id
+                WHERE pcr.chunk_id = %s
+                  AND pcr.reference_type::text = 'setting'
+                ORDER BY p.id
+                """,
+                (parent_chunk_id,),
+            )
+            setting_rows = cur.fetchall()
+    finally:
+        conn.close()
+
+    if len(setting_rows) > 1:
+        raise ValueError(f"Parent chunk {parent_chunk_id} has multiple setting places")
+    setting = (
+        PresenceRef(
+            kind="place",
+            id=setting_rows[0][0],
+            name=setting_rows[0][1],
+        )
+        if setting_rows
+        else None
+    )
+    return PresenceBaseline(present=present, setting=setting)
+
+
+async def read_presence_baseline_async(
+    dbname: str,
+    parent_chunk_id: int,
+) -> PresenceBaseline:
+    """Read a presence baseline without blocking the async turn loop."""
+
+    return await asyncio.to_thread(
+        read_presence_baseline,
+        dbname,
+        parent_chunk_id,
+    )
 
 
 def _coerce_mapping(value: Any) -> Dict[str, Any]:
@@ -438,7 +514,15 @@ class LogonUtility:
                 schema_model,
                 **schema_kwargs,
             )
-            response = self._hydrate_provider_response(parsed_response, schema_model)
+            presence_baseline = self._read_presence_baseline_for_context(
+                context_payload,
+                schema_model,
+            )
+            response = self._hydrate_provider_response(
+                parsed_response,
+                schema_model,
+                presence_baseline=presence_baseline,
+            )
             logger.debug(
                 "Received structured response with narrative length: %s",
                 len(response.narrative),
@@ -466,7 +550,15 @@ class LogonUtility:
                     **schema_kwargs,
                 )
             )
-            response = self._hydrate_provider_response(parsed_response, schema_model)
+            presence_baseline = await self._read_presence_baseline_for_context_async(
+                context_payload,
+                schema_model,
+            )
+            response = self._hydrate_provider_response(
+                parsed_response,
+                schema_model,
+                presence_baseline=presence_baseline,
+            )
             logger.debug(
                 "Received structured response with narrative length: %s",
                 len(response.narrative),
@@ -486,9 +578,69 @@ class LogonUtility:
         return SkaldTurnWire
 
     @staticmethod
+    def _parent_chunk_id(context_payload: Mapping[str, Any]) -> Optional[int]:
+        """Return the explicit parent chunk id carried by LORE context."""
+
+        metadata = context_payload.get("metadata")
+        if not isinstance(metadata, Mapping):
+            return None
+        parent_chunk_id = metadata.get("target_chunk_id")
+        if parent_chunk_id is None:
+            return None
+        if isinstance(parent_chunk_id, bool) or not isinstance(parent_chunk_id, int):
+            raise TypeError("metadata.target_chunk_id must be an integer")
+        if parent_chunk_id <= 0:
+            raise ValueError("metadata.target_chunk_id must be positive")
+        return parent_chunk_id
+
+    def _read_presence_baseline_for_context(
+        self,
+        context_payload: Mapping[str, Any],
+        schema_model: type[StorytellerResponseBootstrap] | type[SkaldTurnWire],
+    ) -> Optional[PresenceBaseline]:
+        """Read the parent baseline for a synchronous extended turn."""
+
+        if schema_model is not SkaldTurnWire:
+            return None
+        if self.dbname is None:
+            # No slot database means a baseline is structurally unavailable
+            # (DB-less utilities in tests). Hydration still raises loudly if
+            # the response actually carries a presence block.
+            return None
+        parent_chunk_id = self._parent_chunk_id(context_payload)
+        if parent_chunk_id is None:
+            raise ValueError(
+                "Non-bootstrap narrative context requires metadata.target_chunk_id"
+            )
+        return read_presence_baseline(self.dbname, parent_chunk_id)
+
+    async def _read_presence_baseline_for_context_async(
+        self,
+        context_payload: Mapping[str, Any],
+        schema_model: type[StorytellerResponseBootstrap] | type[SkaldTurnWire],
+    ) -> Optional[PresenceBaseline]:
+        """Read the parent baseline for an asynchronous extended turn."""
+
+        if schema_model is not SkaldTurnWire:
+            return None
+        if self.dbname is None:
+            # No slot database means a baseline is structurally unavailable
+            # (DB-less utilities in tests). Hydration still raises loudly if
+            # the response actually carries a presence block.
+            return None
+        parent_chunk_id = self._parent_chunk_id(context_payload)
+        if parent_chunk_id is None:
+            raise ValueError(
+                "Non-bootstrap narrative context requires metadata.target_chunk_id"
+            )
+        return await read_presence_baseline_async(self.dbname, parent_chunk_id)
+
+    @staticmethod
     def _hydrate_provider_response(
         parsed_response: Any,
         schema_model: type[StorytellerResponseBootstrap] | type[SkaldTurnWire],
+        *,
+        presence_baseline: Optional[PresenceBaseline] = None,
     ) -> StoryTurnResponse:
         """Hydrate extended wire output while leaving bootstrap output unchanged."""
 
@@ -497,7 +649,10 @@ class LogonUtility:
                 raise TypeError(
                     "Extended LOGON provider returned a non-SkaldTurnWire response"
                 )
-            return hydrate_skald_turn(parsed_response)
+            return hydrate_skald_turn(
+                parsed_response,
+                presence_baseline=presence_baseline,
+            )
         if not isinstance(parsed_response, StorytellerResponseBootstrap):
             raise TypeError(
                 "Bootstrap LOGON provider returned a non-bootstrap response"
@@ -820,7 +975,7 @@ class LogonUtility:
                 "from orrery_adjudications, commit will ratify it. You remain "
                 "sovereign: use defer to leave pressure unresolved, void when a "
                 "proposal is definitively false, and replace when your structured "
-                "state_updates or replacement_state_delta supersede it. A replacement "
+                "updates or replacement_state_delta supersede it. A replacement "
                 "only emits a world_event if you provide replacement_event_type. "
                 "Refer only to proposal_id; do not rely on prose parsing."
             )

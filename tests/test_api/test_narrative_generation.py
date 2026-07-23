@@ -6,12 +6,17 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from fastapi import BackgroundTasks
 
 from nexus.agents.logon.apex_schema import (
     StorytellerResponseBootstrap,
     StorytellerResponseMinimal,
 )
-from nexus.api import narrative_generation
+from nexus.api import narrative, narrative_generation
+from nexus.api.narrative_schemas import (
+    ContinueNarrativeRequest,
+    RegenerateNarrativeRequest,
+)
 
 
 class DummyProgressManager:
@@ -99,7 +104,9 @@ async def test_lore_phase_failure_is_reported_before_adapter_coercion(
 
     error_events = [event for event in manager.events if event[1] == "error"]
     assert len(error_events) == 1
-    error_message = error_events[0][2]["error"]
+    error_data = error_events[0][2]
+    assert error_data is not None
+    error_message = error_data["error"]
     assert "TurnPhase.WARM_ANALYSIS" in error_message
     assert "FATAL: No warm slice chunks retrieved." in error_message
     assert "No narrative text in LORE response" not in error_message
@@ -116,6 +123,8 @@ async def test_continuation_threads_logon_model_into_incubator(
     class SuccessfulLore:
         """LORE double returning a provider-enriched storyteller response."""
 
+        calls: list[tuple[str, int, str | None]] = []
+
         def __init__(self, *args: Any, **kwargs: Any) -> None:
             self.turn_context = SimpleNamespace(error_log=[], orrery_proposal=None)
 
@@ -125,6 +134,7 @@ async def test_continuation_threads_logon_model_into_incubator(
             parent_chunk_id: int,
             note: str | None = None,
         ) -> StorytellerResponseMinimal:
+            self.calls.append((user_text, parent_chunk_id, note))
             return StorytellerResponseMinimal(
                 generation_model="resolved-provider-model",
                 narrative="A train exhales beyond the wall.",
@@ -161,6 +171,7 @@ async def test_continuation_threads_logon_model_into_incubator(
     )
 
     assert written[0]["generation_model"] == "resolved-provider-model"
+    assert SuccessfulLore.calls == [("Continue.", 7, None)]
     assert [status for _session, status, _data in manager.events][-1] == "complete"
 
 
@@ -187,8 +198,8 @@ async def test_bootstrap_threads_logon_model_into_incubator_payload(
         def __enter__(self) -> "BootstrapCursor":
             return self
 
-        def __exit__(self, *_args: Any) -> bool:
-            return False
+        def __exit__(self, *_args: Any) -> None:
+            return None
 
         def execute(self, query: str, params: Any = None) -> None:
             if "SELECT setting, user_character" in query:
@@ -212,6 +223,7 @@ async def test_bootstrap_threads_logon_model_into_incubator_payload(
                 }
             elif "JOIN characters c" in query:
                 self.result = {
+                    "id": 27,
                     "name": "Fixture Station",
                     "summary": "A test-only location.",
                     "history": "",
@@ -258,3 +270,72 @@ async def test_bootstrap_threads_logon_model_into_incubator_payload(
     )
 
     assert payload["generation_model"] == "resolved-bootstrap-model"
+    assert payload["reference_updates"]["places"] == [
+        {
+            "place_id": 27,
+            "place_name": "Fixture Station",
+            "reference_type": "setting",
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_continue_route_threads_parent_into_generation_task() -> None:
+    """The continue API schedules generation with its canonical parent id."""
+
+    background_tasks = BackgroundTasks()
+    await narrative.continue_narrative(
+        ContinueNarrativeRequest(chunk_id=17, user_text=""),
+        background_tasks,
+    )
+
+    assert len(background_tasks.tasks) == 1
+    task = background_tasks.tasks[0]
+    assert task.func is narrative_generation.generate_narrative_async
+    assert task.args[1] == 17
+
+
+@pytest.mark.asyncio
+async def test_regenerate_route_threads_incubator_parent_into_generation_task(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regeneration reuses the pending row's parent as LORE's context anchor."""
+
+    class RegenerateCursor:
+        def __enter__(self) -> "RegenerateCursor":
+            return self
+
+        def __exit__(self, *_args: Any) -> None:
+            return None
+
+        def execute(self, _sql: str) -> None:
+            return None
+
+        def fetchone(self) -> dict[str, Any]:
+            return {
+                "session_id": "pending-session",
+                "chunk_id": 18,
+                "parent_chunk_id": 17,
+                "user_text": "Open the gate.",
+            }
+
+    class RegenerateConnection(DummyConnection):
+        def cursor(self, **_kwargs: Any) -> RegenerateCursor:
+            return RegenerateCursor()
+
+    monkeypatch.setattr(
+        narrative,
+        "get_db_connection",
+        lambda _slot: RegenerateConnection(),
+    )
+
+    background_tasks = BackgroundTasks()
+    await narrative.regenerate_narrative(
+        RegenerateNarrativeRequest(slot=5),
+        background_tasks,
+    )
+
+    assert len(background_tasks.tasks) == 1
+    task = background_tasks.tasks[0]
+    assert task.func is narrative_generation.generate_narrative_async
+    assert task.args[1] == 17

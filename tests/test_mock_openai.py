@@ -257,7 +257,7 @@ def test_requested_output_properties_extracts_schema_fields() -> None:
     fields = _requested_output_properties(request)
     assert "narrative" in fields
     assert "choices" in fields
-    assert "state_updates" not in fields
+    assert "updates" not in fields
 
     native_request = ResponsesRequest(
         model="TEST",
@@ -265,8 +265,8 @@ def test_requested_output_properties_extracts_schema_fields() -> None:
         text=_native_text_format(SkaldTurnWire),
     )
     native_fields = _requested_output_properties(native_request)
-    assert "state_updates" in native_fields
-    assert "referenced_entities" in native_fields
+    assert "updates" in native_fields
+    assert "presence" in native_fields
 
     bare = ResponsesRequest(model="TEST", input=[])
     assert _requested_output_properties(bare) == set()

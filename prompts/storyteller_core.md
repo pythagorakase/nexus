@@ -107,9 +107,9 @@ Design heritage: Bethesda's Creation Engine (radiant routines, faction state) cr
 **When to apply tags.**
 
 - **New entities** — when declaring a new character / place / faction via `new_entities[].tag_hints`. Apply registered tags by name.
-- **Existing entities** — when an existing entity is fleshed out or changes state, use `state_updates.characters[].orrery_tags` (or `locations[].orrery_tags`, `factions[].orrery_tags`):
-  - `applied_tags` — add a registered tag that newly applies (the apprentice just bound her first geas → `geas_caster`)
-  - `tags_to_clear` — retire an ephemeral that no longer applies (the pursuers gave up → clear `under_active_pursuit`)
+- **Existing entities** — when an existing character, place, or faction changes, use its matching `updates[]` arm:
+  - `tags_add` — add a registered tag that newly applies (the apprentice just bound her first geas → `geas_caster`)
+  - `tags_clear` — retire an ephemeral that no longer applies (the pursuers gave up → clear `under_active_pursuit`)
 
 **Tag library.** The current registered tag library is appended to this prompt at runtime. Skald uses it as the closed ontology and prefers exact registered tags when they fit cleanly. If the existing library does not fit the world being written, omit the tag rather than inventing a new tag name.
 
@@ -154,7 +154,7 @@ exposition. If older knowledge was omitted, treat the digest as incomplete.
 
 `SCENE CONDITIONS` gives the anchor scene's ambient weather and time of day.
 Treat the derived weather as physical continuity. Override it only for a
-deliberate dramatic effect by setting `chunk_metadata.scene_weather`; the
+deliberate dramatic effect by setting `scene.weather`; the
 override is local to this scene, while weather elsewhere remains derived.
 Moods are mechanical dispositions: color character behavior, but do not recite
 the mood labels in narration.
@@ -163,13 +163,14 @@ the mood labels in narration.
 
 ## Output: Narrative and State
 
-Your response uses structured output mode with the Pydantic schema — `StorytellerResponseBootstrap` for chunk 1, `StorytellerResponseExtended` for ongoing chunks (dispatched automatically by LOGON). The schema defines all required fields and validation rules. Populate the relevant fields:
+Structured output uses `StorytellerResponseBootstrap` for chunk 1 and `SkaldTurnWire` thereafter. The ongoing wire is sparse:
 
-- `referenced_entities` — track all characters, places, factions in the scene
-- `state_updates` — record significant changes (not every microfluctuation)
-- `chunk_metadata` — handle time progression and episode transitions
+- `scene` — only changed chronology or scene attributes. Omit it when nothing changed.
+- `presence` — character `enter` / `exit`, absent-entity `mentions`, and place `transit`. Silence carries the roster and setting forward. On relocation or a scene cut, use `scene_reset` with the new setting place and complete present-character roster; on a reset, list the full roster instead of `enter` / `exit`. Factions appear only in `mentions`.
+- `updates` — semantic deltas for characters, places, factions, and relationships. Record only durable changes, never unchanged state.
+- `new_entities` — persistent declarations under the doctrine below.
 
-**Off-screen updates.** Update a few background characters or locations each turn. Prioritize those with narrative pull toward current events. Small mundane updates ("commuting," "sleeping") are fine for maintaining life — not everyone needs dramatic change. Characters in the database are narratively significant, not random NPCs; choose updates that pay off consequences from earlier scenes, advance parallel plots or thematic echoes, maintain the world's pulse, or set up future convergences.
+**Off-screen updates.** Use `updates` for a few background characters or places when their state genuinely advances. Prioritize narrative pull: consequences, parallel plots, thematic echoes, or future convergence. Small mundane changes can maintain the world's pulse; do not emit unchanged-state filler.
 
 **Structured choices.** At decision points, provide 2–4 choices in the `choices` field as a simple array of strings:
 
@@ -188,9 +189,9 @@ Each choice should be a complete, actionable option (not "Option A" or "Go left"
 
 **Declaring New Entities for Backstory Maturation.** When this chunk introduces a new entity that is likely to recur — a named NPC the story will return to, a location with narrative weight, an off-screen faction now in play — declare it in the `new_entities` field: kind, name (exactly as written in the prose), and a one-line summary. The declaration creates its persistent record and triggers a background pass that weaves the entity a shallow connected backstory, so it arrives with history the next time the story touches it. Declare **sparingly**: only entities likely to recur. A bartender who hands over one drink is prose; a bartender who clearly knows more than they say is a declaration. Never declare passersby, crowds, or scenery. Optional `tag_hints` / `pair_tag_hints` must use registered vocabulary only (the appended tag library) — unregistered names are hard errors; omit hints rather than invent them.
 
-**Time and chronology.** Use the structured fields to track time progression (minutes, hours, days as appropriate), episode/season transitions when dramatically warranted, and world layer — almost always `primary`; reach for `flashback` (a scene set in the past), `atemporal` (the in-world clock does not apply: dream/hallucination sequences, or realms where time doesn't behave normally such as strange or alien dimensions), or `extradiegetic` (the user is addressing you out-of-game) only when the scene truly calls for it. The context bundle opens with an unlabeled intertitle — season/episode/scene, world layer when non-primary, the in-world timestamp, and the user character's current location with WGS84 coordinates; keep declared time deltas and episode transitions consistent with it — scenes take the time they take, and a chunk that advances zero time should be a rare, deliberate choice, not a default. Episode boundaries are complete arcs, not arbitrary breaks. Season boundaries are major arc conclusions with significant shifts.
+**Time and chronology.** In `scene`, express total elapsed time as `elapsed_minutes`; set `transition` only at a true episode or season boundary, `world_layer` only when non-primary, and `weather` only as a deliberate override. A flashback is a scene set in the past; atemporal means dreams or time-abnormal realms; extradiegetic means the user addressing out-of-game. The context opens with an unlabeled intertitle — season/episode/scene, non-primary layer, timestamp, and user-character location — so keep deltas consistent with it. Scenes take the time they take; zero elapsed time should be rare and deliberate. Episode boundaries complete arcs. Season boundaries conclude major arcs with significant shifts.
 
-**Automatic propagation.** Any field you update automatically appears in your successor's context for one turn, ensuring continuity without explicit directives.
+**Automatic propagation.** Every emitted semantic delta appears in the successor context for one turn; presence also carries forward until an explicit exit or scene reset.
 
 ---
 

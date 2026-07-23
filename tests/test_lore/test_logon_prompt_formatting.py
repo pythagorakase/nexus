@@ -1,7 +1,7 @@
 """Tests for LOGON prompt formatting."""
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import pytest
 
@@ -18,7 +18,7 @@ class _FakeCursor:
     def __enter__(self) -> "_FakeCursor":
         return self
 
-    def __exit__(self, _exc_type: object, _exc: object, _tb: object) -> bool:
+    def __exit__(self, _exc_type: object, _exc: object, _tb: object) -> Literal[False]:
         return False
 
     def execute(self, _sql: str) -> None:
@@ -243,7 +243,7 @@ def test_context_prompt_includes_orrery_imminent_activity_controls() -> None:
     assert "If you omit a proposal from orrery_adjudications" in prompt
     assert "defer to leave pressure unresolved" in prompt
     assert "void when a proposal is definitively false" in prompt
-    assert "replace when your structured state_updates" in prompt
+    assert "replace when your structured updates" in prompt
     assert "replacement_event_type" in prompt
     assert "Refer only to proposal_id" in prompt
     assert "sleep_pressure:sleepy-1 [Nod off]" in prompt
