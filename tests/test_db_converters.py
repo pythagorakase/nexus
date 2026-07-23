@@ -3,7 +3,6 @@
 import pytest
 from datetime import timedelta
 from nexus.api.db_converters import (
-    create_new_faction,
     time_fields_to_interval,
     interval_to_time_fields,
     chronology_to_db_values,
@@ -15,7 +14,6 @@ from nexus.agents.logon.apex_schema import (
     CharacterReference,
     ChronologyUpdate,
     FactionReference,
-    NewFaction,
     PlaceReference,
     PlaceReferenceType,
     ReferenceType,
@@ -26,27 +24,6 @@ class MissingLookupConnection:
     """Async connection stand-in whose name lookups find no rows."""
 
     async def fetchval(self, *_args, **_kwargs):
-        return None
-
-
-class RecordingAsyncFactionConnection:
-    """Async connection stand-in for new-faction insert tests."""
-
-    def __init__(self):
-        self.statements = []
-        self.params = []
-
-    async def execute(self, sql, *args):
-        self.statements.append(" ".join(sql.split()))
-        self.params.append(args)
-
-    async def fetchval(self, sql, *args):
-        self.statements.append(" ".join(sql.split()))
-        self.params.append(args)
-        if "SELECT COALESCE(MAX(id), 0) + 1 FROM factions" in sql:
-            return 88
-        if "INSERT INTO factions" in sql:
-            return 88
         return None
 
 
@@ -103,13 +80,10 @@ class TestChronologyConversion:
     def test_chronology_continue(self):
         """Test episode continuation"""
         chronology = ChronologyUpdate(
-            episode_transition="continue",
-            time_delta_minutes=5
+            episode_transition="continue", time_delta_minutes=5
         )
         result = chronology_to_db_values(
-            chronology,
-            current_season=3,
-            current_episode=7
+            chronology, current_season=3, current_episode=7
         )
         assert result["season"] == 3
         assert result["episode"] == 7
@@ -118,13 +92,10 @@ class TestChronologyConversion:
     def test_chronology_new_episode(self):
         """Test new episode transition"""
         chronology = ChronologyUpdate(
-            episode_transition="new_episode",
-            time_delta_hours=2
+            episode_transition="new_episode", time_delta_hours=2
         )
         result = chronology_to_db_values(
-            chronology,
-            current_season=3,
-            current_episode=7
+            chronology, current_season=3, current_episode=7
         )
         assert result["season"] == 3
         assert result["episode"] == 8
@@ -133,13 +104,10 @@ class TestChronologyConversion:
     def test_chronology_new_season(self):
         """Test new season transition"""
         chronology = ChronologyUpdate(
-            episode_transition="new_season",
-            time_delta_days=1
+            episode_transition="new_season", time_delta_days=1
         )
         result = chronology_to_db_values(
-            chronology,
-            current_season=3,
-            current_episode=7
+            chronology, current_season=3, current_episode=7
         )
         assert result["season"] == 4
         assert result["episode"] == 1  # Seasons start at episode 1
@@ -152,9 +120,7 @@ class TestChronologyConversion:
             # No time fields provided
         )
         result = chronology_to_db_values(
-            chronology,
-            current_season=2,
-            current_episode=5
+            chronology, current_season=2, current_episode=5
         )
         assert result["season"] == 2
         assert result["episode"] == 5
@@ -167,24 +133,18 @@ class TestPlaceReference:
     def test_place_reference_validation(self):
         """Test PlaceReference validation"""
         # Valid with place_id
-        ref = PlaceReference(
-            place_id=1,
-            reference_type=PlaceReferenceType.SETTING
-        )
+        ref = PlaceReference(place_id=1, reference_type=PlaceReferenceType.SETTING)
         assert ref.place_id == 1
 
         # Valid with place_name
         ref = PlaceReference(
-            place_name="The Great Library",
-            reference_type=PlaceReferenceType.MENTIONED
+            place_name="The Great Library", reference_type=PlaceReferenceType.MENTIONED
         )
         assert ref.place_name == "The Great Library"
 
         # Invalid - no reference provided
         with pytest.raises(ValueError, match="Must provide either"):
-            PlaceReference(
-                reference_type=PlaceReferenceType.SETTING
-            )
+            PlaceReference(reference_type=PlaceReferenceType.SETTING)
 
 
 class TestReferenceResolution:
@@ -236,33 +196,6 @@ class TestReferenceResolution:
         assert refs == []
         assert "Skipping unresolved faction reference" in caplog.text
 
-    @pytest.mark.asyncio
-    async def test_create_new_faction_omits_obsolete_columns(self):
-        """Async faction creation should not write retired semantic columns."""
-
-        conn = RecordingAsyncFactionConnection()
-
-        faction_id = await create_new_faction(
-            conn,
-            NewFaction(
-                name="Project Palimpsest",
-                summary="A covert continuity office.",
-                extra_data={"leader": "unknown"},
-            ),
-        )
-
-        insert_sql = next(sql for sql in conn.statements if sql.startswith("INSERT"))
-
-        assert faction_id == 88
-        assert "ideology" not in insert_sql
-        assert "history" not in insert_sql
-        assert "current_activity" not in insert_sql
-        assert "hidden_agenda" not in insert_sql
-        assert "territory" not in insert_sql
-        assert "power_level" not in insert_sql
-        assert "resources" not in insert_sql
-        assert "id, name, summary, primary_location, extra_data" in insert_sql
-
 
 class TestTimeFieldValidation:
     """Test ChronologyUpdate time field validation"""
@@ -270,16 +203,11 @@ class TestTimeFieldValidation:
     def test_valid_time_fields(self):
         """Test valid time field combinations"""
         # Just minutes
-        chronology = ChronologyUpdate(
-            time_delta_minutes=30
-        )
+        chronology = ChronologyUpdate(time_delta_minutes=30)
         assert chronology.time_delta_minutes == 30
 
         # Hours and days
-        chronology = ChronologyUpdate(
-            time_delta_hours=2,
-            time_delta_days=1
-        )
+        chronology = ChronologyUpdate(time_delta_hours=2, time_delta_days=1)
         assert chronology.time_delta_hours == 2
         assert chronology.time_delta_days == 1
 

@@ -46,6 +46,4 @@ Orrery (Bethesda Creation Engine × Dwarf Fortress: radiant routines, autonomous
 
 The protagonist's tags and the starting location's `place_affordance` tags were already bestowed during the wizard (in `submit_wildcard_trait` and `submit_starting_scenario`). Don't re-apply them.
 
-For **new entities you introduce in the opening scene** — NPCs the protagonist encounters, places they pass through, factions named in the prose — populate `orrery_tags` on the corresponding `new_character` / `new_place` / `new_faction` payloads in `referenced_entities`. The fields work the same way as in ongoing narrative (see `storyteller_core.md`'s Orrery Awareness section). The opening scene typically introduces 1–3 NPCs and 1–2 places — tag them with the same care you'd give the protagonist.
-
-If the world is non-cyberpunk, apply only registered tags that actually fit. Do not invent tag names for missing fantasy, historical, alien, or other genre-specific concepts; prose remains authoritative when the closed tag library has no matching mechanical hook.
+The bootstrap response contains prose and choices only. On subsequent turns, persistent new entities flow through the `new_entities` declaration channel described in `storyteller_core.md`; do not emit entity records from this bootstrap response.

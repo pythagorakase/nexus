@@ -4,12 +4,11 @@ These models are embedded in:
 
 - ``nexus.api.new_story_schemas``: ``WildcardTrait`` and ``PlaceProfile``
   (wizard phase tagging of the protagonist and starting location).
-- ``nexus.agents.logon.apex_schema``: ``NewCharacter`` / ``NewPlace`` /
-  ``NewFaction`` (per-chunk entity introduction) and ``CharacterStateUpdate`` /
+- ``nexus.agents.logon.apex_schema``: ``CharacterStateUpdate`` /
   ``LocationStateUpdate`` / ``FactionStateUpdate`` (per-chunk entity update).
 
-Skald fills these as part of normal entity emission. The per-chunk commit
-handler and the wizard persistence layer feed them into
+Skald fills these as part of normal entity updates or wizard registration. The
+per-chunk commit handler and the wizard persistence layer feed them into
 ``nexus.agents.orrery.tag_writer.apply_tag_bestowal`` to insert into
 ``entity_tags``. The vocabulary is closed: Skald may only apply registered tag
 names.

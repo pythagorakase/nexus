@@ -1,7 +1,5 @@
 """Tests for adapting LOGON responses into incubator payloads."""
 
-import pytest
-
 from nexus.agents.logon.apex_schema import (
     ReferencedEntities,
     StorytellerResponseExtended,
@@ -26,30 +24,38 @@ def test_response_to_incubator_serializes_current_reference_schema() -> None:
         referenced_entities={
             "characters": [
                 {"character_name": "Eleanor Voss", "reference_type": "present"},
-                {
-                    "new_character": {
-                        "name": "Jonas Vale",
-                        "appearance": "A raincoated man with a milky prosthetic eye.",
-                    },
-                    "reference_type": "present",
-                },
+                {"character_name": "Jonas Vale", "reference_type": "present"},
             ],
             "places": [
                 {
-                    "new_place": {
-                        "name": "Kettering Street Transit Stop",
-                        "type": "transit stop",
-                    },
+                    "place_name": "Kettering Street Transit Stop",
                     "reference_type": "setting",
                 }
             ],
             "factions": [
                 {
-                    "new_faction": {"name": "Project Palimpsest"},
+                    "faction_name": "Project Palimpsest",
                     "reference_type": "mentioned",
                 }
             ],
         },
+        new_entities=[
+            {
+                "kind": "character",
+                "name": "Jonas Vale",
+                "summary": "A raincoated man with a milky prosthetic eye.",
+            },
+            {
+                "kind": "place",
+                "name": "Kettering Street Transit Stop",
+                "summary": "A rain-slick transit stop across from the pharmacy.",
+            },
+            {
+                "kind": "faction",
+                "name": "Project Palimpsest",
+                "summary": "A covert continuity office.",
+            },
+        ],
         state_updates={
             "characters": [],
             "relationships": [],
@@ -70,19 +76,20 @@ def test_response_to_incubator_serializes_current_reference_schema() -> None:
     assert "authorial_directives" not in incubator
     reference_updates = incubator["reference_updates"]
     assert reference_updates["characters"][0]["character_name"] == "Eleanor Voss"
-    assert reference_updates["characters"][1]["new_character"]["name"] == "Jonas Vale"
-    assert reference_updates["places"][0]["new_place"]["type"] == "fixed_location"
-    assert (
-        reference_updates["places"][0]["new_place"]["extra_data"]["category"]
-        == "transit stop"
+    assert reference_updates["characters"][1]["character_name"] == "Jonas Vale"
+    assert reference_updates["places"][0]["place_name"] == (
+        "Kettering Street Transit Stop"
     )
-    assert (
-        reference_updates["factions"][0]["new_faction"]["name"] == "Project Palimpsest"
-    )
+    assert reference_updates["factions"][0]["faction_name"] == "Project Palimpsest"
+    assert [item["name"] for item in incubator["new_entities"]] == [
+        "Jonas Vale",
+        "Kettering Street Transit Stop",
+        "Project Palimpsest",
+    ]
 
     # The commit path reparses this JSONB payload into the current schema.
     reparsed = ReferencedEntities(**reference_updates)
-    assert reparsed.characters[1].new_character.name == "Jonas Vale"
+    assert reparsed.characters[1].character_name == "Jonas Vale"
 
 
 def test_response_to_incubator_threads_generation_model_verbatim() -> None:

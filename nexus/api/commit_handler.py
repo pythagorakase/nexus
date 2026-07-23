@@ -11,7 +11,7 @@ import json
 import logging
 from datetime import datetime
 from typing import Optional, Dict, Any, List
-import asyncpg
+import asyncpg  # type: ignore[import-untyped]
 
 from nexus.agents.logon.apex_schema import (
     ChunkMetadataUpdate,
@@ -30,9 +30,10 @@ from nexus.agents.orrery.reconstruction import (
 from nexus.agents.orrery.tag_writer import apply_tag_bestowal_async
 from nexus.api.db_converters import (
     chronology_to_db_values,
+    create_declared_entity_stubs,
     resolve_character_references,
-    resolve_place_references,
     resolve_faction_references,
+    resolve_place_references,
 )
 from nexus.api.summary_triggers import (
     SummaryTask,
@@ -64,6 +65,7 @@ async def fetch_incubator_data(
         SELECT chunk_id, parent_chunk_id, user_text, storyteller_text,
                choice_object, choice_text, orrery_proposal,
                COALESCE(orrery_adjudications, '[]'::jsonb) AS orrery_adjudications,
+               COALESCE(new_entities, '[]'::jsonb) AS new_entities,
                metadata_updates, entity_updates, reference_updates,
                llm_response_id, generation_model, status
         FROM incubator
@@ -291,11 +293,11 @@ async def apply_state_updates(
     # Update character states
     for char_update in state_updates.characters:
         if char_update.character_id:
-            updates = []
-            params = []
+            updates: List[str] = []
+            params: List[Any] = []
             param_count = 1
 
-            written_fields = []
+            written_fields: List[tuple[str, Any]] = []
 
             if char_update.emotional_state:
                 updates.append(f"emotional_state = ${param_count}")
@@ -441,7 +443,9 @@ async def apply_state_tags_async(
         logger.info(f"Tag bestowal {kind}/{subtype_id}: {counters}")
 
 
-async def clear_incubator(conn: asyncpg.Connection, session_id: str = None) -> None:
+async def clear_incubator(
+    conn: asyncpg.Connection, session_id: Optional[str] = None
+) -> None:
     """
     Clear incubator after successful commit.
     If session_id is provided, only clear that session.
@@ -469,13 +473,14 @@ async def commit_incubator_to_database(
     Transaction steps:
     1. Read and validate incubator data
     2. Get parent chunk context (season/episode/scene)
-    3. Resolve and create entities (characters, places, factions)
-    4. Convert metadata (time, episode transitions)
-    5. Insert narrative chunk
-    6. Insert chunk metadata
-    7. Insert junction table references
-    8. Update entity states
-    9. Clear incubator
+    3. Convert metadata (time, episode transitions)
+    4. Insert narrative chunk
+    5. Create declaration stubs
+    6. Resolve entity references
+    7. Insert chunk metadata
+    8. Insert junction table references
+    9. Update entity states and commit the Orrery tick
+    10. Clear incubator
 
     Returns:
         New chunk ID
@@ -503,18 +508,7 @@ async def commit_incubator_to_database(
                 parent_meta["scene"],
             )
 
-            # Step 3: Resolve entity references
-            # Parse referenced entities from JSONB
-            ref_entities = ReferencedEntities(**incubator["reference_updates"])
-
-            # Create new entities and resolve all to IDs
-            character_refs = await resolve_character_references(
-                ref_entities.characters, conn
-            )
-            place_refs = await resolve_place_references(ref_entities.places, conn)
-            faction_refs = await resolve_faction_references(ref_entities.factions, conn)
-
-            # Step 4: Convert metadata
+            # Step 3: Convert metadata
             metadata_update = ChunkMetadataUpdate(**incubator["metadata_updates"])
             chronology_data = incubator["metadata_updates"].get("chronology", {})
             chronology = ChronologyUpdate(**chronology_data)
@@ -535,7 +529,7 @@ async def commit_incubator_to_database(
             # Get world_layer
             world_layer = incubator["metadata_updates"].get("world_layer", "primary")
 
-            # Step 5: Insert narrative chunk
+            # Step 4: Insert narrative chunk
             choice_object = incubator.get("choice_object")
             storyteller_text = incubator.get("storyteller_text") or ""
             choice_text = incubator.get("choice_text")
@@ -555,7 +549,20 @@ async def commit_incubator_to_database(
             if chunk_id is None:
                 raise ValueError("Failed to obtain chunk_id after insert")
 
-            # Step 6: Insert chunk metadata
+            # Step 5: Create declaration stubs before name-reference resolution.
+            await create_declared_entity_stubs(
+                incubator.get("new_entities") or [], conn
+            )
+
+            # Step 6: Resolve entity references, including same-turn declarations.
+            ref_entities = ReferencedEntities(**incubator["reference_updates"])
+            character_refs = await resolve_character_references(
+                ref_entities.characters, conn
+            )
+            place_refs = await resolve_place_references(ref_entities.places, conn)
+            faction_refs = await resolve_faction_references(ref_entities.factions, conn)
+
+            # Step 7: Insert chunk metadata
             await insert_chunk_metadata(
                 conn,
                 chunk_id=chunk_id,
@@ -568,17 +575,17 @@ async def commit_incubator_to_database(
                 scene_weather=metadata_update.scene_weather,
             )
 
-            # Step 7: Insert junction table references
+            # Step 8: Insert junction table references
             await insert_place_references(conn, chunk_id, place_refs)
             await insert_character_references(conn, chunk_id, character_refs)
             await insert_faction_references(conn, chunk_id, faction_refs)
 
-            # Step 8: Update entity states (if provided)
+            # Step 9: Update entity states (if provided)
             if incubator.get("entity_updates"):
                 state_updates = StateUpdates(**incubator["entity_updates"])
                 await apply_state_updates(conn, state_updates, source_chunk_id=chunk_id)
 
-            # Step 8.5: Commit Orrery proposal inside the accepted-chunk transaction
+            # Step 9.5: Commit Orrery proposal inside the accepted-chunk transaction
             orrery_result = await commit_orrery_tick_async(
                 conn,
                 incubator.get("orrery_proposal"),
@@ -633,7 +640,7 @@ async def commit_incubator_to_database(
                     orrery_result.reveal_count,
                 )
 
-            # Step 8.55: interval state checkpoint (reconstruction bar 7c)
+            # Step 9.55: interval state checkpoint (reconstruction bar 7c)
             checkpoint_interval = _orrery_checkpoint_interval()
             if checkpoint_interval:
                 playable_ordinal = await playable_narrative_ordinal_async(conn)
@@ -653,7 +660,7 @@ async def commit_incubator_to_database(
                             chunk_id,
                         )
 
-            # Step 9: Clear incubator
+            # Step 10: Clear incubator
             await clear_incubator(conn, session_id)
 
         except Exception as e:

@@ -11,14 +11,10 @@ import tiktoken
 from pydantic_ai import ModelRetry
 
 from nexus.agents.logon.apex_schema import (
-    CharacterReference,
     CharacterStateUpdate,
     LocationStateUpdate,
-    NewCharacter,
     NewEntityDeclaration,
     NewEntityPairTagHint,
-    ReferencedEntities,
-    ReferenceType,
     StateUpdates,
     StorytellerResponseExtended,
 )
@@ -41,7 +37,14 @@ from scripts.api_anthropic import AnthropicProvider
 from scripts.api_openai import OpenAIProvider
 
 
-EXTENDED_SCHEMA_MIN_BYTE_SAVINGS = 8_000
+# Recalibrated after #557 removed the dossier subtrees (which carried much of
+# the long-description weight the diet originally counted): the diet now saves
+# ~7.3KB / ~1,469 tokens on the dossier-free schema. Guards stay binding
+# against a no-op transform; the absolute ceiling holds the combined campaign
+# result (measured 20,666 bytes dieted).
+EXTENDED_SCHEMA_MIN_BYTE_SAVINGS = 6_000
+EXTENDED_SCHEMA_MIN_TOKEN_SAVINGS = 1_200
+EXTENDED_SCHEMA_DIETED_MAX_BYTES = 21_500
 
 
 class FakeRegistryCursor:
@@ -216,17 +219,12 @@ def _storyteller_response(
 
 def test_valid_bestowals_produce_no_issues() -> None:
     response = _response(
-        referenced_entities=ReferencedEntities(
+        state_updates=StateUpdates(
             characters=[
-                CharacterReference(
-                    reference_type=ReferenceType.PRESENT,
-                    new_character=NewCharacter(
-                        name="Joryn Peale",
-                        summary="A frightened junior copyist.",
-                        orrery_tags=OrreryTagBestowal(
-                            applied_tags=["human", "perceptive"]
-                        ),
-                    ),
+                CharacterStateUpdate(
+                    character_id=1,
+                    character_name="Joryn Peale",
+                    orrery_tags=OrreryTagBestowal(applied_tags=["human", "perceptive"]),
                 )
             ]
         ),
@@ -1210,7 +1208,10 @@ def test_extended_openai_wire_schema_meets_description_diet_budget() -> None:
     dieted_tokens = encoding.encode(dieted_wire)
 
     assert len(undieted_bytes) - len(dieted_bytes) >= EXTENDED_SCHEMA_MIN_BYTE_SAVINGS
-    assert len(undieted_tokens) - len(dieted_tokens) >= 2_000
+    assert (
+        len(undieted_tokens) - len(dieted_tokens) >= EXTENDED_SCHEMA_MIN_TOKEN_SAVINGS
+    )
+    assert len(dieted_bytes) <= EXTENDED_SCHEMA_DIETED_MAX_BYTES
     assert set(dieted["properties"]) >= {
         "narrative",
         "choices",
@@ -1232,8 +1233,11 @@ def test_extended_openai_wire_schema_meets_description_diet_budget() -> None:
         ]["description"]
     )
     assert "Earth's physical geography" in dieted["$defs"]["Coordinates"]["description"]
-    assert b"never a bare list of strings" in undieted_bytes
-    assert b"never a bare list of strings" not in dieted_bytes
+    # The pre-#557 anchor screed ("never a bare list of strings") was deleted
+    # with the dossier models; this long declaration description is the
+    # surviving proof that the diet drops overlong wire guidance.
+    assert b"drives background backstory" in undieted_bytes
+    assert b"drives background backstory" not in dieted_bytes
 
 
 def test_logon_schema_kwargs_diet_openai_and_keep_anthropic_compact() -> None:
@@ -1248,7 +1252,7 @@ def test_logon_schema_kwargs_diet_openai_and_keep_anthropic_compact() -> None:
     assert text_format["type"] == "json_schema"
     assert text_format["strict"] is True
     assert text_format["name"] == "StorytellerResponseExtended"
-    assert "never a bare list of strings" not in json.dumps(text_format["schema"])
+    assert "drives background backstory" not in json.dumps(text_format["schema"])
 
     utility._provider_wire_type = "anthropic"
     utility._validation_dbname = None
