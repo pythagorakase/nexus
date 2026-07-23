@@ -14,6 +14,7 @@ output validator can hand issues back to the model while it still owns the turn.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from difflib import get_close_matches
 import logging
 from typing import Any, FrozenSet, List, Mapping, Optional, Tuple
 
@@ -108,6 +109,7 @@ def _validate_bestowal_against_vocabulary(
     entity_kind: str,
     bestowal: OrreryTagBestowal,
     vocabulary: StorytellerVocabulary,
+    suggestion_limit: int,
 ) -> List[str]:
     """Return field-qualified issues from the cached per-kind tag catalog."""
 
@@ -116,11 +118,111 @@ def _validate_bestowal_against_vocabulary(
     for field_name in ("applied_tags", "tags_to_clear"):
         for tag_name in getattr(bestowal, field_name):
             if tag_name not in allowed_tags:
-                issues.append(
+                issue = (
                     f"{field_name}: Unknown or entity-kind-incompatible tag "
                     f"{tag_name!r} for {entity_kind!r}"
                 )
+                issues.append(
+                    _with_near_misses(
+                        issue,
+                        value=tag_name,
+                        candidates=allowed_tags,
+                        suggestion_limit=suggestion_limit,
+                    )
+                )
     return issues
+
+
+def _with_near_misses(
+    issue: str,
+    *,
+    value: str,
+    candidates: FrozenSet[str],
+    suggestion_limit: int,
+) -> str:
+    """Append bounded same-catalog spelling suggestions to one issue."""
+
+    if suggestion_limit <= 0:
+        return issue
+    matches = get_close_matches(
+        value,
+        sorted(candidates),
+        n=suggestion_limit,
+    )
+    if not matches:
+        return issue
+    return f"{issue}; did you mean: {', '.join(matches)}"
+
+
+def _annotate_declaration_issues(
+    issues: List[str],
+    declarations: Any,
+    *,
+    vocabulary: StorytellerVocabulary,
+    suggestion_limit: int,
+) -> List[str]:
+    """Add kind-correct suggestions to declaration hint failures."""
+
+    annotated = list(issues)
+    for declaration_index, declaration in enumerate(declarations):
+        entity_kind = getattr(declaration, "kind", "")
+        allowed_tags = vocabulary.tag_names_by_kind.get(entity_kind, frozenset())
+        for tag_name in getattr(declaration, "tag_hints", None) or []:
+            if tag_name in allowed_tags:
+                continue
+            prefix = f"new_entities[{declaration_index}].tag_hints:"
+            annotated = _annotate_matching_issue(
+                annotated,
+                prefix=prefix,
+                value=tag_name,
+                candidates=allowed_tags,
+                suggestion_limit=suggestion_limit,
+            )
+        for hint_index, hint in enumerate(
+            getattr(declaration, "pair_tag_hints", None) or []
+        ):
+            tag_name = getattr(hint, "tag", "")
+            if tag_name in vocabulary.pair_tag_names:
+                continue
+            prefix = (
+                f"new_entities[{declaration_index}].pair_tag_hints"
+                f"[{hint_index}].tag:"
+            )
+            annotated = _annotate_matching_issue(
+                annotated,
+                prefix=prefix,
+                value=tag_name,
+                candidates=vocabulary.pair_tag_names,
+                suggestion_limit=suggestion_limit,
+            )
+    return annotated
+
+
+def _annotate_matching_issue(
+    issues: List[str],
+    *,
+    prefix: str,
+    value: str,
+    candidates: FrozenSet[str],
+    suggestion_limit: int,
+) -> List[str]:
+    """Annotate the exact issue emitted for one invalid declaration value."""
+
+    annotated = list(issues)
+    for index, issue in enumerate(annotated):
+        if (
+            issue.startswith(prefix)
+            and repr(value) in issue
+            and "; did you mean:" not in issue
+        ):
+            annotated[index] = _with_near_misses(
+                issue,
+                value=value,
+                candidates=candidates,
+                suggestion_limit=suggestion_limit,
+            )
+            break
+    return annotated
 
 
 def collect_orrery_tag_issues(
@@ -128,6 +230,7 @@ def collect_orrery_tag_issues(
     cur: Any,
     *,
     vocabulary: Optional[StorytellerVocabulary] = None,
+    suggestion_limit: int = 3,
 ) -> List[str]:
     """Validate every bestowal and declaration against the live registry."""
 
@@ -144,21 +247,27 @@ def collect_orrery_tag_issues(
                 entity_kind=entity_kind,
                 bestowal=bestowal,
                 vocabulary=vocabulary,
+                suggestion_limit=suggestion_limit,
             )
         for issue in bestowal_issues:
             issues.append(f"{path}: {issue}")
-    issues.extend(
-        collect_new_entity_declaration_vocabulary_issues(
-            cur,
-            getattr(response, "new_entities", None) or [],
-            tag_names_by_kind=(
-                vocabulary.tag_names_by_kind if vocabulary is not None else None
-            ),
-            pair_tag_names=(
-                vocabulary.pair_tag_names if vocabulary is not None else None
-            ),
-        )
+    declarations = getattr(response, "new_entities", None) or []
+    declaration_issues = collect_new_entity_declaration_vocabulary_issues(
+        cur,
+        declarations,
+        tag_names_by_kind=(
+            vocabulary.tag_names_by_kind if vocabulary is not None else None
+        ),
+        pair_tag_names=(vocabulary.pair_tag_names if vocabulary is not None else None),
     )
+    if vocabulary is not None:
+        declaration_issues = _annotate_declaration_issues(
+            declaration_issues,
+            declarations,
+            vocabulary=vocabulary,
+            suggestion_limit=suggestion_limit,
+        )
+    issues.extend(declaration_issues)
     for index, adjudication in enumerate(
         getattr(response, "orrery_adjudications", None) or []
     ):
@@ -168,15 +277,27 @@ def collect_orrery_tag_issues(
             and vocabulary is not None
             and event_type not in vocabulary.event_types
         ):
-            issues.append(
+            issue = (
                 "orrery_adjudications"
                 f"[{index}].replacement_event_type: Unknown or deprecated "
                 f"event type {event_type!r}"
             )
+            issues.append(
+                _with_near_misses(
+                    issue,
+                    value=event_type,
+                    candidates=vocabulary.event_types,
+                    suggestion_limit=suggestion_limit,
+                )
+            )
     return issues
 
 
-def build_storyteller_tag_validator(dbname: Optional[str]) -> Optional[Any]:
+def build_storyteller_tag_validator(
+    dbname: Optional[str],
+    *,
+    suggestion_limit: int = 3,
+) -> Optional[Any]:
     """Return an async pydantic_ai output validator bound to ``dbname``.
 
     Returns ``None`` when no slot database is in scope (nothing to validate
@@ -187,6 +308,8 @@ def build_storyteller_tag_validator(dbname: Optional[str]) -> Optional[Any]:
 
     if not dbname:
         return None
+    if suggestion_limit < 0:
+        raise ValueError("suggestion_limit must be non-negative")
 
     async def _validate(ctx: Any, output: Any) -> Any:
         from pydantic_ai import ModelRetry
@@ -200,6 +323,7 @@ def build_storyteller_tag_validator(dbname: Optional[str]) -> Optional[Any]:
                     output,
                     cur,
                     vocabulary=vocabulary,
+                    suggestion_limit=suggestion_limit,
                 )
         if issues:
             formatted = "\n".join(f"- {issue}" for issue in issues)

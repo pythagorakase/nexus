@@ -32,6 +32,9 @@ from nexus.agents.logon.skald_wire import (  # noqa: E402
     skald_wire_strict_text_format,
 )
 from nexus.agents.orrery.tag_library import (  # noqa: E402
+    EntityRowReference,
+    TagLibraryContext,
+    format_contextual_tag_library,
     format_tag_library_for_prompt,
 )
 from nexus.config.loader import get_provider_for_model, resolve_model_ref  # noqa: E402
@@ -39,6 +42,50 @@ from nexus.memory.context_state import is_retrograde_summary  # noqa: E402
 from nexus.memory.retrieval_coverage import coerce_chunk_id  # noqa: E402
 
 logger = logging.getLogger("nexus.lore.logon")
+
+_PROPOSAL_TAG_DELTA_KEYS = frozenset(
+    {
+        "entity_tags.add",
+        "entity_tags.remove",
+        "entity_tags_target.add",
+        "entity_tags_target.remove",
+    }
+)
+# The remaining closed-vocabulary carriers in SUPPORTED_STATE_DELTA_KEYS are
+# pair-tag operations: entity_pair_tags.{add_inbound,add_outbound,
+# clear_outbound}, entity_pair_tags_target.clear_inbound, and status.bestow
+# (which writes status:<level>). Pair tags have their own name index and no
+# single-entity Tier-2 descriptions, so they are intentionally not extracted
+# here.
+
+
+def proposal_tag_names_from_payload(context_payload: Mapping[str, Any]) -> set[str]:
+    """Extract single-entity tags referenced by pending Orrery proposals."""
+
+    tag_names: set[str] = set()
+    for proposal in context_payload.get("orrery_imminent_activity") or []:
+        if not isinstance(proposal, Mapping):
+            continue
+        state_delta = proposal.get("state_delta") or {}
+        if not isinstance(state_delta, Mapping):
+            continue
+        for key in _PROPOSAL_TAG_DELTA_KEYS:
+            values = state_delta.get(key) or []
+            if isinstance(values, str):
+                values = [values]
+            if not isinstance(values, (list, tuple, set)):
+                continue
+            tag_names.update(
+                str(value).strip()
+                for value in values
+                if value is not None and str(value).strip()
+            )
+        mood_set = state_delta.get("mood.set")
+        if isinstance(mood_set, Mapping):
+            mood = mood_set.get("mood")
+            if mood is not None and str(mood).strip():
+                tag_names.add(str(mood).strip())
+    return tag_names
 
 
 def read_presence_baseline(
@@ -98,6 +145,31 @@ def read_presence_baseline(
         else None
     )
     return PresenceBaseline(present=present, setting=setting)
+
+
+def read_user_character_id(dbname: str) -> Optional[int]:
+    """Read the configured user character for contextual tag exposure."""
+
+    conn = psycopg2.connect(
+        host=os.environ.get("PGHOST", "localhost"),
+        database=dbname,
+        user=os.environ.get("PGUSER", "pythagor"),
+        port=os.environ.get("PGPORT", "5432"),
+    )
+    try:
+        conn.set_session(readonly=True, autocommit=True)
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT user_character
+                FROM global_variables
+                WHERE id = TRUE
+                """
+            )
+            row = cur.fetchone()
+    finally:
+        conn.close()
+    return int(row[0]) if row and row[0] is not None else None
 
 
 async def read_presence_baseline_async(
@@ -246,16 +318,6 @@ class LogonUtility:
         # Query setting from global_variables
         try:
             db = require_slot_dbname(dbname=self.dbname)
-            try:
-                tag_library_prompt = format_tag_library_for_prompt(db)
-                if tag_library_prompt:
-                    system_prompt = f"{system_prompt}\n\n---\n\n{tag_library_prompt}"
-            except Exception as e:
-                logger.warning(
-                    "Failed to load Orrery tag library for storyteller prompt: %s",
-                    e,
-                )
-
             conn = psycopg2.connect(host="localhost", database=db, user="pythagor")
             with conn.cursor() as cur:
                 cur.execute("SELECT setting FROM global_variables WHERE id = true")
@@ -413,7 +475,11 @@ class LogonUtility:
             validation_dbname: Optional[str] = require_slot_dbname(dbname=self.dbname)
         except Exception:
             validation_dbname = None
-        output_validator = build_storyteller_tag_validator(validation_dbname)
+        tag_library_settings = apex_settings.get("tag_library") or {}
+        output_validator = build_storyteller_tag_validator(
+            validation_dbname,
+            suggestion_limit=int(tag_library_settings.get("suggestion_limit", 3)),
+        )
         self._validation_dbname = validation_dbname
         self._schema_format_cache = {}
 
@@ -501,9 +567,16 @@ class LogonUtility:
         """Generate narrative from context payload with structured output."""
         self._ensure_provider(context_payload)
         assert self.provider is not None
-        # Format the context into a prompt
-        prompt = self._format_context_prompt(context_payload)
         schema_model = self._select_response_schema(context_payload)
+        presence_baseline = self._read_presence_baseline_for_context(
+            context_payload,
+            schema_model,
+        )
+        # Format the context into a prompt
+        prompt = self._format_context_prompt(
+            context_payload,
+            presence_baseline=presence_baseline,
+        )
         schema_kwargs = self._schema_format_kwargs(schema_model)
 
         # Get structured completion from provider
@@ -513,10 +586,6 @@ class LogonUtility:
                 prompt,
                 schema_model,
                 **schema_kwargs,
-            )
-            presence_baseline = self._read_presence_baseline_for_context(
-                context_payload,
-                schema_model,
             )
             response = self._hydrate_provider_response(
                 parsed_response,
@@ -538,8 +607,15 @@ class LogonUtility:
         """Generate narrative from context payload without blocking the event loop."""
         self._ensure_provider(context_payload)
         assert self.provider is not None
-        prompt = self._format_context_prompt(context_payload)
         schema_model = self._select_response_schema(context_payload)
+        presence_baseline = await self._read_presence_baseline_for_context_async(
+            context_payload,
+            schema_model,
+        )
+        prompt = self._format_context_prompt(
+            context_payload,
+            presence_baseline=presence_baseline,
+        )
         schema_kwargs = self._schema_format_kwargs(schema_model)
 
         try:
@@ -549,10 +625,6 @@ class LogonUtility:
                     schema_model,
                     **schema_kwargs,
                 )
-            )
-            presence_baseline = await self._read_presence_baseline_for_context_async(
-                context_payload,
-                schema_model,
             )
             response = self._hydrate_provider_response(
                 parsed_response,
@@ -714,7 +786,12 @@ class LogonUtility:
         )
         return bool(context_payload.get("is_bootstrap", False) or metadata_bootstrap)
 
-    def _format_context_prompt(self, context: Dict) -> str:
+    def _format_context_prompt(
+        self,
+        context: Dict,
+        *,
+        presence_baseline: Optional[PresenceBaseline] = None,
+    ) -> str:
         """Format context payload into a prompt for the Apex AI"""
         sections = []
 
@@ -948,6 +1025,13 @@ class LogonUtility:
             if context.get("world_knowledge_truncated"):
                 sections.append("(older knowledge omitted)")
 
+        tag_library = self._format_turn_tag_library(
+            context,
+            presence_baseline=presence_baseline,
+        )
+        if tag_library:
+            sections.extend(["\n=== ORRERY TAG LIBRARY ===", tag_library])
+
         # Render caps shared with the commit-time prompt-exposure log
         # (orrery_prompt_exposures): both sides must slice identically or the
         # recorded "shown set" lies. Model defaults keep a single source when
@@ -1076,6 +1160,73 @@ class LogonUtility:
         )
 
         return "\n".join(sections)
+
+    def _format_turn_tag_library(
+        self,
+        context: Mapping[str, Any],
+        *,
+        presence_baseline: Optional[PresenceBaseline],
+    ) -> str:
+        """Render the bootstrap or scene-contextual tag library for one turn."""
+
+        if self.dbname is None:
+            return ""
+        if self._is_bootstrap_context(context):
+            return format_tag_library_for_prompt(self.dbname)
+
+        from nexus.config.settings_models import APEXTagLibrarySettings
+
+        defaults = APEXTagLibrarySettings()
+        apex_settings = self.settings.get("API Settings", {}).get("apex")
+        if not isinstance(apex_settings, Mapping):
+            apex_settings = self.settings.get("apex") or {}
+        raw_settings = apex_settings.get("tag_library") or {}
+        contextual = bool(raw_settings.get("contextual", defaults.contextual))
+        if not contextual:
+            return format_tag_library_for_prompt(self.dbname)
+
+        baseline = presence_baseline
+        if baseline is None:
+            baseline = self._read_presence_baseline_for_context(
+                context,
+                SkaldTurnWire,
+            )
+        if baseline is None:
+            raise RuntimeError(
+                "Contextual Orrery tag library requires a presence baseline"
+            )
+
+        entity_refs = [
+            EntityRowReference(kind=reference.kind, row_id=reference.id)
+            for reference in baseline.present
+            if reference.id is not None
+        ]
+        if baseline.setting is not None and baseline.setting.id is not None:
+            entity_refs.append(
+                EntityRowReference(
+                    kind=baseline.setting.kind,
+                    row_id=baseline.setting.id,
+                )
+            )
+        user_character_id = read_user_character_id(self.dbname)
+        if user_character_id is not None:
+            entity_refs.append(
+                EntityRowReference(
+                    kind="character",
+                    row_id=user_character_id,
+                )
+            )
+
+        imminent_activity = context.get("orrery_imminent_activity") or []
+        return format_contextual_tag_library(
+            self.dbname,
+            context=TagLibraryContext(
+                present_entity_refs=list(dict.fromkeys(entity_refs)),
+                proposal_tag_names=proposal_tag_names_from_payload(context),
+                has_pending_proposals=bool(imminent_activity),
+                anchor_chunk_id=self._parent_chunk_id(context),
+            ),
+        )
 
     @staticmethod
     def _format_bootstrap_context(bootstrap_data: Any) -> list[str]:

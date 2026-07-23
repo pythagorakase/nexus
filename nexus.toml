@@ -1010,6 +1010,11 @@ structured_output_retries = 3 # Validation retry budget for structured story tur
 # [runtime.services.llama_server] notes.
 generation_timeout_seconds = 1200
 
+[apex.tag_library]
+# Measurement-stage A/B lever: false restores the complete described library.
+contextual = true
+suggestion_limit = 3
+
 # =============================================================================
 # Narrative Summary Settings
 # =============================================================================

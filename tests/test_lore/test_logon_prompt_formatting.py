@@ -6,6 +6,7 @@ from typing import Any, Literal
 import pytest
 
 from nexus.agents.lore.logon_utility import LogonUtility
+from nexus.agents.logon.skald_wire import PresenceBaseline, PresenceRef
 
 
 PROMPTS_DIR = Path(__file__).parents[2] / "prompts"
@@ -346,8 +347,8 @@ def test_context_prompt_renders_world_knowledge_without_answer_keys(
     assert prompt.count("(older knowledge omitted)") == int(truncated)
 
 
-def test_system_prompt_includes_runtime_tag_library(monkeypatch) -> None:
-    """Storyteller prompt receives the slot's live Orrery tag library."""
+def test_system_prompt_excludes_runtime_tag_library(monkeypatch) -> None:
+    """The provider-cacheable system prompt no longer carries turn vocabulary."""
 
     monkeypatch.setattr(
         "nexus.agents.lore.logon_utility.format_tag_library_for_prompt",
@@ -364,35 +365,120 @@ def test_system_prompt_includes_runtime_tag_library(monkeypatch) -> None:
 
     prompt = LogonUtility({}, dbname="save_05")._load_system_prompt()
 
-    assert "TAG LIBRARY" in prompt
-    assert "## Test Setting" in prompt
-    assert "Setting body." in prompt
-
-
-def test_system_prompt_keeps_setting_when_tag_library_unavailable(monkeypatch) -> None:
-    """A missing Orrery registry should not block storyteller prompt loading."""
-
-    def raise_missing_registry(_dbname: str) -> str:
-        raise RuntimeError("tag_category_registry missing")
-
-    monkeypatch.setattr(
-        "nexus.agents.lore.logon_utility.format_tag_library_for_prompt",
-        raise_missing_registry,
-    )
-    monkeypatch.setattr(
-        "nexus.api.slot_utils.require_slot_dbname",
-        lambda dbname=None: dbname or "save_05",
-    )
-    monkeypatch.setattr(
-        "nexus.agents.lore.logon_utility.psycopg2.connect",
-        lambda **_kwargs: _Conn(),
-    )
-
-    prompt = LogonUtility({}, dbname="save_05")._load_system_prompt()
-
     assert "TAG LIBRARY" not in prompt
     assert "## Test Setting" in prompt
     assert "Setting body." in prompt
+
+
+def test_context_prompt_includes_contextual_tag_library(monkeypatch) -> None:
+    """Non-bootstrap turns derive vocabulary context from presence and proposals."""
+
+    captured: list[Any] = []
+
+    def _capture_context(_dbname: str, *, context: Any) -> str:
+        captured.append(context)
+        return "CONTEXTUAL LIBRARY"
+
+    monkeypatch.setattr(
+        "nexus.agents.lore.logon_utility.format_contextual_tag_library",
+        _capture_context,
+    )
+    monkeypatch.setattr(
+        "nexus.agents.lore.logon_utility.read_user_character_id",
+        lambda _dbname: 99,
+    )
+    baseline = PresenceBaseline(
+        present=[PresenceRef(kind="character", id=7, name="Mara")],
+        setting=PresenceRef(kind="place", id=12, name="The Sluice"),
+    )
+
+    prompt = LogonUtility({}, dbname="save_05")._format_context_prompt(
+        {
+            "user_input": "Continue.",
+            "metadata": {"target_chunk_id": 44},
+            "orrery_imminent_activity": [
+                {
+                    "proposal_id": "proposal-1",
+                    "state_delta": {
+                        "entity_tags.add": ["wounded"],
+                        "entity_tags_target.remove": ["off_grid"],
+                        "character.current_activity": "waiting",
+                    },
+                },
+                {
+                    "proposal_id": "proposal-2",
+                    "state_delta": {
+                        "mood.set": {"mood": "restless"},
+                    },
+                },
+            ],
+        },
+        presence_baseline=baseline,
+    )
+
+    assert "=== ORRERY TAG LIBRARY ===\nCONTEXTUAL LIBRARY" in prompt
+    assert len(captured) == 1
+    assert [
+        (reference.kind, reference.row_id)
+        for reference in captured[0].present_entity_refs
+    ] == [
+        ("character", 7),
+        ("place", 12),
+        ("character", 99),
+    ]
+    assert captured[0].proposal_tag_names == {
+        "wounded",
+        "off_grid",
+        "restless",
+    }
+    assert captured[0].has_pending_proposals is True
+    assert captured[0].anchor_chunk_id == 44
+
+
+def test_bootstrap_context_keeps_full_tag_library(monkeypatch) -> None:
+    """World-introducing bootstrap turns retain the fully described library."""
+
+    monkeypatch.setattr(
+        "nexus.agents.lore.logon_utility.format_tag_library_for_prompt",
+        lambda _dbname: "FULL TAG LIBRARY",
+    )
+    monkeypatch.setattr(
+        "nexus.agents.lore.logon_utility.format_contextual_tag_library",
+        lambda *_args, **_kwargs: pytest.fail(
+            "bootstrap must not use contextual vocabulary"
+        ),
+    )
+
+    prompt = LogonUtility({}, dbname="save_05")._format_context_prompt(
+        {
+            "user_input": "Begin.",
+            "metadata": {"is_bootstrap": True},
+        }
+    )
+
+    assert "=== ORRERY TAG LIBRARY ===\nFULL TAG LIBRARY" in prompt
+
+
+def test_contextual_false_restores_full_library(monkeypatch) -> None:
+    """The measurement-stage switch selects the original full renderer."""
+
+    monkeypatch.setattr(
+        "nexus.agents.lore.logon_utility.format_tag_library_for_prompt",
+        lambda _dbname: "FULL TAG LIBRARY",
+    )
+    monkeypatch.setattr(
+        "nexus.agents.lore.logon_utility.format_contextual_tag_library",
+        lambda *_args, **_kwargs: pytest.fail(
+            "contextual=false must use the full renderer"
+        ),
+    )
+
+    prompt = LogonUtility(
+        {"apex": {"tag_library": {"contextual": False}}},
+        dbname="save_05",
+    )._format_context_prompt({"user_input": "Continue."})
+
+    assert "=== ORRERY TAG LIBRARY ===\nFULL TAG LIBRARY" in prompt
 
 
 class _Conn:
