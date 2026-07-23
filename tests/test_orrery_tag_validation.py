@@ -1209,8 +1209,7 @@ def test_extended_openai_wire_schema_meets_description_diet_budget() -> None:
 
     assert len(undieted_bytes) - len(dieted_bytes) >= EXTENDED_SCHEMA_MIN_BYTE_SAVINGS
     assert (
-        len(undieted_tokens) - len(dieted_tokens)
-        >= EXTENDED_SCHEMA_MIN_TOKEN_SAVINGS
+        len(undieted_tokens) - len(dieted_tokens) >= EXTENDED_SCHEMA_MIN_TOKEN_SAVINGS
     )
     assert len(dieted_bytes) <= EXTENDED_SCHEMA_DIETED_MAX_BYTES
     assert set(dieted["properties"]) >= {
@@ -1234,8 +1233,11 @@ def test_extended_openai_wire_schema_meets_description_diet_budget() -> None:
         ]["description"]
     )
     assert "Earth's physical geography" in dieted["$defs"]["Coordinates"]["description"]
-    assert b"never a bare list of strings" in undieted_bytes
-    assert b"never a bare list of strings" not in dieted_bytes
+    # The pre-#557 anchor screed ("never a bare list of strings") was deleted
+    # with the dossier models; this long declaration description is the
+    # surviving proof that the diet drops overlong wire guidance.
+    assert b"drives background backstory" in undieted_bytes
+    assert b"drives background backstory" not in dieted_bytes
 
 
 def test_logon_schema_kwargs_diet_openai_and_keep_anthropic_compact() -> None:
@@ -1250,7 +1252,7 @@ def test_logon_schema_kwargs_diet_openai_and_keep_anthropic_compact() -> None:
     assert text_format["type"] == "json_schema"
     assert text_format["strict"] is True
     assert text_format["name"] == "StorytellerResponseExtended"
-    assert "never a bare list of strings" not in json.dumps(text_format["schema"])
+    assert "drives background backstory" not in json.dumps(text_format["schema"])
 
     utility._provider_wire_type = "anthropic"
     utility._validation_dbname = None
