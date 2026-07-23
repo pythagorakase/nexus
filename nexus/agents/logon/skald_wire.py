@@ -135,6 +135,16 @@ class PresenceDelta(BaseModel):
             raise ValueError("presence.exit accepts characters only")
         if any(reference.kind != "place" for reference in self.transit):
             raise ValueError("presence.transit accepts places only")
+        if self.scene_reset is not None and (self.enter or self.exit):
+            raise ValueError("scene_reset cannot be combined with enter or exit")
+        enter_names = {reference.name.casefold() for reference in self.enter}
+        exit_names = {reference.name.casefold() for reference in self.exit}
+        overlap = enter_names & exit_names
+        if overlap:
+            raise ValueError(
+                "presence cannot enter and exit the same character: "
+                + ", ".join(sorted(overlap))
+            )
         return self
 
     model_config = ConfigDict(extra="forbid")
@@ -190,6 +200,23 @@ class CharacterUpdateDelta(BaseModel):
         description="Registered tags to clear.",
     )
 
+    @model_validator(mode="after")
+    def validate_substantive_update(self) -> "CharacterUpdateDelta":
+        """Reject identity-only character update arms."""
+
+        if not any(
+            (
+                self.activity,
+                self.location is not None,
+                self.emotional_state,
+                self.observations,
+                self.tags_add,
+                self.tags_clear,
+            )
+        ):
+            raise ValueError("character update requires a substantive field")
+        return self
+
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
 
@@ -212,6 +239,21 @@ class PlaceUpdateDelta(BaseModel):
         default=None,
         description="Registered tags to clear.",
     )
+
+    @model_validator(mode="after")
+    def validate_substantive_update(self) -> "PlaceUpdateDelta":
+        """Reject identity-only place update arms."""
+
+        if not any(
+            (
+                self.condition,
+                self.notable_change,
+                self.tags_add,
+                self.tags_clear,
+            )
+        ):
+            raise ValueError("place update requires a substantive field")
+        return self
 
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
@@ -243,6 +285,15 @@ class FactionUpdateDelta(BaseModel):
 
         if (self.stance_toward is None) != (self.stance is None):
             raise ValueError("stance_toward and stance must travel together")
+        if not any(
+            (
+                self.action,
+                self.stance_toward and self.stance,
+                self.tags_add,
+                self.tags_clear,
+            )
+        ):
+            raise ValueError("faction update requires a substantive field")
         return self
 
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
@@ -273,6 +324,21 @@ class RelationshipUpdateDelta(BaseModel):
         default=None,
         description="Recent relationship events.",
     )
+
+    @model_validator(mode="after")
+    def validate_substantive_update(self) -> "RelationshipUpdateDelta":
+        """Reject identity-only relationship update arms."""
+
+        if not any(
+            (
+                self.type is not None,
+                self.valence is not None,
+                self.dynamic,
+                self.recent_events,
+            )
+        ):
+            raise ValueError("relationship update requires a substantive field")
+        return self
 
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 

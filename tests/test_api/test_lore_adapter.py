@@ -2,6 +2,7 @@
 
 from nexus.agents.logon.apex_schema import (
     ReferencedEntities,
+    StateUpdates,
     StorytellerResponseExtended,
 )
 from nexus.api.lore_adapter import response_to_incubator
@@ -135,3 +136,97 @@ def test_response_to_incubator_threads_generation_model_verbatim() -> None:
         session_id="session-stamped-model",
     )
     assert stamped["generation_model"] == "gpt-5.6-terra"
+
+
+def test_response_to_incubator_preserves_full_canonical_state_updates() -> None:
+    """Every hydrated v2 state field survives the incubator boundary."""
+
+    response = StorytellerResponseExtended(
+        narrative="The drowned bell sounds beneath the archive.",
+        choices=["Descend.", "Seal the stair."],
+        state_updates={
+            "characters": [
+                {
+                    "character_name": "Brena Tideloft",
+                    "current_location": 41,
+                    "current_activity": "tracking the drowned clerk",
+                    "emotional_state": "alert but composed",
+                    "extra_observations": [
+                        {"key": "clue", "value": "heard the drowned bell"}
+                    ],
+                    "orrery_tags": {
+                        "applied_tags": ["perceptive"],
+                        "tags_to_clear": ["resting"],
+                    },
+                }
+            ],
+            "locations": [
+                {
+                    "place_name": "The Lower Sluice",
+                    "current_conditions": "Floodwater is rising.",
+                    "notable_changes": ["The archive bell rings underwater."],
+                    "orrery_tags": {
+                        "applied_tags": ["hazardous"],
+                        "tags_to_clear": ["sheltered"],
+                    },
+                }
+            ],
+            "factions": [
+                {
+                    "faction_name": "The Sluice Guild",
+                    "recent_actions": ["Sealed the eastern lock."],
+                    "stance_changes": [
+                        {
+                            "target": "Brena Tideloft",
+                            "stance": "watchful cooperation",
+                        }
+                    ],
+                    "orrery_tags": {
+                        "applied_tags": ["mobilized"],
+                        "tags_to_clear": ["dormant"],
+                    },
+                }
+            ],
+            "relationships": [
+                {
+                    "character1_name": "Brena Tideloft",
+                    "character2_name": "Odile",
+                    "relationship_type": "ally",
+                    "emotional_valence": "+2|friendly",
+                    "dynamic": "Trust sharpened by shared danger.",
+                    "recent_events": "Odile stayed behind at the eastern lock.",
+                }
+            ],
+        },
+    )
+
+    incubator = response_to_incubator(
+        response=response,
+        parent_chunk_id=9,
+        user_text="Follow the sound.",
+        session_id="rich-state-roundtrip",
+    )
+    payload = incubator["entity_updates"]
+
+    character = payload["characters"][0]
+    assert character["extra_observations"] == [
+        {"key": "clue", "value": "heard the drowned bell"}
+    ]
+    assert character["orrery_tags"]["applied_tags"] == ["perceptive"]
+    place = payload["locations"][0]
+    assert place["current_conditions"] == "Floodwater is rising."
+    assert place["notable_changes"] == ["The archive bell rings underwater."]
+    faction = payload["factions"][0]
+    assert faction["recent_actions"] == ["Sealed the eastern lock."]
+    assert faction["stance_changes"] == [
+        {"target": "Brena Tideloft", "stance": "watchful cooperation"}
+    ]
+    assert faction["orrery_tags"]["tags_to_clear"] == ["dormant"]
+    relationship = payload["relationships"][0]
+    assert relationship["relationship_type"] == "ally"
+    assert relationship["emotional_valence"] == "+2|friendly"
+    assert relationship["recent_events"] == (
+        "Odile stayed behind at the eastern lock."
+    )
+
+    assert StateUpdates(**payload) == response.state_updates

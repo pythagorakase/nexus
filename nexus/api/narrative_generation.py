@@ -390,7 +390,7 @@ async def generate_bootstrap_narrative(
         # global_variables.user_character → characters.current_location → places.id
         # Note: atmosphere is stored in extra_data JSONB
         cur.execute(
-            """SELECT p.name, p.summary, p.history, p.current_status, p.secrets,
+            """SELECT p.id, p.name, p.summary, p.history, p.current_status, p.secrets,
                       p.inhabitants,
                       p.extra_data->>'atmosphere' as atmosphere,
                       p.extra_data
@@ -400,7 +400,12 @@ async def generate_bootstrap_narrative(
                WHERE g.id = true"""
         )
         place_row = cur.fetchone()
-        location_name = place_row["name"] if place_row else "Unknown Location"
+        if not place_row:
+            raise ValueError(
+                "No starting location found for the bootstrap protagonist"
+            )
+        location_id = place_row["id"]
+        location_name = place_row["name"]
         location_summary = place_row.get("summary", "") if place_row else ""
         location_atmosphere = place_row.get("atmosphere", "") if place_row else ""
         location_history = place_row.get("history", "") if place_row else ""
@@ -515,7 +520,13 @@ async def generate_bootstrap_narrative(
                 if character_id
                 else []
             ),
-            "places": [],
+            "places": [
+                {
+                    "place_id": location_id,
+                    "place_name": location_name,
+                    "reference_type": "setting",
+                }
+            ],
             "factions": [],
         },
         "orrery_adjudications": [],

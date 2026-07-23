@@ -8,7 +8,7 @@ Handles conversion between structured Pydantic models and database JSONB fields.
 
 import logging
 from typing import Dict, Any, Optional, List
-from nexus.agents.logon.apex_schema import StoryTurnResponse
+from nexus.agents.logon.apex_schema import StateUpdates, StoryTurnResponse
 from nexus.api.choice_handling import (
     ChoiceObject,
     normalize_choice_object,
@@ -253,54 +253,10 @@ def extract_metadata_updates(response: StoryTurnResponse) -> Dict[str, Any]:
 
 
 def extract_entity_updates(response: StoryTurnResponse) -> Dict[str, Any]:
-    """
-    Extract entity state updates from the response.
+    """Serialize the complete canonical state-update contract for commit."""
 
-    Includes character emotional states, location statuses, and faction activities.
-    """
-    entity_updates = {"characters": [], "locations": [], "factions": []}
-
-    if hasattr(response, "state_updates") and response.state_updates:
-        # Extract character updates
-        if hasattr(response.state_updates, "characters"):
-            for char in response.state_updates.characters:
-                update = {"character_id": char.character_id}
-
-                # Only include fields that are actually set
-                if hasattr(char, "character_name") and char.character_name:
-                    update["character_name"] = char.character_name
-                if hasattr(char, "emotional_state") and char.emotional_state:
-                    update["emotional_state"] = char.emotional_state
-                if hasattr(char, "current_activity") and char.current_activity:
-                    update["current_activity"] = char.current_activity
-                if hasattr(char, "current_location") and char.current_location:
-                    update["current_location"] = char.current_location
-
-                entity_updates["characters"].append(update)
-
-        # Extract location updates
-        if hasattr(response.state_updates, "locations"):
-            for loc in response.state_updates.locations:
-                update = {"place_id": loc.place_id}
-
-                if hasattr(loc, "place_name") and loc.place_name:
-                    update["place_name"] = loc.place_name
-                if hasattr(loc, "current_status") and loc.current_status:
-                    update["current_status"] = loc.current_status
-
-                entity_updates["locations"].append(update)
-
-        # Extract faction updates
-        if hasattr(response.state_updates, "factions"):
-            for faction in response.state_updates.factions:
-                update = {"faction_id": faction.faction_id}
-
-                if hasattr(faction, "faction_name") and faction.faction_name:
-                    update["faction_name"] = faction.faction_name
-
-                entity_updates["factions"].append(update)
-
-    return entity_updates
+    state_updates = getattr(response, "state_updates", None) or StateUpdates()
+    return state_updates.model_dump(mode="json", exclude_none=True)
 
 
 def extract_reference_updates(response: StoryTurnResponse) -> Dict[str, Any]:

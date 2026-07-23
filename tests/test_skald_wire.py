@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 from typing import Any, cast, get_args
 
 import psycopg2
@@ -492,6 +493,79 @@ def test_presence_rejects_ontology_invalid_kinds(
         SkaldTurnWire.model_validate({**SPARSE_WIRE_PAYLOAD, "presence": presence})
 
 
+@pytest.mark.parametrize("roster_operation", ["enter", "exit"])
+def test_scene_reset_rejects_roster_operations(roster_operation: str) -> None:
+    with pytest.raises(
+        ValidationError,
+        match="scene_reset cannot be combined with enter or exit",
+    ):
+        SkaldTurnWire.model_validate(
+            {
+                **SPARSE_WIRE_PAYLOAD,
+                "presence": {
+                    "scene_reset": {
+                        "place": {"kind": "place", "name": "Archive"},
+                        "present": [],
+                    },
+                    roster_operation: [
+                        {"kind": "character", "name": "Brena Tideloft"}
+                    ],
+                },
+            }
+        )
+
+
+def test_presence_rejects_same_name_in_enter_and_exit_casefolded() -> None:
+    with pytest.raises(
+        ValidationError,
+        match="presence cannot enter and exit the same character",
+    ):
+        SkaldTurnWire.model_validate(
+            {
+                **SPARSE_WIRE_PAYLOAD,
+                "presence": {
+                    "enter": [{"kind": "character", "name": "Brena Tideloft"}],
+                    "exit": [{"kind": "character", "name": "BRENA TIDELOFT"}],
+                },
+            }
+        )
+
+
+@pytest.mark.parametrize(
+    ("update", "message"),
+    [
+        (
+            {"kind": "character", "name": "Brena Tideloft"},
+            "character update requires a substantive field",
+        ),
+        (
+            {"kind": "place", "name": "The Lower Sluice"},
+            "place update requires a substantive field",
+        ),
+        (
+            {"kind": "faction", "name": "The Sluice Guild"},
+            "faction update requires a substantive field",
+        ),
+        (
+            {
+                "kind": "relationship",
+                "name": "Brena Tideloft",
+                "other_name": "Odile",
+            },
+            "relationship update requires a substantive field",
+        ),
+    ],
+)
+def test_update_arms_require_substantive_fields(
+    update: dict[str, Any],
+    message: str,
+) -> None:
+    with pytest.raises(ValidationError, match=message):
+        SkaldTurnWire.model_validate(
+            {**SPARSE_WIRE_PAYLOAD, "updates": [update]}
+        )
+
+
 def test_faction_stance_fields_must_travel_together() -> None:
     with pytest.raises(
         ValidationError,
@@ -751,6 +825,35 @@ def test_bootstrap_schema_selection_and_contract_are_unchanged() -> None:
     ]
     assert text_format["name"] == "StorytellerResponseBootstrap"
     assert set(text_format["schema"]["properties"]) == {"narrative", "choices"}
+
+
+def test_non_bootstrap_logon_requires_parent_chunk_id() -> None:
+    utility = LogonUtility({}, dbname="save_05")
+    with pytest.raises(
+        ValueError,
+        match="requires metadata.target_chunk_id",
+    ):
+        utility._read_presence_baseline_for_context({}, SkaldTurnWire)
+
+
+@pytest.mark.asyncio
+async def test_async_non_bootstrap_logon_requires_parent_chunk_id() -> None:
+    utility = LogonUtility({}, dbname="save_05")
+    with pytest.raises(
+        ValueError,
+        match="requires metadata.target_chunk_id",
+    ):
+        await utility._read_presence_baseline_for_context_async({}, SkaldTurnWire)
+
+
+def test_storyteller_prompt_defines_reset_and_world_layer_semantics() -> None:
+    prompt = (
+        Path(__file__).parents[1] / "prompts" / "storyteller_core.md"
+    ).read_text()
+    assert "on a reset, list the full roster instead of `enter` / `exit`" in prompt
+    assert "A flashback is a scene set in the past" in prompt
+    assert "atemporal means dreams or time-abnormal realms" in prompt
+    assert "extradiegetic means the user addressing out-of-game" in prompt
 
 
 def test_sync_logon_reads_and_supplies_parent_baseline(

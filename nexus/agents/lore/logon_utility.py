@@ -604,7 +604,9 @@ class LogonUtility:
             return None
         parent_chunk_id = self._parent_chunk_id(context_payload)
         if parent_chunk_id is None:
-            return None
+            raise ValueError(
+                "Non-bootstrap narrative context requires metadata.target_chunk_id"
+            )
         if self.dbname is None:
             raise RuntimeError("Presence hydration requires a slot database")
         return read_presence_baseline(self.dbname, parent_chunk_id)
@@ -620,7 +622,9 @@ class LogonUtility:
             return None
         parent_chunk_id = self._parent_chunk_id(context_payload)
         if parent_chunk_id is None:
-            return None
+            raise ValueError(
+                "Non-bootstrap narrative context requires metadata.target_chunk_id"
+            )
         if self.dbname is None:
             raise RuntimeError("Presence hydration requires a slot database")
         return await read_presence_baseline_async(self.dbname, parent_chunk_id)

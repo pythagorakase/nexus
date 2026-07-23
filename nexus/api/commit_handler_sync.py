@@ -210,6 +210,77 @@ def resolve_faction_references_sync(
     return resolved_refs
 
 
+def _require_state_update_id_sync(
+    conn,
+    *,
+    kind: str,
+    table: str,
+    current_id: Optional[int],
+    name: Optional[str],
+) -> int:
+    """Resolve one synchronous state-update identity or fail the transaction."""
+
+    if current_id is not None:
+        return current_id
+    if not name:
+        raise ValueError(f"{kind} state update requires an id or name")
+    with conn.cursor() as cur:
+        cur.execute(f"SELECT id FROM {table} WHERE name = %s", (name,))
+        row = cur.fetchone()
+    if row is None:
+        raise ValueError(f"Unresolved {kind} state update name {name!r}")
+    return _row_value(row, "id", 0)
+
+
+def resolve_state_update_ids_sync(
+    conn,
+    state_updates: StateUpdates,
+) -> StateUpdates:
+    """Resolve all name-addressed state updates to canonical database IDs."""
+
+    resolved = state_updates.model_copy(deep=True)
+    for update in resolved.characters:
+        update.character_id = _require_state_update_id_sync(
+            conn,
+            kind="character",
+            table="characters",
+            current_id=update.character_id,
+            name=update.character_name,
+        )
+    for update in resolved.locations:
+        update.place_id = _require_state_update_id_sync(
+            conn,
+            kind="place",
+            table="places",
+            current_id=update.place_id,
+            name=update.place_name,
+        )
+    for update in resolved.factions:
+        update.faction_id = _require_state_update_id_sync(
+            conn,
+            kind="faction",
+            table="factions",
+            current_id=update.faction_id,
+            name=update.faction_name,
+        )
+    for update in resolved.relationships:
+        update.character1_id = _require_state_update_id_sync(
+            conn,
+            kind="relationship character1",
+            table="characters",
+            current_id=update.character1_id,
+            name=update.character1_name,
+        )
+        update.character2_id = _require_state_update_id_sync(
+            conn,
+            kind="relationship character2",
+            table="characters",
+            current_id=update.character2_id,
+            name=update.character2_name,
+        )
+    return resolved
+
+
 # ============================================================================
 # Main Synchronous Commit Function
 # ============================================================================
@@ -228,6 +299,7 @@ def commit_incubator_to_database_sync(
     """
     summary_tasks: List[SummaryTask] = []
     chunk_id: Optional[int] = None
+    state_updates: Optional[StateUpdates] = None
 
     try:
         # Start transaction
@@ -383,6 +455,11 @@ def commit_incubator_to_database_sync(
             )
             place_refs = resolve_place_references_sync(ref_entities.places, conn)
             faction_refs = resolve_faction_references_sync(ref_entities.factions, conn)
+            if incubator.get("entity_updates"):
+                state_updates = resolve_state_update_ids_sync(
+                    conn,
+                    StateUpdates(**incubator["entity_updates"]),
+                )
 
             # Step 7: Insert chunk metadata
             with conn.cursor() as cur:
@@ -476,8 +553,7 @@ def commit_incubator_to_database_sync(
                     )
 
             # Step 9: Update entity states (if provided)
-            if incubator.get("entity_updates"):
-                state_updates = StateUpdates(**incubator["entity_updates"])
+            if state_updates is not None:
                 apply_state_updates_sync(conn, state_updates, source_chunk_id=chunk_id)
 
             # Step 9.5: Commit Orrery proposal inside the accepted-chunk transaction
@@ -589,74 +665,75 @@ def apply_state_updates_sync(
     with conn.cursor() as cur:
         # Update character states
         for char_update in state_updates.characters:
-            if char_update.character_id:
-                updates: List[str] = []
-                params: List[Any] = []
-                written_fields: List[tuple[str, Any]] = []
+            if char_update.character_id is None:
+                raise ValueError("Character state update was not resolved before apply")
+            updates: List[str] = []
+            params: List[Any] = []
+            written_fields: List[tuple[str, Any]] = []
 
-                if char_update.emotional_state:
-                    updates.append("emotional_state = %s")
-                    params.append(char_update.emotional_state)
-                    written_fields.append(
-                        ("characters.emotional_state", char_update.emotional_state)
-                    )
+            if char_update.emotional_state:
+                updates.append("emotional_state = %s")
+                params.append(char_update.emotional_state)
+                written_fields.append(
+                    ("characters.emotional_state", char_update.emotional_state)
+                )
 
-                if char_update.current_activity:
-                    updates.append("current_activity = %s")
-                    params.append(char_update.current_activity)
-                    written_fields.append(
-                        ("characters.current_activity", char_update.current_activity)
-                    )
+            if char_update.current_activity:
+                updates.append("current_activity = %s")
+                params.append(char_update.current_activity)
+                written_fields.append(
+                    ("characters.current_activity", char_update.current_activity)
+                )
 
-                if char_update.current_location:
-                    updates.append("current_location = %s")
-                    params.append(char_update.current_location)
-                    written_fields.append(
-                        ("characters.current_location", char_update.current_location)
-                    )
+            if char_update.current_location:
+                updates.append("current_location = %s")
+                params.append(char_update.current_location)
+                written_fields.append(
+                    ("characters.current_location", char_update.current_location)
+                )
 
-                if updates:
-                    params.append(char_update.character_id)
+            if updates:
+                params.append(char_update.character_id)
+                cur.execute(
+                    f"UPDATE characters SET {', '.join(updates)} WHERE id = %s",
+                    params,
+                )
+                logger.info(f"Updated character {char_update.character_id}")
+                if source_chunk_id is not None:
                     cur.execute(
-                        f"UPDATE characters SET {', '.join(updates)} WHERE id = %s",
-                        params,
+                        "SELECT entity_id FROM characters WHERE id = %s",
+                        (char_update.character_id,),
                     )
-                    logger.info(f"Updated character {char_update.character_id}")
-                    if source_chunk_id is not None:
-                        cur.execute(
-                            "SELECT entity_id FROM characters WHERE id = %s",
-                            (char_update.character_id,),
+                    row = cur.fetchone()
+                    char_entity_id = _row_value(row, "entity_id", 0) if row else None
+                    for field, value in written_fields:
+                        log_state_delta_sync(
+                            cur,
+                            source_chunk_id=source_chunk_id,
+                            writer="skald_state_update",
+                            entity_id=char_entity_id,
+                            field=field,
+                            new_value=value,
                         )
-                        row = cur.fetchone()
-                        char_entity_id = (
-                            _row_value(row, "entity_id", 0) if row else None
-                        )
-                        for field, value in written_fields:
-                            log_state_delta_sync(
-                                cur,
-                                source_chunk_id=source_chunk_id,
-                                writer="skald_state_update",
-                                entity_id=char_entity_id,
-                                field=field,
-                                new_value=value,
-                            )
 
-                bestowal = getattr(char_update, "orrery_tags", None)
-                if char_update.character_id and bestowal is not None:
-                    _apply_state_tags(
-                        cur,
-                        kind="character",
-                        subtype_table="characters",
-                        subtype_id=char_update.character_id,
-                        bestowal=bestowal,
-                        source_chunk_id=source_chunk_id,
-                    )
+            bestowal = getattr(char_update, "orrery_tags", None)
+            if bestowal is not None:
+                _apply_state_tags(
+                    cur,
+                    kind="character",
+                    subtype_table="characters",
+                    subtype_id=char_update.character_id,
+                    bestowal=bestowal,
+                    source_chunk_id=source_chunk_id,
+                )
 
         # Update place states. The schema field is current_conditions
         # (LocationStateUpdate); it persists to the places.current_status
         # column (M9 gate finding: the old attribute read crashed commits).
         for place_update in state_updates.locations:
-            if place_update.place_id and place_update.current_conditions:
+            if place_update.place_id is None:
+                raise ValueError("Place state update was not resolved before apply")
+            if place_update.current_conditions:
                 cur.execute(
                     "UPDATE places SET current_status = %s WHERE id = %s",
                     (place_update.current_conditions, place_update.place_id),
@@ -678,7 +755,7 @@ def apply_state_updates_sync(
                     )
 
             bestowal = getattr(place_update, "orrery_tags", None)
-            if place_update.place_id and bestowal is not None:
+            if bestowal is not None:
                 _apply_state_tags(
                     cur,
                     kind="place",
@@ -690,8 +767,10 @@ def apply_state_updates_sync(
 
         # Update faction states
         for faction_update in state_updates.factions:
+            if faction_update.faction_id is None:
+                raise ValueError("Faction state update was not resolved before apply")
             bestowal = getattr(faction_update, "orrery_tags", None)
-            if faction_update.faction_id and bestowal is not None:
+            if bestowal is not None:
                 _apply_state_tags(
                     cur,
                     kind="faction",
@@ -699,6 +778,43 @@ def apply_state_updates_sync(
                     subtype_id=faction_update.faction_id,
                     bestowal=bestowal,
                     source_chunk_id=source_chunk_id,
+                )
+
+        for relationship_update in state_updates.relationships:
+            if (
+                relationship_update.character1_id is None
+                or relationship_update.character2_id is None
+            ):
+                raise ValueError(
+                    "Relationship state update was not resolved before apply"
+                )
+            updates = []
+            params = []
+            relationship_fields = (
+                ("relationship_type", relationship_update.relationship_type),
+                ("emotional_valence", relationship_update.emotional_valence),
+                ("dynamic", relationship_update.dynamic),
+                ("recent_events", relationship_update.recent_events),
+            )
+            for field, value in relationship_fields:
+                if value is None:
+                    continue
+                updates.append(f"{field} = %s")
+                params.append(value.value if hasattr(value, "value") else value)
+            if updates:
+                params.extend(
+                    [
+                        relationship_update.character1_id,
+                        relationship_update.character2_id,
+                    ]
+                )
+                cur.execute(
+                    f"""
+                    UPDATE character_relationships
+                    SET {', '.join(updates)}
+                    WHERE character1_id = %s AND character2_id = %s
+                    """,
+                    params,
                 )
 
 
