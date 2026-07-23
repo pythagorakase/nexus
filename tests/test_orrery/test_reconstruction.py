@@ -76,6 +76,9 @@ def test_checkpoint_captures_every_section_and_is_idempotent() -> None:
             assert len(state["entity_tags"]) == active_tags
             assert active_tags > 0, "save_05 must carry active tags"
             assert state["characters"], "character scalars must be captured"
+            cur.execute("SELECT count(*) FROM entities")
+            assert len(state["entities"]) == cur.fetchone()[0]
+            assert all(set(row) == {"id", "is_active"} for row in state["entities"])
 
             # Idempotent per (chunk, label): re-commit of the same tick
             # cannot duplicate the snapshot.

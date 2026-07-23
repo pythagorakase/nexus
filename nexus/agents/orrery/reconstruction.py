@@ -91,6 +91,10 @@ def interval_checkpoint_due(*, playable_ordinal: int, interval: int) -> bool:
 # Order is presentation-only; each section is captured atomically inside the
 # caller's transaction.
 CHECKPOINT_SECTIONS: dict[str, str] = {
+    "entities": (
+        "SELECT coalesce(jsonb_agg(to_jsonb(t)), '[]'::jsonb) "
+        "FROM (SELECT id, is_active FROM entities) t"
+    ),
     "entity_tags": (
         "SELECT coalesce(jsonb_agg(to_jsonb(t)), '[]'::jsonb) "
         "FROM (SELECT * FROM entity_tags WHERE cleared_at IS NULL) t"

@@ -4,6 +4,10 @@ Reconstructs the mutable world-state surface at an arbitrary chunk N from
 the artifacts the write side (migrations 064/065, ``reconstruction.py``)
 produces. Sections and their replay sources:
 
+- ``entities`` activity — forward from the base checkpoint. Entity rows born
+  inside the window are seeded with the schema's ``is_active=true`` default;
+  any later activity change without replayable provenance deliberately
+  surfaces as verification drift.
 - ``characters`` / ``places`` scalars — forward from the base checkpoint:
   ``state_delta_log`` rows (Skald, applied first within a chunk), then
   ``orrery_resolutions.state_delta`` keys ``character.current_activity``
@@ -458,6 +462,7 @@ class _Replayer:
             )
         missing = set(CHECKPOINT_SECTIONS) - set(state)
         allowed_missing = {
+            "entities",
             "character_project_states",
             "claim_awareness",
             "backstory_secrets",
@@ -468,6 +473,9 @@ class _Replayer:
                 f"Checkpoint {checkpoint_id} lacks sections "
                 f"{sorted(unexpected_missing)}"
             )
+        if "entities" in missing:
+            state["entities"] = []
+            self.missing_base_sections.add("entities")
         if "character_project_states" in missing:
             state["character_project_states"] = []
             self.missing_base_sections.add("character_project_states")
@@ -491,6 +499,13 @@ class _Replayer:
             base_checkpoint_chunk_id=base_chunk,
             state={},
         )
+        if "entities" in self.missing_base_sections:
+            result.add_note(
+                "entities",
+                "base checkpoint predates the entity-activity checkpoint "
+                "section; pre-checkpoint activity is unreproducible",
+                approximate=True,
+            )
         if "character_project_states" in self.missing_base_sections:
             result.add_note(
                 "character_project_states",
@@ -515,6 +530,7 @@ class _Replayer:
                 approximate=True,
             )
 
+        entities = {row["id"]: dict(row) for row in base_state["entities"]}
         characters = {row["id"]: dict(row) for row in base_state["characters"]}
         places = {row["id"]: dict(row) for row in base_state["places"]}
         needs = {
@@ -532,6 +548,8 @@ class _Replayer:
             project.setdefault("target_character_entity_id", None)
             project.setdefault("target_faction_entity_id", None)
 
+        if "entities" not in self.missing_base_sections:
+            self._seed_window_entity_births(entities, result)
         born_entities = self._seed_window_births(characters, places, result)
         character_entities = {
             row["entity_id"]
@@ -580,6 +598,14 @@ class _Replayer:
         for section, working in tag_workings.items():
             result.state[section] = sorted(working.values(), key=lambda r: r["id"])
 
+        result.state["entities"] = sorted(entities.values(), key=lambda r: r["id"])
+        if "entities" not in self.missing_base_sections:
+            result.add_note(
+                "entities",
+                "checkpoint-forward activity; an unledgered is_active change "
+                "surfaces as verification drift",
+                approximate=False,
+            )
         result.state["characters"] = sorted(characters.values(), key=lambda r: r["id"])
         result.state["places"] = sorted(places.values(), key=lambda r: r["id"])
         result.state["character_need_states"] = [
@@ -1005,6 +1031,40 @@ class _Replayer:
             },
         )
         return [_row_value(row, 0) for row in self.cur.fetchall()]
+
+    def _seed_window_entity_births(
+        self,
+        entities: dict[int, dict[str, Any]],
+        result: ReplayResult,
+    ) -> None:
+        """Seed entity-spine rows born after the base checkpoint.
+
+        ``entities.is_active`` has a NOT NULL ``true`` schema default, and
+        every in-repo entity creator relies on it. Starting window-born rows
+        at that value preserves their exact initial activity without copying
+        a possibly later live value. A deactivation with no replay evidence
+        therefore remains visible to checkpoint verification.
+        """
+
+        self.cur.execute(
+            "SELECT id, created_at FROM entities WHERE created_at <= %s",
+            (self.target_created_at,),
+        )
+        births = 0
+        for entity_id, created_at in self.cur.fetchall():
+            if entity_id in entities:
+                continue
+            entities[entity_id] = {"id": entity_id, "is_active": True}
+            births += 1
+            if created_at == self.target_created_at:
+                result.uncertain_rows.add(("entities", str(entity_id)))
+        if births:
+            result.add_note(
+                "entities",
+                f"{births} row(s) born in the window; activity seeded from "
+                "the entities.is_active=true schema default",
+                approximate=False,
+            )
 
     def _seed_window_births(
         self,
@@ -2431,6 +2491,7 @@ def _section_key_fn(section: str) -> Any:
 def _load_checkpoint_state(cur: Any, checkpoint_id: int) -> dict[str, Any]:
     cur.execute("SELECT state FROM state_checkpoints WHERE id = %s", (checkpoint_id,))
     state = _as_document(_row_value(cur.fetchone(), 0))
+    state.setdefault("entities", [])
     state.setdefault("character_project_states", [])
     state.setdefault("claim_awareness", [])
     state.setdefault("backstory_secrets", [])
@@ -2508,6 +2569,16 @@ def verify_checkpoints_sync(cur: Any) -> list[CheckpointPairVerdict]:
                             "same-chunk captures compared directly "
                             "(stored vs stored)"
                         ],
+                        **(
+                            {
+                                "entities": [
+                                    "checkpoint predates the entity-activity "
+                                    "section; comparison skipped"
+                                ]
+                            }
+                            if "entities" in missing_sections
+                            else {}
+                        ),
                         **(
                             {
                                 "claim_awareness": [

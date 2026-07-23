@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS state_checkpoints (
 );
 
 COMMENT ON TABLE state_checkpoints IS
-    'Point-in-time JSONB snapshots of the mutable world-state surface (tags, pair tags, character scalars, relationships, needs, travel, routine anchors, faction memberships). Auto-taken every [orrery.reconstruction] checkpoint_interval_chunks accepted chunks; "genesis" marks the instrumentation-era boundary for slots older than migration 065.';
+    'Point-in-time JSONB snapshots of the mutable world-state surface (entity activity, tags, pair tags, character scalars, relationships, needs, travel, routine anchors, faction memberships). Auto-taken every [orrery.reconstruction] checkpoint_interval_chunks accepted chunks; "genesis" marks the instrumentation-era boundary for slots older than migration 065.';
 COMMENT ON COLUMN state_checkpoints.chunk_id IS
     'Head chunk at snapshot time; NULL only for empty slots checkpointed before any chunk exists.';
 
@@ -142,6 +142,7 @@ SELECT
     (SELECT max(id) FROM narrative_chunks),
     'genesis',
     jsonb_build_object(
+        'entities', (SELECT coalesce(jsonb_agg(to_jsonb(t)), '[]'::jsonb) FROM (SELECT id, is_active FROM entities) t),
         'entity_tags', (SELECT coalesce(jsonb_agg(to_jsonb(t)), '[]'::jsonb) FROM (SELECT * FROM entity_tags WHERE cleared_at IS NULL) t),
         'entity_pair_tags', (SELECT coalesce(jsonb_agg(to_jsonb(t)), '[]'::jsonb) FROM (SELECT * FROM entity_pair_tags WHERE cleared_at IS NULL) t),
         'characters', (SELECT coalesce(jsonb_agg(to_jsonb(t)), '[]'::jsonb) FROM (SELECT id, entity_id, current_location, current_activity, emotional_state FROM characters) t),

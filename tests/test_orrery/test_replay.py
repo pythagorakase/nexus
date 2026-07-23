@@ -723,6 +723,96 @@ def test_verify_catches_unledgered_scalar_drift() -> None:
         conn.close()
 
 
+def test_verify_catches_unledgered_entity_deactivation() -> None:
+    """A missed activity replay produces an exact entity-section drift."""
+
+    conn = _connect()
+    try:
+        with conn.cursor() as cur:
+            head = _head_chunk(cur)
+            _, entity_id, _, _ = _probe_character(cur)
+            base_id = capture_state_checkpoint_sync(cur, chunk_id=head, label="manual")
+            assert base_id is not None
+            probe_chunk = _fabricate_chunk(
+                cur,
+                None,
+                created_offset_minutes=1,
+            )
+
+            cur.execute(
+                "UPDATE entities SET is_active = false WHERE id = %s",
+                (entity_id,),
+            )
+            target_id = capture_state_checkpoint_sync(
+                cur, chunk_id=probe_chunk, label="manual"
+            )
+            assert target_id is not None
+
+            verdicts = verify_checkpoints_sync(cur)
+            verdict = next(
+                item
+                for item in verdicts
+                if item.base_checkpoint_id == base_id
+                and item.target_checkpoint_id == target_id
+            )
+            assert any(
+                drift.section == "entities"
+                and drift.row_key == str(entity_id)
+                and drift.column == "is_active"
+                and drift.kind == "value"
+                and drift.expected is False
+                and drift.actual is True
+                for drift in verdict.drifts
+            ), f"verify must catch the un-ledgered deactivation; got {verdict.drifts}"
+    finally:
+        conn.rollback()
+        conn.close()
+
+
+def test_verify_skips_legacy_checkpoint_without_entity_activity() -> None:
+    """Pre-section checkpoint documents remain an explicit skip boundary."""
+
+    conn = _connect()
+    try:
+        with conn.cursor() as cur:
+            head = _head_chunk(cur)
+            base_id = capture_state_checkpoint_sync(cur, chunk_id=head, label="manual")
+            assert base_id is not None
+            cur.execute(
+                "UPDATE state_checkpoints SET state = state - 'entities' "
+                "WHERE id = %s",
+                (base_id,),
+            )
+            probe_chunk = _fabricate_chunk(
+                cur,
+                None,
+                created_offset_minutes=1,
+            )
+            target_id = capture_state_checkpoint_sync(
+                cur, chunk_id=probe_chunk, label="manual"
+            )
+            assert target_id is not None
+
+            verdicts = verify_checkpoints_sync(cur)
+            verdict = next(
+                item
+                for item in verdicts
+                if item.base_checkpoint_id == base_id
+                and item.target_checkpoint_id == target_id
+            )
+            assert not [
+                drift for drift in verdict.drifts if drift.section == "entities"
+            ]
+            assert verdict.skipped_unreproducible >= 1
+            assert any(
+                "comparison skipped" in note
+                for note in verdict.notes.get("entities", [])
+            )
+    finally:
+        conn.rollback()
+        conn.close()
+
+
 def test_reconstruction_refuses_pre_instrumentation_chunks() -> None:
     conn = _connect()
     try:
