@@ -595,6 +595,13 @@ def test_persistence_execute_deactivates_staged_stub() -> None:
     assert death_row["status"] == "deactivated"
     assert death_row["cause_world_event_id"] == 901
     assert cur.deactivated_entity_ids == [300]
+    assert cur.entity_activity_projections == [
+        {
+            "entity_id": 300,
+            "source_chunk_id": 900,
+            "world_event_id": 901,
+        }
+    ]
 
 
 def test_persistence_death_already_inactive_is_idempotent() -> None:
@@ -731,6 +738,7 @@ class FakeRetrogradePersistenceCursor:
         }
         self.inactive_entity_ids = set(inactive_entity_ids or set())
         self.deactivated_entity_ids: list[int] = []
+        self.entity_activity_projections: list[dict[str, int]] = []
         self.inserted_character_stubs: list[str] = []
         self.statements: list[str] = []
         self.params: list[Any] = []
@@ -885,6 +893,16 @@ class FakeRetrogradePersistenceCursor:
             self.deactivated_entity_ids.append(entity_id)
             self.inactive_entity_ids.add(entity_id)
             self._result = []
+        elif "orrery:retrograde:record_entity_activity" in sql:
+            assert params is not None
+            self.entity_activity_projections.append(
+                {
+                    "entity_id": int(params[0]),
+                    "source_chunk_id": int(params[1]),
+                    "world_event_id": int(params[2]),
+                }
+            )
+            self._result = [{"id": int(params[2])}]
         elif "SELECT to_regclass" in sql:
             self._result = [{"checkpoint_table": "backstory_secrets"}]
         elif "jsonb_agg(to_jsonb(t))" in sql:
