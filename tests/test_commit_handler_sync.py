@@ -276,7 +276,9 @@ def _patch_sync_commit_runtime(monkeypatch) -> None:
     monkeypatch.setattr(
         commit_handler_sync, "set_commit_chunk_attribution_sync", lambda *_args: None
     )
-    monkeypatch.setattr(commit_handler_sync, "log_state_delta_sync", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        commit_handler_sync, "log_state_delta_sync", lambda *_a, **_k: None
+    )
     monkeypatch.setattr(commit_handler_sync, "_orrery_checkpoint_interval", lambda: 0)
 
 
@@ -331,9 +333,7 @@ def test_sync_commit_resolves_all_name_addressed_state_updates(monkeypatch):
     commit_incubator_to_database_sync(conn, "state-session", slot=5)
 
     update_statements = [
-        (sql, params)
-        for sql, params in conn.statements
-        if sql.startswith("UPDATE ")
+        (sql, params) for sql, params in conn.statements if sql.startswith("UPDATE ")
     ]
     assert any(
         sql.startswith("UPDATE characters") and params[-1] == 71
@@ -344,8 +344,7 @@ def test_sync_commit_resolves_all_name_addressed_state_updates(monkeypatch):
         for sql, params in update_statements
     )
     assert any(
-        sql.startswith("UPDATE character_relationships")
-        and params[-2:] == [71, 72]
+        sql.startswith("UPDATE character_relationships") and params[-2:] == [71, 72]
         for sql, params in update_statements
     )
     assert tag_writes[0]["subtype_id"] == 91
@@ -429,8 +428,9 @@ def test_bootstrap_commit_seeds_setting_for_next_presence_baseline(
             elif "FROM place_chunk_references" in normalized:
                 self.rows = [
                     (place_id, "Fixture Station")
-                    for place_id, recorded_chunk_id, reference_type, _evidence
-                    in conn.place_junctions
+                    for place_id, recorded_chunk_id, reference_type, _evidence in (
+                        conn.place_junctions
+                    )
                     if recorded_chunk_id == chunk_id and reference_type == "setting"
                 ]
             else:

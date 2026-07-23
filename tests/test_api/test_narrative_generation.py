@@ -104,7 +104,9 @@ async def test_lore_phase_failure_is_reported_before_adapter_coercion(
 
     error_events = [event for event in manager.events if event[1] == "error"]
     assert len(error_events) == 1
-    error_message = error_events[0][2]["error"]
+    error_data = error_events[0][2]
+    assert error_data is not None
+    error_message = error_data["error"]
     assert "TurnPhase.WARM_ANALYSIS" in error_message
     assert "FATAL: No warm slice chunks retrieved." in error_message
     assert "No narrative text in LORE response" not in error_message
@@ -196,8 +198,8 @@ async def test_bootstrap_threads_logon_model_into_incubator_payload(
         def __enter__(self) -> "BootstrapCursor":
             return self
 
-        def __exit__(self, *_args: Any) -> bool:
-            return False
+        def __exit__(self, *_args: Any) -> None:
+            return None
 
         def execute(self, query: str, params: Any = None) -> None:
             if "SELECT setting, user_character" in query:
@@ -303,8 +305,8 @@ async def test_regenerate_route_threads_incubator_parent_into_generation_task(
         def __enter__(self) -> "RegenerateCursor":
             return self
 
-        def __exit__(self, *_args: Any) -> bool:
-            return False
+        def __exit__(self, *_args: Any) -> None:
+            return None
 
         def execute(self, _sql: str) -> None:
             return None

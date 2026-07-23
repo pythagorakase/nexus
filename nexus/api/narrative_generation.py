@@ -59,7 +59,7 @@ class ProgressManager(Protocol):
     """Protocol for progress notification manager."""
 
     async def send_progress(
-        self, session_id: str, status: str, data: Dict = None
+        self, session_id: str, status: str, data: Optional[Dict] = None
     ) -> None:
         """Send progress update for a specific session."""
         ...
@@ -109,7 +109,7 @@ async def generate_narrative_async(
 
         # Get parent chunk info (or bootstrap info)
         if is_bootstrap:
-            # For bootstrap, use placeholder info - LORE will build context from global state
+            # For bootstrap, use placeholder info. LORE builds from global state.
             chunk_info = {
                 "season": 1,
                 "episode": 1,
@@ -356,7 +356,8 @@ async def generate_bootstrap_narrative(
         row = cur.fetchone()
         if not row or not row["setting"]:
             raise ValueError(
-                "No setting found in global_variables - transition may not have completed"
+                "No setting found in global_variables; "
+                "transition may not have completed"
             )
 
         setting_data = row["setting"]
@@ -401,9 +402,7 @@ async def generate_bootstrap_narrative(
         )
         place_row = cur.fetchone()
         if not place_row:
-            raise ValueError(
-                "No starting location found for the bootstrap protagonist"
-            )
+            raise ValueError("No starting location found for the bootstrap protagonist")
         location_id = place_row["id"]
         location_name = place_row["name"]
         location_summary = place_row.get("summary", "") if place_row else ""
@@ -505,7 +504,8 @@ async def generate_bootstrap_narrative(
         "choice_text": None,
         "metadata_updates": {
             "chronology": {
-                "episode_transition": "new_episode",  # Valid: continue, new_episode, new_season
+                # Valid values: continue, new_episode, new_season.
+                "episode_transition": "new_episode",
                 "time_delta_minutes": 0,
                 "time_delta_hours": None,
                 "time_delta_days": None,
@@ -536,7 +536,7 @@ async def generate_bootstrap_narrative(
     }
 
     # Extract choices if present
-    # NOTE: Key must be "presented" to match schema used by select_choice() and lore_adapter
+    # Key must be "presented" for select_choice() and lore_adapter.
     if hasattr(story_response, "choices") and story_response.choices:
         incubator_data["choice_object"] = {
             "presented": story_response.choices,

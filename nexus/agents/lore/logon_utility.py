@@ -602,13 +602,16 @@ class LogonUtility:
 
         if schema_model is not SkaldTurnWire:
             return None
+        if self.dbname is None:
+            # No slot database means a baseline is structurally unavailable
+            # (DB-less utilities in tests). Hydration still raises loudly if
+            # the response actually carries a presence block.
+            return None
         parent_chunk_id = self._parent_chunk_id(context_payload)
         if parent_chunk_id is None:
             raise ValueError(
                 "Non-bootstrap narrative context requires metadata.target_chunk_id"
             )
-        if self.dbname is None:
-            raise RuntimeError("Presence hydration requires a slot database")
         return read_presence_baseline(self.dbname, parent_chunk_id)
 
     async def _read_presence_baseline_for_context_async(
@@ -620,13 +623,16 @@ class LogonUtility:
 
         if schema_model is not SkaldTurnWire:
             return None
+        if self.dbname is None:
+            # No slot database means a baseline is structurally unavailable
+            # (DB-less utilities in tests). Hydration still raises loudly if
+            # the response actually carries a presence block.
+            return None
         parent_chunk_id = self._parent_chunk_id(context_payload)
         if parent_chunk_id is None:
             raise ValueError(
                 "Non-bootstrap narrative context requires metadata.target_chunk_id"
             )
-        if self.dbname is None:
-            raise RuntimeError("Presence hydration requires a slot database")
         return await read_presence_baseline_async(self.dbname, parent_chunk_id)
 
     @staticmethod

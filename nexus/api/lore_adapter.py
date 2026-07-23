@@ -195,7 +195,7 @@ def extract_metadata_updates(response: StoryTurnResponse) -> Dict[str, Any]:
 
     Includes chronology (time changes), world layer, and episode transitions.
     """
-    metadata_updates = {}
+    metadata_updates: Dict[str, Any] = {}
 
     metadata = getattr(response, "chunk_metadata", None) or getattr(
         response, "metadata", None
@@ -265,7 +265,11 @@ def extract_reference_updates(response: StoryTurnResponse) -> Dict[str, Any]:
 
     Tracks which characters, places, and factions are referenced or present.
     """
-    reference_updates = {"characters": [], "places": [], "factions": []}
+    reference_updates: Dict[str, List[Dict[str, Any]]] = {
+        "characters": [],
+        "places": [],
+        "factions": [],
+    }
 
     refs = getattr(response, "referenced_entities", None)
     if not refs:

@@ -275,34 +275,26 @@ async def test_async_commit_resolves_all_name_addressed_state_updates(monkeypatc
     async def empty_orrery_tick(*_args, **_kwargs):
         return _empty_orrery_result()
 
-    monkeypatch.setattr(
-        commit_handler, "set_commit_chunk_attribution_async", no_op
-    )
+    monkeypatch.setattr(commit_handler, "set_commit_chunk_attribution_async", no_op)
     monkeypatch.setattr(commit_handler, "log_state_delta_async", no_op)
-    monkeypatch.setattr(
-        commit_handler, "apply_tag_bestowal_async", record_tag_write
-    )
+    monkeypatch.setattr(commit_handler, "apply_tag_bestowal_async", record_tag_write)
     monkeypatch.setattr(commit_handler, "commit_orrery_tick_async", empty_orrery_tick)
     monkeypatch.setattr(commit_handler, "_orrery_checkpoint_interval", lambda: 0)
 
     await commit_incubator_to_database(conn, "state-session", slot=5)
 
     sql_and_args = [
-        (sql, args)
-        for sql, args in conn.statements
-        if sql.startswith("UPDATE ")
+        (sql, args) for sql, args in conn.statements if sql.startswith("UPDATE ")
     ]
     assert any(
         sql.startswith("UPDATE characters") and args[-1] == 72
         for sql, args in sql_and_args
     )
     assert any(
-        sql.startswith("UPDATE places") and args[-1] == 81
-        for sql, args in sql_and_args
+        sql.startswith("UPDATE places") and args[-1] == 81 for sql, args in sql_and_args
     )
     assert any(
-        sql.startswith("UPDATE character_relationships")
-        and args[-2:] == (72, 73)
+        sql.startswith("UPDATE character_relationships") and args[-2:] == (72, 73)
         for sql, args in sql_and_args
     )
     assert tag_writes[0]["entity_id"] == 303
@@ -331,9 +323,7 @@ async def test_async_commit_aborts_on_unresolvable_state_update_name(monkeypatch
     async def no_op(*_args, **_kwargs):
         return None
 
-    monkeypatch.setattr(
-        commit_handler, "set_commit_chunk_attribution_async", no_op
-    )
+    monkeypatch.setattr(commit_handler, "set_commit_chunk_attribution_async", no_op)
 
     with pytest.raises(
         ValueError,

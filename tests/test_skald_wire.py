@@ -507,9 +507,7 @@ def test_scene_reset_rejects_roster_operations(roster_operation: str) -> None:
                         "place": {"kind": "place", "name": "Archive"},
                         "present": [],
                     },
-                    roster_operation: [
-                        {"kind": "character", "name": "Brena Tideloft"}
-                    ],
+                    roster_operation: [{"kind": "character", "name": "Brena Tideloft"}],
                 },
             }
         )
@@ -561,9 +559,7 @@ def test_update_arms_require_substantive_fields(
     message: str,
 ) -> None:
     with pytest.raises(ValidationError, match=message):
-        SkaldTurnWire.model_validate(
-            {**SPARSE_WIRE_PAYLOAD, "updates": [update]}
-        )
+        SkaldTurnWire.model_validate({**SPARSE_WIRE_PAYLOAD, "updates": [update]})
 
 
 def test_faction_stance_fields_must_travel_together() -> None:
@@ -847,9 +843,7 @@ async def test_async_non_bootstrap_logon_requires_parent_chunk_id() -> None:
 
 
 def test_storyteller_prompt_defines_reset_and_world_layer_semantics() -> None:
-    prompt = (
-        Path(__file__).parents[1] / "prompts" / "storyteller_core.md"
-    ).read_text()
+    prompt = (Path(__file__).parents[1] / "prompts" / "storyteller_core.md").read_text()
     assert "on a reset, list the full roster instead of `enter` / `exit`" in prompt
     assert "A flashback is a scene set in the past" in prompt
     assert "atemporal means dreams or time-abnormal realms" in prompt

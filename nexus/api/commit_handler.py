@@ -131,43 +131,43 @@ async def resolve_state_update_ids(
     """Resolve all name-addressed state updates to canonical database IDs."""
 
     resolved = state_updates.model_copy(deep=True)
-    for update in resolved.characters:
-        update.character_id = await _require_state_update_id(
+    for character_update in resolved.characters:
+        character_update.character_id = await _require_state_update_id(
             conn,
             kind="character",
-            current_id=update.character_id,
-            name=update.character_name,
+            current_id=character_update.character_id,
+            name=character_update.character_name,
             lookup=lookup_character_by_name,
         )
-    for update in resolved.locations:
-        update.place_id = await _require_state_update_id(
+    for location_update in resolved.locations:
+        location_update.place_id = await _require_state_update_id(
             conn,
             kind="place",
-            current_id=update.place_id,
-            name=update.place_name,
+            current_id=location_update.place_id,
+            name=location_update.place_name,
             lookup=lookup_place_by_name,
         )
-    for update in resolved.factions:
-        update.faction_id = await _require_state_update_id(
+    for faction_update in resolved.factions:
+        faction_update.faction_id = await _require_state_update_id(
             conn,
             kind="faction",
-            current_id=update.faction_id,
-            name=update.faction_name,
+            current_id=faction_update.faction_id,
+            name=faction_update.faction_name,
             lookup=lookup_faction_by_name,
         )
-    for update in resolved.relationships:
-        update.character1_id = await _require_state_update_id(
+    for relationship_update in resolved.relationships:
+        relationship_update.character1_id = await _require_state_update_id(
             conn,
             kind="relationship character1",
-            current_id=update.character1_id,
-            name=update.character1_name,
+            current_id=relationship_update.character1_id,
+            name=relationship_update.character1_name,
             lookup=lookup_character_by_name,
         )
-        update.character2_id = await _require_state_update_id(
+        relationship_update.character2_id = await _require_state_update_id(
             conn,
             kind="relationship character2",
-            current_id=update.character2_id,
-            name=update.character2_name,
+            current_id=relationship_update.character2_id,
+            name=relationship_update.character2_name,
             lookup=lookup_character_by_name,
         )
     return resolved
