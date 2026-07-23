@@ -48,6 +48,10 @@ from nexus.agents.orrery.replay import (
     verify_checkpoints_sync,
 )
 from nexus.agents.orrery.resolver import OrreryResolutionDraft
+from nexus.agents.orrery.retrograde_persistence import (
+    _deactivate_entity,
+    _record_entity_activity_projection,
+)
 from nexus.agents.orrery.substrate import ProjectPolicy
 from nexus.api.commit_handler_sync import apply_state_updates_sync
 
@@ -718,6 +722,244 @@ def test_verify_catches_unledgered_scalar_drift() -> None:
                 and d.expected == "unledgered drift probe"
                 for d in drifts
             ), f"verify must catch the un-ledgered write; got {drifts}"
+    finally:
+        conn.rollback()
+        conn.close()
+
+
+def test_verify_catches_unledgered_entity_deactivation() -> None:
+    """A missed activity replay produces an exact entity-section drift."""
+
+    conn = _connect()
+    try:
+        with conn.cursor() as cur:
+            head = _head_chunk(cur)
+            _, entity_id, _, _ = _probe_character(cur)
+            base_id = capture_state_checkpoint_sync(cur, chunk_id=head, label="manual")
+            assert base_id is not None
+            probe_chunk = _fabricate_chunk(
+                cur,
+                None,
+                created_offset_minutes=1,
+            )
+
+            cur.execute(
+                "UPDATE entities SET is_active = false WHERE id = %s",
+                (entity_id,),
+            )
+            target_id = capture_state_checkpoint_sync(
+                cur, chunk_id=probe_chunk, label="manual"
+            )
+            assert target_id is not None
+
+            verdicts = verify_checkpoints_sync(cur)
+            verdict = next(
+                item
+                for item in verdicts
+                if item.base_checkpoint_id == base_id
+                and item.target_checkpoint_id == target_id
+            )
+            assert any(
+                drift.section == "entities"
+                and drift.row_key == str(entity_id)
+                and drift.column == "is_active"
+                and drift.kind == "value"
+                and drift.expected is False
+                and drift.actual is True
+                for drift in verdict.drifts
+            ), f"verify must catch the un-ledgered deactivation; got {verdict.drifts}"
+    finally:
+        conn.rollback()
+        conn.close()
+
+
+def test_runtime_maturation_death_replays_without_drift() -> None:
+    """A ledgered maturation death is exact, not a false-positive drift."""
+
+    conn = _connect()
+    try:
+        with conn.cursor() as cur:
+            head = _head_chunk(cur)
+            base_id = capture_state_checkpoint_sync(cur, chunk_id=head, label="manual")
+            assert base_id is not None
+            source_chunk = _fabricate_chunk(
+                cur,
+                None,
+                created_offset_minutes=1,
+            )
+            target_chunk = _fabricate_chunk(
+                cur,
+                None,
+                created_offset_minutes=2,
+            )
+
+            cur.execute("INSERT INTO entities (kind) VALUES ('character') RETURNING id")
+            entity_id = int(cur.fetchone()[0])
+            cur.execute("SELECT type FROM event_types ORDER BY type LIMIT 1")
+            event_type = str(cur.fetchone()[0])
+            projection = {
+                "entity_id": entity_id,
+                "is_active": False,
+                "source_chunk_id": source_chunk,
+            }
+            cur.execute(
+                """
+                INSERT INTO world_events (
+                    event_type, tick_chunk_id, source, payload
+                ) VALUES (
+                    %s, %s, 'retrograde', %s::jsonb
+                )
+                RETURNING id
+                """,
+                (
+                    event_type,
+                    head,
+                    json.dumps(
+                        {
+                            "source": "retrograde",
+                            "retrograde_event_ref": (
+                                "maturation_job_545001_death_probe"
+                            ),
+                        }
+                    ),
+                ),
+            )
+            cause_world_event_id = int(cur.fetchone()[0])
+            cur.execute(
+                """
+                INSERT INTO world_event_entities (event_id, role, entity_id)
+                VALUES (%s, 'observer', %s)
+                """,
+                (cause_world_event_id, entity_id),
+            )
+            _deactivate_entity(cur, entity_id)
+            _record_entity_activity_projection(
+                cur,
+                world_event_id=cause_world_event_id,
+                entity_id=entity_id,
+                source_chunk_id=source_chunk,
+            )
+            # The append is idempotent for a retried entity/boundary pair.
+            _record_entity_activity_projection(
+                cur,
+                world_event_id=cause_world_event_id,
+                entity_id=entity_id,
+                source_chunk_id=source_chunk,
+            )
+            cur.execute(
+                "SELECT changed_fields, payload FROM world_events WHERE id = %s",
+                (cause_world_event_id,),
+            )
+            changed_fields, cause_payload = cur.fetchone()
+            assert changed_fields == ["entities.is_active"]
+            assert cause_payload["applied_entity_activity"] == [projection]
+            target_id = capture_state_checkpoint_sync(
+                cur, chunk_id=target_chunk, label="manual"
+            )
+            assert target_id is not None
+
+            at_target = reconstruct_state_at_sync(
+                cur, target_chunk, base_checkpoint_id=base_id
+            )
+            assert _section_row(
+                at_target.state["entities"],
+                id=entity_id,
+                is_active=False,
+            )
+
+            verdicts = verify_checkpoints_sync(cur)
+            verdict = next(
+                item
+                for item in verdicts
+                if item.base_checkpoint_id == base_id
+                and item.target_checkpoint_id == target_id
+            )
+            assert verdict.drifts == []
+            assert any(
+                "ledgered runtime-maturation" in note
+                for note in verdict.notes.get("entities", [])
+            )
+    finally:
+        conn.rollback()
+        conn.close()
+
+
+def test_verify_skips_legacy_checkpoint_without_entity_activity() -> None:
+    """Pre-section checkpoint documents remain an explicit skip boundary."""
+
+    conn = _connect()
+    try:
+        with conn.cursor() as cur:
+            head = _head_chunk(cur)
+            base_id = capture_state_checkpoint_sync(cur, chunk_id=head, label="manual")
+            assert base_id is not None
+            cur.execute(
+                "UPDATE state_checkpoints SET state = state - 'entities' "
+                "WHERE id = %s",
+                (base_id,),
+            )
+            death_chunk = _fabricate_chunk(
+                cur,
+                None,
+                created_offset_minutes=1,
+            )
+            target_chunk = _fabricate_chunk(
+                cur,
+                None,
+                created_offset_minutes=2,
+            )
+            cur.execute("INSERT INTO entities (kind) VALUES ('character') RETURNING id")
+            entity_id = int(cur.fetchone()[0])
+            cur.execute("SELECT type FROM event_types ORDER BY type LIMIT 1")
+            event_type = str(cur.fetchone()[0])
+            cur.execute(
+                """
+                INSERT INTO world_events (
+                    event_type, tick_chunk_id, source, payload
+                ) VALUES (%s, %s, 'retrograde', %s::jsonb)
+                RETURNING id
+                """,
+                (
+                    event_type,
+                    head,
+                    json.dumps(
+                        {
+                            "source": "retrograde",
+                            "retrograde_event_ref": (
+                                "maturation_job_545002_legacy_probe"
+                            ),
+                        }
+                    ),
+                ),
+            )
+            cause_world_event_id = int(cur.fetchone()[0])
+            _deactivate_entity(cur, entity_id)
+            _record_entity_activity_projection(
+                cur,
+                world_event_id=cause_world_event_id,
+                entity_id=entity_id,
+                source_chunk_id=death_chunk,
+            )
+            target_id = capture_state_checkpoint_sync(
+                cur, chunk_id=target_chunk, label="manual"
+            )
+            assert target_id is not None
+
+            verdicts = verify_checkpoints_sync(cur)
+            verdict = next(
+                item
+                for item in verdicts
+                if item.base_checkpoint_id == base_id
+                and item.target_checkpoint_id == target_id
+            )
+            assert not [
+                drift for drift in verdict.drifts if drift.section == "entities"
+            ]
+            assert verdict.skipped_unreproducible >= 1
+            assert any(
+                "comparison skipped" in note
+                for note in verdict.notes.get("entities", [])
+            )
     finally:
         conn.rollback()
         conn.close()

@@ -4,6 +4,11 @@ Reconstructs the mutable world-state surface at an arbitrary chunk N from
 the artifacts the write side (migrations 064/065, ``reconstruction.py``)
 produces. Sections and their replay sources:
 
+- ``entities`` activity — forward from the base checkpoint. Entity rows born
+  inside the window are seeded with the schema's ``is_active=true`` default;
+  runtime maturation deaths replay their exact projection from the causing
+  world event, while any activity change without replayable provenance
+  deliberately surfaces as verification drift.
 - ``characters`` / ``places`` scalars — forward from the base checkpoint:
   ``state_delta_log`` rows (Skald, applied first within a chunk), then
   ``orrery_resolutions.state_delta`` keys ``character.current_activity``
@@ -458,6 +463,7 @@ class _Replayer:
             )
         missing = set(CHECKPOINT_SECTIONS) - set(state)
         allowed_missing = {
+            "entities",
             "character_project_states",
             "claim_awareness",
             "backstory_secrets",
@@ -468,6 +474,9 @@ class _Replayer:
                 f"Checkpoint {checkpoint_id} lacks sections "
                 f"{sorted(unexpected_missing)}"
             )
+        if "entities" in missing:
+            state["entities"] = []
+            self.missing_base_sections.add("entities")
         if "character_project_states" in missing:
             state["character_project_states"] = []
             self.missing_base_sections.add("character_project_states")
@@ -491,6 +500,13 @@ class _Replayer:
             base_checkpoint_chunk_id=base_chunk,
             state={},
         )
+        if "entities" in self.missing_base_sections:
+            result.add_note(
+                "entities",
+                "base checkpoint predates the entity-activity checkpoint "
+                "section; pre-checkpoint activity is unreproducible",
+                approximate=True,
+            )
         if "character_project_states" in self.missing_base_sections:
             result.add_note(
                 "character_project_states",
@@ -515,6 +531,7 @@ class _Replayer:
                 approximate=True,
             )
 
+        entities = {row["id"]: dict(row) for row in base_state["entities"]}
         characters = {row["id"]: dict(row) for row in base_state["characters"]}
         places = {row["id"]: dict(row) for row in base_state["places"]}
         needs = {
@@ -532,6 +549,8 @@ class _Replayer:
             project.setdefault("target_character_entity_id", None)
             project.setdefault("target_faction_entity_id", None)
 
+        if "entities" not in self.missing_base_sections:
+            self._seed_window_entity_births(entities, result)
         born_entities = self._seed_window_births(characters, places, result)
         character_entities = {
             row["entity_id"]
@@ -554,6 +573,13 @@ class _Replayer:
                         projects,
                         born_entities,
                         made_applicable_at,
+                        result,
+                    )
+                if "entities" not in self.missing_base_sections:
+                    self._apply_maturation_entity_activity(
+                        chunk_id,
+                        base_chunk,
+                        entities,
                         result,
                     )
                 self._apply_maturation_project_starts(
@@ -580,6 +606,15 @@ class _Replayer:
         for section, working in tag_workings.items():
             result.state[section] = sorted(working.values(), key=lambda r: r["id"])
 
+        result.state["entities"] = sorted(entities.values(), key=lambda r: r["id"])
+        if "entities" not in self.missing_base_sections:
+            result.add_note(
+                "entities",
+                "checkpoint-forward activity with exact runtime-maturation "
+                "death projections; an unledgered is_active change surfaces "
+                "as verification drift",
+                approximate=False,
+            )
         result.state["characters"] = sorted(characters.values(), key=lambda r: r["id"])
         result.state["places"] = sorted(places.values(), key=lambda r: r["id"])
         result.state["character_need_states"] = [
@@ -975,6 +1010,9 @@ class _Replayer:
         maturation_start_window = MATURATION_PROJECT_START_WINDOW_SQL.format(
             column="tick_chunk_id"
         )
+        maturation_activity_window = MATURATION_PROJECT_START_WINDOW_SQL.format(
+            column="(activity.row ->> 'source_chunk_id')::bigint"
+        )
         self.cur.execute(
             f"""
             SELECT DISTINCT chunk_id FROM (
@@ -996,6 +1034,16 @@ class _Replayer:
                                 LIKE 'maturation_job_%%'
                         )
                       )
+                UNION
+                SELECT (activity.row ->> 'source_chunk_id')::bigint
+                FROM world_events
+                CROSS JOIN LATERAL jsonb_array_elements(
+                    payload -> 'applied_entity_activity'
+                ) WITH ORDINALITY AS activity(row, ordinal)
+                WHERE source::text = 'retrograde'
+                  AND payload ->> 'retrograde_event_ref'
+                        LIKE 'maturation_job_%%'
+                  AND {maturation_activity_window}
             ) w ORDER BY chunk_id
             """,
             {
@@ -1005,6 +1053,126 @@ class _Replayer:
             },
         )
         return [_row_value(row, 0) for row in self.cur.fetchall()]
+
+    def _apply_maturation_entity_activity(
+        self,
+        chunk_id: int,
+        base_chunk: int,
+        entities: dict[int, dict[str, Any]],
+        result: ReplayResult,
+    ) -> None:
+        """Replay exact activity flips applied by runtime maturation."""
+
+        maturation_activity_window = MATURATION_PROJECT_START_WINDOW_SQL.format(
+            column="(activity.row ->> 'source_chunk_id')::bigint"
+        )
+        self.cur.execute(
+            f"""
+            SELECT
+                world_events.id,
+                activity.row,
+                EXISTS (
+                    SELECT 1
+                    FROM world_event_entities
+                    WHERE event_id = world_events.id
+                      AND entity_id =
+                            (activity.row ->> 'entity_id')::bigint
+                ) AS entity_is_participant
+            FROM world_events
+            CROSS JOIN LATERAL jsonb_array_elements(
+                payload -> 'applied_entity_activity'
+            ) WITH ORDINALITY AS activity(row, ordinal)
+            WHERE source::text = 'retrograde'
+              AND payload ->> 'retrograde_event_ref'
+                    LIKE 'maturation_job_%%'
+              AND (activity.row ->> 'source_chunk_id')::bigint = %(chunk)s
+              AND {maturation_activity_window}
+            ORDER BY world_events.id, activity.ordinal
+            """,
+            {
+                "chunk": chunk_id,
+                "base": base_chunk,
+                "target": self.target_chunk_id,
+            },
+        )
+        applied_count = 0
+        for event_id, raw_projection, entity_is_participant in self.cur.fetchall():
+            projection = _as_document(raw_projection)
+            required = {"entity_id", "is_active", "source_chunk_id"}
+            if not isinstance(projection, dict) or set(projection) != required:
+                raise ValueError(
+                    f"Maturation world event {event_id} has an invalid applied "
+                    "entity-activity projection"
+                )
+            entity_id = projection["entity_id"]
+            source_chunk_id = projection["source_chunk_id"]
+            if type(entity_id) is not int or type(source_chunk_id) is not int:
+                raise ValueError(
+                    f"Maturation world event {event_id} activity ids must be integers"
+                )
+            if projection["is_active"] is not False:
+                raise ValueError(
+                    f"Maturation world event {event_id} activity projection "
+                    "must record is_active=false"
+                )
+            if source_chunk_id != chunk_id:
+                raise ValueError(
+                    f"Maturation world event {event_id} activity projection "
+                    f"belongs to chunk {source_chunk_id}, not {chunk_id}"
+                )
+            if not entity_is_participant:
+                raise ValueError(
+                    f"Maturation world event {event_id} activity entity "
+                    f"{entity_id} is not an event participant"
+                )
+            if entity_id not in entities:
+                raise ValueError(
+                    f"Maturation world event {event_id} deactivates missing "
+                    f"entity {entity_id}"
+                )
+            entities[entity_id]["is_active"] = False
+            applied_count += 1
+        if applied_count:
+            result.add_note(
+                "entities",
+                f"replayed {applied_count} ledgered runtime-maturation "
+                "activity projection(s)",
+                approximate=False,
+            )
+
+    def _seed_window_entity_births(
+        self,
+        entities: dict[int, dict[str, Any]],
+        result: ReplayResult,
+    ) -> None:
+        """Seed entity-spine rows born after the base checkpoint.
+
+        ``entities.is_active`` has a NOT NULL ``true`` schema default, and
+        every in-repo entity creator relies on it. Starting window-born rows
+        at that value preserves their exact initial activity without copying
+        a possibly later live value. A deactivation with no replay evidence
+        therefore remains visible to checkpoint verification.
+        """
+
+        self.cur.execute(
+            "SELECT id, created_at FROM entities WHERE created_at <= %s",
+            (self.target_created_at,),
+        )
+        births = 0
+        for entity_id, created_at in self.cur.fetchall():
+            if entity_id in entities:
+                continue
+            entities[entity_id] = {"id": entity_id, "is_active": True}
+            births += 1
+            if created_at == self.target_created_at:
+                result.uncertain_rows.add(("entities", str(entity_id)))
+        if births:
+            result.add_note(
+                "entities",
+                f"{births} row(s) born in the window; activity seeded from "
+                "the entities.is_active=true schema default",
+                approximate=False,
+            )
 
     def _seed_window_births(
         self,
@@ -2431,6 +2599,7 @@ def _section_key_fn(section: str) -> Any:
 def _load_checkpoint_state(cur: Any, checkpoint_id: int) -> dict[str, Any]:
     cur.execute("SELECT state FROM state_checkpoints WHERE id = %s", (checkpoint_id,))
     state = _as_document(_row_value(cur.fetchone(), 0))
+    state.setdefault("entities", [])
     state.setdefault("character_project_states", [])
     state.setdefault("claim_awareness", [])
     state.setdefault("backstory_secrets", [])
@@ -2508,6 +2677,16 @@ def verify_checkpoints_sync(cur: Any) -> list[CheckpointPairVerdict]:
                             "same-chunk captures compared directly "
                             "(stored vs stored)"
                         ],
+                        **(
+                            {
+                                "entities": [
+                                    "checkpoint predates the entity-activity "
+                                    "section; comparison skipped"
+                                ]
+                            }
+                            if "entities" in missing_sections
+                            else {}
+                        ),
                         **(
                             {
                                 "claim_awareness": [

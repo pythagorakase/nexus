@@ -424,6 +424,7 @@ def _build_plan(
             event_ref_to_id=event_ref_to_id,
             creatable_refs=creatable_refs,
             inserted_stub_keys=inserted_stub_keys,
+            recorded_at_chunk_id=recorded_at_chunk_id,
         )
         death_rows.append(planned)
         counters[f"deaths_{planned['status']}"] += 1
@@ -1632,6 +1633,7 @@ def _plan_death_row(
     event_ref_to_id: Mapping[str, int],
     creatable_refs: frozenset[tuple[str, str]],
     inserted_stub_keys: frozenset[tuple[str, str]],
+    recorded_at_chunk_id: Optional[int],
 ) -> dict[str, Any]:
     """Plan or execute one entities.is_active=false flip for an asserted death.
 
@@ -1696,7 +1698,18 @@ def _plan_death_row(
         return {**base, "status": "blocked"}
     if dry_run:
         return {**base, "status": "would_deactivate"}
+    cause_world_event_id = base["cause_world_event_id"]
+    if cause_world_event_id is None:
+        raise AssertionError("executed death must resolve its cause world event")
+    if recorded_at_chunk_id is None:
+        raise AssertionError("executed death must have a recording boundary")
     _deactivate_entity(cur, entity_id)
+    _record_entity_activity_projection(
+        cur,
+        world_event_id=int(cause_world_event_id),
+        entity_id=entity_id,
+        source_chunk_id=int(recorded_at_chunk_id),
+    )
     return {**base, "status": "deactivated"}
 
 
@@ -1724,6 +1737,67 @@ def _deactivate_entity(cur: Any, entity_id: int) -> None:
         """,
         (entity_id,),
     )
+
+
+def _record_entity_activity_projection(
+    cur: Any,
+    *,
+    world_event_id: int,
+    entity_id: int,
+    source_chunk_id: int,
+) -> None:
+    """Attach an exact death projection to its durable cause event.
+
+    Runtime maturation history events retain their backstory chronology at the
+    synthetic prologue tick, so ``source_chunk_id`` records when the activity
+    flip was actually applied. Replay uses that boundary with the same
+    base-inclusive/target-exclusive semantics as maturation project starts.
+    """
+
+    cur.execute(
+        """
+        /* orrery:retrograde:record_entity_activity */
+        WITH projection AS (
+            SELECT jsonb_build_object(
+                'entity_id', %s,
+                'is_active', false,
+                'source_chunk_id', %s
+            ) AS value
+        )
+        UPDATE world_events
+        SET changed_fields = CASE
+                WHEN 'entities.is_active' = ANY(changed_fields)
+                THEN changed_fields
+                ELSE array_append(changed_fields, 'entities.is_active')
+            END,
+            payload = jsonb_set(
+                payload,
+                '{applied_entity_activity}',
+                COALESCE(
+                    payload -> 'applied_entity_activity',
+                    '[]'::jsonb
+                ) ||
+                    CASE
+                        WHEN COALESCE(
+                            payload -> 'applied_entity_activity',
+                            '[]'::jsonb
+                        ) @> jsonb_build_array(projection.value)
+                        THEN '[]'::jsonb
+                        ELSE jsonb_build_array(projection.value)
+                    END,
+                true
+            )
+        FROM projection
+        WHERE id = %s
+        RETURNING world_events.id
+        """,
+        (entity_id, source_chunk_id, world_event_id),
+    )
+    if cur.fetchone() is None:
+        raise RuntimeError(
+            f"Cause world event {world_event_id} disappeared before entity "
+            "activity could be recorded"
+        )
 
 
 def plan_retrograde_summaries(
