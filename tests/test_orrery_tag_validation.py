@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import json
 from types import SimpleNamespace
 from typing import Any, cast, List, Literal, Optional, Tuple
 
 import pytest
-import tiktoken
 from pydantic_ai import ModelRetry
 
 from nexus.agents.logon.apex_schema import (
@@ -16,35 +14,17 @@ from nexus.agents.logon.apex_schema import (
     NewEntityDeclaration,
     NewEntityPairTagHint,
     StateUpdates,
-    StorytellerResponseExtended,
-)
-from nexus.agents.logon.orrery_tag_schema import (
-    STORYTELLER_WIRE_DESCRIPTION_MAX_LENGTH,
-    diet_storyteller_wire_schema,
-    storyteller_anthropic_compact_schema,
-    storyteller_anthropic_output_config,
-    storyteller_openai_text_format,
 )
 from nexus.agents.logon.orrery_tag_validation import (
     StorytellerVocabulary,
     build_storyteller_tag_validator,
     collect_orrery_tag_issues,
 )
+from nexus.agents.logon.skald_wire import SkaldTurnWire
 from nexus.agents.orrery.tag_library import TagLibraryEntry
 from nexus.agents.orrery.tag_schemas import OrreryTagBestowal
-from nexus.api.native_structured_output import strict_json_schema
 from scripts.api_anthropic import AnthropicProvider
 from scripts.api_openai import OpenAIProvider
-
-
-# Recalibrated after #557 removed the dossier subtrees (which carried much of
-# the long-description weight the diet originally counted): the diet now saves
-# ~7.3KB / ~1,469 tokens on the dossier-free schema. Guards stay binding
-# against a no-op transform; the absolute ceiling holds the combined campaign
-# result (measured 20,666 bytes dieted).
-EXTENDED_SCHEMA_MIN_BYTE_SAVINGS = 6_000
-EXTENDED_SCHEMA_MIN_TOKEN_SAVINGS = 1_200
-EXTENDED_SCHEMA_DIETED_MAX_BYTES = 21_500
 
 
 class FakeRegistryCursor:
@@ -193,15 +173,12 @@ def _storyteller_response(
     pair_tag_hints: Optional[List[dict[str, str]]] = None,
     state_updates: Optional[dict[str, Any]] = None,
     orrery_adjudications: Optional[List[dict[str, Any]]] = None,
-) -> StorytellerResponseExtended:
-    return StorytellerResponseExtended.model_validate(
+) -> SkaldTurnWire:
+    return SkaldTurnWire.model_validate(
         {
             "narrative": "Marra Kest steps out from behind the sluice gate.",
             "choices": ["Question Marra.", "Keep walking."],
-            "chunk_metadata": {},
-            "referenced_entities": {},
             "state_updates": state_updates or {},
-            "operations": None,
             "orrery_adjudications": orrery_adjudications or [],
             "new_entities": [
                 {
@@ -212,9 +189,32 @@ def _storyteller_response(
                     "pair_tag_hints": pair_tag_hints or [],
                 }
             ],
-            "reasoning": None,
         }
     )
+
+
+def _state_updates_with_tag(
+    kind: str,
+    name: str,
+    field_name: str,
+    tag_name: str,
+) -> dict[str, Any]:
+    """Build one canonical nested state update with an Orrery tag delta."""
+
+    collection_by_kind = {
+        "character": ("characters", "character_name"),
+        "place": ("locations", "place_name"),
+        "faction": ("factions", "faction_name"),
+    }
+    collection, name_field = collection_by_kind[kind]
+    return {
+        collection: [
+            {
+                name_field: name,
+                "orrery_tags": {field_name: [tag_name]},
+            }
+        ]
+    }
 
 
 def test_valid_bestowals_produce_no_issues() -> None:
@@ -288,40 +288,33 @@ def test_kind_incompatible_tags_are_flagged() -> None:
     ],
 )
 @pytest.mark.parametrize(
-    ("wire_field", "canonical_field"),
+    "canonical_field",
     [
-        ("tag_add", "applied_tags"),
-        ("tag_clear", "tags_to_clear"),
+        "applied_tags",
+        "tags_to_clear",
     ],
 )
 def test_cached_catalog_validates_single_tags_per_kind_and_field(
     kind: str,
     valid_tag: str,
     invalid_tag: str,
-    wire_field: str,
     canonical_field: str,
 ) -> None:
     valid = _storyteller_response(
-        state_updates={
-            "updates": [
-                {
-                    "kind": kind,
-                    "name": f"Known {kind}",
-                    wire_field: valid_tag,
-                }
-            ]
-        }
+        state_updates=_state_updates_with_tag(
+            kind,
+            f"Known {kind}",
+            canonical_field,
+            valid_tag,
+        )
     )
     invalid = _storyteller_response(
-        state_updates={
-            "updates": [
-                {
-                    "kind": kind,
-                    "name": f"Known {kind}",
-                    wire_field: invalid_tag,
-                }
-            ]
-        }
+        state_updates=_state_updates_with_tag(
+            kind,
+            f"Known {kind}",
+            canonical_field,
+            invalid_tag,
+        )
     )
 
     assert (
@@ -666,12 +659,13 @@ async def test_storyteller_validator_reads_each_catalog_once_per_attempt(
             }
         ],
         state_updates={
-            "updates": [
+            "characters": [
                 {
-                    "kind": "character",
-                    "name": "Brena Tideloft",
-                    "tag_add": "human",
-                    "tag_clear": "perceptive",
+                    "character_name": "Brena Tideloft",
+                    "orrery_tags": {
+                        "applied_tags": ["human"],
+                        "tags_to_clear": ["perceptive"],
+                    },
                 }
             ]
         },
@@ -726,7 +720,7 @@ def test_provider_repairs_invalid_declaration_inside_structured_retry_budget(
     provider.client = cast(Any, SimpleNamespace(responses=FakeResponses()))
 
     parsed, _llm_response = provider.get_structured_completion(
-        "Continue the story.", StorytellerResponseExtended
+        "Continue the story.", SkaldTurnWire
     )
 
     assert parsed == repaired
@@ -783,7 +777,7 @@ def test_openai_chat_transport_repairs_invalid_declaration(
 
     parsed, llm_response = provider.get_structured_completion(
         "Continue the story.",
-        StorytellerResponseExtended,
+        SkaldTurnWire,
     )
 
     assert parsed == repaired
@@ -836,7 +830,7 @@ def test_anthropic_transport_repairs_invalid_declaration(
 
     parsed, llm_response = provider.get_structured_completion(
         "Continue the story.",
-        StorytellerResponseExtended,
+        SkaldTurnWire,
     )
 
     assert parsed == repaired
@@ -896,7 +890,7 @@ async def test_openai_chat_transport_async_repairs_invalid_declaration(
 
     parsed, llm_response = await provider.get_structured_completion_async(
         "Continue the story.",
-        StorytellerResponseExtended,
+        SkaldTurnWire,
     )
 
     assert parsed == repaired
@@ -912,42 +906,33 @@ def _retry_boundary_response(
     boundary: str,
     *,
     valid: bool,
-) -> StorytellerResponseExtended:
+) -> SkaldTurnWire:
     if boundary == "character_applied_tags":
         return _storyteller_response(
-            state_updates={
-                "updates": [
-                    {
-                        "kind": "character",
-                        "name": "Brena Tideloft",
-                        "tag_add": "human" if valid else "haven",
-                    }
-                ]
-            }
+            state_updates=_state_updates_with_tag(
+                "character",
+                "Brena Tideloft",
+                "applied_tags",
+                "human" if valid else "haven",
+            )
         )
     if boundary == "place_tags_to_clear":
         return _storyteller_response(
-            state_updates={
-                "updates": [
-                    {
-                        "kind": "place",
-                        "name": "The Lower Sluice",
-                        "tag_clear": "haven" if valid else "human",
-                    }
-                ]
-            }
+            state_updates=_state_updates_with_tag(
+                "place",
+                "The Lower Sluice",
+                "tags_to_clear",
+                "haven" if valid else "human",
+            )
         )
     if boundary == "faction_applied_tags":
         return _storyteller_response(
-            state_updates={
-                "updates": [
-                    {
-                        "kind": "faction",
-                        "name": "The Sluice Guild",
-                        "tag_add": "loyalist" if valid else "perceptive",
-                    }
-                ]
-            }
+            state_updates=_state_updates_with_tag(
+                "faction",
+                "The Sluice Guild",
+                "applied_tags",
+                "loyalist" if valid else "perceptive",
+            )
         )
     if boundary == "tag_hints":
         return _storyteller_response(tag_hints=["human" if valid else "invented:tag"])
@@ -1028,7 +1013,7 @@ def test_each_catalog_boundary_consumes_retry_and_returns_valid_output_unchanged
 
     parsed, _llm_response = provider.get_structured_completion(
         "Continue the story.",
-        StorytellerResponseExtended,
+        SkaldTurnWire,
     )
 
     assert parsed is valid
@@ -1128,379 +1113,6 @@ def test_validator_skipped_without_slot_database() -> None:
     assert build_storyteller_tag_validator(None) is None
     assert build_storyteller_tag_validator("") is None
     assert build_storyteller_tag_validator("save_05") is not None
-
-
-def test_description_diet_walks_nested_schema_without_mutating_input() -> None:
-    long_description = "x" * (STORYTELLER_WIRE_DESCRIPTION_MAX_LENGTH + 1)
-    schema: dict[str, Any] = {
-        "type": "object",
-        "description": "Short root hint.",
-        "properties": {
-            "nested": {
-                "type": "array",
-                "description": long_description,
-                "prefixItems": [
-                    {
-                        "type": "string",
-                        "description": long_description,
-                    }
-                ],
-            }
-        },
-        "$defs": {
-            "Kept": {
-                "description": "Short definition hint.",
-                "type": "string",
-            },
-            "Dieted": {
-                "description": long_description,
-                "type": "integer",
-            },
-        },
-        "default": {
-            "description": long_description,
-            "kept": 1,
-        },
-        "enum": [
-            {
-                "description": long_description,
-                "kept": 2,
-            }
-        ],
-        "examples": [{"description": long_description, "kept": 3}],
-        "x-description": long_description,
-    }
-
-    dieted = diet_storyteller_wire_schema(schema)
-
-    assert dieted["description"] == "Short root hint."
-    assert "description" not in dieted["properties"]["nested"]
-    assert "description" not in dieted["properties"]["nested"]["prefixItems"][0]
-    assert dieted["$defs"]["Kept"]["description"] == "Short definition hint."
-    assert "description" not in dieted["$defs"]["Dieted"]
-    assert dieted["default"] == schema["default"]
-    assert dieted["enum"] == schema["enum"]
-    assert dieted["examples"] == schema["examples"]
-    assert dieted["x-description"] == long_description
-    assert schema["properties"]["nested"]["description"] == long_description
-
-
-def test_extended_openai_wire_schema_meets_description_diet_budget() -> None:
-    undieted = strict_json_schema(StorytellerResponseExtended)
-    text_format = storyteller_openai_text_format(StorytellerResponseExtended)
-    dieted = text_format["schema"]
-    undieted_wire = json.dumps(
-        undieted,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-    dieted_wire = json.dumps(
-        dieted,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-    undieted_bytes = undieted_wire.encode("utf-8")
-    dieted_bytes = dieted_wire.encode("utf-8")
-    encoding = tiktoken.get_encoding("o200k_base")
-    undieted_tokens = encoding.encode(undieted_wire)
-    dieted_tokens = encoding.encode(dieted_wire)
-
-    assert len(undieted_bytes) - len(dieted_bytes) >= EXTENDED_SCHEMA_MIN_BYTE_SAVINGS
-    assert (
-        len(undieted_tokens) - len(dieted_tokens) >= EXTENDED_SCHEMA_MIN_TOKEN_SAVINGS
-    )
-    assert len(dieted_bytes) <= EXTENDED_SCHEMA_DIETED_MAX_BYTES
-    assert set(dieted["properties"]) >= {
-        "narrative",
-        "choices",
-        "state_updates",
-        "new_entities",
-    }
-    assert "OrreryTagBestowal" in dieted["$defs"]
-    assert "applied_tags" in dieted["$defs"]["OrreryTagBestowal"]["properties"]
-    assert (
-        "registered event type"
-        in dieted["$defs"]["OrreryAdjudication"]["properties"][
-            "replacement_event_type"
-        ]["description"]
-    )
-    assert (
-        "directed pair tag"
-        in dieted["$defs"]["NewEntityPairTagHint"]["properties"][
-            "declared_entity_role"
-        ]["description"]
-    )
-    assert "Earth's physical geography" in dieted["$defs"]["Coordinates"]["description"]
-    # The pre-#557 anchor screed ("never a bare list of strings") was deleted
-    # with the dossier models; this long declaration description is the
-    # surviving proof that the diet drops overlong wire guidance.
-    assert b"drives background backstory" in undieted_bytes
-    assert b"drives background backstory" not in dieted_bytes
-
-
-def test_logon_schema_kwargs_diet_openai_and_keep_anthropic_compact() -> None:
-    from nexus.agents.lore.logon_utility import LogonUtility
-
-    utility = LogonUtility({}, dbname="save_05")
-    utility._validation_dbname = "save_05"
-    utility._provider_wire_type = "openai"
-    kwargs = utility._schema_format_kwargs(StorytellerResponseExtended)
-    assert set(kwargs) == {"text_format"}
-    text_format = kwargs["text_format"]
-    assert text_format["type"] == "json_schema"
-    assert text_format["strict"] is True
-    assert text_format["name"] == "StorytellerResponseExtended"
-    assert "drives background backstory" not in json.dumps(text_format["schema"])
-
-    utility._provider_wire_type = "anthropic"
-    utility._validation_dbname = None
-    utility._schema_format_cache = {}
-    kwargs = utility._schema_format_kwargs(StorytellerResponseExtended)
-    assert set(kwargs) == {"output_config"}
-    schema = kwargs["output_config"]["format"]["schema"]
-    assert schema == storyteller_anthropic_compact_schema(
-        StorytellerResponseExtended,
-        None,
-    )
-
-
-def test_openai_strict_schema_uses_plain_strings_for_live_catalogs() -> None:
-    """The canonical strict wire schema contains no live vocabulary enums."""
-
-    schema = strict_json_schema(StorytellerResponseExtended)
-    defs = schema["$defs"]
-    bestowal_properties = defs["OrreryTagBestowal"]["properties"]
-    assert bestowal_properties["applied_tags"]["items"] == {"type": "string"}
-    assert bestowal_properties["tags_to_clear"]["items"] == {"type": "string"}
-    declaration_properties = defs["NewEntityDeclaration"]["properties"]
-    assert declaration_properties["tag_hints"]["items"] == {"type": "string"}
-    pair_hint_properties = defs["NewEntityPairTagHint"]["properties"]
-    assert "enum" not in pair_hint_properties["tag"]
-    adjudication_properties = defs["OrreryAdjudication"]["properties"]
-    assert adjudication_properties["replacement_event_type"]["anyOf"] == [
-        {"type": "string"},
-        {"type": "null"},
-    ]
-
-
-def test_storyteller_anthropic_output_config_uses_compact_extended_schema() -> None:
-    """Anthropic extended turns avoid the full DB-mirroring grammar."""
-
-    output_config = storyteller_anthropic_output_config(
-        StorytellerResponseExtended,
-        "save_05",
-    )
-
-    assert output_config is not None
-    schema = output_config["format"]["schema"]
-    assert "$defs" not in schema
-    assert set(schema["properties"]) == {
-        "narrative",
-        "choices",
-        "chunk_metadata",
-        "referenced_entities",
-        "state_updates",
-        "operations",
-        "orrery_adjudications",
-        "new_entities",
-        "reasoning",
-    }
-    state_update_schema = schema["properties"]["state_updates"]
-    assert set(state_update_schema["properties"]) == {
-        "updates",
-    }
-    update_schema = state_update_schema["properties"]["updates"]["items"]
-    assert update_schema["properties"]["kind"]["enum"] == [
-        "character",
-        "place",
-        "faction",
-    ]
-    assert update_schema["properties"]["tag_add"] == {
-        "type": "string",
-        "description": "Registered tag name to apply.",
-    }
-    entity_schema = schema["properties"]["new_entities"]["items"]
-    assert entity_schema["properties"]["tag_hints"]["items"] == {"type": "string"}
-    pair_tag_schema = entity_schema["properties"]["pair_tag_hints"]["items"]
-    assert pair_tag_schema["properties"]["tag"] == {"type": "string"}
-    adjudication_schema = schema["properties"]["orrery_adjudications"]["items"]
-    assert adjudication_schema["properties"]["replacement_event_type"] == {
-        "type": "string"
-    }
-
-    response = StorytellerResponseExtended.model_validate(
-        {
-            "narrative": "Brena follows the wet bell-sound into the stacks.",
-            "choices": ["Follow the footprints.", "Call for Odile."],
-            "chunk_metadata": {},
-            "referenced_entities": {},
-            "state_updates": {
-                "updates": [
-                    {
-                        "kind": "character",
-                        "name": "Brena Tideloft",
-                        "status": "following a wet bell-sound",
-                        "tag_add": "perceptive",
-                    }
-                ]
-            },
-            "operations": {},
-            "orrery_adjudications": [],
-            "new_entities": [
-                {
-                    "kind": "character",
-                    "name": "Marra Kest",
-                    "summary": "A drowned clerk animated by echo and current.",
-                    "tag_hints": [],
-                    "pair_tag_hints": [],
-                }
-            ],
-            "reasoning": "",
-        }
-    )
-
-    assert response.state_updates.characters[0].character_name == "Brena Tideloft"
-    assert (
-        response.state_updates.characters[0].current_activity
-        == "following a wet bell-sound"
-    )
-    assert response.state_updates.characters[0].orrery_tags is not None
-    assert response.state_updates.characters[0].orrery_tags.applied_tags == [
-        "perceptive"
-    ]
-    assert response.new_entities[0].name == "Marra Kest"
-
-
-def _enum_paths(value: Any, path: str = "$") -> dict[str, list[str]]:
-    enums: dict[str, list[str]] = {}
-    if isinstance(value, dict):
-        if "enum" in value:
-            enums[path] = value["enum"]
-        for key, item in value.items():
-            enums.update(_enum_paths(item, f"{path}.{key}"))
-    elif isinstance(value, list):
-        for index, item in enumerate(value):
-            enums.update(_enum_paths(item, f"{path}[{index}]"))
-    return enums
-
-
-def _compact_schema_bytes(schema: dict[str, Any]) -> bytes:
-    """Serialize a compact schema using the canonical wire comparison form."""
-
-    return json.dumps(schema, separators=(",", ":"), sort_keys=True).encode("utf-8")
-
-
-def test_compact_schema_is_small_structural_and_registry_stable() -> None:
-    """Registry identity cannot affect the vocabulary-free compact wire bytes."""
-
-    schema_a = storyteller_anthropic_compact_schema(
-        StorytellerResponseExtended,
-        "fake_registry_a",
-    )
-    schema_b = storyteller_anthropic_compact_schema(
-        StorytellerResponseExtended,
-        "fake_registry_b",
-    )
-    schema_none = storyteller_anthropic_compact_schema(
-        StorytellerResponseExtended,
-        None,
-    )
-    assert schema_a is not None
-    assert schema_b is not None
-    assert schema_none is not None
-    assert schema_a == schema_b == schema_none
-
-    serialized_a = _compact_schema_bytes(schema_a)
-    serialized_b = _compact_schema_bytes(schema_b)
-    serialized_none = _compact_schema_bytes(schema_none)
-    assert serialized_a == serialized_b == serialized_none
-    assert len(serialized_a) <= 3500
-    assert _enum_paths(schema_a) == {
-        "$.properties.state_updates.properties.updates.items.properties.kind": [
-            "character",
-            "place",
-            "faction",
-        ],
-        "$.properties.orrery_adjudications.items.properties.action": [
-            "defer",
-            "replace",
-            "void",
-        ],
-        "$.properties.new_entities.items.properties.kind": [
-            "character",
-            "place",
-            "faction",
-        ],
-        (
-            "$.properties.new_entities.items.properties.pair_tag_hints.items."
-            "properties.declared_entity_role"
-        ): ["subject", "object"],
-    }
-
-
-@pytest.mark.requires_postgres
-def test_compact_schema_matches_populated_slot_registry_live() -> None:
-    """A populated save_05 registry cannot alter compact schema wire bytes."""
-
-    import psycopg2
-
-    from nexus.api.slot_utils import get_slot_db_url
-
-    with psycopg2.connect(get_slot_db_url(slot=5)) as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT
-                    (SELECT count(*) FROM tags
-                     WHERE deprecated = FALSE AND synonym_for IS NULL),
-                    (SELECT count(*) FROM pair_tags WHERE deprecated = FALSE),
-                    (SELECT count(*) FROM event_types WHERE deprecated = FALSE)
-                """
-            )
-            registry_counts = cur.fetchone()
-            assert registry_counts is not None
-            tag_count, pair_tag_count, event_type_count = (
-                int(value) for value in registry_counts
-            )
-
-    assert tag_count > 0, "save_05 must have registered entity tags"
-    assert pair_tag_count > 0, "save_05 must have registered pair tags"
-    assert event_type_count > 0, "save_05 must have registered event types"
-
-    schema_live = storyteller_anthropic_compact_schema(
-        StorytellerResponseExtended,
-        "save_05",
-    )
-    schema_none = storyteller_anthropic_compact_schema(
-        StorytellerResponseExtended,
-        None,
-    )
-    assert schema_live is not None
-    assert schema_none is not None
-    assert _compact_schema_bytes(schema_live) == _compact_schema_bytes(schema_none)
-    assert _enum_paths(schema_live) == {
-        "$.properties.state_updates.properties.updates.items.properties.kind": [
-            "character",
-            "place",
-            "faction",
-        ],
-        "$.properties.orrery_adjudications.items.properties.action": [
-            "defer",
-            "replace",
-            "void",
-        ],
-        "$.properties.new_entities.items.properties.kind": [
-            "character",
-            "place",
-            "faction",
-        ],
-        (
-            "$.properties.new_entities.items.properties.pair_tag_hints.items."
-            "properties.declared_entity_role"
-        ): ["subject", "object"],
-    }
 
 
 def _tag_entry(entity_kind: str, category: str, tag: str) -> TagLibraryEntry:

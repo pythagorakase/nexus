@@ -18,7 +18,7 @@ import logging
 import re
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 import psycopg2
 from fastapi import FastAPI
@@ -86,7 +86,8 @@ def query_wizard_cache() -> Dict[str, Any]:
                     setting_genre, setting_secondary_genres, setting_world_name,
                     setting_tone, setting_themes, setting_diegetic_artifact,
                     setting_tech_level, setting_magic_exists, setting_magic_description,
-                    setting_geographic_scope, setting_political_structure, setting_major_conflict,
+                    setting_geographic_scope, setting_political_structure,
+                    setting_major_conflict,
                     setting_cultural_notes, setting_language_notes, setting_time_period,
                     -- Character (traits now in assets.traits table)
                     character_name, character_archetype, character_background,
@@ -105,7 +106,8 @@ def query_wizard_cache() -> Dict[str, Any]:
                 WHERE id = TRUE
             """
             )
-            return cur.fetchone() or {}
+            row = cast(Optional[Dict[str, Any]], cur.fetchone())
+            return row or {}
 
 
 def query_traits() -> List[Dict[str, Any]]:
@@ -119,7 +121,7 @@ def query_traits() -> List[Dict[str, Any]]:
                 ORDER BY id
             """
             )
-            return list(cur.fetchall())
+            return cast(List[Dict[str, Any]], cur.fetchall())
 
 
 def query_bootstrap_narrative() -> Dict[str, Any]:
@@ -134,7 +136,8 @@ def query_bootstrap_narrative() -> Dict[str, Any]:
                 WHERE id = TRUE
             """
             )
-            return cur.fetchone() or {}
+            row = cast(Optional[Dict[str, Any]], cur.fetchone())
+            return row or {}
 
 
 def build_setting_arguments(cache: Dict[str, Any]) -> Dict[str, Any]:
@@ -957,7 +960,7 @@ def _mock_storyteller_response(prompt: str) -> Dict[str, Any]:
     """Build a schema-valid deterministic narrative response for TEST mode."""
 
     adjudications = _mock_orrery_adjudications(prompt)
-    return {
+    response: Dict[str, Any] = {
         "narrative": (
             "[TEST MODE] The scene advances under deterministic mock control. "
             "Orrery pressure is acknowledged structurally, while the prose remains "
@@ -968,31 +971,10 @@ def _mock_storyteller_response(prompt: str) -> Dict[str, Any]:
             "Pause and reassess the pressure around the scene.",
             "Shift attention to the quieter off-screen consequence.",
         ],
-        "chunk_metadata": {
-            "chronology": {
-                "episode_transition": "continue",
-                "time_delta_minutes": 5,
-                "time_delta_hours": None,
-                "time_delta_days": None,
-                "time_delta_description": "A few focused minutes pass.",
-            },
-            "world_layer": "primary",
-        },
-        "referenced_entities": {
-            "characters": [],
-            "places": [],
-            "factions": [],
-        },
-        "state_updates": {
-            "characters": [],
-            "relationships": [],
-            "locations": [],
-            "factions": [],
-        },
-        "operations": None,
-        "orrery_adjudications": adjudications,
-        "reasoning": "[TEST MODE] Deterministic mock storyteller response.",
     }
+    if adjudications:
+        response["orrery_adjudications"] = adjudications
+    return response
 
 
 def _responses_payload(
@@ -1004,6 +986,7 @@ def _responses_payload(
     """Format structured JSON as an OpenAI Responses-compatible payload."""
 
     output_json = json.dumps(output_data)
+    output: List[Dict[str, Any]]
     if final_result_tool:
         output = [
             {
@@ -1113,14 +1096,14 @@ async def responses_create(request: ResponsesRequest):
 
     # Exact routing: the structured-output tool's schema says which
     # Storyteller response the caller validates against. Turn requests
-    # (StorytellerResponseExtended) carry state_updates; bootstrap requests
+    # (SkaldTurnWire) carry state_updates; bootstrap requests
     # (StorytellerResponseBootstrap) do not.
     output_fields = _requested_output_properties(request)
     if output_fields:
         final_result_tool = _requested_output_uses_final_result_tool(request)
         if "state_updates" in output_fields:
             logger.info(
-                "[MOCK] Extended turn schema requested (%d Orrery proposals)",
+                "[MOCK] Skald turn wire requested (%d Orrery proposals)",
                 len(proposal_ids),
             )
             return _responses_payload(

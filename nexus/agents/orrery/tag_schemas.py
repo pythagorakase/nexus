@@ -37,19 +37,9 @@ class OrreryTagBestowal(BaseModel):
 
     applied_tags: List[str] = Field(
         default_factory=list,
-        description=(
-            "Registered tag names to apply to this entity. Lookups happen "
-            "against the live `tags` table; unknown names and "
-            "category-incompatible names are hard errors."
-        ),
+        description="Registered tag names to apply to this entity.",
     )
     tags_to_clear: List[str] = Field(
         default_factory=list,
-        description=(
-            "Registered tag names whose open `entity_tags` row should be "
-            "cleared (cleared_at = now()) for this entity. Meaningful only in "
-            "update contexts. Clear targets are validated against the live, "
-            "non-deprecated registry just like applied tags; unknown, "
-            "deprecated, or category-incompatible names are hard errors."
-        ),
+        description="Registered tag names to clear from this entity.",
     )

@@ -20,7 +20,12 @@ from scripts.api_anthropic import AnthropicProvider  # noqa: E402
 from nexus.agents.logon.apex_schema import (  # noqa: E402
     StoryTurnResponse,
     StorytellerResponseBootstrap,
-    StorytellerResponseExtended,
+)
+from nexus.agents.logon.skald_wire import (  # noqa: E402
+    SkaldTurnWire,
+    hydrate_skald_turn,
+    skald_wire_lenient_schema,
+    skald_wire_strict_text_format,
 )
 from nexus.agents.orrery.tag_library import (  # noqa: E402
     format_tag_library_for_prompt,
@@ -350,7 +355,7 @@ class LogonUtility:
         elif provider_type == "openai" or base_url:
             # Native OpenAI, or any OpenAI-compatible server registered with a
             # base_url in [global.model.api_models] (mock TEST, Ollama, vLLM).
-            self._provider_wire_type = "openai"
+            self._provider_wire_type = "local" if base_url else "openai"
             self.provider = OpenAIProvider(
                 model=model,
                 temperature=apex_settings.get("temperature", 0.7),
@@ -433,11 +438,12 @@ class LogonUtility:
                 schema_model,
                 **schema_kwargs,
             )
+            response = self._hydrate_provider_response(parsed_response, schema_model)
             logger.debug(
                 "Received structured response with narrative length: %s",
-                len(parsed_response.narrative),
+                len(response.narrative),
             )
-            return self._stamp_generation_model(parsed_response)
+            return self._stamp_generation_model(response)
         except Exception:
             logger.exception("Failed to get structured response")
             raise
@@ -460,23 +466,43 @@ class LogonUtility:
                     **schema_kwargs,
                 )
             )
+            response = self._hydrate_provider_response(parsed_response, schema_model)
             logger.debug(
                 "Received structured response with narrative length: %s",
-                len(parsed_response.narrative),
+                len(response.narrative),
             )
-            return self._stamp_generation_model(parsed_response)
+            return self._stamp_generation_model(response)
         except Exception:
             logger.exception("Failed to get structured response")
             raise
 
     def _select_response_schema(
         self, context_payload: Dict[str, Any]
-    ) -> type[StorytellerResponseBootstrap] | type[StorytellerResponseExtended]:
+    ) -> type[StorytellerResponseBootstrap] | type[SkaldTurnWire]:
         """Select the structured output schema for the current narrative context."""
         if self._is_bootstrap_context(context_payload):
             return StorytellerResponseBootstrap
 
-        return StorytellerResponseExtended
+        return SkaldTurnWire
+
+    @staticmethod
+    def _hydrate_provider_response(
+        parsed_response: Any,
+        schema_model: type[StorytellerResponseBootstrap] | type[SkaldTurnWire],
+    ) -> StoryTurnResponse:
+        """Hydrate extended wire output while leaving bootstrap output unchanged."""
+
+        if schema_model is SkaldTurnWire:
+            if not isinstance(parsed_response, SkaldTurnWire):
+                raise TypeError(
+                    "Extended LOGON provider returned a non-SkaldTurnWire response"
+                )
+            return hydrate_skald_turn(parsed_response)
+        if not isinstance(parsed_response, StorytellerResponseBootstrap):
+            raise TypeError(
+                "Bootstrap LOGON provider returned a non-bootstrap response"
+            )
+        return parsed_response
 
     def _schema_format_kwargs(self, schema_model: type) -> Dict[str, Any]:
         """Return provider-specific native schema overrides for LOGON."""
@@ -486,25 +512,37 @@ class LogonUtility:
         if schema_model in self._schema_format_cache:
             return self._schema_format_cache[schema_model]
 
-        kwargs: Dict[str, Any] = {}
-        if self._provider_wire_type == "openai":
-            from nexus.agents.logon.orrery_tag_schema import (
-                storyteller_openai_text_format,
-            )
+        from nexus.api.native_structured_output import (
+            anthropic_output_config,
+            openai_response_text_format,
+        )
 
-            kwargs = {
-                "text_format": storyteller_openai_text_format(schema_model),
-            }
+        kwargs: Dict[str, Any]
+        if schema_model is SkaldTurnWire:
+            if self._provider_wire_type == "openai":
+                kwargs = {"text_format": skald_wire_strict_text_format()}
+            elif self._provider_wire_type == "local":
+                kwargs = {
+                    "text_format": openai_response_text_format(
+                        SkaldTurnWire,
+                        schema=skald_wire_lenient_schema(),
+                    )
+                }
+            elif self._provider_wire_type == "anthropic":
+                kwargs = {
+                    "output_config": anthropic_output_config(
+                        SkaldTurnWire,
+                        schema=skald_wire_lenient_schema(),
+                    )
+                }
+            else:
+                kwargs = {}
+        elif self._provider_wire_type in {"openai", "local"}:
+            kwargs = {"text_format": openai_response_text_format(schema_model)}
         elif self._provider_wire_type == "anthropic":
-            from nexus.agents.logon.orrery_tag_schema import (
-                storyteller_anthropic_output_config,
-            )
-
-            output_config = storyteller_anthropic_output_config(
-                schema_model, self._validation_dbname
-            )
-            if output_config is not None:
-                kwargs = {"output_config": output_config}
+            kwargs = {"output_config": anthropic_output_config(schema_model)}
+        else:
+            kwargs = {}
 
         self._schema_format_cache[schema_model] = kwargs
         return kwargs
