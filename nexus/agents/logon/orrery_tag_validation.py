@@ -1,10 +1,10 @@
 """Generation-time registry validation for storyteller Orrery vocabulary.
 
 Skald freely invents tag names (often ``category:name`` composites) when
-introducing entities, updating state, or emitting ``new_entities`` declaration
-hints. The closed-vocabulary tag writers hard-error on unknown names -- but
-they run inside the chunk COMMIT transaction, where the only outcome is a dead
-player turn (M9 gate finding).
+updating state or emitting ``new_entities`` declaration hints. The
+closed-vocabulary tag writers hard-error on unknown names -- but they run
+inside the chunk COMMIT transaction, where the only outcome is a dead player
+turn (M9 gate finding).
 
 This module walks a parsed storyteller response and validates every
 ``orrery_tags`` bestowal and declaration hint against the live registry, so
@@ -65,42 +65,6 @@ def _bestowal_sites(response: Any) -> List[Tuple[str, str, OrreryTagBestowal]]:
     """Yield (path, entity_kind, bestowal) triples from a parsed response."""
 
     sites: List[Tuple[str, str, OrreryTagBestowal]] = []
-
-    referenced = getattr(response, "referenced_entities", None)
-    if referenced is not None:
-        for index, ref in enumerate(getattr(referenced, "characters", []) or []):
-            new_entity = getattr(ref, "new_character", None)
-            bestowal = getattr(new_entity, "orrery_tags", None)
-            if bestowal is not None:
-                sites.append(
-                    (
-                        f"referenced_entities.characters[{index}].new_character",
-                        "character",
-                        bestowal,
-                    )
-                )
-        for index, ref in enumerate(getattr(referenced, "places", []) or []):
-            new_entity = getattr(ref, "new_place", None)
-            bestowal = getattr(new_entity, "orrery_tags", None)
-            if bestowal is not None:
-                sites.append(
-                    (
-                        f"referenced_entities.places[{index}].new_place",
-                        "place",
-                        bestowal,
-                    )
-                )
-        for index, ref in enumerate(getattr(referenced, "factions", []) or []):
-            new_entity = getattr(ref, "new_faction", None)
-            bestowal = getattr(new_entity, "orrery_tags", None)
-            if bestowal is not None:
-                sites.append(
-                    (
-                        f"referenced_entities.factions[{index}].new_faction",
-                        "faction",
-                        bestowal,
-                    )
-                )
 
     state_updates = getattr(response, "state_updates", None)
     if state_updates is not None:

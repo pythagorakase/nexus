@@ -22,7 +22,6 @@ from nexus.agents.logon.apex_schema import (
     StateUpdates,
 )
 from nexus.agents.orrery.events import commit_orrery_tick_sync
-from nexus.agents.orrery.geo import resolve_zone_for_point, story_active_zone
 from nexus.agents.orrery.retrograde_maturation import (
     enqueue_declared_entity_maturations,
 )
@@ -99,16 +98,6 @@ def insert_chunk_metadata_sync(
         )
 
 
-def _json_dumps_model(value: Any) -> Optional[str]:
-    """Serialize dicts or Pydantic models for JSONB columns."""
-
-    if value is None:
-        return None
-    if hasattr(value, "model_dump"):
-        value = value.model_dump(mode="json", exclude_none=True)
-    return json.dumps(value)
-
-
 # ============================================================================
 # Entity Resolution Functions (Synchronous)
 # ============================================================================
@@ -127,23 +116,17 @@ def resolve_place_references_sync(
             if ref.place_id:
                 place_id = ref.place_id
             elif ref.place_name:
-                # Look up existing place by name
                 cur.execute("SELECT id FROM places WHERE name = %s", (ref.place_name,))
                 result = cur.fetchone()
                 if result:
                     place_id = result[0]
-                elif ref.new_place:
-                    place_id = create_new_place_sync(cur, ref.new_place)
                 else:
                     logger.warning(
-                        "Skipping unresolved place reference %r; provide place_id "
-                        "or new_place to persist place_chunk_references",
+                        "Skipping unresolved place reference %r; provide a canonical "
+                        "place_id or place_name to persist place_chunk_references",
                         ref.place_name,
                     )
                     continue
-            elif ref.new_place:
-                # Create new place and get ID
-                place_id = create_new_place_sync(cur, ref.new_place)
 
         # Build junction table entry
         resolved_refs.append(
@@ -155,62 +138,6 @@ def resolve_place_references_sync(
         )
 
     return resolved_refs
-
-
-def create_new_place_sync(cur, new_place):
-    """Create a new place with the shared real-Earth GIS invariant."""
-
-    place_type = new_place.type.value if new_place.type else None
-    coordinates = None if place_type == "virtual" else new_place.coordinates
-    if coordinates is None:
-        zone_id = story_active_zone(cur)
-    else:
-        zone_id = resolve_zone_for_point(
-            cur,
-            longitude=coordinates.lon,
-            latitude=coordinates.lat,
-        )
-
-    cur.execute(
-        """
-        INSERT INTO places (
-            name, type, summary, history, current_status, secrets,
-            extra_data, zone, coordinates
-        ) VALUES (
-            %s, %s, %s, %s, %s, %s, %s, %s,
-            CASE
-                WHEN %s IS NULL THEN NULL
-                ELSE ST_SetSRID(
-                    ST_MakePoint(%s, %s, 0, 0), 4326
-                )::geography
-            END
-        )
-        RETURNING id, entity_id
-    """,
-        (
-            new_place.name,
-            place_type,
-            new_place.summary,
-            new_place.history,
-            new_place.current_status,
-            new_place.secrets,
-            _json_dumps_model(new_place.extra_data),
-            zone_id,
-            coordinates.lon if coordinates else None,
-            coordinates.lon if coordinates else None,
-            coordinates.lat if coordinates else None,
-        ),
-    )
-
-    place_id, entity_id = cur.fetchone()
-    apply_tag_bestowal(
-        cur,
-        entity_id=entity_id,
-        entity_kind="place",
-        bestowal=getattr(new_place, "orrery_tags", None),
-        source_kind="skald_inline",
-    )
-    return place_id
 
 
 def resolve_character_references_sync(
@@ -232,18 +159,14 @@ def resolve_character_references_sync(
                 result = cur.fetchone()
                 if result:
                     char_id = result[0]
-                elif ref.new_character:
-                    char_id = create_new_character_sync(cur, ref.new_character)
                 else:
                     logger.warning(
-                        "Skipping unresolved character reference %r; provide "
-                        "character_id or new_character to persist "
+                        "Skipping unresolved character reference %r; provide a "
+                        "canonical character_id or character_name to persist "
                         "chunk_character_references",
                         ref.character_name,
                     )
                     continue
-            elif ref.new_character:
-                char_id = create_new_character_sync(cur, ref.new_character)
 
         # Build junction table entry
         resolved_refs.append(
@@ -251,49 +174,6 @@ def resolve_character_references_sync(
         )
 
     return resolved_refs
-
-
-def create_new_character_sync(cur, new_char):
-    """Create a new character synchronously"""
-    # Validate location exists
-    if new_char.current_location:
-        cur.execute("SELECT id FROM places WHERE id = %s", (new_char.current_location,))
-        if not cur.fetchone():
-            raise ValueError(
-                f"Place ID {new_char.current_location} not found for character location"
-            )
-
-    # Insert character
-    cur.execute(
-        """
-        INSERT INTO characters (
-            name, summary, appearance, background, personality,
-            emotional_state, current_activity, current_location, extra_data
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-        RETURNING id, entity_id
-    """,
-        (
-            new_char.name,
-            new_char.summary,
-            new_char.appearance,
-            new_char.background,
-            new_char.personality,
-            new_char.emotional_state,
-            new_char.current_activity,
-            new_char.current_location,
-            _json_dumps_model(new_char.extra_data),
-        ),
-    )
-
-    char_id, entity_id = cur.fetchone()
-    apply_tag_bestowal(
-        cur,
-        entity_id=entity_id,
-        entity_kind="character",
-        bestowal=getattr(new_char, "orrery_tags", None),
-        source_kind="skald_inline",
-    )
-    return char_id
 
 
 def resolve_faction_references_sync(
@@ -315,68 +195,19 @@ def resolve_faction_references_sync(
                 result = cur.fetchone()
                 if result:
                     faction_id = result[0]
-                elif ref.new_faction:
-                    faction_id = create_new_faction_sync(cur, ref.new_faction)
                 else:
                     logger.warning(
-                        "Skipping unresolved faction reference %r; provide "
-                        "faction_id or new_faction to persist "
+                        "Skipping unresolved faction reference %r; provide a "
+                        "canonical faction_id or faction_name to persist "
                         "chunk_faction_references",
                         ref.faction_name,
                     )
                     continue
-            elif ref.new_faction:
-                faction_id = create_new_faction_sync(cur, ref.new_faction)
 
         # Build junction table entry
         resolved_refs.append({"faction_id": faction_id})
 
     return resolved_refs
-
-
-def create_new_faction_sync(cur, new_faction):
-    """Create a new faction synchronously"""
-    # Validate primary_location exists
-    if new_faction.primary_location:
-        cur.execute(
-            "SELECT id FROM places WHERE id = %s", (new_faction.primary_location,)
-        )
-        if not cur.fetchone():
-            raise ValueError(
-                f"Place ID {new_faction.primary_location} not found for "
-                "faction location"
-            )
-
-    cur.execute("LOCK TABLE factions IN SHARE ROW EXCLUSIVE MODE")
-    cur.execute("SELECT COALESCE(MAX(id), 0) + 1 FROM factions")
-    faction_id = cur.fetchone()[0]
-
-    # Insert faction
-    cur.execute(
-        """
-        INSERT INTO factions (
-            id, name, summary, primary_location, extra_data
-        ) VALUES (%s, %s, %s, %s, %s)
-        RETURNING id, entity_id
-    """,
-        (
-            faction_id,
-            new_faction.name,
-            new_faction.summary,
-            new_faction.primary_location,
-            _json_dumps_model(new_faction.extra_data),
-        ),
-    )
-
-    inserted_faction_id, entity_id = cur.fetchone()
-    apply_tag_bestowal(
-        cur,
-        entity_id=entity_id,
-        entity_kind="faction",
-        bestowal=getattr(new_faction, "orrery_tags", None),
-        source_kind="skald_inline",
-    )
-    return inserted_faction_id
 
 
 # ============================================================================

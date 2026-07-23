@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -68,6 +69,23 @@ def test_openai_response_text_format_is_native_strict_json_schema() -> None:
     assert "state_updates" in schema["properties"]
     assert "authorial_directives" not in schema["required"]
     assert "authorial_directives" not in schema["properties"]
+
+
+def test_extended_wire_schema_excludes_inline_dossiers() -> None:
+    """The strict contract stays below the post-dossier size ceiling."""
+
+    schema = strict_json_schema(StorytellerResponseExtended)
+    encoded = json.dumps(schema, ensure_ascii=False, separators=(",", ":")).encode()
+
+    assert len(encoded) < 30_000
+    assert {
+        "NewCharacter",
+        "CharacterTraits",
+        "NewPlace",
+        "PlaceDetails",
+        "NewFaction",
+        "FactionDetails",
+    }.isdisjoint(schema.get("$defs", {}))
 
 
 def test_anthropic_output_format_uses_native_json_schema_shape() -> None:

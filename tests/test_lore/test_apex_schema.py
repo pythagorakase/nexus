@@ -5,14 +5,15 @@ from pydantic import ValidationError
 
 from nexus.agents.logon.apex_enums import WorldLayerType
 from nexus.agents.logon.apex_schema import (
+    CharacterReference,
+    FactionReference,
     FactionStateUpdate,
-    NewFaction,
-    NewPlace,
     OrreryAdjudication,
-    PlaceType,
+    PlaceReference,
+    PlaceReferenceType,
     StorytellerResponseBootstrap,
-    StorytellerResponseExtended,
     create_minimal_response,
+    validate_story_turn_response,
 )
 
 
@@ -71,18 +72,6 @@ def test_create_minimal_response_includes_valid_choices() -> None:
     ]
 
 
-def test_new_place_normalization_does_not_mutate_input_payload() -> None:
-    """Place type normalization should not leak mutations to caller data."""
-
-    payload = {"name": "Mirror Tram", "type": "fixed location"}
-    original_payload = dict(payload)
-
-    place = NewPlace.model_validate(payload)
-
-    assert payload == original_payload
-    assert place.type == PlaceType.FIXED_LOCATION
-
-
 def test_faction_state_update_rejects_legacy_current_activity() -> None:
     """Faction updates should use Orrery tags, not legacy activity columns."""
 
@@ -91,28 +80,6 @@ def test_faction_state_update_rejects_legacy_current_activity() -> None:
             faction_id=42,
             current_activity="Watching the station exits.",
         )
-
-
-def test_new_faction_schema_excludes_obsolete_legacy_columns() -> None:
-    """New faction creation should no longer advertise obsolete table columns."""
-
-    obsolete_fields = {
-        "ideology",
-        "history",
-        "current_activity",
-        "hidden_agenda",
-        "territory",
-        "power_level",
-        "resources",
-    }
-
-    assert obsolete_fields.isdisjoint(NewFaction.model_fields)
-    assert {"name", "summary", "primary_location", "extra_data", "orrery_tags"} <= set(
-        NewFaction.model_fields
-    )
-
-    with pytest.raises(ValidationError):
-        NewFaction(name="The Glass Choir", ideology="memory control")
 
 
 def test_orrery_adjudication_schema_accepts_replace_delta() -> None:
@@ -141,80 +108,53 @@ def test_orrery_adjudication_schema_accepts_replace_delta() -> None:
     assert adjudication.replacement_event_type == "sleep_need"
 
 
-def test_extended_response_accepts_partial_new_character_context() -> None:
-    """Normal narrative turns may introduce NPCs before all DB fields are known."""
+@pytest.mark.parametrize(
+    ("reference_model", "payload"),
+    [
+        (CharacterReference, {}),
+        (PlaceReference, {"reference_type": PlaceReferenceType.SETTING}),
+        (FactionReference, {}),
+    ],
+)
+def test_entity_references_require_id_or_name(reference_model, payload) -> None:
+    """Reference objects cannot stand in for new-entity declarations."""
 
-    response = StorytellerResponseExtended(
-        narrative="The watcher steps into the pharmacy light.",
-        choices=["Ask his name.", "Step back."],
-        chunk_metadata={
-            "chronology": {
-                "episode_transition": "continue",
-                "time_delta_minutes": 1,
-            },
-            "world_layer": "primary",
-        },
-        referenced_entities={
-            "characters": [
-                {
-                    "new_character": {
-                        "name": "Adrian Vale",
-                        "appearance": "A raincoated figure with tired eyes.",
-                        "background": "An informant with missing records.",
-                        "current_location": None,
-                        "extra_data": {
-                            "role": "Erased intelligence operative",
-                            "asset": "A brass token stamped with an angel",
-                        },
-                    },
-                    "reference_type": "present",
-                }
-            ],
-            "places": [
-                {
-                    "new_place": {
-                        "name": "Vey Street Transit Stop",
-                        "type": "transit stop",
-                        "coordinates": None,
-                        "extra_data": {"atmosphere": "uneasy"},
-                    },
-                    "reference_type": "setting",
-                }
-            ],
-            "factions": [
-                {
-                    "new_faction": {
-                        "name": "The Glass Choir",
-                        "summary": "A memory-control conspiracy around transit stops.",
-                        "primary_location": None,
-                        "extra_data": {"leader": "unknown"},
-                        "orrery_tags": {
-                            "applied_tags": ["covert", "information"],
-                            "tags_to_clear": [],
-                        },
-                    },
-                    "reference_type": "mentioned",
-                }
-            ],
-        },
-        state_updates={
-            "characters": [],
-            "relationships": [],
-            "locations": [],
-            "factions": [],
-        },
-    )
+    with pytest.raises(ValidationError, match="Must provide either"):
+        reference_model(**payload)
 
-    new_character = response.referenced_entities.characters[0].new_character
-    assert new_character is not None
-    assert new_character.personality is None
-    assert new_character.current_location is None
-    assert new_character.extra_data.role == "Erased intelligence operative"
-    new_place = response.referenced_entities.places[0].new_place
-    assert new_place is not None
-    assert new_place.type == PlaceType.FIXED_LOCATION
-    assert new_place.coordinates is None
-    assert new_place.extra_data.category == "transit stop"
-    new_faction = response.referenced_entities.factions[0].new_faction
-    assert new_faction is not None
-    assert new_faction.primary_location is None
+
+@pytest.mark.parametrize(
+    ("collection", "name_field", "legacy_field"),
+    [
+        ("characters", "character_name", "new_character"),
+        ("places", "place_name", "new_place"),
+    ],
+)
+def test_legacy_inline_dossiers_fail_the_entire_fallback_chain(
+    collection: str,
+    name_field: str,
+    legacy_field: str,
+) -> None:
+    """Legacy dossier fields raise instead of degrading to a smaller response."""
+
+    referenced_entities: dict[str, list[dict[str, object]]] = {
+        "characters": [],
+        "places": [],
+        "factions": [],
+    }
+    reference: dict[str, object] = {
+        name_field: "Legacy Inline Entity",
+        legacy_field: {"name": "Legacy Inline Entity"},
+    }
+    if collection == "places":
+        reference["reference_type"] = "setting"
+    referenced_entities[collection] = [reference]
+
+    with pytest.raises(ValidationError):
+        validate_story_turn_response(
+            {
+                "narrative": "A legacy entity steps into view.",
+                "choices": ["Continue.", "Wait."],
+                "referenced_entities": referenced_entities,
+            }
+        )

@@ -6,37 +6,19 @@ Converts between Pydantic models (LLM-friendly) and PostgreSQL types.
 Handles time conversion, episode/season calculation, and entity resolution.
 """
 
-import json
 import logging
 from datetime import timedelta
-from typing import Any, List, Optional, Tuple
+from typing import List, Optional, Tuple
+
 import asyncpg
 from nexus.agents.logon.apex_schema import (
     ChronologyUpdate,
     PlaceReference,
     CharacterReference,
     FactionReference,
-    NewCharacter,
-    NewPlace,
-    NewFaction,
-)
-from nexus.agents.orrery.tag_writer import apply_tag_bestowal_async
-from nexus.agents.orrery.geo import (
-    resolve_zone_for_point_async,
-    story_active_zone_async,
 )
 
 logger = logging.getLogger("nexus.api.db_converters")
-
-
-def _json_dumps_model(value: Any) -> Optional[str]:
-    """Serialize dicts or Pydantic models for JSONB columns."""
-
-    if value is None:
-        return None
-    if hasattr(value, "model_dump"):
-        value = value.model_dump(mode="json", exclude_none=True)
-    return json.dumps(value)
 
 
 # ============================================================================
@@ -133,11 +115,7 @@ async def resolve_place_references(
     place_references: List[PlaceReference], conn: asyncpg.Connection
 ) -> List[dict]:
     """
-    Resolve place references to place IDs, creating new places as needed.
-
-    Two-step process:
-    1. Create any new places and get their IDs
-    2. Build list of (place_id, reference_type, evidence) tuples for junction table
+    Resolve existing place references to IDs.
 
     Args:
         place_references: List of PlaceReference objects from LLM
@@ -151,26 +129,18 @@ async def resolve_place_references(
     for ref in place_references:
         place_id = None
 
-        # Step 1: Get or create place ID
         if ref.place_id:
             place_id = ref.place_id
         elif ref.place_name:
-            # Look up existing place by name
             place_id = await lookup_place_by_name(conn, ref.place_name)
-            if not place_id and ref.new_place:
-                place_id = await create_new_place(conn, ref.new_place)
-            elif not place_id:
+            if not place_id:
                 logger.warning(
-                    "Skipping unresolved place reference %r; provide place_id "
-                    "or new_place to persist place_chunk_references",
+                    "Skipping unresolved place reference %r; provide a canonical "
+                    "place_id or place_name to persist place_chunk_references",
                     ref.place_name,
                 )
                 continue
-        elif ref.new_place:
-            # Create new place and get ID
-            place_id = await create_new_place(conn, ref.new_place)
 
-        # Step 2: Build junction table entry
         resolved_refs.append(
             {
                 "place_id": place_id,
@@ -188,65 +158,6 @@ async def lookup_place_by_name(conn: asyncpg.Connection, name: str) -> Optional[
     return result
 
 
-async def create_new_place(conn: asyncpg.Connection, new_place: NewPlace) -> int:
-    """
-    Create a new place in the database.
-
-    Returns:
-        ID of newly created place
-    """
-    place_type = new_place.type.value if new_place.type else None
-    coordinates = None if place_type == "virtual" else new_place.coordinates
-    if coordinates is None:
-        zone_id = await story_active_zone_async(conn)
-    else:
-        zone_id = await resolve_zone_for_point_async(
-            conn,
-            longitude=coordinates.lon,
-            latitude=coordinates.lat,
-        )
-
-    place_row = await conn.fetchrow(
-        """
-        INSERT INTO places (
-            name, type, summary, history, current_status, secrets,
-            extra_data, zone, coordinates
-        ) VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8,
-            CASE
-                WHEN $9::double precision IS NULL THEN NULL
-                ELSE ST_SetSRID(
-                    ST_MakePoint($9, $10, 0, 0), 4326
-                )::geography
-            END
-        )
-        RETURNING id, entity_id
-    """,
-        new_place.name,
-        place_type,
-        new_place.summary,
-        new_place.history,
-        new_place.current_status,
-        new_place.secrets,
-        _json_dumps_model(new_place.extra_data),
-        zone_id,
-        coordinates.lon if coordinates else None,
-        coordinates.lat if coordinates else None,
-    )
-
-    place_id = int(place_row["id"])
-    counters = await apply_tag_bestowal_async(
-        conn,
-        entity_id=int(place_row["entity_id"]),
-        entity_kind="place",
-        bestowal=getattr(new_place, "orrery_tags", None),
-        source_kind="skald_inline",
-    )
-    if any(counters.values()):
-        logger.info(f"Tag bestowal place/{place_id}: {counters}")
-    return place_id
-
-
 # ============================================================================
 # Character Reference Resolution
 # ============================================================================
@@ -256,37 +167,26 @@ async def resolve_character_references(
     character_references: List[CharacterReference], conn: asyncpg.Connection
 ) -> List[dict]:
     """
-    Resolve character references, creating new characters as needed.
-
-    Two-step process:
-    1. Create new characters and get their IDs
-    2. Build list of (character_id, reference_type) for junction table
+    Resolve existing character references to IDs.
     """
     resolved_refs = []
 
     for ref in character_references:
         char_id = None
 
-        # Get or create character ID
         if ref.character_id:
             char_id = ref.character_id
         elif ref.character_name:
             char_id = await lookup_character_by_name(conn, ref.character_name)
-            if not char_id and ref.new_character:
-                char_id = await create_new_character(conn, ref.new_character)
-            elif not char_id:
+            if not char_id:
                 logger.warning(
-                    "Skipping unresolved character reference %r; provide "
-                    "character_id or new_character to persist "
+                    "Skipping unresolved character reference %r; provide a "
+                    "canonical character_id or character_name to persist "
                     "chunk_character_references",
                     ref.character_name,
                 )
                 continue
-        elif ref.new_character:
-            # Create new character
-            char_id = await create_new_character(conn, ref.new_character)
 
-        # Build junction table entry
         resolved_refs.append(
             {"character_id": char_id, "reference": ref.reference_type.value}
         )
@@ -302,45 +202,6 @@ async def lookup_character_by_name(
     return result
 
 
-async def create_new_character(conn: asyncpg.Connection, new_char: NewCharacter) -> int:
-    """
-    Create a new character in the database.
-
-    Validates that current_location (place_id) exists before insertion.
-    """
-    # Validate location exists
-    if new_char.current_location:
-        location_exists = await conn.fetchval(
-            "SELECT id FROM places WHERE id = $1", new_char.current_location
-        )
-        if not location_exists:
-            raise ValueError(
-                f"Place ID {new_char.current_location} not found for character location"
-            )
-
-    # Insert character
-    char_id = await conn.fetchval(
-        """
-        INSERT INTO characters (
-            name, summary, appearance, background, personality,
-            emotional_state, current_activity, current_location, extra_data
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-        RETURNING id
-    """,
-        new_char.name,
-        new_char.summary,
-        new_char.appearance,
-        new_char.background,
-        new_char.personality,
-        new_char.emotional_state,
-        new_char.current_activity,
-        new_char.current_location,
-        _json_dumps_model(new_char.extra_data),
-    )
-
-    return char_id
-
-
 # ============================================================================
 # Faction Reference Resolution
 # ============================================================================
@@ -350,36 +211,25 @@ async def resolve_faction_references(
     faction_references: List[FactionReference], conn: asyncpg.Connection
 ) -> List[dict]:
     """
-    Resolve faction references, creating new factions as needed.
-
-    Two-step process:
-    1. Create new factions and get their IDs
-    2. Build list of faction_ids for junction table
+    Resolve existing faction references to IDs.
     """
     resolved_refs = []
 
     for ref in faction_references:
         faction_id = None
 
-        # Get or create faction ID
         if ref.faction_id:
             faction_id = ref.faction_id
         elif ref.faction_name:
             faction_id = await lookup_faction_by_name(conn, ref.faction_name)
-            if not faction_id and ref.new_faction:
-                faction_id = await create_new_faction(conn, ref.new_faction)
-            elif not faction_id:
+            if not faction_id:
                 logger.warning(
-                    "Skipping unresolved faction reference %r; provide faction_id "
-                    "or new_faction to persist chunk_faction_references",
+                    "Skipping unresolved faction reference %r; provide a canonical "
+                    "faction_id or faction_name to persist chunk_faction_references",
                     ref.faction_name,
                 )
                 continue
-        elif ref.new_faction:
-            # Create new faction
-            faction_id = await create_new_faction(conn, ref.new_faction)
 
-        # Build junction table entry
         resolved_refs.append({"faction_id": faction_id})
 
     return resolved_refs
@@ -389,65 +239,3 @@ async def lookup_faction_by_name(conn: asyncpg.Connection, name: str) -> Optiona
     """Look up faction ID by name"""
     result = await conn.fetchval("SELECT id FROM factions WHERE name = $1", name)
     return result
-
-
-async def create_new_faction(conn: asyncpg.Connection, new_faction: NewFaction) -> int:
-    """Create a new faction in the database."""
-    # Validate primary_location exists
-    if new_faction.primary_location:
-        location_exists = await conn.fetchval(
-            "SELECT id FROM places WHERE id = $1", new_faction.primary_location
-        )
-        if not location_exists:
-            raise ValueError(
-                f"Place ID {new_faction.primary_location} not found for "
-                "faction location"
-            )
-
-    await conn.execute("LOCK TABLE factions IN SHARE ROW EXCLUSIVE MODE")
-    faction_id = await conn.fetchval("SELECT COALESCE(MAX(id), 0) + 1 FROM factions")
-
-    # Insert faction
-    faction_id = await conn.fetchval(
-        """
-        INSERT INTO factions (
-            id, name, summary, primary_location, extra_data
-        ) VALUES ($1, $2, $3, $4, $5)
-        RETURNING id
-    """,
-        faction_id,
-        new_faction.name,
-        new_faction.summary,
-        new_faction.primary_location,
-        _json_dumps_model(new_faction.extra_data),
-    )
-
-    await apply_new_faction_tags(conn, faction_id, new_faction)
-    return faction_id
-
-
-async def apply_new_faction_tags(
-    conn: asyncpg.Connection, faction_id: int, new_faction: NewFaction
-) -> None:
-    """Apply inline Orrery tags for async-created factions."""
-
-    bestowal = getattr(new_faction, "orrery_tags", None)
-    if bestowal is None:
-        return
-
-    entity_id = await conn.fetchval(
-        "SELECT entity_id FROM factions WHERE id = $1",
-        faction_id,
-    )
-    if entity_id is None:
-        raise ValueError(f"Faction ID {faction_id} not found for tag bestowal")
-
-    counters = await apply_tag_bestowal_async(
-        conn,
-        entity_id=entity_id,
-        entity_kind="faction",
-        bestowal=bestowal,
-        source_kind="skald_inline",
-    )
-    if any(counters.values()):
-        logger.info(f"Tag bestowal faction/{faction_id}: {counters}")

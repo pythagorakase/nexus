@@ -6,7 +6,7 @@ Production schema for NEXUS narrative generation, based on refactored version.
 
 Key improvements over legacy schema:
 1. Full database column alignment (all required fields present)
-2. Support for creating new entities (characters, places, factions)
+2. Declaration-driven creation of persistent entities
 3. Proper database ENUM types
 4. Fixed episode/season transition handling
 5. Interval-based timekeeping
@@ -26,7 +26,6 @@ from pydantic.json_schema import SkipJsonSchema
 from nexus.agents.logon.apex_enums import (
     EmotionalValence,
     PlaceReferenceType,
-    PlaceType,
     ReferenceType,
     RelationshipType,
     WorldLayerType,
@@ -60,182 +59,6 @@ class Coordinates(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-class CharacterTraits(BaseModel):
-    """
-    Character traits following Mind's Eye Theatre philosophy.
-
-    Exactly 3 of the 10 optional traits must be provided, plus the required
-    wildcard. Traits signal narrative focus - what aspects of the character
-    should be foregrounded in the story.
-    """
-
-    # Social Network (choose if narratively significant)
-    allies: Optional[str] = Field(
-        default=None, description="Who will actively help and take risks for you"
-    )
-    contacts: Optional[str] = Field(
-        default=None, description="Information/favor sources - limited risk-taking"
-    )
-    patron: Optional[str] = Field(
-        default=None, description="Powerful mentor/sponsor with their own agenda"
-    )
-    dependents: Optional[str] = Field(
-        default=None, description="Those who rely on you for support or protection"
-    )
-
-    # Power & Position
-    status: Optional[str] = Field(
-        default=None, description="Formal standing recognized by an institution"
-    )
-    reputation: Optional[str] = Field(
-        default=None, description="How widely known you are, what for"
-    )
-
-    # Assets & Territory
-    resources: Optional[str] = Field(
-        default=None, description="Material wealth, equipment, supplies"
-    )
-    domain: Optional[str] = Field(
-        default=None, description="Place or area you control or claim"
-    )
-    role: Optional[str] = Field(
-        default=None,
-        description="Legacy freeform role note for partially introduced characters",
-    )
-    asset: Optional[str] = Field(
-        default=None,
-        description="Legacy freeform asset note for partially introduced characters",
-    )
-
-    # Liabilities
-    enemies: Optional[str] = Field(
-        default=None,
-        description="Those actively opposed who will expend energy to thwart you",
-    )
-    obligations: Optional[str] = Field(
-        default=None, description="Debts, oaths, or duties you must honor"
-    )
-
-    # Optional wildcard - unique trait that sets this character apart
-    wildcard_name: Optional[str] = Field(
-        default=None, description="Name of the unique custom trait"
-    )
-    wildcard_description: Optional[str] = Field(
-        default=None,
-        description=(
-            "What this trait means - capability, possession, relationship, " "or curse"
-        ),
-    )
-
-    @model_validator(mode="before")
-    @classmethod
-    def normalize_legacy_extra_trait_keys(cls, data: Any) -> Any:
-        """Fold legacy arbitrary extra_data keys into strict wildcard prose."""
-
-        if not isinstance(data, dict):
-            return data
-        field_names = set(cls.model_fields)
-        extras = {key: value for key, value in data.items() if key not in field_names}
-        if not extras:
-            return data
-
-        normalized = {key: value for key, value in data.items() if key in field_names}
-        normalized.setdefault("wildcard_name", "legacy_extra_data")
-        normalized.setdefault(
-            "wildcard_description",
-            json.dumps(extras, ensure_ascii=False, sort_keys=True),
-        )
-        return normalized
-
-    model_config = ConfigDict(extra="forbid")
-
-
-class PlaceDetails(BaseModel):
-    """
-    Additional place attributes stored in extra_data JSONB.
-
-    These provide rich world-building details beyond the core place fields.
-    """
-
-    category: Optional[str] = Field(
-        default=None,
-        description=(
-            "Narrative category: settlement, wilderness, dungeon, building, "
-            "district, landmark, road, border"
-        ),
-    )
-    size: Optional[str] = Field(
-        default=None,
-        description="Relative size: tiny, small, medium, large, huge, massive",
-    )
-    population: Optional[int] = Field(
-        default=None, ge=0, description="Population if applicable"
-    )
-    atmosphere: Optional[str] = Field(
-        default=None, description="Mood and feeling of the place"
-    )
-    notable_features: List[str] = Field(
-        default_factory=list, description="Distinctive physical features (max 8)"
-    )
-    resources: List[str] = Field(
-        default_factory=list, description="Available resources (max 5)"
-    )
-    dangers: List[str] = Field(
-        default_factory=list, description="Known threats or hazards (max 5)"
-    )
-    ruler: Optional[str] = Field(
-        default=None, description="Who controls or governs this place"
-    )
-    factions: List[str] = Field(
-        default_factory=list, description="Active factions or groups (max 5)"
-    )
-    culture: Optional[str] = Field(
-        default=None, description="Cultural characteristics and customs"
-    )
-    economy: Optional[str] = Field(
-        default=None, description="Economic base and activities"
-    )
-    trade_goods: List[str] = Field(
-        default_factory=list, description="Goods produced or traded (max 5)"
-    )
-    nearby_landmarks: List[str] = Field(
-        default_factory=list, description="Nearby notable locations (max 5)"
-    )
-    current_events: List[str] = Field(
-        default_factory=list, description="Ongoing events (max 3)"
-    )
-    rumors: List[str] = Field(
-        default_factory=list, description="Current rumors or gossip (max 3)"
-    )
-
-    model_config = ConfigDict(extra="forbid")
-
-
-class FactionDetails(BaseModel):
-    """
-    Additional faction attributes stored in extra_data JSONB.
-    """
-
-    leader: Optional[str] = Field(default=None, description="Name of faction leader")
-    notable_members: List[str] = Field(
-        default_factory=list, description="Other notable members"
-    )
-    allies: List[str] = Field(
-        default_factory=list, description="Allied factions or groups"
-    )
-    rivals: List[str] = Field(
-        default_factory=list, description="Rival factions or groups"
-    )
-    symbols: Optional[str] = Field(
-        default=None, description="Faction symbols, colors, or identifying marks"
-    )
-    traditions: Optional[str] = Field(
-        default=None, description="Key traditions or rituals"
-    )
-
-    model_config = ConfigDict(extra="forbid")
-
-
 class NamedObservation(BaseModel):
     """Strict key/value observation entry for JSONB-style side notes."""
 
@@ -262,199 +85,6 @@ def _stringify_structured_value(value: Any) -> str:
     if isinstance(value, str):
         return value
     return json.dumps(value, ensure_ascii=False, sort_keys=True)
-
-
-# ============================================================================
-# New Entity Creation
-# ============================================================================
-
-
-class NewCharacter(BaseModel):
-    """
-    Schema for introducing a new character - aligned with DB schema.
-    """
-
-    name: str = Field(description="Character's name")
-    appearance: Optional[str] = Field(
-        default=None, description="Physical description - how the character looks"
-    )
-    background: Optional[str] = Field(
-        default=None, description="Character backstory and history"
-    )
-    personality: Optional[str] = Field(
-        default=None,
-        description=(
-            "Personality traits and quirks (prose format, e.g., 'Methodical "
-            "problem-solver. Paranoid about digital traces.')"
-        ),
-    )
-    emotional_state: Optional[str] = Field(
-        default=None, description="Current emotional state"
-    )
-    current_activity: Optional[str] = Field(
-        default=None, description="What the character is currently doing"
-    )
-    current_location: Optional[int] = Field(
-        default=None,
-        description="Place ID where character is located (FK to places.id)",
-    )
-    summary: Optional[str] = Field(
-        default=None,
-        max_length=500,
-        description="Brief character description (max 500 chars)",
-    )
-    extra_data: Optional[CharacterTraits] = Field(
-        default=None,
-        description="Character traits (3 of 10 optional traits + required wildcard)",
-    )
-    orrery_tags: Optional[OrreryTagBestowal] = Field(
-        default=None,
-        description=(
-            "Semantic Orrery tags for this character (bodyform, capacity, "
-            "disposition, role, state, etc.). This is an OBJECT whose "
-            '"applied_tags" key holds the list of registered tag names — '
-            "never a bare list of strings. Omit tags when the closed "
-            "registry has no exact fit. See the Orrery Awareness section of "
-            "your system prompt for category guidance."
-        ),
-    )
-
-
-class NewPlace(BaseModel):
-    """
-    Schema for introducing a new place - aligned with DB schema.
-    Zone is resolved from coordinates or inherited from the story-active place.
-    """
-
-    name: str = Field(description="Place name")
-    type: PlaceType = Field(
-        default=PlaceType.FIXED_LOCATION,
-        description="Type of place (fixed_location, vehicle, virtual, other)",
-    )
-    summary: Optional[str] = Field(
-        default=None,
-        max_length=500,
-        description="Brief place description (max 500 chars)",
-    )
-    history: Optional[str] = Field(
-        default=None, description="Place history and past events"
-    )
-    current_status: Optional[str] = Field(
-        default=None,
-        description="Current state, conditions, and activity at this location",
-    )
-    secrets: Optional[str] = Field(
-        default=None,
-        description="Hidden information, plot hooks, and narrative opportunities",
-    )
-    coordinates: Optional[Coordinates] = Field(
-        default=None,
-        description=(
-            "Geographic coordinates (lat/lon on Earth-shaped planet). Zone "
-            "calculated from this."
-        ),
-    )
-    inhabitants: Optional[List[int]] = Field(
-        default_factory=list,
-        description=(
-            "Character IDs of inhabitants (usually empty for newly "
-            "introduced places)"
-        ),
-    )
-    extra_data: Optional[PlaceDetails] = Field(
-        default=None,
-        description="Additional place attributes (atmosphere, features, dangers, etc.)",
-    )
-    orrery_tags: Optional[OrreryTagBestowal] = Field(
-        default=None,
-        description=(
-            "Semantic place tags for this location (e.g., commerce, dwelling, "
-            "haven, transit, place_hidden, place_open, wilderness). This is "
-            'an OBJECT whose "applied_tags" key holds the list of registered '
-            "tag names — never a bare list of strings. Omit tags when the "
-            "closed registry has no exact fit."
-        ),
-    )
-
-    @model_validator(mode="before")
-    @classmethod
-    def normalize_place_type(cls, data: Any) -> Any:
-        """Coerce descriptive place categories into the database enum."""
-
-        if not isinstance(data, dict):
-            return data
-
-        raw_type = data.get("type")
-        if not isinstance(raw_type, str):
-            return data
-
-        data = dict(data)
-        normalized_type = raw_type.strip().lower().replace("-", "_").replace(" ", "_")
-        try:
-            data["type"] = PlaceType(normalized_type).value
-            return data
-        except ValueError:
-            pass
-
-        vehicle_terms = {"vehicle", "train", "car", "bus", "tram", "ship", "boat"}
-        virtual_terms = {"virtual", "digital", "online", "network", "simulation"}
-        if normalized_type in vehicle_terms:
-            data["type"] = PlaceType.VEHICLE.value
-        elif normalized_type in virtual_terms:
-            data["type"] = PlaceType.VIRTUAL.value
-        else:
-            data["type"] = PlaceType.FIXED_LOCATION.value
-
-        extra_data = data.get("extra_data")
-        if isinstance(extra_data, dict):
-            extra_data = dict(extra_data)
-            extra_data.setdefault("category", raw_type)
-            data["extra_data"] = extra_data
-        elif extra_data is None:
-            data["extra_data"] = {"category": raw_type}
-
-        return data
-
-
-class NewFaction(BaseModel):
-    """
-    Schema for introducing a new faction.
-
-    Faction semantics live in Orrery tags and pair-tags, not legacy prose
-    columns. Leader/member/color detail goes in extra_data or relationships.
-    """
-
-    name: str = Field(description="Faction name")
-    summary: Optional[str] = Field(
-        default=None,
-        max_length=500,
-        description=(
-            "Brief faction description (max 500 chars). Put narrative prose "
-            "here when no accepted Orrery tag applies."
-        ),
-    )
-    primary_location: Optional[int] = Field(
-        default=None,
-        description="Place ID of faction headquarters/primary base (FK to places.id)",
-    )
-    extra_data: Optional[FactionDetails] = Field(
-        default=None,
-        description=(
-            "Additional faction attributes (leader, members, allies, " "rivals, etc.)"
-        ),
-    )
-    orrery_tags: Optional[OrreryTagBestowal] = Field(
-        default=None,
-        description=(
-            "Closed-vocabulary Orrery tags for this faction. This is an "
-            'OBJECT whose "applied_tags" key holds the list of registered '
-            "tag names — never a bare list of strings. Use registered tags "
-            "from ideology, resource_base, legitimacy, operational_mode, "
-            "power_status, and agenda; omit tags when prose is more accurate."
-        ),
-    )
-
-    model_config = ConfigDict(extra="forbid")
 
 
 # ============================================================================
@@ -561,12 +191,12 @@ class NewEntityDeclaration(BaseModel):
 
 
 # ============================================================================
-# Entity References (Supporting both existing and new)
+# Entity References
 # ============================================================================
 
 
 class CharacterReference(BaseModel):
-    """Reference to a character - either existing or new"""
+    """Reference to an existing character by ID or name."""
 
     # For existing character
     character_id: Optional[int] = Field(
@@ -575,10 +205,6 @@ class CharacterReference(BaseModel):
     character_name: Optional[str] = Field(
         default=None, description="Name for lookup if ID unknown"
     )
-    # For new character
-    new_character: Optional[NewCharacter] = Field(
-        default=None, description="Details for creating new character"
-    )
     # How they appear in this chunk
     reference_type: ReferenceType = Field(
         default=ReferenceType.MENTIONED, description="How the character is referenced"
@@ -586,16 +212,16 @@ class CharacterReference(BaseModel):
 
     @model_validator(mode="after")
     def validate_character_reference(self):
-        """Ensure we have either existing ref or new character"""
-        if not any([self.character_id, self.character_name, self.new_character]):
-            raise ValueError(
-                "Must provide either character_id, character_name, or new_character"
-            )
+        """Ensure the reference supplies an ID or name."""
+        if not any([self.character_id, self.character_name]):
+            raise ValueError("Must provide either character_id or character_name")
         return self
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class PlaceReference(BaseModel):
-    """Reference to a place - either existing or new"""
+    """Reference to an existing place by ID or name."""
 
     # For existing place
     place_id: Optional[int] = Field(
@@ -603,10 +229,6 @@ class PlaceReference(BaseModel):
     )
     place_name: Optional[str] = Field(
         default=None, description="Name for lookup if ID unknown"
-    )
-    # For new place
-    new_place: Optional[NewPlace] = Field(
-        default=None, description="Details for creating new place"
     )
     # How it appears in this chunk (REQUIRED for junction table)
     reference_type: PlaceReferenceType = Field(
@@ -627,14 +249,16 @@ class PlaceReference(BaseModel):
 
     @model_validator(mode="after")
     def validate_place_reference(self):
-        """Ensure we have either existing ref or new place"""
-        if not any([self.place_id, self.place_name, self.new_place]):
-            raise ValueError("Must provide either place_id, place_name, or new_place")
+        """Ensure the reference supplies an ID or name."""
+        if not any([self.place_id, self.place_name]):
+            raise ValueError("Must provide either place_id or place_name")
         return self
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class FactionReference(BaseModel):
-    """Reference to a faction - either existing or new"""
+    """Reference to an existing faction by ID or name."""
 
     # For existing faction
     faction_id: Optional[int] = Field(
@@ -643,33 +267,37 @@ class FactionReference(BaseModel):
     faction_name: Optional[str] = Field(
         default=None, description="Name for lookup if ID unknown"
     )
-    # For new faction
-    new_faction: Optional[NewFaction] = Field(
-        default=None, description="Details for creating new faction"
-    )
     # How it appears
     reference_type: ReferenceType = Field(
         default=ReferenceType.MENTIONED, description="How the faction is referenced"
     )
 
+    @model_validator(mode="after")
+    def validate_faction_reference(self):
+        """Ensure the reference supplies an ID or name."""
+        if not any([self.faction_id, self.faction_name]):
+            raise ValueError("Must provide either faction_id or faction_name")
+        return self
+
+    model_config = ConfigDict(extra="forbid")
+
 
 class ReferencedEntities(BaseModel):
     """
-    Collection of all entities referenced in the narrative chunk.
-    Supports both existing entities and introduction of new ones.
+    Collection of existing entities referenced in the narrative chunk.
     """
 
     characters: List[CharacterReference] = Field(
         default_factory=list,
-        description="Characters present or mentioned (existing or new)",
+        description="Existing characters present or mentioned",
     )
     places: List[PlaceReference] = Field(
         default_factory=list,
-        description="Places present or mentioned (existing or new)",
+        description="Existing places present or mentioned",
     )
     factions: List[FactionReference] = Field(
         default_factory=list,
-        description="Factions present or mentioned (existing or new)",
+        description="Existing factions present or mentioned",
     )
     # Note: items and threats tables exist but are empty
     # events table doesn't exist
@@ -1347,7 +975,7 @@ class StorytellerResponseExtended(StorytellerResponseBase):
     )
     chunk_metadata: ChunkMetadataUpdate = Field(description="Essential chunk metadata")
     referenced_entities: ReferencedEntities = Field(
-        description="All entities referenced (existing or new)"
+        description="All existing entities referenced"
     )
     state_updates: StateUpdates = Field(description="Comprehensive state updates")
     operations: Optional[Operations] = Field(
@@ -1386,34 +1014,6 @@ def calculate_token_count(text: str) -> int:
     from nexus.agents.lore.utils.chunk_operations import calculate_chunk_tokens
 
     return calculate_chunk_tokens(text)
-
-
-def validate_entity_references(entities: ReferencedEntities) -> List[str]:
-    """
-    Validate that entity references are well-formed.
-    Returns list of validation warnings.
-    """
-    warnings = []
-
-    # Check for duplicate characters
-    char_names = [
-        c.character_name or c.new_character.name
-        for c in entities.characters
-        if c.character_name or c.new_character
-    ]
-    if len(char_names) != len(set(char_names)):
-        warnings.append("Duplicate character references detected")
-
-    # Check for duplicate places
-    place_names = [
-        p.place_name or p.new_place.name
-        for p in entities.places
-        if p.place_name or p.new_place
-    ]
-    if len(place_names) != len(set(place_names)):
-        warnings.append("Duplicate place references detected")
-
-    return warnings
 
 
 # ============================================================================

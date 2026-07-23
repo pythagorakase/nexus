@@ -11,14 +11,10 @@ import tiktoken
 from pydantic_ai import ModelRetry
 
 from nexus.agents.logon.apex_schema import (
-    CharacterReference,
     CharacterStateUpdate,
     LocationStateUpdate,
-    NewCharacter,
     NewEntityDeclaration,
     NewEntityPairTagHint,
-    ReferencedEntities,
-    ReferenceType,
     StateUpdates,
     StorytellerResponseExtended,
 )
@@ -216,17 +212,12 @@ def _storyteller_response(
 
 def test_valid_bestowals_produce_no_issues() -> None:
     response = _response(
-        referenced_entities=ReferencedEntities(
+        state_updates=StateUpdates(
             characters=[
-                CharacterReference(
-                    reference_type=ReferenceType.PRESENT,
-                    new_character=NewCharacter(
-                        name="Joryn Peale",
-                        summary="A frightened junior copyist.",
-                        orrery_tags=OrreryTagBestowal(
-                            applied_tags=["human", "perceptive"]
-                        ),
-                    ),
+                CharacterStateUpdate(
+                    character_id=1,
+                    character_name="Joryn Peale",
+                    orrery_tags=OrreryTagBestowal(applied_tags=["human", "perceptive"]),
                 )
             ]
         ),
