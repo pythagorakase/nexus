@@ -71,7 +71,7 @@ def _stub_baseline(
 @pytest.mark.parametrize(
     ("apex_model", "provider_wire_type", "expected_window"),
     [
-        ("nousresearch/hermes-4-70b", "local", 24_000),
+        ("nousresearch/hermes-4-70b", "local", 32_000),
         (None, "openai", 75_000),
         ("claude-opus-4-8", "anthropic", 75_000),
     ],
@@ -245,7 +245,7 @@ def test_local_payload_trims_oldest_warm_chunks_and_keeps_parent(
     ]
 
     assert phase_state["total_tokens_used"] <= phase_state["payload_ceiling"]
-    assert ctx.token_counts["apex_window"] == 24_000
+    assert ctx.token_counts["apex_window"] == 32_000
     assert phase_state["prompt_overhead_tokens"] == 4_000
     assert phase_state["payload_ceiling"] == (
         ctx.token_counts["total_available"] - 4_000
