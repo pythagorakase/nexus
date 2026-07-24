@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 import json
 import os
 from pathlib import Path
@@ -43,6 +44,7 @@ from nexus.agents.logon.skald_wire import (
     PresenceBaseline,
     PresenceRef,
     SkaldTurnWire,
+    _prompt_guide_type,
     hydrate_skald_turn,
     skald_wire_lenient_schema,
     skald_wire_prompt_guide,
@@ -924,6 +926,49 @@ def _reachable_schema_objects(
     return objects
 
 
+def _reachable_schema_property_names(schema: dict[str, Any]) -> list[str]:
+    """Collect every reachable property, including properties of inline objects."""
+
+    definitions = schema["$defs"]
+    property_names: list[str] = []
+    visited_definitions: set[str] = set()
+
+    def visit(node: Any) -> None:
+        if not isinstance(node, dict):
+            return
+        ref = node.get("$ref")
+        if isinstance(ref, str):
+            name = ref.removeprefix("#/$defs/")
+            if name not in visited_definitions:
+                visited_definitions.add(name)
+                visit(definitions[name])
+            return
+
+        properties = node.get("properties")
+        if isinstance(properties, dict):
+            for property_name, property_schema in properties.items():
+                property_names.append(property_name)
+                visit(property_schema)
+
+        visit(node.get("items"))
+        for key in ("anyOf", "oneOf", "allOf"):
+            for member in node.get(key, []):
+                visit(member)
+
+    visit(schema)
+    return property_names
+
+
+def test_prompt_guide_type_rejects_inline_object_schema() -> None:
+    inline_object = {
+        "type": "object",
+        "properties": {"nested": {"type": "string"}},
+    }
+
+    with pytest.raises(ValueError, match="does not support inline object schemas"):
+        _prompt_guide_type(inline_object, {})
+
+
 def test_skald_wire_prompt_guide_is_deterministic_and_complete() -> None:
     schema = skald_wire_lenient_schema()
     first = skald_wire_prompt_guide()
@@ -933,6 +978,15 @@ def test_skald_wire_prompt_guide_is_deterministic_and_complete() -> None:
     assert first.startswith("=== OUTPUT FORMAT ===\n")
     assert "Respond with a single JSON object" in first
     assert "No prose outside the JSON." in first
+
+    rendered_property_names = []
+    for line in first.splitlines():
+        field_label = line.split(":", 1)[0]
+        if field_label.endswith(("!", "?")):
+            rendered_property_names.append(field_label[:-1])
+    assert Counter(rendered_property_names) == Counter(
+        _reachable_schema_property_names(schema)
+    )
 
     for object_name, object_schema in _reachable_schema_objects(schema):
         marker = f"{object_name}{{\n"
@@ -1088,6 +1142,15 @@ def test_logon_selects_transport_appropriate_wire_serialization() -> None:
             schema=skald_wire_lenient_schema(),
         )
     }
+
+
+def test_anthropic_wire_serialization_requires_transport_attribute() -> None:
+    utility = LogonUtility({})
+    utility._provider_wire_type = "anthropic"
+    utility.provider = cast(Any, SimpleNamespace())
+
+    with pytest.raises(AttributeError, match="structured_transport"):
+        utility._schema_format_kwargs(SkaldTurnWire)
 
 
 def test_local_chat_response_format_carries_lenient_wire_schema() -> None:

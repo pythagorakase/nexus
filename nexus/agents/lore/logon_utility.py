@@ -506,6 +506,7 @@ class LogonUtility:
                 max_tokens=apex_settings.get(
                     "max_output_tokens", apex_settings.get("max_tokens", 4000)
                 ),
+                reasoning_effort=apex_settings.get("reasoning_effort"),
                 system_prompt=system_prompt,
                 structured_transport=anthropic_transport,
                 structured_output_retries=structured_output_retries,
@@ -773,11 +774,11 @@ class LogonUtility:
                     )
                 }
             elif self._provider_wire_type == "anthropic":
-                anthropic_transport = getattr(
-                    self.provider,
-                    "structured_transport",
-                    "prompted",
-                )
+                if self.provider is None:
+                    raise RuntimeError(
+                        "Anthropic schema formatting requires an initialized provider"
+                    )
+                anthropic_transport = self.provider.structured_transport
                 if anthropic_transport == "prompted":
                     kwargs = {}
                 elif anthropic_transport == "native":

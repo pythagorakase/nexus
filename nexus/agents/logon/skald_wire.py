@@ -709,8 +709,9 @@ def _prompt_guide_type(
     if ref is not None:
         ref_name = _prompt_guide_ref_name(ref)
         target = definitions[ref_name]
-        target_type = _prompt_guide_type(target, definitions)
-        return ref_name if target_type == "object" else target_type
+        if target.get("type") == "object":
+            return ref_name
+        return _prompt_guide_type(target, definitions)
 
     schema_type = schema_node.get("type")
     if schema_type == "array":
@@ -718,6 +719,11 @@ def _prompt_guide_type(
         if not isinstance(items, dict):
             raise ValueError("Skald wire array schema is missing an items schema")
         return f"{_prompt_guide_type(items, definitions)}[]"
+    if schema_type == "object":
+        raise ValueError(
+            "Skald wire prompt guide does not support inline object schemas; "
+            "use a named $defs model"
+        )
     if isinstance(schema_type, str):
         return schema_type
 

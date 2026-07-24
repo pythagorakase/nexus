@@ -191,6 +191,7 @@ def test_anthropic_storyteller_transport_and_guide_follow_settings(
             "apex": {
                 "anthropic_storyteller_transport": configured_transport,
                 "max_output_tokens": 1234,
+                "reasoning_effort": "medium",
                 "structured_output_retries": 2,
             }
         }
@@ -200,6 +201,7 @@ def test_anthropic_storyteller_transport_and_guide_follow_settings(
     utility._initialize_provider(is_bootstrap)
 
     assert captured["structured_transport"] == expected_transport
+    assert captured["reasoning_effort"] == "medium"
     expected_system = (
         f"Core prompt\n\n{skald_wire_prompt_guide()}" if has_guide else "Core prompt"
     )
