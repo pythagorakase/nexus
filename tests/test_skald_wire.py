@@ -1259,6 +1259,7 @@ def test_sync_logon_reads_and_supplies_parent_baseline(
     )
     utility.provider = cast(Any, WireProvider())
     utility._provider_bootstrap_mode = False
+    utility._provider_wire_type = "openai"
     response = utility.generate_narrative(
         {
             "user_input": "Continue.",
@@ -1266,7 +1267,8 @@ def test_sync_logon_reads_and_supplies_parent_baseline(
             "entity_data": {},
             "retrieved_passages": {"results": []},
             "metadata": {"target_chunk_id": 77},
-        }
+        },
+        effective_context_window=75_000,
     )
     assert calls == [("save_05", 77)]
     assert isinstance(response, StorytellerResponseExtended)
@@ -1309,6 +1311,7 @@ async def test_async_logon_reads_and_supplies_parent_baseline(
     )
     utility.provider = cast(Any, WireProvider())
     utility._provider_bootstrap_mode = False
+    utility._provider_wire_type = "openai"
     response = await utility.generate_narrative_async(
         {
             "user_input": "Continue.",
@@ -1316,7 +1319,8 @@ async def test_async_logon_reads_and_supplies_parent_baseline(
             "entity_data": {},
             "retrieved_passages": {"results": []},
             "metadata": {"target_chunk_id": 77},
-        }
+        },
+        effective_context_window=75_000,
     )
     assert calls == [("save_05", 77)]
     assert isinstance(response, StorytellerResponseExtended)

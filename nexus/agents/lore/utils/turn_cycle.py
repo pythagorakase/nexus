@@ -4,11 +4,14 @@ Turn Cycle Phase Implementations for LORE
 Handles the execution of individual turn cycle phases.
 """
 
+import json
 import logging
-from typing import Dict, List, Any, Optional, Union, Iterable
 from datetime import datetime
+from typing import Any, Dict, Iterable, List, Optional, Union
 
+from nexus.agents.lore.utils.chunk_operations import calculate_chunk_tokens
 from nexus.memory.context_state import memory_identity
+from nexus.memory.manager import resolve_storyteller_prompt_overhead_tokens
 from nexus.memory.retrieval_coverage import coerce_chunk_id
 
 logger = logging.getLogger("nexus.lore.turn_cycle")
@@ -142,6 +145,75 @@ def _deduplicate_retrieval_results(
     )[:limit]
 
 
+def _context_component_token_count(payload: Dict[str, Any]) -> int:
+    """Count assembled context components after separately reserved user input."""
+    context_components = {
+        key: value for key, value in payload.items() if key != "user_input"
+    }
+    try:
+        serialized = json.dumps(
+            context_components,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+    except (TypeError, ValueError) as exc:
+        raise TypeError(
+            "Storyteller context payload must be JSON-serializable for token "
+            "budget enforcement"
+        ) from exc
+    return calculate_chunk_tokens(serialized)
+
+
+def _warm_chunk_recency_id(chunk: Dict[str, Any]) -> Optional[int]:
+    """Resolve narrative or Retrograde chronology for warm-slice ordering."""
+    chunk_id = coerce_chunk_id(chunk)
+    if chunk_id is not None:
+        return chunk_id
+    metadata = chunk.get("metadata")
+    if not isinstance(metadata, dict):
+        return None
+    recorded_at_chunk_id = metadata.get("recorded_at_chunk_id")
+    try:
+        return int(recorded_at_chunk_id) if recorded_at_chunk_id is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _protected_warm_chunk(chunks: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Return the load-bearing parent, or the most recent identifiable chunk."""
+    target_chunks = [chunk for chunk in chunks if chunk.get("is_target")]
+    candidates = target_chunks or chunks
+    identified: List[tuple[int, Dict[str, Any]]] = []
+    for chunk in candidates:
+        chunk_id = _warm_chunk_recency_id(chunk)
+        if chunk_id is not None:
+            identified.append((chunk_id, chunk))
+    if identified:
+        return max(identified, key=lambda item: item[0])[1]
+    return candidates[-1]
+
+
+def _oldest_droppable_warm_index(
+    chunks: List[Dict[str, Any]], protected_chunk: Dict[str, Any]
+) -> Optional[int]:
+    """Locate the oldest warm chunk other than the protected parent."""
+    droppable = [
+        (index, _warm_chunk_recency_id(chunk))
+        for index, chunk in enumerate(chunks)
+        if chunk is not protected_chunk
+    ]
+    if not droppable:
+        return None
+
+    def age_key(item: tuple[int, Optional[int]]) -> tuple[int, int]:
+        index, chunk_id = item
+        if chunk_id is not None:
+            return (1, chunk_id)
+        return (0, -index)
+
+    return min(droppable, key=age_key)[0]
+
+
 class TurnCycleManager:
     """Manages the execution of turn cycle phases"""
 
@@ -208,12 +280,39 @@ class TurnCycleManager:
 
         # Calculate token budget
         if self.lore.token_manager:
-            turn_context.token_counts = self.lore.token_manager.calculate_budget(
-                turn_context.user_input
-            )
+            memory_manager = getattr(self.lore, "memory_manager", None)
+            if memory_manager is None:
+                raise RuntimeError(
+                    "Storyteller payload sizing requires the memory manager"
+                )
+            if not getattr(self.lore, "enable_logon", True):
+                apex_context_window = memory_manager.configure_base_storyteller_budget()
+                turn_context.token_counts = self.lore.token_manager.calculate_budget(
+                    turn_context.user_input,
+                    apex_context_window=apex_context_window,
+                )
+            else:
+                self.lore.ensure_logon()
+                logon = getattr(self.lore, "logon", None)
+                if logon is None:
+                    raise RuntimeError(
+                        "Active LOGON provider is required for storyteller payload "
+                        "sizing"
+                    )
+                apex_model, provider_wire_type = logon.resolve_storyteller_route()
+                turn_context.apex_model = apex_model
+                turn_context.provider_wire_type = provider_wire_type
+                apex_context_window = memory_manager.configure_storyteller_budget(
+                    provider_wire_type
+                )
+                turn_context.token_counts = self.lore.token_manager.calculate_budget(
+                    turn_context.user_input,
+                    apex_model=apex_model,
+                    apex_context_window=apex_context_window,
+                )
 
         # Store processed input
-        phase_state = {
+        phase_state: Dict[str, Any] = {
             "processed": True,
             "token_count": turn_context.token_counts.get("user_input", 0),
         }
@@ -221,7 +320,7 @@ class TurnCycleManager:
             phase_state["target_chunk_id"] = turn_context.target_chunk_id
         turn_context.phase_states["user_input"] = phase_state
 
-        memory_update = {}
+        memory_update: Dict[str, Any] = {}
         if getattr(self.lore, "memory_manager", None):
             try:
                 pass2_update = self.lore.memory_manager.handle_user_input(
@@ -379,7 +478,10 @@ class TurnCycleManager:
             warm_chunk_ids = []
 
         # Query characters with baseline + featured structure
-        characters_data = {"baseline": [], "featured": []}
+        characters_data: Dict[str, List[Dict[str, Any]]] = {
+            "baseline": [],
+            "featured": [],
+        }
         try:
             from sqlalchemy import text
 
@@ -396,14 +498,17 @@ class TurnCycleManager:
 
         # Query places with baseline + featured structure
         # Include places that are current_location of featured characters
-        featured_place_ids = set()
+        featured_place_ids: set[int] = set()
         for char in characters_data.get("featured", []):
             loc_name = char.get("current_location")
             if loc_name:
                 # Get place ID from name (we'll query by name in the function)
                 pass  # fetch_all_places_with_references handles this
 
-        places_data = {"baseline": [], "featured": []}
+        places_data: Dict[str, List[Dict[str, Any]]] = {
+            "baseline": [],
+            "featured": [],
+        }
         try:
             with self.lore.memnon.Session() as session:
                 places_data = fetch_all_places_with_references(
@@ -417,7 +522,10 @@ class TurnCycleManager:
             logger.error(f"Failed to query places: {e}")
 
         # Query factions with baseline + featured structure
-        factions_data = {"baseline": [], "featured": []}
+        factions_data: Dict[str, List[Dict[str, Any]]] = {
+            "baseline": [],
+            "featured": [],
+        }
         try:
             with self.lore.memnon.Session() as session:
                 factions_data = fetch_all_factions_with_references(
@@ -591,8 +699,8 @@ class TurnCycleManager:
             return
 
         # Execute queries with proper SearchManager configuration
-        all_results = []
-        query_type_counts = {}
+        all_results: List[Dict[str, Any]] = []
+        query_type_counts: Dict[str, int] = {}
         max_deep_queries = self._max_deep_queries()
 
         for query_obj in queries[:max_deep_queries]:
@@ -889,6 +997,8 @@ class TurnCycleManager:
                 "target_chunk_id"
             ] = turn_context.target_chunk_id
 
+        payload_budget = self._enforce_context_payload_budget(turn_context)
+
         # Calculate utilization
         if self.lore.token_manager:
             utilization = self.lore.token_manager.calculate_utilization(
@@ -898,18 +1008,188 @@ class TurnCycleManager:
             utilization = 0
 
         turn_context.phase_states["payload_assembly"] = {
-            "total_tokens_used": sum(
-                [
-                    turn_context.token_counts.get("user_input", 0),
-                    turn_context.token_counts.get("warm_slice", 0),
-                    turn_context.token_counts.get("structured", 0),
-                    turn_context.token_counts.get("augmentation", 0),
-                ]
-            ),
+            "total_tokens_used": payload_budget["tokens_after"],
+            "tokens_before_trimming": payload_budget["tokens_before"],
+            "warm_chunks_dropped": payload_budget["warm_chunks_dropped"],
+            "retrieved_passages_dropped": payload_budget["retrieved_passages_dropped"],
+            "memory_budget_refunded": payload_budget["memory_budget_refunded"],
+            "payload_ceiling": payload_budget["payload_ceiling"],
+            "prompt_overhead_tokens": payload_budget["prompt_overhead_tokens"],
             "utilization_percentage": utilization,
         }
 
         logger.info(f"Context payload assembled: {utilization:.1f}% budget utilization")
+
+    def _enforce_context_payload_budget(
+        self, turn_context: TurnContext
+    ) -> Dict[str, int]:
+        """Trim expendable context until the assembled payload fits its ceiling."""
+        if "total_available" not in turn_context.token_counts:
+            raise RuntimeError(
+                "Storyteller payload assembly requires a total_available token "
+                "ceiling"
+            )
+        total_available = turn_context.token_counts["total_available"]
+        if not isinstance(total_available, int):
+            raise TypeError("Storyteller total_available token ceiling must be an int")
+        if total_available < 1000:
+            raise ValueError(
+                "Storyteller total_available token ceiling must be at least 1000"
+            )
+        prompt_overhead_tokens = resolve_storyteller_prompt_overhead_tokens(
+            self.settings
+        )
+        ceiling = total_available - prompt_overhead_tokens
+        if ceiling < 0:
+            raise ValueError(
+                "Storyteller prompt overhead exceeds the available payload "
+                f"ceiling: total_available={total_available}, "
+                f"prompt_overhead_tokens={prompt_overhead_tokens}"
+            )
+
+        payload = turn_context.context_payload
+        tokens_before = _context_component_token_count(payload)
+        tokens_after = tokens_before
+        warm_chunks_dropped = 0
+        retrieved_passages_dropped = 0
+        memory_budget_refunded = 0
+
+        if tokens_after <= ceiling:
+            return {
+                "tokens_before": tokens_before,
+                "tokens_after": tokens_after,
+                "warm_chunks_dropped": 0,
+                "retrieved_passages_dropped": 0,
+                "memory_budget_refunded": 0,
+                "payload_ceiling": ceiling,
+                "prompt_overhead_tokens": prompt_overhead_tokens,
+            }
+
+        warm_section = payload.get("warm_slice")
+        retrieved_section = payload.get("retrieved_passages")
+        if not isinstance(warm_section, dict) or not isinstance(
+            warm_section.get("chunks"), list
+        ):
+            raise TypeError("Storyteller warm_slice.chunks must be a list")
+        if not isinstance(retrieved_section, dict) or not isinstance(
+            retrieved_section.get("results"), list
+        ):
+            raise TypeError("Storyteller retrieved_passages.results must be a list")
+
+        warm_chunks = list(warm_section["chunks"])
+        retrieved_passages = list(retrieved_section["results"])
+        warm_section["chunks"] = warm_chunks
+        retrieved_section["results"] = retrieved_passages
+        dropped_chunks: List[Dict[str, Any]] = []
+
+        protected_chunk = _protected_warm_chunk(warm_chunks) if warm_chunks else None
+        while tokens_after > ceiling and protected_chunk is not None:
+            oldest_index = _oldest_droppable_warm_index(warm_chunks, protected_chunk)
+            if oldest_index is None:
+                break
+            dropped_chunks.append(warm_chunks.pop(oldest_index))
+            warm_chunks_dropped += 1
+            tokens_after = _context_component_token_count(payload)
+
+        while tokens_after > ceiling and retrieved_passages:
+            dropped_chunks.append(retrieved_passages.pop())
+            retrieved_passages_dropped += 1
+            tokens_after = _context_component_token_count(payload)
+
+        if warm_chunks_dropped or retrieved_passages_dropped:
+            memory_manager = getattr(self.lore, "memory_manager", None)
+            dropped_identities = {
+                identity
+                for chunk in dropped_chunks
+                for identity in [memory_identity(chunk)]
+                if identity is not None
+            }
+            if memory_manager is None and dropped_identities:
+                raise RuntimeError(
+                    "Storyteller payload trimming cannot synchronize chunk state "
+                    "without the memory manager"
+                )
+            unregistered_identities = set()
+            if memory_manager is not None:
+                (
+                    unregistered_identities,
+                    memory_budget_refunded,
+                ) = memory_manager.unregister_payload_chunks(dropped_chunks)
+            self._synchronize_trimmed_memory_snapshot(
+                turn_context,
+                unregistered_identities,
+                memory_budget_refunded,
+            )
+            logger.info(
+                "Storyteller payload trimmed: wire_class=%s tokens=%s -> %s "
+                "warm_chunks_dropped=%s retrieved_passages_dropped=%s",
+                turn_context.provider_wire_type,
+                tokens_before,
+                tokens_after,
+                warm_chunks_dropped,
+                retrieved_passages_dropped,
+            )
+
+        if tokens_after > ceiling:
+            raise ValueError(
+                "Structured storyteller context exceeds the configured payload "
+                "window after all trimmable context was removed: "
+                f"wire_class={turn_context.provider_wire_type!r}, "
+                f"tokens={tokens_after}, ceiling={ceiling}. "
+                "The structured core is a configuration error."
+            )
+
+        return {
+            "tokens_before": tokens_before,
+            "tokens_after": tokens_after,
+            "warm_chunks_dropped": warm_chunks_dropped,
+            "retrieved_passages_dropped": retrieved_passages_dropped,
+            "memory_budget_refunded": memory_budget_refunded,
+            "payload_ceiling": ceiling,
+            "prompt_overhead_tokens": prompt_overhead_tokens,
+        }
+
+    @staticmethod
+    def _synchronize_trimmed_memory_snapshot(
+        turn_context: TurnContext,
+        removed_identities: set[Union[int, str]],
+        refunded_tokens: int,
+    ) -> None:
+        """Remove dropped retrievals from the turn's diagnostic memory snapshot."""
+        if not removed_identities:
+            return
+
+        pass2_snapshots: List[Dict[str, Any]] = []
+        memory_snapshot = turn_context.memory_state.get("pass2")
+        if isinstance(memory_snapshot, dict):
+            pass2_snapshots.append(memory_snapshot)
+        user_input_state = turn_context.phase_states.get("user_input")
+        if isinstance(user_input_state, dict):
+            phase_snapshot = user_input_state.get("memory_pass2")
+            if isinstance(phase_snapshot, dict) and all(
+                phase_snapshot is not snapshot for snapshot in pass2_snapshots
+            ):
+                pass2_snapshots.append(phase_snapshot)
+
+        narrative_ids = {
+            identity for identity in removed_identities if isinstance(identity, int)
+        }
+        for snapshot in pass2_snapshots:
+            memory_ids = snapshot.get("retrieved_memory_ids")
+            if isinstance(memory_ids, list):
+                snapshot["retrieved_memory_ids"] = [
+                    identity
+                    for identity in memory_ids
+                    if identity not in removed_identities
+                ]
+            chunk_ids = snapshot.get("retrieved_chunk_ids")
+            if isinstance(chunk_ids, list):
+                snapshot["retrieved_chunk_ids"] = [
+                    chunk_id for chunk_id in chunk_ids if chunk_id not in narrative_ids
+                ]
+            tokens_used = snapshot.get("tokens_used")
+            if isinstance(tokens_used, int):
+                snapshot["tokens_used"] = max(0, tokens_used - refunded_tokens)
 
     def _build_world_knowledge(self, turn_context: TurnContext) -> list[dict[str, Any]]:
         """Load optional spoiler-limited knowledge for the current scene."""
@@ -1090,8 +1370,27 @@ class TurnCycleManager:
 
         try:
             # Generate narrative with structured output
+            if (
+                turn_context.apex_model is None
+                or turn_context.provider_wire_type is None
+            ):
+                raise RuntimeError(
+                    "Storyteller route must be resolved during Phase 1 before "
+                    "provider initialization"
+                )
+            effective_context_window = turn_context.token_counts.get("apex_window")
+            if isinstance(effective_context_window, bool) or not isinstance(
+                effective_context_window, int
+            ):
+                raise RuntimeError(
+                    "Storyteller effective context window must be resolved during "
+                    "Phase 1 before provider initialization"
+                )
             story_response = await self.lore.logon.generate_narrative_async(
-                turn_context.context_payload
+                turn_context.context_payload,
+                expected_model=turn_context.apex_model,
+                expected_wire_type=turn_context.provider_wire_type,
+                effective_context_window=effective_context_window,
             )
 
             # Store the full structured response
@@ -1167,10 +1466,27 @@ class TurnCycleManager:
 
         if getattr(self.lore, "memory_manager", None):
             try:
+                warm_section = turn_context.context_payload.get("warm_slice")
+                retrieved_section = turn_context.context_payload.get(
+                    "retrieved_passages"
+                )
+                if not isinstance(warm_section, dict) or not isinstance(
+                    warm_section.get("chunks"), list
+                ):
+                    raise RuntimeError(
+                        "Integrated storyteller payload is missing warm_slice.chunks"
+                    )
+                if not isinstance(retrieved_section, dict) or not isinstance(
+                    retrieved_section.get("results"), list
+                ):
+                    raise RuntimeError(
+                        "Integrated storyteller payload is missing "
+                        "retrieved_passages.results"
+                    )
                 baseline = self.lore.memory_manager.handle_storyteller_response(
                     narrative=narrative_text,
-                    warm_slice=turn_context.warm_slice,
-                    retrieved_passages=turn_context.retrieved_passages,
+                    warm_slice=warm_section["chunks"],
+                    retrieved_passages=retrieved_section["results"],
                     token_usage=turn_context.token_counts,
                     assembled_context=turn_context.context_payload,
                 )

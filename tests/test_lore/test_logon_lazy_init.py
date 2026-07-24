@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any, cast, Dict
 
 import pytest
@@ -13,6 +14,9 @@ from nexus.agents.logon.skald_wire import SkaldTurnWire, skald_wire_prompt_guide
 from nexus.agents.lore import logon_utility
 from nexus.agents.lore.lore import LORE
 from nexus.agents.lore.logon_utility import LogonUtility
+from nexus.agents.lore.utils.turn_context import TurnContext
+from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
+from nexus.memory import ContextMemoryManager
 
 
 class _DummyResponse:
@@ -37,14 +41,14 @@ class _DummyProvider:
         return _DummyResponse(prompt)
 
     def get_structured_completion(
-        self, prompt: str, schema_model: type
+        self, prompt: str, schema_model: type, **_kwargs: Any
     ) -> tuple[Any, _DummyResponse]:
         self.calls += 1
         self.schema_models.append(schema_model)
         return self._response(prompt, schema_model), _DummyResponse(prompt)
 
     async def get_structured_completion_async(
-        self, prompt: str, schema_model: type
+        self, prompt: str, schema_model: type, **_kwargs: Any
     ) -> tuple[Any, _DummyResponse]:
         self.calls += 1
         self.schema_models.append(schema_model)
@@ -73,7 +77,7 @@ class _FailingProvider:
         self.completion_calls = 0
 
     async def get_structured_completion_async(
-        self, prompt: str, schema_model: type
+        self, prompt: str, schema_model: type, **_kwargs: Any
     ) -> tuple[Any, _DummyResponse]:
         self.structured_calls += 1
         raise RuntimeError("structured boom")
@@ -95,6 +99,7 @@ def patched_provider(monkeypatch: pytest.MonkeyPatch) -> Dict[str, int]:
         self._provider_bootstrap_mode = (
             self.bootstrap_mode if is_bootstrap is None else is_bootstrap
         )
+        self._provider_wire_type = "openai"
 
     for target in (
         "nexus.agents.lore.logon_utility.LogonUtility._initialize_provider",
@@ -209,6 +214,97 @@ def test_anthropic_storyteller_transport_and_guide_follow_settings(
     assert utility._system_prompt == expected_system
 
 
+@pytest.mark.parametrize(
+    ("provider_type", "base_url", "expected_wire_type"),
+    [
+        ("openai", None, "openai"),
+        ("anthropic", None, "anthropic"),
+        ("local", "http://127.0.0.1:1234/v1", "local"),
+    ],
+)
+def test_storyteller_route_resolves_without_constructing_provider(
+    monkeypatch: pytest.MonkeyPatch,
+    provider_type: str,
+    base_url: str | None,
+    expected_wire_type: str,
+) -> None:
+    """Budget classification reuses LOGON routing while provider init stays lazy."""
+    monkeypatch.setattr(
+        "nexus.agents.lore.logon_utility.get_provider_for_model",
+        lambda _model: provider_type,
+    )
+    monkeypatch.setattr(
+        "nexus.config.get_openai_compatible_endpoint",
+        lambda _model: {"base_url": base_url} if base_url else None,
+    )
+    logon = LogonUtility({}, model_override="storyteller-model")
+
+    assert logon.resolve_storyteller_route() == (
+        "storyteller-model",
+        expected_wire_type,
+    )
+    assert logon.provider is None
+
+
+def test_provider_initialization_reuses_the_compared_route(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A matching Phase 6 comparison must not perform a third route read."""
+    logon = LogonUtility({}, model_override="storyteller-model")
+    route = ("storyteller-model", "openai", None, "openai")
+    route_calls = {"count": 0}
+    initialized_routes: list[tuple[Any, ...] | None] = []
+
+    def resolve_route() -> tuple[str, str, None, str]:
+        route_calls["count"] += 1
+        return route
+
+    def initialize_provider(
+        _is_bootstrap: bool | None = None,
+        *,
+        resolved_route: tuple[Any, ...] | None = None,
+    ) -> None:
+        initialized_routes.append(resolved_route)
+        logon.provider = cast(Any, _DummyProvider())
+
+    monkeypatch.setattr(logon, "_resolve_storyteller_route", resolve_route)
+    monkeypatch.setattr(logon, "_initialize_provider", initialize_provider)
+
+    logon._ensure_provider(
+        _minimal_payload(),
+        expected_model="storyteller-model",
+        expected_wire_type="openai",
+    )
+
+    assert route_calls["count"] == 1
+    assert initialized_routes == [route]
+
+
+def test_sync_generation_rejects_mid_turn_route_drift(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The synchronous generation path compares the authoritative turn route."""
+    logon = LogonUtility({}, model_override="phase-one-model")
+    monkeypatch.setattr(
+        logon,
+        "_resolve_storyteller_route",
+        lambda: ("changed-model", "openai", None, "local"),
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="slot model changed mid-turn; aborting the turn",
+    ):
+        logon.generate_narrative(
+            _minimal_payload(),
+            expected_model="phase-one-model",
+            expected_wire_type="openai",
+            effective_context_window=75_000,
+        )
+
+    assert logon.provider is None
+
+
 @pytest.mark.requires_postgres
 def test_lore_keeps_logon_lazy(patched_provider: Dict[str, int]) -> None:
     """LORE should not initialize LOGON on construction when lazy mode is enabled."""
@@ -255,8 +351,12 @@ async def test_logon_async_generation_uses_structured_provider() -> None:
     logon = LogonUtility({}, model_override="dummy-model")
     logon.provider = cast(Any, provider)
     logon._provider_bootstrap_mode = False
+    logon._provider_wire_type = "openai"
 
-    response = await logon.generate_narrative_async(_minimal_payload())
+    response = await logon.generate_narrative_async(
+        _minimal_payload(),
+        effective_context_window=75_000,
+    )
 
     assert provider.calls == 1
     assert provider.completion_calls == 0
@@ -274,8 +374,12 @@ async def test_logon_async_generation_uses_bootstrap_schema_for_bootstrap() -> N
     logon = LogonUtility({}, model_override="dummy-model")
     logon.provider = cast(Any, provider)
     logon._provider_bootstrap_mode = True
+    logon._provider_wire_type = "openai"
 
-    response = await logon.generate_narrative_async(_minimal_payload(is_bootstrap=True))
+    response = await logon.generate_narrative_async(
+        _minimal_payload(is_bootstrap=True),
+        effective_context_window=75_000,
+    )
 
     assert provider.calls == 1
     assert provider.completion_calls == 0
@@ -293,17 +397,25 @@ async def test_logon_stamps_model_exposed_by_last_successful_attempt() -> None:
         model = "first-attempt-model"
 
         async def get_structured_completion_async(
-            self, prompt: str, schema_model: type
+            self, prompt: str, schema_model: type, **kwargs: Any
         ) -> tuple[Any, _DummyResponse]:
             self.model = "successful-attempt-model"
-            return await super().get_structured_completion_async(prompt, schema_model)
+            return await super().get_structured_completion_async(
+                prompt,
+                schema_model,
+                **kwargs,
+            )
 
     provider = RetrySwitchingProvider()
     logon = LogonUtility({}, model_override="first-attempt-model")
     logon.provider = cast(Any, provider)
     logon._provider_bootstrap_mode = False
+    logon._provider_wire_type = "openai"
 
-    response = await logon.generate_narrative_async(_minimal_payload())
+    response = await logon.generate_narrative_async(
+        _minimal_payload(),
+        effective_context_window=75_000,
+    )
 
     assert response.generation_model == "successful-attempt-model"
 
@@ -316,9 +428,13 @@ async def test_logon_structured_failure_does_not_call_plain_text_fallback() -> N
     logon = LogonUtility({}, model_override="dummy-model")
     logon.provider = cast(Any, provider)
     logon._provider_bootstrap_mode = False
+    logon._provider_wire_type = "openai"
 
     with pytest.raises(RuntimeError, match="structured boom"):
-        await logon.generate_narrative_async(_minimal_payload())
+        await logon.generate_narrative_async(
+            _minimal_payload(),
+            effective_context_window=75_000,
+        )
 
     assert provider.structured_calls == 1
     assert provider.completion_calls == 0
@@ -337,13 +453,84 @@ def test_context_bootstrap_mode_does_not_mutate_logon_instance(
         self._provider_bootstrap_mode = (
             self.bootstrap_mode if is_bootstrap is None else is_bootstrap
         )
+        self._provider_wire_type = "openai"
 
     monkeypatch.setattr(LogonUtility, "_initialize_provider", _fake_initialize)
 
     logon = LogonUtility({}, model_override="dummy-model", bootstrap_mode=False)
 
-    logon.generate_narrative(_minimal_payload(is_bootstrap=True))
+    logon.generate_narrative(
+        _minimal_payload(is_bootstrap=True),
+        effective_context_window=75_000,
+    )
 
     assert initialized_modes == [True]
     assert logon.bootstrap_mode is False
     assert logon._provider_bootstrap_mode is True
+
+
+@pytest.mark.asyncio
+async def test_final_prompt_overflow_from_tag_library_raises(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Too-small overhead cannot let LOGON send an oversized final prompt."""
+    settings = {
+        "Agent Settings": {
+            "LORE": {
+                "token_budget": {
+                    "apex_context_window": 1_000,
+                    "prompt_overhead_tokens": 0,
+                    "provider_overrides": {"local": 1_000},
+                }
+            }
+        }
+    }
+    provider = _DummyProvider()
+    logon = LogonUtility(settings, model_override="dummy-model")
+    logon.provider = cast(Any, provider)
+    logon._provider_bootstrap_mode = False
+    logon._provider_wire_type = "local"
+
+    class PromptLore:
+        def __init__(self) -> None:
+            self.settings = settings
+            self.memnon = None
+            self.memory_manager = ContextMemoryManager(settings)
+            self.token_manager = None
+
+    turn_manager = TurnCycleManager(PromptLore())
+    turn_context = TurnContext(
+        turn_id="undersized-overhead",
+        user_input="Continue.",
+        start_time=0,
+    )
+    turn_context.provider_wire_type = "local"
+    turn_context.warm_slice = [{"chunk_id": 1, "text": "Parent.", "is_target": True}]
+    turn_context.token_counts = {
+        "total_available": 1_000,
+        "warm_slice": 100,
+        "structured": 0,
+        "augmentation": 0,
+    }
+    await turn_manager.assemble_context_payload(turn_context)
+    assert turn_context.phase_states["payload_assembly"]["payload_ceiling"] == 1_000
+
+    monkeypatch.setattr(
+        logon,
+        "_format_turn_tag_library",
+        lambda _context, *, presence_baseline: "oversized-tag " * 2_000,
+    )
+
+    with caplog.at_level(logging.DEBUG, logger="nexus.lore.logon"):
+        with pytest.raises(
+            ValueError,
+            match="Final storyteller prompt exceeds the effective context window",
+        ):
+            await logon.generate_narrative_async(
+                turn_context.context_payload,
+                effective_context_window=1_000,
+            )
+
+    assert provider.calls == 0
+    assert "Final storyteller prompt size: wire_class=local" in caplog.text

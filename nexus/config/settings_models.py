@@ -601,6 +601,41 @@ class TokenBudgetConfig(BaseModel):
     system_prompt_tokens: int = Field(
         ..., ge=100, description="Reserved for system prompt"
     )
+    prompt_overhead_tokens: int = Field(
+        default=4000,
+        ge=0,
+        description="Reserve for LOGON formatting added after payload assembly",
+    )
+    provider_overrides: Dict[str, int] = Field(
+        default_factory=dict,
+        description="Smaller APEX context windows by storyteller provider class",
+    )
+
+    @model_validator(mode="after")
+    def _validate_provider_overrides(self) -> "TokenBudgetConfig":
+        """Provider overrides are closed-keyed reductions of the base window."""
+        legal_provider_classes = {"openai", "anthropic", "local"}
+        unknown_provider_classes = set(self.provider_overrides) - legal_provider_classes
+        if unknown_provider_classes:
+            raise ValueError(
+                "token budget provider_overrides contains unknown provider "
+                f"classes: {sorted(unknown_provider_classes)}; legal keys are "
+                f"{sorted(legal_provider_classes)}"
+            )
+
+        for provider_class, override in self.provider_overrides.items():
+            if override < 1000:
+                raise ValueError(
+                    f"token budget provider override for '{provider_class}' must "
+                    "be greater than or equal to 1000"
+                )
+            if override > self.apex_context_window:
+                raise ValueError(
+                    "token budget provider overrides may only shrink "
+                    f"apex_context_window; '{provider_class}' override {override} "
+                    f"exceeds base {self.apex_context_window}"
+                )
+        return self
 
 
 class PayloadBudgetRange(BaseModel):
@@ -2773,7 +2808,7 @@ class UILoreBudgetSlider(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    min: int = Field(default=10_000, ge=1000, description="Slider lower bound (tok)")
+    min: int = Field(default=24_000, ge=1000, description="Slider lower bound (tok)")
     max: int = Field(default=200_000, ge=1000, description="Slider upper bound (tok)")
     step: int = Field(default=1000, ge=1, description="Slider step size (tok)")
     stops: List[int] = Field(

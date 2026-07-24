@@ -32,6 +32,9 @@ from nexus.agents.logon.skald_wire import (  # noqa: E402
     skald_wire_prompt_guide,
     skald_wire_strict_text_format,
 )
+from nexus.agents.lore.utils.chunk_operations import (  # noqa: E402
+    calculate_chunk_tokens,
+)
 from nexus.agents.orrery.tag_library import (  # noqa: E402
     EntityRowReference,
     TagLibraryContext,
@@ -40,6 +43,9 @@ from nexus.agents.orrery.tag_library import (  # noqa: E402
 )
 from nexus.config.loader import get_provider_for_model, resolve_model_ref  # noqa: E402
 from nexus.memory.context_state import is_retrograde_summary  # noqa: E402
+from nexus.memory.manager import (  # noqa: E402
+    resolve_storyteller_context_window,
+)
 from nexus.memory.retrieval_coverage import coerce_chunk_id  # noqa: E402
 
 logger = logging.getLogger("nexus.lore.logon")
@@ -274,7 +280,9 @@ class LogonUtility:
         self.provider: Optional[OpenAIProvider | AnthropicProvider] = None
         self._system_prompt: Optional[str] = None
         self._provider_bootstrap_mode: Optional[bool] = None
-        self._provider_wire_type: Optional[str] = None
+        self._provider_wire_type: Optional[Literal["openai", "anthropic", "local"]] = (
+            None
+        )
         self._validation_dbname: Optional[str] = None
         self._schema_format_cache: Dict[type, Dict[str, Any]] = {}
 
@@ -418,12 +426,16 @@ class LogonUtility:
         """Resolve a runtime roster reference before constructing the provider."""
         return resolve_model_ref(model) if model.startswith("@") else model
 
-    def _initialize_provider(self, is_bootstrap: Optional[bool] = None) -> None:
-        """Initialize the appropriate API provider based on settings and slot config."""
+    def _resolve_storyteller_route(
+        self,
+    ) -> tuple[
+        str,
+        str,
+        Optional[Dict[str, Any]],
+        Literal["openai", "anthropic", "local"],
+    ]:
+        """Resolve the active model, endpoint, and storyteller wire class."""
         apex_settings = self.settings.get("API Settings", {}).get("apex", {})
-        provider_bootstrap_mode = (
-            self.bootstrap_mode if is_bootstrap is None else is_bootstrap
-        )
 
         # Model priority: override > slot config > settings
         model = self.model_override
@@ -440,10 +452,59 @@ class LogonUtility:
         )
 
         # OpenAI-compatible base_url routing (mock TEST server, local servers):
-        # the endpoint lives in the [global.model.api_models] registry (#401).
+        # the endpoint lives in [global.model.api_models] (#401).
         from nexus.config import get_openai_compatible_endpoint
 
         endpoint = get_openai_compatible_endpoint(model)
+        base_url = endpoint["base_url"] if endpoint else None
+
+        provider_wire_type: Literal["openai", "anthropic", "local"]
+        if provider_type == "anthropic":
+            provider_wire_type = "anthropic"
+        elif provider_type == "openai" or base_url:
+            provider_wire_type = "local" if base_url else "openai"
+        else:
+            raise ValueError(f"Unsupported provider type: {provider_type}")
+
+        return model, provider_type, endpoint, provider_wire_type
+
+    def resolve_provider_wire_type(
+        self,
+    ) -> Literal["openai", "anthropic", "local"]:
+        """Return LOGON's wire classification without constructing a provider."""
+        return self._resolve_storyteller_route()[3]
+
+    def resolve_storyteller_route(
+        self,
+    ) -> tuple[str, Literal["openai", "anthropic", "local"]]:
+        """Return the concrete storyteller model and its wire class."""
+        model, _provider_type, _endpoint, provider_wire_type = (
+            self._resolve_storyteller_route()
+        )
+        return model, provider_wire_type
+
+    def _initialize_provider(
+        self,
+        is_bootstrap: Optional[bool] = None,
+        *,
+        resolved_route: Optional[
+            tuple[
+                str,
+                str,
+                Optional[Dict[str, Any]],
+                Literal["openai", "anthropic", "local"],
+            ]
+        ] = None,
+    ) -> None:
+        """Initialize the appropriate API provider based on settings and slot config."""
+        apex_settings = self.settings.get("API Settings", {}).get("apex", {})
+        provider_bootstrap_mode = (
+            self.bootstrap_mode if is_bootstrap is None else is_bootstrap
+        )
+
+        model, provider_type, endpoint, provider_wire_type = resolved_route or (
+            self._resolve_storyteller_route()
+        )
         base_url = endpoint["base_url"] if endpoint else None
         api_key = endpoint["api_key"] if endpoint else None
         structured_transport = cast(
@@ -499,8 +560,8 @@ class LogonUtility:
         self._validation_dbname = validation_dbname
         self._schema_format_cache = {}
 
-        if provider_type == "anthropic":
-            self._provider_wire_type = "anthropic"
+        self._provider_wire_type = provider_wire_type
+        if provider_wire_type == "anthropic":
             self.provider = AnthropicProvider(
                 model=model,
                 max_tokens=apex_settings.get(
@@ -512,10 +573,9 @@ class LogonUtility:
                 structured_output_retries=structured_output_retries,
                 output_validator=output_validator,
             )
-        elif provider_type == "openai" or base_url:
+        else:
             # Native OpenAI, or any OpenAI-compatible server registered with a
             # base_url in [global.model.api_models] (mock TEST, Ollama, vLLM).
-            self._provider_wire_type = "local" if base_url else "openai"
             self.provider = OpenAIProvider(
                 model=model,
                 temperature=apex_settings.get("temperature", 0.7),
@@ -529,8 +589,6 @@ class LogonUtility:
                 structured_output_retries=structured_output_retries,
                 output_validator=output_validator,
             )
-        else:
-            raise ValueError(f"Unsupported provider type: {provider_type}")
 
         logger.info(
             f"LOGON initialized with {provider_type} provider using model {model}"
@@ -538,7 +596,11 @@ class LogonUtility:
         logger.info(f"System prompt loaded: {len(system_prompt)} chars")
 
     def _ensure_provider(
-        self, context_payload: Optional[Dict[str, Any]] = None
+        self,
+        context_payload: Optional[Dict[str, Any]] = None,
+        *,
+        expected_model: Optional[str] = None,
+        expected_wire_type: Optional[Literal["openai", "anthropic", "local"]] = None,
     ) -> None:
         """Ensure the provider is initialized before use."""
         desired_bootstrap_mode = (
@@ -547,25 +609,66 @@ class LogonUtility:
             else self.bootstrap_mode
         )
 
+        resolved_route = None
+        if (expected_model is None) != (expected_wire_type is None):
+            raise RuntimeError(
+                "Expected storyteller model and wire class must be supplied together"
+            )
+        if expected_model is not None and expected_wire_type is not None:
+            resolved_route = self._resolve_storyteller_route()
+            resolved_model = resolved_route[0]
+            resolved_wire_type = resolved_route[3]
+            if (
+                resolved_model != expected_model
+                or resolved_wire_type != expected_wire_type
+            ):
+                raise RuntimeError(
+                    "slot model changed mid-turn; aborting the turn: "
+                    f"expected model={expected_model!r}, "
+                    f"wire_class={expected_wire_type!r}; "
+                    f"found model={resolved_model!r}, "
+                    f"wire_class={resolved_wire_type!r}"
+                )
+
         if self.provider is None:
-            self._initialize_provider(desired_bootstrap_mode)
+            if resolved_route is None:
+                self._initialize_provider(desired_bootstrap_mode)
+            else:
+                self._initialize_provider(
+                    desired_bootstrap_mode,
+                    resolved_route=resolved_route,
+                )
             return
 
-        resolved_model = self.model_override or self._get_slot_model()
-        if resolved_model:
-            resolved_model = self._resolve_generation_model(resolved_model)
+        if resolved_route is not None:
+            active_model: Optional[str] = resolved_route[0]
+            active_wire_type: Optional[Literal["openai", "anthropic", "local"]] = (
+                resolved_route[3]
+            )
+        else:
+            active_model = self.model_override or self._get_slot_model()
+            if active_model:
+                active_model = self._resolve_generation_model(active_model)
+            active_wire_type = self._provider_wire_type
         model_changed = bool(
-            resolved_model and getattr(self.provider, "model", None) != resolved_model
+            active_model and getattr(self.provider, "model", None) != active_model
         )
+        wire_type_changed = self._provider_wire_type != active_wire_type
         bootstrap_changed = self._provider_bootstrap_mode != desired_bootstrap_mode
-        if model_changed or bootstrap_changed:
+        if model_changed or wire_type_changed or bootstrap_changed:
             logger.info(
                 "LOGON provider context changed. Reinitializing provider for model %s "
                 "(bootstrap=%s)",
-                resolved_model or getattr(self.provider, "model", None),
+                active_model or getattr(self.provider, "model", None),
                 desired_bootstrap_mode,
             )
-            self._initialize_provider(desired_bootstrap_mode)
+            if resolved_route is None:
+                self._initialize_provider(desired_bootstrap_mode)
+            else:
+                self._initialize_provider(
+                    desired_bootstrap_mode,
+                    resolved_route=resolved_route,
+                )
 
     def ensure_provider(self) -> None:
         """Public wrapper for provider initialization."""
@@ -581,9 +684,20 @@ class LogonUtility:
         response.generation_model = generation_model
         return response
 
-    def generate_narrative(self, context_payload: Dict[str, Any]) -> StoryTurnResponse:
+    def generate_narrative(
+        self,
+        context_payload: Dict[str, Any],
+        *,
+        expected_model: Optional[str] = None,
+        expected_wire_type: Optional[Literal["openai", "anthropic", "local"]] = None,
+        effective_context_window: Optional[int] = None,
+    ) -> StoryTurnResponse:
         """Generate narrative from context payload with structured output."""
-        self._ensure_provider(context_payload)
+        self._ensure_provider(
+            context_payload,
+            expected_model=expected_model,
+            expected_wire_type=expected_wire_type,
+        )
         assert self.provider is not None
         schema_model = self._select_response_schema(context_payload)
         presence_baseline = self._read_presence_baseline_for_context(
@@ -594,6 +708,10 @@ class LogonUtility:
         prompt = self._format_context_prompt(
             context_payload,
             presence_baseline=presence_baseline,
+        )
+        self._enforce_final_prompt_window(
+            prompt,
+            effective_context_window=effective_context_window,
         )
         schema_kwargs = self._schema_format_kwargs(schema_model)
 
@@ -620,10 +738,19 @@ class LogonUtility:
             raise
 
     async def generate_narrative_async(
-        self, context_payload: Dict[str, Any]
+        self,
+        context_payload: Dict[str, Any],
+        *,
+        expected_model: Optional[str] = None,
+        expected_wire_type: Optional[Literal["openai", "anthropic", "local"]] = None,
+        effective_context_window: Optional[int] = None,
     ) -> StoryTurnResponse:
         """Generate narrative from context payload without blocking the event loop."""
-        self._ensure_provider(context_payload)
+        self._ensure_provider(
+            context_payload,
+            expected_model=expected_model,
+            expected_wire_type=expected_wire_type,
+        )
         assert self.provider is not None
         schema_model = self._select_response_schema(context_payload)
         presence_baseline = await self._read_presence_baseline_for_context_async(
@@ -633,6 +760,10 @@ class LogonUtility:
         prompt = self._format_context_prompt(
             context_payload,
             presence_baseline=presence_baseline,
+        )
+        self._enforce_final_prompt_window(
+            prompt,
+            effective_context_window=effective_context_window,
         )
         schema_kwargs = self._schema_format_kwargs(schema_model)
 
@@ -657,6 +788,50 @@ class LogonUtility:
         except Exception:
             logger.exception("Failed to get structured response")
             raise
+
+    def _enforce_final_prompt_window(
+        self,
+        prompt: str,
+        *,
+        effective_context_window: Optional[int],
+    ) -> int:
+        """Fail before generation when LOGON formatting exceeds the turn window."""
+        provider_wire_type = self._provider_wire_type
+        if provider_wire_type is None:
+            raise RuntimeError(
+                "Final storyteller prompt sizing requires an active provider "
+                "wire class"
+            )
+        if effective_context_window is None:
+            effective_context_window = resolve_storyteller_context_window(
+                self.settings,
+                provider_wire_type,
+            )
+        if isinstance(effective_context_window, bool) or not isinstance(
+            effective_context_window, int
+        ):
+            raise TypeError("Effective storyteller context window must be an integer")
+        if effective_context_window < 1000:
+            raise ValueError(
+                "Effective storyteller context window must be at least 1000 tokens"
+            )
+
+        prompt_tokens = calculate_chunk_tokens(prompt)
+        logger.debug(
+            "Final storyteller prompt size: wire_class=%s tokens=%s "
+            "effective_window=%s",
+            provider_wire_type,
+            prompt_tokens,
+            effective_context_window,
+        )
+        if prompt_tokens > effective_context_window:
+            raise ValueError(
+                "Final storyteller prompt exceeds the effective context window: "
+                f"wire_class={provider_wire_type!r}, "
+                f"prompt_tokens={prompt_tokens}, "
+                f"effective_window={effective_context_window}"
+            )
+        return prompt_tokens
 
     def _select_response_schema(
         self, context_payload: Dict[str, Any]

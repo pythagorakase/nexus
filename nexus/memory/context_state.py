@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, List, Optional, Set, Union
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Set, Union
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +93,7 @@ class ContextStateManager:
         self._context: Optional[ContextPackage] = None
         self._transition: Optional[PassTransition] = None
         self._chunk_cache: Dict[MemoryIdentity, Dict[str, Any]] = {}
+        self._additional_chunk_token_costs: Dict[MemoryIdentity, int] = {}
 
     # ------------------------------------------------------------------
     # Baseline context management
@@ -119,6 +120,7 @@ class ContextStateManager:
         self._context = package
         self._transition = transition
         self._chunk_cache = {}
+        self._additional_chunk_token_costs = {}
 
         if chunk_details:
             self.register_chunks(chunk_details)
@@ -171,9 +173,12 @@ class ContextStateManager:
         )
 
     def register_additional_chunks(
-        self, chunks: Iterable[Dict[str, Any]]
+        self,
+        chunks: Iterable[Dict[str, Any]],
+        *,
+        token_costs: Optional[Mapping[MemoryIdentity, int]] = None,
     ) -> List[Dict[str, Any]]:
-        """Register additional chunks and return only the truly new entries."""
+        """Register new chunks and optionally charge their exact Pass-2 costs."""
 
         if not self._context:
             logger.debug(
@@ -182,14 +187,101 @@ class ContextStateManager:
             return []
 
         new_chunks: List[Dict[str, Any]] = []
+        new_identities: Set[MemoryIdentity] = set()
         for chunk in chunks:
             identity = memory_identity(chunk)
-            if identity is None or self.is_chunk_known(identity):
+            if (
+                identity is None
+                or identity in new_identities
+                or self.is_chunk_known(identity)
+            ):
                 continue
+            new_chunks.append(chunk)
+            new_identities.add(identity)
+
+        tracked_costs: Dict[MemoryIdentity, int] = {}
+        if token_costs is not None:
+            for identity in new_identities:
+                if identity not in token_costs:
+                    raise RuntimeError(
+                        "Pass-2 token accounting is missing a cost for newly "
+                        f"registered memory {identity!r}"
+                    )
+                cost = token_costs[identity]
+                if isinstance(cost, bool) or not isinstance(cost, int):
+                    raise TypeError(
+                        f"Pass-2 token cost for memory {identity!r} must be an int"
+                    )
+                if cost < 0:
+                    raise ValueError(
+                        f"Pass-2 token cost for memory {identity!r} cannot be negative"
+                    )
+                tracked_costs[identity] = cost
+
+            total_cost = sum(tracked_costs.values())
+            if total_cost > self.get_remaining_budget():
+                raise RuntimeError(
+                    "Pass-2 chunk registration exceeds the remaining budget: "
+                    f"cost={total_cost}, remaining={self.get_remaining_budget()}"
+                )
+
+        for chunk in new_chunks:
+            identity = memory_identity(chunk)
+            assert identity is not None
             self._context.additional_chunks.add(identity)
             self._chunk_cache[identity] = chunk
-            new_chunks.append(chunk)
+
+        if tracked_costs:
+            consumed = self.consume_budget(sum(tracked_costs.values()))
+            if consumed != sum(tracked_costs.values()):
+                raise RuntimeError(
+                    "Pass-2 chunk registration failed to consume its full token cost"
+                )
+            self._additional_chunk_token_costs.update(tracked_costs)
         return new_chunks
+
+    def unregister_chunks(
+        self, chunks: Iterable[Dict[str, Any]]
+    ) -> tuple[Set[MemoryIdentity], int]:
+        """Forget dropped payload chunks and refund tracked Pass-2 token costs."""
+
+        if not self._context:
+            return set(), 0
+
+        identities = {
+            identity
+            for chunk in chunks
+            for identity in [memory_identity(chunk)]
+            if identity is not None
+        }
+        removed: Set[MemoryIdentity] = set()
+        refunded_tokens = 0
+        for identity in identities:
+            was_known = (
+                identity in self._context.baseline_chunks
+                or identity in self._context.additional_chunks
+            )
+            if not was_known:
+                continue
+            self._context.baseline_chunks.discard(identity)
+            self._context.additional_chunks.discard(identity)
+            self._chunk_cache.pop(identity, None)
+            refunded_tokens += self._additional_chunk_token_costs.pop(identity, 0)
+            removed.add(identity)
+
+        if refunded_tokens:
+            if not self._transition:
+                raise RuntimeError(
+                    "Cannot refund dropped Pass-2 chunks without transition state"
+                )
+            self._transition.remaining_budget += refunded_tokens
+            logger.debug(
+                "Refunded %s tokens from dropped Pass-2 chunks (now %s)",
+                refunded_tokens,
+                self._transition.remaining_budget,
+            )
+
+        return removed, refunded_tokens
 
     def get_all_chunks(self) -> List[Dict[str, Any]]:
         if not self._context:

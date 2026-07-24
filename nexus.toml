@@ -124,7 +124,8 @@ theme = "veil"
 [ui.lore_budget_slider]
 # Bounds, step, and preset ladder stops for the LORE budget slider in the
 # settings pane. Values are token counts for lore.token_budget.apex_context_window.
-min = 10_000
+# Keep this floor aligned with the largest committed provider override below.
+min = 24_000
 max = 200_000
 step = 1000
 stops = [75_000, 100_000, 150_000, 200_000]
@@ -208,6 +209,14 @@ max_deep_queries = 5
 # Context window limits for APEX generation
 apex_context_window = 75_000  # Total tokens available for APEX (includes prompt + context)
 system_prompt_tokens = 5000  # Reserved tokens for system prompt
+# Reserve for LOGON's tag library and formatting after Phase 5; live chunk
+# 1369 measured +2,999 tokens. Keep headroom above that observed overhead.
+prompt_overhead_tokens = 4_000
+
+[lore.token_budget.provider_overrides]
+# Effective apex_context_window per storyteller provider class. Absent key =
+# base value. Local models need a smaller assembled payload (see #566).
+local = 24_000
 
 [lore.payload_percent_budget.structured_summaries]
 # Percentage allocation for entity summaries, relationships, events
