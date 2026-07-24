@@ -685,3 +685,23 @@ def test_integrate_response_sorts_mixed_chunk_id_payloads(
     asyncio.run(turn_manager.integrate_response(ctx, "Story chunk text"))
 
     assert ctx.memory_state["pass1"]["baseline_chunks"] == [1, "2", 3]
+
+
+def test_payload_token_count_stringifies_database_values() -> None:
+    """DB-sourced datetimes and Decimals must count, not crash enforcement."""
+    from datetime import datetime
+    from decimal import Decimal
+
+    from nexus.agents.lore.utils.turn_cycle import _context_component_token_count
+
+    payload = {
+        "user_input": "ignored",
+        "entity_data": {
+            "world_time": datetime(2042, 8, 18, 8, 54),
+            "valence": Decimal("0.25"),
+        },
+        "warm_slice": {"chunks": []},
+        "retrieved_passages": {"results": []},
+    }
+
+    assert _context_component_token_count(payload) > 0
