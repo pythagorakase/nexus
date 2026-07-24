@@ -578,6 +578,7 @@ async def test_turn_payload_conditionally_attaches_world_knowledge(
         user_input="Continue.",
         start_time=0,
     )
+    context.token_counts = {"total_available": 75_000}
     context.orrery_proposal = cast(
         Any,
         SimpleNamespace(

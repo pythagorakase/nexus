@@ -274,7 +274,9 @@ class LogonUtility:
         self.provider: Optional[OpenAIProvider | AnthropicProvider] = None
         self._system_prompt: Optional[str] = None
         self._provider_bootstrap_mode: Optional[bool] = None
-        self._provider_wire_type: Optional[str] = None
+        self._provider_wire_type: Optional[Literal["openai", "anthropic", "local"]] = (
+            None
+        )
         self._validation_dbname: Optional[str] = None
         self._schema_format_cache: Dict[type, Dict[str, Any]] = {}
 
@@ -466,14 +468,35 @@ class LogonUtility:
         """Return LOGON's wire classification without constructing a provider."""
         return self._resolve_storyteller_route()[3]
 
-    def _initialize_provider(self, is_bootstrap: Optional[bool] = None) -> None:
+    def resolve_storyteller_route(
+        self,
+    ) -> tuple[str, Literal["openai", "anthropic", "local"]]:
+        """Return the concrete storyteller model and its wire class."""
+        model, _provider_type, _endpoint, provider_wire_type = (
+            self._resolve_storyteller_route()
+        )
+        return model, provider_wire_type
+
+    def _initialize_provider(
+        self,
+        is_bootstrap: Optional[bool] = None,
+        *,
+        resolved_route: Optional[
+            tuple[
+                str,
+                str,
+                Optional[Dict[str, Any]],
+                Literal["openai", "anthropic", "local"],
+            ]
+        ] = None,
+    ) -> None:
         """Initialize the appropriate API provider based on settings and slot config."""
         apex_settings = self.settings.get("API Settings", {}).get("apex", {})
         provider_bootstrap_mode = (
             self.bootstrap_mode if is_bootstrap is None else is_bootstrap
         )
 
-        model, provider_type, endpoint, provider_wire_type = (
+        model, provider_type, endpoint, provider_wire_type = resolved_route or (
             self._resolve_storyteller_route()
         )
         base_url = endpoint["base_url"] if endpoint else None
@@ -567,7 +590,11 @@ class LogonUtility:
         logger.info(f"System prompt loaded: {len(system_prompt)} chars")
 
     def _ensure_provider(
-        self, context_payload: Optional[Dict[str, Any]] = None
+        self,
+        context_payload: Optional[Dict[str, Any]] = None,
+        *,
+        expected_model: Optional[str] = None,
+        expected_wire_type: Optional[Literal["openai", "anthropic", "local"]] = None,
     ) -> None:
         """Ensure the provider is initialized before use."""
         desired_bootstrap_mode = (
@@ -576,25 +603,66 @@ class LogonUtility:
             else self.bootstrap_mode
         )
 
+        resolved_route = None
+        if (expected_model is None) != (expected_wire_type is None):
+            raise RuntimeError(
+                "Expected storyteller model and wire class must be supplied together"
+            )
+        if expected_model is not None and expected_wire_type is not None:
+            resolved_route = self._resolve_storyteller_route()
+            resolved_model = resolved_route[0]
+            resolved_wire_type = resolved_route[3]
+            if (
+                resolved_model != expected_model
+                or resolved_wire_type != expected_wire_type
+            ):
+                raise RuntimeError(
+                    "slot model changed mid-turn; aborting the turn: "
+                    f"expected model={expected_model!r}, "
+                    f"wire_class={expected_wire_type!r}; "
+                    f"found model={resolved_model!r}, "
+                    f"wire_class={resolved_wire_type!r}"
+                )
+
         if self.provider is None:
-            self._initialize_provider(desired_bootstrap_mode)
+            if resolved_route is None:
+                self._initialize_provider(desired_bootstrap_mode)
+            else:
+                self._initialize_provider(
+                    desired_bootstrap_mode,
+                    resolved_route=resolved_route,
+                )
             return
 
-        resolved_model = self.model_override or self._get_slot_model()
-        if resolved_model:
-            resolved_model = self._resolve_generation_model(resolved_model)
+        if resolved_route is not None:
+            active_model: Optional[str] = resolved_route[0]
+            active_wire_type: Optional[Literal["openai", "anthropic", "local"]] = (
+                resolved_route[3]
+            )
+        else:
+            active_model = self.model_override or self._get_slot_model()
+            if active_model:
+                active_model = self._resolve_generation_model(active_model)
+            active_wire_type = self._provider_wire_type
         model_changed = bool(
-            resolved_model and getattr(self.provider, "model", None) != resolved_model
+            active_model and getattr(self.provider, "model", None) != active_model
         )
+        wire_type_changed = self._provider_wire_type != active_wire_type
         bootstrap_changed = self._provider_bootstrap_mode != desired_bootstrap_mode
-        if model_changed or bootstrap_changed:
+        if model_changed or wire_type_changed or bootstrap_changed:
             logger.info(
                 "LOGON provider context changed. Reinitializing provider for model %s "
                 "(bootstrap=%s)",
-                resolved_model or getattr(self.provider, "model", None),
+                active_model or getattr(self.provider, "model", None),
                 desired_bootstrap_mode,
             )
-            self._initialize_provider(desired_bootstrap_mode)
+            if resolved_route is None:
+                self._initialize_provider(desired_bootstrap_mode)
+            else:
+                self._initialize_provider(
+                    desired_bootstrap_mode,
+                    resolved_route=resolved_route,
+                )
 
     def ensure_provider(self) -> None:
         """Public wrapper for provider initialization."""
@@ -649,10 +717,18 @@ class LogonUtility:
             raise
 
     async def generate_narrative_async(
-        self, context_payload: Dict[str, Any]
+        self,
+        context_payload: Dict[str, Any],
+        *,
+        expected_model: Optional[str] = None,
+        expected_wire_type: Optional[Literal["openai", "anthropic", "local"]] = None,
     ) -> StoryTurnResponse:
         """Generate narrative from context payload without blocking the event loop."""
-        self._ensure_provider(context_payload)
+        self._ensure_provider(
+            context_payload,
+            expected_model=expected_model,
+            expected_wire_type=expected_wire_type,
+        )
         assert self.provider is not None
         schema_model = self._select_response_schema(context_payload)
         presence_baseline = await self._read_presence_baseline_for_context_async(

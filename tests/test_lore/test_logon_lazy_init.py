@@ -217,7 +217,7 @@ def test_anthropic_storyteller_transport_and_guide_follow_settings(
         ("local", "http://127.0.0.1:1234/v1", "local"),
     ],
 )
-def test_provider_wire_type_resolves_without_constructing_provider(
+def test_storyteller_route_resolves_without_constructing_provider(
     monkeypatch: pytest.MonkeyPatch,
     provider_type: str,
     base_url: str | None,
@@ -234,8 +234,45 @@ def test_provider_wire_type_resolves_without_constructing_provider(
     )
     logon = LogonUtility({}, model_override="storyteller-model")
 
-    assert logon.resolve_provider_wire_type() == expected_wire_type
+    assert logon.resolve_storyteller_route() == (
+        "storyteller-model",
+        expected_wire_type,
+    )
     assert logon.provider is None
+
+
+def test_provider_initialization_reuses_the_compared_route(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A matching Phase 6 comparison must not perform a third route read."""
+    logon = LogonUtility({}, model_override="storyteller-model")
+    route = ("storyteller-model", "openai", None, "openai")
+    route_calls = {"count": 0}
+    initialized_routes: list[tuple[Any, ...] | None] = []
+
+    def resolve_route() -> tuple[str, str, None, str]:
+        route_calls["count"] += 1
+        return route
+
+    def initialize_provider(
+        _is_bootstrap: bool | None = None,
+        *,
+        resolved_route: tuple[Any, ...] | None = None,
+    ) -> None:
+        initialized_routes.append(resolved_route)
+        logon.provider = cast(Any, _DummyProvider())
+
+    monkeypatch.setattr(logon, "_resolve_storyteller_route", resolve_route)
+    monkeypatch.setattr(logon, "_initialize_provider", initialize_provider)
+
+    logon._ensure_provider(
+        _minimal_payload(),
+        expected_model="storyteller-model",
+        expected_wire_type="openai",
+    )
+
+    assert route_calls["count"] == 1
+    assert initialized_routes == [route]
 
 
 @pytest.mark.requires_postgres

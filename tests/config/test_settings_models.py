@@ -123,6 +123,11 @@ def test_token_budget_provider_overrides_parse() -> None:
     settings = Settings(**_nexus_toml_dict())
 
     assert settings.lore.token_budget.provider_overrides == {"local": 24_000}
+    assert settings.ui.lore_budget_slider.min == 24_000
+    assert all(
+        stop >= settings.ui.lore_budget_slider.min
+        for stop in settings.ui.lore_budget_slider.stops
+    )
 
 
 def test_token_budget_provider_overrides_reject_unknown_key() -> None:

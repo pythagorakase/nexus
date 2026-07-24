@@ -146,6 +146,18 @@ def test_missing_provider_wire_type_is_programming_error(minimal_settings) -> No
         manager.configure_storyteller_budget(None)  # type: ignore[arg-type]
 
 
+def test_explicit_base_budget_mode_configures_phase2(minimal_settings) -> None:
+    """LOGON-disabled callers can deliberately select the base window."""
+    manager = ContextMemoryManager(minimal_settings)
+
+    effective_window = manager.configure_base_storyteller_budget()
+
+    assert effective_window == 75_000
+    assert manager.provider_wire_type is None
+    assert manager.phase2_budget == 7_500
+    assert manager._compute_available_phase2_budget({"total_available": 7_500}) == 7_500
+
+
 def test_pass1_baseline_tracks_chunks_and_budget(
     minimal_settings, dummy_memnon, baseline_inputs
 ):

@@ -39,17 +39,8 @@ logger = logging.getLogger(__name__)
 _STORYTELLER_WIRE_CLASSES = frozenset({"openai", "anthropic", "local"})
 
 
-def resolve_storyteller_context_window(
-    settings: Mapping[str, Any], provider_wire_type: Optional[str]
-) -> int:
-    """Resolve the assembled-context ceiling for one storyteller provider class."""
-    if provider_wire_type not in _STORYTELLER_WIRE_CLASSES:
-        raise RuntimeError(
-            "Cannot resolve the storyteller context budget without a valid active "
-            "provider wire class; expected one of "
-            f"{sorted(_STORYTELLER_WIRE_CLASSES)}, got {provider_wire_type!r}"
-        )
-
+def _storyteller_token_budget(settings: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Return the validated LORE token-budget mapping."""
     legacy_agent_settings = settings.get("Agent Settings")
     legacy_lore_settings = (
         legacy_agent_settings.get("LORE")
@@ -73,10 +64,32 @@ def resolve_storyteller_context_window(
         raise ValueError(
             "apex_context_window must be configured under LORE token_budget"
         )
+    return token_budget
+
+
+def resolve_base_storyteller_context_window(settings: Mapping[str, Any]) -> int:
+    """Resolve the base context ceiling used when LOGON is explicitly disabled."""
+    token_budget = _storyteller_token_budget(settings)
 
     apex_context_window = token_budget["apex_context_window"]
     if not isinstance(apex_context_window, int):
         raise TypeError("apex_context_window must be an integer")
+    return apex_context_window
+
+
+def resolve_storyteller_context_window(
+    settings: Mapping[str, Any], provider_wire_type: Optional[str]
+) -> int:
+    """Resolve the assembled-context ceiling for one storyteller provider class."""
+    if provider_wire_type not in _STORYTELLER_WIRE_CLASSES:
+        raise RuntimeError(
+            "Cannot resolve the storyteller context budget without a valid active "
+            "provider wire class; expected one of "
+            f"{sorted(_STORYTELLER_WIRE_CLASSES)}, got {provider_wire_type!r}"
+        )
+
+    token_budget = _storyteller_token_budget(settings)
+    apex_context_window = resolve_base_storyteller_context_window(settings)
 
     provider_overrides = token_budget.get("provider_overrides", {})
     if not isinstance(provider_overrides, Mapping):
@@ -226,6 +239,7 @@ class ContextMemoryManager:
         # change models while a LORE instance remains alive.
         self.provider_wire_type: Optional[str] = None
         self.phase2_budget: Optional[int] = None
+        self._storyteller_budget_configured = False
         if provider_wire_type is not None:
             self.configure_storyteller_budget(provider_wire_type)
 
@@ -281,6 +295,20 @@ class ContextMemoryManager:
             self.settings, provider_wire_type
         )
         self.provider_wire_type = provider_wire_type
+        self._storyteller_budget_configured = True
+        self._configure_phase2_budget(apex_context_window)
+        return apex_context_window
+
+    def configure_base_storyteller_budget(self) -> int:
+        """Use the base window for a turn where LOGON is explicitly disabled."""
+        apex_context_window = resolve_base_storyteller_context_window(self.settings)
+        self.provider_wire_type = None
+        self._storyteller_budget_configured = True
+        self._configure_phase2_budget(apex_context_window)
+        return apex_context_window
+
+    def _configure_phase2_budget(self, apex_context_window: int) -> None:
+        """Apply one resolved context window to the Phase 2 reserve."""
         self.phase2_budget = int(apex_context_window * self.phase2_fraction)
         logger.info(
             "Phase 2 budget: %s tokens (%.0f%% of %s)",
@@ -288,7 +316,6 @@ class ContextMemoryManager:
             self.phase2_fraction * 100,
             apex_context_window,
         )
-        return apex_context_window
 
     def get_memory_summary(self) -> Dict[str, Any]:
         """Get a summary of the current memory state for status reporting."""
@@ -513,10 +540,10 @@ class ContextMemoryManager:
         """Determine the usable Phase 2 budget for this turn."""
 
         phase2_budget = self.phase2_budget
-        if phase2_budget is None or self.provider_wire_type is None:
+        if phase2_budget is None or not self._storyteller_budget_configured:
             raise RuntimeError(
-                "Storyteller provider wire class must be configured before "
-                "resolving the Phase 2 payload budget"
+                "Storyteller context budget must be configured before resolving "
+                "the Phase 2 payload budget"
             )
 
         remaining_budget = self.context_state.get_remaining_budget()

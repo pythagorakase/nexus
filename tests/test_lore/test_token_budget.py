@@ -63,6 +63,40 @@ class TestTokenBudgetManager:
         # Should have reasoning reserve
         assert "reasoning_reserve" in budget or budget["total_available"] < 200000
 
+    def test_local_reasoning_model_cannot_return_negative_allocations(self, settings):
+        """A reasoning reserve that consumes a local profile fails loudly."""
+        manager = TokenBudgetManager(settings)
+
+        with pytest.raises(ValueError) as exc_info:
+            manager.calculate_budget(
+                "Test input",
+                apex_model="gpt-5-local-reasoning",
+                apex_context_window=24_000,
+            )
+
+        message = str(exc_info.value)
+        assert "window=24000" in message
+        assert "system_prompt=5000" in message
+        assert "reasoning_reserve=30000" in message
+        assert "response_reserve=4000" in message
+        assert "model=gpt-5-local-reasoning" in message
+
+    def test_real_local_model_produces_positive_allocations(self, settings):
+        """Hermes uses the local window without inheriting frontier reasoning."""
+        manager = TokenBudgetManager(settings)
+
+        budget = manager.calculate_budget(
+            "Test input",
+            apex_model="nousresearch/hermes-4-70b",
+            apex_context_window=24_000,
+        )
+
+        assert budget["reasoning_reserve"] == 0
+        assert budget["total_available"] >= 1_000
+        assert budget["warm_slice"] > 0
+        assert budget["structured"] > 0
+        assert budget["augmentation"] > 0
+
     def test_calculate_budget_respects_window(self, settings):
         """Test that budget doesn't exceed context window."""
         manager = TokenBudgetManager(settings)

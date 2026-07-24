@@ -27,7 +27,7 @@ class TokenBudgetManager:
     def calculate_budget(
         self,
         user_input: str,
-        apex_model: str = None,
+        apex_model: Optional[str] = None,
         *,
         apex_context_window: Optional[int] = None,
     ) -> Dict[str, int]:
@@ -64,7 +64,13 @@ class TokenBudgetManager:
         # Check if we're using a reasoning model
         if not apex_model:
             apex_settings = self.settings.get("API Settings", {}).get("apex", {})
-            apex_model = apex_settings.get("model", "gpt-4o")
+            configured_model = apex_settings.get("model", "gpt-4o")
+            if not isinstance(configured_model, str) or not configured_model.strip():
+                raise RuntimeError(
+                    "Storyteller model must be configured before calculating its "
+                    "token budget"
+                )
+            apex_model = configured_model
 
         using_reasoning_model = (
             apex_model.startswith("o")
@@ -83,6 +89,16 @@ class TokenBudgetManager:
             - reasoning_reserve
             - response_reserve
         )
+        if available_context < 1000:
+            raise ValueError(
+                "Storyteller payload budget must leave at least 1000 context "
+                "tokens: "
+                f"window={apex_window} - system_prompt={system_prompt} - "
+                f"user_input={user_input_tokens} - "
+                f"reasoning_reserve={reasoning_reserve} - "
+                f"response_reserve={response_reserve} = "
+                f"available_context={available_context}; model={apex_model}"
+            )
 
         # Calculate component allocations using minimum percentages initially
         warm_slice_min = self.allocation_config.get("warm_slice", {}).get("min", 40)
@@ -508,7 +524,7 @@ class TokenBudgetManager:
                 max_tokens,
             )
             # Keep baseline, remove all featured
-            trimmed_data = {
+            trimmed_data: Dict[str, Any] = {
                 "characters": {
                     "baseline": entity_data.get("characters", {}).get("baseline", []),
                     "featured": [],
@@ -572,7 +588,7 @@ class TokenBudgetManager:
 
         # Keep items until budget exhausted
         current_tokens = 0
-        kept_items = {
+        kept_items: Dict[str, List[Dict[str, Any]]] = {
             "characters": [],
             "locations": [],
             "factions": [],

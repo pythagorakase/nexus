@@ -110,14 +110,14 @@ class FakeStoryResponse:
 class FakeLogon:
     """LOGON stand-in returning a successful structured narrative."""
 
-    async def generate_narrative_async(self, _payload):
+    async def generate_narrative_async(self, _payload, **_route):
         return FakeStoryResponse()
 
 
 class FailingLogon:
     """LOGON stand-in that raises before a response is surfaced."""
 
-    async def generate_narrative_async(self, _payload):
+    async def generate_narrative_async(self, _payload, **_route):
         raise RuntimeError("generation failed")
 
 
@@ -467,6 +467,7 @@ async def test_assemble_context_payload_includes_bleed_menu() -> None:
         start_time=0,
         warm_slice=[{"id": 100, "text": "Rain ticks against the glass."}],
     )
+    context.token_counts = {"total_available": 75_000}
 
     await manager.assemble_context_payload(context)
 
@@ -491,6 +492,7 @@ async def test_assemble_context_payload_does_not_initialize_bleed_llm() -> None:
         start_time=0,
         warm_slice=[{"id": 100, "text": "Rain ticks against the glass."}],
     )
+    context.token_counts = {"total_available": 75_000}
 
     await manager.assemble_context_payload(context)
 
@@ -510,6 +512,7 @@ async def test_assemble_context_payload_reuses_orrery_proposal_anchor() -> None:
         start_time=0,
         warm_slice=[],
     )
+    context.token_counts = {"total_available": 75_000}
     context.orrery_proposal = SimpleNamespace(anchor_chunk_id=77, pressure_count=0)
 
     await manager.assemble_context_payload(context)
@@ -535,6 +538,7 @@ async def test_assemble_context_payload_attaches_scene_conditions() -> None:
         start_time=0,
         warm_slice=[],
     )
+    context.token_counts = {"total_available": 75_000}
     context.orrery_proposal = SimpleNamespace(
         anchor_chunk_id=77,
         pressure_count=0,
@@ -558,6 +562,7 @@ async def test_assemble_context_payload_preserves_scene_moods() -> None:
     context = TurnContext(
         turn_id="t1", user_input="Continue.", start_time=0, warm_slice=[]
     )
+    context.token_counts = {"total_available": 75_000}
     context.orrery_proposal = SimpleNamespace(
         anchor_chunk_id=77,
         pressure_count=0,
@@ -580,6 +585,8 @@ async def test_call_apex_ai_records_bleed_offers_after_generation_success() -> N
     session = FakeSession()
     manager = TurnCycleManager(FakeLore(_settings(), session, logon=FakeLogon()))
     context = TurnContext(turn_id="t1", user_input="Continue.", start_time=0)
+    context.apex_model = "resolved-bleed-test-model"
+    context.provider_wire_type = "openai"
     context.context_payload = {"user_input": "Continue."}
     context.bleed_menu = load_bleed_candidates(
         FakeSession(candidate_rows=[_candidate_row()]),
@@ -619,6 +626,8 @@ async def test_call_apex_ai_does_not_record_bleed_offers_on_generation_failure()
     session = FakeSession()
     manager = TurnCycleManager(FakeLore(_settings(), session, logon=FailingLogon()))
     context = TurnContext(turn_id="t1", user_input="Continue.", start_time=0)
+    context.apex_model = "resolved-bleed-test-model"
+    context.provider_wire_type = "openai"
     context.context_payload = {"user_input": "Continue."}
     context.bleed_menu = load_bleed_candidates(
         FakeSession(candidate_rows=[_candidate_row()]),

@@ -2803,7 +2803,7 @@ class UILoreBudgetSlider(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    min: int = Field(default=10_000, ge=1000, description="Slider lower bound (tok)")
+    min: int = Field(default=24_000, ge=1000, description="Slider lower bound (tok)")
     max: int = Field(default=200_000, ge=1000, description="Slider upper bound (tok)")
     step: int = Field(default=1000, ge=1, description="Slider step size (tok)")
     stops: List[int] = Field(
