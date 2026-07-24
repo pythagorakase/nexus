@@ -77,11 +77,45 @@ def openai_response_text_format(
     return cast(Dict[str, Any], type_to_text_format_param(schema_model))
 
 
-def _strip_anthropic_unsupported_schema_keys(value: Any) -> Any:
-    """Remove JSON Schema constraints not accepted by Anthropic structured output."""
+def de_null_schema(value: Any) -> Any:
+    """Collapse omittable nullable unions without changing non-schema values.
+
+    Lenient provider schemas express optional fields as non-required properties,
+    so their explicit ``null`` alternative is redundant. Sibling keys survive
+    the collapse, while keys from the non-null member take precedence.
+    """
 
     if isinstance(value, list):
-        return [_strip_anthropic_unsupported_schema_keys(item) for item in value]
+        return [de_null_schema(item) for item in value]
+    if not isinstance(value, dict):
+        return value
+
+    transformed = {key: de_null_schema(item) for key, item in value.items()}
+    any_of = transformed.get("anyOf")
+    if not isinstance(any_of, list) or len(any_of) != 2:
+        return transformed
+
+    null_indexes = [
+        index
+        for index, member in enumerate(any_of)
+        if isinstance(member, dict) and member.get("type") == "null"
+    ]
+    if len(null_indexes) != 1:
+        return transformed
+
+    non_null_member = any_of[1 - null_indexes[0]]
+    if not isinstance(non_null_member, dict):
+        return transformed
+
+    siblings = {key: item for key, item in transformed.items() if key != "anyOf"}
+    return {**siblings, **non_null_member}
+
+
+def _rewrite_anthropic_schema(value: Any) -> Any:
+    """Recursively remove or rewrite schema features Anthropic rejects."""
+
+    if isinstance(value, list):
+        return [_rewrite_anthropic_schema(item) for item in value]
     if not isinstance(value, dict):
         return value
     return {
@@ -90,12 +124,16 @@ def _strip_anthropic_unsupported_schema_keys(value: Any) -> Any:
         # accepted, semantically-wider spelling; app-side Pydantic still
         # enforces the discriminator after parse. Found live on the first
         # universal-wire Anthropic turn (measurement stage).
-        ("anyOf" if key == "oneOf" else key): (
-            _strip_anthropic_unsupported_schema_keys(item)
-        )
+        ("anyOf" if key == "oneOf" else key): _rewrite_anthropic_schema(item)
         for key, item in value.items()
         if key not in ANTHROPIC_UNSUPPORTED_SCHEMA_KEYS
     }
+
+
+def _strip_anthropic_unsupported_schema_keys(value: Any) -> Any:
+    """Build Anthropic's rewritten supported JSON Schema subset."""
+
+    return _rewrite_anthropic_schema(value)
 
 
 class AnthropicJsonSchemaTransformer(JsonSchemaTransformer):

@@ -38,6 +38,7 @@ from nexus.agents.logon.apex_schema import (
 )
 from nexus.agents.orrery.tag_schemas import OrreryTagBestowal
 from nexus.api.native_structured_output import (
+    de_null_schema,
     openai_response_text_format,
     strict_json_schema,
 )
@@ -681,4 +682,4 @@ def skald_wire_strict_text_format() -> Dict[str, Any]:
 def skald_wire_lenient_schema() -> Dict[str, Any]:
     """Build the omittable-field schema for Anthropic and local endpoints."""
 
-    return SkaldTurnWire.model_json_schema()
+    return de_null_schema(SkaldTurnWire.model_json_schema())
