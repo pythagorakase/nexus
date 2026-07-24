@@ -29,6 +29,7 @@ from nexus.agents.logon.skald_wire import (  # noqa: E402
     SkaldTurnWire,
     hydrate_skald_turn,
     skald_wire_lenient_schema,
+    skald_wire_prompt_guide,
     skald_wire_strict_text_format,
 )
 from nexus.agents.orrery.tag_library import (  # noqa: E402
@@ -455,6 +456,21 @@ class LogonUtility:
 
         # Load system prompt
         system_prompt = self._load_system_prompt(provider_bootstrap_mode)
+        anthropic_transport: Literal["native", "prompted"] = "native"
+        if provider_type == "anthropic":
+            configured_transport = apex_settings.get("anthropic_storyteller_transport")
+            if configured_transport not in {"native", "prompted"}:
+                raise ValueError(
+                    "API Settings.apex.anthropic_storyteller_transport must be "
+                    "'native' or 'prompted'"
+                )
+            anthropic_transport = (
+                "native"
+                if provider_bootstrap_mode
+                else cast(Literal["native", "prompted"], configured_transport)
+            )
+            if anthropic_transport == "prompted":
+                system_prompt = f"{system_prompt}\n\n{skald_wire_prompt_guide()}"
         self._system_prompt = system_prompt
         self._provider_bootstrap_mode = provider_bootstrap_mode
 
@@ -491,6 +507,7 @@ class LogonUtility:
                     "max_output_tokens", apex_settings.get("max_tokens", 4000)
                 ),
                 system_prompt=system_prompt,
+                structured_transport=anthropic_transport,
                 structured_output_retries=structured_output_retries,
                 output_validator=output_validator,
             )
@@ -756,12 +773,25 @@ class LogonUtility:
                     )
                 }
             elif self._provider_wire_type == "anthropic":
-                kwargs = {
-                    "output_config": anthropic_output_config(
-                        SkaldTurnWire,
-                        schema=skald_wire_lenient_schema(),
+                anthropic_transport = getattr(
+                    self.provider,
+                    "structured_transport",
+                    "prompted",
+                )
+                if anthropic_transport == "prompted":
+                    kwargs = {}
+                elif anthropic_transport == "native":
+                    kwargs = {
+                        "output_config": anthropic_output_config(
+                            SkaldTurnWire,
+                            schema=skald_wire_lenient_schema(),
+                        )
+                    }
+                else:
+                    raise ValueError(
+                        "Anthropic provider has an invalid structured transport: "
+                        f"{anthropic_transport!r}"
                     )
-                }
             else:
                 kwargs = {}
         elif self._provider_wire_type in {"openai", "local"}:

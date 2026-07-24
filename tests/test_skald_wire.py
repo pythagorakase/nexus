@@ -5,11 +5,11 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, cast, get_args
 
 import psycopg2
 import pytest
-import tiktoken
 from pydantic import BaseModel, ValidationError
 
 from nexus.agents.logon.apex_enums import (
@@ -45,6 +45,7 @@ from nexus.agents.logon.skald_wire import (
     SkaldTurnWire,
     hydrate_skald_turn,
     skald_wire_lenient_schema,
+    skald_wire_prompt_guide,
     skald_wire_strict_text_format,
 )
 from nexus.agents.lore import logon_utility
@@ -889,13 +890,95 @@ def test_lenient_wire_closes_every_object_schema_node() -> None:
 
 
 def test_shipped_anthropic_wire_has_no_union_typed_schema_nodes() -> None:
-    utility = LogonUtility({})
-    utility._provider_wire_type = "anthropic"
-    schema = utility._schema_format_kwargs(SkaldTurnWire)["output_config"]["format"][
-        "schema"
-    ]
+    assert _count_union_typed_parameters(skald_wire_lenient_schema()) == 0
 
-    assert _count_union_typed_parameters(schema) == 0
+
+def _reachable_schema_objects(
+    schema: dict[str, Any],
+) -> list[tuple[str, dict[str, Any]]]:
+    """Walk every object reachable through local schema references."""
+
+    definitions = schema["$defs"]
+    objects = [(schema["title"], schema)]
+    seen = {schema["title"]}
+
+    def visit(node: Any) -> None:
+        if not isinstance(node, dict):
+            return
+        ref = node.get("$ref")
+        if isinstance(ref, str):
+            name = ref.removeprefix("#/$defs/")
+            target = definitions[name]
+            if target.get("type") == "object" and name not in seen:
+                seen.add(name)
+                objects.append((name, target))
+            return
+        visit(node.get("items"))
+        for key in ("anyOf", "oneOf", "allOf"):
+            for member in node.get(key, []):
+                visit(member)
+
+    for _object_name, object_schema in objects:
+        for property_schema in object_schema["properties"].values():
+            visit(property_schema)
+    return objects
+
+
+def test_skald_wire_prompt_guide_is_deterministic_and_complete() -> None:
+    schema = skald_wire_lenient_schema()
+    first = skald_wire_prompt_guide()
+    second = skald_wire_prompt_guide()
+
+    assert first == second
+    assert first.startswith("=== OUTPUT FORMAT ===\n")
+    assert "Respond with a single JSON object" in first
+    assert "No prose outside the JSON." in first
+
+    for object_name, object_schema in _reachable_schema_objects(schema):
+        marker = f"{object_name}{{\n"
+        assert first.count(marker) == 1
+        block = first.split(marker, 1)[1].split("\n}", 1)[0]
+        block_lines = block.splitlines()
+        required = set(object_schema.get("required", []))
+        assert len(block_lines) == len(object_schema["properties"])
+
+        for property_name, property_schema in object_schema["properties"].items():
+            status = "!" if property_name in required else "?"
+            prefix = f"{property_name}{status}:"
+            matching_lines = [line for line in block_lines if line.startswith(prefix)]
+            assert len(matching_lines) == 1
+            description = json.dumps(
+                property_schema.get("description", ""),
+                ensure_ascii=False,
+            )
+            assert matching_lines[0].endswith(f"|{description}")
+            assert matching_lines[0][len(prefix) :].split("|", 1)[0]
+
+
+def test_skald_wire_prompt_guide_preserves_enum_values_verbatim() -> None:
+    guide = skald_wire_prompt_guide()
+
+    assert (
+        'transition?:string|enum=["new_episode","new_season"]|'
+        '"Episode or season transition."' in guide
+    )
+    assert (
+        'type?:string|enum=["family","romantic","friend","companion","ally",'
+        '"contact","pedagogical","acquaintance","stranger","complex"]|'
+        '"Canonical relationship type."' in guide
+    )
+    assert (
+        'declared_entity_role?:string|enum=["subject","object"]|'
+        '"Whether the declared entity is the subject or object of the directed '
+        'pair tag."' in guide
+    )
+
+
+def test_skald_wire_prompt_guide_stays_within_token_budget() -> None:
+    tiktoken = pytest.importorskip("tiktoken")
+    encoding = tiktoken.get_encoding("o200k_base")
+
+    assert len(encoding.encode(skald_wire_prompt_guide())) <= 1_400
 
 
 def test_wire_schema_size_and_description_budget() -> None:
@@ -985,6 +1068,19 @@ def test_logon_selects_transport_appropriate_wire_serialization() -> None:
     assert local_format["schema"] == skald_wire_lenient_schema()
 
     utility._provider_wire_type = "anthropic"
+    utility.provider = cast(
+        Any,
+        SimpleNamespace(structured_transport="prompted"),
+    )
+    utility._schema_format_cache = {}
+    prompted_kwargs = utility._schema_format_kwargs(SkaldTurnWire)
+    assert prompted_kwargs == {}
+    assert utility._schema_format_kwargs(SkaldTurnWire) is prompted_kwargs
+
+    utility.provider = cast(
+        Any,
+        SimpleNamespace(structured_transport="native"),
+    )
     utility._schema_format_cache = {}
     assert utility._schema_format_kwargs(SkaldTurnWire) == {
         "output_config": anthropic_output_config(
@@ -1023,6 +1119,17 @@ def test_bootstrap_schema_selection_and_contract_are_unchanged() -> None:
     ]
     assert text_format["name"] == "StorytellerResponseBootstrap"
     assert set(text_format["schema"]["properties"]) == {"narrative", "choices"}
+
+    utility._provider_wire_type = "anthropic"
+    utility.provider = cast(
+        Any,
+        SimpleNamespace(structured_transport="native"),
+    )
+    utility._schema_format_cache = {}
+    output_config = utility._schema_format_kwargs(StorytellerResponseBootstrap)[
+        "output_config"
+    ]
+    assert output_config == anthropic_output_config(StorytellerResponseBootstrap)
 
 
 def test_non_bootstrap_logon_requires_parent_chunk_id() -> None:
@@ -1197,6 +1304,7 @@ def test_presence_baseline_reads_real_slot_parent_rows() -> None:
 
 
 def test_schema_token_measurement_uses_o200k() -> None:
+    tiktoken = pytest.importorskip("tiktoken")
     encoding = tiktoken.get_encoding("o200k_base")
     strict_wire = _compact_schema_json(skald_wire_strict_text_format()["schema"])
     lenient_wire = _compact_schema_json(skald_wire_lenient_schema())

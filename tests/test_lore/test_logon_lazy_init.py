@@ -9,7 +9,8 @@ import pytest
 from nexus.agents.logon.apex_schema import (
     StorytellerResponseBootstrap,
 )
-from nexus.agents.logon.skald_wire import SkaldTurnWire
+from nexus.agents.logon.skald_wire import SkaldTurnWire, skald_wire_prompt_guide
+from nexus.agents.lore import logon_utility
 from nexus.agents.lore.lore import LORE
 from nexus.agents.lore.logon_utility import LogonUtility
 
@@ -137,6 +138,73 @@ def test_runtime_roster_reference_resolves_before_provider_call(
         == "resolved-roster-model"
     )
     assert seen == ["@openai.storyteller"]
+
+
+@pytest.mark.parametrize(
+    ("configured_transport", "is_bootstrap", "expected_transport", "has_guide"),
+    [
+        ("prompted", False, "prompted", True),
+        ("native", False, "native", False),
+        ("prompted", True, "native", False),
+    ],
+)
+def test_anthropic_storyteller_transport_and_guide_follow_settings(
+    monkeypatch: pytest.MonkeyPatch,
+    configured_transport: str,
+    is_bootstrap: bool,
+    expected_transport: str,
+    has_guide: bool,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    class RecordingAnthropicProvider:
+        def __init__(self, **kwargs: Any) -> None:
+            captured.update(kwargs)
+            self.model = kwargs["model"]
+            self.structured_transport = kwargs["structured_transport"]
+
+    monkeypatch.setattr(
+        logon_utility,
+        "get_provider_for_model",
+        lambda _model: "anthropic",
+    )
+    monkeypatch.setattr(
+        "nexus.config.get_openai_compatible_endpoint",
+        lambda _model: None,
+    )
+    monkeypatch.setattr(
+        "nexus.agents.logon.orrery_tag_validation." "build_storyteller_tag_validator",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        LogonUtility,
+        "_load_system_prompt",
+        lambda _self, _is_bootstrap=None: "Core prompt",
+    )
+    monkeypatch.setattr(
+        logon_utility,
+        "AnthropicProvider",
+        RecordingAnthropicProvider,
+    )
+    settings = {
+        "API Settings": {
+            "apex": {
+                "anthropic_storyteller_transport": configured_transport,
+                "max_output_tokens": 1234,
+                "structured_output_retries": 2,
+            }
+        }
+    }
+    utility = LogonUtility(settings, model_override="claude-sonnet-4-5")
+
+    utility._initialize_provider(is_bootstrap)
+
+    assert captured["structured_transport"] == expected_transport
+    expected_system = (
+        f"Core prompt\n\n{skald_wire_prompt_guide()}" if has_guide else "Core prompt"
+    )
+    assert captured["system_prompt"] == expected_system
+    assert utility._system_prompt == expected_system
 
 
 @pytest.mark.requires_postgres

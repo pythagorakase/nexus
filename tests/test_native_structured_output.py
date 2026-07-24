@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+from pydantic import ValidationError
 
 from nexus.agents.logon.apex_schema import (
     StorytellerResponseBootstrap,
@@ -690,6 +691,258 @@ def test_anthropic_provider_uses_native_output_format() -> None:
     assert "tools" not in captured
     assert captured["system"] == "System prompt"
     assert captured["max_tokens"] == 5678
+
+
+def test_anthropic_provider_rejects_unknown_structured_transport() -> None:
+    with pytest.raises(
+        ValueError,
+        match="structured_transport must be 'native' or 'prompted'",
+    ):
+        AnthropicProvider(
+            model="claude-sonnet-4-5",
+            api_key="test-key",
+            structured_transport="unknown",  # type: ignore[arg-type]
+        )
+
+
+def test_anthropic_prompted_transport_omits_schema_and_parses_json_fence() -> None:
+    expected = _bootstrap_response()
+    captured = {}
+
+    class FakeMessages:
+        def create(self, **kwargs):
+            captured.update(kwargs)
+            return SimpleNamespace(
+                content=[
+                    SimpleNamespace(
+                        type="text",
+                        text=f"```json\n{expected.model_dump_json()}\n```",
+                    )
+                ],
+                usage=SimpleNamespace(input_tokens=33, output_tokens=44),
+            )
+
+    provider = AnthropicProvider(
+        model="claude-sonnet-4-5",
+        api_key="test-key",
+        system_prompt="System prompt",
+        temperature=0.2,
+        top_p=0.8,
+        top_k=40,
+        max_tokens=5678,
+        thinking_enabled=True,
+        thinking_budget_tokens=1024,
+        structured_transport="prompted",
+        structured_output_retries=0,
+    )
+    provider.client = SimpleNamespace(beta=SimpleNamespace(messages=FakeMessages()))
+
+    parsed, llm_response = provider.get_structured_completion(
+        "Prompt",
+        StorytellerResponseBootstrap,
+    )
+
+    assert parsed == expected
+    assert llm_response.input_tokens == 33
+    assert llm_response.output_tokens == 44
+    assert captured == {
+        "model": "claude-sonnet-4-5",
+        "messages": [{"role": "user", "content": "Prompt"}],
+        "max_tokens": 5678,
+        "system": "System prompt",
+        "temperature": 0.2,
+        "top_p": 0.8,
+        "top_k": 40,
+        "thinking": {"type": "enabled", "budget_tokens": 1024},
+    }
+
+
+@pytest.mark.asyncio
+async def test_anthropic_prompted_transport_async_parses_bare_fence() -> None:
+    expected = _bootstrap_response()
+    calls = []
+
+    class FakeMessages:
+        def create(self, **kwargs):
+            calls.append(kwargs)
+            return SimpleNamespace(
+                content=[
+                    SimpleNamespace(
+                        type="text",
+                        text=f"```\n{expected.model_dump_json()}\n```",
+                    )
+                ],
+                usage=SimpleNamespace(input_tokens=33, output_tokens=44),
+            )
+
+    provider = AnthropicProvider(
+        model="claude-sonnet-4-5",
+        api_key="test-key",
+        structured_transport="prompted",
+        structured_output_retries=0,
+    )
+    provider.client = SimpleNamespace(beta=SimpleNamespace(messages=FakeMessages()))
+
+    parsed, _llm_response = await provider.get_structured_completion_async(
+        "Prompt",
+        StorytellerResponseBootstrap,
+    )
+
+    assert parsed == expected
+    assert len(calls) == 1
+    assert "output_config" not in calls[0]
+    assert "output_format" not in calls[0]
+
+
+def test_anthropic_prompted_transport_repairs_then_raises_on_garbage() -> None:
+    calls = []
+
+    class FakeMessages:
+        def create(self, **kwargs):
+            calls.append(kwargs)
+            return SimpleNamespace(
+                content=[SimpleNamespace(type="text", text="persistent garbage")],
+                usage=SimpleNamespace(input_tokens=33, output_tokens=44),
+            )
+
+    provider = AnthropicProvider(
+        model="claude-sonnet-4-5",
+        api_key="test-key",
+        structured_transport="prompted",
+        structured_output_retries=1,
+    )
+    provider.client = SimpleNamespace(beta=SimpleNamespace(messages=FakeMessages()))
+
+    with pytest.raises(ValidationError, match="Invalid JSON"):
+        provider.get_structured_completion("Prompt", StorytellerResponseBootstrap)
+
+    assert len(calls) == 2
+    assert calls[0]["messages"][0]["content"] == "Prompt"
+    assert "=== STRUCTURED OUTPUT RETRY ===" in calls[1]["messages"][0]["content"]
+    assert all("output_config" not in request for request in calls)
+
+
+@pytest.mark.asyncio
+async def test_anthropic_prompted_transport_async_repairs_then_raises() -> None:
+    calls = []
+
+    class FakeMessages:
+        def create(self, **kwargs):
+            calls.append(kwargs)
+            return SimpleNamespace(
+                content=[SimpleNamespace(type="text", text="persistent garbage")],
+                usage=SimpleNamespace(input_tokens=33, output_tokens=44),
+            )
+
+    provider = AnthropicProvider(
+        model="claude-sonnet-4-5",
+        api_key="test-key",
+        structured_transport="prompted",
+        structured_output_retries=1,
+    )
+    provider.client = SimpleNamespace(beta=SimpleNamespace(messages=FakeMessages()))
+
+    with pytest.raises(ValidationError, match="Invalid JSON"):
+        await provider.get_structured_completion_async(
+            "Prompt",
+            StorytellerResponseBootstrap,
+        )
+
+    assert len(calls) == 2
+    assert "=== STRUCTURED OUTPUT RETRY ===" in calls[1]["messages"][0]["content"]
+    assert all("output_config" not in request for request in calls)
+
+
+def test_anthropic_prompted_transport_carries_effort_without_format() -> None:
+    expected = _bootstrap_response()
+    captured = {}
+
+    class FakeMessages:
+        def create(self, **kwargs):
+            captured.update(kwargs)
+            return SimpleNamespace(
+                content=[SimpleNamespace(type="text", text=expected.model_dump_json())],
+                usage=SimpleNamespace(input_tokens=33, output_tokens=44),
+            )
+
+    provider = AnthropicProvider(
+        model="claude-sonnet-4-5",
+        api_key="test-key",
+        reasoning_effort="medium",
+        structured_transport="prompted",
+        structured_output_retries=0,
+    )
+    provider.client = SimpleNamespace(beta=SimpleNamespace(messages=FakeMessages()))
+
+    parsed, _llm_response = provider.get_structured_completion(
+        "Prompt",
+        StorytellerResponseBootstrap,
+    )
+
+    assert parsed == expected
+    assert captured["output_config"] == {"effort": "medium"}
+    assert "format" not in captured["output_config"]
+
+
+@pytest.mark.asyncio
+async def test_anthropic_prompted_transport_async_carries_effort_without_format() -> (
+    None
+):
+    expected = _bootstrap_response()
+    captured = {}
+
+    class FakeMessages:
+        def create(self, **kwargs):
+            captured.update(kwargs)
+            return SimpleNamespace(
+                content=[SimpleNamespace(type="text", text=expected.model_dump_json())],
+                usage=SimpleNamespace(input_tokens=33, output_tokens=44),
+            )
+
+    provider = AnthropicProvider(
+        model="claude-sonnet-4-5",
+        api_key="test-key",
+        reasoning_effort="low",
+        structured_transport="prompted",
+        structured_output_retries=0,
+    )
+    provider.client = SimpleNamespace(beta=SimpleNamespace(messages=FakeMessages()))
+
+    parsed, _llm_response = await provider.get_structured_completion_async(
+        "Prompt",
+        StorytellerResponseBootstrap,
+    )
+
+    assert parsed == expected
+    assert captured["output_config"] == {"effort": "low"}
+    assert "format" not in captured["output_config"]
+
+
+@pytest.mark.parametrize("schema_argument", ["output_config", "output_format"])
+def test_anthropic_prompted_transport_rejects_caller_schema_arguments(
+    schema_argument: str,
+) -> None:
+    create = Mock(side_effect=AssertionError("request must not be sent"))
+    provider = AnthropicProvider(
+        model="claude-sonnet-4-5",
+        api_key="test-key",
+        structured_transport="prompted",
+    )
+    provider.client = SimpleNamespace(
+        beta=SimpleNamespace(messages=SimpleNamespace(create=create))
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="does not accept output_config or output_format",
+    ):
+        provider.get_structured_completion(
+            "Prompt",
+            StorytellerResponseBootstrap,
+            **{schema_argument: {}},
+        )
+
+    create.assert_not_called()
 
 
 def test_anthropic_provider_accepts_native_output_config_override() -> None:
