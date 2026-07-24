@@ -208,8 +208,25 @@ class TurnCycleManager:
 
         # Calculate token budget
         if self.lore.token_manager:
+            memory_manager = getattr(self.lore, "memory_manager", None)
+            if memory_manager is None:
+                raise RuntimeError(
+                    "Storyteller payload sizing requires the memory manager"
+                )
+            self.lore.ensure_logon()
+            logon = getattr(self.lore, "logon", None)
+            if logon is None:
+                raise RuntimeError(
+                    "Active LOGON provider is required for storyteller payload sizing"
+                )
+            provider_wire_type = logon.resolve_provider_wire_type()
+            turn_context.provider_wire_type = provider_wire_type
+            apex_context_window = memory_manager.configure_storyteller_budget(
+                provider_wire_type
+            )
             turn_context.token_counts = self.lore.token_manager.calculate_budget(
-                turn_context.user_input
+                turn_context.user_input,
+                apex_context_window=apex_context_window,
             )
 
         # Store processed input

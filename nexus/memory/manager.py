@@ -6,7 +6,7 @@ import logging
 import re
 from collections import Counter
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Optional, Set
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Set
 
 from sqlalchemy import text
 
@@ -24,12 +24,79 @@ from .incremental import IncrementalRetriever
 from .query_memory import QueryMemory
 from .retrieval_coverage import audit_retrieval_coverage, coerce_chunk_id
 
+load_aliases_from_db: Optional[Callable[[Any], Dict[str, List[str]]]]
 try:  # pragma: no cover - optional dependency during unit tests
-    from nexus.agents.memnon.utils.alias_search import load_aliases_from_db
+    from nexus.agents.memnon.utils.alias_search import (
+        load_aliases_from_db as _load_aliases_from_db,
+    )
+
+    load_aliases_from_db = _load_aliases_from_db
 except ImportError:  # pragma: no cover - fallback if module unavailable
     load_aliases_from_db = None
 
 logger = logging.getLogger(__name__)
+
+_STORYTELLER_WIRE_CLASSES = frozenset({"openai", "anthropic", "local"})
+
+
+def resolve_storyteller_context_window(
+    settings: Mapping[str, Any], provider_wire_type: Optional[str]
+) -> int:
+    """Resolve the assembled-context ceiling for one storyteller provider class."""
+    if provider_wire_type not in _STORYTELLER_WIRE_CLASSES:
+        raise RuntimeError(
+            "Cannot resolve the storyteller context budget without a valid active "
+            "provider wire class; expected one of "
+            f"{sorted(_STORYTELLER_WIRE_CLASSES)}, got {provider_wire_type!r}"
+        )
+
+    legacy_agent_settings = settings.get("Agent Settings")
+    legacy_lore_settings = (
+        legacy_agent_settings.get("LORE")
+        if isinstance(legacy_agent_settings, Mapping)
+        else None
+    )
+    lore_settings = (
+        legacy_lore_settings
+        if isinstance(legacy_lore_settings, Mapping)
+        else settings.get("lore")
+    )
+    if not isinstance(lore_settings, Mapping):
+        raise ValueError("LORE settings are required to resolve the context budget")
+
+    token_budget = lore_settings.get("token_budget")
+    if not isinstance(token_budget, Mapping):
+        raise ValueError(
+            "token_budget must be configured under the LORE settings section"
+        )
+    if "apex_context_window" not in token_budget:
+        raise ValueError(
+            "apex_context_window must be configured under LORE token_budget"
+        )
+
+    apex_context_window = token_budget["apex_context_window"]
+    if not isinstance(apex_context_window, int):
+        raise TypeError("apex_context_window must be an integer")
+
+    provider_overrides = token_budget.get("provider_overrides", {})
+    if not isinstance(provider_overrides, Mapping):
+        raise TypeError("token_budget provider_overrides must be a mapping")
+
+    override = provider_overrides.get(provider_wire_type)
+    if override is None:
+        return apex_context_window
+    if not isinstance(override, int):
+        raise TypeError(
+            f"token budget provider override for {provider_wire_type!r} must be "
+            "an integer"
+        )
+
+    logger.debug(
+        "Storyteller payload budget override: class=%s effective=%s tokens",
+        provider_wire_type,
+        override,
+    )
+    return override
 
 
 _COMMON_STOPWORDS: Set[str] = {
@@ -138,6 +205,7 @@ class ContextMemoryManager:
         settings: Dict[str, Any],
         memnon: Optional[object] = None,
         token_manager: Optional[object] = None,
+        provider_wire_type: Optional[str] = None,
     ) -> None:
         self.settings = settings
         self.memnon = memnon  # Store reference for entity detector
@@ -154,17 +222,12 @@ class ContextMemoryManager:
             memory_settings.get("skip_simple_choices", True)
         )
 
-        # Calculate actual Phase 2 budget from apex window
-        apex_context_window = (
-            settings.get("Agent Settings", {})
-            .get("LORE", {})
-            .get("token_budget", {})
-            .get("apex_context_window", 75000)
-        )
-        self.phase2_budget = int(apex_context_window * self.phase2_fraction)
-        logger.info(
-            f"Phase 2 budget: {self.phase2_budget} tokens ({self.phase2_fraction * 100:.0f}% of {apex_context_window})"
-        )
+        # The active storyteller class is resolved per turn because slots can
+        # change models while a LORE instance remains alive.
+        self.provider_wire_type: Optional[str] = None
+        self.phase2_budget: Optional[int] = None
+        if provider_wire_type is not None:
+            self.configure_storyteller_budget(provider_wire_type)
 
         # Legacy settings (kept for compatibility but may be deprecated)
         self.pass2_reserve = float(memory_settings.get("pass2_budget_reserve", 0.25))
@@ -211,6 +274,21 @@ class ContextMemoryManager:
         self.idf_dictionary = getattr(memnon, "idf_dictionary", None)
 
         self._initialize_entity_maps(memnon)
+
+    def configure_storyteller_budget(self, provider_wire_type: str) -> int:
+        """Apply the active provider class to every memory payload budget."""
+        apex_context_window = resolve_storyteller_context_window(
+            self.settings, provider_wire_type
+        )
+        self.provider_wire_type = provider_wire_type
+        self.phase2_budget = int(apex_context_window * self.phase2_fraction)
+        logger.info(
+            "Phase 2 budget: %s tokens (%.0f%% of %s)",
+            self.phase2_budget,
+            self.phase2_fraction * 100,
+            apex_context_window,
+        )
+        return apex_context_window
 
     def get_memory_summary(self) -> Dict[str, Any]:
         """Get a summary of the current memory state for status reporting."""
@@ -364,7 +442,8 @@ class ContextMemoryManager:
         # Pass 2 queries are always reset when a new baseline is stored
         self.query_memory.reset_pass("pass2")
         logger.debug(
-            "Pass 1 baseline stored: %s baseline chunks, %s expected themes, remaining budget=%s",
+            "Pass 1 baseline stored: %s baseline chunks, %s expected themes, "
+            "remaining budget=%s",
             len(baseline_chunks),
             len(expected_user_themes),
             remaining_budget,
@@ -433,6 +512,13 @@ class ContextMemoryManager:
     ) -> int:
         """Determine the usable Phase 2 budget for this turn."""
 
+        phase2_budget = self.phase2_budget
+        if phase2_budget is None or self.provider_wire_type is None:
+            raise RuntimeError(
+                "Storyteller provider wire class must be configured before "
+                "resolving the Phase 2 payload budget"
+            )
+
         remaining_budget = self.context_state.get_remaining_budget()
 
         if token_counts:
@@ -445,14 +531,15 @@ class ContextMemoryManager:
                 actual_remaining = max(0, int(total_available) - int(baseline_tokens))
                 if actual_remaining != remaining_budget:
                     logger.debug(
-                        "Adjusting remaining budget from %s to %s based on token counts",
+                        "Adjusting remaining budget from %s to %s based on "
+                        "token counts",
                         remaining_budget,
                         actual_remaining,
                     )
                     self.context_state.adjust_budget(actual_remaining)
                     remaining_budget = actual_remaining
 
-        return max(0, min(self.phase2_budget, remaining_budget))
+        return max(0, min(phase2_budget, remaining_budget))
 
     def handle_user_input(
         self,
@@ -571,14 +658,19 @@ class ContextMemoryManager:
             )
 
         logger.info(
-            f"Raw search retrieved {len(raw_search_results)} chunks (~{raw_tokens} tokens)"
+            "Raw search retrieved %s chunks (~%s tokens)",
+            len(raw_search_results),
+            raw_tokens,
         )
 
         # STEP 3: Keep chunks that fit in the remaining Phase 2 budget.
         kept_chunks = []
         total_tokens = 0
         for chunk in raw_search_results:
-            chunk_tokens = self._estimate_tokens(chunk.get("text", ""))
+            chunk_text = chunk.get("text", "")
+            if not isinstance(chunk_text, str):
+                raise TypeError("Retrieved chunk text must be a string")
+            chunk_tokens = self._estimate_tokens(chunk_text)
             if total_tokens + chunk_tokens > available_budget:
                 break
             kept_chunks.append(chunk)
@@ -587,10 +679,12 @@ class ContextMemoryManager:
         if kept_chunks:
             new_chunks = self.context_state.register_additional_chunks(kept_chunks)
             self.context_state.consume_budget(total_tokens)
+            budget_percentage = (
+                total_tokens / available_budget * 100 if available_budget else 0
+            )
             logger.info(
                 f"✅ Phase 2 complete: {len(new_chunks)} new chunks, "
-                f"{total_tokens} tokens ("
-                f"{(total_tokens / available_budget * 100) if available_budget else 0:.1f}% of budget)"
+                f"{total_tokens} tokens ({budget_percentage:.1f}% of budget)"
             )
         else:
             logger.info("Phase 2 complete: No chunks fit in remaining budget")
@@ -685,7 +779,7 @@ class ContextMemoryManager:
     def _initialize_entity_maps(self, memnon: Optional[object]) -> None:
         """Load alias and location metadata for canonical entity detection."""
 
-        if not memnon or not load_aliases_from_db:  # pragma: no cover - defensive
+        if not memnon or load_aliases_from_db is None:  # pragma: no cover - defensive
             return
 
         engine = getattr(getattr(memnon, "db_manager", None), "engine", None)
@@ -714,14 +808,13 @@ class ContextMemoryManager:
                         text("SELECT name FROM characters WHERE id = :id"),
                         {"id": result[0]},
                     ).fetchone()
-                    if user_row and user_row[0]:
-                        self.user_character_name = user_row[0]
-                        canonical = self.user_character_name.lower()
+                    user_character_name = user_row[0] if user_row else None
+                    if user_character_name:
+                        self.user_character_name = user_character_name
+                        canonical = user_character_name.lower()
                         if canonical not in self.alias_lookup:
-                            self.alias_lookup[canonical] = [self.user_character_name]
-                            self.canonical_name_map[canonical] = (
-                                self.user_character_name
-                            )
+                            self.alias_lookup[canonical] = [user_character_name]
+                            self.canonical_name_map[canonical] = user_character_name
                         for alias in self.alias_lookup[canonical]:
                             self.alias_inverse[alias.lower()] = canonical
                         for pronoun in ("you", "your", "yours", "yourself"):
@@ -819,7 +912,8 @@ class ContextMemoryManager:
                     locations.append(location_name)
                 continue
 
-            # Fallback: treat standalone capitalised tokens as provisional character names
+            # Fallback: standalone capitalised tokens are provisional
+            # character names.
             lower_normalized = normalized.lower()
             if (
                 " " not in normalized

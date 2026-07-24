@@ -41,6 +41,7 @@ class TurnContext:
     apex_response: Optional[str] = None
     error_log: List[str] = field(default_factory=list)
     token_counts: Dict[str, int] = field(default_factory=dict)
+    provider_wire_type: Optional[str] = None
     memory_state: Dict[str, Any] = field(default_factory=dict)
     target_chunk_id: Optional[int] = None
     # Soft author's note / suggestion for the storyteller.

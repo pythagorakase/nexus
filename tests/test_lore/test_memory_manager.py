@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import logging
 from typing import Dict, List
 
 import pytest
@@ -15,12 +16,20 @@ from nexus.memory.entity_detector import HighSpecificityEntityDetector
 @pytest.fixture
 def minimal_settings() -> Dict[str, object]:
     return {
+        "Agent Settings": {
+            "LORE": {
+                "token_budget": {
+                    "apex_context_window": 75_000,
+                    "provider_overrides": {"local": 24_000},
+                }
+            }
+        },
         "memory": {
             "pass2_budget_reserve": 0.25,
             "divergence_threshold": 0.4,
             "warm_slice_default": True,
             "max_sql_iterations": 3,
-        }
+        },
     }
 
 
@@ -56,7 +65,10 @@ def dummy_memnon() -> DummyMemnon:
 
 @pytest.fixture
 def baseline_inputs() -> Dict[str, object]:
-    narrative = "Alex and Emilia secure the Crystal Orb inside the sealed vault while Pete monitors the perimeter."
+    narrative = (
+        "Alex and Emilia secure the Crystal Orb inside the sealed vault while "
+        "Pete monitors the perimeter."
+    )
     warm_slice = [
         {"chunk_id": 101, "text": "Setup: extraction plan finalised."},
         {"chunk_id": 102, "text": "Alex briefs Emilia on the vault sequence."},
@@ -76,10 +88,72 @@ def baseline_inputs() -> Dict[str, object]:
     }
 
 
+@pytest.mark.parametrize(
+    ("provider_wire_type", "expected_window", "expected_phase2_budget"),
+    [
+        ("local", 24_000, 2_400),
+        ("openai", 75_000, 7_500),
+        ("anthropic", 75_000, 7_500),
+    ],
+)
+def test_provider_override_resolves_at_memory_manager_seam(
+    minimal_settings,
+    caplog: pytest.LogCaptureFixture,
+    provider_wire_type: str,
+    expected_window: int,
+    expected_phase2_budget: int,
+) -> None:
+    """The turn-cycle seam resolves one provider-class budget for assembly."""
+    manager = ContextMemoryManager(minimal_settings)
+
+    with caplog.at_level(logging.DEBUG, logger="nexus.memory.manager"):
+        effective_window = manager.configure_storyteller_budget(provider_wire_type)
+
+    assert effective_window == expected_window
+    assert manager.phase2_budget == expected_phase2_budget
+    override_logs = [
+        record
+        for record in caplog.records
+        if "Storyteller payload budget override" in record.getMessage()
+    ]
+    assert len(override_logs) == (1 if provider_wire_type == "local" else 0)
+    if override_logs:
+        assert "class=local" in override_logs[0].getMessage()
+        assert "effective=24000" in override_logs[0].getMessage()
+
+
+def test_empty_provider_override_table_uses_base_budget(
+    minimal_settings, caplog: pytest.LogCaptureFixture
+) -> None:
+    """An empty override table preserves pure base-window behavior."""
+    settings = copy.deepcopy(minimal_settings)
+    settings["Agent Settings"]["LORE"]["token_budget"]["provider_overrides"] = {}
+    manager = ContextMemoryManager(settings)
+
+    with caplog.at_level(logging.DEBUG, logger="nexus.memory.manager"):
+        effective_window = manager.configure_storyteller_budget("local")
+
+    assert effective_window == 75_000
+    assert manager.phase2_budget == 7_500
+    assert "Storyteller payload budget override" not in caplog.text
+
+
+def test_missing_provider_wire_type_is_programming_error(minimal_settings) -> None:
+    """Budget resolution cannot silently assume a frontier provider."""
+    manager = ContextMemoryManager(minimal_settings)
+
+    with pytest.raises(RuntimeError, match="valid active provider wire class"):
+        manager.configure_storyteller_budget(None)  # type: ignore[arg-type]
+
+
 def test_pass1_baseline_tracks_chunks_and_budget(
     minimal_settings, dummy_memnon, baseline_inputs
 ):
-    manager = ContextMemoryManager(minimal_settings, memnon=dummy_memnon)
+    manager = ContextMemoryManager(
+        minimal_settings,
+        memnon=dummy_memnon,
+        provider_wire_type="openai",
+    )
 
     package = manager.handle_storyteller_response(
         narrative=baseline_inputs["narrative"],
@@ -106,7 +180,11 @@ def test_pass1_baseline_tracks_chunks_and_budget(
 def test_pass1_records_reserve_shortfall(
     minimal_settings, dummy_memnon, baseline_inputs
 ):
-    manager = ContextMemoryManager(minimal_settings, memnon=dummy_memnon)
+    manager = ContextMemoryManager(
+        minimal_settings,
+        memnon=dummy_memnon,
+        provider_wire_type="openai",
+    )
 
     tight_tokens = {
         "total_available": 1000,
@@ -134,7 +212,11 @@ def test_pass1_records_reserve_shortfall(
 def test_pass2_divergence_triggers_incremental_retrieval(
     minimal_settings, dummy_memnon, baseline_inputs
 ):
-    manager = ContextMemoryManager(minimal_settings, memnon=dummy_memnon)
+    manager = ContextMemoryManager(
+        minimal_settings,
+        memnon=dummy_memnon,
+        provider_wire_type="openai",
+    )
 
     manager.handle_storyteller_response(
         narrative=baseline_inputs["narrative"],
@@ -179,7 +261,11 @@ def test_pass2_divergence_triggers_incremental_retrieval(
 def test_pass2_preserves_entity_detection_when_character_is_in_baseline(
     minimal_settings, dummy_memnon, baseline_inputs
 ):
-    manager = ContextMemoryManager(minimal_settings, memnon=dummy_memnon)
+    manager = ContextMemoryManager(
+        minimal_settings,
+        memnon=dummy_memnon,
+        provider_wire_type="openai",
+    )
     manager.entity_detector.character_lookup = {
         "emilia": {"id": 2, "name": "Emilia", "summary": None}
     }
@@ -201,7 +287,11 @@ def test_pass2_preserves_entity_detection_when_character_is_in_baseline(
 def test_pass2_marks_matched_entities_outside_baseline(
     minimal_settings, dummy_memnon, baseline_inputs
 ):
-    manager = ContextMemoryManager(minimal_settings, memnon=dummy_memnon)
+    manager = ContextMemoryManager(
+        minimal_settings,
+        memnon=dummy_memnon,
+        provider_wire_type="openai",
+    )
     manager.entity_detector.character_lookup = {
         "victor": {"id": 99, "name": "Victor", "summary": None}
     }
@@ -231,7 +321,11 @@ def test_entity_detector_raises_when_database_load_fails():
 def test_pass1_separates_structured_passages(
     minimal_settings, dummy_memnon, baseline_inputs
 ):
-    manager = ContextMemoryManager(minimal_settings, memnon=dummy_memnon)
+    manager = ContextMemoryManager(
+        minimal_settings,
+        memnon=dummy_memnon,
+        provider_wire_type="openai",
+    )
 
     structured = {
         "id": "character:alex",
@@ -263,7 +357,11 @@ def test_pass1_separates_structured_passages(
 def test_pass2_warm_slice_expansion_without_divergence(
     minimal_settings, dummy_memnon, baseline_inputs
 ):
-    manager = ContextMemoryManager(minimal_settings, memnon=dummy_memnon)
+    manager = ContextMemoryManager(
+        minimal_settings,
+        memnon=dummy_memnon,
+        provider_wire_type="openai",
+    )
 
     manager.handle_storyteller_response(
         narrative=baseline_inputs["narrative"],
@@ -292,7 +390,11 @@ def test_pass2_warm_slice_expansion_without_divergence(
 def test_augment_warm_slice_merges_incremental_additions(
     minimal_settings, dummy_memnon, baseline_inputs
 ):
-    manager = ContextMemoryManager(minimal_settings, memnon=dummy_memnon)
+    manager = ContextMemoryManager(
+        minimal_settings,
+        memnon=dummy_memnon,
+        provider_wire_type="openai",
+    )
 
     manager.handle_storyteller_response(
         narrative=baseline_inputs["narrative"],
@@ -324,7 +426,11 @@ def test_augment_warm_slice_merges_incremental_additions(
 def test_get_memory_summary_reports_state(
     minimal_settings, dummy_memnon, baseline_inputs
 ):
-    manager = ContextMemoryManager(minimal_settings, memnon=dummy_memnon)
+    manager = ContextMemoryManager(
+        minimal_settings,
+        memnon=dummy_memnon,
+        provider_wire_type="openai",
+    )
 
     manager.handle_storyteller_response(
         narrative=baseline_inputs["narrative"],

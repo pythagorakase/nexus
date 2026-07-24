@@ -118,6 +118,40 @@ def test_apex_rejects_unknown_anthropic_storyteller_transport() -> None:
         Settings(**raw)
 
 
+def test_token_budget_provider_overrides_parse() -> None:
+    """Legal provider-class reductions survive settings validation."""
+    settings = Settings(**_nexus_toml_dict())
+
+    assert settings.lore.token_budget.provider_overrides == {"local": 24_000}
+
+
+def test_token_budget_provider_overrides_reject_unknown_key() -> None:
+    """Provider override keys are the closed storyteller wire-class set."""
+    raw = _nexus_toml_dict()
+    raw["lore"]["token_budget"]["provider_overrides"]["bedrock"] = 20_000
+
+    with pytest.raises(ValidationError, match="unknown provider classes.*bedrock"):
+        Settings(**raw)
+
+
+def test_token_budget_provider_overrides_reject_over_base() -> None:
+    """An override cannot accidentally enlarge the assembled payload."""
+    raw = _nexus_toml_dict()
+    raw["lore"]["token_budget"]["provider_overrides"]["local"] = 75_001
+
+    with pytest.raises(ValidationError, match="may only shrink"):
+        Settings(**raw)
+
+
+def test_token_budget_provider_overrides_reject_too_small_value() -> None:
+    """Overrides retain the base field's 1,000-token lower bound."""
+    raw = _nexus_toml_dict()
+    raw["lore"]["token_budget"]["provider_overrides"]["local"] = 999
+
+    with pytest.raises(ValidationError, match="greater than or equal to 1000"):
+        Settings(**raw)
+
+
 def test_summaries_follow_anthropic_storyteller_with_registry_route():
     """A native Anthropic storyteller remains the default summarizer."""
     raw = _nexus_toml_dict()

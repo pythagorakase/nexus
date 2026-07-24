@@ -24,8 +24,14 @@ def test_handle_user_input_skips_retrieval_coverage_without_database(
     caplog,
 ) -> None:
     manager = ContextMemoryManager(
-        {"memory": {"skip_simple_choices": False}},
+        {
+            "Agent Settings": {
+                "LORE": {"token_budget": {"apex_context_window": 75_000}}
+            },
+            "memory": {"skip_simple_choices": False},
+        },
         memnon=FakeMemnon(),
+        provider_wire_type="openai",
     )
     manager.handle_storyteller_response(
         narrative="The briefing ends.",

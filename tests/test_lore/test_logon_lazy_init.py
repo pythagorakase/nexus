@@ -209,6 +209,35 @@ def test_anthropic_storyteller_transport_and_guide_follow_settings(
     assert utility._system_prompt == expected_system
 
 
+@pytest.mark.parametrize(
+    ("provider_type", "base_url", "expected_wire_type"),
+    [
+        ("openai", None, "openai"),
+        ("anthropic", None, "anthropic"),
+        ("local", "http://127.0.0.1:1234/v1", "local"),
+    ],
+)
+def test_provider_wire_type_resolves_without_constructing_provider(
+    monkeypatch: pytest.MonkeyPatch,
+    provider_type: str,
+    base_url: str | None,
+    expected_wire_type: str,
+) -> None:
+    """Budget classification reuses LOGON routing while provider init stays lazy."""
+    monkeypatch.setattr(
+        "nexus.agents.lore.logon_utility.get_provider_for_model",
+        lambda _model: provider_type,
+    )
+    monkeypatch.setattr(
+        "nexus.config.get_openai_compatible_endpoint",
+        lambda _model: {"base_url": base_url} if base_url else None,
+    )
+    logon = LogonUtility({}, model_override="storyteller-model")
+
+    assert logon.resolve_provider_wire_type() == expected_wire_type
+    assert logon.provider is None
+
+
 @pytest.mark.requires_postgres
 def test_lore_keeps_logon_lazy(patched_provider: Dict[str, int]) -> None:
     """LORE should not initialize LOGON on construction when lazy mode is enabled."""

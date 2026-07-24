@@ -209,6 +209,11 @@ max_deep_queries = 5
 apex_context_window = 75_000  # Total tokens available for APEX (includes prompt + context)
 system_prompt_tokens = 5000  # Reserved tokens for system prompt
 
+[lore.token_budget.provider_overrides]
+# Effective apex_context_window per storyteller provider class. Absent key =
+# base value. Local models need a smaller assembled payload (see #566).
+local = 24_000
+
 [lore.payload_percent_budget.structured_summaries]
 # Percentage allocation for entity summaries, relationships, events
 min = 70  # Minimum % for structured data

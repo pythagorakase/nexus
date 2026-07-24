@@ -1,4 +1,4 @@
-"""Integration test verifying Pass 2 retrieves karaoke context when baseline is naive."""
+"""Integration test for Pass 2 karaoke retrieval from a naive baseline."""
 
 from __future__ import annotations
 
@@ -100,8 +100,8 @@ def test_pass2_handles_karaoke_divergence(
     assert "karaoke" not in storyteller_only.lower()
 
     warm_slice = _build_warm_slice(lore_agent, KARAOKE_CHUNK_ID)
-    token_counts = lore_agent.token_manager.calculate_budget("karaoke divergence probe")
     context = _run_pass1_phases(lore_agent, warm_slice, monkeypatch)
+    token_counts = context.token_counts
     authorial_passages = _execute_authorial_queries(lore_agent)
     structured_stub = {
         "id": "character:karaoke_incident",
@@ -144,8 +144,9 @@ def test_pass2_handles_karaoke_divergence(
     assert directive_history == []
 
     divergence_prompt = (
-        "Walk me back through the Virginia Beach karaoke ambush—the Driftlight cocktails, "
-        "Pete's duet trap, and why Emilia swore off stage lights after that meltdown."
+        "Walk me back through the Virginia Beach karaoke ambush—the Driftlight "
+        "cocktails, Pete's duet trap, and why Emilia swore off stage lights "
+        "after that meltdown."
     )
     update = lore_agent.memory_manager.handle_user_input(
         user_input=divergence_prompt,
@@ -158,13 +159,16 @@ def test_pass2_handles_karaoke_divergence(
 
     additional_ids = {
         int(chunk.get("chunk_id") or chunk.get("id"))
-        for chunk in lore_agent.memory_manager.context_state.get_additional_chunk_details()
+        for chunk in (
+            lore_agent.memory_manager.context_state.get_additional_chunk_details()
+        )
     }
     additional_ids.discard(None)
     karaoke_hits = [cid for cid in additional_ids if cid in KARAOKE_DEEP_CUT_RANGE]
-    assert (
-        karaoke_hits
-    ), f"Expected karaoke chunks in {KARAOKE_DEEP_CUT_RANGE}, got {sorted(additional_ids)}"
+    assert karaoke_hits, (
+        f"Expected karaoke chunks in {KARAOKE_DEEP_CUT_RANGE}, got "
+        f"{sorted(additional_ids)}"
+    )
 
     summary = lore_agent.memory_manager.get_memory_summary()
     assert summary["pass2"]["divergence_detected"] is True

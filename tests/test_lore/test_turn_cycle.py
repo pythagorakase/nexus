@@ -11,6 +11,7 @@ import pytest
 
 from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
 from nexus.agents.lore.utils.turn_context import TurnContext
+from nexus.agents.lore.utils.token_budget import TokenBudgetManager
 from nexus.memory import ContextMemoryManager
 from nexus.memory.context_state import ContextPackage, PassTransition
 
@@ -52,6 +53,57 @@ def _stub_baseline(
     )
     manager.context_state.store_baseline(package, transition, warm_slice)
     return package
+
+
+@pytest.mark.parametrize(
+    ("provider_wire_type", "expected_window"),
+    [("local", 24_000), ("openai", 75_000), ("anthropic", 75_000)],
+)
+def test_process_user_input_uses_provider_profile_budget(
+    provider_wire_type: str, expected_window: int
+) -> None:
+    """The real turn-cycle seam feeds one resolved window to both managers."""
+
+    class BudgetLore:
+        def __init__(self) -> None:
+            self.settings = {
+                "Agent Settings": {
+                    "LORE": {
+                        "token_budget": {
+                            "apex_context_window": 75_000,
+                            "system_prompt_tokens": 5_000,
+                            "provider_overrides": {"local": 24_000},
+                        },
+                        "payload_percent_budget": {},
+                    }
+                },
+                "API Settings": {"apex": {"model": "gpt-4o"}},
+                "memory": {},
+            }
+            self.memnon = None
+            self.memory_manager = ContextMemoryManager(self.settings)
+            self.token_manager = TokenBudgetManager(self.settings)
+            self.logon = self
+
+        def ensure_logon(self) -> None:
+            return None
+
+        def resolve_provider_wire_type(self) -> str:
+            return provider_wire_type
+
+    lore = BudgetLore()
+    manager = TurnCycleManager(lore)
+    ctx = TurnContext(
+        turn_id=f"provider-profile-{provider_wire_type}",
+        user_input="Continue.",
+        start_time=time.time(),
+    )
+
+    asyncio.run(manager.process_user_input(ctx))
+
+    assert ctx.provider_wire_type == provider_wire_type
+    assert ctx.token_counts["apex_window"] == expected_window
+    assert lore.memory_manager.phase2_budget == expected_window // 10
 
 
 def test_integrate_response_does_not_pass_authorial_directives(

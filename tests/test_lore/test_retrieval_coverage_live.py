@@ -92,8 +92,14 @@ def test_handle_user_input_writes_exact_coverage_and_empty_detection() -> None:
             ).one()
 
             manager = ContextMemoryManager(
-                {"memory": {"skip_simple_choices": False}},
+                {
+                    "Agent Settings": {
+                        "LORE": {"token_budget": {"apex_context_window": 75_000}}
+                    },
+                    "memory": {"skip_simple_choices": False},
+                },
                 memnon=LiveReferenceMemnon(connection, int(covered.chunk_id)),
+                provider_wire_type="openai",
             )
             manager.handle_storyteller_response(
                 narrative="The prior scene closes.",

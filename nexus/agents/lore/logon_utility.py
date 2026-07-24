@@ -418,12 +418,16 @@ class LogonUtility:
         """Resolve a runtime roster reference before constructing the provider."""
         return resolve_model_ref(model) if model.startswith("@") else model
 
-    def _initialize_provider(self, is_bootstrap: Optional[bool] = None) -> None:
-        """Initialize the appropriate API provider based on settings and slot config."""
+    def _resolve_storyteller_route(
+        self,
+    ) -> tuple[
+        str,
+        str,
+        Optional[Dict[str, Any]],
+        Literal["openai", "anthropic", "local"],
+    ]:
+        """Resolve the active model, endpoint, and storyteller wire class."""
         apex_settings = self.settings.get("API Settings", {}).get("apex", {})
-        provider_bootstrap_mode = (
-            self.bootstrap_mode if is_bootstrap is None else is_bootstrap
-        )
 
         # Model priority: override > slot config > settings
         model = self.model_override
@@ -440,10 +444,38 @@ class LogonUtility:
         )
 
         # OpenAI-compatible base_url routing (mock TEST server, local servers):
-        # the endpoint lives in the [global.model.api_models] registry (#401).
+        # the endpoint lives in [global.model.api_models] (#401).
         from nexus.config import get_openai_compatible_endpoint
 
         endpoint = get_openai_compatible_endpoint(model)
+        base_url = endpoint["base_url"] if endpoint else None
+
+        provider_wire_type: Literal["openai", "anthropic", "local"]
+        if provider_type == "anthropic":
+            provider_wire_type = "anthropic"
+        elif provider_type == "openai" or base_url:
+            provider_wire_type = "local" if base_url else "openai"
+        else:
+            raise ValueError(f"Unsupported provider type: {provider_type}")
+
+        return model, provider_type, endpoint, provider_wire_type
+
+    def resolve_provider_wire_type(
+        self,
+    ) -> Literal["openai", "anthropic", "local"]:
+        """Return LOGON's wire classification without constructing a provider."""
+        return self._resolve_storyteller_route()[3]
+
+    def _initialize_provider(self, is_bootstrap: Optional[bool] = None) -> None:
+        """Initialize the appropriate API provider based on settings and slot config."""
+        apex_settings = self.settings.get("API Settings", {}).get("apex", {})
+        provider_bootstrap_mode = (
+            self.bootstrap_mode if is_bootstrap is None else is_bootstrap
+        )
+
+        model, provider_type, endpoint, provider_wire_type = (
+            self._resolve_storyteller_route()
+        )
         base_url = endpoint["base_url"] if endpoint else None
         api_key = endpoint["api_key"] if endpoint else None
         structured_transport = cast(
@@ -499,8 +531,8 @@ class LogonUtility:
         self._validation_dbname = validation_dbname
         self._schema_format_cache = {}
 
-        if provider_type == "anthropic":
-            self._provider_wire_type = "anthropic"
+        self._provider_wire_type = provider_wire_type
+        if provider_wire_type == "anthropic":
             self.provider = AnthropicProvider(
                 model=model,
                 max_tokens=apex_settings.get(
@@ -512,10 +544,9 @@ class LogonUtility:
                 structured_output_retries=structured_output_retries,
                 output_validator=output_validator,
             )
-        elif provider_type == "openai" or base_url:
+        else:
             # Native OpenAI, or any OpenAI-compatible server registered with a
             # base_url in [global.model.api_models] (mock TEST, Ollama, vLLM).
-            self._provider_wire_type = "local" if base_url else "openai"
             self.provider = OpenAIProvider(
                 model=model,
                 temperature=apex_settings.get("temperature", 0.7),
@@ -529,8 +560,6 @@ class LogonUtility:
                 structured_output_retries=structured_output_retries,
                 output_validator=output_validator,
             )
-        else:
-            raise ValueError(f"Unsupported provider type: {provider_type}")
 
         logger.info(
             f"LOGON initialized with {provider_type} provider using model {model}"
