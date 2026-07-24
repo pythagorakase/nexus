@@ -2485,6 +2485,12 @@ class APEXSettings(BaseModel):
     model: str
     reasoning_effort: str = Field(..., pattern="^(low|medium|high)$")
     max_output_tokens: int = Field(..., ge=1)
+    anthropic_storyteller_transport: Literal["prompted", "native"] = Field(
+        default="prompted",
+        description=(
+            "Structured transport for non-bootstrap Anthropic storyteller turns."
+        ),
+    )
     tag_library: APEXTagLibrarySettings = Field(default_factory=APEXTagLibrarySettings)
     structured_output_retries: int = Field(
         default=3,

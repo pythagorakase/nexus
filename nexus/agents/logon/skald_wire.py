@@ -6,6 +6,7 @@ per-chunk mentions, never members of the carried scene roster.
 
 from __future__ import annotations
 
+import json
 from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -687,3 +688,178 @@ def skald_wire_lenient_schema() -> Dict[str, Any]:
     """Build the omittable-field schema for Anthropic and local endpoints."""
 
     return de_null_schema(SkaldTurnWire.model_json_schema())
+
+
+def _prompt_guide_ref_name(ref: str) -> str:
+    """Return a local definition name from a JSON Schema reference."""
+
+    prefix = "#/$defs/"
+    if not ref.startswith(prefix) or not ref[len(prefix) :]:
+        raise ValueError(f"Unsupported Skald wire schema reference: {ref!r}")
+    return ref[len(prefix) :]
+
+
+def _prompt_guide_type(
+    schema_node: Dict[str, Any],
+    definitions: Dict[str, Any],
+) -> str:
+    """Render one compact type expression from a JSON Schema node."""
+
+    ref = schema_node.get("$ref")
+    if ref is not None:
+        ref_name = _prompt_guide_ref_name(ref)
+        target = definitions[ref_name]
+        if target.get("type") == "object":
+            return ref_name
+        return _prompt_guide_type(target, definitions)
+
+    schema_type = schema_node.get("type")
+    if schema_type == "array":
+        items = schema_node.get("items")
+        if not isinstance(items, dict):
+            raise ValueError("Skald wire array schema is missing an items schema")
+        return f"{_prompt_guide_type(items, definitions)}[]"
+    if schema_type == "object":
+        raise ValueError(
+            "Skald wire prompt guide does not support inline object schemas; "
+            "use a named $defs model"
+        )
+    if isinstance(schema_type, str):
+        return schema_type
+
+    for union_key in ("anyOf", "oneOf"):
+        members = schema_node.get(union_key)
+        if isinstance(members, list) and members:
+            return "|".join(
+                _prompt_guide_type(member, definitions) for member in members
+            )
+    raise ValueError(f"Unsupported Skald wire schema node: {schema_node!r}")
+
+
+def _prompt_guide_enum(
+    schema_node: Dict[str, Any],
+    definitions: Dict[str, Any],
+) -> Optional[List[Any]]:
+    """Return the enum governing a field, following local references."""
+
+    ref = schema_node.get("$ref")
+    if ref is not None:
+        return _prompt_guide_enum(
+            definitions[_prompt_guide_ref_name(ref)],
+            definitions,
+        )
+    enum_values = schema_node.get("enum")
+    if enum_values is not None:
+        if not isinstance(enum_values, list):
+            raise ValueError("Skald wire enum schema must contain a list")
+        return enum_values
+    items = schema_node.get("items")
+    if isinstance(items, dict):
+        return _prompt_guide_enum(items, definitions)
+    return None
+
+
+def _prompt_guide_object_refs(
+    schema_node: Dict[str, Any],
+    definitions: Dict[str, Any],
+) -> List[str]:
+    """Collect directly referenced object definitions in declaration order."""
+
+    refs: List[str] = []
+    ref = schema_node.get("$ref")
+    if ref is not None:
+        ref_name = _prompt_guide_ref_name(ref)
+        target = definitions[ref_name]
+        if target.get("type") == "object":
+            refs.append(ref_name)
+        return refs
+
+    items = schema_node.get("items")
+    if isinstance(items, dict):
+        refs.extend(_prompt_guide_object_refs(items, definitions))
+    for union_key in ("anyOf", "oneOf", "allOf"):
+        members = schema_node.get(union_key)
+        if isinstance(members, list):
+            for member in members:
+                refs.extend(_prompt_guide_object_refs(member, definitions))
+    return refs
+
+
+def skald_wire_prompt_guide() -> str:
+    """Render a compact prompted-output guide from the lenient wire schema."""
+
+    schema = skald_wire_lenient_schema()
+    definitions = schema.get("$defs", {})
+    if not isinstance(definitions, dict):
+        raise ValueError("Skald wire schema definitions must be an object")
+
+    root_name = schema.get("title")
+    if not isinstance(root_name, str) or not root_name:
+        raise ValueError("Skald wire schema must have a title")
+
+    lines = [
+        "=== OUTPUT FORMAT ===",
+        (
+            "Respond with a single JSON object matching this structure. "
+            "Omit optional fields that have no value. No prose outside the JSON."
+        ),
+        "Legend: ! required; ? optional; named types are objects; T[] is an array.",
+        "```text",
+    ]
+    object_queue: List[tuple[str, Dict[str, Any]]] = [(root_name, schema)]
+    queued_names = {root_name}
+
+    for object_name, object_schema in object_queue:
+        properties = object_schema.get("properties")
+        if not isinstance(properties, dict):
+            raise ValueError(
+                f"Skald wire object {object_name!r} has no property mapping"
+            )
+        required = object_schema.get("required", [])
+        if not isinstance(required, list):
+            raise ValueError(
+                f"Skald wire object {object_name!r} has an invalid required list"
+            )
+        required_names = set(required)
+
+        lines.append(f"{object_name}{{")
+        for property_name, property_schema in properties.items():
+            if not isinstance(property_schema, dict):
+                raise ValueError(
+                    f"Skald wire property {object_name}.{property_name} is invalid"
+                )
+            field_type = _prompt_guide_type(property_schema, definitions)
+            status = "!" if property_name in required_names else "?"
+            enum_values = _prompt_guide_enum(property_schema, definitions)
+            enum_text = (
+                "|enum="
+                + json.dumps(
+                    enum_values,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                )
+                if enum_values is not None
+                else ""
+            )
+            description = property_schema.get("description", "")
+            if not isinstance(description, str):
+                raise ValueError(
+                    f"Skald wire property {object_name}.{property_name} "
+                    "has a non-string description"
+                )
+            description_text = json.dumps(description, ensure_ascii=False)
+            lines.append(
+                f"{property_name}{status}:{field_type}{enum_text}|{description_text}"
+            )
+
+            for ref_name in _prompt_guide_object_refs(
+                property_schema,
+                definitions,
+            ):
+                if ref_name not in queued_names:
+                    object_queue.append((ref_name, definitions[ref_name]))
+                    queued_names.add(ref_name)
+        lines.append("}")
+
+    lines.append("```")
+    return "\n".join(lines)

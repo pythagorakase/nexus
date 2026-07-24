@@ -101,6 +101,23 @@ def test_apex_tag_library_settings_round_trip() -> None:
     assert dumped["apex"]["tag_library"] == raw["apex"]["tag_library"]
 
 
+def test_shipped_anthropic_storyteller_transport_is_prompted() -> None:
+    settings = Settings(**_nexus_toml_dict())
+
+    assert settings.apex.anthropic_storyteller_transport == "prompted"
+
+
+def test_apex_rejects_unknown_anthropic_storyteller_transport() -> None:
+    raw = _nexus_toml_dict()
+    raw["apex"]["anthropic_storyteller_transport"] = "tool"
+
+    with pytest.raises(
+        ValidationError,
+        match="anthropic_storyteller_transport",
+    ):
+        Settings(**raw)
+
+
 def test_summaries_follow_anthropic_storyteller_with_registry_route():
     """A native Anthropic storyteller remains the default summarizer."""
     raw = _nexus_toml_dict()

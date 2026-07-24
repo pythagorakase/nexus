@@ -2,7 +2,8 @@
 """
 NEXUS Anthropic API Library
 
-This module provides reusable components for Anthropic Claude API access across NEXUS scripts.
+This module provides reusable components for Anthropic Claude API access
+across NEXUS scripts.
 It centralizes common functionality to maintain consistency and avoid code duplication.
 
 Features:
@@ -27,9 +28,9 @@ LLM Provider Options:
     --timeout INT           Request timeout in seconds (default: 120)
 
 Processing Options:
-    --batch-size INT        Number of items to process before prompting to continue (default: 10)
+    --batch-size INT        Number of items processed before confirmation (default: 10)
     --dry-run               Don't actually save results to the database
-    --db-url URL            Database connection URL (optional, defaults to environment variables)
+    --db-url URL            Database URL (optional, defaults to environment variables)
 """
 
 import os
@@ -38,17 +39,25 @@ import abc
 import argparse
 import asyncio
 import logging
-import re
 import json
 import time
 import signal
-import threading
-from typing import List, Dict, Any, Tuple, Optional, Union, Protocol, Type, TypeVar
+from typing import (
+    List,
+    Dict,
+    Any,
+    Tuple,
+    Optional,
+    Union,
+    Type,
+    Literal,
+    cast,
+)
 from datetime import datetime, timedelta
 
 # Try to import keyboard module for abort functionality
 try:
-    import keyboard
+    import keyboard  # type: ignore[import-untyped]
 
     KEYBOARD_AVAILABLE = True
 except ImportError:
@@ -58,17 +67,14 @@ except ImportError:
 try:
     import anthropic
 except ImportError:
-    anthropic = None
+    anthropic = None  # type: ignore[assignment]
 
 # For token counting
 try:
     import tiktoken
 except ImportError:
-    tiktoken = None
+    tiktoken = None  # type: ignore[assignment]
 
-# For database connection (utilities only, no ORM)
-import sqlalchemy as sa
-from sqlalchemy import create_engine
 from pydantic import ValidationError
 
 from nexus.api.native_structured_output import (
@@ -150,22 +156,27 @@ def get_token_count(text: str, model: str) -> int:
     # For Claude models, we can use the anthropic library if available
     if anthropic and model.startswith("claude"):
         try:
-            client = anthropic.Anthropic()
+            client = cast(Any, anthropic.Anthropic())
             token_count = client.count_tokens(text)
             return token_count
         except Exception as e:
             logger.warning(
-                f"Failed to get token count using anthropic library: {str(e)}. Falling back to approximation."
+                "Failed to get token count using anthropic library: %s. "
+                "Falling back to approximation.",
+                e,
             )
 
-    # If anthropic not available, use tiktoken with cl100k_base which is similar to Claude's tokenizer
+    # cl100k_base is a reasonable approximation when Anthropic's counter is
+    # unavailable.
     if tiktoken:
         try:
             encoding = tiktoken.get_encoding("cl100k_base")
             return len(encoding.encode(text))
         except Exception as e:
             logger.warning(
-                f"Failed to get token count using tiktoken: {str(e)}. Falling back to character-based estimation."
+                "Failed to get token count using tiktoken: %s. "
+                "Falling back to character-based estimation.",
+                e,
             )
 
     # Fallback to character-based estimation if all else fails
@@ -192,7 +203,7 @@ class LLMProvider(abc.ABC):
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.system_prompt = system_prompt
-        self.provider_name = None  # Will be set by subclasses
+        self.provider_name: Optional[str] = None  # Will be set by subclasses
         self.initialize()
 
     @abc.abstractmethod
@@ -207,6 +218,8 @@ class LLMProvider(abc.ABC):
 
     def count_tokens(self, text: str) -> int:
         """Count tokens for the provider's model."""
+        if self.model is None:
+            raise RuntimeError("Provider model is not initialized")
         return get_token_count(text, self.model)
 
     def check_tpm_limit(
@@ -217,7 +230,7 @@ class LLMProvider(abc.ABC):
 
         Args:
             prompt: The prompt text to be sent
-            estimated_output_tokens: Optional estimate of output tokens (calculated if not provided)
+            estimated_output_tokens: Optional output-token estimate
 
         Returns:
             Tuple of (within_limit, input_tokens, total_tokens)
@@ -225,7 +238,8 @@ class LLMProvider(abc.ABC):
         if not self.provider_name or self.provider_name.lower() not in TPM_LIMITS:
             # No provider name or no limit defined - assume it's safe
             logger.warning(
-                f"No TPM limit found for provider {self.provider_name}. Proceeding without limits."
+                "No TPM limit found for provider %s. Proceeding without limits.",
+                self.provider_name,
             )
             return True, 0, 0
 
@@ -248,7 +262,9 @@ class LLMProvider(abc.ABC):
 
         if not within_limit:
             logger.warning(
-                f"TPM limit exceeded: Request would use {total_tokens} tokens but limit is {tpm_limit}"
+                "TPM limit exceeded: request would use %s tokens but limit is %s",
+                total_tokens,
+                tpm_limit,
             )
             logger.warning(
                 f"This exceeds the {self.provider_name} TPM limit set in settings.json"
@@ -277,6 +293,7 @@ class AnthropicProvider(LLMProvider):
         reasoning_effort: Optional[str] = None,
         thinking_enabled: bool = False,
         thinking_budget_tokens: Optional[int] = None,
+        structured_transport: Literal["native", "prompted"] = "native",
         structured_output_retries: Optional[int] = None,
         output_validator: Optional[Any] = None,
     ):
@@ -295,6 +312,7 @@ class AnthropicProvider(LLMProvider):
             reasoning_effort: Anthropic output effort for structured requests
             thinking_enabled: Enable extended thinking (requires Claude 4+ models)
             thinking_budget_tokens: Thinking token budget (typically 32000)
+            structured_transport: Anthropic Messages structured-output transport
             structured_output_retries: Validation retry budget for structured
                 output agents (apex.structured_output_retries in nexus.toml)
             output_validator: Optional async pydantic_ai output validator
@@ -306,6 +324,9 @@ class AnthropicProvider(LLMProvider):
         self.reasoning_effort = reasoning_effort
         self.thinking_enabled = thinking_enabled
         self.thinking_budget_tokens = thinking_budget_tokens
+        if structured_transport not in {"native", "prompted"}:
+            raise ValueError("structured_transport must be 'native' or 'prompted'")
+        self.structured_transport = structured_transport
         self.structured_output_retries = (
             structured_output_retries
             if structured_output_retries is not None
@@ -336,7 +357,8 @@ class AnthropicProvider(LLMProvider):
         """Initialize the Anthropic client."""
         if not anthropic:
             raise ImportError(
-                "The 'anthropic' package is required for AnthropicProvider. Install with 'pip install anthropic'."
+                "The 'anthropic' package is required for AnthropicProvider. "
+                "Install with 'pip install anthropic'."
             )
 
         self.provider_name = "anthropic"
@@ -351,13 +373,15 @@ class AnthropicProvider(LLMProvider):
             if self.temperature is None:
                 logger.info(
                     f"Using Anthropic model: {self.model} with default temperature, "
-                    f"extended thinking enabled (budget: {self.thinking_budget_tokens} tokens, "
+                    "extended thinking enabled "
+                    f"(budget: {self.thinking_budget_tokens} tokens, "
                     f"total max_tokens: {self.max_tokens})"
                 )
             else:
                 logger.info(
-                    f"Using Anthropic model: {self.model} with temperature: {self.temperature}, "
-                    f"extended thinking enabled (budget: {self.thinking_budget_tokens} tokens, "
+                    f"Using Anthropic model: {self.model} with temperature: "
+                    f"{self.temperature}, extended thinking enabled "
+                    f"(budget: {self.thinking_budget_tokens} tokens, "
                     f"total max_tokens: {self.max_tokens})"
                 )
         else:
@@ -367,7 +391,8 @@ class AnthropicProvider(LLMProvider):
                 )
             else:
                 logger.info(
-                    f"Using Anthropic model: {self.model} with temperature: {self.temperature}"
+                    f"Using Anthropic model: {self.model} with temperature: "
+                    f"{self.temperature}"
                 )
 
     def get_completion(self, prompt: str, enable_cache: bool = False) -> LLMResponse:
@@ -381,7 +406,12 @@ class AnthropicProvider(LLMProvider):
         Returns:
             LLMResponse with completion and cache usage stats
         """
+        if self.model is None:
+            raise RuntimeError("Anthropic provider model is not initialized")
+
         # Format messages for the API
+        messages: List[Dict[str, Any]]
+        system: Optional[Union[str, List[Dict[str, Any]]]]
         if enable_cache:
             # Use structured content with cache control
             messages = self._format_messages_with_cache(prompt)
@@ -391,7 +421,7 @@ class AnthropicProvider(LLMProvider):
             system = self.system_prompt
 
         # Prepare parameters for the API call
-        params = {
+        params: Dict[str, Any] = {
             "model": self.model,
             "messages": messages,
             "max_tokens": self.max_tokens,
@@ -423,7 +453,7 @@ class AnthropicProvider(LLMProvider):
             # Call the API
             if extra_body:
                 params["extra_body"] = extra_body
-            response = self.client.messages.create(**params)
+            response = cast(Any, self.client.messages).create(**params)
 
             # Extract the content from the response
             # For extended thinking, skip "thinking" blocks and get the first text block
@@ -508,7 +538,9 @@ class AnthropicProvider(LLMProvider):
 
             # Define your output schema
             class SentimentAnalysis(BaseModel):
-                sentiment: str = Field(description="Sentiment of the text (positive, negative, neutral)")
+                sentiment: str = Field(
+                    description="Sentiment (positive, negative, or neutral)"
+                )
                 score: float = Field(description="Confidence score (0-1)")
 
             # Get structured completion
@@ -572,6 +604,17 @@ class AnthropicProvider(LLMProvider):
     ) -> Tuple[Any, LLMResponse]:
         """Run a native JSON-schema Messages request with bounded repair."""
 
+        if self.structured_transport == "prompted":
+            if output_config is not None or output_format is not None:
+                raise ValueError(
+                    "Prompted Anthropic structured transport does not accept "
+                    "output_config or output_format"
+                )
+            return self._get_structured_completion_prompted_sync(
+                prompt,
+                schema_model,
+            )
+
         from pydantic_ai import ModelRetry
 
         active_prompt = prompt
@@ -596,6 +639,50 @@ class AnthropicProvider(LLMProvider):
                 )
                 return parsed_output, self._native_response_to_llm_response(
                     parsed_output, response
+                )
+            except ModelRetry as exc:
+                last_error = exc
+                if attempt >= self.structured_output_retries:
+                    raise
+                active_prompt = retry_prompt(prompt, exc.message)
+            except (ValidationError, json.JSONDecodeError, ValueError) as exc:
+                last_error = exc
+                if attempt >= self.structured_output_retries:
+                    raise
+                active_prompt = retry_prompt(prompt, str(exc))
+
+        raise RuntimeError("Structured completion failed") from last_error
+
+    def _get_structured_completion_prompted_sync(
+        self,
+        prompt: str,
+        schema_model: Type,
+    ) -> Tuple[Any, LLMResponse]:
+        """Run a prompted-schema Messages request with bounded repair."""
+
+        from pydantic_ai import ModelRetry
+
+        active_prompt = prompt
+        last_error: Optional[BaseException] = None
+        for attempt in range(self.structured_output_retries + 1):
+            try:
+                response = self.client.beta.messages.create(
+                    **self._build_prompted_structured_request_params(active_prompt)
+                )
+                parsed_output = self._extract_prompted_parsed_output(
+                    response,
+                    schema_model,
+                )
+                parsed_output = asyncio.run(
+                    run_output_validator(
+                        self.output_validator,
+                        parsed_output,
+                        retry=attempt,
+                    )
+                )
+                return parsed_output, self._native_response_to_llm_response(
+                    parsed_output,
+                    response,
                 )
             except ModelRetry as exc:
                 last_error = exc
@@ -651,6 +738,34 @@ class AnthropicProvider(LLMProvider):
             }
         return params
 
+    def _build_prompted_structured_request_params(
+        self,
+        prompt: str,
+    ) -> Dict[str, Any]:
+        """Build Anthropic Messages params without a native output schema."""
+
+        params: Dict[str, Any] = {
+            "model": self.model,
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": self.max_tokens,
+        }
+        if self.reasoning_effort is not None:
+            params["output_config"] = {"effort": self.reasoning_effort}
+        if self.system_prompt:
+            params["system"] = self.system_prompt
+        if self.temperature is not None:
+            params["temperature"] = self.temperature
+        if self.top_p is not None:
+            params["top_p"] = self.top_p
+        if self.top_k is not None:
+            params["top_k"] = self.top_k
+        if self.thinking_enabled:
+            params["thinking"] = {
+                "type": "enabled",
+                "budget_tokens": self.thinking_budget_tokens,
+            }
+        return params
+
     @staticmethod
     def _extract_native_parsed_output(response: Any, schema_model: Type) -> Any:
         """Extract and validate Anthropic native JSON output."""
@@ -670,11 +785,46 @@ class AnthropicProvider(LLMProvider):
 
         raise ValueError("Anthropic structured response did not include JSON output")
 
+    @staticmethod
+    def _extract_prompted_parsed_output(response: Any, schema_model: Type) -> Any:
+        """Validate one text JSON value, tolerating one outer Markdown fence."""
+
+        text_parts: List[str] = []
+        for block in getattr(response, "content", []) or []:
+            if getattr(block, "type", None) != "text":
+                continue
+            text = getattr(block, "text", None)
+            if text:
+                text_parts.append(text)
+
+        output_text = "".join(text_parts)
+        if not output_text:
+            raise ValueError(
+                "Anthropic prompted structured response did not include text output"
+            )
+
+        try:
+            return schema_model.model_validate_json(output_text)
+        except (ValidationError, json.JSONDecodeError, ValueError):
+            fenced_text = output_text.strip()
+            if not fenced_text.endswith("```"):
+                raise
+            if fenced_text.startswith("```json"):
+                opening_fence = "```json"
+            elif fenced_text.startswith("```"):
+                opening_fence = "```"
+            else:
+                raise
+            unfenced_text = fenced_text[len(opening_fence) : -3].strip()
+            return schema_model.model_validate_json(unfenced_text)
+
     def _native_response_to_llm_response(
         self, parsed_output: Any, response: Any
     ) -> LLMResponse:
         """Convert an Anthropic native structured response into LLMResponse."""
 
+        if self.model is None:
+            raise RuntimeError("Anthropic provider model is not initialized")
         content = (
             parsed_output.model_dump_json()
             if hasattr(parsed_output, "model_dump_json")
@@ -712,11 +862,13 @@ class AnthropicProvider(LLMProvider):
         """
         try:
             # Use Anthropic's built-in token counter
-            return self.client.count_tokens(text)
+            return cast(Any, self.client).count_tokens(text)
         except Exception as e:
             # Fall back to base implementation if Anthropic's counter fails
             logger.warning(
-                f"Error using Anthropic token counter: {str(e)}. Falling back to approximation."
+                "Error using Anthropic token counter: %s. "
+                "Falling back to approximation.",
+                e,
             )
             return super().count_tokens(text)
 
@@ -765,14 +917,15 @@ class AnthropicProvider(LLMProvider):
 
         # Simple implementation: mark the entire user prompt as cacheable
         # More sophisticated: split on section markers and cache large sections
-        content_blocks = []
+        content_blocks: List[Dict[str, Any]] = []
+        block: Dict[str, Any]
 
         # Check if prompt contains section markers
         if "=== RECENT STORYTELLER CONTEXT ===" in prompt:
             # Split into sections
-            sections = []
-            current_section = []
-            current_name = None
+            sections: List[Tuple[Optional[str], str]] = []
+            current_section: List[str] = []
+            current_name: Optional[str] = None
 
             for line in prompt.split("\n"):
                 if line.startswith("===") and line.endswith("==="):
@@ -852,8 +1005,10 @@ def get_db_connection_string() -> str:
     else:
         connection_string = f"postgresql://{DB_USER}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
+    safe_password = "********" if DB_PASSWORD else ""
     logger.info(
-        f"Using database connection: {connection_string.replace(DB_PASSWORD, '********' if DB_PASSWORD else '')}"
+        "Using database connection: %s",
+        connection_string.replace(DB_PASSWORD, safe_password),
     )
     return connection_string
 
@@ -974,8 +1129,6 @@ def setup_abort_handler(
     Returns:
         True if handlers were successfully set up, False otherwise
     """
-    global ABORT_REQUESTED
-
     # Setup keyboard handler if available
     if KEYBOARD_AVAILABLE:
 
@@ -1013,7 +1166,6 @@ def is_abort_requested() -> bool:
     Returns:
         True if abort has been requested, False otherwise
     """
-    global ABORT_REQUESTED
     return ABORT_REQUESTED
 
 
