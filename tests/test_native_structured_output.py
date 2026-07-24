@@ -17,6 +17,7 @@ from nexus.agents.logon.skald_wire import (
     SkaldTurnWire,
     SkaldWriterWire,
     skald_wire_lenient_schema,
+    skald_writer_lenient_schema,
 )
 from nexus.agents.lore.logon_utility import LogonUtility
 from nexus.api.new_story_schemas import SettingCard, StorySeedSubmission, WizardResponse
@@ -223,14 +224,65 @@ def test_anthropic_preserves_wire_updates_namespace_after_lenient_transform() ->
     assert not _contains_key(transformed, "anyOf")
 
 
-def test_two_pass_writer_native_output_config_has_no_union_typed_nodes() -> None:
+@pytest.mark.parametrize(
+    ("reasoning_effort", "expected_effort"),
+    [
+        ("high", "high"),
+        (None, None),
+    ],
+)
+def test_two_pass_writer_native_config_reaches_shipped_anthropic_request(
+    reasoning_effort: str | None,
+    expected_effort: str | None,
+) -> None:
     utility = LogonUtility({})
     utility._provider_wire_type = "anthropic"
+    schema_kwargs = utility._two_pass_schema_format_kwargs(SkaldWriterWire)
+    writer = SkaldWriterWire.model_validate(
+        {
+            "narrative": "The archive door opens.",
+            "choices": ["Enter.", "Wait."],
+        }
+    )
+    captured = {}
 
-    kwargs = utility._two_pass_schema_format_kwargs(SkaldWriterWire)
+    class FakeMessages:
+        def create(self, **kwargs):
+            captured.update(kwargs)
+            return SimpleNamespace(
+                content=[
+                    SimpleNamespace(type="text", text=writer.model_dump_json()),
+                ],
+                usage=SimpleNamespace(input_tokens=33, output_tokens=44),
+            )
 
-    assert set(kwargs) == {"output_config"}
-    assert _count_union_typed_nodes(kwargs["output_config"]) == 0
+    provider = AnthropicProvider(
+        model="claude-sonnet-4-5",
+        api_key="test-key",
+        reasoning_effort=reasoning_effort,
+        structured_output_retries=0,
+    )
+    provider.client = SimpleNamespace(beta=SimpleNamespace(messages=FakeMessages()))
+
+    parsed, _llm_response = provider.get_structured_completion(
+        "Write the next beat.",
+        SkaldWriterWire,
+        **schema_kwargs,
+    )
+
+    request_output_config = captured["output_config"]
+    request_schema = request_output_config["format"]["schema"]
+    expected_schema = anthropic_output_format(
+        SkaldWriterWire,
+        schema=skald_writer_lenient_schema(),
+    )["schema"]
+    assert parsed == writer
+    assert request_schema == expected_schema
+    assert _count_union_typed_nodes(request_schema) == 0
+    if expected_effort is None:
+        assert "effort" not in request_output_config
+    else:
+        assert request_output_config["effort"] == expected_effort
 
 
 def test_anthropic_one_of_rewrite_recurses_through_lists_and_dicts() -> None:
