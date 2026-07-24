@@ -122,9 +122,9 @@ def test_token_budget_provider_overrides_parse() -> None:
     """Legal provider-class reductions survive settings validation."""
     settings = Settings(**_nexus_toml_dict())
 
-    assert settings.lore.token_budget.provider_overrides == {"local": 24_000}
+    assert settings.lore.token_budget.provider_overrides == {"local": 32_000}
     assert settings.lore.token_budget.prompt_overhead_tokens == 4_000
-    assert settings.ui.lore_budget_slider.min == 24_000
+    assert settings.ui.lore_budget_slider.min == 32_000
     assert all(
         stop >= settings.ui.lore_budget_slider.min
         for stop in settings.ui.lore_budget_slider.stops
