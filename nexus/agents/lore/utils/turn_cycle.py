@@ -150,17 +150,15 @@ def _context_component_token_count(payload: Dict[str, Any]) -> int:
     context_components = {
         key: value for key, value in payload.items() if key != "user_input"
     }
-    try:
-        serialized = json.dumps(
-            context_components,
-            ensure_ascii=False,
-            separators=(",", ":"),
-        )
-    except (TypeError, ValueError) as exc:
-        raise TypeError(
-            "Storyteller context payload must be JSON-serializable for token "
-            "budget enforcement"
-        ) from exc
+    # This is a counting seam, not a wire: DB-sourced values (datetime,
+    # Decimal) reach the storyteller as rendered text anyway, so measuring
+    # their stringified length is the honest approximation.
+    serialized = json.dumps(
+        context_components,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        default=str,
+    )
     return calculate_chunk_tokens(serialized)
 
 
