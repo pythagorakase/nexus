@@ -18,10 +18,12 @@ logger = logging.getLogger("nexus.lore.turn_cycle")
 
 try:
     from .turn_context import TurnContext
+    from .entity_inclusion import resolve_entity_inclusion
     from .entity_queries import (
         fetch_all_characters_with_references,
-        fetch_all_places_with_references,
         fetch_all_factions_with_references,
+        fetch_all_places_with_references,
+        fetch_place_ids_by_names,
     )
     from nexus.agents.logon.apex_schema import (
         StoryTurnResponse,
@@ -48,10 +50,12 @@ try:
 except ImportError:
     # If relative import fails, try absolute
     from nexus.agents.lore.utils.turn_context import TurnContext
+    from nexus.agents.lore.utils.entity_inclusion import resolve_entity_inclusion
     from nexus.agents.lore.utils.entity_queries import (
         fetch_all_characters_with_references,
-        fetch_all_places_with_references,
         fetch_all_factions_with_references,
+        fetch_all_places_with_references,
+        fetch_place_ids_by_names,
     )
     from nexus.agents.logon.apex_schema import (
         StoryTurnResponse,
@@ -455,21 +459,28 @@ class TurnCycleManager:
             }
             return
 
-        # Get entity_inclusion settings
-        entity_settings = (
-            self.settings.get("Agent Settings", {})
-            .get("LORE", {})
-            .get("entity_inclusion", {})
-        )
-        include_relationships = entity_settings.get("include_all_relationships", True)
-        include_events = entity_settings.get("include_all_active_events", True)
-        include_threats = entity_settings.get("include_all_active_threats", True)
-        event_statuses = entity_settings.get(
-            "active_event_statuses", ["active", "ongoing", "escalating"]
-        )
+        if getattr(self.lore, "enable_logon", True):
+            if turn_context.provider_wire_type is None:
+                raise RuntimeError(
+                    "Active LOGON entity queries require the storyteller provider "
+                    "wire class resolved during Phase 1"
+                )
+            entity_settings = resolve_entity_inclusion(
+                self.settings, turn_context.provider_wire_type
+            )
+        else:
+            entity_settings = resolve_entity_inclusion(
+                self.settings, provider_wire_type=None
+            )
+        include_relationships = entity_settings.include_all_relationships
+        include_events = entity_settings.include_all_active_events
+        include_threats = entity_settings.include_all_active_threats
+        event_statuses = entity_settings.active_event_statuses
 
         # Get chunk IDs from warm slice for featured entity queries
-        warm_chunk_ids = _narrative_chunk_ids(turn_context.warm_slice)
+        warm_chunk_ids = _narrative_chunk_ids(turn_context.warm_slice)[
+            : entity_settings.warm_slice_lookback_chunks
+        ]
 
         if not warm_chunk_ids:
             logger.warning("No chunk IDs in warm slice for entity queries")
@@ -485,7 +496,11 @@ class TurnCycleManager:
 
             with self.lore.memnon.Session() as session:
                 characters_data = fetch_all_characters_with_references(
-                    session, warm_chunk_ids
+                    session,
+                    warm_chunk_ids,
+                    max_featured_characters=(
+                        entity_settings.max_characters_from_warm_slice
+                    ),
                 )
             logger.info(
                 f"Characters: {len(characters_data['baseline'])} baseline, "
@@ -497,11 +512,31 @@ class TurnCycleManager:
         # Query places with baseline + featured structure
         # Include places that are current_location of featured characters
         featured_place_ids: set[int] = set()
+        featured_place_names: set[str] = set()
         for char in characters_data.get("featured", []):
-            loc_name = char.get("current_location")
-            if loc_name:
-                # Get place ID from name (we'll query by name in the function)
-                pass  # fetch_all_places_with_references handles this
+            current_location = char.get("current_location")
+            if current_location is None:
+                continue
+            if isinstance(current_location, int) and not isinstance(
+                current_location, bool
+            ):
+                featured_place_ids.add(current_location)
+                continue
+            if isinstance(current_location, str) and current_location.strip():
+                featured_place_names.add(current_location.strip())
+                continue
+            character_identity = char.get("id") or char.get("name") or "<unknown>"
+            raise TypeError(
+                "Featured character "
+                f"{character_identity!r} has invalid current_location "
+                f"{current_location!r}; expected places.id or canonical place name"
+            )
+
+        if featured_place_names:
+            with self.lore.memnon.Session() as session:
+                featured_place_ids.update(
+                    fetch_place_ids_by_names(session, featured_place_names)
+                )
 
         places_data: Dict[str, List[Dict[str, Any]]] = {
             "baseline": [],
@@ -510,7 +545,10 @@ class TurnCycleManager:
         try:
             with self.lore.memnon.Session() as session:
                 places_data = fetch_all_places_with_references(
-                    session, warm_chunk_ids, featured_place_ids
+                    session,
+                    warm_chunk_ids,
+                    featured_place_ids,
+                    max_featured_places=(entity_settings.max_locations_from_warm_slice),
                 )
             logger.info(
                 f"Places: {len(places_data['baseline'])} baseline, "
@@ -567,7 +605,7 @@ class TurnCycleManager:
         events = []
         if include_events:
             try:
-                max_events = entity_settings.get("max_total_events", 15)
+                max_events = entity_settings.max_total_events
                 with self.lore.memnon.Session() as session:
                     event_query = text(
                         """
@@ -596,7 +634,7 @@ class TurnCycleManager:
         threats = []
         if include_threats:
             try:
-                max_threats = entity_settings.get("max_total_threats", 10)
+                max_threats = entity_settings.max_total_threats
                 with self.lore.memnon.Session() as session:
                     # Note: threats table uses is_active boolean, not status enum
                     # Lifecycle stages: inception, developing, active, resolved, dormant

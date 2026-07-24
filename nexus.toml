@@ -254,6 +254,14 @@ max_total_relationships = 100
 max_total_events = 15
 max_total_threats = 10
 
+[lore.entity_inclusion.provider_overrides.local]
+# Initial estimates measured against the 32K local window; calibrated by
+# overnight trials (see #566). Absent key = base value.
+warm_slice_lookback_chunks = 12
+max_characters_from_warm_slice = 12
+max_locations_from_warm_slice = 6
+include_all_relationships = false
+
 # =============================================================================
 # Orrery Settings (Off-Screen Behavior Resolver)
 # =============================================================================
