@@ -131,9 +131,9 @@ def _rewrite_anthropic_schema(value: Any) -> Any:
 
 
 def _strip_anthropic_unsupported_schema_keys(value: Any) -> Any:
-    """Build Anthropic's rewritten, de-nulled JSON Schema subset."""
+    """Build Anthropic's rewritten supported JSON Schema subset."""
 
-    return de_null_schema(_rewrite_anthropic_schema(value))
+    return _rewrite_anthropic_schema(value)
 
 
 class AnthropicJsonSchemaTransformer(JsonSchemaTransformer):

@@ -12,11 +12,12 @@ from nexus.agents.logon.apex_schema import (
     StorytellerResponseBootstrap,
     StorytellerResponseExtended,
 )
-from nexus.agents.logon.skald_wire import SkaldTurnWire
+from nexus.agents.logon.skald_wire import SkaldTurnWire, skald_wire_lenient_schema
 from nexus.api.new_story_schemas import SettingCard, StorySeedSubmission, WizardResponse
 from nexus.api.native_structured_output import (
     ANTHROPIC_UNSUPPORTED_SCHEMA_KEYS,
     AnthropicJsonSchemaTransformer,
+    anthropic_json_schema,
     anthropic_output_config,
     anthropic_output_format,
     anthropic_strict_tool,
@@ -69,6 +70,22 @@ def _contains_nullable_any_of(value: object) -> bool:
     if isinstance(value, list):
         return any(_contains_nullable_any_of(item) for item in value)
     return False
+
+
+def _assert_property_maps_are_consistent(value: object, path: str = "$") -> None:
+    if isinstance(value, dict):
+        properties = value.get("properties")
+        if isinstance(properties, dict):
+            assert "anyOf" not in properties, path
+        required = value.get("required")
+        if isinstance(required, list):
+            assert isinstance(properties, dict), path
+            assert set(required) <= set(properties), path
+        for key, item in value.items():
+            _assert_property_maps_are_consistent(item, f"{path}.{key}")
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            _assert_property_maps_are_consistent(item, f"{path}[{index}]")
 
 
 @pytest.mark.parametrize(
@@ -214,14 +231,26 @@ def test_anthropic_one_of_rewrite_recurses_through_lists_and_dicts() -> None:
     }
 
 
-def test_all_anthropic_schema_entrypoints_de_null_optional_fields() -> None:
-    schemas = [
-        anthropic_output_format(SkaldTurnWire)["schema"],
-        anthropic_output_config(SkaldTurnWire)["format"]["schema"],
-        anthropic_strict_tool(SkaldTurnWire)["input_schema"],
-    ]
+def test_anthropic_setting_schema_retains_required_nullable_default_field() -> None:
+    schema = anthropic_json_schema(SettingCard)
+    magic_description = schema["properties"]["magic_description"]
 
-    assert all(not _contains_nullable_any_of(schema) for schema in schemas)
+    assert "magic_description" in schema["required"]
+    assert set(schema["required"]) == set(schema["properties"])
+    assert _contains_nullable_any_of(magic_description)
+
+
+def test_real_anthropic_schema_transforms_keep_property_maps_consistent() -> None:
+    schemas = {
+        "storyteller": anthropic_output_config(
+            SkaldTurnWire,
+            schema=skald_wire_lenient_schema(),
+        )["format"]["schema"],
+        "setting": anthropic_json_schema(SettingCard),
+    }
+
+    for name, schema in schemas.items():
+        _assert_property_maps_are_consistent(schema, name)
 
 
 def test_openai_response_text_format_is_native_strict_json_schema() -> None:

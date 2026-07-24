@@ -729,10 +729,11 @@ def test_lenient_wire_closes_every_object_schema_node() -> None:
 
 
 def test_anthropic_wire_stays_within_union_parameter_budget() -> None:
-    schema = anthropic_output_config(
-        SkaldTurnWire,
-        schema=skald_wire_lenient_schema(),
-    )["format"]["schema"]
+    utility = LogonUtility({})
+    utility._provider_wire_type = "anthropic"
+    schema = utility._schema_format_kwargs(SkaldTurnWire)["output_config"]["format"][
+        "schema"
+    ]
 
     # Anthropic's live #566 error: "20 parameters with union types... limit: 16".
     assert _count_union_typed_parameters(schema) <= 16
