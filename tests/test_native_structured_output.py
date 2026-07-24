@@ -14,8 +14,10 @@ from nexus.agents.logon.apex_schema import (
     StorytellerResponseExtended,
 )
 from nexus.agents.logon.skald_wire import (
+    SkaldClerkWire,
     SkaldTurnWire,
     SkaldWriterWire,
+    skald_clerk_lenient_schema,
     skald_wire_lenient_schema,
     skald_writer_lenient_schema,
 )
@@ -51,6 +53,10 @@ def _wire_response() -> SkaldTurnWire:
         narrative="[TEST MODE] Tool-envelope structured output.",
         choices=["Continue", "Wait"],
     )
+
+
+def _clerk_response() -> SkaldClerkWire:
+    return SkaldClerkWire()
 
 
 def _contains_key(value: object, key: str) -> bool:
@@ -290,6 +296,103 @@ def test_two_pass_writer_native_config_reaches_shipped_anthropic_request(
         assert "effort" not in request_output_config
     else:
         assert request_output_config["effort"] == expected_effort
+
+
+def test_two_pass_clerk_tool_envelope_reaches_forced_non_strict_tool() -> None:
+    utility = LogonUtility({})
+    utility._provider_wire_type = "anthropic"
+    utility.provider = SimpleNamespace(structured_transport="tool_envelope")
+    schema_kwargs = utility._two_pass_schema_format_kwargs(SkaldClerkWire)
+    clerk = _clerk_response()
+    captured = {}
+
+    class FakeMessages:
+        def create(self, **kwargs):
+            captured.update(kwargs)
+            return SimpleNamespace(
+                content=[
+                    SimpleNamespace(
+                        type="tool_use",
+                        name="submit_structured_response",
+                        input=clerk.model_dump(mode="json"),
+                    ),
+                ],
+                usage=SimpleNamespace(input_tokens=33, output_tokens=44),
+            )
+
+    provider = AnthropicProvider(
+        model="claude-sonnet-4-5",
+        api_key="test-key",
+        structured_transport="tool_envelope",
+        structured_output_retries=0,
+    )
+    provider.client = SimpleNamespace(beta=SimpleNamespace(messages=FakeMessages()))
+
+    parsed, _llm_response = provider.get_structured_completion(
+        "Record the durable state.",
+        SkaldClerkWire,
+        **schema_kwargs,
+    )
+
+    assert parsed == clerk
+    assert captured["tools"][0]["name"] == "submit_structured_response"
+    assert captured["tools"][0]["input_schema"] == skald_clerk_lenient_schema()
+    assert "strict" not in captured["tools"][0]
+    assert captured["tool_choice"] == {
+        "type": "tool",
+        "name": "submit_structured_response",
+    }
+    assert "output_config" not in captured
+
+
+@pytest.mark.asyncio
+async def test_two_pass_clerk_tool_envelope_async_uses_effort_only_config() -> None:
+    utility = LogonUtility({})
+    utility._provider_wire_type = "anthropic"
+    utility.provider = SimpleNamespace(structured_transport="tool_envelope")
+    schema_kwargs = utility._two_pass_schema_format_kwargs(SkaldClerkWire)
+    clerk = _clerk_response()
+    captured = {}
+
+    class FakeMessages:
+        def create(self, **kwargs):
+            captured.update(kwargs)
+            return SimpleNamespace(
+                content=[
+                    SimpleNamespace(
+                        type="tool_use",
+                        name="submit_structured_response",
+                        input=clerk.model_dump(mode="json"),
+                    ),
+                ],
+                usage=SimpleNamespace(input_tokens=33, output_tokens=44),
+            )
+
+    provider = AnthropicProvider(
+        model="claude-sonnet-4-5",
+        api_key="test-key",
+        reasoning_effort="medium",
+        structured_transport="tool_envelope",
+        structured_output_retries=0,
+    )
+    provider.client = SimpleNamespace(beta=SimpleNamespace(messages=FakeMessages()))
+
+    parsed, _llm_response = await provider.get_structured_completion_async(
+        "Record the durable state.",
+        SkaldClerkWire,
+        **schema_kwargs,
+    )
+
+    assert parsed == clerk
+    assert captured["tools"][0]["name"] == "submit_structured_response"
+    assert captured["tools"][0]["input_schema"] == skald_clerk_lenient_schema()
+    assert "strict" not in captured["tools"][0]
+    assert captured["tool_choice"] == {
+        "type": "tool",
+        "name": "submit_structured_response",
+    }
+    assert captured["output_config"] == {"effort": "medium"}
+    assert "format" not in captured["output_config"]
 
 
 def test_anthropic_one_of_rewrite_recurses_through_lists_and_dicts() -> None:

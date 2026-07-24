@@ -274,23 +274,30 @@ def _utility(
     provider_type: str,
     outputs: list[object],
     *,
+    anthropic_transport: str | None = None,
     bootstrap: bool = False,
     output_validator: Any = None,
     structured_output_retries: int = 3,
 ) -> tuple[LogonUtility, _RecordingProvider]:
+    if provider_type == "anthropic":
+        if anthropic_transport is None:
+            raise ValueError("Anthropic test utility requires a transport")
+        provider_transport = anthropic_transport
+    else:
+        if anthropic_transport is not None:
+            raise ValueError("Non-Anthropic test utility cannot set a transport")
+        provider_transport = "responses"
     settings = {
         "API Settings": {
             "apex": {
                 "turn_pipeline": "two_pass",
-                "anthropic_storyteller_transport": "prompted",
+                "anthropic_storyteller_transport": (anthropic_transport or "prompted"),
             }
         }
     }
     provider = _RecordingProvider(
         outputs,
-        structured_transport=(
-            "prompted" if provider_type == "anthropic" else "responses"
-        ),
+        structured_transport=provider_transport,
         output_validator=output_validator,
         structured_output_retries=structured_output_retries,
     )
@@ -304,6 +311,7 @@ def _utility(
 
 def _expected_schema_kwargs(
     provider_type: str,
+    anthropic_transport: str | None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     if provider_type == "openai":
         return (
@@ -325,6 +333,13 @@ def _expected_schema_kwargs(
                 )
             },
         )
+    if anthropic_transport not in {"prompted", "tool_envelope"}:
+        raise ValueError("Successful Anthropic test requires a schema-free transport")
+    clerk_kwargs = (
+        {}
+        if anthropic_transport == "prompted"
+        else {"input_schema": skald_clerk_lenient_schema()}
+    )
     return (
         {
             "output_config": anthropic_output_config(
@@ -332,19 +347,21 @@ def _expected_schema_kwargs(
                 schema=skald_writer_lenient_schema(),
             )
         },
-        {},
+        clerk_kwargs,
     )
 
 
 def _assert_two_pass_calls(
     provider: _RecordingProvider,
     provider_type: str,
+    anthropic_transport: str | None,
 ) -> None:
     writer = SkaldWriterWire.model_validate(WRITER_PAYLOAD)
     assert len(provider.calls) == 2
     writer_call, clerk_call = provider.calls
     expected_writer_kwargs, expected_clerk_kwargs = _expected_schema_kwargs(
-        provider_type
+        provider_type,
+        anthropic_transport,
     )
 
     assert writer_call["schema_model"] is SkaldWriterWire
@@ -365,10 +382,21 @@ def _assert_two_pass_calls(
     assert writer.presence.model_dump_json(exclude_none=True) in clerk_call["prompt"]
 
     if provider_type == "anthropic":
+        assert anthropic_transport is not None
         assert writer_call["structured_transport"] == "native"
-        assert clerk_call["structured_transport"] == "prompted"
-        assert clerk_call["system_prompt"].endswith(skald_clerk_prompt_guide())
+        assert clerk_call["structured_transport"] == anthropic_transport
+        if anthropic_transport == "prompted":
+            assert clerk_call["kwargs"] == {}
+            assert clerk_call["system_prompt"].endswith(skald_clerk_prompt_guide())
+        else:
+            assert clerk_call["kwargs"] == {
+                "input_schema": skald_clerk_lenient_schema()
+            }
+            assert "output_config" not in clerk_call["kwargs"]
+            assert skald_clerk_prompt_guide() not in clerk_call["system_prompt"]
+            assert "=== OUTPUT FORMAT ===" not in clerk_call["system_prompt"]
     else:
+        assert anthropic_transport is None
         assert writer_call["structured_transport"] == "responses"
         assert clerk_call["structured_transport"] == "responses"
         assert "=== OUTPUT FORMAT ===" not in clerk_call["system_prompt"]
@@ -389,14 +417,24 @@ def _assert_matches_independently_parsed_single_pass(
             assert getattr(actual, field_name) == getattr(expected, field_name)
 
 
-@pytest.mark.parametrize("provider_type", ["openai", "local", "anthropic"])
+@pytest.mark.parametrize(
+    ("provider_type", "anthropic_transport"),
+    [
+        ("openai", None),
+        ("local", None),
+        ("anthropic", "prompted"),
+        ("anthropic", "tool_envelope"),
+    ],
+)
 def test_sync_two_pass_pipeline_uses_provider_specific_transports(
     provider_type: str,
+    anthropic_transport: str | None,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     utility, provider = _utility(
         provider_type,
         [WRITER_PAYLOAD, CLERK_PAYLOAD],
+        anthropic_transport=anthropic_transport,
     )
     monkeypatch.setattr(
         utility,
@@ -409,20 +447,30 @@ def test_sync_two_pass_pipeline_uses_provider_specific_transports(
         effective_context_window=75_000,
     )
 
-    _assert_two_pass_calls(provider, provider_type)
+    _assert_two_pass_calls(provider, provider_type, anthropic_transport)
     assert response.narrative == WRITER_PAYLOAD["narrative"]
     assert response.generation_model == provider.model
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("provider_type", ["openai", "local", "anthropic"])
+@pytest.mark.parametrize(
+    ("provider_type", "anthropic_transport"),
+    [
+        ("openai", None),
+        ("local", None),
+        ("anthropic", "prompted"),
+        ("anthropic", "tool_envelope"),
+    ],
+)
 async def test_async_two_pass_pipeline_uses_provider_specific_transports(
     provider_type: str,
+    anthropic_transport: str | None,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     utility, provider = _utility(
         provider_type,
         [WRITER_PAYLOAD, CLERK_PAYLOAD],
+        anthropic_transport=anthropic_transport,
     )
 
     async def read_baseline(
@@ -442,9 +490,73 @@ async def test_async_two_pass_pipeline_uses_provider_specific_transports(
         effective_context_window=75_000,
     )
 
-    _assert_two_pass_calls(provider, provider_type)
+    _assert_two_pass_calls(provider, provider_type, anthropic_transport)
     assert response.narrative == WRITER_PAYLOAD["narrative"]
     assert response.generation_model == provider.model
+
+
+def test_sync_anthropic_two_pass_rejects_native_before_provider_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    utility, provider = _utility(
+        "anthropic",
+        [],
+        anthropic_transport="native",
+    )
+    monkeypatch.setattr(
+        utility,
+        "_read_presence_baseline_for_context",
+        lambda _context_payload, _schema_model: BASELINE,
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        utility.generate_narrative(
+            _context(),
+            effective_context_window=75_000,
+        )
+
+    message = str(exc_info.value)
+    assert "clerk wire cannot compile under Anthropic native enforcement" in message
+    assert "probe G2b, issue #566" in message
+    assert "'prompted'" in message
+    assert "'tool_envelope'" in message
+    assert provider.calls == []
+
+
+@pytest.mark.asyncio
+async def test_async_anthropic_two_pass_rejects_native_before_provider_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    utility, provider = _utility(
+        "anthropic",
+        [],
+        anthropic_transport="native",
+    )
+
+    async def read_baseline(
+        _context_payload: dict[str, Any],
+        _schema_model: type,
+    ) -> PresenceBaseline:
+        return BASELINE
+
+    monkeypatch.setattr(
+        utility,
+        "_read_presence_baseline_for_context_async",
+        read_baseline,
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        await utility.generate_narrative_async(
+            _context(),
+            effective_context_window=75_000,
+        )
+
+    message = str(exc_info.value)
+    assert "clerk wire cannot compile under Anthropic native enforcement" in message
+    assert "probe G2b, issue #566" in message
+    assert "'prompted'" in message
+    assert "'tool_envelope'" in message
+    assert provider.calls == []
 
 
 def test_two_pass_hydration_matches_independent_single_pass_parse(
@@ -569,6 +681,7 @@ async def test_clerk_failure_raises_without_partial_hydration(
     utility, provider = _utility(
         "anthropic",
         [WRITER_PAYLOAD, RuntimeError("clerk exhausted repairs")],
+        anthropic_transport="prompted",
     )
     hydrated: list[object] = []
     monkeypatch.setattr(

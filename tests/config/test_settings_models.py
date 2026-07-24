@@ -120,6 +120,17 @@ def test_apex_accepts_anthropic_storyteller_transports(transport: str) -> None:
     assert settings.apex.anthropic_storyteller_transport == transport
 
 
+def test_apex_allows_native_anthropic_transport_with_two_pass_pipeline() -> None:
+    raw = _nexus_toml_dict()
+    raw["apex"]["anthropic_storyteller_transport"] = "native"
+    raw["apex"]["turn_pipeline"] = "two_pass"
+
+    settings = Settings(**raw)
+
+    assert settings.apex.anthropic_storyteller_transport == "native"
+    assert settings.apex.turn_pipeline == "two_pass"
+
+
 def test_apex_rejects_unknown_anthropic_storyteller_transport() -> None:
     raw = _nexus_toml_dict()
     raw["apex"]["anthropic_storyteller_transport"] = "tool"
