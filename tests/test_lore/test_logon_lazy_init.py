@@ -10,7 +10,11 @@ import pytest
 from nexus.agents.logon.apex_schema import (
     StorytellerResponseBootstrap,
 )
-from nexus.agents.logon.skald_wire import SkaldTurnWire, skald_wire_prompt_guide
+from nexus.agents.logon.skald_wire import (
+    SkaldTurnWire,
+    skald_wire_lenient_schema,
+    skald_wire_prompt_guide,
+)
 from nexus.agents.lore import logon_utility
 from nexus.agents.lore.lore import LORE
 from nexus.agents.lore.logon_utility import LogonUtility
@@ -156,8 +160,12 @@ def test_runtime_roster_reference_resolves_before_provider_call(
     [
         ("prompted", False, "single_pass", "prompted", True),
         ("native", False, "single_pass", "native", False),
+        ("tool_envelope", False, "single_pass", "tool_envelope", False),
         ("prompted", True, "single_pass", "native", False),
+        ("tool_envelope", True, "single_pass", "native", False),
         ("prompted", False, "two_pass", "prompted", False),
+        ("tool_envelope", False, "two_pass", "tool_envelope", False),
+        ("native", False, "two_pass", "native", False),
         ("prompted", True, "two_pass", "native", False),
     ],
 )
@@ -222,6 +230,10 @@ def test_anthropic_storyteller_transport_and_guide_follow_settings(
     )
     assert captured["system_prompt"] == expected_system
     assert utility._system_prompt == expected_system
+    if expected_transport == "tool_envelope" and turn_pipeline == "single_pass":
+        assert utility._schema_format_kwargs(SkaldTurnWire) == {
+            "input_schema": skald_wire_lenient_schema()
+        }
 
 
 @pytest.mark.parametrize(

@@ -2550,11 +2550,13 @@ class APEXSettings(BaseModel):
     model: str
     reasoning_effort: str = Field(..., pattern="^(low|medium|high)$")
     max_output_tokens: int = Field(..., ge=1)
-    anthropic_storyteller_transport: Literal["prompted", "native"] = Field(
-        default="prompted",
-        description=(
-            "Structured transport for non-bootstrap Anthropic storyteller turns."
-        ),
+    anthropic_storyteller_transport: Literal["prompted", "native", "tool_envelope"] = (
+        Field(
+            default="prompted",
+            description=(
+                "Structured transport for non-bootstrap Anthropic storyteller turns."
+            ),
+        )
     )
     turn_pipeline: Literal["single_pass", "two_pass"] = Field(
         default="single_pass",

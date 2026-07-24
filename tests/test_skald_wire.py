@@ -1253,6 +1253,15 @@ def test_logon_selects_transport_appropriate_wire_serialization() -> None:
 
     utility.provider = cast(
         Any,
+        SimpleNamespace(structured_transport="tool_envelope"),
+    )
+    utility._schema_format_cache = {}
+    assert utility._schema_format_kwargs(SkaldTurnWire) == {
+        "input_schema": skald_wire_lenient_schema()
+    }
+
+    utility.provider = cast(
+        Any,
         SimpleNamespace(structured_transport="native"),
     )
     utility._schema_format_cache = {}

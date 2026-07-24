@@ -554,18 +554,25 @@ class LogonUtility:
         use_two_pass = (
             not provider_bootstrap_mode and self._turn_pipeline() == "two_pass"
         )
-        anthropic_transport: Literal["native", "prompted"] = "native"
+        anthropic_transport: Literal["native", "prompted", "tool_envelope"] = "native"
         if provider_type == "anthropic":
             configured_transport = apex_settings.get("anthropic_storyteller_transport")
-            if configured_transport not in {"native", "prompted"}:
+            if configured_transport not in {
+                "native",
+                "prompted",
+                "tool_envelope",
+            }:
                 raise ValueError(
                     "API Settings.apex.anthropic_storyteller_transport must be "
-                    "'native' or 'prompted'"
+                    "'native', 'prompted', or 'tool_envelope'"
                 )
             anthropic_transport = (
                 "native"
                 if provider_bootstrap_mode
-                else cast(Literal["native", "prompted"], configured_transport)
+                else cast(
+                    Literal["native", "prompted", "tool_envelope"],
+                    configured_transport,
+                )
             )
             if anthropic_transport == "prompted" and not use_two_pass:
                 system_prompt = f"{system_prompt}\n\n{skald_wire_prompt_guide()}"
@@ -852,7 +859,9 @@ class LogonUtility:
         *,
         system_prompt: Optional[str],
         output_validator: Any,
-        anthropic_transport: Optional[Literal["native", "prompted"]] = None,
+        anthropic_transport: Optional[
+            Literal["native", "prompted", "tool_envelope"]
+        ] = None,
     ) -> OpenAIProvider | AnthropicProvider:
         """Create an isolated provider view for one pass."""
 
@@ -887,12 +896,46 @@ class LogonUtility:
             raise TypeError("Writer system prompt must be a string")
         return system_prompt
 
-    def _clerk_system_prompt(self) -> str:
+    def _resolve_anthropic_two_pass_clerk_transport(
+        self,
+    ) -> Optional[Literal["prompted", "tool_envelope"]]:
+        """Resolve the schema-free Anthropic clerk arm or reject native."""
+
+        if self._provider_wire_type != "anthropic":
+            return None
+        if self.provider is None:
+            raise RuntimeError("Two-pass generation requires an initialized provider")
+
+        transport = self.provider.structured_transport
+        if transport == "native":
+            raise ValueError(
+                "Anthropic two-pass execution cannot use "
+                "anthropic_storyteller_transport='native': the clerk wire cannot "
+                "compile under Anthropic native enforcement (probe G2b, issue #566). "
+                "Choose 'prompted' or 'tool_envelope' for the clerk."
+            )
+        if transport not in {"prompted", "tool_envelope"}:
+            raise ValueError(
+                "Anthropic two-pass clerk transport must be 'prompted' or "
+                f"'tool_envelope', got {transport!r}"
+            )
+        return cast(Literal["prompted", "tool_envelope"], transport)
+
+    def _clerk_system_prompt(
+        self,
+        *,
+        anthropic_transport: Optional[Literal["prompted", "tool_envelope"]] = None,
+    ) -> str:
         """Build the pass-two system content for the active provider."""
 
         system_prompt = self._load_clerk_system_prompt()
         if self._provider_wire_type == "anthropic":
-            system_prompt = f"{system_prompt}\n\n{skald_clerk_prompt_guide()}"
+            if anthropic_transport is None:
+                raise ValueError(
+                    "Anthropic clerk system prompt requires an explicit transport"
+                )
+            if anthropic_transport == "prompted":
+                system_prompt = f"{system_prompt}\n\n{skald_clerk_prompt_guide()}"
         return system_prompt
 
     @staticmethod
@@ -945,6 +988,7 @@ class LogonUtility:
 
         if self.provider is None:
             raise RuntimeError("Two-pass generation requires an initialized provider")
+        anthropic_clerk_transport = self._resolve_anthropic_two_pass_clerk_transport()
         writer_provider = self._clone_provider_for_two_pass(
             system_prompt=self._writer_system_prompt(),
             output_validator=None,
@@ -966,11 +1010,11 @@ class LogonUtility:
             effective_context_window=effective_context_window,
         )
         clerk_provider = self._clone_provider_for_two_pass(
-            system_prompt=self._clerk_system_prompt(),
-            output_validator=getattr(self.provider, "output_validator", None),
-            anthropic_transport=(
-                "prompted" if self._provider_wire_type == "anthropic" else None
+            system_prompt=self._clerk_system_prompt(
+                anthropic_transport=anthropic_clerk_transport,
             ),
+            output_validator=getattr(self.provider, "output_validator", None),
+            anthropic_transport=anthropic_clerk_transport,
         )
         clerk, _clerk_response = clerk_provider.get_structured_completion(
             clerk_prompt,
@@ -997,6 +1041,7 @@ class LogonUtility:
 
         if self.provider is None:
             raise RuntimeError("Two-pass generation requires an initialized provider")
+        anthropic_clerk_transport = self._resolve_anthropic_two_pass_clerk_transport()
         writer_provider = self._clone_provider_for_two_pass(
             system_prompt=self._writer_system_prompt(),
             output_validator=None,
@@ -1020,11 +1065,11 @@ class LogonUtility:
             effective_context_window=effective_context_window,
         )
         clerk_provider = self._clone_provider_for_two_pass(
-            system_prompt=self._clerk_system_prompt(),
-            output_validator=getattr(self.provider, "output_validator", None),
-            anthropic_transport=(
-                "prompted" if self._provider_wire_type == "anthropic" else None
+            system_prompt=self._clerk_system_prompt(
+                anthropic_transport=anthropic_clerk_transport,
             ),
+            output_validator=getattr(self.provider, "output_validator", None),
+            anthropic_transport=anthropic_clerk_transport,
         )
         clerk, _clerk_response = await clerk_provider.get_structured_completion_async(
             clerk_prompt,
@@ -1207,6 +1252,8 @@ class LogonUtility:
                 anthropic_transport = self.provider.structured_transport
                 if anthropic_transport == "prompted":
                     kwargs = {}
+                elif anthropic_transport == "tool_envelope":
+                    kwargs = {"input_schema": skald_wire_lenient_schema()}
                 elif anthropic_transport == "native":
                     kwargs = {
                         "output_config": anthropic_output_config(
@@ -1278,7 +1325,15 @@ class LogonUtility:
                     )
                 }
             else:
-                kwargs = {}
+                clerk_transport = self._resolve_anthropic_two_pass_clerk_transport()
+                if clerk_transport == "prompted":
+                    kwargs = {}
+                elif clerk_transport == "tool_envelope":
+                    kwargs = {"input_schema": skald_clerk_lenient_schema()}
+                else:
+                    raise AssertionError(
+                        "Anthropic clerk transport resolution returned no transport"
+                    )
         else:
             raise ValueError(
                 "Unsupported two-pass provider wire class: "
