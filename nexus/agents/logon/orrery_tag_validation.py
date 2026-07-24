@@ -66,23 +66,24 @@ def _bestowal_sites(response: Any) -> List[Tuple[str, str, OrreryTagBestowal]]:
 
     sites: List[Tuple[str, str, OrreryTagBestowal]] = []
 
-    for index, update in enumerate(getattr(response, "updates", None) or []):
-        entity_kind = getattr(update, "kind", None)
-        if entity_kind not in {"character", "place", "faction"}:
-            continue
-        tags_add = getattr(update, "tags_add", None)
-        tags_clear = getattr(update, "tags_clear", None)
-        if tags_add is not None or tags_clear is not None:
-            sites.append(
-                (
-                    f"updates[{index}]",
-                    entity_kind,
-                    OrreryTagBestowal(
-                        applied_tags=tags_add or [],
-                        tags_to_clear=tags_clear or [],
-                    ),
-                )
-            )
+    updates = getattr(response, "updates", None)
+    if updates is not None:
+        for array_name in ("characters", "places", "factions", "relationships"):
+            entity_kind = array_name.removesuffix("s")
+            for index, update in enumerate(getattr(updates, array_name)):
+                tags_add = getattr(update, "tags_add", None)
+                tags_clear = getattr(update, "tags_clear", None)
+                if tags_add is not None or tags_clear is not None:
+                    sites.append(
+                        (
+                            f"updates.{array_name}[{index}]",
+                            entity_kind,
+                            OrreryTagBestowal(
+                                applied_tags=tags_add or [],
+                                tags_to_clear=tags_clear or [],
+                            ),
+                        )
+                    )
 
     state_updates = getattr(response, "state_updates", None)
     if state_updates is not None:

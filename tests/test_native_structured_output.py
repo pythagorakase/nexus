@@ -179,24 +179,31 @@ def test_de_null_schema_is_total_for_arbitrary_json_shapes(value: object) -> Non
     de_null_schema(value)
 
 
-def test_anthropic_rewrites_representative_pydantic_discriminated_union() -> None:
+def test_anthropic_preserves_wire_updates_namespace_after_lenient_transform() -> None:
     raw_schema = SkaldTurnWire.model_json_schema()
-    raw_items = raw_schema["properties"]["updates"]["items"]
+    assert raw_schema["properties"]["updates"]["anyOf"] == [
+        {"$ref": "#/$defs/UpdatesBlock"},
+        {"type": "null"},
+    ]
 
-    # Pydantic emits oneOf, never a simultaneous oneOf/anyOf collision here.
-    assert "oneOf" in raw_items
-    assert "anyOf" not in raw_items
-    assert "discriminator" in raw_items
-
+    lenient_schema = skald_wire_lenient_schema()
     transformed = anthropic_output_format(
         SkaldTurnWire,
-        schema=raw_schema,
+        schema=lenient_schema,
     )["schema"]
-    transformed_items = transformed["properties"]["updates"]["items"]
-
-    assert "oneOf" not in transformed_items
-    assert "discriminator" not in transformed_items
-    assert transformed_items["anyOf"] == raw_items["oneOf"]
+    assert transformed["properties"]["updates"] == {
+        "$ref": "#/$defs/UpdatesBlock",
+        "description": "Durable semantic state changes.",
+    }
+    assert transformed["$defs"]["UpdatesBlock"]["required"] == [
+        "characters",
+        "places",
+        "factions",
+        "relationships",
+    ]
+    assert not _contains_key(transformed, "oneOf")
+    assert not _contains_key(transformed, "discriminator")
+    assert not _contains_key(transformed, "anyOf")
 
 
 def test_anthropic_one_of_rewrite_recurses_through_lists_and_dicts() -> None:
