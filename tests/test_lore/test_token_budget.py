@@ -10,6 +10,7 @@ import pytest
 from unittest.mock import patch
 
 from nexus.agents.lore.utils.token_budget import TokenBudgetManager
+from nexus.config import load_settings_as_dict
 
 
 def _calculate_budget(
@@ -63,14 +64,17 @@ class TestTokenBudgetManager:
         # Should have reasoning reserve
         assert "reasoning_reserve" in budget or budget["total_available"] < 200000
 
-    def test_local_reasoning_model_cannot_return_negative_allocations(self, settings):
-        """A reasoning reserve that consumes a local profile fails loudly."""
+    def test_local_reasoning_model_cannot_return_negative_allocations(self):
+        """The committed role-resolved route cannot yield negative allocations."""
+        settings = load_settings_as_dict()
+        committed_model = settings["API Settings"]["apex"]["model"]
+        assert not committed_model.startswith("@")
         manager = TokenBudgetManager(settings)
 
         with pytest.raises(ValueError) as exc_info:
             manager.calculate_budget(
                 "Test input",
-                apex_model="gpt-5-local-reasoning",
+                apex_model=committed_model,
                 apex_context_window=24_000,
             )
 
@@ -79,7 +83,7 @@ class TestTokenBudgetManager:
         assert "system_prompt=5000" in message
         assert "reasoning_reserve=30000" in message
         assert "response_reserve=4000" in message
-        assert "model=gpt-5-local-reasoning" in message
+        assert f"model={committed_model}" in message
 
     def test_real_local_model_produces_positive_allocations(self, settings):
         """Hermes uses the local window without inheriting frontier reasoning."""

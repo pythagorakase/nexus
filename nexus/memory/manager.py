@@ -77,6 +77,25 @@ def resolve_base_storyteller_context_window(settings: Mapping[str, Any]) -> int:
     return apex_context_window
 
 
+def resolve_storyteller_prompt_overhead_tokens(
+    settings: Mapping[str, Any],
+) -> int:
+    """Resolve the post-assembly reserve for LOGON prompt formatting."""
+    token_budget = _storyteller_token_budget(settings)
+    if "prompt_overhead_tokens" not in token_budget:
+        raise ValueError(
+            "prompt_overhead_tokens must be configured under LORE token_budget"
+        )
+    prompt_overhead_tokens = token_budget["prompt_overhead_tokens"]
+    if isinstance(prompt_overhead_tokens, bool) or not isinstance(
+        prompt_overhead_tokens, int
+    ):
+        raise TypeError("prompt_overhead_tokens must be an integer")
+    if prompt_overhead_tokens < 0:
+        raise ValueError("prompt_overhead_tokens cannot be negative")
+    return prompt_overhead_tokens
+
+
 def resolve_storyteller_context_window(
     settings: Mapping[str, Any], provider_wire_type: Optional[str]
 ) -> int:
@@ -692,6 +711,7 @@ class ContextMemoryManager:
 
         # STEP 3: Keep chunks that fit in the remaining Phase 2 budget.
         kept_chunks = []
+        kept_token_costs: Dict[MemoryIdentity, int] = {}
         total_tokens = 0
         for chunk in raw_search_results:
             chunk_text = chunk.get("text", "")
@@ -700,12 +720,26 @@ class ContextMemoryManager:
             chunk_tokens = self._estimate_tokens(chunk_text)
             if total_tokens + chunk_tokens > available_budget:
                 break
+            identity = self._memory_identity(chunk)
+            if identity is None:
+                raise RuntimeError(
+                    "Incremental retrieval returned a chunk without a memory identity"
+                )
             kept_chunks.append(chunk)
+            kept_token_costs[identity] = chunk_tokens
             total_tokens += chunk_tokens
 
         if kept_chunks:
-            new_chunks = self.context_state.register_additional_chunks(kept_chunks)
-            self.context_state.consume_budget(total_tokens)
+            new_chunks = self.context_state.register_additional_chunks(
+                kept_chunks,
+                token_costs=kept_token_costs,
+            )
+            total_tokens = sum(
+                kept_token_costs[identity]
+                for chunk in new_chunks
+                for identity in [self._memory_identity(chunk)]
+                if identity is not None
+            )
             budget_percentage = (
                 total_tokens / available_budget * 100 if available_budget else 0
             )
@@ -729,10 +763,17 @@ class ContextMemoryManager:
 
         return Pass2Update(
             divergence,
-            kept_chunks,
+            new_chunks if kept_chunks else [],
             total_tokens,
             baseline_available=True,
         )
+
+    def unregister_payload_chunks(
+        self, chunks: Iterable[Dict[str, Any]]
+    ) -> tuple[Set[MemoryIdentity], int]:
+        """Remove Phase-5 drops from memory state and refund tracked retrievals."""
+
+        return self.context_state.unregister_chunks(chunks)
 
     # ------------------------------------------------------------------
     # Helper Methods

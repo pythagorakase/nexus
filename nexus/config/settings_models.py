@@ -601,6 +601,11 @@ class TokenBudgetConfig(BaseModel):
     system_prompt_tokens: int = Field(
         ..., ge=100, description="Reserved for system prompt"
     )
+    prompt_overhead_tokens: int = Field(
+        default=4000,
+        ge=0,
+        description="Reserve for LOGON formatting added after payload assembly",
+    )
     provider_overrides: Dict[str, int] = Field(
         default_factory=dict,
         description="Smaller APEX context windows by storyteller provider class",

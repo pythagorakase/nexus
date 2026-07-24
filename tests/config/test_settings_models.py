@@ -123,6 +123,7 @@ def test_token_budget_provider_overrides_parse() -> None:
     settings = Settings(**_nexus_toml_dict())
 
     assert settings.lore.token_budget.provider_overrides == {"local": 24_000}
+    assert settings.lore.token_budget.prompt_overhead_tokens == 4_000
     assert settings.ui.lore_budget_slider.min == 24_000
     assert all(
         stop >= settings.ui.lore_budget_slider.min
@@ -155,6 +156,28 @@ def test_token_budget_provider_overrides_reject_too_small_value() -> None:
 
     with pytest.raises(ValidationError, match="greater than or equal to 1000"):
         Settings(**raw)
+
+
+def test_token_budget_rejects_negative_prompt_overhead() -> None:
+    """Post-assembly prompt headroom can be zero but never negative."""
+    raw = _nexus_toml_dict()
+    raw["lore"]["token_budget"]["prompt_overhead_tokens"] = -1
+
+    with pytest.raises(
+        ValidationError,
+        match="prompt_overhead_tokens",
+    ):
+        Settings(**raw)
+
+
+def test_token_budget_accepts_zero_prompt_overhead() -> None:
+    """Zero remains legal for targeted final-prompt invariant tests."""
+    raw = _nexus_toml_dict()
+    raw["lore"]["token_budget"]["prompt_overhead_tokens"] = 0
+
+    settings = Settings(**raw)
+
+    assert settings.lore.token_budget.prompt_overhead_tokens == 0
 
 
 def test_summaries_follow_anthropic_storyteller_with_registry_route():

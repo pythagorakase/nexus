@@ -186,12 +186,20 @@ def _select(
 
 def _settings():
     return {
+        "Agent Settings": {
+            "LORE": {
+                "token_budget": {
+                    "apex_context_window": 75_000,
+                    "prompt_overhead_tokens": 4_000,
+                }
+            }
+        },
         "orrery": {
             "enabled": True,
             "bleed": {
                 "max_candidates": 3,
             },
-        }
+        },
     }
 
 
@@ -587,6 +595,7 @@ async def test_call_apex_ai_records_bleed_offers_after_generation_success() -> N
     context = TurnContext(turn_id="t1", user_input="Continue.", start_time=0)
     context.apex_model = "resolved-bleed-test-model"
     context.provider_wire_type = "openai"
+    context.token_counts = {"apex_window": 75_000}
     context.context_payload = {"user_input": "Continue."}
     context.bleed_menu = load_bleed_candidates(
         FakeSession(candidate_rows=[_candidate_row()]),
@@ -628,6 +637,7 @@ async def test_call_apex_ai_does_not_record_bleed_offers_on_generation_failure()
     context = TurnContext(turn_id="t1", user_input="Continue.", start_time=0)
     context.apex_model = "resolved-bleed-test-model"
     context.provider_wire_type = "openai"
+    context.token_counts = {"apex_window": 75_000}
     context.context_payload = {"user_input": "Continue."}
     context.bleed_menu = load_bleed_candidates(
         FakeSession(candidate_rows=[_candidate_row()]),

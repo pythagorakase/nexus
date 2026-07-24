@@ -32,6 +32,9 @@ from nexus.agents.logon.skald_wire import (  # noqa: E402
     skald_wire_prompt_guide,
     skald_wire_strict_text_format,
 )
+from nexus.agents.lore.utils.chunk_operations import (  # noqa: E402
+    calculate_chunk_tokens,
+)
 from nexus.agents.orrery.tag_library import (  # noqa: E402
     EntityRowReference,
     TagLibraryContext,
@@ -40,6 +43,9 @@ from nexus.agents.orrery.tag_library import (  # noqa: E402
 )
 from nexus.config.loader import get_provider_for_model, resolve_model_ref  # noqa: E402
 from nexus.memory.context_state import is_retrograde_summary  # noqa: E402
+from nexus.memory.manager import (  # noqa: E402
+    resolve_storyteller_context_window,
+)
 from nexus.memory.retrieval_coverage import coerce_chunk_id  # noqa: E402
 
 logger = logging.getLogger("nexus.lore.logon")
@@ -678,9 +684,20 @@ class LogonUtility:
         response.generation_model = generation_model
         return response
 
-    def generate_narrative(self, context_payload: Dict[str, Any]) -> StoryTurnResponse:
+    def generate_narrative(
+        self,
+        context_payload: Dict[str, Any],
+        *,
+        expected_model: Optional[str] = None,
+        expected_wire_type: Optional[Literal["openai", "anthropic", "local"]] = None,
+        effective_context_window: Optional[int] = None,
+    ) -> StoryTurnResponse:
         """Generate narrative from context payload with structured output."""
-        self._ensure_provider(context_payload)
+        self._ensure_provider(
+            context_payload,
+            expected_model=expected_model,
+            expected_wire_type=expected_wire_type,
+        )
         assert self.provider is not None
         schema_model = self._select_response_schema(context_payload)
         presence_baseline = self._read_presence_baseline_for_context(
@@ -691,6 +708,10 @@ class LogonUtility:
         prompt = self._format_context_prompt(
             context_payload,
             presence_baseline=presence_baseline,
+        )
+        self._enforce_final_prompt_window(
+            prompt,
+            effective_context_window=effective_context_window,
         )
         schema_kwargs = self._schema_format_kwargs(schema_model)
 
@@ -722,6 +743,7 @@ class LogonUtility:
         *,
         expected_model: Optional[str] = None,
         expected_wire_type: Optional[Literal["openai", "anthropic", "local"]] = None,
+        effective_context_window: Optional[int] = None,
     ) -> StoryTurnResponse:
         """Generate narrative from context payload without blocking the event loop."""
         self._ensure_provider(
@@ -738,6 +760,10 @@ class LogonUtility:
         prompt = self._format_context_prompt(
             context_payload,
             presence_baseline=presence_baseline,
+        )
+        self._enforce_final_prompt_window(
+            prompt,
+            effective_context_window=effective_context_window,
         )
         schema_kwargs = self._schema_format_kwargs(schema_model)
 
@@ -762,6 +788,50 @@ class LogonUtility:
         except Exception:
             logger.exception("Failed to get structured response")
             raise
+
+    def _enforce_final_prompt_window(
+        self,
+        prompt: str,
+        *,
+        effective_context_window: Optional[int],
+    ) -> int:
+        """Fail before generation when LOGON formatting exceeds the turn window."""
+        provider_wire_type = self._provider_wire_type
+        if provider_wire_type is None:
+            raise RuntimeError(
+                "Final storyteller prompt sizing requires an active provider "
+                "wire class"
+            )
+        if effective_context_window is None:
+            effective_context_window = resolve_storyteller_context_window(
+                self.settings,
+                provider_wire_type,
+            )
+        if isinstance(effective_context_window, bool) or not isinstance(
+            effective_context_window, int
+        ):
+            raise TypeError("Effective storyteller context window must be an integer")
+        if effective_context_window < 1000:
+            raise ValueError(
+                "Effective storyteller context window must be at least 1000 tokens"
+            )
+
+        prompt_tokens = calculate_chunk_tokens(prompt)
+        logger.debug(
+            "Final storyteller prompt size: wire_class=%s tokens=%s "
+            "effective_window=%s",
+            provider_wire_type,
+            prompt_tokens,
+            effective_context_window,
+        )
+        if prompt_tokens > effective_context_window:
+            raise ValueError(
+                "Final storyteller prompt exceeds the effective context window: "
+                f"wire_class={provider_wire_type!r}, "
+                f"prompt_tokens={prompt_tokens}, "
+                f"effective_window={effective_context_window}"
+            )
+        return prompt_tokens
 
     def _select_response_schema(
         self, context_payload: Dict[str, Any]

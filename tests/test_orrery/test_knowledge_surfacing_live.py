@@ -555,11 +555,19 @@ class _LiveLoreHarness:
 
     def __init__(self, session: Session, *, enabled: bool) -> None:
         self.settings = {
+            "Agent Settings": {
+                "LORE": {
+                    "token_budget": {
+                        "apex_context_window": 75_000,
+                        "prompt_overhead_tokens": 4_000,
+                    }
+                }
+            },
             "orrery": {
                 "enabled": True,
                 "bleed": {"max_candidates": 0},
                 "knowledge": _settings(enabled=enabled),
-            }
+            },
         }
         self.memnon = _LiveMemnonHarness(session)
 
