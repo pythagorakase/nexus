@@ -293,7 +293,7 @@ class AnthropicProvider(LLMProvider):
         reasoning_effort: Optional[str] = None,
         thinking_enabled: bool = False,
         thinking_budget_tokens: Optional[int] = None,
-        structured_transport: Literal["native", "prompted"] = "native",
+        structured_transport: Literal["native", "prompted", "tool_envelope"] = "native",
         structured_output_retries: Optional[int] = None,
         output_validator: Optional[Any] = None,
     ):
@@ -324,8 +324,11 @@ class AnthropicProvider(LLMProvider):
         self.reasoning_effort = reasoning_effort
         self.thinking_enabled = thinking_enabled
         self.thinking_budget_tokens = thinking_budget_tokens
-        if structured_transport not in {"native", "prompted"}:
-            raise ValueError("structured_transport must be 'native' or 'prompted'")
+        if structured_transport not in {"native", "prompted", "tool_envelope"}:
+            raise ValueError(
+                "structured_transport must be 'native', 'prompted', or "
+                "'tool_envelope'"
+            )
         self.structured_transport = structured_transport
         self.structured_output_retries = (
             structured_output_retries
@@ -519,6 +522,7 @@ class AnthropicProvider(LLMProvider):
         prompt: str,
         schema_model: Type,
         *,
+        input_schema: Optional[Dict[str, Any]] = None,
         output_config: Optional[Dict[str, Any]] = None,
         output_format: Optional[Dict[str, Any]] = None,
     ) -> Tuple[Any, LLMResponse]:
@@ -561,6 +565,7 @@ class AnthropicProvider(LLMProvider):
         return self._get_structured_completion_native_sync(
             prompt,
             schema_model,
+            input_schema=input_schema,
             output_config=output_config,
             output_format=output_format,
         )
@@ -570,6 +575,7 @@ class AnthropicProvider(LLMProvider):
         prompt: str,
         schema_model: Type,
         *,
+        input_schema: Optional[Dict[str, Any]] = None,
         output_config: Optional[Dict[str, Any]] = None,
         output_format: Optional[Dict[str, Any]] = None,
     ) -> Tuple[Any, LLMResponse]:
@@ -578,6 +584,7 @@ class AnthropicProvider(LLMProvider):
             self._get_structured_completion_native_sync,
             prompt,
             schema_model,
+            input_schema=input_schema,
             output_config=output_config,
             output_format=output_format,
         )
@@ -599,6 +606,7 @@ class AnthropicProvider(LLMProvider):
         prompt: str,
         schema_model: Type,
         *,
+        input_schema: Optional[Dict[str, Any]] = None,
         output_config: Optional[Dict[str, Any]] = None,
         output_format: Optional[Dict[str, Any]] = None,
     ) -> Tuple[Any, LLMResponse]:
@@ -610,9 +618,29 @@ class AnthropicProvider(LLMProvider):
                     "Prompted Anthropic structured transport does not accept "
                     "output_config or output_format"
                 )
+            if input_schema is not None:
+                raise ValueError(
+                    "Prompted Anthropic structured transport does not accept "
+                    "input_schema"
+                )
             return self._get_structured_completion_prompted_sync(
                 prompt,
                 schema_model,
+            )
+        if self.structured_transport == "tool_envelope":
+            if output_config is not None or output_format is not None:
+                raise ValueError(
+                    "Tool-envelope Anthropic structured transport does not accept "
+                    "output_config or output_format"
+                )
+            return self._get_structured_completion_tool_envelope_sync(
+                prompt,
+                schema_model,
+                input_schema=input_schema,
+            )
+        if input_schema is not None:
+            raise ValueError(
+                "Native Anthropic structured transport does not accept input_schema"
             )
 
         from pydantic_ai import ModelRetry
@@ -639,6 +667,56 @@ class AnthropicProvider(LLMProvider):
                 )
                 return parsed_output, self._native_response_to_llm_response(
                     parsed_output, response
+                )
+            except ModelRetry as exc:
+                last_error = exc
+                if attempt >= self.structured_output_retries:
+                    raise
+                active_prompt = retry_prompt(prompt, exc.message)
+            except (ValidationError, json.JSONDecodeError, ValueError) as exc:
+                last_error = exc
+                if attempt >= self.structured_output_retries:
+                    raise
+                active_prompt = retry_prompt(prompt, str(exc))
+
+        raise RuntimeError("Structured completion failed") from last_error
+
+    def _get_structured_completion_tool_envelope_sync(
+        self,
+        prompt: str,
+        schema_model: Type,
+        *,
+        input_schema: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[Any, LLMResponse]:
+        """Run a forced non-strict tool call with bounded validation repair."""
+
+        from pydantic_ai import ModelRetry
+
+        active_prompt = prompt
+        last_error: Optional[BaseException] = None
+        for attempt in range(self.structured_output_retries + 1):
+            try:
+                response = self.client.beta.messages.create(
+                    **self._build_tool_envelope_structured_request_params(
+                        active_prompt,
+                        schema_model,
+                        input_schema=input_schema,
+                    )
+                )
+                parsed_output = self._extract_tool_envelope_parsed_output(
+                    response,
+                    schema_model,
+                )
+                parsed_output = asyncio.run(
+                    run_output_validator(
+                        self.output_validator,
+                        parsed_output,
+                        retry=attempt,
+                    )
+                )
+                return parsed_output, self._native_response_to_llm_response(
+                    parsed_output,
+                    response,
                 )
             except ModelRetry as exc:
                 last_error = exc
@@ -766,6 +844,37 @@ class AnthropicProvider(LLMProvider):
             }
         return params
 
+    def _build_tool_envelope_structured_request_params(
+        self,
+        prompt: str,
+        schema_model: Type,
+        *,
+        input_schema: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Build a forced non-strict tool request carrying an advisory schema."""
+
+        tool_input_schema = (
+            input_schema
+            if input_schema is not None
+            else cast(Dict[str, Any], schema_model.model_json_schema())
+        )
+        params = self._build_prompted_structured_request_params(prompt)
+        params["tools"] = [
+            {
+                "name": "submit_structured_response",
+                "description": (
+                    "Return the complete structured response for the current NEXUS "
+                    "generation request."
+                ),
+                "input_schema": tool_input_schema,
+            }
+        ]
+        params["tool_choice"] = {
+            "type": "tool",
+            "name": "submit_structured_response",
+        }
+        return params
+
     @staticmethod
     def _extract_native_parsed_output(response: Any, schema_model: Type) -> Any:
         """Extract and validate Anthropic native JSON output."""
@@ -784,6 +893,31 @@ class AnthropicProvider(LLMProvider):
             return schema_model.model_validate_json(output_text)
 
         raise ValueError("Anthropic structured response did not include JSON output")
+
+    @staticmethod
+    def _extract_tool_envelope_parsed_output(
+        response: Any,
+        schema_model: Type,
+    ) -> Any:
+        """Validate the parsed input from the one forced structured tool."""
+
+        for block in getattr(response, "content", []) or []:
+            if (
+                getattr(block, "type", None) != "tool_use"
+                or getattr(block, "name", None) != "submit_structured_response"
+            ):
+                continue
+            tool_input = getattr(block, "input", None)
+            if not isinstance(tool_input, dict):
+                raise ValueError(
+                    "Anthropic tool-envelope response input must be a dict"
+                )
+            return schema_model.model_validate(tool_input)
+
+        raise ValueError(
+            "Anthropic tool-envelope response did not include the "
+            "submit_structured_response tool_use block"
+        )
 
     @staticmethod
     def _extract_prompted_parsed_output(response: Any, schema_model: Type) -> Any:

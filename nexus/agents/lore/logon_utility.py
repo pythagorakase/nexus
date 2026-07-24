@@ -554,18 +554,25 @@ class LogonUtility:
         use_two_pass = (
             not provider_bootstrap_mode and self._turn_pipeline() == "two_pass"
         )
-        anthropic_transport: Literal["native", "prompted"] = "native"
+        anthropic_transport: Literal["native", "prompted", "tool_envelope"] = "native"
         if provider_type == "anthropic":
             configured_transport = apex_settings.get("anthropic_storyteller_transport")
-            if configured_transport not in {"native", "prompted"}:
+            if configured_transport not in {
+                "native",
+                "prompted",
+                "tool_envelope",
+            }:
                 raise ValueError(
                     "API Settings.apex.anthropic_storyteller_transport must be "
-                    "'native' or 'prompted'"
+                    "'native', 'prompted', or 'tool_envelope'"
                 )
             anthropic_transport = (
                 "native"
                 if provider_bootstrap_mode
-                else cast(Literal["native", "prompted"], configured_transport)
+                else cast(
+                    Literal["native", "prompted", "tool_envelope"],
+                    configured_transport,
+                )
             )
             if anthropic_transport == "prompted" and not use_two_pass:
                 system_prompt = f"{system_prompt}\n\n{skald_wire_prompt_guide()}"
@@ -1207,6 +1214,8 @@ class LogonUtility:
                 anthropic_transport = self.provider.structured_transport
                 if anthropic_transport == "prompted":
                     kwargs = {}
+                elif anthropic_transport == "tool_envelope":
+                    kwargs = {"input_schema": skald_wire_lenient_schema()}
                 elif anthropic_transport == "native":
                     kwargs = {
                         "output_config": anthropic_output_config(

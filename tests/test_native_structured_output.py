@@ -46,6 +46,13 @@ def _bootstrap_response() -> StorytellerResponseBootstrap:
     )
 
 
+def _wire_response() -> SkaldTurnWire:
+    return SkaldTurnWire(
+        narrative="[TEST MODE] Tool-envelope structured output.",
+        choices=["Continue", "Wait"],
+    )
+
+
 def _contains_key(value: object, key: str) -> bool:
     if isinstance(value, dict):
         return key in value or any(_contains_key(item, key) for item in value.values())
@@ -774,13 +781,221 @@ def test_anthropic_provider_uses_native_output_format() -> None:
 def test_anthropic_provider_rejects_unknown_structured_transport() -> None:
     with pytest.raises(
         ValueError,
-        match="structured_transport must be 'native' or 'prompted'",
+        match=(
+            "structured_transport must be 'native', 'prompted', or " "'tool_envelope'"
+        ),
     ):
         AnthropicProvider(
             model="claude-sonnet-4-5",
             api_key="test-key",
             structured_transport="unknown",  # type: ignore[arg-type]
         )
+
+
+def test_anthropic_tool_envelope_forces_non_strict_tool_and_validates_input() -> None:
+    expected = _wire_response()
+    captured = {}
+    input_schema = skald_wire_lenient_schema()
+
+    class FakeMessages:
+        def create(self, **kwargs):
+            captured.update(kwargs)
+            return SimpleNamespace(
+                content=[
+                    SimpleNamespace(
+                        type="text",
+                        text=expected.model_dump_json(),
+                    ),
+                    SimpleNamespace(
+                        type="tool_use",
+                        name="submit_structured_response",
+                        input=expected.model_dump(mode="json"),
+                    ),
+                ],
+                usage=SimpleNamespace(input_tokens=33, output_tokens=44),
+            )
+
+    provider = AnthropicProvider(
+        model="claude-sonnet-4-5",
+        api_key="test-key",
+        system_prompt="System prompt",
+        temperature=0.2,
+        top_p=0.8,
+        top_k=40,
+        max_tokens=5678,
+        thinking_enabled=True,
+        thinking_budget_tokens=1024,
+        structured_transport="tool_envelope",
+        structured_output_retries=0,
+    )
+    provider.client = SimpleNamespace(beta=SimpleNamespace(messages=FakeMessages()))
+
+    parsed, llm_response = provider.get_structured_completion(
+        "Prompt",
+        SkaldTurnWire,
+        input_schema=input_schema,
+    )
+
+    assert parsed == expected
+    assert llm_response.input_tokens == 33
+    assert llm_response.output_tokens == 44
+    assert captured["tools"] == [
+        {
+            "name": "submit_structured_response",
+            "description": (
+                "Return the complete structured response for the current NEXUS "
+                "generation request."
+            ),
+            "input_schema": input_schema,
+        }
+    ]
+    assert "strict" not in captured["tools"][0]
+    assert captured["tool_choice"] == {
+        "type": "tool",
+        "name": "submit_structured_response",
+    }
+    assert "output_config" not in captured
+    assert "output_format" not in captured
+    assert captured["system"] == "System prompt"
+    assert captured["temperature"] == 0.2
+    assert captured["top_p"] == 0.8
+    assert captured["top_k"] == 40
+    assert captured["thinking"] == {
+        "type": "enabled",
+        "budget_tokens": 1024,
+    }
+
+
+@pytest.mark.asyncio
+async def test_anthropic_tool_envelope_async_carries_effort_without_format() -> None:
+    expected = _wire_response()
+    calls = []
+    input_schema = skald_wire_lenient_schema()
+
+    class FakeMessages:
+        def create(self, **kwargs):
+            calls.append(kwargs)
+            return SimpleNamespace(
+                content=[
+                    SimpleNamespace(
+                        type="tool_use",
+                        name="submit_structured_response",
+                        input=expected.model_dump(mode="json"),
+                    )
+                ],
+                usage=SimpleNamespace(input_tokens=33, output_tokens=44),
+            )
+
+    provider = AnthropicProvider(
+        model="claude-sonnet-4-5",
+        api_key="test-key",
+        reasoning_effort="low",
+        structured_transport="tool_envelope",
+        structured_output_retries=0,
+    )
+    provider.client = SimpleNamespace(beta=SimpleNamespace(messages=FakeMessages()))
+
+    parsed, _llm_response = await provider.get_structured_completion_async(
+        "Prompt",
+        SkaldTurnWire,
+        input_schema=input_schema,
+    )
+
+    assert parsed == expected
+    assert len(calls) == 1
+    assert calls[0]["tools"][0]["input_schema"] == input_schema
+    assert "strict" not in calls[0]["tools"][0]
+    assert calls[0]["tool_choice"] == {
+        "type": "tool",
+        "name": "submit_structured_response",
+    }
+    assert calls[0]["output_config"] == {"effort": "low"}
+    assert "format" not in calls[0]["output_config"]
+    assert "output_format" not in calls[0]
+
+
+def test_anthropic_tool_envelope_repairs_text_only_then_raises() -> None:
+    expected = _wire_response()
+    calls = []
+
+    class FakeMessages:
+        def create(self, **kwargs):
+            calls.append(kwargs)
+            return SimpleNamespace(
+                content=[
+                    SimpleNamespace(
+                        type="text",
+                        text=expected.model_dump_json(),
+                    )
+                ],
+                usage=SimpleNamespace(input_tokens=33, output_tokens=44),
+            )
+
+    provider = AnthropicProvider(
+        model="claude-sonnet-4-5",
+        api_key="test-key",
+        structured_transport="tool_envelope",
+        structured_output_retries=1,
+    )
+    provider.client = SimpleNamespace(beta=SimpleNamespace(messages=FakeMessages()))
+
+    with pytest.raises(
+        ValueError,
+        match="did not include the submit_structured_response tool_use block",
+    ):
+        provider.get_structured_completion(
+            "Prompt",
+            SkaldTurnWire,
+            input_schema=skald_wire_lenient_schema(),
+        )
+
+    assert len(calls) == 2
+    assert calls[0]["messages"][0]["content"] == "Prompt"
+    assert "=== STRUCTURED OUTPUT RETRY ===" in calls[1]["messages"][0]["content"]
+    assert all("output_config" not in request for request in calls)
+    assert all("strict" not in request["tools"][0] for request in calls)
+
+
+@pytest.mark.asyncio
+async def test_anthropic_tool_envelope_async_repairs_text_only_then_raises() -> None:
+    expected = _wire_response()
+    calls = []
+
+    class FakeMessages:
+        def create(self, **kwargs):
+            calls.append(kwargs)
+            return SimpleNamespace(
+                content=[
+                    SimpleNamespace(
+                        type="text",
+                        text=expected.model_dump_json(),
+                    )
+                ],
+                usage=SimpleNamespace(input_tokens=33, output_tokens=44),
+            )
+
+    provider = AnthropicProvider(
+        model="claude-sonnet-4-5",
+        api_key="test-key",
+        structured_transport="tool_envelope",
+        structured_output_retries=1,
+    )
+    provider.client = SimpleNamespace(beta=SimpleNamespace(messages=FakeMessages()))
+
+    with pytest.raises(
+        ValueError,
+        match="did not include the submit_structured_response tool_use block",
+    ):
+        await provider.get_structured_completion_async(
+            "Prompt",
+            SkaldTurnWire,
+            input_schema=skald_wire_lenient_schema(),
+        )
+
+    assert len(calls) == 2
+    assert "=== STRUCTURED OUTPUT RETRY ===" in calls[1]["messages"][0]["content"]
+    assert all("output_config" not in request for request in calls)
+    assert all("strict" not in request["tools"][0] for request in calls)
 
 
 def test_anthropic_prompted_transport_omits_schema_and_parses_json_fence() -> None:
@@ -996,15 +1211,20 @@ async def test_anthropic_prompted_transport_async_carries_effort_without_format(
     assert "format" not in captured["output_config"]
 
 
+@pytest.mark.parametrize(
+    "structured_transport",
+    ["prompted", "tool_envelope"],
+)
 @pytest.mark.parametrize("schema_argument", ["output_config", "output_format"])
-def test_anthropic_prompted_transport_rejects_caller_schema_arguments(
+def test_anthropic_non_native_transport_rejects_caller_schema_arguments(
+    structured_transport: str,
     schema_argument: str,
 ) -> None:
     create = Mock(side_effect=AssertionError("request must not be sent"))
     provider = AnthropicProvider(
         model="claude-sonnet-4-5",
         api_key="test-key",
-        structured_transport="prompted",
+        structured_transport=structured_transport,  # type: ignore[arg-type]
     )
     provider.client = SimpleNamespace(
         beta=SimpleNamespace(messages=SimpleNamespace(create=create))
