@@ -213,8 +213,18 @@ def test_query_entity_states_passes_resolved_limits_to_fetch_boundary(
         )
         return {
             "baseline": [],
-            "featured": [{"id": 1, "current_location": None}],
+            "featured": [
+                {"id": 1, "current_location": 9_001},
+                {"id": 2, "current_location": "Named Haven"},
+            ],
         }
+
+    def fake_place_ids_by_names(
+        session: Any,
+        place_names: set[str],
+    ) -> set[int]:
+        captured["place_names"] = set(place_names)
+        return {9_002}
 
     def fake_places(
         session: Any,
@@ -228,7 +238,15 @@ def test_query_entity_states_passes_resolved_limits_to_fetch_boundary(
             set(featured_place_ids),
             max_featured_places,
         )
-        return {"baseline": [], "featured": []}
+        warm_reference_ids = list(range(1_000, 1_000 + max_featured_places + 2))
+        featured_ids = [
+            *warm_reference_ids[:max_featured_places],
+            *sorted(featured_place_ids),
+        ]
+        return {
+            "baseline": [],
+            "featured": [{"id": place_id} for place_id in featured_ids],
+        }
 
     def fake_factions(
         session: Any,
@@ -246,6 +264,11 @@ def test_query_entity_states_passes_resolved_limits_to_fetch_boundary(
         turn_cycle_module,
         "fetch_all_places_with_references",
         fake_places,
+    )
+    monkeypatch.setattr(
+        turn_cycle_module,
+        "fetch_place_ids_by_names",
+        fake_place_ids_by_names,
     )
     monkeypatch.setattr(
         turn_cycle_module,
@@ -269,7 +292,20 @@ def test_query_entity_states_passes_resolved_limits_to_fetch_boundary(
 
     expected_chunk_ids = list(range(30, 30 - expected_lookback, -1))
     assert captured["characters"] == (expected_chunk_ids, expected_characters)
-    assert captured["places"] == (expected_chunk_ids, set(), expected_locations)
+    assert captured["place_names"] == {"Named Haven"}
+    assert captured["places"] == (
+        expected_chunk_ids,
+        {9_001, 9_002},
+        expected_locations,
+    )
+    featured_location_ids = {
+        place["id"] for place in ctx.entity_data["locations"]["featured"]
+    }
+    assert featured_location_ids == {
+        *range(1_000, 1_000 + expected_locations),
+        9_001,
+        9_002,
+    }
     assert captured["factions"] == expected_chunk_ids
     relationship_queried = any(
         "character_relationships" in statement for statement in statements

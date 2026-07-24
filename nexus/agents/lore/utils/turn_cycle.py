@@ -21,8 +21,9 @@ try:
     from .entity_inclusion import resolve_entity_inclusion
     from .entity_queries import (
         fetch_all_characters_with_references,
-        fetch_all_places_with_references,
         fetch_all_factions_with_references,
+        fetch_all_places_with_references,
+        fetch_place_ids_by_names,
     )
     from nexus.agents.logon.apex_schema import (
         StoryTurnResponse,
@@ -52,8 +53,9 @@ except ImportError:
     from nexus.agents.lore.utils.entity_inclusion import resolve_entity_inclusion
     from nexus.agents.lore.utils.entity_queries import (
         fetch_all_characters_with_references,
-        fetch_all_places_with_references,
         fetch_all_factions_with_references,
+        fetch_all_places_with_references,
+        fetch_place_ids_by_names,
     )
     from nexus.agents.logon.apex_schema import (
         StoryTurnResponse,
@@ -510,11 +512,31 @@ class TurnCycleManager:
         # Query places with baseline + featured structure
         # Include places that are current_location of featured characters
         featured_place_ids: set[int] = set()
+        featured_place_names: set[str] = set()
         for char in characters_data.get("featured", []):
-            loc_name = char.get("current_location")
-            if loc_name:
-                # Get place ID from name (we'll query by name in the function)
-                pass  # fetch_all_places_with_references handles this
+            current_location = char.get("current_location")
+            if current_location is None:
+                continue
+            if isinstance(current_location, int) and not isinstance(
+                current_location, bool
+            ):
+                featured_place_ids.add(current_location)
+                continue
+            if isinstance(current_location, str) and current_location.strip():
+                featured_place_names.add(current_location.strip())
+                continue
+            character_identity = char.get("id") or char.get("name") or "<unknown>"
+            raise TypeError(
+                "Featured character "
+                f"{character_identity!r} has invalid current_location "
+                f"{current_location!r}; expected places.id or canonical place name"
+            )
+
+        if featured_place_names:
+            with self.lore.memnon.Session() as session:
+                featured_place_ids.update(
+                    fetch_place_ids_by_names(session, featured_place_names)
+                )
 
         places_data: Dict[str, List[Dict[str, Any]]] = {
             "baseline": [],

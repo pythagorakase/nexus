@@ -37,7 +37,7 @@ def fetch_all_characters_with_references(
     Args:
         session: SQLAlchemy session
         featured_chunk_ids: Chunk IDs to check for character references
-        max_featured_characters: Maximum warm-slice characters to feature
+        max_featured_characters: Maximum non-user warm-slice characters to feature
 
     Returns:
         Dict with:
@@ -85,6 +85,7 @@ def fetch_all_characters_with_references(
                     character_id, reference, chunk_id
                 FROM chunk_character_references
                 WHERE chunk_id = ANY(:chunk_ids)
+                  AND character_id IS DISTINCT FROM :user_character_id
                 ORDER BY character_id, chunk_id DESC
             ) AS latest_character_references
             ORDER BY chunk_id DESC, character_id
@@ -96,6 +97,7 @@ def fetch_all_characters_with_references(
             {
                 "chunk_ids": featured_chunk_ids,
                 "max_featured_characters": max_featured_characters,
+                "user_character_id": user_char_id,
             },
         ).fetchall()
         featured_ids = {row.character_id: str(row.reference) for row in ref_rows}
@@ -129,6 +131,50 @@ def fetch_all_characters_with_references(
             for row in featured_rows
         ],
     }
+
+
+def fetch_place_ids_by_names(
+    session: Session,
+    place_names: Set[str],
+) -> Set[int]:
+    """Resolve canonical place names to unique place IDs.
+
+    Missing or ambiguous names are data errors because callers use these IDs to
+    guarantee that featured-character locations receive full place dossiers.
+    """
+    if not place_names:
+        return set()
+
+    rows = session.execute(
+        text(
+            """
+            SELECT id, name
+            FROM places
+            WHERE name = ANY(:place_names)
+            ORDER BY name, id
+            """
+        ),
+        {"place_names": sorted(place_names)},
+    ).fetchall()
+
+    ids_by_name: Dict[str, List[int]] = {}
+    for row in rows:
+        ids_by_name.setdefault(str(row.name), []).append(int(row.id))
+
+    missing_names = place_names - set(ids_by_name)
+    if missing_names:
+        raise ValueError(
+            "Featured-character locations did not resolve to places: "
+            f"{sorted(missing_names)}"
+        )
+
+    ambiguous_names = {name: ids for name, ids in ids_by_name.items() if len(ids) != 1}
+    if ambiguous_names:
+        raise ValueError(
+            f"Featured-character location names are ambiguous: {ambiguous_names}"
+        )
+
+    return {ids[0] for ids in ids_by_name.values()}
 
 
 def fetch_all_places_with_references(
@@ -176,7 +222,18 @@ def fetch_all_places_with_references(
                     place_id, reference_type, chunk_id
                 FROM place_chunk_references
                 WHERE chunk_id = ANY(:chunk_ids)
-                ORDER BY place_id, chunk_id DESC
+                -- place_reference_type is setting, transit, mentioned.
+                -- Transit is the place-level present/passing-through tier.
+                ORDER BY
+                    place_id,
+                    chunk_id DESC,
+                    CASE reference_type::text
+                        WHEN 'setting' THEN 0
+                        WHEN 'transit' THEN 1
+                        WHEN 'mentioned' THEN 2
+                        ELSE 3
+                    END,
+                    reference_type::text
             ) AS latest_place_references
             ORDER BY chunk_id DESC, place_id
             LIMIT :max_featured_places
