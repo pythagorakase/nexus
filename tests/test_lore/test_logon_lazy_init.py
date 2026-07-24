@@ -146,17 +146,26 @@ def test_runtime_roster_reference_resolves_before_provider_call(
 
 
 @pytest.mark.parametrize(
-    ("configured_transport", "is_bootstrap", "expected_transport", "has_guide"),
+    (
+        "configured_transport",
+        "is_bootstrap",
+        "turn_pipeline",
+        "expected_transport",
+        "has_guide",
+    ),
     [
-        ("prompted", False, "prompted", True),
-        ("native", False, "native", False),
-        ("prompted", True, "native", False),
+        ("prompted", False, "single_pass", "prompted", True),
+        ("native", False, "single_pass", "native", False),
+        ("prompted", True, "single_pass", "native", False),
+        ("prompted", False, "two_pass", "prompted", False),
+        ("prompted", True, "two_pass", "native", False),
     ],
 )
 def test_anthropic_storyteller_transport_and_guide_follow_settings(
     monkeypatch: pytest.MonkeyPatch,
     configured_transport: str,
     is_bootstrap: bool,
+    turn_pipeline: str,
     expected_transport: str,
     has_guide: bool,
 ) -> None:
@@ -195,6 +204,7 @@ def test_anthropic_storyteller_transport_and_guide_follow_settings(
         "API Settings": {
             "apex": {
                 "anthropic_storyteller_transport": configured_transport,
+                "turn_pipeline": turn_pipeline,
                 "max_output_tokens": 1234,
                 "reasoning_effort": "medium",
                 "structured_output_retries": 2,

@@ -13,7 +13,13 @@ from nexus.agents.logon.apex_schema import (
     StorytellerResponseBootstrap,
     StorytellerResponseExtended,
 )
-from nexus.agents.logon.skald_wire import SkaldTurnWire, skald_wire_lenient_schema
+from nexus.agents.logon.skald_wire import (
+    SkaldTurnWire,
+    SkaldWriterWire,
+    skald_wire_lenient_schema,
+    skald_writer_lenient_schema,
+)
+from nexus.agents.lore.logon_utility import LogonUtility
 from nexus.api.new_story_schemas import SettingCard, StorySeedSubmission, WizardResponse
 from nexus.api.native_structured_output import (
     ANTHROPIC_UNSUPPORTED_SCHEMA_KEYS,
@@ -71,6 +77,17 @@ def _contains_nullable_any_of(value: object) -> bool:
     if isinstance(value, list):
         return any(_contains_nullable_any_of(item) for item in value)
     return False
+
+
+def _count_union_typed_nodes(value: object) -> int:
+    if isinstance(value, dict):
+        is_union = "anyOf" in value or isinstance(value.get("type"), list)
+        return int(is_union) + sum(
+            _count_union_typed_nodes(item) for item in value.values()
+        )
+    if isinstance(value, list):
+        return sum(_count_union_typed_nodes(item) for item in value)
+    return 0
 
 
 def _assert_property_maps_are_consistent(value: object, path: str = "$") -> None:
@@ -205,6 +222,67 @@ def test_anthropic_preserves_wire_updates_namespace_after_lenient_transform() ->
     assert not _contains_key(transformed, "oneOf")
     assert not _contains_key(transformed, "discriminator")
     assert not _contains_key(transformed, "anyOf")
+
+
+@pytest.mark.parametrize(
+    ("reasoning_effort", "expected_effort"),
+    [
+        ("high", "high"),
+        (None, None),
+    ],
+)
+def test_two_pass_writer_native_config_reaches_shipped_anthropic_request(
+    reasoning_effort: str | None,
+    expected_effort: str | None,
+) -> None:
+    utility = LogonUtility({})
+    utility._provider_wire_type = "anthropic"
+    schema_kwargs = utility._two_pass_schema_format_kwargs(SkaldWriterWire)
+    writer = SkaldWriterWire.model_validate(
+        {
+            "narrative": "The archive door opens.",
+            "choices": ["Enter.", "Wait."],
+        }
+    )
+    captured = {}
+
+    class FakeMessages:
+        def create(self, **kwargs):
+            captured.update(kwargs)
+            return SimpleNamespace(
+                content=[
+                    SimpleNamespace(type="text", text=writer.model_dump_json()),
+                ],
+                usage=SimpleNamespace(input_tokens=33, output_tokens=44),
+            )
+
+    provider = AnthropicProvider(
+        model="claude-sonnet-4-5",
+        api_key="test-key",
+        reasoning_effort=reasoning_effort,
+        structured_output_retries=0,
+    )
+    provider.client = SimpleNamespace(beta=SimpleNamespace(messages=FakeMessages()))
+
+    parsed, _llm_response = provider.get_structured_completion(
+        "Write the next beat.",
+        SkaldWriterWire,
+        **schema_kwargs,
+    )
+
+    request_output_config = captured["output_config"]
+    request_schema = request_output_config["format"]["schema"]
+    expected_schema = anthropic_output_format(
+        SkaldWriterWire,
+        schema=skald_writer_lenient_schema(),
+    )["schema"]
+    assert parsed == writer
+    assert request_schema == expected_schema
+    assert _count_union_typed_nodes(request_schema) == 0
+    if expected_effort is None:
+        assert "effort" not in request_output_config
+    else:
+        assert request_output_config["effort"] == expected_effort
 
 
 def test_anthropic_one_of_rewrite_recurses_through_lists_and_dicts() -> None:

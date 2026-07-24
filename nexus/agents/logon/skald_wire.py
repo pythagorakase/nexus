@@ -356,6 +356,50 @@ class UpdatesBlock(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class SkaldWriterWire(BaseModel):
+    """Provider-facing prose and scene deltas for pass one."""
+
+    narrative: str = Field(description="Narrative prose.")
+    choices: List[str] = Field(
+        min_length=2,
+        max_length=4,
+        description="Two to four actionable player choices.",
+    )
+    scene: Optional[SceneDelta] = Field(
+        default=None,
+        description="Changed chronology or scene attributes.",
+    )
+    presence: Optional[PresenceDelta] = Field(
+        default=None,
+        description="Scene presence and reference changes.",
+    )
+    operations: Optional[Operations] = Field(
+        default=None,
+        description="Special runtime requests, when needed.",
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class SkaldClerkWire(BaseModel):
+    """Provider-facing durable state record for pass two."""
+
+    updates: Optional[UpdatesBlock] = Field(
+        default=None,
+        description="Durable semantic state changes.",
+    )
+    orrery_adjudications: List[OrreryAdjudication] = Field(
+        default_factory=list,
+        description="Rulings on current Orrery proposals.",
+    )
+    new_entities: List[NewEntityDeclaration] = Field(
+        default_factory=list,
+        description="New persistent entities introduced by this turn.",
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class SkaldTurnWire(BaseModel):
     """Provider-facing semantic deltas for a non-bootstrap turn."""
 
@@ -391,6 +435,24 @@ class SkaldTurnWire(BaseModel):
     )
 
     model_config = ConfigDict(extra="forbid")
+
+
+def combine_two_pass(
+    writer: SkaldWriterWire,
+    clerk: SkaldClerkWire,
+) -> SkaldTurnWire:
+    """Combine writer and clerk outputs into the existing full wire contract."""
+
+    return SkaldTurnWire(
+        narrative=writer.narrative,
+        choices=writer.choices,
+        scene=writer.scene,
+        presence=writer.presence,
+        updates=clerk.updates,
+        operations=writer.operations,
+        orrery_adjudications=clerk.orrery_adjudications,
+        new_entities=clerk.new_entities,
+    )
 
 
 def _hydrate_scene(scene: Optional[SceneDelta]) -> ChunkMetadataUpdate:
@@ -684,10 +746,36 @@ def skald_wire_strict_text_format() -> Dict[str, Any]:
     return openai_response_text_format(SkaldTurnWire, schema=schema)
 
 
+def skald_writer_strict_text_format() -> Dict[str, Any]:
+    """Build the strict OpenAI Responses text format for writer passes."""
+
+    schema = strict_json_schema(SkaldWriterWire)
+    return openai_response_text_format(SkaldWriterWire, schema=schema)
+
+
+def skald_clerk_strict_text_format() -> Dict[str, Any]:
+    """Build the strict OpenAI Responses text format for clerk passes."""
+
+    schema = strict_json_schema(SkaldClerkWire)
+    return openai_response_text_format(SkaldClerkWire, schema=schema)
+
+
 def skald_wire_lenient_schema() -> Dict[str, Any]:
     """Build the omittable-field schema for Anthropic and local endpoints."""
 
     return de_null_schema(SkaldTurnWire.model_json_schema())
+
+
+def skald_writer_lenient_schema() -> Dict[str, Any]:
+    """Build the omittable-field schema for writer passes."""
+
+    return de_null_schema(SkaldWriterWire.model_json_schema())
+
+
+def skald_clerk_lenient_schema() -> Dict[str, Any]:
+    """Build the omittable-field schema for clerk passes."""
+
+    return de_null_schema(SkaldClerkWire.model_json_schema())
 
 
 def _prompt_guide_ref_name(ref: str) -> str:
@@ -785,10 +873,13 @@ def _prompt_guide_object_refs(
     return refs
 
 
-def skald_wire_prompt_guide() -> str:
-    """Render a compact prompted-output guide from the lenient wire schema."""
+def _render_prompt_guide(
+    schema: Dict[str, Any],
+    *,
+    include_descriptions: bool = True,
+) -> str:
+    """Render one compact prompted-output guide from a lenient wire schema."""
 
-    schema = skald_wire_lenient_schema()
     definitions = schema.get("$defs", {})
     if not isinstance(definitions, dict):
         raise ValueError("Skald wire schema definitions must be an object")
@@ -841,16 +932,17 @@ def skald_wire_prompt_guide() -> str:
                 if enum_values is not None
                 else ""
             )
-            description = property_schema.get("description", "")
-            if not isinstance(description, str):
-                raise ValueError(
-                    f"Skald wire property {object_name}.{property_name} "
-                    "has a non-string description"
-                )
-            description_text = json.dumps(description, ensure_ascii=False)
-            lines.append(
-                f"{property_name}{status}:{field_type}{enum_text}|{description_text}"
-            )
+            field_line = f"{property_name}{status}:{field_type}{enum_text}"
+            if include_descriptions:
+                description = property_schema.get("description", "")
+                if not isinstance(description, str):
+                    raise ValueError(
+                        f"Skald wire property {object_name}.{property_name} "
+                        "has a non-string description"
+                    )
+                description_text = json.dumps(description, ensure_ascii=False)
+                field_line = f"{field_line}|{description_text}"
+            lines.append(field_line)
 
             for ref_name in _prompt_guide_object_refs(
                 property_schema,
@@ -863,3 +955,18 @@ def skald_wire_prompt_guide() -> str:
 
     lines.append("```")
     return "\n".join(lines)
+
+
+def skald_wire_prompt_guide() -> str:
+    """Render a compact prompted-output guide from the lenient wire schema."""
+
+    return _render_prompt_guide(skald_wire_lenient_schema())
+
+
+def skald_clerk_prompt_guide() -> str:
+    """Render a compact prompted-output guide for the clerk pass."""
+
+    return _render_prompt_guide(
+        skald_clerk_lenient_schema(),
+        include_descriptions=False,
+    )

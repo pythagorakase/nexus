@@ -2526,6 +2526,10 @@ class APEXSettings(BaseModel):
             "Structured transport for non-bootstrap Anthropic storyteller turns."
         ),
     )
+    turn_pipeline: Literal["single_pass", "two_pass"] = Field(
+        default="single_pass",
+        description="Storyteller turn pipeline used for non-bootstrap turns.",
+    )
     tag_library: APEXTagLibrarySettings = Field(default_factory=APEXTagLibrarySettings)
     structured_output_retries: int = Field(
         default=3,
