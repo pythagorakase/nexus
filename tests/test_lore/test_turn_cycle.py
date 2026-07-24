@@ -10,6 +10,7 @@ from typing import Any, Dict
 
 import pytest
 
+from nexus.agents.lore.utils import turn_cycle as turn_cycle_module
 from nexus.agents.lore.logon_utility import LogonUtility
 from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
 from nexus.agents.lore.utils.turn_context import TurnContext
@@ -149,6 +150,152 @@ def test_process_user_input_uses_base_budget_when_logon_is_disabled() -> None:
     assert ctx.token_counts["apex_window"] == 75_000
     assert ctx.token_counts["reasoning_reserve"] == 30_000
     assert lore.memory_manager.phase2_budget == 7_500
+
+
+@pytest.mark.parametrize(
+    (
+        "enable_logon",
+        "provider_wire_type",
+        "expected_lookback",
+        "expected_characters",
+        "expected_locations",
+        "expect_relationship_query",
+    ),
+    [
+        (True, "local", 12, 12, 6, False),
+        (False, None, 20, 25, 10, True),
+    ],
+)
+def test_query_entity_states_passes_resolved_limits_to_fetch_boundary(
+    monkeypatch: pytest.MonkeyPatch,
+    enable_logon: bool,
+    provider_wire_type: str | None,
+    expected_lookback: int,
+    expected_characters: int,
+    expected_locations: int,
+    expect_relationship_query: bool,
+) -> None:
+    """The real gather seam passes provider-resolved limits to DB fetches."""
+    captured: Dict[str, Any] = {}
+    statements: list[str] = []
+
+    class EmptySession:
+        def __enter__(self) -> "EmptySession":
+            return self
+
+        def __exit__(self, *args: Any) -> None:
+            return None
+
+        def execute(
+            self, statement: Any, parameters: Dict[str, Any] | None = None
+        ) -> list[Any]:
+            statements.append(str(statement))
+            return []
+
+    class EntityMemnon:
+        Session = EmptySession
+
+    class EntityLore:
+        def __init__(self) -> None:
+            self.settings = load_settings_as_dict()
+            self.memnon = EntityMemnon()
+            self.enable_logon = enable_logon
+
+    def fake_characters(
+        session: Any,
+        featured_chunk_ids: list[int],
+        *,
+        max_featured_characters: int,
+    ) -> Dict[str, list[Dict[str, Any]]]:
+        captured["characters"] = (
+            list(featured_chunk_ids),
+            max_featured_characters,
+        )
+        return {
+            "baseline": [],
+            "featured": [{"id": 1, "current_location": None}],
+        }
+
+    def fake_places(
+        session: Any,
+        featured_chunk_ids: list[int],
+        featured_place_ids: set[int],
+        *,
+        max_featured_places: int,
+    ) -> Dict[str, list[Dict[str, Any]]]:
+        captured["places"] = (
+            list(featured_chunk_ids),
+            set(featured_place_ids),
+            max_featured_places,
+        )
+        return {"baseline": [], "featured": []}
+
+    def fake_factions(
+        session: Any,
+        featured_chunk_ids: list[int],
+    ) -> Dict[str, list[Dict[str, Any]]]:
+        captured["factions"] = list(featured_chunk_ids)
+        return {"baseline": [], "featured": []}
+
+    monkeypatch.setattr(
+        turn_cycle_module,
+        "fetch_all_characters_with_references",
+        fake_characters,
+    )
+    monkeypatch.setattr(
+        turn_cycle_module,
+        "fetch_all_places_with_references",
+        fake_places,
+    )
+    monkeypatch.setattr(
+        turn_cycle_module,
+        "fetch_all_factions_with_references",
+        fake_factions,
+    )
+
+    manager = TurnCycleManager(EntityLore())
+    ctx = TurnContext(
+        turn_id="entity-provider-limits",
+        user_input="Continue.",
+        start_time=time.time(),
+        provider_wire_type=provider_wire_type,
+        warm_slice=[
+            {"chunk_id": chunk_id, "text": f"Chunk {chunk_id}."}
+            for chunk_id in range(30, 5, -1)
+        ],
+    )
+
+    asyncio.run(manager.query_entity_states(ctx))
+
+    expected_chunk_ids = list(range(30, 30 - expected_lookback, -1))
+    assert captured["characters"] == (expected_chunk_ids, expected_characters)
+    assert captured["places"] == (expected_chunk_ids, set(), expected_locations)
+    assert captured["factions"] == expected_chunk_ids
+    relationship_queried = any(
+        "character_relationships" in statement for statement in statements
+    )
+    assert relationship_queried is expect_relationship_query
+
+
+def test_query_entity_states_requires_wire_class_when_logon_is_active() -> None:
+    """A missing Phase 1 route cannot silently fall back to base entity limits."""
+
+    class EntityLore:
+        def __init__(self) -> None:
+            self.settings = load_settings_as_dict()
+            self.memnon = object()
+            self.enable_logon = True
+
+    manager = TurnCycleManager(EntityLore())
+    ctx = TurnContext(
+        turn_id="entity-missing-wire-class",
+        user_input="Continue.",
+        start_time=time.time(),
+        warm_slice=[{"chunk_id": 1, "text": "Parent."}],
+    )
+
+    with pytest.raises(RuntimeError, match="require.*provider wire class"):
+        asyncio.run(manager.query_entity_states(ctx))
 
 
 def test_slot_model_change_mid_turn_aborts_before_provider_initialization(

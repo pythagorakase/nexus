@@ -194,6 +194,65 @@ def test_token_budget_accepts_zero_prompt_overhead() -> None:
     assert settings.lore.token_budget.prompt_overhead_tokens == 0
 
 
+def test_entity_inclusion_provider_overrides_parse() -> None:
+    """Shipped local entity limits survive settings validation."""
+    settings = Settings(**_nexus_toml_dict())
+
+    assert set(settings.lore.entity_inclusion.provider_overrides) == {"local"}
+    local = settings.lore.entity_inclusion.provider_overrides["local"]
+    assert local.model_dump(exclude_none=True) == {
+        "warm_slice_lookback_chunks": 12,
+        "max_characters_from_warm_slice": 12,
+        "max_locations_from_warm_slice": 6,
+        "include_all_relationships": False,
+    }
+
+
+def test_entity_inclusion_provider_overrides_reject_unknown_outer_key() -> None:
+    """Provider override tables use the closed storyteller wire-class set."""
+    raw = _nexus_toml_dict()
+    raw["lore"]["entity_inclusion"]["provider_overrides"]["bedrock"] = {}
+
+    with pytest.raises(ValidationError, match="unknown provider classes.*bedrock"):
+        Settings(**raw)
+
+
+def test_entity_inclusion_provider_overrides_reject_unknown_inner_key() -> None:
+    """Override fields cannot silently expand beyond the six allowed knobs."""
+    raw = _nexus_toml_dict()
+    raw["lore"]["entity_inclusion"]["provider_overrides"]["local"][
+        "max_factions_from_warm_slice"
+    ] = 4
+
+    with pytest.raises(ValidationError, match="max_factions_from_warm_slice"):
+        Settings(**raw)
+
+
+def test_entity_inclusion_provider_overrides_keep_integer_constraints() -> None:
+    """Override integer limits retain the base fields' positive constraint."""
+    raw = _nexus_toml_dict()
+    raw["lore"]["entity_inclusion"]["provider_overrides"]["local"][
+        "warm_slice_lookback_chunks"
+    ] = 0
+
+    with pytest.raises(
+        ValidationError,
+        match="warm_slice_lookback_chunks",
+    ):
+        Settings(**raw)
+
+
+def test_entity_inclusion_provider_overrides_allow_empty_table() -> None:
+    """An empty provider table represents pure inheritance."""
+    raw = _nexus_toml_dict()
+    raw["lore"]["entity_inclusion"]["provider_overrides"] = {"local": {}}
+
+    settings = Settings(**raw)
+
+    local = settings.lore.entity_inclusion.provider_overrides["local"]
+    assert local.model_dump(exclude_none=True) == {}
+
+
 def test_summaries_follow_anthropic_storyteller_with_registry_route():
     """A native Anthropic storyteller remains the default summarizer."""
     raw = _nexus_toml_dict()

@@ -5,7 +5,8 @@ Provides hierarchical entity queries with universal baseline + featured tracking
 """
 
 import logging
-from typing import Dict, List, Any, Set, Optional
+from typing import Any, Dict, List, Optional, Sequence, Set
+
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -27,6 +28,8 @@ FACTION_TAG_CONTEXT_CATEGORY_SQL = ", ".join(
 def fetch_all_characters_with_references(
     session: Session,
     featured_chunk_ids: List[int],
+    *,
+    max_featured_characters: int,
 ) -> Dict[str, List[Dict[str, Any]]]:
     """
     Fetch ALL characters with baseline tracking fields, plus referenced details.
@@ -34,6 +37,7 @@ def fetch_all_characters_with_references(
     Args:
         session: SQLAlchemy session
         featured_chunk_ids: Chunk IDs to check for character references
+        max_featured_characters: Maximum warm-slice characters to feature
 
     Returns:
         Dict with:
@@ -75,13 +79,24 @@ def fetch_all_characters_with_references(
     if featured_chunk_ids:
         ref_query = text(
             """
-            SELECT DISTINCT character_id, reference
-            FROM chunk_character_references
-            WHERE chunk_id = ANY(:chunk_ids)
+            SELECT character_id, reference
+            FROM (
+                SELECT DISTINCT ON (character_id)
+                    character_id, reference, chunk_id
+                FROM chunk_character_references
+                WHERE chunk_id = ANY(:chunk_ids)
+                ORDER BY character_id, chunk_id DESC
+            ) AS latest_character_references
+            ORDER BY chunk_id DESC, character_id
+            LIMIT :max_featured_characters
         """
         )
         ref_rows = session.execute(
-            ref_query, {"chunk_ids": featured_chunk_ids}
+            ref_query,
+            {
+                "chunk_ids": featured_chunk_ids,
+                "max_featured_characters": max_featured_characters,
+            },
         ).fetchall()
         featured_ids = {row.character_id: str(row.reference) for row in ref_rows}
 
@@ -91,7 +106,7 @@ def fetch_all_characters_with_references(
         logger.debug(f"Added user character (ID {user_char_id}) to featured list")
 
     # Get full details for featured characters
-    featured_rows = []
+    featured_rows: Sequence[Any] = []
     if featured_ids:
         featured_query = text(
             """
@@ -120,6 +135,8 @@ def fetch_all_places_with_references(
     session: Session,
     featured_chunk_ids: List[int],
     featured_place_ids: Optional[Set[int]] = None,
+    *,
+    max_featured_places: int,
 ) -> Dict[str, List[Dict[str, Any]]]:
     """
     Fetch ALL places with baseline tracking fields, plus referenced details.
@@ -128,6 +145,7 @@ def fetch_all_places_with_references(
         session: SQLAlchemy session
         featured_chunk_ids: Chunk IDs to check for place references
         featured_place_ids: Additional place IDs to include (e.g., character locations)
+        max_featured_places: Maximum warm-slice places to feature
 
     Returns:
         Dict with:
@@ -152,13 +170,24 @@ def fetch_all_places_with_references(
     if featured_chunk_ids:
         ref_query = text(
             """
-            SELECT DISTINCT place_id, reference_type
-            FROM place_chunk_references
-            WHERE chunk_id = ANY(:chunk_ids)
+            SELECT place_id, reference_type
+            FROM (
+                SELECT DISTINCT ON (place_id)
+                    place_id, reference_type, chunk_id
+                FROM place_chunk_references
+                WHERE chunk_id = ANY(:chunk_ids)
+                ORDER BY place_id, chunk_id DESC
+            ) AS latest_place_references
+            ORDER BY chunk_id DESC, place_id
+            LIMIT :max_featured_places
         """
         )
         ref_rows = session.execute(
-            ref_query, {"chunk_ids": featured_chunk_ids}
+            ref_query,
+            {
+                "chunk_ids": featured_chunk_ids,
+                "max_featured_places": max_featured_places,
+            },
         ).fetchall()
         featured_ids = {row.place_id: str(row.reference_type) for row in ref_rows}
 
@@ -168,7 +197,7 @@ def fetch_all_places_with_references(
             featured_ids.setdefault(pid, "character_location")
 
     # Get full details for featured places
-    featured_rows = []
+    featured_rows: Sequence[Any] = []
     if featured_ids:
         featured_query = text(
             """
@@ -263,7 +292,7 @@ def fetch_all_factions_with_references(
         featured_ids = {row.faction_id for row in ref_rows}
 
     # Get full details for featured factions
-    featured_rows = []
+    featured_rows: Sequence[Any] = []
     if featured_ids:
         featured_query = text(
             f"""

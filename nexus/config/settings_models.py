@@ -657,6 +657,19 @@ class PayloadPercentBudget(BaseModel):
     warm_slice: PayloadBudgetRange
 
 
+class EntityInclusionProviderOverride(BaseModel):
+    """Optional entity-inclusion overrides for one storyteller wire class."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    warm_slice_lookback_chunks: Optional[int] = Field(default=None, ge=1)
+    max_characters_from_warm_slice: Optional[int] = Field(default=None, ge=1)
+    max_locations_from_warm_slice: Optional[int] = Field(default=None, ge=1)
+    include_all_relationships: Optional[bool] = None
+    include_all_active_events: Optional[bool] = None
+    include_all_active_threats: Optional[bool] = None
+
+
 class EntityInclusionConfig(BaseModel):
     """Configuration for entity inclusion in context payloads."""
 
@@ -674,6 +687,23 @@ class EntityInclusionConfig(BaseModel):
     max_total_relationships: int = Field(..., ge=1)
     max_total_events: int = Field(..., ge=1)
     max_total_threats: int = Field(..., ge=1)
+    provider_overrides: Dict[str, EntityInclusionProviderOverride] = Field(
+        default_factory=dict,
+        description="Entity-inclusion overrides by storyteller provider class",
+    )
+
+    @model_validator(mode="after")
+    def _validate_provider_overrides(self) -> "EntityInclusionConfig":
+        """Provider overrides use the closed storyteller wire-class set."""
+        legal_provider_classes = {"openai", "anthropic", "local"}
+        unknown_provider_classes = set(self.provider_overrides) - legal_provider_classes
+        if unknown_provider_classes:
+            raise ValueError(
+                "entity inclusion provider_overrides contains unknown provider "
+                f"classes: {sorted(unknown_provider_classes)}; legal keys are "
+                f"{sorted(legal_provider_classes)}"
+            )
+        return self
 
 
 class LORERetrievalSettings(BaseModel):
