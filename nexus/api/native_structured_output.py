@@ -17,6 +17,7 @@ from pydantic_ai import JsonSchemaTransformer
 
 ANTHROPIC_UNSUPPORTED_SCHEMA_KEYS = {
     "default",
+    "discriminator",
     "exclusiveMaximum",
     "exclusiveMinimum",
     "format",
@@ -84,7 +85,14 @@ def _strip_anthropic_unsupported_schema_keys(value: Any) -> Any:
     if not isinstance(value, dict):
         return value
     return {
-        key: _strip_anthropic_unsupported_schema_keys(item)
+        # Anthropic's native format rejects oneOf (Pydantic emits it for
+        # discriminated unions, e.g. SkaldTurnWire.updates). anyOf is the
+        # accepted, semantically-wider spelling; app-side Pydantic still
+        # enforces the discriminator after parse. Found live on the first
+        # universal-wire Anthropic turn (measurement stage).
+        ("anyOf" if key == "oneOf" else key): (
+            _strip_anthropic_unsupported_schema_keys(item)
+        )
         for key, item in value.items()
         if key not in ANTHROPIC_UNSUPPORTED_SCHEMA_KEYS
     }
