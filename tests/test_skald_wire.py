@@ -355,6 +355,13 @@ def test_sparse_prose_only_wire_needs_no_baseline() -> None:
     _assert_canonical_fields_equal(hydrated, expected)
 
 
+def test_explicit_null_scene_still_validates_and_hydrates_to_defaults() -> None:
+    wire = SkaldTurnWire.model_validate({**SPARSE_WIRE_PAYLOAD, "scene": None})
+
+    assert wire.scene is None
+    assert hydrate_skald_turn(wire).chunk_metadata == ChunkMetadataUpdate()
+
+
 def test_absent_presence_block_carries_supplied_baseline() -> None:
     hydrated = hydrate_skald_turn(
         SkaldTurnWire.model_validate(SPARSE_WIRE_PAYLOAD),
@@ -614,6 +621,11 @@ def test_chronology_elapsed_minutes_split(
 def test_lenient_sparse_round_trip_has_no_scaffold_keys() -> None:
     schema = skald_wire_lenient_schema()
     assert schema["required"] == ["narrative", "choices"]
+    assert schema["properties"]["scene"] == {
+        "$ref": "#/$defs/SceneDelta",
+        "default": None,
+        "description": "Changed chronology or scene attributes.",
+    }
     update_items = schema["properties"]["updates"]["items"]
     assert update_items["discriminator"]["propertyName"] == "kind"
     assert set(update_items["discriminator"]["mapping"]) == {
@@ -626,6 +638,13 @@ def test_lenient_sparse_round_trip_has_no_scaffold_keys() -> None:
     serialized = json.dumps(SPARSE_WIRE_PAYLOAD, separators=(",", ":"))
     wire = SkaldTurnWire.model_validate_json(serialized)
     assert wire.model_dump(exclude_unset=True, mode="json") == SPARSE_WIRE_PAYLOAD
+
+
+def test_openai_strict_wire_keeps_required_nullable_spelling() -> None:
+    schema = skald_wire_strict_text_format()["schema"]
+
+    assert "scene" in schema["required"]
+    assert {"type": "null"} in schema["properties"]["scene"]["anyOf"]
 
 
 def _compact_schema_json(schema: dict[str, Any]) -> str:
@@ -673,6 +692,19 @@ def _schema_descriptions(value: Any) -> set[str]:
     return descriptions
 
 
+def _count_union_typed_parameters(value: Any) -> int:
+    """Count schema nodes Anthropic treats as union-typed parameters."""
+
+    if isinstance(value, dict):
+        node_is_union = "anyOf" in value or isinstance(value.get("type"), list)
+        return int(node_is_union) + sum(
+            _count_union_typed_parameters(nested) for nested in value.values()
+        )
+    if isinstance(value, list):
+        return sum(_count_union_typed_parameters(nested) for nested in value)
+    return 0
+
+
 def test_lenient_wire_closes_every_object_schema_node() -> None:
     """No wire-reachable object may silently discard unknown provider keys."""
 
@@ -694,6 +726,16 @@ def test_lenient_wire_closes_every_object_schema_node() -> None:
 
     visit(skald_wire_lenient_schema(), "$")
     assert open_object_nodes == []
+
+
+def test_anthropic_wire_stays_within_union_parameter_budget() -> None:
+    schema = anthropic_output_config(
+        SkaldTurnWire,
+        schema=skald_wire_lenient_schema(),
+    )["format"]["schema"]
+
+    # Anthropic's live #566 error: "20 parameters with union types... limit: 16".
+    assert _count_union_typed_parameters(schema) <= 16
 
 
 def test_wire_schema_size_and_description_budget() -> None:

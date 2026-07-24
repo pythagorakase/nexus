@@ -12,6 +12,7 @@ from nexus.agents.logon.apex_schema import (
     StorytellerResponseBootstrap,
     StorytellerResponseExtended,
 )
+from nexus.agents.logon.skald_wire import SkaldTurnWire
 from nexus.api.new_story_schemas import SettingCard, StorySeedSubmission, WizardResponse
 from nexus.api.native_structured_output import (
     ANTHROPIC_UNSUPPORTED_SCHEMA_KEYS,
@@ -20,6 +21,7 @@ from nexus.api.native_structured_output import (
     anthropic_output_format,
     anthropic_strict_tool,
     build_native_structured_provider,
+    de_null_schema,
     openai_response_text_format,
     strict_json_schema,
 )
@@ -53,6 +55,173 @@ def _assert_object_schemas_closed(value: object) -> None:
     elif isinstance(value, list):
         for item in value:
             _assert_object_schemas_closed(item)
+
+
+def _contains_nullable_any_of(value: object) -> bool:
+    if isinstance(value, dict):
+        any_of = value.get("anyOf")
+        if isinstance(any_of, list) and any(
+            isinstance(member, dict) and member.get("type") == "null"
+            for member in any_of
+        ):
+            return True
+        return any(_contains_nullable_any_of(item) for item in value.values())
+    if isinstance(value, list):
+        return any(_contains_nullable_any_of(item) for item in value)
+    return False
+
+
+@pytest.mark.parametrize(
+    "any_of",
+    [
+        [{"type": "string"}, {"type": "null"}],
+        [{"type": "null"}, {"type": "string"}],
+    ],
+)
+def test_de_null_schema_collapses_two_member_null_unions(
+    any_of: list[dict[str, str]],
+) -> None:
+    assert de_null_schema({"anyOf": any_of}) == {"type": "string"}
+
+
+def test_de_null_schema_preserves_siblings_with_member_precedence() -> None:
+    schema = {
+        "anyOf": [
+            {
+                "type": "string",
+                "description": "Member description wins.",
+                "title": "Member title",
+            },
+            {"type": "null"},
+        ],
+        "description": "Sibling description",
+        "title": "Sibling title",
+        "examples": ["kept"],
+    }
+
+    assert de_null_schema(schema) == {
+        "type": "string",
+        "description": "Member description wins.",
+        "title": "Member title",
+        "examples": ["kept"],
+    }
+
+
+@pytest.mark.parametrize(
+    "any_of",
+    [
+        [{"type": "string"}, {"type": "integer"}, {"type": "null"}],
+        [{"type": "string"}, {"type": "integer"}],
+    ],
+)
+def test_de_null_schema_leaves_other_unions_intact(
+    any_of: list[dict[str, str]],
+) -> None:
+    assert de_null_schema({"anyOf": any_of}) == {"anyOf": any_of}
+
+
+def test_de_null_schema_recurses_through_nested_lists_and_dicts() -> None:
+    schema = {
+        "properties": {
+            "entries": {
+                "type": "array",
+                "items": [
+                    {
+                        "metadata": {
+                            "anyOf": [
+                                {"type": "object", "additionalProperties": False},
+                                {"type": "null"},
+                            ]
+                        }
+                    }
+                ],
+            }
+        }
+    }
+
+    transformed = de_null_schema(schema)
+
+    assert transformed["properties"]["entries"]["items"][0]["metadata"] == {
+        "type": "object",
+        "additionalProperties": False,
+    }
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        None,
+        3,
+        "schema",
+        ["mixed", None, 4],
+        {"anyOf": None},
+        {"anyOf": [False, {"type": "null"}], "description": "malformed"},
+    ],
+)
+def test_de_null_schema_is_total_for_arbitrary_json_shapes(value: object) -> None:
+    de_null_schema(value)
+
+
+def test_anthropic_rewrites_representative_pydantic_discriminated_union() -> None:
+    raw_schema = SkaldTurnWire.model_json_schema()
+    raw_items = raw_schema["properties"]["updates"]["items"]
+
+    # Pydantic emits oneOf, never a simultaneous oneOf/anyOf collision here.
+    assert "oneOf" in raw_items
+    assert "anyOf" not in raw_items
+    assert "discriminator" in raw_items
+
+    transformed = anthropic_output_format(
+        SkaldTurnWire,
+        schema=raw_schema,
+    )["schema"]
+    transformed_items = transformed["properties"]["updates"]["items"]
+
+    assert "oneOf" not in transformed_items
+    assert "discriminator" not in transformed_items
+    assert transformed_items["anyOf"] == raw_items["oneOf"]
+
+
+def test_anthropic_one_of_rewrite_recurses_through_lists_and_dicts() -> None:
+    schema = {
+        "type": "object",
+        "properties": {
+            "values": {
+                "type": "array",
+                "items": {
+                    "oneOf": [{"type": "string"}, {"type": "integer"}],
+                    "discriminator": {"propertyName": "kind"},
+                },
+            }
+        },
+        "$defs": {
+            "Nested": {
+                "oneOf": [{"type": "boolean"}, {"type": "number"}],
+            }
+        },
+    }
+
+    transformed = anthropic_output_format(
+        StorytellerResponseBootstrap,
+        schema=schema,
+    )["schema"]
+
+    assert transformed["properties"]["values"]["items"] == {
+        "anyOf": [{"type": "string"}, {"type": "integer"}],
+    }
+    assert transformed["$defs"]["Nested"] == {
+        "anyOf": [{"type": "boolean"}, {"type": "number"}],
+    }
+
+
+def test_all_anthropic_schema_entrypoints_de_null_optional_fields() -> None:
+    schemas = [
+        anthropic_output_format(SkaldTurnWire)["schema"],
+        anthropic_output_config(SkaldTurnWire)["format"]["schema"],
+        anthropic_strict_tool(SkaldTurnWire)["input_schema"],
+    ]
+
+    assert all(not _contains_nullable_any_of(schema) for schema in schemas)
 
 
 def test_openai_response_text_format_is_native_strict_json_schema() -> None:
