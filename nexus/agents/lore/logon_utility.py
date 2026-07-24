@@ -5,6 +5,7 @@ Manages communication with Apex AI providers (OpenAI, Anthropic, xAI).
 """
 
 import asyncio
+import copy
 import json
 import logging
 import os
@@ -26,11 +27,19 @@ from nexus.agents.logon.apex_schema import (  # noqa: E402
 from nexus.agents.logon.skald_wire import (  # noqa: E402
     PresenceBaseline,
     PresenceRef,
+    SkaldClerkWire,
     SkaldTurnWire,
+    SkaldWriterWire,
+    combine_two_pass,
     hydrate_skald_turn,
+    skald_clerk_lenient_schema,
+    skald_clerk_prompt_guide,
+    skald_clerk_strict_text_format,
     skald_wire_lenient_schema,
     skald_wire_prompt_guide,
     skald_wire_strict_text_format,
+    skald_writer_lenient_schema,
+    skald_writer_strict_text_format,
 )
 from nexus.agents.lore.utils.chunk_operations import (  # noqa: E402
     calculate_chunk_tokens,
@@ -286,6 +295,19 @@ class LogonUtility:
         self._validation_dbname: Optional[str] = None
         self._schema_format_cache: Dict[type, Dict[str, Any]] = {}
 
+    def _turn_pipeline(self) -> Literal["single_pass", "two_pass"]:
+        """Return the validated non-bootstrap storyteller pipeline lever."""
+
+        apex_settings = self.settings.get("API Settings", {}).get("apex")
+        if not isinstance(apex_settings, Mapping):
+            apex_settings = self.settings.get("apex") or {}
+        turn_pipeline = apex_settings.get("turn_pipeline", "single_pass")
+        if turn_pipeline not in {"single_pass", "two_pass"}:
+            raise ValueError(
+                "API Settings.apex.turn_pipeline must be 'single_pass' or 'two_pass'"
+            )
+        return cast(Literal["single_pass", "two_pass"], turn_pipeline)
+
     def _load_system_prompt(self, is_bootstrap: Optional[bool] = None) -> str:
         """Load and combine storyteller instructions with live slot context."""
         from nexus.api.slot_utils import require_slot_dbname
@@ -361,6 +383,18 @@ class LogonUtility:
         finally:
             if "conn" in locals():
                 conn.close()
+
+    @staticmethod
+    def _load_clerk_system_prompt() -> str:
+        """Load the dedicated clerk instructions without per-turn material."""
+
+        prompts_dir = Path(__file__).parent.parent.parent.parent / "prompts"
+        clerk_prompt_path = prompts_dir / "storyteller_clerk.md"
+        clerk_prompt = clerk_prompt_path.read_text()
+        if not clerk_prompt.strip():
+            raise ValueError(f"Clerk prompt is empty: {clerk_prompt_path}")
+        logger.info("Loaded storyteller clerk prompt (%s chars)", len(clerk_prompt))
+        return clerk_prompt
 
     @staticmethod
     def _format_setting_context(setting_data: Any) -> str:
@@ -517,6 +551,9 @@ class LogonUtility:
 
         # Load system prompt
         system_prompt = self._load_system_prompt(provider_bootstrap_mode)
+        use_two_pass = (
+            not provider_bootstrap_mode and self._turn_pipeline() == "two_pass"
+        )
         anthropic_transport: Literal["native", "prompted"] = "native"
         if provider_type == "anthropic":
             configured_transport = apex_settings.get("anthropic_storyteller_transport")
@@ -530,7 +567,7 @@ class LogonUtility:
                 if provider_bootstrap_mode
                 else cast(Literal["native", "prompted"], configured_transport)
             )
-            if anthropic_transport == "prompted":
+            if anthropic_transport == "prompted" and not use_two_pass:
                 system_prompt = f"{system_prompt}\n\n{skald_wire_prompt_guide()}"
         self._system_prompt = system_prompt
         self._provider_bootstrap_mode = provider_bootstrap_mode
@@ -713,21 +750,30 @@ class LogonUtility:
             prompt,
             effective_context_window=effective_context_window,
         )
-        schema_kwargs = self._schema_format_kwargs(schema_model)
 
         # Get structured completion from provider
         # This returns a tuple of (parsed_object, llm_response)
         try:
-            parsed_response, _llm_response = self.provider.get_structured_completion(
-                prompt,
-                schema_model,
-                **schema_kwargs,
-            )
-            response = self._hydrate_provider_response(
-                parsed_response,
-                schema_model,
-                presence_baseline=presence_baseline,
-            )
+            if self._is_two_pass_turn(schema_model):
+                response = self._generate_narrative_two_pass(
+                    prompt,
+                    presence_baseline=presence_baseline,
+                    effective_context_window=effective_context_window,
+                )
+            else:
+                schema_kwargs = self._schema_format_kwargs(schema_model)
+                parsed_response, _llm_response = (
+                    self.provider.get_structured_completion(
+                        prompt,
+                        schema_model,
+                        **schema_kwargs,
+                    )
+                )
+                response = self._hydrate_provider_response(
+                    parsed_response,
+                    schema_model,
+                    presence_baseline=presence_baseline,
+                )
             logger.debug(
                 "Received structured response with narrative length: %s",
                 len(response.narrative),
@@ -765,21 +811,28 @@ class LogonUtility:
             prompt,
             effective_context_window=effective_context_window,
         )
-        schema_kwargs = self._schema_format_kwargs(schema_model)
 
         try:
-            parsed_response, _llm_response = (
-                await self.provider.get_structured_completion_async(
+            if self._is_two_pass_turn(schema_model):
+                response = await self._generate_narrative_two_pass_async(
                     prompt,
-                    schema_model,
-                    **schema_kwargs,
+                    presence_baseline=presence_baseline,
+                    effective_context_window=effective_context_window,
                 )
-            )
-            response = self._hydrate_provider_response(
-                parsed_response,
-                schema_model,
-                presence_baseline=presence_baseline,
-            )
+            else:
+                schema_kwargs = self._schema_format_kwargs(schema_model)
+                parsed_response, _llm_response = (
+                    await self.provider.get_structured_completion_async(
+                        prompt,
+                        schema_model,
+                        **schema_kwargs,
+                    )
+                )
+                response = self._hydrate_provider_response(
+                    parsed_response,
+                    schema_model,
+                    presence_baseline=presence_baseline,
+                )
             logger.debug(
                 "Received structured response with narrative length: %s",
                 len(response.narrative),
@@ -788,6 +841,204 @@ class LogonUtility:
         except Exception:
             logger.exception("Failed to get structured response")
             raise
+
+    def _is_two_pass_turn(self, schema_model: type) -> bool:
+        """Return whether this non-bootstrap turn uses the bakeoff pipeline."""
+
+        return schema_model is SkaldTurnWire and self._turn_pipeline() == "two_pass"
+
+    def _clone_provider_for_two_pass(
+        self,
+        *,
+        system_prompt: Optional[str],
+        output_validator: Any,
+        anthropic_transport: Optional[Literal["native", "prompted"]] = None,
+    ) -> OpenAIProvider | AnthropicProvider:
+        """Create an isolated provider view for one pass."""
+
+        if self.provider is None:
+            raise RuntimeError("Two-pass generation requires an initialized provider")
+        pass_provider = copy.copy(self.provider)
+        pass_provider.system_prompt = system_prompt
+        pass_provider.output_validator = output_validator
+        if self._provider_wire_type == "anthropic":
+            if anthropic_transport is None:
+                raise ValueError(
+                    "Anthropic two-pass calls require an explicit transport"
+                )
+            cast(AnthropicProvider, pass_provider).structured_transport = (
+                anthropic_transport
+            )
+        elif anthropic_transport is not None:
+            raise ValueError(
+                "Anthropic transport cannot be set for a non-Anthropic provider"
+            )
+        return pass_provider
+
+    def _writer_system_prompt(self) -> Optional[str]:
+        """Return the existing storyteller system prompt for pass one."""
+
+        if self.provider is None:
+            raise RuntimeError("Writer prompt requires an initialized provider")
+        system_prompt = self._system_prompt
+        if system_prompt is None:
+            system_prompt = getattr(self.provider, "system_prompt", None)
+        if system_prompt is not None and not isinstance(system_prompt, str):
+            raise TypeError("Writer system prompt must be a string")
+        return system_prompt
+
+    def _clerk_system_prompt(self) -> str:
+        """Build the pass-two system content for the active provider."""
+
+        system_prompt = self._load_clerk_system_prompt()
+        if self._provider_wire_type == "anthropic":
+            system_prompt = f"{system_prompt}\n\n{skald_clerk_prompt_guide()}"
+        return system_prompt
+
+    @staticmethod
+    def _format_clerk_user_prompt(
+        turn_prompt: str,
+        writer: SkaldWriterWire,
+    ) -> str:
+        """Append the finished writer output to the stable turn context."""
+
+        scene = (
+            writer.scene.model_dump_json(exclude_none=True)
+            if writer.scene is not None
+            else "null"
+        )
+        presence = (
+            writer.presence.model_dump_json(exclude_none=True)
+            if writer.presence is not None
+            else "null"
+        )
+        operations = (
+            writer.operations.model_dump_json(exclude_none=True)
+            if writer.operations is not None
+            else "null"
+        )
+        choices = "\n\n".join(writer.choices)
+        return "\n\n".join(
+            [
+                turn_prompt,
+                "=== FINISHED WRITER NARRATIVE (VERBATIM) ===",
+                writer.narrative,
+                "=== FINISHED WRITER CHOICES (VERBATIM) ===",
+                choices,
+                "=== FINISHED WRITER SCENE (COMPACT JSON) ===",
+                scene,
+                "=== FINISHED WRITER PRESENCE (COMPACT JSON) ===",
+                presence,
+                "=== FINISHED WRITER OPERATIONS (COMPACT JSON) ===",
+                operations,
+            ]
+        )
+
+    def _generate_narrative_two_pass(
+        self,
+        turn_prompt: str,
+        *,
+        presence_baseline: Optional[PresenceBaseline],
+        effective_context_window: Optional[int],
+    ) -> StoryTurnResponse:
+        """Run synchronous writer and clerk calls, then hydrate once."""
+
+        if self.provider is None:
+            raise RuntimeError("Two-pass generation requires an initialized provider")
+        writer_provider = self._clone_provider_for_two_pass(
+            system_prompt=self._writer_system_prompt(),
+            output_validator=None,
+            anthropic_transport=(
+                "native" if self._provider_wire_type == "anthropic" else None
+            ),
+        )
+        writer, _writer_response = writer_provider.get_structured_completion(
+            turn_prompt,
+            SkaldWriterWire,
+            **self._two_pass_schema_format_kwargs(SkaldWriterWire),
+        )
+        if not isinstance(writer, SkaldWriterWire):
+            raise TypeError("LOGON writer pass returned a non-SkaldWriterWire response")
+
+        clerk_prompt = self._format_clerk_user_prompt(turn_prompt, writer)
+        self._enforce_final_prompt_window(
+            clerk_prompt,
+            effective_context_window=effective_context_window,
+        )
+        clerk_provider = self._clone_provider_for_two_pass(
+            system_prompt=self._clerk_system_prompt(),
+            output_validator=getattr(self.provider, "output_validator", None),
+            anthropic_transport=(
+                "prompted" if self._provider_wire_type == "anthropic" else None
+            ),
+        )
+        clerk, _clerk_response = clerk_provider.get_structured_completion(
+            clerk_prompt,
+            SkaldClerkWire,
+            **self._two_pass_schema_format_kwargs(SkaldClerkWire),
+        )
+        if not isinstance(clerk, SkaldClerkWire):
+            raise TypeError("LOGON clerk pass returned a non-SkaldClerkWire response")
+
+        return self._hydrate_provider_response(
+            combine_two_pass(writer, clerk),
+            SkaldTurnWire,
+            presence_baseline=presence_baseline,
+        )
+
+    async def _generate_narrative_two_pass_async(
+        self,
+        turn_prompt: str,
+        *,
+        presence_baseline: Optional[PresenceBaseline],
+        effective_context_window: Optional[int],
+    ) -> StoryTurnResponse:
+        """Run asynchronous writer and clerk calls, then hydrate once."""
+
+        if self.provider is None:
+            raise RuntimeError("Two-pass generation requires an initialized provider")
+        writer_provider = self._clone_provider_for_two_pass(
+            system_prompt=self._writer_system_prompt(),
+            output_validator=None,
+            anthropic_transport=(
+                "native" if self._provider_wire_type == "anthropic" else None
+            ),
+        )
+        writer, _writer_response = (
+            await writer_provider.get_structured_completion_async(
+                turn_prompt,
+                SkaldWriterWire,
+                **self._two_pass_schema_format_kwargs(SkaldWriterWire),
+            )
+        )
+        if not isinstance(writer, SkaldWriterWire):
+            raise TypeError("LOGON writer pass returned a non-SkaldWriterWire response")
+
+        clerk_prompt = self._format_clerk_user_prompt(turn_prompt, writer)
+        self._enforce_final_prompt_window(
+            clerk_prompt,
+            effective_context_window=effective_context_window,
+        )
+        clerk_provider = self._clone_provider_for_two_pass(
+            system_prompt=self._clerk_system_prompt(),
+            output_validator=getattr(self.provider, "output_validator", None),
+            anthropic_transport=(
+                "prompted" if self._provider_wire_type == "anthropic" else None
+            ),
+        )
+        clerk, _clerk_response = await clerk_provider.get_structured_completion_async(
+            clerk_prompt,
+            SkaldClerkWire,
+            **self._two_pass_schema_format_kwargs(SkaldClerkWire),
+        )
+        if not isinstance(clerk, SkaldClerkWire):
+            raise TypeError("LOGON clerk pass returned a non-SkaldClerkWire response")
+
+        return self._hydrate_provider_response(
+            combine_two_pass(writer, clerk),
+            SkaldTurnWire,
+            presence_baseline=presence_baseline,
+        )
 
     def _enforce_final_prompt_window(
         self,
@@ -976,6 +1227,63 @@ class LogonUtility:
             kwargs = {"output_config": anthropic_output_config(schema_model)}
         else:
             kwargs = {}
+
+        self._schema_format_cache[schema_model] = kwargs
+        return kwargs
+
+    def _two_pass_schema_format_kwargs(self, schema_model: type) -> Dict[str, Any]:
+        """Return the frozen writer or clerk transport schema arguments."""
+
+        if schema_model not in {SkaldWriterWire, SkaldClerkWire}:
+            raise TypeError("Two-pass schema formatting requires writer or clerk wire")
+        if self._provider_wire_type is None:
+            raise RuntimeError(
+                "Two-pass schema formatting requires an active provider wire class"
+            )
+        if schema_model in self._schema_format_cache:
+            return self._schema_format_cache[schema_model]
+
+        from nexus.api.native_structured_output import (
+            anthropic_output_config,
+            openai_response_text_format,
+        )
+
+        kwargs: Dict[str, Any]
+        if self._provider_wire_type == "openai":
+            kwargs = {
+                "text_format": (
+                    skald_writer_strict_text_format()
+                    if schema_model is SkaldWriterWire
+                    else skald_clerk_strict_text_format()
+                )
+            }
+        elif self._provider_wire_type == "local":
+            lenient_schema = (
+                skald_writer_lenient_schema()
+                if schema_model is SkaldWriterWire
+                else skald_clerk_lenient_schema()
+            )
+            kwargs = {
+                "text_format": openai_response_text_format(
+                    schema_model,
+                    schema=lenient_schema,
+                )
+            }
+        elif self._provider_wire_type == "anthropic":
+            if schema_model is SkaldWriterWire:
+                kwargs = {
+                    "output_config": anthropic_output_config(
+                        SkaldWriterWire,
+                        schema=skald_writer_lenient_schema(),
+                    )
+                }
+            else:
+                kwargs = {}
+        else:
+            raise ValueError(
+                "Unsupported two-pass provider wire class: "
+                f"{self._provider_wire_type!r}"
+            )
 
         self._schema_format_cache[schema_model] = kwargs
         return kwargs

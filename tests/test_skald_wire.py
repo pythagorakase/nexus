@@ -43,12 +43,20 @@ from nexus.agents.logon.apex_schema import (
 from nexus.agents.logon.skald_wire import (
     PresenceBaseline,
     PresenceRef,
+    SkaldClerkWire,
     SkaldTurnWire,
+    SkaldWriterWire,
     _prompt_guide_type,
+    combine_two_pass,
     hydrate_skald_turn,
+    skald_clerk_lenient_schema,
+    skald_clerk_prompt_guide,
+    skald_clerk_strict_text_format,
     skald_wire_lenient_schema,
     skald_wire_prompt_guide,
     skald_wire_strict_text_format,
+    skald_writer_lenient_schema,
+    skald_writer_strict_text_format,
 )
 from nexus.agents.lore import logon_utility
 from nexus.agents.lore.logon_utility import LogonUtility, read_presence_baseline
@@ -217,6 +225,93 @@ RICH_WIRE_PAYLOAD: dict[str, Any] = {
         }
     ],
 }
+
+
+def test_two_pass_wire_fields_match_and_partition_full_wire() -> None:
+    writer_fields = SkaldWriterWire.model_fields
+    clerk_fields = SkaldClerkWire.model_fields
+    full_fields = SkaldTurnWire.model_fields
+
+    assert list(writer_fields) == [
+        "narrative",
+        "choices",
+        "scene",
+        "presence",
+        "operations",
+    ]
+    assert list(clerk_fields) == [
+        "updates",
+        "orrery_adjudications",
+        "new_entities",
+    ]
+    assert set(writer_fields).isdisjoint(clerk_fields)
+    assert set(writer_fields) | set(clerk_fields) == set(full_fields)
+
+    for field_name, split_field in {**writer_fields, **clerk_fields}.items():
+        full_field = full_fields[field_name]
+        assert split_field.annotation == full_field.annotation
+        assert split_field.default == full_field.default
+        assert split_field.default_factory == full_field.default_factory
+        assert split_field.description == full_field.description
+        assert split_field.metadata == full_field.metadata
+
+
+def test_combine_two_pass_is_property_complete() -> None:
+    writer = SkaldWriterWire.model_validate(
+        {
+            field_name: field_value
+            for field_name, field_value in RICH_WIRE_PAYLOAD.items()
+            if field_name in SkaldWriterWire.model_fields
+        }
+    )
+    clerk = SkaldClerkWire.model_validate(
+        {
+            field_name: field_value
+            for field_name, field_value in RICH_WIRE_PAYLOAD.items()
+            if field_name in SkaldClerkWire.model_fields
+        }
+    )
+
+    sources = {
+        field_name: getattr(source, field_name)
+        for source in (writer, clerk)
+        for field_name in source.__class__.model_fields
+    }
+    assert set(sources) == set(SkaldTurnWire.model_fields)
+
+    combined = combine_two_pass(writer, clerk)
+    for field_name in SkaldTurnWire.model_fields:
+        assert getattr(combined, field_name) == sources[field_name]
+    assert combined.model_dump(mode="json") == SkaldTurnWire.model_validate(
+        RICH_WIRE_PAYLOAD
+    ).model_dump(mode="json")
+
+
+def test_two_pass_strict_and_lenient_schema_shapes() -> None:
+    writer_strict = skald_writer_strict_text_format()
+    clerk_strict = skald_clerk_strict_text_format()
+    writer_lenient = skald_writer_lenient_schema()
+    clerk_lenient = skald_clerk_lenient_schema()
+
+    assert writer_strict["name"] == "SkaldWriterWire"
+    assert clerk_strict["name"] == "SkaldClerkWire"
+    assert set(writer_strict["schema"]["properties"]) == set(
+        SkaldWriterWire.model_fields
+    )
+    assert set(clerk_strict["schema"]["properties"]) == set(SkaldClerkWire.model_fields)
+    assert set(writer_strict["schema"]["required"]) == set(SkaldWriterWire.model_fields)
+    assert set(clerk_strict["schema"]["required"]) == set(SkaldClerkWire.model_fields)
+    assert writer_strict["schema"]["additionalProperties"] is False
+    assert clerk_strict["schema"]["additionalProperties"] is False
+
+    assert set(writer_lenient["properties"]) == set(SkaldWriterWire.model_fields)
+    assert set(clerk_lenient["properties"]) == set(SkaldClerkWire.model_fields)
+    assert writer_lenient["required"] == ["narrative", "choices"]
+    assert clerk_lenient.get("required", []) == []
+    assert writer_lenient["additionalProperties"] is False
+    assert clerk_lenient["additionalProperties"] is False
+    assert "anyOf" not in writer_lenient["properties"]["scene"]
+    assert "anyOf" not in clerk_lenient["properties"]["updates"]
 
 
 def _assert_canonical_fields_equal(
@@ -1009,6 +1104,24 @@ def test_skald_wire_prompt_guide_is_deterministic_and_complete() -> None:
             assert matching_lines[0][len(prefix) :].split("|", 1)[0]
 
 
+def test_skald_clerk_prompt_guide_is_deterministic_and_complete() -> None:
+    schema = skald_clerk_lenient_schema()
+    first = skald_clerk_prompt_guide()
+
+    assert first == skald_clerk_prompt_guide()
+    assert first.startswith("=== OUTPUT FORMAT ===\n")
+    rendered_property_names = []
+    for line in first.splitlines():
+        field_label = line.split(":", 1)[0]
+        if field_label.endswith(("!", "?")):
+            rendered_property_names.append(field_label[:-1])
+    assert Counter(rendered_property_names) == Counter(
+        _reachable_schema_property_names(schema)
+    )
+    for object_name, _object_schema in _reachable_schema_objects(schema):
+        assert first.count(f"{object_name}{{\n") == 1
+
+
 def test_skald_wire_prompt_guide_preserves_enum_values_verbatim() -> None:
     guide = skald_wire_prompt_guide()
 
@@ -1033,6 +1146,13 @@ def test_skald_wire_prompt_guide_stays_within_token_budget() -> None:
     encoding = tiktoken.get_encoding("o200k_base")
 
     assert len(encoding.encode(skald_wire_prompt_guide())) <= 1_400
+
+
+def test_skald_clerk_prompt_guide_stays_within_token_budget() -> None:
+    tiktoken = pytest.importorskip("tiktoken")
+    encoding = tiktoken.get_encoding("o200k_base")
+
+    assert len(encoding.encode(skald_clerk_prompt_guide())) <= 900
 
 
 def test_wire_schema_size_and_description_budget() -> None:

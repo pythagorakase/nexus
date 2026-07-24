@@ -118,6 +118,20 @@ def test_apex_rejects_unknown_anthropic_storyteller_transport() -> None:
         Settings(**raw)
 
 
+def test_shipped_turn_pipeline_defaults_to_single_pass() -> None:
+    settings = Settings(**_nexus_toml_dict())
+
+    assert settings.apex.turn_pipeline == "single_pass"
+
+
+def test_apex_rejects_unknown_turn_pipeline() -> None:
+    raw = _nexus_toml_dict()
+    raw["apex"]["turn_pipeline"] = "fallback"
+
+    with pytest.raises(ValidationError, match="turn_pipeline"):
+        Settings(**raw)
+
+
 def test_token_budget_provider_overrides_parse() -> None:
     """Legal provider-class reductions survive settings validation."""
     settings = Settings(**_nexus_toml_dict())

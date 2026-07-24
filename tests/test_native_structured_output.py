@@ -13,7 +13,12 @@ from nexus.agents.logon.apex_schema import (
     StorytellerResponseBootstrap,
     StorytellerResponseExtended,
 )
-from nexus.agents.logon.skald_wire import SkaldTurnWire, skald_wire_lenient_schema
+from nexus.agents.logon.skald_wire import (
+    SkaldTurnWire,
+    SkaldWriterWire,
+    skald_wire_lenient_schema,
+)
+from nexus.agents.lore.logon_utility import LogonUtility
 from nexus.api.new_story_schemas import SettingCard, StorySeedSubmission, WizardResponse
 from nexus.api.native_structured_output import (
     ANTHROPIC_UNSUPPORTED_SCHEMA_KEYS,
@@ -71,6 +76,17 @@ def _contains_nullable_any_of(value: object) -> bool:
     if isinstance(value, list):
         return any(_contains_nullable_any_of(item) for item in value)
     return False
+
+
+def _count_union_typed_nodes(value: object) -> int:
+    if isinstance(value, dict):
+        is_union = "anyOf" in value or isinstance(value.get("type"), list)
+        return int(is_union) + sum(
+            _count_union_typed_nodes(item) for item in value.values()
+        )
+    if isinstance(value, list):
+        return sum(_count_union_typed_nodes(item) for item in value)
+    return 0
 
 
 def _assert_property_maps_are_consistent(value: object, path: str = "$") -> None:
@@ -205,6 +221,16 @@ def test_anthropic_preserves_wire_updates_namespace_after_lenient_transform() ->
     assert not _contains_key(transformed, "oneOf")
     assert not _contains_key(transformed, "discriminator")
     assert not _contains_key(transformed, "anyOf")
+
+
+def test_two_pass_writer_native_output_config_has_no_union_typed_nodes() -> None:
+    utility = LogonUtility({})
+    utility._provider_wire_type = "anthropic"
+
+    kwargs = utility._two_pass_schema_format_kwargs(SkaldWriterWire)
+
+    assert set(kwargs) == {"output_config"}
+    assert _count_union_typed_nodes(kwargs["output_config"]) == 0
 
 
 def test_anthropic_one_of_rewrite_recurses_through_lists_and_dicts() -> None:
