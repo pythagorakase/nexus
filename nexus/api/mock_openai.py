@@ -1096,7 +1096,7 @@ async def responses_create(request: ResponsesRequest):
 
     # Exact routing: the structured-output tool's schema says which
     # Storyteller response the caller validates against. Turn requests
-    # (SkaldTurnWire) carry updates; bootstrap requests
+    # (SkaldTurnWire) expose the optional updates namespace; bootstrap requests
     # (StorytellerResponseBootstrap) do not.
     output_fields = _requested_output_properties(request)
     if output_fields:

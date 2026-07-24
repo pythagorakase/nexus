@@ -6,7 +6,7 @@ per-chunk mentions, never members of the carried scene roster.
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Dict, List, Literal, Optional, Union
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -179,7 +179,6 @@ class PresenceBaseline(BaseModel):
 class CharacterUpdateDelta(BaseModel):
     """Sparse character state changes."""
 
-    kind: Literal["character"] = Field(description="Character update.")
     name: str = Field(min_length=1, description="Canonical character name.")
     id: Optional[int] = Field(default=None, description="Canonical ID when known.")
     activity: Optional[str] = Field(default=None, description="Current activity.")
@@ -224,7 +223,6 @@ class CharacterUpdateDelta(BaseModel):
 class PlaceUpdateDelta(BaseModel):
     """Sparse place state changes."""
 
-    kind: Literal["place"] = Field(description="Place update.")
     name: str = Field(min_length=1, description="Canonical place name.")
     id: Optional[int] = Field(default=None, description="Canonical ID when known.")
     condition: Optional[str] = Field(default=None, description="Current conditions.")
@@ -262,7 +260,6 @@ class PlaceUpdateDelta(BaseModel):
 class FactionUpdateDelta(BaseModel):
     """Sparse faction state changes."""
 
-    kind: Literal["faction"] = Field(description="Faction update.")
     name: str = Field(min_length=1, description="Canonical faction name.")
     id: Optional[int] = Field(default=None, description="Canonical ID when known.")
     action: Optional[str] = Field(default=None, description="One recent action.")
@@ -303,7 +300,6 @@ class FactionUpdateDelta(BaseModel):
 class RelationshipUpdateDelta(BaseModel):
     """Sparse relationship state changes."""
 
-    kind: Literal["relationship"] = Field(description="Relationship update.")
     name: str = Field(min_length=1, description="First character name.")
     other_name: str = Field(min_length=1, description="Second character name.")
     id: Optional[int] = Field(default=None, description="First character ID.")
@@ -344,15 +340,19 @@ class RelationshipUpdateDelta(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
 
-UpdateDelta = Annotated[
-    Union[
-        CharacterUpdateDelta,
-        PlaceUpdateDelta,
-        FactionUpdateDelta,
-        RelationshipUpdateDelta,
-    ],
-    Field(discriminator="kind"),
-]
+class UpdatesBlock(BaseModel):
+    """Namespaced semantic state changes."""
+
+    characters: List[CharacterUpdateDelta] = Field(
+        description="Character state changes."
+    )
+    places: List[PlaceUpdateDelta] = Field(description="Place state changes.")
+    factions: List[FactionUpdateDelta] = Field(description="Faction state changes.")
+    relationships: List[RelationshipUpdateDelta] = Field(
+        description="Relationship state changes."
+    )
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class SkaldTurnWire(BaseModel):
@@ -372,8 +372,8 @@ class SkaldTurnWire(BaseModel):
         default=None,
         description="Scene presence and reference changes.",
     )
-    updates: List[UpdateDelta] = Field(
-        default_factory=list,
+    updates: Optional[UpdatesBlock] = Field(
+        default=None,
         description="Durable semantic state changes.",
     )
     operations: Optional[Operations] = Field(
@@ -557,83 +557,87 @@ def _hydrate_tags(
     )
 
 
-def _hydrate_updates(updates: List[UpdateDelta]) -> StateUpdates:
-    """Map semantic update arms to canonical nested state lists."""
+def _hydrate_updates(updates: Optional[UpdatesBlock]) -> StateUpdates:
+    """Map namespaced semantic updates to canonical nested state lists."""
+
+    if updates is None:
+        return StateUpdates()
 
     characters: List[CharacterStateUpdate] = []
     locations: List[LocationStateUpdate] = []
     factions: List[FactionStateUpdate] = []
     relationships: List[RelationshipUpdate] = []
 
-    for update in updates:
-        if isinstance(update, CharacterUpdateDelta):
-            characters.append(
-                CharacterStateUpdate(
-                    character_id=update.id,
-                    character_name=update.name,
-                    current_location=update.location,
-                    current_activity=update.activity,
-                    emotional_state=update.emotional_state,
-                    extra_observations=update.observations or [],
-                    orrery_tags=_hydrate_tags(
-                        update.tags_add,
-                        update.tags_clear,
-                    ),
-                )
+    for character_update in updates.characters:
+        characters.append(
+            CharacterStateUpdate(
+                character_id=character_update.id,
+                character_name=character_update.name,
+                current_location=character_update.location,
+                current_activity=character_update.activity,
+                emotional_state=character_update.emotional_state,
+                extra_observations=character_update.observations or [],
+                orrery_tags=_hydrate_tags(
+                    character_update.tags_add,
+                    character_update.tags_clear,
+                ),
             )
-        elif isinstance(update, PlaceUpdateDelta):
-            locations.append(
-                LocationStateUpdate(
-                    place_id=update.id,
-                    place_name=update.name,
-                    current_conditions=update.condition,
-                    notable_changes=(
-                        [update.notable_change]
-                        if update.notable_change is not None
-                        else []
-                    ),
-                    orrery_tags=_hydrate_tags(
-                        update.tags_add,
-                        update.tags_clear,
-                    ),
-                )
+        )
+    for place_update in updates.places:
+        locations.append(
+            LocationStateUpdate(
+                place_id=place_update.id,
+                place_name=place_update.name,
+                current_conditions=place_update.condition,
+                notable_changes=(
+                    [place_update.notable_change]
+                    if place_update.notable_change is not None
+                    else []
+                ),
+                orrery_tags=_hydrate_tags(
+                    place_update.tags_add,
+                    place_update.tags_clear,
+                ),
             )
-        elif isinstance(update, FactionUpdateDelta):
-            factions.append(
-                FactionStateUpdate(
-                    faction_id=update.id,
-                    faction_name=update.name,
-                    recent_actions=[update.action] if update.action is not None else [],
-                    stance_changes=(
-                        [
-                            FactionStanceChange(
-                                target=update.stance_toward,
-                                stance=update.stance,
-                            )
-                        ]
-                        if update.stance_toward is not None
-                        and update.stance is not None
-                        else []
-                    ),
-                    orrery_tags=_hydrate_tags(
-                        update.tags_add,
-                        update.tags_clear,
-                    ),
-                )
+        )
+    for faction_update in updates.factions:
+        factions.append(
+            FactionStateUpdate(
+                faction_id=faction_update.id,
+                faction_name=faction_update.name,
+                recent_actions=(
+                    [faction_update.action] if faction_update.action is not None else []
+                ),
+                stance_changes=(
+                    [
+                        FactionStanceChange(
+                            target=faction_update.stance_toward,
+                            stance=faction_update.stance,
+                        )
+                    ]
+                    if faction_update.stance_toward is not None
+                    and faction_update.stance is not None
+                    else []
+                ),
+                orrery_tags=_hydrate_tags(
+                    faction_update.tags_add,
+                    faction_update.tags_clear,
+                ),
             )
-        else:
-            relationships.append(
-                RelationshipUpdate(
-                    character1_id=update.id,
-                    character1_name=update.name,
-                    character2_id=update.other_id,
-                    character2_name=update.other_name,
-                    relationship_type=update.type,
-                    emotional_valence=update.valence,
-                    dynamic=update.dynamic,
-                    recent_events=update.recent_events,
-                )
+        )
+    for relationship_update in updates.relationships:
+        relationships.append(
+            RelationshipUpdate(
+                character1_id=relationship_update.id,
+                character1_name=relationship_update.name,
+                character2_id=relationship_update.other_id,
+                character2_name=relationship_update.other_name,
+                relationship_type=relationship_update.type,
+                emotional_valence=relationship_update.valence,
+                dynamic=relationship_update.dynamic,
+                recent_events=relationship_update.recent_events,
             )
+        )
 
     return StateUpdates(
         characters=characters,

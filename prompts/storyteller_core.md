@@ -107,7 +107,7 @@ Design heritage: Bethesda's Creation Engine (radiant routines, faction state) cr
 **When to apply tags.**
 
 - **New entities** — when declaring a new character / place / faction via `new_entities[].tag_hints`. Apply registered tags by name.
-- **Existing entities** — when an existing character, place, or faction changes, use its matching `updates[]` arm:
+- **Existing entities** — when an existing character, place, or faction changes, use its matching `updates.characters`, `updates.places`, or `updates.factions` array:
   - `tags_add` — add a registered tag that newly applies (the apprentice just bound her first geas → `geas_caster`)
   - `tags_clear` — retire an ephemeral that no longer applies (the pursuers gave up → clear `under_active_pursuit`)
 
@@ -167,7 +167,7 @@ Structured output uses `StorytellerResponseBootstrap` for chunk 1 and `SkaldTurn
 
 - `scene` — only changed chronology or scene attributes. Omit it when nothing changed.
 - `presence` — character `enter` / `exit`, absent-entity `mentions`, and place `transit`. Silence carries the roster and setting forward. On relocation or a scene cut, use `scene_reset` with the new setting place and complete present-character roster; on a reset, list the full roster instead of `enter` / `exit`. Factions appear only in `mentions`.
-- `updates` — semantic deltas for characters, places, factions, and relationships. Record only durable changes, never unchanged state.
+- `updates` — optional object for durable semantic changes. When present, include all four arrays: `characters`, `places`, `factions`, and `relationships`; each array may be empty. Omit the whole block when there are no updates.
 - `new_entities` — persistent declarations under the doctrine below.
 
 **Off-screen updates.** Use `updates` for a few background characters or places when their state genuinely advances. Prioritize narrative pull: consequences, parallel plots, thematic echoes, or future convergence. Small mundane changes can maintain the world's pulse; do not emit unchanged-state filler.

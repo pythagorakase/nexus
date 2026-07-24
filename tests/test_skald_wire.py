@@ -92,6 +92,24 @@ BASELINE = PresenceBaseline(
     setting=PresenceRef(kind="place", name="The Lower Sluice", id=41),
 )
 
+
+def _updates_payload(
+    *,
+    characters: list[dict[str, Any]] | None = None,
+    places: list[dict[str, Any]] | None = None,
+    factions: list[dict[str, Any]] | None = None,
+    relationships: list[dict[str, Any]] | None = None,
+) -> dict[str, list[dict[str, Any]]]:
+    """Build the complete provider-facing updates namespace."""
+
+    return {
+        "characters": characters or [],
+        "places": places or [],
+        "factions": factions or [],
+        "relationships": relationships or [],
+    }
+
+
 RICH_WIRE_PAYLOAD: dict[str, Any] = {
     "narrative": "Brena follows the bell-sound through the flooded stacks.",
     "choices": [
@@ -114,49 +132,53 @@ RICH_WIRE_PAYLOAD: dict[str, Any] = {
         ],
         "transit": [{"kind": "place", "name": "The East Lock", "id": 43}],
     },
-    "updates": [
-        {
-            "kind": "character",
-            "name": "Brena Tideloft",
-            "id": 7,
-            "activity": "tracking the drowned clerk",
-            "location": 41,
-            "emotional_state": "alert but composed",
-            "observations": [{"key": "clue", "value": "heard the drowned bell"}],
-            "tags_add": ["perceptive", "alert"],
-            "tags_clear": ["resting"],
-        },
-        {
-            "kind": "place",
-            "name": "The Lower Sluice",
-            "id": 41,
-            "condition": "Floodwater rising between the stacks.",
-            "notable_change": "The archive bell is ringing underwater.",
-            "tags_add": ["hazardous"],
-            "tags_clear": ["sheltered"],
-        },
-        {
-            "kind": "faction",
-            "name": "The Sluice Guild",
-            "id": 12,
-            "action": "Sealed the eastern lock.",
-            "stance_toward": "Brena Tideloft",
-            "stance": "watchful cooperation",
-            "tags_add": ["mobilized"],
-            "tags_clear": ["dormant"],
-        },
-        {
-            "kind": "relationship",
-            "name": "Brena Tideloft",
-            "other_name": "Odile",
-            "id": 7,
-            "other_id": 8,
-            "type": "ally",
-            "valence": "+2|friendly",
-            "dynamic": "Trust sharpened by shared danger.",
-            "recent_events": "Odile stayed behind at the eastern lock.",
-        },
-    ],
+    "updates": _updates_payload(
+        characters=[
+            {
+                "name": "Brena Tideloft",
+                "id": 7,
+                "activity": "tracking the drowned clerk",
+                "location": 41,
+                "emotional_state": "alert but composed",
+                "observations": [{"key": "clue", "value": "heard the drowned bell"}],
+                "tags_add": ["perceptive", "alert"],
+                "tags_clear": ["resting"],
+            }
+        ],
+        places=[
+            {
+                "name": "The Lower Sluice",
+                "id": 41,
+                "condition": "Floodwater rising between the stacks.",
+                "notable_change": "The archive bell is ringing underwater.",
+                "tags_add": ["hazardous"],
+                "tags_clear": ["sheltered"],
+            }
+        ],
+        factions=[
+            {
+                "name": "The Sluice Guild",
+                "id": 12,
+                "action": "Sealed the eastern lock.",
+                "stance_toward": "Brena Tideloft",
+                "stance": "watchful cooperation",
+                "tags_add": ["mobilized"],
+                "tags_clear": ["dormant"],
+            }
+        ],
+        relationships=[
+            {
+                "name": "Brena Tideloft",
+                "other_name": "Odile",
+                "id": 7,
+                "other_id": 8,
+                "type": "ally",
+                "valence": "+2|friendly",
+                "dynamic": "Trust sharpened by shared danger.",
+                "recent_events": "Odile stayed behind at the eastern lock.",
+            }
+        ],
+    ),
     "operations": {
         "request_summary": {
             "summary_type": "episode",
@@ -333,14 +355,15 @@ def _rich_canonical_expectation(wire: SkaldTurnWire) -> StorytellerResponseExten
     )
 
 
-def test_rich_wire_hydrates_every_block_field_by_field() -> None:
+def test_rich_wire_hydrates_mixed_update_namespaces_field_by_field() -> None:
     wire = SkaldTurnWire.model_validate(RICH_WIRE_PAYLOAD)
     actual = hydrate_skald_turn(wire, presence_baseline=BASELINE)
     _assert_canonical_fields_equal(actual, _rich_canonical_expectation(wire))
 
 
 def test_sparse_prose_only_wire_needs_no_baseline() -> None:
-    hydrated = hydrate_skald_turn(SkaldTurnWire.model_validate(SPARSE_WIRE_PAYLOAD))
+    wire = SkaldTurnWire.model_validate(SPARSE_WIRE_PAYLOAD)
+    hydrated = hydrate_skald_turn(wire)
     expected = StorytellerResponseExtended(
         narrative=str(SPARSE_WIRE_PAYLOAD["narrative"]),
         choices=list(SPARSE_WIRE_PAYLOAD["choices"]),
@@ -352,7 +375,87 @@ def test_sparse_prose_only_wire_needs_no_baseline() -> None:
         new_entities=[],
         reasoning=None,
     )
+    assert wire.updates is None
     _assert_canonical_fields_equal(hydrated, expected)
+
+
+def test_present_empty_updates_block_hydrates_to_empty_state_updates() -> None:
+    wire = SkaldTurnWire.model_validate(
+        {**SPARSE_WIRE_PAYLOAD, "updates": _updates_payload()}
+    )
+
+    assert wire.updates is not None
+    assert hydrate_skald_turn(wire).state_updates == StateUpdates()
+
+
+@pytest.mark.parametrize(
+    ("namespace", "item", "state_field", "expected"),
+    [
+        (
+            "characters",
+            {"name": "Brena Tideloft", "activity": "keeping watch"},
+            "characters",
+            CharacterStateUpdate(
+                character_name="Brena Tideloft",
+                current_activity="keeping watch",
+            ),
+        ),
+        (
+            "places",
+            {"name": "The Lower Sluice", "condition": "The lock is sealed."},
+            "locations",
+            LocationStateUpdate(
+                place_name="The Lower Sluice",
+                current_conditions="The lock is sealed.",
+            ),
+        ),
+        (
+            "factions",
+            {"name": "The Sluice Guild", "action": "Sealed the eastern lock."},
+            "factions",
+            FactionStateUpdate(
+                faction_name="The Sluice Guild",
+                recent_actions=["Sealed the eastern lock."],
+            ),
+        ),
+        (
+            "relationships",
+            {
+                "name": "Brena Tideloft",
+                "other_name": "Odile",
+                "dynamic": "Wary cooperation.",
+            },
+            "relationships",
+            RelationshipUpdate(
+                character1_name="Brena Tideloft",
+                character2_name="Odile",
+                dynamic="Wary cooperation.",
+            ),
+        ),
+    ],
+)
+def test_each_update_namespace_hydrates_its_canonical_list(
+    namespace: str,
+    item: dict[str, Any],
+    state_field: str,
+    expected: BaseModel,
+) -> None:
+    wire = SkaldTurnWire.model_validate(
+        {
+            **SPARSE_WIRE_PAYLOAD,
+            "updates": _updates_payload(**{namespace: [item]}),
+        }
+    )
+
+    state_updates = hydrate_skald_turn(wire).state_updates
+    assert getattr(state_updates, state_field) == [expected]
+    assert (
+        sum(
+            bool(getattr(state_updates, field_name))
+            for field_name in ("characters", "locations", "factions", "relationships")
+        )
+        == 1
+    )
 
 
 def test_explicit_null_scene_still_validates_and_hydrates_to_defaults() -> None:
@@ -537,23 +640,26 @@ def test_presence_rejects_same_name_in_enter_and_exit_casefolded() -> None:
 
 
 @pytest.mark.parametrize(
-    ("update", "message"),
+    ("namespace", "update", "message"),
     [
         (
-            {"kind": "character", "name": "Brena Tideloft"},
+            "characters",
+            {"name": "Brena Tideloft"},
             "character update requires a substantive field",
         ),
         (
-            {"kind": "place", "name": "The Lower Sluice"},
+            "places",
+            {"name": "The Lower Sluice"},
             "place update requires a substantive field",
         ),
         (
-            {"kind": "faction", "name": "The Sluice Guild"},
+            "factions",
+            {"name": "The Sluice Guild"},
             "faction update requires a substantive field",
         ),
         (
+            "relationships",
             {
-                "kind": "relationship",
                 "name": "Brena Tideloft",
                 "other_name": "Odile",
             },
@@ -562,11 +668,49 @@ def test_presence_rejects_same_name_in_enter_and_exit_casefolded() -> None:
     ],
 )
 def test_update_arms_require_substantive_fields(
+    namespace: str,
     update: dict[str, Any],
     message: str,
 ) -> None:
     with pytest.raises(ValidationError, match=message):
-        SkaldTurnWire.model_validate({**SPARSE_WIRE_PAYLOAD, "updates": [update]})
+        SkaldTurnWire.model_validate(
+            {
+                **SPARSE_WIRE_PAYLOAD,
+                "updates": _updates_payload(**{namespace: [update]}),
+            }
+        )
+
+
+@pytest.mark.parametrize(
+    "missing_namespace",
+    ["characters", "places", "factions", "relationships"],
+)
+def test_present_updates_block_requires_every_namespace(
+    missing_namespace: str,
+) -> None:
+    updates = _updates_payload()
+    del updates[missing_namespace]
+
+    with pytest.raises(ValidationError, match="Field required"):
+        SkaldTurnWire.model_validate({**SPARSE_WIRE_PAYLOAD, "updates": updates})
+
+
+def test_update_items_reject_removed_kind_discriminator() -> None:
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        SkaldTurnWire.model_validate(
+            {
+                **SPARSE_WIRE_PAYLOAD,
+                "updates": _updates_payload(
+                    characters=[
+                        {
+                            "kind": "character",
+                            "name": "Brena Tideloft",
+                            "activity": "keeping watch",
+                        }
+                    ]
+                ),
+            }
+        )
 
 
 def test_faction_stance_fields_must_travel_together() -> None:
@@ -577,13 +721,14 @@ def test_faction_stance_fields_must_travel_together() -> None:
         SkaldTurnWire.model_validate(
             {
                 **SPARSE_WIRE_PAYLOAD,
-                "updates": [
-                    {
-                        "kind": "faction",
-                        "name": "Guild",
-                        "stance_toward": "Brena",
-                    }
-                ],
+                "updates": _updates_payload(
+                    factions=[
+                        {
+                            "name": "Guild",
+                            "stance_toward": "Brena",
+                        }
+                    ]
+                ),
             }
         )
 
@@ -626,14 +771,18 @@ def test_lenient_sparse_round_trip_has_no_scaffold_keys() -> None:
         "default": None,
         "description": "Changed chronology or scene attributes.",
     }
-    update_items = schema["properties"]["updates"]["items"]
-    assert update_items["discriminator"]["propertyName"] == "kind"
-    assert set(update_items["discriminator"]["mapping"]) == {
-        "character",
-        "place",
-        "faction",
-        "relationship",
+    assert schema["properties"]["updates"] == {
+        "$ref": "#/$defs/UpdatesBlock",
+        "default": None,
+        "description": "Durable semantic state changes.",
     }
+    assert schema["$defs"]["UpdatesBlock"]["required"] == [
+        "characters",
+        "places",
+        "factions",
+        "relationships",
+    ]
+    assert "anyOf" not in schema["properties"]["updates"]
 
     serialized = json.dumps(SPARSE_WIRE_PAYLOAD, separators=(",", ":"))
     wire = SkaldTurnWire.model_validate_json(serialized)
@@ -645,6 +794,17 @@ def test_openai_strict_wire_keeps_required_nullable_spelling() -> None:
 
     assert "scene" in schema["required"]
     assert {"type": "null"} in schema["properties"]["scene"]["anyOf"]
+    assert "updates" in schema["required"]
+    assert schema["properties"]["updates"]["anyOf"] == [
+        {"$ref": "#/$defs/UpdatesBlock"},
+        {"type": "null"},
+    ]
+    assert schema["$defs"]["UpdatesBlock"]["required"] == [
+        "characters",
+        "places",
+        "factions",
+        "relationships",
+    ]
 
 
 def _compact_schema_json(schema: dict[str, Any]) -> str:
@@ -728,15 +888,14 @@ def test_lenient_wire_closes_every_object_schema_node() -> None:
     assert open_object_nodes == []
 
 
-def test_anthropic_wire_stays_within_union_parameter_budget() -> None:
+def test_shipped_anthropic_wire_has_no_union_typed_schema_nodes() -> None:
     utility = LogonUtility({})
     utility._provider_wire_type = "anthropic"
     schema = utility._schema_format_kwargs(SkaldTurnWire)["output_config"]["format"][
         "schema"
     ]
 
-    # Anthropic's live #566 error: "20 parameters with union types... limit: 16".
-    assert _count_union_typed_parameters(schema) <= 16
+    assert _count_union_typed_parameters(schema) == 0
 
 
 def test_wire_schema_size_and_description_budget() -> None:
@@ -888,6 +1047,9 @@ async def test_async_non_bootstrap_logon_requires_parent_chunk_id() -> None:
 def test_storyteller_prompt_defines_reset_and_world_layer_semantics() -> None:
     prompt = (Path(__file__).parents[1] / "prompts" / "storyteller_core.md").read_text()
     assert "on a reset, list the full roster instead of `enter` / `exit`" in prompt
+    assert "When present, include all four arrays" in prompt
+    assert "Omit the whole block when there are no updates" in prompt
+    assert "`updates[]`" not in prompt
     assert "A flashback is a scene set in the past" in prompt
     assert "atemporal means dreams or time-abnormal realms" in prompt
     assert "extradiegetic means the user addressing out-of-game" in prompt

@@ -171,41 +171,63 @@ def _storyteller_response(
     *,
     tag_hints: Optional[List[str]] = None,
     pair_tag_hints: Optional[List[dict[str, str]]] = None,
-    updates: Optional[List[dict[str, Any]]] = None,
+    updates: Optional[dict[str, List[dict[str, Any]]]] = None,
     orrery_adjudications: Optional[List[dict[str, Any]]] = None,
 ) -> SkaldTurnWire:
-    return SkaldTurnWire.model_validate(
-        {
-            "narrative": "Marra Kest steps out from behind the sluice gate.",
-            "choices": ["Question Marra.", "Keep walking."],
-            "updates": updates or [],
-            "orrery_adjudications": orrery_adjudications or [],
-            "new_entities": [
-                {
-                    "kind": "character",
-                    "name": "Marra Kest",
-                    "summary": "A sluice keeper with divided loyalties.",
-                    "tag_hints": tag_hints or [],
-                    "pair_tag_hints": pair_tag_hints or [],
-                }
-            ],
-        }
-    )
+    payload: dict[str, Any] = {
+        "narrative": "Marra Kest steps out from behind the sluice gate.",
+        "choices": ["Question Marra.", "Keep walking."],
+        "orrery_adjudications": orrery_adjudications or [],
+        "new_entities": [
+            {
+                "kind": "character",
+                "name": "Marra Kest",
+                "summary": "A sluice keeper with divided loyalties.",
+                "tag_hints": tag_hints or [],
+                "pair_tag_hints": pair_tag_hints or [],
+            }
+        ],
+    }
+    if updates is not None:
+        payload["updates"] = updates
+    return SkaldTurnWire.model_validate(payload)
 
 
-def _state_updates_with_tag(
+def _updates_block(
+    *,
+    characters: Optional[List[dict[str, Any]]] = None,
+    places: Optional[List[dict[str, Any]]] = None,
+    factions: Optional[List[dict[str, Any]]] = None,
+    relationships: Optional[List[dict[str, Any]]] = None,
+) -> dict[str, List[dict[str, Any]]]:
+    """Build the complete provider-facing updates namespace."""
+
+    return {
+        "characters": characters or [],
+        "places": places or [],
+        "factions": factions or [],
+        "relationships": relationships or [],
+    }
+
+
+def _updates_block_with_tag(
     kind: str,
     name: str,
     field_name: str,
     tag_name: str,
-) -> List[dict[str, Any]]:
+) -> dict[str, List[dict[str, Any]]]:
     """Build one semantic update with an Orrery tag delta."""
 
     wire_field = {
         "applied_tags": "tags_add",
         "tags_to_clear": "tags_clear",
     }[field_name]
-    return [{"kind": kind, "name": name, wire_field: [tag_name]}]
+    array_name = {
+        "character": "characters",
+        "place": "places",
+        "faction": "factions",
+    }[kind]
+    return _updates_block(**{array_name: [{"name": name, wire_field: [tag_name]}]})
 
 
 def test_valid_bestowals_produce_no_issues() -> None:
@@ -292,7 +314,7 @@ def test_cached_catalog_validates_single_tags_per_kind_and_field(
     canonical_field: str,
 ) -> None:
     valid = _storyteller_response(
-        updates=_state_updates_with_tag(
+        updates=_updates_block_with_tag(
             kind,
             f"Known {kind}",
             canonical_field,
@@ -300,7 +322,7 @@ def test_cached_catalog_validates_single_tags_per_kind_and_field(
         )
     )
     invalid = _storyteller_response(
-        updates=_state_updates_with_tag(
+        updates=_updates_block_with_tag(
             kind,
             f"Known {kind}",
             canonical_field,
@@ -666,14 +688,15 @@ async def test_storyteller_validator_reads_each_catalog_once_per_attempt(
                 "declared_entity_role": "subject",
             }
         ],
-        updates=[
-            {
-                "kind": "character",
-                "name": "Brena Tideloft",
-                "tags_add": ["human"],
-                "tags_clear": ["perceptive"],
-            }
-        ],
+        updates=_updates_block(
+            characters=[
+                {
+                    "name": "Brena Tideloft",
+                    "tags_add": ["human"],
+                    "tags_clear": ["perceptive"],
+                }
+            ]
+        ),
         orrery_adjudications=[
             {
                 "proposal_id": "proposal-1",
@@ -914,7 +937,7 @@ def _retry_boundary_response(
 ) -> SkaldTurnWire:
     if boundary == "character_applied_tags":
         return _storyteller_response(
-            updates=_state_updates_with_tag(
+            updates=_updates_block_with_tag(
                 "character",
                 "Brena Tideloft",
                 "applied_tags",
@@ -923,7 +946,7 @@ def _retry_boundary_response(
         )
     if boundary == "place_tags_to_clear":
         return _storyteller_response(
-            updates=_state_updates_with_tag(
+            updates=_updates_block_with_tag(
                 "place",
                 "The Lower Sluice",
                 "tags_to_clear",
@@ -932,7 +955,7 @@ def _retry_boundary_response(
         )
     if boundary == "faction_applied_tags":
         return _storyteller_response(
-            updates=_state_updates_with_tag(
+            updates=_updates_block_with_tag(
                 "faction",
                 "The Sluice Guild",
                 "applied_tags",
@@ -967,9 +990,9 @@ def _retry_boundary_response(
 @pytest.mark.parametrize(
     ("boundary", "failure_path", "expected_suggestion"),
     [
-        ("character_applied_tags", "updates[0]", "human"),
-        ("place_tags_to_clear", "updates[0]", None),
-        ("faction_applied_tags", "updates[0]", None),
+        ("character_applied_tags", "updates.characters[0]", "human"),
+        ("place_tags_to_clear", "updates.places[0]", None),
+        ("faction_applied_tags", "updates.factions[0]", None),
         ("tag_hints", "new_entities[0].tag_hints", "human"),
         ("pair_tag_hints", "new_entities[0].pair_tag_hints[0].tag", "protects"),
         (

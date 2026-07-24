@@ -42,6 +42,7 @@ def test_mock_non_bootstrap_payload_is_sparse_skald_wire() -> None:
     wire = SkaldTurnWire.model_validate(payload)
 
     assert set(payload) == {"narrative", "choices"}
+    assert wire.updates is None
     assert wire.model_dump(exclude_unset=True, mode="json") == payload
 
 
@@ -184,6 +185,7 @@ async def test_mock_responses_routes_turn_schema_without_orrery_proposals() -> N
     assert json.loads(tool_call["arguments"]) == payload
     parsed = SkaldTurnWire.model_validate(payload)
     assert parsed.narrative.startswith("[TEST MODE]")
+    assert parsed.updates is None
     assert parsed.orrery_adjudications == []
 
 
@@ -205,6 +207,7 @@ async def test_mock_responses_routes_turn_schema_as_native_text_format() -> None
     payload = json.loads(response["output_text"])
     parsed = SkaldTurnWire.model_validate(payload)
     assert parsed.narrative.startswith("[TEST MODE]")
+    assert parsed.updates is None
     assert parsed.orrery_adjudications == []
 
 

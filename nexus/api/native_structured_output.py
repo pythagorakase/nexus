@@ -120,10 +120,9 @@ def _rewrite_anthropic_schema(value: Any) -> Any:
         return value
     return {
         # Anthropic's native format rejects oneOf (Pydantic emits it for
-        # discriminated unions, e.g. SkaldTurnWire.updates). anyOf is the
-        # accepted, semantically-wider spelling; app-side Pydantic still
-        # enforces the discriminator after parse. Found live on the first
-        # universal-wire Anthropic turn (measurement stage).
+        # discriminated unions). anyOf is the accepted, semantically-wider
+        # spelling; app-side Pydantic still enforces the discriminator after
+        # parse. Found live during the universal-wire measurement stage.
         ("anyOf" if key == "oneOf" else key): _rewrite_anthropic_schema(item)
         for key, item in value.items()
         if key not in ANTHROPIC_UNSUPPORTED_SCHEMA_KEYS
