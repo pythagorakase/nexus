@@ -70,12 +70,14 @@ SKALD_WIRE_STRICT_MAX_BYTES = 19_600
 SKALD_WIRE_LENIENT_MAX_BYTES = 18_950
 SKALD_WIRE_DESCRIPTION_MAX_CHARS = 70
 
+# Post-#577 unification: the replacement vocabulary's guidance lives in the
+# contextual tag library (Event-Type Names) and the imminent-activity prompt
+# block, so every wire field description sits under the uniform ceiling.
 DECLARED_ENTITY_ROLE_DESCRIPTION = (
-    "Whether the declared entity is the subject or object of the directed pair tag."
+    "Whether the declared entity is subject or object of the pair tag."
 )
 REPLACEMENT_EVENT_TYPE_DESCRIPTION = (
-    "Optional registered event type for a replacement_state_delta. "
-    "Leave unset unless the replacement should emit a canonical world_event."
+    "Registered event type for a replacement_state_delta world_event."
 )
 COORDINATES_DESCRIPTION = (
     "Earth-based lat/lon coordinates.\n\n"
@@ -84,11 +86,6 @@ COORDINATES_DESCRIPTION = (
     "for the location's described characteristics (climate, terrain, proximity\n"
     "to water)."
 )
-
-WIRE_DESCRIPTION_SURVIVORS = {
-    "NewEntityPairTagHint.declared_entity_role": DECLARED_ENTITY_ROLE_DESCRIPTION,
-    "OrreryAdjudication.replacement_event_type": REPLACEMENT_EVENT_TYPE_DESCRIPTION,
-}
 
 SPARSE_WIRE_PAYLOAD = {
     "narrative": "Rain beads on the sealed archive door.",
@@ -1136,8 +1133,7 @@ def test_skald_wire_prompt_guide_preserves_enum_values_verbatim() -> None:
     )
     assert (
         'declared_entity_role?:string|enum=["subject","object"]|'
-        '"Whether the declared entity is the subject or object of the directed '
-        'pair tag."' in guide
+        '"Whether the declared entity is subject or object of the pair tag."' in guide
     )
 
 
@@ -1172,7 +1168,9 @@ def test_wire_schema_size_and_description_budget() -> None:
         if field.description is not None
         and len(field.description) > SKALD_WIRE_DESCRIPTION_MAX_CHARS
     }
-    assert overlong_descriptions == WIRE_DESCRIPTION_SURVIVORS
+    # #577 unification: no field description may exceed the uniform ceiling —
+    # the replacement-vocabulary keep-list special case is deleted.
+    assert overlong_descriptions == {}
     overlong_new_model_descriptions = {
         model.__name__: description
         for model in described_models
@@ -1515,3 +1513,23 @@ def test_schema_token_measurement_uses_o200k() -> None:
     lenient_wire = _compact_schema_json(skald_wire_lenient_schema())
     assert len(encoding.encode(strict_wire)) > 0
     assert len(encoding.encode(lenient_wire)) > 0
+
+
+def test_replacement_event_type_requires_replacement_delta() -> None:
+    """An event type without a delta is silently dropped by the applier —
+    reject the shape at validation so the repair loop fixes it (#585 P2)."""
+
+    with pytest.raises(ValidationError, match="requires replacement_state_delta"):
+        OrreryAdjudication(
+            proposal_id="drink:aaa",
+            action="replace",
+            replacement_event_type="mock_replacement",
+        )
+
+    adjudication = OrreryAdjudication(
+        proposal_id="drink:aaa",
+        action="replace",
+        replacement_state_delta={"character_current_activity": "resting"},
+        replacement_event_type="mock_replacement",
+    )
+    assert adjudication.replacement_event_type == "mock_replacement"
