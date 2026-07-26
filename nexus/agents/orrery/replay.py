@@ -450,6 +450,12 @@ class _Replayer:
         # Resolved in replay() once the base document is loaded; None means
         # legacy chunk-window behavior (issue #552).
         self.maturation_gate: Optional[frozenset[int]] = None
+        # Requesting chunks of persisted jobs OUTSIDE the target's control
+        # set: their tag/claim/relationship writes carry window-interior
+        # chunk attribution but were invisible at the target capture, and
+        # those row kinds carry no job provenance to gate on — their rows
+        # are marked presence-uncertain instead.
+        self.delayed_maturation_chunks: frozenset[int] = frozenset()
 
     # -- base checkpoint ---------------------------------------------------
 
@@ -522,6 +528,7 @@ class _Replayer:
     def _resolve_maturation_gate(
         self,
         base_state: dict[str, Any],
+        base_chunk: int,
         result: ReplayResult,
     ) -> None:
         """Resolve the job-membership gate from the checkpoint documents.
@@ -559,7 +566,84 @@ class _Replayer:
             "job(s))",
             approximate=False,
         )
-        self._assert_maturation_events_attributable()
+        self._assert_maturation_events_attributable(base_chunk)
+        self._resolve_delayed_maturation_chunks(target_ids, base_chunk, result)
+
+    def _resolve_delayed_maturation_chunks(
+        self,
+        target_ids: list[Any],
+        base_chunk: int,
+        result: ReplayResult,
+    ) -> None:
+        """Find window chunks polluted by writes invisible at the target.
+
+        A persisted job absent from the TARGET's control set committed after
+        the target capture. Its project/activity events are gated by job id,
+        but its tag, claim, secret, and relationship rows carry only
+        requesting-chunk attribution — no job provenance — so every such
+        row inside the window is marked presence-uncertain rather than
+        guessed at (PR #586 review: gate every maturation-attributed replay
+        source).
+        """
+
+        self.cur.execute(
+            """
+            SELECT DISTINCT requesting_chunk_id
+            FROM orrery_maturation_jobs
+            WHERE (result_manifest ->> 'persisted')::boolean
+              AND NOT (id = ANY(%(target_ids)s::bigint[]))
+              AND requesting_chunk_id >= %(base)s
+              AND requesting_chunk_id <= %(target)s
+            ORDER BY requesting_chunk_id
+            """,
+            {
+                "target_ids": [int(v) for v in target_ids],
+                "base": base_chunk,
+                "target": self.target_chunk_id,
+            },
+        )
+        chunks = frozenset(_row_value(row, 0) for row in self.cur.fetchall())
+        self.delayed_maturation_chunks = chunks
+        if chunks:
+            result.add_note(
+                "_maturation_gate",
+                "delayed maturation persistence detected at requesting "
+                f"chunk(s) {sorted(chunks)}; tag/claim/secret/relationship "
+                "rows attributed there are presence-uncertain for this pair",
+                approximate=True,
+            )
+
+    def _mark_delayed_maturation_rows(self, result: ReplayResult) -> None:
+        """Mark rows chunk-attributed to delayed maturation persistence."""
+
+        chunks = self.delayed_maturation_chunks
+        if not chunks:
+            return
+        for section in (
+            "entity_tags",
+            "entity_pair_tags",
+            "claim_awareness",
+            "backstory_secrets",
+        ):
+            key_fn = _section_key_fn(section)
+            for row in result.state.get(section, []):
+                if row.get("source_chunk_id") in chunks:
+                    result.uncertain_rows.add((section, str(key_fn(row))))
+        self.cur.execute(
+            """
+            SELECT DISTINCT relationship_table, old_row
+            FROM relationship_versions
+            WHERE source_chunk_id = ANY(%(chunks)s::bigint[])
+            """,
+            {"chunks": sorted(chunks)},
+        )
+        for relationship_table, old_row_json in self.cur.fetchall():
+            columns = RELATIONSHIP_KEY_COLUMNS.get(relationship_table)
+            old_row = _as_document(old_row_json)
+            if columns is None or not isinstance(old_row, dict):
+                continue
+            key = tuple(old_row.get(column) for column in columns)
+            result.uncertain_rows.add((relationship_table, str(key)))
 
     def _maturation_gate_params(self) -> dict[str, Any]:
         if self.maturation_gate is None:
@@ -569,19 +653,24 @@ class _Replayer:
     def _maturation_gate_filter(self) -> str:
         return "" if self.maturation_gate is None else MATURATION_GATE_FILTER_SQL
 
-    def _assert_maturation_events_attributable(self) -> None:
+    def _assert_maturation_events_attributable(self, base_chunk: int) -> None:
         """Gated replay must be able to name every maturation write's job.
 
         Live maturation events carry ``maturation_job_<id>_...`` refs; an
         event claiming maturation provenance without a parseable job id
         cannot be placed on either side of the capture boundary, so the
-        reconstruction refuses loudly instead of guessing.
+        reconstruction refuses loudly instead of guessing. The scan is
+        windowed to this pair's maturation range — an orphan elsewhere in
+        history must not abort verification of an unrelated, healthy pair
+        (PR #586 review finding).
         """
 
         self.cur.execute(
             """
             SELECT id FROM world_events
-            WHERE (
+            WHERE tick_chunk_id >= %(base)s
+              AND tick_chunk_id < %(target)s
+              AND (
                     source::text = 'maturation'
                     OR (
                         source::text = 'retrograde'
@@ -594,7 +683,8 @@ class _Replayer:
                         !~ '^maturation_job_[0-9]+'
                   )
             ORDER BY id
-            """
+            """,
+            {"base": base_chunk, "target": self.target_chunk_id},
         )
         orphans = [_row_value(row, 0) for row in self.cur.fetchall()]
         if orphans:
@@ -615,7 +705,7 @@ class _Replayer:
             base_checkpoint_chunk_id=base_chunk,
             state={},
         )
-        self._resolve_maturation_gate(base_state, result)
+        self._resolve_maturation_gate(base_state, base_chunk, result)
         if "entities" in self.missing_base_sections:
             result.add_note(
                 "entities",
@@ -771,6 +861,7 @@ class _Replayer:
 
         for table in RELATIONSHIP_KEY_COLUMNS:
             self._unwind_relationships(table, result)
+        self._mark_delayed_maturation_rows(result)
         return result
 
     def _replay_claim_awareness(

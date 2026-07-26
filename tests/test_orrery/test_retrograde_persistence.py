@@ -905,6 +905,9 @@ class FakeRetrogradePersistenceCursor:
             self._result = [{"id": int(params[2])}]
         elif "SELECT to_regclass" in sql:
             self._result = [{"checkpoint_table": "backstory_secrets"}]
+        elif "jsonb_build_object" in sql:
+            # #552 single-statement capture: one coherent document.
+            self._result = [{"doc": {}}]
         elif "jsonb_agg(to_jsonb(t))" in sql:
             self._result = [{"state": []}]
         elif "FROM orrery_maturation_jobs" in sql and "persisted" in sql:

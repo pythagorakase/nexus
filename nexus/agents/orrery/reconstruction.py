@@ -155,9 +155,10 @@ _ADDITIVE_CHECKPOINT_TABLES = {"backstory_secrets": "backstory_secrets"}
 # are visible inside the capture transaction. Underscore-prefixed and
 # deliberately absent from CHECKPOINT_SECTIONS so verification never diffs it
 # as state; replay uses target-minus-base membership as the exact applied-at
-# boundary for asynchronously persisted maturation writes. MVCC gives the
-# exactness: whatever this SELECT can see is precisely what the section
-# snapshots in the same transaction saw.
+# boundary for asynchronously persisted maturation writes. Statement-level
+# MVCC gives the exactness: the control set and every section are read in
+# ONE statement (see _checkpoint_document_sql), so they share one snapshot
+# even under READ COMMITTED.
 #
 # The predicate is result_manifest.persisted — recorded by the worker in the
 # SAME transaction as the expansion writes — NOT state = 'succeeded', which
@@ -181,19 +182,31 @@ def _validate_label(label: str) -> None:
         )
 
 
-def capture_state_checkpoint_sync(
-    cur: Any,
-    *,
-    chunk_id: Optional[int],
-    label: str,
-) -> Optional[int]:
-    """Snapshot the mutable state surface. Returns the checkpoint id, or
-    ``None`` when a checkpoint for ``(chunk_id, label)`` already exists
-    (idempotent re-commit)."""
+def _checkpoint_document_sql(included_sections: list[str]) -> str:
+    """Build the single-statement capture for one coherent snapshot.
 
-    _validate_label(label)
-    state: dict[str, Any] = {}
-    for section, sql in CHECKPOINT_SECTIONS.items():
+    Under READ COMMITTED each statement sees its own snapshot, so capturing
+    sections with one query per section lets a concurrent writer (a delayed
+    maturation worker especially) land BETWEEN sections — the document would
+    then disagree with its own maturation-job control set (#552 review
+    finding). One SELECT = one snapshot for every section AND the control
+    key, which is what makes target-minus-base membership exact.
+    """
+
+    # Section names are trusted code constants (single-quote-free), rendered
+    # as SQL string literals.
+    parts = [
+        f"'{section}', ({CHECKPOINT_SECTIONS[section]})"
+        for section in included_sections
+    ]
+    parts.append(f"'{MATURATION_JOBS_CONTROL_KEY}', ({_MATURATION_JOBS_CONTROL_SQL})")
+    # jsonb_build_object caps at 100 arguments; nest concatenation instead.
+    return "SELECT " + " || ".join(f"jsonb_build_object({part})" for part in parts)
+
+
+def _included_checkpoint_sections_sync(cur: Any) -> list[str]:
+    included: list[str] = []
+    for section in CHECKPOINT_SECTIONS:
         additive_table = _ADDITIVE_CHECKPOINT_TABLES.get(section)
         if additive_table is not None:
             cur.execute(
@@ -205,16 +218,26 @@ def capture_state_checkpoint_sync(
                 # checkpoint document. Replay treats the absent key as the
                 # explicit cross-era compatibility boundary.
                 continue
-        cur.execute(sql)
-        row = cur.fetchone()
-        state[section] = row[0] if not hasattr(row, "keys") else list(row.values())[0]
-    cur.execute(_MATURATION_JOBS_CONTROL_SQL)
-    control_row = cur.fetchone()
-    state[MATURATION_JOBS_CONTROL_KEY] = (
-        control_row[0]
-        if not hasattr(control_row, "keys")
-        else list(control_row.values())[0]
-    )
+        included.append(section)
+    return included
+
+
+def capture_state_checkpoint_sync(
+    cur: Any,
+    *,
+    chunk_id: Optional[int],
+    label: str,
+) -> Optional[int]:
+    """Snapshot the mutable state surface. Returns the checkpoint id, or
+    ``None`` when a checkpoint for ``(chunk_id, label)`` already exists
+    (idempotent re-commit)."""
+
+    _validate_label(label)
+    included = _included_checkpoint_sections_sync(cur)
+    cur.execute(_checkpoint_document_sql(included))
+    row = cur.fetchone()
+    document = row[0] if not hasattr(row, "keys") else list(row.values())[0]
+    state = document if isinstance(document, dict) else json.loads(document)
     cur.execute(
         """
         INSERT INTO state_checkpoints (chunk_id, label, state)
@@ -235,20 +258,17 @@ async def capture_state_checkpoint_async(
     label: str,
 ) -> Optional[int]:
     _validate_label(label)
-    state: dict[str, Any] = {}
-    for section, sql in CHECKPOINT_SECTIONS.items():
+    included: list[str] = []
+    for section in CHECKPOINT_SECTIONS:
         additive_table = _ADDITIVE_CHECKPOINT_TABLES.get(section)
         if (
             additive_table is not None
             and await conn.fetchval("SELECT to_regclass($1)", additive_table) is None
         ):
             continue
-        value = await conn.fetchval(sql)
-        state[section] = json.loads(value) if isinstance(value, str) else value
-    control_value = await conn.fetchval(_MATURATION_JOBS_CONTROL_SQL)
-    state[MATURATION_JOBS_CONTROL_KEY] = (
-        json.loads(control_value) if isinstance(control_value, str) else control_value
-    )
+        included.append(section)
+    document = await conn.fetchval(_checkpoint_document_sql(included))
+    state = document if isinstance(document, dict) else json.loads(document)
     return await conn.fetchval(
         """
         INSERT INTO state_checkpoints (chunk_id, label, state)

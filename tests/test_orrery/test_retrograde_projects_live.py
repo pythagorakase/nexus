@@ -1419,11 +1419,14 @@ def test_delayed_maturation_write_is_gated_out_of_checkpoint_replay(
     actor_id, _actor = db["characters"][0]
     with db["conn"].cursor() as cur:
         base_time = _next_world_time(cur)
-        request_chunk = _fabricate_chunk(cur, base_time)
+        base_chunk = _fabricate_chunk(cur, base_time)
         base_id = capture_state_checkpoint_sync(
-            cur, chunk_id=request_chunk, label="manual"
+            cur, chunk_id=base_chunk, label="manual"
         )
         assert base_id is not None
+        # The requesting chunk sits strictly inside the window so both the
+        # inverse event window and the base-exclusive tag window cover it.
+        request_chunk = _fabricate_chunk(cur, base_time + timedelta(hours=1))
         target_chunk = _fabricate_chunk(cur, base_time + timedelta(hours=2))
         target_id = capture_state_checkpoint_sync(
             cur, chunk_id=target_chunk, label="manual"
@@ -1446,6 +1449,23 @@ def test_delayed_maturation_write_is_gated_out_of_checkpoint_replay(
             job_id=552001,
         )
 
+        # A delayed worker's pair-tag write carries only requesting-chunk
+        # attribution (no job provenance); replay's chunk-window arm reads
+        # the table directly, so the pair must skip the row as
+        # presence-uncertain instead of reporting phantom drift.
+        other_id, _other = db["characters"][3]
+        cur.execute("SELECT id FROM pair_tags ORDER BY id LIMIT 1")
+        pair_tag_id = cur.fetchone()[0]
+        cur.execute(
+            """
+            INSERT INTO entity_pair_tags (
+                subject_entity_id, object_entity_id, pair_tag_id,
+                source_kind, source_chunk_id
+            ) VALUES (%s, %s, %s, 'retrograde', %s)
+            """,
+            (actor_id, other_id, pair_tag_id, request_chunk),
+        )
+
         result = reconstruct_state_at_sync(
             cur,
             target_chunk,
@@ -1455,6 +1475,20 @@ def test_delayed_maturation_write_is_gated_out_of_checkpoint_replay(
         assert any(
             "gated on jobs" in note for note in result.notes.get("_maturation_gate", [])
         )
+        assert any(
+            "delayed maturation persistence" in note
+            for note in result.notes.get("_maturation_gate", [])
+        )
+
+        pair = [
+            verdict
+            for verdict in verify_checkpoints_sync(cur)
+            if verdict.base_checkpoint_id == base_id
+            and verdict.target_checkpoint_id == target_id
+        ]
+        assert len(pair) == 1
+        assert pair[0].drifts == []
+        assert pair[0].skipped_unreproducible >= 1
 
         with pytest.raises(ValueError, match="missing its required applied"):
             reconstruct_state_at_sync(cur, target_chunk, base_checkpoint_id=base_id)
