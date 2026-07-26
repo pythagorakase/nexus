@@ -1357,7 +1357,12 @@ def _insert_succeeded_maturation_job(
             slot, requesting_chunk_id, declaration, state, result_manifest
         )
         SELECT %s, %s, 'character', c.id, c.name, 'test', %s, '{}'::jsonb,
-               'succeeded'::orrery_job_state, '{"schema_version": "orrery_retrograde_maturation_manifest.v1", "persisted": true}'::jsonb
+               'succeeded'::orrery_job_state,
+               jsonb_build_object(
+                   'schema_version',
+                   'orrery_retrograde_maturation_manifest.v1',
+                   'persisted', true
+               )
         FROM characters c WHERE c.entity_id = %s
         """,
         (job_id, actor_entity_id, requesting_chunk_id, actor_entity_id),
