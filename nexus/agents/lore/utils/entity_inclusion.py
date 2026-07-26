@@ -44,12 +44,22 @@ def _base_entity_inclusion(
 def resolve_entity_inclusion(
     settings: Mapping[str, Any],
     provider_wire_type: Optional[str],
+    provider_name: Optional[str],
 ) -> EntityInclusionConfig:
-    """Resolve effective entity inclusion for one storyteller wire class.
+    """Resolve effective entity inclusion for one storyteller provider.
 
-    ``None`` is the named LOGON-disabled path and therefore returns base values.
-    Active LOGON callers must establish a wire class before calling this function.
+    ``None``/``None`` is the named LOGON-disabled path and returns base values.
+    Active LOGON callers must establish the full route first. The override
+    lookup keys on the registry provider NAME: resource profiles belong to the
+    serving provider, not the wire dialect, so an OpenAI-compatible remote
+    provider (openrouter) shares the "local" wire class but keeps base
+    inclusion unless it has its own override entry.
     """
+    if (provider_wire_type is None) != (provider_name is None):
+        raise RuntimeError(
+            "provider_wire_type and provider_name must be supplied together; got "
+            f"wire={provider_wire_type!r}, provider={provider_name!r}"
+        )
     if (
         provider_wire_type is not None
         and provider_wire_type not in _STORYTELLER_WIRE_CLASSES
@@ -61,10 +71,10 @@ def resolve_entity_inclusion(
         )
 
     base = _base_entity_inclusion(settings)
-    if provider_wire_type is None:
+    if provider_wire_type is None or provider_name is None:
         return base
 
-    override = base.provider_overrides.get(provider_wire_type)
+    override = base.provider_overrides.get(provider_name)
     if override is None:
         return base
 
@@ -76,7 +86,9 @@ def resolve_entity_inclusion(
     }
     if resolved_differences:
         logger.debug(
-            "Storyteller entity inclusion override: class=%s resolved=%s",
+            "Storyteller entity inclusion override: provider=%s class=%s "
+            "resolved=%s",
+            provider_name,
             provider_wire_type,
             resolved_differences,
         )

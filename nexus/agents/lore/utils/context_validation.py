@@ -17,6 +17,7 @@ def validate_context(
     context: Dict[str, Any],
     settings: Dict[str, Any],
     provider_wire_type: str,
+    provider_name: str,
 ) -> Tuple[bool, List[str]]:
     """
     Validate context payload against constraints from settings.
@@ -25,6 +26,7 @@ def validate_context(
         context: Context payload to validate
         settings: Settings dictionary
         provider_wire_type: Active LOGON storyteller wire class
+        provider_name: Active registry provider name (override lookup key)
 
     Returns:
         Tuple of (is_valid, list_of_errors)
@@ -34,7 +36,9 @@ def validate_context(
     # Get LORE settings
     lore_settings = settings.get("Agent Settings", {}).get("LORE", {})
 
-    apex_window = resolve_storyteller_context_window(settings, provider_wire_type)
+    apex_window = resolve_storyteller_context_window(
+        settings, provider_wire_type, provider_name
+    )
 
     # Get the percentage ranges
     ranges = lore_settings.get("payload_percent_budget", {})

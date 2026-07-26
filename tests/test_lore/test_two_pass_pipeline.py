@@ -305,6 +305,7 @@ def _utility(
     utility.provider = cast(Any, provider)
     utility._provider_bootstrap_mode = bootstrap
     utility._provider_wire_type = cast(Any, provider_type)
+    utility._provider_type_name = provider_type
     utility._system_prompt = provider.system_prompt
     return utility, provider
 

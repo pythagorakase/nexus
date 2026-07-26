@@ -97,14 +97,28 @@ def resolve_storyteller_prompt_overhead_tokens(
 
 
 def resolve_storyteller_context_window(
-    settings: Mapping[str, Any], provider_wire_type: Optional[str]
+    settings: Mapping[str, Any],
+    provider_wire_type: Optional[str],
+    provider_name: Optional[str],
 ) -> int:
-    """Resolve the assembled-context ceiling for one storyteller provider class."""
+    """Resolve the assembled-context ceiling for one storyteller provider.
+
+    The wire class proves an active route was resolved; the override lookup
+    keys on the registry provider NAME, because resource profiles belong to
+    the serving provider, not the wire dialect (an OpenAI-compatible remote
+    provider such as openrouter shares the "local" wire class but must not
+    inherit the compute-bound local payload squeeze).
+    """
     if provider_wire_type not in _STORYTELLER_WIRE_CLASSES:
         raise RuntimeError(
             "Cannot resolve the storyteller context budget without a valid active "
             "provider wire class; expected one of "
             f"{sorted(_STORYTELLER_WIRE_CLASSES)}, got {provider_wire_type!r}"
+        )
+    if not isinstance(provider_name, str) or not provider_name.strip():
+        raise RuntimeError(
+            "Cannot resolve the storyteller context budget without the active "
+            f"registry provider name; got {provider_name!r}"
         )
 
     token_budget = _storyteller_token_budget(settings)
@@ -114,17 +128,19 @@ def resolve_storyteller_context_window(
     if not isinstance(provider_overrides, Mapping):
         raise TypeError("token_budget provider_overrides must be a mapping")
 
-    override = provider_overrides.get(provider_wire_type)
+    override = provider_overrides.get(provider_name)
     if override is None:
         return apex_context_window
     if not isinstance(override, int):
         raise TypeError(
-            f"token budget provider override for {provider_wire_type!r} must be "
+            f"token budget provider override for {provider_name!r} must be "
             "an integer"
         )
 
     logger.debug(
-        "Storyteller payload budget override: class=%s effective=%s tokens",
+        "Storyteller payload budget override: provider=%s class=%s effective=%s "
+        "tokens",
+        provider_name,
         provider_wire_type,
         override,
     )
@@ -238,6 +254,7 @@ class ContextMemoryManager:
         memnon: Optional[object] = None,
         token_manager: Optional[object] = None,
         provider_wire_type: Optional[str] = None,
+        provider_name: Optional[str] = None,
     ) -> None:
         self.settings = settings
         self.memnon = memnon  # Store reference for entity detector
@@ -257,10 +274,15 @@ class ContextMemoryManager:
         # The active storyteller class is resolved per turn because slots can
         # change models while a LORE instance remains alive.
         self.provider_wire_type: Optional[str] = None
+        self.provider_name: Optional[str] = None
         self.phase2_budget: Optional[int] = None
         self._storyteller_budget_configured = False
-        if provider_wire_type is not None:
-            self.configure_storyteller_budget(provider_wire_type)
+        if (provider_wire_type is None) != (provider_name is None):
+            raise ValueError(
+                "provider_wire_type and provider_name must be supplied together"
+            )
+        if provider_wire_type is not None and provider_name is not None:
+            self.configure_storyteller_budget(provider_wire_type, provider_name)
 
         # Legacy settings (kept for compatibility but may be deprecated)
         self.pass2_reserve = float(memory_settings.get("pass2_budget_reserve", 0.25))
@@ -308,12 +330,15 @@ class ContextMemoryManager:
 
         self._initialize_entity_maps(memnon)
 
-    def configure_storyteller_budget(self, provider_wire_type: str) -> int:
-        """Apply the active provider class to every memory payload budget."""
+    def configure_storyteller_budget(
+        self, provider_wire_type: str, provider_name: str
+    ) -> int:
+        """Apply the active provider's resource profile to payload budgets."""
         apex_context_window = resolve_storyteller_context_window(
-            self.settings, provider_wire_type
+            self.settings, provider_wire_type, provider_name
         )
         self.provider_wire_type = provider_wire_type
+        self.provider_name = provider_name
         self._storyteller_budget_configured = True
         self._configure_phase2_budget(apex_context_window)
         return apex_context_window
@@ -322,6 +347,7 @@ class ContextMemoryManager:
         """Use the base window for a turn where LOGON is explicitly disabled."""
         apex_context_window = resolve_base_storyteller_context_window(self.settings)
         self.provider_wire_type = None
+        self.provider_name = None
         self._storyteller_budget_configured = True
         self._configure_phase2_budget(apex_context_window)
         return apex_context_window

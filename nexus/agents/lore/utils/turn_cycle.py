@@ -301,11 +301,14 @@ class TurnCycleManager:
                         "Active LOGON provider is required for storyteller payload "
                         "sizing"
                     )
-                apex_model, provider_wire_type = logon.resolve_storyteller_route()
+                apex_model, provider_wire_type, provider_name = (
+                    logon.resolve_storyteller_route()
+                )
                 turn_context.apex_model = apex_model
                 turn_context.provider_wire_type = provider_wire_type
+                turn_context.provider_name = provider_name
                 apex_context_window = memory_manager.configure_storyteller_budget(
-                    provider_wire_type
+                    provider_wire_type, provider_name
                 )
                 turn_context.token_counts = self.lore.token_manager.calculate_budget(
                     turn_context.user_input,
@@ -460,17 +463,22 @@ class TurnCycleManager:
             return
 
         if getattr(self.lore, "enable_logon", True):
-            if turn_context.provider_wire_type is None:
+            if (
+                turn_context.provider_wire_type is None
+                or turn_context.provider_name is None
+            ):
                 raise RuntimeError(
-                    "Active LOGON entity queries require the storyteller provider "
-                    "wire class resolved during Phase 1"
+                    "Active LOGON entity queries require the storyteller route "
+                    "(wire class and provider name) resolved during Phase 1"
                 )
             entity_settings = resolve_entity_inclusion(
-                self.settings, turn_context.provider_wire_type
+                self.settings,
+                turn_context.provider_wire_type,
+                turn_context.provider_name,
             )
         else:
             entity_settings = resolve_entity_inclusion(
-                self.settings, provider_wire_type=None
+                self.settings, provider_wire_type=None, provider_name=None
             )
         include_relationships = entity_settings.include_all_relationships
         include_events = entity_settings.include_all_active_events

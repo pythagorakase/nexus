@@ -104,6 +104,7 @@ def patched_provider(monkeypatch: pytest.MonkeyPatch) -> Dict[str, int]:
             self.bootstrap_mode if is_bootstrap is None else is_bootstrap
         )
         self._provider_wire_type = "openai"
+        self._provider_type_name = "openai"
 
     for target in (
         "nexus.agents.lore.logon_utility.LogonUtility._initialize_provider",
@@ -264,6 +265,7 @@ def test_storyteller_route_resolves_without_constructing_provider(
     assert logon.resolve_storyteller_route() == (
         "storyteller-model",
         expected_wire_type,
+        provider_type,
     )
     assert logon.provider is None
 
@@ -374,6 +376,7 @@ async def test_logon_async_generation_uses_structured_provider() -> None:
     logon.provider = cast(Any, provider)
     logon._provider_bootstrap_mode = False
     logon._provider_wire_type = "openai"
+    logon._provider_type_name = "openai"
 
     response = await logon.generate_narrative_async(
         _minimal_payload(),
@@ -397,6 +400,7 @@ async def test_logon_async_generation_uses_bootstrap_schema_for_bootstrap() -> N
     logon.provider = cast(Any, provider)
     logon._provider_bootstrap_mode = True
     logon._provider_wire_type = "openai"
+    logon._provider_type_name = "openai"
 
     response = await logon.generate_narrative_async(
         _minimal_payload(is_bootstrap=True),
@@ -433,6 +437,7 @@ async def test_logon_stamps_model_exposed_by_last_successful_attempt() -> None:
     logon.provider = cast(Any, provider)
     logon._provider_bootstrap_mode = False
     logon._provider_wire_type = "openai"
+    logon._provider_type_name = "openai"
 
     response = await logon.generate_narrative_async(
         _minimal_payload(),
@@ -451,6 +456,7 @@ async def test_logon_structured_failure_does_not_call_plain_text_fallback() -> N
     logon.provider = cast(Any, provider)
     logon._provider_bootstrap_mode = False
     logon._provider_wire_type = "openai"
+    logon._provider_type_name = "openai"
 
     with pytest.raises(RuntimeError, match="structured boom"):
         await logon.generate_narrative_async(
@@ -476,6 +482,7 @@ def test_context_bootstrap_mode_does_not_mutate_logon_instance(
             self.bootstrap_mode if is_bootstrap is None else is_bootstrap
         )
         self._provider_wire_type = "openai"
+        self._provider_type_name = "openai"
 
     monkeypatch.setattr(LogonUtility, "_initialize_provider", _fake_initialize)
 
@@ -513,6 +520,7 @@ async def test_final_prompt_overflow_from_tag_library_raises(
     logon.provider = cast(Any, provider)
     logon._provider_bootstrap_mode = False
     logon._provider_wire_type = "local"
+    logon._provider_type_name = "local"
 
     class PromptLore:
         def __init__(self) -> None:
