@@ -238,8 +238,11 @@ system_prompt_tokens = 5000  # Reserved tokens for system prompt
 prompt_overhead_tokens = 4_000
 
 [lore.token_budget.provider_overrides]
-# Effective apex_context_window per storyteller provider class. Absent key =
-# base value. Local models need a smaller assembled payload (see #566).
+# Effective apex_context_window per REGISTRY PROVIDER NAME (not wire class).
+# Absent key = base value: openrouter shares the "local" wire dialect but has
+# no entry here, so its frontier models keep the full window. This "local"
+# key is the [api_models.local] provider — compute-bound GGUF serving needs a
+# smaller assembled payload (see #566).
 # 32K floor measured live 2026-07-24: a mature slot's untrimmable structured
 # core alone is ~14.9K tokens; 24K left the enforcement nothing to trim to.
 local = 32_000
