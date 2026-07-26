@@ -149,6 +149,25 @@ def test_shipped_turn_pipeline_is_two_pass() -> None:
     assert settings.apex.turn_pipeline == "two_pass"
 
 
+def test_shipped_clerk_model_resolves_to_openai_registry_id() -> None:
+    """Committed clerk seat = @openai.default, resolved concrete at load (#578)."""
+    settings = Settings(**_nexus_toml_dict())
+
+    openai_default = settings.global_.model.api_models["openai"].roles["default"]
+    assert settings.apex.clerk_model == openai_default
+    assert not settings.apex.clerk_model.startswith("@")
+
+
+def test_absent_clerk_model_stays_none() -> None:
+    """Unset clerk_model = clerk follows the slot model."""
+    raw = _nexus_toml_dict()
+    raw["apex"].pop("clerk_model", None)
+
+    settings = Settings(**raw)
+
+    assert settings.apex.clerk_model is None
+
+
 def test_apex_rejects_unknown_turn_pipeline() -> None:
     raw = _nexus_toml_dict()
     raw["apex"]["turn_pipeline"] = "fallback"

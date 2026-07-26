@@ -294,7 +294,10 @@ class LogonUtility:
         )
         self._provider_type_name: Optional[str] = None
         self._validation_dbname: Optional[str] = None
-        self._schema_format_cache: Dict[type, Dict[str, Any]] = {}
+        # Keyed by schema type for single-pass entries and by
+        # (schema type, wire class) tuples for two-pass entries, because the
+        # pinned clerk seat can run a different wire class than the writer.
+        self._schema_format_cache: Dict[Any, Dict[str, Any]] = {}
 
     def _turn_pipeline(self) -> Literal["single_pass", "two_pass"]:
         """Return the validated non-bootstrap storyteller pipeline lever."""
@@ -898,17 +901,162 @@ class LogonUtility:
             raise TypeError("Writer system prompt must be a string")
         return system_prompt
 
+    def _resolve_clerk_route(
+        self,
+    ) -> Optional[
+        tuple[
+            str,
+            str,
+            Optional[Dict[str, Any]],
+            Literal["openai", "anthropic", "local"],
+        ]
+    ]:
+        """Resolve the pinned clerk seat, or None to follow the slot model.
+
+        Returns None whenever the clerk should ride the proven clone path:
+        no clerk_model configured; the active writer is the TEST mock (TEST
+        slots stay self-contained and offline); or the pinned model IS the
+        slot model (a fresh provider would be an identical twin).
+        """
+        apex_settings = self.settings.get("API Settings", {}).get("apex", {})
+        clerk_model = apex_settings.get("clerk_model")
+        if not clerk_model:
+            return None
+        if self._provider_type_name is None:
+            raise RuntimeError(
+                "Clerk route resolution requires an initialized provider"
+            )
+        if self._provider_type_name == "test":
+            return None
+        turn_model = getattr(self.provider, "model", None)
+        if turn_model is None:
+            raise RuntimeError(
+                "Clerk route resolution requires the active provider's model"
+            )
+        if clerk_model == turn_model:
+            return None
+
+        provider_type = get_provider_for_model(clerk_model)
+        if provider_type is None:
+            raise ValueError(
+                f"clerk_model {clerk_model!r} is not in the model registry"
+            )
+        from nexus.config import get_openai_compatible_endpoint
+
+        endpoint = get_openai_compatible_endpoint(clerk_model)
+        base_url = endpoint["base_url"] if endpoint else None
+        clerk_wire: Literal["openai", "anthropic", "local"]
+        if provider_type == "anthropic":
+            clerk_wire = "anthropic"
+        elif provider_type == "openai" or base_url:
+            clerk_wire = "local" if base_url else "openai"
+        else:
+            raise ValueError(f"Unsupported clerk provider type: {provider_type}")
+        return clerk_model, provider_type, endpoint, clerk_wire
+
+    def _build_clerk_provider(
+        self,
+        clerk_route: tuple[
+            str,
+            str,
+            Optional[Dict[str, Any]],
+            Literal["openai", "anthropic", "local"],
+        ],
+        *,
+        system_prompt: Optional[str],
+        output_validator: Any,
+        anthropic_transport: Optional[Literal["prompted", "tool_envelope"]],
+    ) -> "OpenAIProvider | AnthropicProvider":
+        """Construct a fresh provider for the pinned clerk seat.
+
+        Mirrors _initialize_provider's constructor arguments so the clerk
+        inherits the same apex generation settings as the writer, differing
+        only in model, endpoint, and transport.
+        """
+        clerk_model, _provider_type, endpoint, clerk_wire = clerk_route
+        apex_settings = self.settings.get("API Settings", {}).get("apex", {})
+        structured_output_retries = apex_settings.get("structured_output_retries", 3)
+        if clerk_wire == "anthropic":
+            if anthropic_transport is None:
+                raise ValueError("Anthropic clerk seat requires an explicit transport")
+            return AnthropicProvider(
+                model=clerk_model,
+                max_tokens=apex_settings.get(
+                    "max_output_tokens", apex_settings.get("max_tokens", 4000)
+                ),
+                reasoning_effort=apex_settings.get("reasoning_effort"),
+                system_prompt=system_prompt,
+                structured_transport=anthropic_transport,
+                structured_output_retries=structured_output_retries,
+                output_validator=output_validator,
+            )
+        base_url = endpoint["base_url"] if endpoint else None
+        api_key = endpoint["api_key"] if endpoint else None
+        structured_transport = cast(
+            Literal["responses", "chat_completions"],
+            endpoint["structured_transport"] if endpoint else "responses",
+        )
+        request_timeout = endpoint["request_timeout_seconds"] if endpoint else None
+        return OpenAIProvider(
+            model=clerk_model,
+            temperature=apex_settings.get("temperature", 0.7),
+            max_output_tokens=apex_settings.get("max_output_tokens", 25000),
+            reasoning_effort=apex_settings.get("reasoning_effort", "medium"),
+            system_prompt=system_prompt,
+            base_url=base_url,
+            api_key=api_key,
+            structured_transport=structured_transport,
+            request_timeout=request_timeout,
+            structured_output_retries=structured_output_retries,
+            output_validator=output_validator,
+        )
+
+    def _clerk_effective_window(
+        self,
+        clerk_route: tuple[
+            str,
+            str,
+            Optional[Dict[str, Any]],
+            Literal["openai", "anthropic", "local"],
+        ],
+    ) -> int:
+        """Resolve the pinned clerk provider's own context ceiling.
+
+        The clerk prompt (turn context + finished writer output) must be
+        enforced against the CLERK provider's window, not the writer's — a
+        32K local writer with a 75K frontier clerk must not false-raise.
+        """
+        _model, provider_type, _endpoint, clerk_wire = clerk_route
+        return resolve_storyteller_context_window(
+            self.settings, clerk_wire, provider_type
+        )
+
     def _resolve_anthropic_two_pass_clerk_transport(
         self,
+        wire_type: Optional[Literal["openai", "anthropic", "local"]] = None,
     ) -> Optional[Literal["prompted", "tool_envelope"]]:
-        """Resolve the schema-free Anthropic clerk arm or reject native."""
+        """Resolve the schema-free Anthropic clerk arm or reject native.
 
-        if self._provider_wire_type != "anthropic":
+        ``wire_type`` is the CLERK seat's wire class (defaults to the active
+        provider's). A non-Anthropic clerk needs no Anthropic transport even
+        under an Anthropic writer, and vice versa.
+        """
+
+        effective_wire = (
+            wire_type if wire_type is not None else self._provider_wire_type
+        )
+        if effective_wire != "anthropic":
             return None
         if self.provider is None:
             raise RuntimeError("Two-pass generation requires an initialized provider")
 
-        transport = self.provider.structured_transport
+        if self._provider_wire_type == "anthropic":
+            transport = self.provider.structured_transport
+        else:
+            # Pinned Anthropic clerk under a non-Anthropic writer: the active
+            # provider carries no Anthropic transport, so read the setting.
+            apex_settings = self.settings.get("API Settings", {}).get("apex", {})
+            transport = apex_settings.get("anthropic_storyteller_transport", "prompted")
         if transport == "native":
             raise ValueError(
                 "Anthropic two-pass execution cannot use "
@@ -926,12 +1074,16 @@ class LogonUtility:
     def _clerk_system_prompt(
         self,
         *,
+        wire_type: Optional[Literal["openai", "anthropic", "local"]] = None,
         anthropic_transport: Optional[Literal["prompted", "tool_envelope"]] = None,
     ) -> str:
-        """Build the pass-two system content for the active provider."""
+        """Build the pass-two system content for the clerk seat's wire class."""
 
+        effective_wire = (
+            wire_type if wire_type is not None else self._provider_wire_type
+        )
         system_prompt = self._load_clerk_system_prompt()
-        if self._provider_wire_type == "anthropic":
+        if effective_wire == "anthropic":
             if anthropic_transport is None:
                 raise ValueError(
                     "Anthropic clerk system prompt requires an explicit transport"
@@ -990,7 +1142,13 @@ class LogonUtility:
 
         if self.provider is None:
             raise RuntimeError("Two-pass generation requires an initialized provider")
-        anthropic_clerk_transport = self._resolve_anthropic_two_pass_clerk_transport()
+        clerk_route = self._resolve_clerk_route()
+        clerk_wire = (
+            clerk_route[3] if clerk_route is not None else self._provider_wire_type
+        )
+        anthropic_clerk_transport = self._resolve_anthropic_two_pass_clerk_transport(
+            clerk_wire
+        )
         writer_provider = self._clone_provider_for_two_pass(
             system_prompt=self._writer_system_prompt(),
             output_validator=None,
@@ -1007,21 +1165,37 @@ class LogonUtility:
             raise TypeError("LOGON writer pass returned a non-SkaldWriterWire response")
 
         clerk_prompt = self._format_clerk_user_prompt(turn_prompt, writer)
+        clerk_window = (
+            self._clerk_effective_window(clerk_route)
+            if clerk_route is not None
+            else effective_context_window
+        )
         self._enforce_final_prompt_window(
             clerk_prompt,
-            effective_context_window=effective_context_window,
+            effective_context_window=clerk_window,
         )
-        clerk_provider = self._clone_provider_for_two_pass(
-            system_prompt=self._clerk_system_prompt(
-                anthropic_transport=anthropic_clerk_transport,
-            ),
-            output_validator=getattr(self.provider, "output_validator", None),
+        clerk_system_prompt = self._clerk_system_prompt(
+            wire_type=clerk_wire,
             anthropic_transport=anthropic_clerk_transport,
         )
+        clerk_validator = getattr(self.provider, "output_validator", None)
+        if clerk_route is not None:
+            clerk_provider: Any = self._build_clerk_provider(
+                clerk_route,
+                system_prompt=clerk_system_prompt,
+                output_validator=clerk_validator,
+                anthropic_transport=anthropic_clerk_transport,
+            )
+        else:
+            clerk_provider = self._clone_provider_for_two_pass(
+                system_prompt=clerk_system_prompt,
+                output_validator=clerk_validator,
+                anthropic_transport=anthropic_clerk_transport,
+            )
         clerk, _clerk_response = clerk_provider.get_structured_completion(
             clerk_prompt,
             SkaldClerkWire,
-            **self._two_pass_schema_format_kwargs(SkaldClerkWire),
+            **self._two_pass_schema_format_kwargs(SkaldClerkWire, wire_type=clerk_wire),
         )
         if not isinstance(clerk, SkaldClerkWire):
             raise TypeError("LOGON clerk pass returned a non-SkaldClerkWire response")
@@ -1043,7 +1217,13 @@ class LogonUtility:
 
         if self.provider is None:
             raise RuntimeError("Two-pass generation requires an initialized provider")
-        anthropic_clerk_transport = self._resolve_anthropic_two_pass_clerk_transport()
+        clerk_route = self._resolve_clerk_route()
+        clerk_wire = (
+            clerk_route[3] if clerk_route is not None else self._provider_wire_type
+        )
+        anthropic_clerk_transport = self._resolve_anthropic_two_pass_clerk_transport(
+            clerk_wire
+        )
         writer_provider = self._clone_provider_for_two_pass(
             system_prompt=self._writer_system_prompt(),
             output_validator=None,
@@ -1062,21 +1242,37 @@ class LogonUtility:
             raise TypeError("LOGON writer pass returned a non-SkaldWriterWire response")
 
         clerk_prompt = self._format_clerk_user_prompt(turn_prompt, writer)
+        clerk_window = (
+            self._clerk_effective_window(clerk_route)
+            if clerk_route is not None
+            else effective_context_window
+        )
         self._enforce_final_prompt_window(
             clerk_prompt,
-            effective_context_window=effective_context_window,
+            effective_context_window=clerk_window,
         )
-        clerk_provider = self._clone_provider_for_two_pass(
-            system_prompt=self._clerk_system_prompt(
-                anthropic_transport=anthropic_clerk_transport,
-            ),
-            output_validator=getattr(self.provider, "output_validator", None),
+        clerk_system_prompt = self._clerk_system_prompt(
+            wire_type=clerk_wire,
             anthropic_transport=anthropic_clerk_transport,
         )
+        clerk_validator = getattr(self.provider, "output_validator", None)
+        if clerk_route is not None:
+            clerk_provider: Any = self._build_clerk_provider(
+                clerk_route,
+                system_prompt=clerk_system_prompt,
+                output_validator=clerk_validator,
+                anthropic_transport=anthropic_clerk_transport,
+            )
+        else:
+            clerk_provider = self._clone_provider_for_two_pass(
+                system_prompt=clerk_system_prompt,
+                output_validator=clerk_validator,
+                anthropic_transport=anthropic_clerk_transport,
+            )
         clerk, _clerk_response = await clerk_provider.get_structured_completion_async(
             clerk_prompt,
             SkaldClerkWire,
-            **self._two_pass_schema_format_kwargs(SkaldClerkWire),
+            **self._two_pass_schema_format_kwargs(SkaldClerkWire, wire_type=clerk_wire),
         )
         if not isinstance(clerk, SkaldClerkWire):
             raise TypeError("LOGON clerk pass returned a non-SkaldClerkWire response")
@@ -1282,17 +1478,30 @@ class LogonUtility:
         self._schema_format_cache[schema_model] = kwargs
         return kwargs
 
-    def _two_pass_schema_format_kwargs(self, schema_model: type) -> Dict[str, Any]:
-        """Return the frozen writer or clerk transport schema arguments."""
+    def _two_pass_schema_format_kwargs(
+        self,
+        schema_model: type,
+        *,
+        wire_type: Optional[Literal["openai", "anthropic", "local"]] = None,
+    ) -> Dict[str, Any]:
+        """Return the frozen transport schema arguments for one pass.
+
+        ``wire_type`` is the wire class of the provider EXECUTING the pass —
+        the pinned clerk seat may run a different class than the writer.
+        """
 
         if schema_model not in {SkaldWriterWire, SkaldClerkWire}:
             raise TypeError("Two-pass schema formatting requires writer or clerk wire")
-        if self._provider_wire_type is None:
+        effective_wire = (
+            wire_type if wire_type is not None else self._provider_wire_type
+        )
+        if effective_wire is None:
             raise RuntimeError(
                 "Two-pass schema formatting requires an active provider wire class"
             )
-        if schema_model in self._schema_format_cache:
-            return self._schema_format_cache[schema_model]
+        cache_key = (schema_model, effective_wire)
+        if cache_key in self._schema_format_cache:
+            return self._schema_format_cache[cache_key]
 
         from nexus.api.native_structured_output import (
             anthropic_output_config,
@@ -1300,7 +1509,7 @@ class LogonUtility:
         )
 
         kwargs: Dict[str, Any]
-        if self._provider_wire_type == "openai":
+        if effective_wire == "openai":
             kwargs = {
                 "text_format": (
                     skald_writer_strict_text_format()
@@ -1308,7 +1517,7 @@ class LogonUtility:
                     else skald_clerk_strict_text_format()
                 )
             }
-        elif self._provider_wire_type == "local":
+        elif effective_wire == "local":
             lenient_schema = (
                 skald_writer_lenient_schema()
                 if schema_model is SkaldWriterWire
@@ -1320,7 +1529,7 @@ class LogonUtility:
                     schema=lenient_schema,
                 )
             }
-        elif self._provider_wire_type == "anthropic":
+        elif effective_wire == "anthropic":
             if schema_model is SkaldWriterWire:
                 kwargs = {
                     "output_config": anthropic_output_config(
@@ -1329,7 +1538,9 @@ class LogonUtility:
                     )
                 }
             else:
-                clerk_transport = self._resolve_anthropic_two_pass_clerk_transport()
+                clerk_transport = self._resolve_anthropic_two_pass_clerk_transport(
+                    effective_wire
+                )
                 if clerk_transport == "prompted":
                     kwargs = {}
                 elif clerk_transport == "tool_envelope":
@@ -1340,11 +1551,10 @@ class LogonUtility:
                     )
         else:
             raise ValueError(
-                "Unsupported two-pass provider wire class: "
-                f"{self._provider_wire_type!r}"
+                "Unsupported two-pass provider wire class: " f"{effective_wire!r}"
             )
 
-        self._schema_format_cache[schema_model] = kwargs
+        self._schema_format_cache[cache_key] = kwargs
         return kwargs
 
     @staticmethod

@@ -751,3 +751,219 @@ def test_clerk_prompt_is_concise_and_references_core_doctrine() -> None:
     assert (
         "`characters`, `places`, `factions`, and `relationships`" in normalized_prompt
     )
+
+
+# --- Pinned clerk seat (#578 rung 2) -----------------------------------------
+
+
+def _pinned_clerk_utility(
+    provider_type: str,
+    outputs: list[object],
+    *,
+    anthropic_transport: str | None = None,
+) -> tuple[LogonUtility, _RecordingProvider]:
+    """Writer runs the active provider; clerk_model pins a different seat."""
+
+    utility, provider = _utility(
+        provider_type,
+        outputs,
+        anthropic_transport=anthropic_transport,
+    )
+    utility.settings["API Settings"]["apex"]["clerk_model"] = "pinned-clerk-model"
+    utility.settings["Agent Settings"] = {
+        "LORE": {
+            "token_budget": {
+                "apex_context_window": 75_000,
+                "provider_overrides": {"local": 32_000},
+            }
+        }
+    }
+    return utility, provider
+
+
+def _patch_clerk_registry(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Register the fake pinned clerk id as a native OpenAI model."""
+
+    monkeypatch.setattr(
+        "nexus.agents.lore.logon_utility.get_provider_for_model",
+        lambda model_id: "openai" if model_id == "pinned-clerk-model" else None,
+    )
+    monkeypatch.setattr(
+        "nexus.config.get_openai_compatible_endpoint",
+        lambda model_id: None,
+    )
+
+
+def _install_clerk_capture(
+    utility: LogonUtility,
+    monkeypatch: pytest.MonkeyPatch,
+    clerk_recorder: _RecordingProvider,
+) -> tuple[dict[str, Any], list[Any]]:
+    """Capture the clerk build args and every enforcement window."""
+
+    captured: dict[str, Any] = {}
+
+    def fake_build(
+        clerk_route: Any,
+        *,
+        system_prompt: Any,
+        output_validator: Any,
+        anthropic_transport: Any,
+    ) -> _RecordingProvider:
+        captured["route"] = clerk_route
+        captured["system_prompt"] = system_prompt
+        captured["anthropic_transport"] = anthropic_transport
+        clerk_recorder.system_prompt = system_prompt
+        clerk_recorder.output_validator = output_validator
+        return clerk_recorder
+
+    monkeypatch.setattr(utility, "_build_clerk_provider", fake_build)
+
+    windows: list[Any] = []
+    real_enforce = utility._enforce_final_prompt_window
+
+    def spy_enforce(prompt: str, *, effective_context_window: Any) -> int:
+        windows.append(effective_context_window)
+        return real_enforce(prompt, effective_context_window=effective_context_window)
+
+    monkeypatch.setattr(utility, "_enforce_final_prompt_window", spy_enforce)
+    return captured, windows
+
+
+@pytest.mark.parametrize(
+    ("writer_type", "writer_transport"),
+    [
+        ("anthropic", "prompted"),
+        ("local", None),
+        # Native + two_pass was rejected outright (probe G2b); with the clerk
+        # pinned OFF Anthropic, the writer's native output_config compiles
+        # (G2a) and the pipeline must proceed.
+        ("anthropic", "native"),
+    ],
+)
+def test_sync_pinned_clerk_runs_fresh_openai_seat(
+    writer_type: str,
+    writer_transport: str | None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    utility, provider = _pinned_clerk_utility(
+        writer_type,
+        [WRITER_PAYLOAD],
+        anthropic_transport=writer_transport,
+    )
+    _patch_clerk_registry(monkeypatch)
+    clerk_recorder = _RecordingProvider([CLERK_PAYLOAD])
+    captured, windows = _install_clerk_capture(utility, monkeypatch, clerk_recorder)
+    monkeypatch.setattr(
+        utility,
+        "_read_presence_baseline_for_context",
+        lambda _context_payload, _schema_model: BASELINE,
+    )
+
+    response = utility.generate_narrative(
+        _context(),
+        effective_context_window=32_000,
+    )
+
+    # Writer ran on the active provider's clone; clerk on the pinned seat.
+    assert len(provider.calls) == 1
+    assert provider.calls[0]["schema_model"] is SkaldWriterWire
+    assert len(clerk_recorder.calls) == 1
+    clerk_call = clerk_recorder.calls[0]
+    assert clerk_call["schema_model"] is SkaldClerkWire
+    # Heterogeneous kwargs: strict OpenAI clerk schema under this writer wire.
+    assert clerk_call["kwargs"] == {"text_format": skald_clerk_strict_text_format()}
+    assert captured["route"][0] == "pinned-clerk-model"
+    assert captured["route"][3] == "openai"
+    assert captured["anthropic_transport"] is None
+    assert "## Skald Clerk" in captured["system_prompt"]
+    assert skald_clerk_prompt_guide() not in captured["system_prompt"]
+    # Clerk enforcement used the CLERK provider's window, not the writer's 32K.
+    assert windows[-1] == 75_000
+    assert response.narrative == WRITER_PAYLOAD["narrative"]
+
+
+@pytest.mark.asyncio
+async def test_async_pinned_clerk_runs_fresh_openai_seat(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    utility, provider = _pinned_clerk_utility("local", [WRITER_PAYLOAD])
+    _patch_clerk_registry(monkeypatch)
+    clerk_recorder = _RecordingProvider([CLERK_PAYLOAD])
+    captured, windows = _install_clerk_capture(utility, monkeypatch, clerk_recorder)
+
+    async def read_baseline(
+        _context_payload: dict[str, Any],
+        _schema_model: type,
+    ) -> Any:
+        return BASELINE
+
+    monkeypatch.setattr(
+        utility,
+        "_read_presence_baseline_for_context_async",
+        read_baseline,
+    )
+
+    response = await utility.generate_narrative_async(
+        _context(),
+        effective_context_window=32_000,
+    )
+
+    assert len(provider.calls) == 1
+    assert len(clerk_recorder.calls) == 1
+    assert clerk_recorder.calls[0]["kwargs"] == {
+        "text_format": skald_clerk_strict_text_format()
+    }
+    assert captured["route"][3] == "openai"
+    assert windows[-1] == 75_000
+    assert response.narrative == WRITER_PAYLOAD["narrative"]
+
+
+def test_clerk_route_guards_fall_back_to_the_clone_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Unset, TEST-provider, and same-model configs all keep the clone path."""
+
+    unset_utility, _provider = _utility("openai", [])
+    assert unset_utility._resolve_clerk_route() is None
+
+    test_utility, _provider = _utility("openai", [])
+    test_utility.settings["API Settings"]["apex"]["clerk_model"] = "pinned-clerk-model"
+    test_utility._provider_type_name = "test"
+    assert test_utility._resolve_clerk_route() is None
+
+    same_utility, same_provider = _utility("openai", [])
+    same_utility.settings["API Settings"]["apex"]["clerk_model"] = same_provider.model
+    assert same_utility._resolve_clerk_route() is None
+
+    junk_utility, _provider = _utility("openai", [])
+    junk_utility.settings["API Settings"]["apex"]["clerk_model"] = "pinned-clerk-model"
+    monkeypatch.setattr(
+        "nexus.agents.lore.logon_utility.get_provider_for_model",
+        lambda _model_id: None,
+    )
+    with pytest.raises(ValueError, match="not in the model registry"):
+        junk_utility._resolve_clerk_route()
+
+
+def test_anthropic_clerk_under_non_anthropic_writer_reads_the_setting() -> None:
+    """A pinned Anthropic clerk must honor the configured transport loudly."""
+
+    utility, _provider = _utility("openai", [])
+    utility.settings["API Settings"]["apex"][
+        "anthropic_storyteller_transport"
+    ] = "native"
+    with pytest.raises(ValueError, match="clerk wire cannot"):
+        utility._resolve_anthropic_two_pass_clerk_transport("anthropic")
+
+
+def test_two_pass_schema_kwargs_cache_is_wire_keyed() -> None:
+    """The same schema must yield per-wire kwargs, never a stale cache hit."""
+
+    utility, _provider = _utility("anthropic", [], anthropic_transport="prompted")
+    anthropic_kwargs = utility._two_pass_schema_format_kwargs(SkaldClerkWire)
+    openai_kwargs = utility._two_pass_schema_format_kwargs(
+        SkaldClerkWire, wire_type="openai"
+    )
+    assert anthropic_kwargs == {}
+    assert openai_kwargs == {"text_format": skald_clerk_strict_text_format()}

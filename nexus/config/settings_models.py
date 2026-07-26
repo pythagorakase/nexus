@@ -2570,6 +2570,16 @@ class APEXSettings(BaseModel):
         default="single_pass",
         description="Storyteller turn pipeline used for non-bootstrap turns.",
     )
+    clerk_model: Optional[str] = Field(
+        default=None,
+        description=(
+            "Registry model id or @provider.role ref pinning the two-pass "
+            "clerk seat (issue #578: grammar-enforced state custody while the "
+            "prose chair rotates via the slot model). None = the clerk follows "
+            "the slot model. TEST-provider slots always stay self-contained. "
+            "Resolved to a concrete id at config load."
+        ),
+    )
     tag_library: APEXTagLibrarySettings = Field(default_factory=APEXTagLibrarySettings)
     structured_output_retries: int = Field(
         default=3,
@@ -3034,6 +3044,7 @@ class Settings(BaseModel):
             (self.global_.model, "default_model", False),
             (self.global_.model, "default_slot_model", False),
             (self.apex, "model", False),
+            (self.apex, "clerk_model", True),
             (self.summaries, "model", True),
             (self.wizard, "default_model", False),
             (self.wizard, "fallback_model", True),
