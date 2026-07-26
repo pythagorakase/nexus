@@ -85,7 +85,10 @@ from nexus.agents.orrery.needs import (
     need_applies_to_tags,
     severity_tags_for_need,
 )
-from nexus.agents.orrery.reconstruction import CHECKPOINT_SECTIONS
+from nexus.agents.orrery.reconstruction import (
+    CHECKPOINT_SECTIONS,
+    MATURATION_JOBS_CONTROL_KEY,
+)
 from nexus.agents.orrery.substrate import ProjectPolicy, coerce_project_policy
 
 PROJECT_STAGE_LADDERS = {
@@ -126,6 +129,22 @@ MATURATION_PROJECT_STARTED_TYPES = {
 # edges: base-exclusive and target-inclusive.
 CHECKPOINTED_WRITE_WINDOW_SQL = "{column} > %(base)s AND {column} <= %(target)s"
 MATURATION_PROJECT_START_WINDOW_SQL = "{column} >= %(base)s AND {column} < %(target)s"
+
+# Issue #552: chunk-keyed windows misplace ASYNCHRONOUSLY persisted maturation
+# writes — a worker can commit its expansion after a later checkpoint was
+# captured, and the requesting-chunk window would then project rows into a
+# snapshot that never contained them. When both the base and target
+# checkpoints record MATURATION_JOBS_CONTROL_KEY, replay gates maturation
+# writes on job membership instead: include exactly the jobs that became
+# visible-succeeded between the two captures (target set minus base set).
+# Event refs are namespaced ``maturation_job_<id>_<skald_ref>``, so the job
+# id is the third underscore-separated token.
+MATURATION_JOB_REF_ID_SQL = (
+    "split_part(payload ->> 'retrograde_event_ref', '_', 3)::bigint"
+)
+MATURATION_GATE_FILTER_SQL = (
+    f" AND {MATURATION_JOB_REF_ID_SQL} = ANY(%(maturation_gate)s::bigint[])"
+)
 
 # Composite natural keys, verbatim column order (faction_relationships
 # enforces faction1_id < faction2_id; character_relationships only c1 <> c2
@@ -414,13 +433,29 @@ def _load_project_policy() -> ProjectPolicy:
 class _Replayer:
     """Single-use forward/backward replay over one (checkpoint, N] window."""
 
-    def __init__(self, cur: Any, target_chunk_id: int) -> None:
+    def __init__(
+        self,
+        cur: Any,
+        target_chunk_id: int,
+        *,
+        target_checkpoint_id: Optional[int] = None,
+    ) -> None:
         self.cur = cur
         self.target_chunk_id = target_chunk_id
+        self.target_checkpoint_id = target_checkpoint_id
         self.target_created_at = _fetch_chunk_created_at(cur, target_chunk_id)
         self.need_tuning = load_need_tuning()
         self.project_policy = _load_project_policy()
         self.missing_base_sections: set[str] = set()
+        # Resolved in replay() once the base document is loaded; None means
+        # legacy chunk-window behavior (issue #552).
+        self.maturation_gate: Optional[frozenset[int]] = None
+        # Requesting chunks of persisted jobs OUTSIDE the target's control
+        # set: their tag/claim/relationship writes carry window-interior
+        # chunk attribution but were invisible at the target capture, and
+        # those row kinds carry no job provenance to gate on — their rows
+        # are marked presence-uncertain instead.
+        self.delayed_maturation_chunks: frozenset[int] = frozenset()
 
     # -- base checkpoint ---------------------------------------------------
 
@@ -488,6 +523,176 @@ class _Replayer:
             self.missing_base_sections.add("backstory_secrets")
         return checkpoint_id, chunk_id, created_at, state
 
+    # -- maturation applied-at gating (issue #552) --------------------------
+
+    def _resolve_maturation_gate(
+        self,
+        base_state: dict[str, Any],
+        base_chunk: int,
+        result: ReplayResult,
+    ) -> None:
+        """Resolve the job-membership gate from the checkpoint documents.
+
+        The gate exists only for checkpoint-targeted reconstruction (verify)
+        where BOTH documents recorded the control key. Arbitrary chunk
+        reconstruction and cross-era pairs keep the legacy chunk-window
+        rule — the acceptance's distinct boundary regimes.
+        """
+
+        if self.target_checkpoint_id is None:
+            return
+        base_ids = base_state.get(MATURATION_JOBS_CONTROL_KEY)
+        self.cur.execute(
+            "SELECT state -> %s FROM state_checkpoints WHERE id = %s",
+            (MATURATION_JOBS_CONTROL_KEY, self.target_checkpoint_id),
+        )
+        row = self.cur.fetchone()
+        target_ids = _as_document(_row_value(row, 0)) if row else None
+        if not isinstance(base_ids, list) or not isinstance(target_ids, list):
+            result.add_note(
+                "_maturation_gate",
+                "checkpoint pair predates the maturation-job control key; "
+                "maturation writes use the legacy chunk-window boundary",
+                approximate=True,
+            )
+            return
+        self.maturation_gate = frozenset(int(v) for v in target_ids) - frozenset(
+            int(v) for v in base_ids
+        )
+        result.add_note(
+            "_maturation_gate",
+            "maturation writes gated on jobs that became visible-succeeded "
+            f"between the checkpoint captures ({len(self.maturation_gate)} "
+            "job(s))",
+            approximate=False,
+        )
+        self._assert_maturation_events_attributable(base_chunk)
+        self._resolve_delayed_maturation_chunks(target_ids, base_chunk, result)
+
+    def _resolve_delayed_maturation_chunks(
+        self,
+        target_ids: list[Any],
+        base_chunk: int,
+        result: ReplayResult,
+    ) -> None:
+        """Find window chunks polluted by writes invisible at the target.
+
+        A persisted job absent from the TARGET's control set committed after
+        the target capture. Its project/activity events are gated by job id,
+        but its tag, claim, secret, and relationship rows carry only
+        requesting-chunk attribution — no job provenance — so every such
+        row inside the window is marked presence-uncertain rather than
+        guessed at (PR #586 review: gate every maturation-attributed replay
+        source).
+        """
+
+        self.cur.execute(
+            """
+            SELECT DISTINCT requesting_chunk_id
+            FROM orrery_maturation_jobs
+            WHERE (result_manifest ->> 'persisted')::boolean
+              AND NOT (id = ANY(%(target_ids)s::bigint[]))
+              AND requesting_chunk_id >= %(base)s
+              AND requesting_chunk_id <= %(target)s
+            ORDER BY requesting_chunk_id
+            """,
+            {
+                "target_ids": [int(v) for v in target_ids],
+                "base": base_chunk,
+                "target": self.target_chunk_id,
+            },
+        )
+        chunks = frozenset(_row_value(row, 0) for row in self.cur.fetchall())
+        self.delayed_maturation_chunks = chunks
+        if chunks:
+            result.add_note(
+                "_maturation_gate",
+                "delayed maturation persistence detected at requesting "
+                f"chunk(s) {sorted(chunks)}; tag/claim/secret/relationship "
+                "rows attributed there are presence-uncertain for this pair",
+                approximate=True,
+            )
+
+    def _mark_delayed_maturation_rows(self, result: ReplayResult) -> None:
+        """Mark rows chunk-attributed to delayed maturation persistence."""
+
+        chunks = self.delayed_maturation_chunks
+        if not chunks:
+            return
+        for section in (
+            "entity_tags",
+            "entity_pair_tags",
+            "claim_awareness",
+            "backstory_secrets",
+        ):
+            key_fn = _section_key_fn(section)
+            for row in result.state.get(section, []):
+                if row.get("source_chunk_id") in chunks:
+                    result.uncertain_rows.add((section, str(key_fn(row))))
+        self.cur.execute(
+            """
+            SELECT DISTINCT relationship_table, old_row
+            FROM relationship_versions
+            WHERE source_chunk_id = ANY(%(chunks)s::bigint[])
+            """,
+            {"chunks": sorted(chunks)},
+        )
+        for relationship_table, old_row_json in self.cur.fetchall():
+            columns = RELATIONSHIP_KEY_COLUMNS.get(relationship_table)
+            old_row = _as_document(old_row_json)
+            if columns is None or not isinstance(old_row, dict):
+                continue
+            key = tuple(old_row.get(column) for column in columns)
+            result.uncertain_rows.add((relationship_table, str(key)))
+
+    def _maturation_gate_params(self) -> dict[str, Any]:
+        if self.maturation_gate is None:
+            return {}
+        return {"maturation_gate": sorted(self.maturation_gate)}
+
+    def _maturation_gate_filter(self) -> str:
+        return "" if self.maturation_gate is None else MATURATION_GATE_FILTER_SQL
+
+    def _assert_maturation_events_attributable(self, base_chunk: int) -> None:
+        """Gated replay must be able to name every maturation write's job.
+
+        Live maturation events carry ``maturation_job_<id>_...`` refs; an
+        event claiming maturation provenance without a parseable job id
+        cannot be placed on either side of the capture boundary, so the
+        reconstruction refuses loudly instead of guessing. The scan is
+        windowed to this pair's maturation range — an orphan elsewhere in
+        history must not abort verification of an unrelated, healthy pair
+        (PR #586 review finding).
+        """
+
+        self.cur.execute(
+            """
+            SELECT id FROM world_events
+            WHERE tick_chunk_id >= %(base)s
+              AND tick_chunk_id < %(target)s
+              AND (
+                    source::text = 'maturation'
+                    OR (
+                        source::text = 'retrograde'
+                        AND payload ->> 'source' = 'maturation'
+                    )
+                  )
+              AND (
+                    payload ->> 'retrograde_event_ref' IS NULL
+                    OR payload ->> 'retrograde_event_ref'
+                        !~ '^maturation_job_[0-9]+'
+                  )
+            ORDER BY id
+            """,
+            {"base": base_chunk, "target": self.target_chunk_id},
+        )
+        orphans = [_row_value(row, 0) for row in self.cur.fetchall()]
+        if orphans:
+            raise ValueError(
+                "Gated maturation replay found events with maturation "
+                f"provenance but no parseable maturation_job ref: {orphans}"
+            )
+
     # -- forward scalar replay ----------------------------------------------
 
     def replay(self, base_checkpoint_id: Optional[int] = None) -> ReplayResult:
@@ -500,6 +705,7 @@ class _Replayer:
             base_checkpoint_chunk_id=base_chunk,
             state={},
         )
+        self._resolve_maturation_gate(base_state, base_chunk, result)
         if "entities" in self.missing_base_sections:
             result.add_note(
                 "entities",
@@ -655,6 +861,7 @@ class _Replayer:
 
         for table in RELATIONSHIP_KEY_COLUMNS:
             self._unwind_relationships(table, result)
+        self._mark_delayed_maturation_rows(result)
         return result
 
     def _replay_claim_awareness(
@@ -1013,6 +1220,7 @@ class _Replayer:
         maturation_activity_window = MATURATION_PROJECT_START_WINDOW_SQL.format(
             column="(activity.row ->> 'source_chunk_id')::bigint"
         )
+        maturation_gate_filter = self._maturation_gate_filter()
         self.cur.execute(
             f"""
             SELECT DISTINCT chunk_id FROM (
@@ -1034,6 +1242,7 @@ class _Replayer:
                                 LIKE 'maturation_job_%%'
                         )
                       )
+                  {maturation_gate_filter}
                 UNION
                 SELECT (activity.row ->> 'source_chunk_id')::bigint
                 FROM world_events
@@ -1044,12 +1253,14 @@ class _Replayer:
                   AND payload ->> 'retrograde_event_ref'
                         LIKE 'maturation_job_%%'
                   AND {maturation_activity_window}
+                  {maturation_gate_filter}
             ) w ORDER BY chunk_id
             """,
             {
                 "base": base_chunk,
                 "target": self.target_chunk_id,
                 "started_types": list(MATURATION_PROJECT_STARTED_TYPES),
+                **self._maturation_gate_params(),
             },
         )
         return [_row_value(row, 0) for row in self.cur.fetchall()]
@@ -1087,12 +1298,14 @@ class _Replayer:
                     LIKE 'maturation_job_%%'
               AND (activity.row ->> 'source_chunk_id')::bigint = %(chunk)s
               AND {maturation_activity_window}
+              {self._maturation_gate_filter()}
             ORDER BY world_events.id, activity.ordinal
             """,
             {
                 "chunk": chunk_id,
                 "base": base_chunk,
                 "target": self.target_chunk_id,
+                **self._maturation_gate_params(),
             },
         )
         applied_count = 0
@@ -1417,6 +1630,7 @@ class _Replayer:
                             LIKE 'maturation_job_%%'
                     )
                   )
+              {self._maturation_gate_filter()}
             ORDER BY id
             """,
             {
@@ -1424,6 +1638,7 @@ class _Replayer:
                 "base": base_chunk,
                 "target": self.target_chunk_id,
                 "started_types": list(MATURATION_PROJECT_STARTED_TYPES),
+                **self._maturation_gate_params(),
             },
         )
         event_rows = self.cur.fetchall()
@@ -2497,15 +2712,22 @@ def reconstruct_state_at_sync(
     chunk_id: int,
     *,
     base_checkpoint_id: Optional[int] = None,
+    target_checkpoint_id: Optional[int] = None,
 ) -> ReplayResult:
     """Reconstruct the full mutable state surface as of ``chunk_id``.
 
     ``base_checkpoint_id`` pins the starting checkpoint (used by verify to
     force replay across a window that ends at a stored checkpoint); by
     default the latest checkpoint at or before ``chunk_id`` is used.
+    ``target_checkpoint_id`` names the stored checkpoint the result will be
+    compared against, enabling the issue-#552 applied-at gate for
+    asynchronously persisted maturation writes; arbitrary chunk
+    reconstruction leaves it None and keeps the chunk-window boundary.
     """
 
-    return _Replayer(cur, chunk_id).replay(base_checkpoint_id)
+    return _Replayer(cur, chunk_id, target_checkpoint_id=target_checkpoint_id).replay(
+        base_checkpoint_id
+    )
 
 
 def _values_equal(expected: Any, actual: Any) -> bool:
@@ -2712,7 +2934,10 @@ def verify_checkpoints_sync(cur: Any) -> list[CheckpointPairVerdict]:
             )
             continue
         result = reconstruct_state_at_sync(
-            cur, target_chunk, base_checkpoint_id=base_id
+            cur,
+            target_chunk,
+            base_checkpoint_id=base_id,
+            target_checkpoint_id=target_id,
         )
         stored = _load_checkpoint_state(cur, target_id)
         missing_sections = _missing_checkpoint_sections(

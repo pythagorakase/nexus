@@ -853,6 +853,23 @@ def test_runtime_maturation_death_replays_without_drift() -> None:
             changed_fields, cause_payload = cur.fetchone()
             assert changed_fields == ["entities.is_active"]
             assert cause_payload["applied_entity_activity"] == [projection]
+            # The #552 gate keys maturation replay on job manifests recorded
+            # in the persistence transaction; the fixture models that
+            # provenance so the death projection stays inside the gate.
+            cur.execute(
+                """
+                INSERT INTO orrery_maturation_jobs (
+                    id, entity_id, entity_kind, entity_subtype_id,
+                    entity_name, slot, requesting_chunk_id, declaration,
+                    state, result_manifest
+                ) VALUES (
+                    545001, %s, 'character', 1, 'Death Probe', 'test', %s,
+                    '{}'::jsonb, 'succeeded'::orrery_job_state,
+                    '{"schema_version": "orrery_retrograde_maturation_manifest.v1", "persisted": true}'::jsonb
+                )
+                """,
+                (entity_id, source_chunk),
+            )
             target_id = capture_state_checkpoint_sync(
                 cur, chunk_id=target_chunk, label="manual"
             )
