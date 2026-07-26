@@ -59,6 +59,16 @@ from nexus.memory.retrieval_coverage import coerce_chunk_id  # noqa: E402
 
 logger = logging.getLogger("nexus.lore.logon")
 
+# One resolved storyteller/clerk seat: (model id, registry provider name,
+# OpenAI-compatible endpoint or None, wire class). Shared by the slot-model
+# route and the pinned clerk route so the tuple shape cannot drift.
+StorytellerRoute = tuple[
+    str,
+    str,
+    Optional[Dict[str, Any]],
+    Literal["openai", "anthropic", "local"],
+]
+
 _PROPOSAL_TAG_DELTA_KEYS = frozenset(
     {
         "entity_tags.add",
@@ -464,14 +474,7 @@ class LogonUtility:
         """Resolve a runtime roster reference before constructing the provider."""
         return resolve_model_ref(model) if model.startswith("@") else model
 
-    def _resolve_storyteller_route(
-        self,
-    ) -> tuple[
-        str,
-        str,
-        Optional[Dict[str, Any]],
-        Literal["openai", "anthropic", "local"],
-    ]:
+    def _resolve_storyteller_route(self) -> StorytellerRoute:
         """Resolve the active model, endpoint, and storyteller wire class."""
         apex_settings = self.settings.get("API Settings", {}).get("apex", {})
 
@@ -525,14 +528,7 @@ class LogonUtility:
         self,
         is_bootstrap: Optional[bool] = None,
         *,
-        resolved_route: Optional[
-            tuple[
-                str,
-                str,
-                Optional[Dict[str, Any]],
-                Literal["openai", "anthropic", "local"],
-            ]
-        ] = None,
+        resolved_route: Optional[StorytellerRoute] = None,
     ) -> None:
         """Initialize the appropriate API provider based on settings and slot config."""
         apex_settings = self.settings.get("API Settings", {}).get("apex", {})
@@ -901,16 +897,7 @@ class LogonUtility:
             raise TypeError("Writer system prompt must be a string")
         return system_prompt
 
-    def _resolve_clerk_route(
-        self,
-    ) -> Optional[
-        tuple[
-            str,
-            str,
-            Optional[Dict[str, Any]],
-            Literal["openai", "anthropic", "local"],
-        ]
-    ]:
+    def _resolve_clerk_route(self) -> Optional[StorytellerRoute]:
         """Resolve the pinned clerk seat, or None to follow the slot model.
 
         Returns None whenever the clerk should ride the proven clone path:
@@ -956,12 +943,7 @@ class LogonUtility:
 
     def _build_clerk_provider(
         self,
-        clerk_route: tuple[
-            str,
-            str,
-            Optional[Dict[str, Any]],
-            Literal["openai", "anthropic", "local"],
-        ],
+        clerk_route: StorytellerRoute,
         *,
         system_prompt: Optional[str],
         output_validator: Any,
@@ -1011,15 +993,7 @@ class LogonUtility:
             output_validator=output_validator,
         )
 
-    def _clerk_effective_window(
-        self,
-        clerk_route: tuple[
-            str,
-            str,
-            Optional[Dict[str, Any]],
-            Literal["openai", "anthropic", "local"],
-        ],
-    ) -> int:
+    def _clerk_effective_window(self, clerk_route: StorytellerRoute) -> int:
         """Resolve the pinned clerk provider's own context ceiling.
 
         The clerk prompt (turn context + finished writer output) must be
