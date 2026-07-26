@@ -411,6 +411,17 @@ class LogonUtility:
         return clerk_prompt
 
     @staticmethod
+    def _load_writer_pass_note() -> str:
+        """Load the writer-pass scope note appended in two-pass mode."""
+
+        prompts_dir = Path(__file__).parent.parent.parent.parent / "prompts"
+        note_path = prompts_dir / "storyteller_writer_pass.md"
+        note = note_path.read_text()
+        if not note.strip():
+            raise ValueError(f"Writer pass note is empty: {note_path}")
+        return note
+
+    @staticmethod
     def _format_setting_context(setting_data: Any) -> str:
         """Render persisted SettingCard JSON into system-prompt context."""
 
@@ -885,8 +896,16 @@ class LogonUtility:
             )
         return pass_provider
 
-    def _writer_system_prompt(self) -> Optional[str]:
-        """Return the existing storyteller system prompt for pass one."""
+    def _writer_system_prompt(self) -> str:
+        """Return the storyteller system prompt scoped to the writer pass.
+
+        The single-pass core doctrine instructs authoring updates,
+        adjudications, and declarations — clerk work. Grammar-enforced
+        writers physically cannot overflow into those fields, but schema-free
+        writers (OpenRouter passthrough) obey the doctrine over the repair
+        loop, so the writer pass must be told its own scope explicitly (live
+        failure: Kimi K2.5 at a proposal-bearing beat, #578).
+        """
 
         if self.provider is None:
             raise RuntimeError("Writer prompt requires an initialized provider")
@@ -895,7 +914,10 @@ class LogonUtility:
             system_prompt = getattr(self.provider, "system_prompt", None)
         if system_prompt is not None and not isinstance(system_prompt, str):
             raise TypeError("Writer system prompt must be a string")
-        return system_prompt
+        note = self._load_writer_pass_note()
+        if system_prompt is None:
+            return note
+        return f"{system_prompt}\n\n{note}"
 
     def _resolve_clerk_route(self) -> Optional[StorytellerRoute]:
         """Resolve the pinned clerk seat, or None to follow the slot model.

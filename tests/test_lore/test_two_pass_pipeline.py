@@ -373,7 +373,11 @@ def _assert_two_pass_calls(
     assert clerk_call["output_validator"] is None
     assert writer_call["structured_output_retries"] == 3
     assert clerk_call["structured_output_retries"] == 3
-    assert writer_call["system_prompt"] == "Core storyteller prompt"
+    # Writer pass = core doctrine + explicit scope note (clerk work excluded);
+    # schema-free writers obey the core prompt over the repair loop without it.
+    assert writer_call["system_prompt"].startswith("Core storyteller prompt")
+    assert "# Writer Pass" in writer_call["system_prompt"]
+    assert "# Writer Pass" not in clerk_call["system_prompt"]
     assert "## Skald Clerk" in clerk_call["system_prompt"]
     assert clerk_call["prompt"].startswith(writer_call["prompt"])
     assert writer.narrative in clerk_call["prompt"]
