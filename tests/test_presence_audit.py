@@ -117,9 +117,9 @@ def test_live_audit_runs_read_only_on_a_real_chunk() -> None:
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT nc.id, nc.storyteller_text FROM narrative_chunks nc "
+                "SELECT nc.id, nc.raw_text FROM narrative_chunks nc "
                 "JOIN chunk_character_references ccr ON ccr.chunk_id = nc.id "
-                "WHERE nc.storyteller_text IS NOT NULL "
+                "WHERE nc.raw_text IS NOT NULL "
                 "ORDER BY nc.id DESC LIMIT 1"
             )
             row = cur.fetchone()
@@ -139,3 +139,22 @@ def test_live_audit_runs_read_only_on_a_real_chunk() -> None:
             assert finding["chunk_id"] == chunk_id
     finally:
         conn.close()
+
+
+def test_narrated_departure_is_accounted_by_parent_presence() -> None:
+    """presence.exit removes the junction row by design; the departing
+    character's name in prose must not be flagged (PR #584 Codex finding).
+
+    Under delta-presence, silence carries a present character forward, so a
+    parent-present character can only lack a row via an authored exit —
+    the exclusion is exact.
+    """
+    detector = _detector_with_characters({"kosi": KOSI})
+    match = detector.detect_entities(
+        "Kosi shoulders the boat hook and walks into the rain."
+    )
+
+    parent_present = {7}
+    findings = diff_presence(match, set() | parent_present, chunk_id=4246)
+
+    assert findings == []

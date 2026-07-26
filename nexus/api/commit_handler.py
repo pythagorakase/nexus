@@ -796,13 +796,20 @@ async def commit_incubator_to_database(
 
     # Post-commit presence-roster drift audit (issue #567): read-only
     # diagnostics over the committed chunk, outside the transaction.
+    # raw_text is the committed prose (storyteller text + enacted choice);
+    # the parent chunk id enables authored-exit accounting.
     from nexus.api.presence_audit import (
         audit_chunk_presence_async,
         presence_audit_enabled,
     )
 
     if presence_audit_enabled():
-        await audit_chunk_presence_async(conn, chunk_id, storyteller_text)
+        await audit_chunk_presence_async(
+            conn,
+            chunk_id,
+            raw_text,
+            parent_chunk_id=incubator.get("parent_chunk_id"),
+        )
 
     logger.info("Successfully committed chunk %s from session %s", chunk_id, session_id)
     return chunk_id
