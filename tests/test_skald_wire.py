@@ -77,7 +77,7 @@ DECLARED_ENTITY_ROLE_DESCRIPTION = (
     "Whether the declared entity is subject or object of the pair tag."
 )
 REPLACEMENT_EVENT_TYPE_DESCRIPTION = (
-    "Registered event type when the replacement emits a world_event."
+    "Registered event type for a replacement_state_delta world_event."
 )
 COORDINATES_DESCRIPTION = (
     "Earth-based lat/lon coordinates.\n\n"
@@ -1513,3 +1513,23 @@ def test_schema_token_measurement_uses_o200k() -> None:
     lenient_wire = _compact_schema_json(skald_wire_lenient_schema())
     assert len(encoding.encode(strict_wire)) > 0
     assert len(encoding.encode(lenient_wire)) > 0
+
+
+def test_replacement_event_type_requires_replacement_delta() -> None:
+    """An event type without a delta is silently dropped by the applier —
+    reject the shape at validation so the repair loop fixes it (#585 P2)."""
+
+    with pytest.raises(ValidationError, match="requires replacement_state_delta"):
+        OrreryAdjudication(
+            proposal_id="drink:aaa",
+            action="replace",
+            replacement_event_type="mock_replacement",
+        )
+
+    adjudication = OrreryAdjudication(
+        proposal_id="drink:aaa",
+        action="replace",
+        replacement_state_delta={"character_current_activity": "resting"},
+        replacement_event_type="mock_replacement",
+    )
+    assert adjudication.replacement_event_type == "mock_replacement"

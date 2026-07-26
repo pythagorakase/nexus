@@ -612,8 +612,26 @@ class OrreryAdjudication(BaseModel):
     )
     replacement_event_type: Optional[str] = Field(
         default=None,
-        description=("Registered event type when the replacement emits a world_event."),
+        description=(
+            "Registered event type for a replacement_state_delta world_event."
+        ),
     )
+
+    @model_validator(mode="after")
+    def event_type_requires_replacement_delta(self) -> "OrreryAdjudication":
+        """An event type without a replacement delta would be silently ignored.
+
+        events.py's adjudication applier returns early when the delta is
+        missing, so accepting this shape would drop the expected canonical
+        world_event on the floor (PR #585 Codex P2). Rejecting it here feeds
+        the generation-time repair loop instead.
+        """
+        if self.replacement_event_type and self.replacement_state_delta is None:
+            raise ValueError(
+                "replacement_event_type requires replacement_state_delta; "
+                "supply the delta or drop the event type"
+            )
+        return self
 
     model_config = ConfigDict(extra="forbid")
 
