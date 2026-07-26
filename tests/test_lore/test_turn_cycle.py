@@ -70,15 +70,21 @@ def _stub_baseline(
 
 
 @pytest.mark.parametrize(
-    ("apex_model", "provider_wire_type", "expected_window"),
+    ("apex_model", "provider_wire_type", "provider_name", "expected_window"),
     [
-        ("nousresearch/hermes-4-70b", "local", 32_000),
-        (None, "openai", 75_000),
-        ("claude-opus-4-8", "anthropic", 75_000),
+        ("nousresearch/hermes-4-70b", "local", "local", 32_000),
+        (None, "openai", "openai", 75_000),
+        ("claude-opus-4-8", "anthropic", "anthropic", 75_000),
+        # Remote OpenAI-compatible providers share the local wire class but
+        # keep the full frontier window (no provider_overrides entry).
+        ("moonshotai/kimi-k2.5", "local", "openrouter", 75_000),
     ],
 )
 def test_process_user_input_uses_provider_profile_budget(
-    apex_model: str | None, provider_wire_type: str, expected_window: int
+    apex_model: str | None,
+    provider_wire_type: str,
+    provider_name: str,
+    expected_window: int,
 ) -> None:
     """The real turn-cycle seam feeds one resolved window to both managers."""
 
@@ -99,13 +105,13 @@ def test_process_user_input_uses_provider_profile_budget(
         def ensure_logon(self) -> None:
             return None
 
-        def resolve_storyteller_route(self) -> tuple[str, str]:
-            return self.apex_model, provider_wire_type
+        def resolve_storyteller_route(self) -> tuple[str, str, str]:
+            return self.apex_model, provider_wire_type, provider_name
 
     lore = BudgetLore()
     manager = TurnCycleManager(lore)
     ctx = TurnContext(
-        turn_id=f"provider-profile-{provider_wire_type}",
+        turn_id=f"provider-profile-{provider_name}",
         user_input="Continue.",
         start_time=time.time(),
     )
@@ -114,6 +120,7 @@ def test_process_user_input_uses_provider_profile_budget(
 
     assert ctx.apex_model == lore.apex_model
     assert ctx.provider_wire_type == provider_wire_type
+    assert ctx.provider_name == provider_name
     assert ctx.token_counts["apex_window"] == expected_window
     assert lore.memory_manager.phase2_budget == expected_window // 10
     if apex_model is None:
@@ -282,6 +289,7 @@ def test_query_entity_states_passes_resolved_limits_to_fetch_boundary(
         user_input="Continue.",
         start_time=time.time(),
         provider_wire_type=provider_wire_type,
+        provider_name=provider_wire_type,
         warm_slice=[
             {"chunk_id": chunk_id, "text": f"Chunk {chunk_id}."}
             for chunk_id in range(30, 5, -1)
@@ -330,7 +338,7 @@ def test_query_entity_states_requires_wire_class_when_logon_is_active() -> None:
         warm_slice=[{"chunk_id": 1, "text": "Parent."}],
     )
 
-    with pytest.raises(RuntimeError, match="require.*provider wire class"):
+    with pytest.raises(RuntimeError, match="require.*wire class and provider name"):
         asyncio.run(manager.query_entity_states(ctx))
 
 
@@ -398,8 +406,8 @@ def test_local_payload_trims_oldest_warm_chunks_and_keeps_parent(
         def ensure_logon(self) -> None:
             return None
 
-        def resolve_storyteller_route(self) -> tuple[str, str]:
-            return "nousresearch/hermes-4-70b", "local"
+        def resolve_storyteller_route(self) -> tuple[str, str, str]:
+            return "nousresearch/hermes-4-70b", "local", "local"
 
     lore = LocalLore()
     turn_manager = TurnCycleManager(lore)
@@ -451,6 +459,7 @@ def test_frontier_payload_below_ceiling_is_unchanged(
         start_time=time.time(),
     )
     ctx.provider_wire_type = "openai"
+    ctx.provider_name = "openai"
     ctx.warm_slice = [{"chunk_id": 10, "text": "Recent narrative.", "is_target": True}]
     ctx.entity_data = {"characters": [{"name": "Mara", "summary": "Alert."}]}
     ctx.retrieved_passages = [{"chunk_id": 2, "text": "Earlier context."}]
@@ -506,6 +515,7 @@ def test_payload_trims_retrieved_passages_last_first(
         start_time=time.time(),
     )
     ctx.provider_wire_type = "local"
+    ctx.provider_name = "local"
     ctx.warm_slice = [{"chunk_id": 3, "text": "parent " * 600, "is_target": True}]
     ctx.retrieved_passages = [
         {"chunk_id": 1, "text": "first " * 250},
@@ -562,6 +572,7 @@ def test_trimmed_pass2_chunk_is_unregistered_refunded_and_retrievable() -> None:
                 self.settings,
                 memnon=self.memnon,
                 provider_wire_type="openai",
+                provider_name="openai",
             )
             self.token_manager = None
 
@@ -595,6 +606,7 @@ def test_trimmed_pass2_chunk_is_unregistered_refunded_and_retrievable() -> None:
     )
 
     first_turn.provider_wire_type = "openai"
+    first_turn.provider_name = "openai"
     first_turn.warm_slice = lore.memory_manager.augment_warm_slice([parent])
     first_turn.token_counts = {
         "total_available": 1_000,
@@ -649,6 +661,7 @@ def test_structured_payload_overflow_raises(
         start_time=time.time(),
     )
     ctx.provider_wire_type = "local"
+    ctx.provider_name = "local"
     ctx.warm_slice = [{"chunk_id": 3, "text": "Parent.", "is_target": True}]
     ctx.entity_data = {"characters": [{"summary": "structured " * 1_500}]}
     ctx.token_counts = {

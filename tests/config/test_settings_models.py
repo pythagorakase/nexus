@@ -142,10 +142,11 @@ def test_apex_rejects_unknown_anthropic_storyteller_transport() -> None:
         Settings(**raw)
 
 
-def test_shipped_turn_pipeline_defaults_to_single_pass() -> None:
+def test_shipped_turn_pipeline_is_two_pass() -> None:
+    """Committed default per the #578 casting ruling (owner, 2026-07-26)."""
     settings = Settings(**_nexus_toml_dict())
 
-    assert settings.apex.turn_pipeline == "single_pass"
+    assert settings.apex.turn_pipeline == "two_pass"
 
 
 def test_apex_rejects_unknown_turn_pipeline() -> None:
@@ -170,11 +171,11 @@ def test_token_budget_provider_overrides_parse() -> None:
 
 
 def test_token_budget_provider_overrides_reject_unknown_key() -> None:
-    """Provider override keys are the closed storyteller wire-class set."""
+    """Provider override keys are a closed provider-name set."""
     raw = _nexus_toml_dict()
     raw["lore"]["token_budget"]["provider_overrides"]["bedrock"] = 20_000
 
-    with pytest.raises(ValidationError, match="unknown provider classes.*bedrock"):
+    with pytest.raises(ValidationError, match="unknown provider names.*bedrock"):
         Settings(**raw)
 
 
@@ -233,11 +234,11 @@ def test_entity_inclusion_provider_overrides_parse() -> None:
 
 
 def test_entity_inclusion_provider_overrides_reject_unknown_outer_key() -> None:
-    """Provider override tables use the closed storyteller wire-class set."""
+    """Provider override tables use a closed provider-name set."""
     raw = _nexus_toml_dict()
     raw["lore"]["entity_inclusion"]["provider_overrides"]["bedrock"] = {}
 
-    with pytest.raises(ValidationError, match="unknown provider classes.*bedrock"):
+    with pytest.raises(ValidationError, match="unknown provider names.*bedrock"):
         Settings(**raw)
 
 

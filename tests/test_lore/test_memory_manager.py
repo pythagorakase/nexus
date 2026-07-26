@@ -89,25 +89,36 @@ def baseline_inputs() -> Dict[str, object]:
 
 
 @pytest.mark.parametrize(
-    ("provider_wire_type", "expected_window", "expected_phase2_budget"),
+    (
+        "provider_wire_type",
+        "provider_name",
+        "expected_window",
+        "expected_phase2_budget",
+    ),
     [
-        ("local", 24_000, 2_400),
-        ("openai", 75_000, 7_500),
-        ("anthropic", 75_000, 7_500),
+        ("local", "local", 24_000, 2_400),
+        ("openai", "openai", 75_000, 7_500),
+        ("anthropic", "anthropic", 75_000, 7_500),
+        # OpenAI-compatible remote providers share the "local" wire class but
+        # have no override entry: they must keep the full frontier window.
+        ("local", "openrouter", 75_000, 7_500),
     ],
 )
 def test_provider_override_resolves_at_memory_manager_seam(
     minimal_settings,
     caplog: pytest.LogCaptureFixture,
     provider_wire_type: str,
+    provider_name: str,
     expected_window: int,
     expected_phase2_budget: int,
 ) -> None:
-    """The turn-cycle seam resolves one provider-class budget for assembly."""
+    """The turn-cycle seam resolves one provider-name budget for assembly."""
     manager = ContextMemoryManager(minimal_settings)
 
     with caplog.at_level(logging.DEBUG, logger="nexus.memory.manager"):
-        effective_window = manager.configure_storyteller_budget(provider_wire_type)
+        effective_window = manager.configure_storyteller_budget(
+            provider_wire_type, provider_name
+        )
 
     assert effective_window == expected_window
     assert manager.phase2_budget == expected_phase2_budget
@@ -116,9 +127,9 @@ def test_provider_override_resolves_at_memory_manager_seam(
         for record in caplog.records
         if "Storyteller payload budget override" in record.getMessage()
     ]
-    assert len(override_logs) == (1 if provider_wire_type == "local" else 0)
+    assert len(override_logs) == (1 if provider_name == "local" else 0)
     if override_logs:
-        assert "class=local" in override_logs[0].getMessage()
+        assert "provider=local" in override_logs[0].getMessage()
         assert "effective=24000" in override_logs[0].getMessage()
 
 
@@ -131,7 +142,7 @@ def test_empty_provider_override_table_uses_base_budget(
     manager = ContextMemoryManager(settings)
 
     with caplog.at_level(logging.DEBUG, logger="nexus.memory.manager"):
-        effective_window = manager.configure_storyteller_budget("local")
+        effective_window = manager.configure_storyteller_budget("local", "local")
 
     assert effective_window == 75_000
     assert manager.phase2_budget == 7_500
@@ -143,7 +154,17 @@ def test_missing_provider_wire_type_is_programming_error(minimal_settings) -> No
     manager = ContextMemoryManager(minimal_settings)
 
     with pytest.raises(RuntimeError, match="valid active provider wire class"):
-        manager.configure_storyteller_budget(None)  # type: ignore[arg-type]
+        manager.configure_storyteller_budget(None, "openai")  # type: ignore[arg-type]
+
+
+def test_missing_provider_name_is_programming_error(minimal_settings) -> None:
+    """The override lookup key cannot be silently absent or blank."""
+    manager = ContextMemoryManager(minimal_settings)
+
+    with pytest.raises(RuntimeError, match="registry provider name"):
+        manager.configure_storyteller_budget("local", None)  # type: ignore[arg-type]
+    with pytest.raises(RuntimeError, match="registry provider name"):
+        manager.configure_storyteller_budget("local", "  ")
 
 
 def test_explicit_base_budget_mode_configures_phase2(minimal_settings) -> None:
@@ -165,6 +186,7 @@ def test_pass1_baseline_tracks_chunks_and_budget(
         minimal_settings,
         memnon=dummy_memnon,
         provider_wire_type="openai",
+        provider_name="openai",
     )
 
     package = manager.handle_storyteller_response(
@@ -196,6 +218,7 @@ def test_pass1_records_reserve_shortfall(
         minimal_settings,
         memnon=dummy_memnon,
         provider_wire_type="openai",
+        provider_name="openai",
     )
 
     tight_tokens = {
@@ -228,6 +251,7 @@ def test_pass2_divergence_triggers_incremental_retrieval(
         minimal_settings,
         memnon=dummy_memnon,
         provider_wire_type="openai",
+        provider_name="openai",
     )
 
     manager.handle_storyteller_response(
@@ -277,6 +301,7 @@ def test_pass2_preserves_entity_detection_when_character_is_in_baseline(
         minimal_settings,
         memnon=dummy_memnon,
         provider_wire_type="openai",
+        provider_name="openai",
     )
     manager.entity_detector.character_lookup = {
         "emilia": {"id": 2, "name": "Emilia", "summary": None}
@@ -303,6 +328,7 @@ def test_pass2_marks_matched_entities_outside_baseline(
         minimal_settings,
         memnon=dummy_memnon,
         provider_wire_type="openai",
+        provider_name="openai",
     )
     manager.entity_detector.character_lookup = {
         "victor": {"id": 99, "name": "Victor", "summary": None}
@@ -337,6 +363,7 @@ def test_pass1_separates_structured_passages(
         minimal_settings,
         memnon=dummy_memnon,
         provider_wire_type="openai",
+        provider_name="openai",
     )
 
     structured = {
@@ -373,6 +400,7 @@ def test_pass2_warm_slice_expansion_without_divergence(
         minimal_settings,
         memnon=dummy_memnon,
         provider_wire_type="openai",
+        provider_name="openai",
     )
 
     manager.handle_storyteller_response(
@@ -406,6 +434,7 @@ def test_augment_warm_slice_merges_incremental_additions(
         minimal_settings,
         memnon=dummy_memnon,
         provider_wire_type="openai",
+        provider_name="openai",
     )
 
     manager.handle_storyteller_response(
@@ -442,6 +471,7 @@ def test_get_memory_summary_reports_state(
         minimal_settings,
         memnon=dummy_memnon,
         provider_wire_type="openai",
+        provider_name="openai",
     )
 
     manager.handle_storyteller_response(

@@ -977,6 +977,28 @@ def _mock_storyteller_response(prompt: str) -> Dict[str, Any]:
     return response
 
 
+_WRITER_WIRE_FIELDS = ("narrative", "choices", "scene", "presence", "operations")
+_CLERK_WIRE_FIELDS = ("updates", "orrery_adjudications", "new_entities")
+
+
+def _mock_writer_response(prompt: str) -> Dict[str, Any]:
+    """Project the writer pass of the two-pass pipeline from the full fixture.
+
+    Projection (rather than a hand-built sibling dict) keeps the split
+    responses shape-coherent with the full turn fixture forever: any field the
+    full mock grows lands in exactly one pass, and extra=forbid on the pass
+    wires makes leakage loud in tests.
+    """
+    full = _mock_storyteller_response(prompt)
+    return {key: full[key] for key in _WRITER_WIRE_FIELDS if key in full}
+
+
+def _mock_clerk_response(prompt: str) -> Dict[str, Any]:
+    """Project the clerk pass of the two-pass pipeline from the full fixture."""
+    full = _mock_storyteller_response(prompt)
+    return {key: full[key] for key in _CLERK_WIRE_FIELDS if key in full}
+
+
 def _responses_payload(
     output_data: Dict[str, Any],
     *,
@@ -1095,19 +1117,37 @@ async def responses_create(request: ResponsesRequest):
     proposal_ids = _extract_orrery_proposal_ids(input_text)
 
     # Exact routing: the structured-output tool's schema says which
-    # Storyteller response the caller validates against. Turn requests
-    # (SkaldTurnWire) expose the optional updates namespace; bootstrap requests
-    # (StorytellerResponseBootstrap) do not.
+    # Storyteller response the caller validates against. The full turn wire
+    # (SkaldTurnWire) exposes BOTH narrative and updates; the two-pass split
+    # separates them (SkaldWriterWire = narrative/presence without updates,
+    # SkaldClerkWire = updates without narrative — extra=forbid, so each pass
+    # must receive only its own projection); bootstrap requests
+    # (StorytellerResponseBootstrap) carry neither updates nor presence.
     output_fields = _requested_output_properties(request)
     if output_fields:
         final_result_tool = _requested_output_uses_final_result_tool(request)
-        if "updates" in output_fields:
+        if "updates" in output_fields and "narrative" in output_fields:
             logger.info(
                 "[MOCK] Skald turn wire requested (%d Orrery proposals)",
                 len(proposal_ids),
             )
             return _responses_payload(
                 _mock_storyteller_response(input_text),
+                final_result_tool=final_result_tool,
+            )
+        if "updates" in output_fields:
+            logger.info(
+                "[MOCK] Skald clerk wire requested (%d Orrery proposals)",
+                len(proposal_ids),
+            )
+            return _responses_payload(
+                _mock_clerk_response(input_text),
+                final_result_tool=final_result_tool,
+            )
+        if "presence" in output_fields:
+            logger.info("[MOCK] Skald writer wire requested")
+            return _responses_payload(
+                _mock_writer_response(input_text),
                 final_result_tool=final_result_tool,
             )
         logger.info("[MOCK] Bootstrap schema requested, returning cached bootstrap")

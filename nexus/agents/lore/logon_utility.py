@@ -292,6 +292,7 @@ class LogonUtility:
         self._provider_wire_type: Optional[Literal["openai", "anthropic", "local"]] = (
             None
         )
+        self._provider_type_name: Optional[str] = None
         self._validation_dbname: Optional[str] = None
         self._schema_format_cache: Dict[type, Dict[str, Any]] = {}
 
@@ -510,12 +511,12 @@ class LogonUtility:
 
     def resolve_storyteller_route(
         self,
-    ) -> tuple[str, Literal["openai", "anthropic", "local"]]:
-        """Return the concrete storyteller model and its wire class."""
-        model, _provider_type, _endpoint, provider_wire_type = (
+    ) -> tuple[str, Literal["openai", "anthropic", "local"], str]:
+        """Return the storyteller model, wire class, and provider name."""
+        model, provider_type, _endpoint, provider_wire_type = (
             self._resolve_storyteller_route()
         )
-        return model, provider_wire_type
+        return model, provider_wire_type, provider_type
 
     def _initialize_provider(
         self,
@@ -605,6 +606,7 @@ class LogonUtility:
         self._schema_format_cache = {}
 
         self._provider_wire_type = provider_wire_type
+        self._provider_type_name = provider_type
         if provider_wire_type == "anthropic":
             self.provider = AnthropicProvider(
                 model=model,
@@ -1093,15 +1095,17 @@ class LogonUtility:
     ) -> int:
         """Fail before generation when LOGON formatting exceeds the turn window."""
         provider_wire_type = self._provider_wire_type
-        if provider_wire_type is None:
+        provider_name = self._provider_type_name
+        if provider_wire_type is None or provider_name is None:
             raise RuntimeError(
                 "Final storyteller prompt sizing requires an active provider "
-                "wire class"
+                "wire class and provider name"
             )
         if effective_context_window is None:
             effective_context_window = resolve_storyteller_context_window(
                 self.settings,
                 provider_wire_type,
+                provider_name,
             )
         if isinstance(effective_context_window, bool) or not isinstance(
             effective_context_window, int

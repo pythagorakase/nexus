@@ -32,6 +32,7 @@ def test_handle_user_input_skips_retrieval_coverage_without_database(
         },
         memnon=FakeMemnon(),
         provider_wire_type="openai",
+        provider_name="openai",
     )
     manager.handle_storyteller_response(
         narrative="The briefing ends.",

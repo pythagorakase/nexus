@@ -17,15 +17,23 @@ def _effective_values(config: Any) -> Dict[str, Any]:
     return config.model_dump(exclude={"provider_overrides"})
 
 
+def _base(settings: Dict[str, Any]) -> Any:
+    return resolve_entity_inclusion(
+        settings, provider_wire_type=None, provider_name=None
+    )
+
+
 def test_local_entity_inclusion_resolves_shipped_overrides(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Local routing applies four overrides and inherits every absent field."""
     settings = load_settings_as_dict()
-    base = resolve_entity_inclusion(settings, provider_wire_type=None)
+    base = _base(settings)
 
     with caplog.at_level(logging.DEBUG, logger="nexus.lore.entity_inclusion"):
-        resolved = resolve_entity_inclusion(settings, provider_wire_type="local")
+        resolved = resolve_entity_inclusion(
+            settings, provider_wire_type="local", provider_name="local"
+        )
 
     assert resolved.warm_slice_lookback_chunks == 12
     assert resolved.max_characters_from_warm_slice == 12
@@ -42,29 +50,47 @@ def test_local_entity_inclusion_resolves_shipped_overrides(
         if record.name == "nexus.lore.entity_inclusion"
     ]
     assert len(override_records) == 1
-    assert "class=local" in override_records[0].getMessage()
+    assert "provider=local" in override_records[0].getMessage()
     assert "'warm_slice_lookback_chunks': 12" in override_records[0].getMessage()
     assert "'include_all_relationships': False" in override_records[0].getMessage()
 
 
-@pytest.mark.parametrize("provider_wire_type", ["openai", "anthropic"])
+@pytest.mark.parametrize(
+    ("provider_wire_type", "provider_name"),
+    [("openai", "openai"), ("anthropic", "anthropic")],
+)
 def test_unconfigured_provider_entity_inclusion_is_pure_base(
     provider_wire_type: str,
+    provider_name: str,
 ) -> None:
-    """Provider classes without a table inherit the complete base config."""
+    """Providers without a table inherit the complete base config."""
     settings = load_settings_as_dict()
-    base = resolve_entity_inclusion(settings, provider_wire_type=None)
+    base = _base(settings)
 
-    resolved = resolve_entity_inclusion(settings, provider_wire_type)
+    resolved = resolve_entity_inclusion(settings, provider_wire_type, provider_name)
 
     assert _effective_values(resolved) == _effective_values(base)
+
+
+def test_remote_compatible_provider_keeps_base_inclusion() -> None:
+    """openrouter shares the local wire class but must NOT inherit its squeeze."""
+    settings = load_settings_as_dict()
+    base = _base(settings)
+
+    resolved = resolve_entity_inclusion(
+        settings, provider_wire_type="local", provider_name="openrouter"
+    )
+
+    assert _effective_values(resolved) == _effective_values(base)
+    assert resolved.max_characters_from_warm_slice == 25
+    assert resolved.include_all_relationships is True
 
 
 def test_logon_disabled_entity_inclusion_is_explicit_base() -> None:
     """The named no-wire-class path preserves the complete base config."""
     settings = load_settings_as_dict()
 
-    resolved = resolve_entity_inclusion(settings, provider_wire_type=None)
+    resolved = _base(settings)
 
     assert resolved.warm_slice_lookback_chunks == 20
     assert resolved.max_characters_from_warm_slice == 25
@@ -78,10 +104,12 @@ def test_empty_entity_inclusion_override_table_is_pure_base(
     """An empty provider table neither changes values nor emits an override log."""
     settings = copy.deepcopy(load_settings_as_dict())
     settings["lore"]["entity_inclusion"]["provider_overrides"] = {"local": {}}
-    base = resolve_entity_inclusion(settings, provider_wire_type=None)
+    base = _base(settings)
 
     with caplog.at_level(logging.DEBUG, logger="nexus.lore.entity_inclusion"):
-        resolved = resolve_entity_inclusion(settings, provider_wire_type="local")
+        resolved = resolve_entity_inclusion(
+            settings, provider_wire_type="local", provider_name="local"
+        )
 
     assert _effective_values(resolved) == _effective_values(base)
     assert not [
@@ -92,9 +120,23 @@ def test_empty_entity_inclusion_override_table_is_pure_base(
 
 
 def test_unknown_entity_inclusion_wire_class_fails_loudly() -> None:
-    """Runtime callers cannot bypass the closed provider-class contract."""
+    """Runtime callers cannot bypass the closed wire-class contract."""
     with pytest.raises(RuntimeError, match="unknown provider wire class.*bedrock"):
         resolve_entity_inclusion(
             load_settings_as_dict(),
             provider_wire_type="bedrock",
+            provider_name="bedrock",
+        )
+
+
+def test_incoherent_route_halves_fail_loudly() -> None:
+    """Wire class and provider name must be supplied together."""
+    settings = load_settings_as_dict()
+    with pytest.raises(RuntimeError, match="supplied together"):
+        resolve_entity_inclusion(
+            settings, provider_wire_type="local", provider_name=None
+        )
+    with pytest.raises(RuntimeError, match="supplied together"):
+        resolve_entity_inclusion(
+            settings, provider_wire_type=None, provider_name="local"
         )

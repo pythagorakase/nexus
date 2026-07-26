@@ -26,7 +26,7 @@ class TestContextValidation:
             },
         }
 
-        is_valid, errors = validate_context(context, settings, "openai")
+        is_valid, errors = validate_context(context, settings, "openai", "openai")
         assert is_valid
         assert len(errors) == 0
 
@@ -37,7 +37,7 @@ class TestContextValidation:
             "narrative_context": {"warm_slice": []}
         }
 
-        is_valid, errors = validate_context(context, settings, "openai")
+        is_valid, errors = validate_context(context, settings, "openai", "openai")
         assert not is_valid
         assert "Missing user_input" in errors
 
@@ -48,7 +48,7 @@ class TestContextValidation:
             "narrative_context": {"warm_slice": []},  # Empty
         }
 
-        is_valid, errors = validate_context(context, settings, "openai")
+        is_valid, errors = validate_context(context, settings, "openai", "openai")
         assert not is_valid
         assert any("warm_slice" in e for e in errors)
 
@@ -66,7 +66,7 @@ class TestContextValidation:
             },
         }
 
-        is_valid, errors = validate_context(context, settings, "openai")
+        is_valid, errors = validate_context(context, settings, "openai", "openai")
         assert not is_valid
         assert any("Token limit exceeded" in e for e in errors)
 
@@ -84,7 +84,7 @@ class TestContextValidation:
             },
         }
 
-        is_valid, errors = validate_context(context, settings, "openai")
+        is_valid, errors = validate_context(context, settings, "openai", "openai")
         assert not is_valid
         # Should have errors for all three components
         assert any("Warm slice below minimum" in e for e in errors)

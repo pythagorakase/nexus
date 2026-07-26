@@ -40,6 +40,7 @@ roles = { default = "claude-opus-4-8", deep = "claude-fable-5", fast = "claude-s
 models = [
     { id = "claude-sonnet-5-0", label = "Sonnet 5.0", native_structured_output = true },
     { id = "claude-opus-4-8", label = "Opus 4.8", unsupported_params = ["temperature", "top_p", "top_k"], native_structured_output = true },
+    { id = "claude-opus-5", label = "Opus 5", unsupported_params = ["temperature", "top_p", "top_k"], native_structured_output = true },
     { id = "claude-fable-5", label = "Fable 5", unsupported_params = ["temperature", "top_p", "top_k"], native_structured_output = true },
 ]
 
@@ -69,6 +70,29 @@ roles = { default = "nousresearch/hermes-4-70b" }
 models = [
     { id = "nousresearch/hermes-4-70b", label = "Hermes 4 70B (Local)", description = "Local llama-server inference (GGUF)" },
     { id = "nousresearch/hermes-4.3-36b", label = "Hermes 4.3 36B (Local)", description = "Local llama-server inference (GGUF, Seed-OSS)" },
+]
+
+# OpenRouter: one OpenAI-compatible funnel for the prose-model casting roster
+# (issue #578; writer-seat sampling 2026-07-25). Wire class is "local"
+# (chat_completions + lenient schema), but resource profiles key on the
+# provider NAME, so these frontier-quality remote models keep the full apex
+# context window and base entity inclusion — the 32K/thin-profile squeeze
+# belongs to compute-bound local GGUF serving only. Kimi K3 note: at default
+# reasoning it can spend its whole output budget thinking; sampled well at
+# low reasoning effort.
+[global.model.api_models.openrouter]
+base_url = "https://openrouter.ai/api/v1"
+api_key_secret = "openrouter"
+structured_transport = "chat_completions"
+request_timeout_seconds = 600
+roles = { default = "moonshotai/kimi-k2.5" }
+models = [
+    { id = "moonshotai/kimi-k2.5", label = "Kimi K2.5", description = "Moonshot K2.5 via OpenRouter" },
+    { id = "moonshotai/kimi-k3", label = "Kimi K3", description = "Moonshot K3 via OpenRouter" },
+    { id = "deepseek/deepseek-v4-pro", label = "DeepSeek V4 Pro", description = "DeepSeek V4 Pro via OpenRouter" },
+    { id = "nousresearch/hermes-4-405b", label = "Hermes 4 405B", description = "Nous Hermes 4 405B via OpenRouter" },
+    { id = "minimax/minimax-m3", label = "MiniMax M3", description = "MiniMax M3 via OpenRouter" },
+    { id = "z-ai/glm-5", label = "GLM-5", description = "Zhipu GLM-5 via OpenRouter" },
 ]
 
 # Interactive local GGUF management. The server port and alias remain sourced
@@ -214,8 +238,11 @@ system_prompt_tokens = 5000  # Reserved tokens for system prompt
 prompt_overhead_tokens = 4_000
 
 [lore.token_budget.provider_overrides]
-# Effective apex_context_window per storyteller provider class. Absent key =
-# base value. Local models need a smaller assembled payload (see #566).
+# Effective apex_context_window per REGISTRY PROVIDER NAME (not wire class).
+# Absent key = base value: openrouter shares the "local" wire dialect but has
+# no entry here, so its frontier models keep the full window. This "local"
+# key is the [api_models.local] provider — compute-bound GGUF serving needs a
+# smaller assembled payload (see #566).
 # 32K floor measured live 2026-07-24: a mature slot's untrimmable structured
 # core alone is ~14.9K tokens; 24K left the enforcement nothing to trim to.
 local = 32_000
@@ -1022,7 +1049,7 @@ model = "@openai.default"     # Resolved via api_models registry; edit roles to 
 reasoning_effort = "medium"   # Reasoning effort level (low/medium/high)
 max_output_tokens = 25000     # Maximum tokens for generated narrative
 anthropic_storyteller_transport = "prompted" # "prompted", "native", or "tool_envelope"
-turn_pipeline = "single_pass" # "single_pass" or "two_pass" bakeoff lever
+turn_pipeline = "two_pass" # "single_pass" or "two_pass"; two_pass default per #578 casting ruling (owner, 2026-07-26)
 structured_output_retries = 3 # Validation retry budget for structured story turns
 # HTTP client timeout for a narrative continue turn. Frontier generation runs
 # inside the request and blocks the API worker, so status polls aren't answered

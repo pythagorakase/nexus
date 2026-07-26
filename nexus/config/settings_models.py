@@ -608,19 +608,24 @@ class TokenBudgetConfig(BaseModel):
     )
     provider_overrides: Dict[str, int] = Field(
         default_factory=dict,
-        description="Smaller APEX context windows by storyteller provider class",
+        description=(
+            "Smaller APEX context windows by registry provider NAME. Providers "
+            "without an entry (e.g. openrouter) keep the full base window; "
+            "extend the legal-key set when a new provider actually needs a "
+            "constrained profile."
+        ),
     )
 
     @model_validator(mode="after")
     def _validate_provider_overrides(self) -> "TokenBudgetConfig":
         """Provider overrides are closed-keyed reductions of the base window."""
-        legal_provider_classes = {"openai", "anthropic", "local"}
-        unknown_provider_classes = set(self.provider_overrides) - legal_provider_classes
-        if unknown_provider_classes:
+        legal_provider_names = {"openai", "anthropic", "local"}
+        unknown_provider_names = set(self.provider_overrides) - legal_provider_names
+        if unknown_provider_names:
             raise ValueError(
                 "token budget provider_overrides contains unknown provider "
-                f"classes: {sorted(unknown_provider_classes)}; legal keys are "
-                f"{sorted(legal_provider_classes)}"
+                f"names: {sorted(unknown_provider_names)}; legal keys are "
+                f"{sorted(legal_provider_names)}"
             )
 
         for provider_class, override in self.provider_overrides.items():
@@ -689,19 +694,22 @@ class EntityInclusionConfig(BaseModel):
     max_total_threats: int = Field(..., ge=1)
     provider_overrides: Dict[str, EntityInclusionProviderOverride] = Field(
         default_factory=dict,
-        description="Entity-inclusion overrides by storyteller provider class",
+        description=(
+            "Entity-inclusion overrides by registry provider NAME. Providers "
+            "without an entry (e.g. openrouter) keep base inclusion."
+        ),
     )
 
     @model_validator(mode="after")
     def _validate_provider_overrides(self) -> "EntityInclusionConfig":
-        """Provider overrides use the closed storyteller wire-class set."""
-        legal_provider_classes = {"openai", "anthropic", "local"}
-        unknown_provider_classes = set(self.provider_overrides) - legal_provider_classes
-        if unknown_provider_classes:
+        """Provider overrides use a closed provider-name set."""
+        legal_provider_names = {"openai", "anthropic", "local"}
+        unknown_provider_names = set(self.provider_overrides) - legal_provider_names
+        if unknown_provider_names:
             raise ValueError(
                 "entity inclusion provider_overrides contains unknown provider "
-                f"classes: {sorted(unknown_provider_classes)}; legal keys are "
-                f"{sorted(legal_provider_classes)}"
+                f"names: {sorted(unknown_provider_names)}; legal keys are "
+                f"{sorted(legal_provider_names)}"
             )
         return self
 

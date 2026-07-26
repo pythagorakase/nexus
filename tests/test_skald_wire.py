@@ -1231,17 +1231,20 @@ def test_logon_selects_transport_appropriate_wire_serialization() -> None:
     utility = LogonUtility({}, dbname="save_05")
 
     utility._provider_wire_type = "openai"
+    utility._provider_type_name = "openai"
     assert utility._schema_format_kwargs(SkaldTurnWire) == {
         "text_format": skald_wire_strict_text_format()
     }
 
     utility._provider_wire_type = "local"
+    utility._provider_type_name = "local"
     utility._schema_format_cache = {}
     local_format = utility._schema_format_kwargs(SkaldTurnWire)["text_format"]
     assert local_format["name"] == "SkaldTurnWire"
     assert local_format["schema"] == skald_wire_lenient_schema()
 
     utility._provider_wire_type = "anthropic"
+    utility._provider_type_name = "anthropic"
     utility.provider = cast(
         Any,
         SimpleNamespace(structured_transport="prompted"),
@@ -1276,6 +1279,7 @@ def test_logon_selects_transport_appropriate_wire_serialization() -> None:
 def test_anthropic_wire_serialization_requires_transport_attribute() -> None:
     utility = LogonUtility({})
     utility._provider_wire_type = "anthropic"
+    utility._provider_type_name = "anthropic"
     utility.provider = cast(Any, SimpleNamespace())
 
     with pytest.raises(AttributeError, match="structured_transport"):
@@ -1285,6 +1289,7 @@ def test_anthropic_wire_serialization_requires_transport_attribute() -> None:
 def test_local_chat_response_format_carries_lenient_wire_schema() -> None:
     utility = LogonUtility({})
     utility._provider_wire_type = "local"
+    utility._provider_type_name = "local"
     text_format = utility._schema_format_kwargs(SkaldTurnWire)["text_format"]
     response_format = OpenAIProvider._chat_response_format(
         SkaldTurnWire,
@@ -1306,6 +1311,7 @@ def test_bootstrap_schema_selection_and_contract_are_unchanged() -> None:
     assert utility._select_response_schema({}) is SkaldTurnWire
 
     utility._provider_wire_type = "openai"
+    utility._provider_type_name = "openai"
     text_format = utility._schema_format_kwargs(StorytellerResponseBootstrap)[
         "text_format"
     ]
@@ -1313,6 +1319,7 @@ def test_bootstrap_schema_selection_and_contract_are_unchanged() -> None:
     assert set(text_format["schema"]["properties"]) == {"narrative", "choices"}
 
     utility._provider_wire_type = "anthropic"
+    utility._provider_type_name = "anthropic"
     utility.provider = cast(
         Any,
         SimpleNamespace(structured_transport="native"),
@@ -1389,6 +1396,7 @@ def test_sync_logon_reads_and_supplies_parent_baseline(
     utility.provider = cast(Any, WireProvider())
     utility._provider_bootstrap_mode = False
     utility._provider_wire_type = "openai"
+    utility._provider_type_name = "openai"
     response = utility.generate_narrative(
         {
             "user_input": "Continue.",
@@ -1441,6 +1449,7 @@ async def test_async_logon_reads_and_supplies_parent_baseline(
     utility.provider = cast(Any, WireProvider())
     utility._provider_bootstrap_mode = False
     utility._provider_wire_type = "openai"
+    utility._provider_type_name = "openai"
     response = await utility.generate_narrative_async(
         {
             "user_input": "Continue.",
