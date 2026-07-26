@@ -788,6 +788,22 @@ class LORERetrievalSettings(BaseModel):
     )
 
 
+class PresenceAuditSettings(BaseModel):
+    """Post-commit presence-roster drift audit (issue #567)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = Field(
+        default=True,
+        description=(
+            "Run the deterministic alias detector over each committed chunk's "
+            "prose and warn on characters named in prose with no junction row "
+            "(candidate missed entries under delta-presence). Diagnostics "
+            "only; never mutates state."
+        ),
+    )
+
+
 class LORESettings(BaseModel):
     """LORE agent configuration."""
 
@@ -799,6 +815,7 @@ class LORESettings(BaseModel):
     payload_percent_budget: PayloadPercentBudget
     entity_inclusion: EntityInclusionConfig
     retrieval: LORERetrievalSettings = Field(default_factory=LORERetrievalSettings)
+    presence_audit: PresenceAuditSettings = Field(default_factory=PresenceAuditSettings)
 
 
 # =============================================================================

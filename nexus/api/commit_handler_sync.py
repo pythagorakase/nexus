@@ -654,6 +654,20 @@ def commit_incubator_to_database_sync(
                 "Failed to schedule summaries for session %s: %s", session_id, exc
             )
 
+    # Post-commit presence-roster drift audit (issue #567): read-only
+    # diagnostics over the committed chunk, outside the transaction.
+    # raw_text is the committed prose (storyteller text + enacted choice);
+    # the parent chunk id enables authored-exit accounting.
+    from nexus.api.presence_audit import audit_chunk_presence, presence_audit_enabled
+
+    if presence_audit_enabled():
+        audit_chunk_presence(
+            conn,
+            chunk_id,
+            raw_text,
+            parent_chunk_id=incubator.get("parent_chunk_id"),
+        )
+
     logger.info("Successfully committed chunk %s from session %s", chunk_id, session_id)
     return chunk_id
 
