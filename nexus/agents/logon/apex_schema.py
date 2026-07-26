@@ -115,8 +115,7 @@ class NewEntityPairTagHint(BaseModel):
     declared_entity_role: Literal["subject", "object"] = Field(
         default="subject",
         description=(
-            "Whether the declared entity is the subject or object of the "
-            "directed pair tag."
+            "Whether the declared entity is subject or object of the pair tag."
         ),
     )
 
@@ -613,10 +612,7 @@ class OrreryAdjudication(BaseModel):
     )
     replacement_event_type: Optional[str] = Field(
         default=None,
-        description=(
-            "Optional registered event type for a replacement_state_delta. "
-            "Leave unset unless the replacement should emit a canonical world_event."
-        ),
+        description=("Registered event type when the replacement emits a world_event."),
     )
 
     model_config = ConfigDict(extra="forbid")
