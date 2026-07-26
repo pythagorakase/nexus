@@ -907,6 +907,9 @@ class FakeRetrogradePersistenceCursor:
             self._result = [{"checkpoint_table": "backstory_secrets"}]
         elif "jsonb_agg(to_jsonb(t))" in sql:
             self._result = [{"state": []}]
+        elif "FROM orrery_maturation_jobs" in sql and "persisted" in sql:
+            # Issue #552 checkpoint control key: no succeeded jobs in fixture.
+            self._result = [{"coalesce": []}]
         elif "INSERT INTO state_checkpoints" in sql:
             self._result = [{"id": 904}]
         else:

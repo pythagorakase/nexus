@@ -862,6 +862,14 @@ def test_maturation_project_replays_exactly_and_hydrates_continuation(
         assert base_id is not None
 
         request_chunk = _fabricate_chunk(cur, base_time + timedelta(hours=1))
+        # The #552 gate keys maturation replay on job manifests recorded in
+        # the persistence transaction; the fixture models that provenance.
+        _insert_succeeded_maturation_job(
+            cur,
+            job_id=531004,
+            actor_entity_id=actor_id,
+            requesting_chunk_id=request_chunk,
+        )
         manifest = _persist_maturation_expansion(
             cur,
             packet=packet,
@@ -955,6 +963,14 @@ def test_maturation_start_at_base_chunk_replays_without_drift(
         )
         assert base_id is not None
 
+        # The #552 gate keys maturation replay on job manifests recorded in
+        # the persistence transaction; the fixture models that provenance.
+        _insert_succeeded_maturation_job(
+            cur,
+            job_id=531006,
+            actor_entity_id=actor_id,
+            requesting_chunk_id=base_chunk,
+        )
         manifest = _persist_maturation_expansion(
             cur,
             packet=packet,
@@ -1320,3 +1336,209 @@ def _apply_project_advance(
         need_tuning=load_need_tuning(),
         project_policy=coerce_project_policy(project_settings),
     )
+
+
+def _insert_succeeded_maturation_job(
+    cur: Any,
+    *,
+    job_id: int,
+    actor_entity_id: int,
+    requesting_chunk_id: int,
+) -> None:
+    """Fabricate a succeeded worker job row (delayed-persistence stand-in)."""
+    cur.execute(
+        "DELETE FROM orrery_maturation_jobs WHERE entity_id = %s",
+        (actor_entity_id,),
+    )
+    cur.execute(
+        """
+        INSERT INTO orrery_maturation_jobs (
+            id, entity_id, entity_kind, entity_subtype_id, entity_name,
+            slot, requesting_chunk_id, declaration, state, result_manifest
+        )
+        SELECT %s, %s, 'character', c.id, c.name, 'test', %s, '{}'::jsonb,
+               'succeeded'::orrery_job_state, '{"schema_version": "orrery_retrograde_maturation_manifest.v1", "persisted": true}'::jsonb
+        FROM characters c WHERE c.entity_id = %s
+        """,
+        (job_id, actor_entity_id, requesting_chunk_id, actor_entity_id),
+    )
+
+
+def _insert_malformed_maturation_start(
+    cur: Any,
+    *,
+    tick_chunk_id: int,
+    actor_entity_id: int,
+    job_id: int,
+) -> None:
+    """A maturation-started event whose missing `applied` projection raises
+    loudly if replay ever reads it — the tripwire proving gate behavior."""
+    cur.execute(
+        """
+        INSERT INTO world_events (
+            event_type, tick_chunk_id, actor_entity_id, world_layer,
+            source, changed_fields, payload
+        ) VALUES (
+            'build_venture_started', %s, %s,
+            'primary'::world_layer_type,
+            'retrograde'::event_source_kind,
+            ARRAY['character_project_states'],
+            %s::jsonb
+        )
+        """,
+        (
+            tick_chunk_id,
+            actor_entity_id,
+            json.dumps(
+                {
+                    "source": "maturation",
+                    "retrograde_event_ref": f"maturation_job_{job_id}_ev_probe",
+                }
+            ),
+        ),
+    )
+
+
+def test_delayed_maturation_write_is_gated_out_of_checkpoint_replay(
+    project_db: dict[str, Any],
+) -> None:
+    """Issue #552 acceptance: request chunk A, checkpoint captured before the
+    worker write, then a delayed maturation persistence — the checkpoint
+    reconstructs WITHOUT the late rows.
+
+    The event's missing `applied` projection raises if replay reads it, so
+    a clean gated reconstruction proves exclusion; the ungated call keeps
+    the legacy chunk-window boundary and still trips.
+    """
+    db = project_db
+    actor_id, _actor = db["characters"][0]
+    with db["conn"].cursor() as cur:
+        base_time = _next_world_time(cur)
+        request_chunk = _fabricate_chunk(cur, base_time)
+        base_id = capture_state_checkpoint_sync(
+            cur, chunk_id=request_chunk, label="manual"
+        )
+        assert base_id is not None
+        target_chunk = _fabricate_chunk(cur, base_time + timedelta(hours=2))
+        target_id = capture_state_checkpoint_sync(
+            cur, chunk_id=target_chunk, label="manual"
+        )
+        assert target_id is not None
+
+        # Delayed worker persistence: job + started event land AFTER the
+        # target capture, attributed to the requesting chunk inside the
+        # replay window.
+        _insert_succeeded_maturation_job(
+            cur,
+            job_id=552001,
+            actor_entity_id=actor_id,
+            requesting_chunk_id=request_chunk,
+        )
+        _insert_malformed_maturation_start(
+            cur,
+            tick_chunk_id=request_chunk,
+            actor_entity_id=actor_id,
+            job_id=552001,
+        )
+
+        result = reconstruct_state_at_sync(
+            cur,
+            target_chunk,
+            base_checkpoint_id=base_id,
+            target_checkpoint_id=target_id,
+        )
+        assert any(
+            "gated on jobs" in note for note in result.notes.get("_maturation_gate", [])
+        )
+
+        with pytest.raises(ValueError, match="missing its required applied"):
+            reconstruct_state_at_sync(cur, target_chunk, base_checkpoint_id=base_id)
+
+
+def test_between_capture_maturation_job_still_replays_under_gate(
+    project_db: dict[str, Any],
+) -> None:
+    """A job that became visible-succeeded between the captures is INSIDE the
+    gate — the gate must not over-exclude (base-inclusive behavior for
+    writes committed before the target checkpoint, per acceptance)."""
+    db = project_db
+    actor_id, _actor = db["characters"][1]
+    with db["conn"].cursor() as cur:
+        base_time = _next_world_time(cur)
+        request_chunk = _fabricate_chunk(cur, base_time)
+        base_id = capture_state_checkpoint_sync(
+            cur, chunk_id=request_chunk, label="manual"
+        )
+        assert base_id is not None
+
+        _insert_succeeded_maturation_job(
+            cur,
+            job_id=552002,
+            actor_entity_id=actor_id,
+            requesting_chunk_id=request_chunk,
+        )
+        _insert_malformed_maturation_start(
+            cur,
+            tick_chunk_id=request_chunk,
+            actor_entity_id=actor_id,
+            job_id=552002,
+        )
+
+        target_chunk = _fabricate_chunk(cur, base_time + timedelta(hours=2))
+        target_id = capture_state_checkpoint_sync(
+            cur, chunk_id=target_chunk, label="manual"
+        )
+        assert target_id is not None
+
+        with pytest.raises(ValueError, match="missing its required applied"):
+            reconstruct_state_at_sync(
+                cur,
+                target_chunk,
+                base_checkpoint_id=base_id,
+                target_checkpoint_id=target_id,
+            )
+
+
+def test_checkpoints_without_control_key_keep_legacy_window(
+    project_db: dict[str, Any],
+) -> None:
+    """Cross-era pairs (documents predating the control key) keep the
+    chunk-window boundary and note the approximation."""
+    db = project_db
+    actor_id, _actor = db["characters"][2]
+    with db["conn"].cursor() as cur:
+        base_time = _next_world_time(cur)
+        request_chunk = _fabricate_chunk(cur, base_time)
+        base_id = capture_state_checkpoint_sync(
+            cur, chunk_id=request_chunk, label="manual"
+        )
+        target_chunk = _fabricate_chunk(cur, base_time + timedelta(hours=2))
+        target_id = capture_state_checkpoint_sync(
+            cur, chunk_id=target_chunk, label="manual"
+        )
+        cur.execute(
+            "UPDATE state_checkpoints SET state = state - '_maturation_jobs_succeeded' "
+            "WHERE id IN (%s, %s)",
+            (base_id, target_id),
+        )
+
+        _insert_succeeded_maturation_job(
+            cur,
+            job_id=552003,
+            actor_entity_id=actor_id,
+            requesting_chunk_id=request_chunk,
+        )
+        _insert_malformed_maturation_start(
+            cur,
+            tick_chunk_id=request_chunk,
+            actor_entity_id=actor_id,
+            job_id=552003,
+        )
+
+        with pytest.raises(ValueError, match="missing its required applied"):
+            reconstruct_state_at_sync(
+                cur,
+                target_chunk,
+                base_checkpoint_id=base_id,
+                target_checkpoint_id=target_id,
+            )

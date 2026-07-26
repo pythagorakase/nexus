@@ -28,6 +28,7 @@ from nexus.agents.logon.apex_schema import (
 )
 from nexus.agents.orrery.reconstruction import (
     CHECKPOINT_SECTIONS,
+    MATURATION_JOBS_CONTROL_KEY,
     capture_state_checkpoint_sync,
     set_commit_chunk_attribution_sync,
 )
@@ -69,7 +70,10 @@ def test_checkpoint_captures_every_section_and_is_idempotent() -> None:
             state = cur.fetchone()[0]
             if isinstance(state, str):
                 state = json.loads(state)
-            assert set(state) == set(CHECKPOINT_SECTIONS)
+            assert set(state) == set(CHECKPOINT_SECTIONS) | {
+                MATURATION_JOBS_CONTROL_KEY
+            }
+            assert isinstance(state[MATURATION_JOBS_CONTROL_KEY], list)
 
             cur.execute("SELECT count(*) FROM entity_tags WHERE cleared_at IS NULL")
             active_tags = cur.fetchone()[0]

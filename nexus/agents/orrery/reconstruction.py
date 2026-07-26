@@ -151,6 +151,25 @@ CHECKPOINT_SECTIONS: dict[str, str] = {
 
 _ADDITIVE_CHECKPOINT_TABLES = {"backstory_secrets": "backstory_secrets"}
 
+# Control key (#552): the set of maturation-job ids whose expansion WRITES
+# are visible inside the capture transaction. Underscore-prefixed and
+# deliberately absent from CHECKPOINT_SECTIONS so verification never diffs it
+# as state; replay uses target-minus-base membership as the exact applied-at
+# boundary for asynchronously persisted maturation writes. MVCC gives the
+# exactness: whatever this SELECT can see is precisely what the section
+# snapshots in the same transaction saw.
+#
+# The predicate is result_manifest.persisted — recorded by the worker in the
+# SAME transaction as the expansion writes — NOT state = 'succeeded', which
+# flips in a later transaction after embedding and would open a race band
+# where a capture sees the writes but not the membership.
+MATURATION_JOBS_CONTROL_KEY = "_maturation_jobs_succeeded"
+_MATURATION_JOBS_CONTROL_SQL = (
+    "SELECT coalesce(jsonb_agg(id ORDER BY id), '[]'::jsonb) "
+    "FROM orrery_maturation_jobs "
+    "WHERE (result_manifest ->> 'persisted')::boolean"
+)
+
 CHECKPOINT_LABELS = ("genesis", "interval", "manual")
 
 
@@ -189,6 +208,13 @@ def capture_state_checkpoint_sync(
         cur.execute(sql)
         row = cur.fetchone()
         state[section] = row[0] if not hasattr(row, "keys") else list(row.values())[0]
+    cur.execute(_MATURATION_JOBS_CONTROL_SQL)
+    control_row = cur.fetchone()
+    state[MATURATION_JOBS_CONTROL_KEY] = (
+        control_row[0]
+        if not hasattr(control_row, "keys")
+        else list(control_row.values())[0]
+    )
     cur.execute(
         """
         INSERT INTO state_checkpoints (chunk_id, label, state)
@@ -219,6 +245,10 @@ async def capture_state_checkpoint_async(
             continue
         value = await conn.fetchval(sql)
         state[section] = json.loads(value) if isinstance(value, str) else value
+    control_value = await conn.fetchval(_MATURATION_JOBS_CONTROL_SQL)
+    state[MATURATION_JOBS_CONTROL_KEY] = (
+        json.loads(control_value) if isinstance(control_value, str) else control_value
+    )
     return await conn.fetchval(
         """
         INSERT INTO state_checkpoints (chunk_id, label, state)
