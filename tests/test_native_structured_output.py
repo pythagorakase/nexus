@@ -1412,3 +1412,42 @@ def test_anthropic_provider_wraps_legacy_output_format_override() -> None:
     assert parsed == expected
     assert captured["output_config"] == {"format": output_format}
     assert "output_format" not in captured
+
+
+def test_chat_request_params_ride_extra_body() -> None:
+    """Registry request_params merge into chat-completions via extra_body (#580)."""
+
+    provider = OpenAIProvider(
+        model="moonshotai/kimi-k3",
+        api_key="test-key",
+        base_url="https://openrouter.ai/api/v1",
+        structured_transport="chat_completions",
+        request_params={"reasoning": {"effort": "low"}},
+    )
+
+    params = provider._build_chat_structured_request_params(
+        "Prompt", StorytellerResponseBootstrap
+    )
+
+    assert params["extra_body"] == {"reasoning": {"effort": "low"}}
+    assert params["model"] == "moonshotai/kimi-k3"
+    # A mutation of the built dict must not leak back into provider state.
+    params["extra_body"]["reasoning"]["effort"] = "high"
+    assert provider.request_params == {"reasoning": {"effort": "low"}}
+
+
+def test_chat_request_without_request_params_omits_extra_body() -> None:
+    """Models without registry params keep the pre-#580 request shape."""
+
+    provider = OpenAIProvider(
+        model="local-model",
+        api_key="test-key",
+        base_url="http://127.0.0.1:1234/v1",
+        structured_transport="chat_completions",
+    )
+
+    params = provider._build_chat_structured_request_params(
+        "Prompt", StorytellerResponseBootstrap
+    )
+
+    assert "extra_body" not in params

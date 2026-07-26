@@ -74,6 +74,40 @@ class APIModelEntry(BaseModel):
             "#454); False forces it OFF; None defers to pydantic-ai."
         ),
     )
+    request_params: Dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "Provider-specific request-body parameters merged into every "
+            "chat-completions call for this model via the OpenAI SDK's "
+            "extra_body (issue #580; e.g. reasoning damping for models that "
+            "otherwise think away their output budget). Structural request "
+            "keys are reserved and rejected at config load."
+        ),
+    )
+
+    _RESERVED_REQUEST_PARAM_KEYS = frozenset(
+        {
+            "model",
+            "messages",
+            "stream",
+            "response_format",
+            "tools",
+            "tool_choice",
+            "text",
+            "extra_body",
+        }
+    )
+
+    @model_validator(mode="after")
+    def _validate_request_params(self) -> "APIModelEntry":
+        """request_params may not shadow structural request keys."""
+        reserved = self._RESERVED_REQUEST_PARAM_KEYS & set(self.request_params)
+        if reserved:
+            raise ValueError(
+                f"request_params for model '{self.id}' may not set reserved "
+                f"request keys: {sorted(reserved)}"
+            )
+        return self
 
 
 class ProviderModels(BaseModel):

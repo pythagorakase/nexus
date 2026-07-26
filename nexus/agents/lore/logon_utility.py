@@ -644,6 +644,7 @@ class LogonUtility:
                 request_timeout=request_timeout,
                 structured_output_retries=structured_output_retries,
                 output_validator=output_validator,
+                request_params=endpoint.get("request_params") if endpoint else None,
             )
 
         logger.info(
@@ -1013,6 +1014,7 @@ class LogonUtility:
             request_timeout=request_timeout,
             structured_output_retries=structured_output_retries,
             output_validator=output_validator,
+            request_params=endpoint.get("request_params") if endpoint else None,
         )
 
     def _clerk_effective_window(self, clerk_route: StorytellerRoute) -> int:

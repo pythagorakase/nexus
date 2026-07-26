@@ -568,6 +568,7 @@ def test_get_openai_compatible_endpoint_routing():
         "api_key": "nexus-local-no-key",
         "structured_transport": "responses",
         "request_timeout_seconds": None,
+        "request_params": {},
     }
     local = settings.global_.model.api_models["local"]
     assert resolve_model_ref("@local.default") == "nousresearch/hermes-4-70b"
@@ -576,11 +577,34 @@ def test_get_openai_compatible_endpoint_routing():
         "api_key": "nexus-local-no-key",
         "structured_transport": "chat_completions",
         "request_timeout_seconds": 1800,
+        "request_params": {},
     }
     assert get_openai_compatible_endpoint("gpt-5.5") is None
     assert get_openai_compatible_endpoint("claude-opus-4-8") is None
     # Models absent from the registry are treated as native/legacy overrides.
     assert get_openai_compatible_endpoint("unregistered-model") is None
+
+
+def test_request_params_reserved_keys_rejected() -> None:
+    """Structural request keys may not be shadowed by request_params (#580)."""
+    raw = _nexus_toml_dict()
+    or_models = raw["global"]["model"]["api_models"]["openrouter"]["models"]
+    or_models[0]["request_params"] = {"messages": []}
+
+    with pytest.raises(ValidationError, match="reserved request keys.*messages"):
+        Settings(**raw)
+
+
+def test_shipped_kimi_k3_carries_reasoning_damping() -> None:
+    """K3's registry entry damps reasoning so it cannot think away its budget."""
+    settings = Settings(**_nexus_toml_dict())
+
+    k3 = next(
+        model
+        for model in settings.global_.model.api_models["openrouter"].models
+        if model.id == "moonshotai/kimi-k3"
+    )
+    assert k3.request_params == {"reasoning": {"effort": "low"}}
 
 
 def test_llama_server_runtime_service_parses():
@@ -658,6 +682,7 @@ def test_default_load_honors_runtime_config_env(tmp_path, monkeypatch):
         "api_key": "nexus-local-no-key",
         "structured_transport": "responses",
         "request_timeout_seconds": None,
+        "request_params": {},
     }
     assert (
         load_settings("nexus.toml")

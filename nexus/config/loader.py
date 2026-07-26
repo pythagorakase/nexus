@@ -263,11 +263,18 @@ def get_openai_compatible_endpoint(model_id: str) -> Optional[Dict[str, Any]]:
         api_key = get_secret(entry.api_key_secret)
     else:
         api_key = "nexus-local-no-key"
+    model_entry = next((model for model in entry.models if model.id == model_id), None)
+    if model_entry is None:
+        raise ValueError(
+            f"Model '{model_id}' maps to provider '{provider}' but is absent "
+            "from that provider's models list"
+        )
     return {
         "base_url": entry.base_url,
         "api_key": api_key,
         "structured_transport": entry.structured_transport,
         "request_timeout_seconds": entry.request_timeout_seconds,
+        "request_params": dict(model_entry.request_params),
     }
 
 
