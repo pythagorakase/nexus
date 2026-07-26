@@ -289,6 +289,12 @@ max_characters_from_warm_slice = 12
 max_locations_from_warm_slice = 6
 include_all_relationships = false
 
+[lore.presence_audit]
+# Post-commit roster-drift diagnostics (issue #567): warn when committed
+# prose names a character with no junction row for the chunk (candidate
+# missed entry under delta-presence). Read-only; never blocks a turn.
+enabled = true
+
 # =============================================================================
 # Orrery Settings (Off-Screen Behavior Resolver)
 # =============================================================================

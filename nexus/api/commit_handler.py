@@ -794,6 +794,16 @@ async def commit_incubator_to_database(
                 "Failed to schedule summaries for session %s: %s", session_id, exc
             )
 
+    # Post-commit presence-roster drift audit (issue #567): read-only
+    # diagnostics over the committed chunk, outside the transaction.
+    from nexus.api.presence_audit import (
+        audit_chunk_presence_async,
+        presence_audit_enabled,
+    )
+
+    if presence_audit_enabled():
+        await audit_chunk_presence_async(conn, chunk_id, storyteller_text)
+
     logger.info("Successfully committed chunk %s from session %s", chunk_id, session_id)
     return chunk_id
 
