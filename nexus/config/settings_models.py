@@ -74,6 +74,40 @@ class APIModelEntry(BaseModel):
             "#454); False forces it OFF; None defers to pydantic-ai."
         ),
     )
+    request_params: Dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "Provider-specific request-body parameters merged into every "
+            "chat-completions call for this model via the OpenAI SDK's "
+            "extra_body (issue #580; e.g. reasoning damping for models that "
+            "otherwise think away their output budget). Structural request "
+            "keys are reserved and rejected at config load."
+        ),
+    )
+
+    _RESERVED_REQUEST_PARAM_KEYS = frozenset(
+        {
+            "model",
+            "messages",
+            "stream",
+            "response_format",
+            "tools",
+            "tool_choice",
+            "text",
+            "extra_body",
+        }
+    )
+
+    @model_validator(mode="after")
+    def _validate_request_params(self) -> "APIModelEntry":
+        """request_params may not shadow structural request keys."""
+        reserved = self._RESERVED_REQUEST_PARAM_KEYS & set(self.request_params)
+        if reserved:
+            raise ValueError(
+                f"request_params for model '{self.id}' may not set reserved "
+                f"request keys: {sorted(reserved)}"
+            )
+        return self
 
 
 class ProviderModels(BaseModel):
@@ -233,6 +267,34 @@ class ModelConfig(BaseModel):
                     f"Provider '{provider}' in [global.model.api_models] is not "
                     f"a native SDK provider ({sorted(NATIVE_API_PROVIDERS)}) and "
                     f"must declare a base_url for its OpenAI-compatible server."
+                )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_request_params_transport(self) -> "ModelConfig":
+        """request_params only reach chat-completions requests (issue #580).
+
+        Native SDK providers return no endpoint, and the 'responses'
+        transport's request builders never merge request_params — configuring
+        them there would silently no-op, which is exactly the failure mode
+        the field exists to prevent.
+        """
+        for provider, config in self.api_models.items():
+            offenders = [entry.id for entry in config.models if entry.request_params]
+            if not offenders:
+                continue
+            if provider in NATIVE_API_PROVIDERS:
+                raise ValueError(
+                    f"request_params on models {offenders} of native provider "
+                    f"'{provider}' would be silently ignored; the field only "
+                    "applies to chat_completions transports."
+                )
+            if config.structured_transport != "chat_completions":
+                raise ValueError(
+                    f"request_params on models {offenders} of provider "
+                    f"'{provider}' require structured_transport = "
+                    "'chat_completions'; the 'responses' transport ignores "
+                    "them."
                 )
         return self
 

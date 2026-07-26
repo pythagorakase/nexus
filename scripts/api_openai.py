@@ -34,6 +34,7 @@ Processing Options:
 import os
 import sys
 import abc
+import copy
 import argparse
 import asyncio
 import logging
@@ -295,6 +296,7 @@ class OpenAIProvider(LLMProvider):
         request_timeout: Optional[float] = None,
         structured_output_retries: Optional[int] = None,
         output_validator: Optional[Any] = None,
+        request_params: Optional[Dict[str, Any]] = None,
     ):
         """
         Initialize OpenAI provider with additional reasoning parameter.
@@ -318,8 +320,14 @@ class OpenAIProvider(LLMProvider):
                 output agents (apex.structured_output_retries in nexus.toml)
             output_validator: Optional async pydantic_ai output validator
                 registered on structured agents (may raise ModelRetry)
+            request_params: Per-model provider-specific request-body params
+                from the registry (issue #580), merged into chat-completions
+                calls via the SDK's extra_body
         """
         self.reasoning_effort = reasoning_effort
+        # Deep copy: nested param objects (e.g. {"reasoning": {"effort": ...}})
+        # must not alias caller state or the built request dicts.
+        self.request_params = copy.deepcopy(request_params) if request_params else {}
         self.max_output_tokens = max_output_tokens or max_tokens
         self.base_url = base_url
         self.request_timeout = request_timeout
@@ -688,6 +696,13 @@ class OpenAIProvider(LLMProvider):
         }
         if self.supports_temperature and self.temperature is not None:
             request_params["temperature"] = self.temperature
+        if self.request_params:
+            # Registry-declared provider-specific params (issue #580) ride
+            # extra_body: the OpenAI SDK rejects unknown kwargs, and servers
+            # (OpenRouter, llama-server) read them from the merged JSON body.
+            # Structural keys are reserved at config load. Deep copy so a
+            # caller mutating the built request cannot corrupt provider state.
+            request_params["extra_body"] = copy.deepcopy(self.request_params)
         return request_params
 
     @staticmethod
@@ -871,6 +886,10 @@ class OpenAIProvider(LLMProvider):
         }
         if self.supports_temperature and self.temperature is not None:
             request_params["temperature"] = self.temperature
+        if self.request_params:
+            # Registry request_params (issue #580) apply to plain completions
+            # too — Orrery narration reaches OpenRouter through this path.
+            request_params["extra_body"] = copy.deepcopy(self.request_params)
 
         response = self.client.chat.completions.create(**request_params)
         choices = getattr(response, "choices", None) or []

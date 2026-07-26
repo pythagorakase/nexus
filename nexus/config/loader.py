@@ -242,9 +242,11 @@ def get_openai_compatible_endpoint(model_id: str) -> Optional[Dict[str, Any]]:
 
     Returns:
         ``{"base_url": ..., "api_key": ..., "structured_transport": ...,
-        "request_timeout_seconds": ...}`` for base_url providers, or None for
-        native providers and for models absent from the registry (callers that
-        accept ad-hoc model overrides treat those as native-SDK models).
+        "request_timeout_seconds": ..., "request_params": ...}`` for base_url
+        providers, or None for native providers and for models absent from
+        the registry (callers that accept ad-hoc model overrides treat those
+        as native-SDK models). ``request_params`` is the model entry's
+        provider-specific request-body table (issue #580), ``{}`` when unset.
         ``api_key`` is read from Keychain when the provider declares
         ``api_key_secret``; otherwise a placeholder is returned because OpenAI
         clients require a non-empty key.
@@ -263,11 +265,21 @@ def get_openai_compatible_endpoint(model_id: str) -> Optional[Dict[str, Any]]:
         api_key = get_secret(entry.api_key_secret)
     else:
         api_key = "nexus-local-no-key"
+    # get_provider_for_model and this function each call load_settings();
+    # a config reload landing between the two reads can desync them, so the
+    # membership guard is a real race check, not dead code.
+    model_entry = next((model for model in entry.models if model.id == model_id), None)
+    if model_entry is None:
+        raise ValueError(
+            f"Model '{model_id}' maps to provider '{provider}' but is absent "
+            "from that provider's models list"
+        )
     return {
         "base_url": entry.base_url,
         "api_key": api_key,
         "structured_transport": entry.structured_transport,
         "request_timeout_seconds": entry.request_timeout_seconds,
+        "request_params": dict(model_entry.request_params),
     }
 
 

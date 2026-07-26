@@ -88,7 +88,7 @@ request_timeout_seconds = 600
 roles = { default = "moonshotai/kimi-k2.5" }
 models = [
     { id = "moonshotai/kimi-k2.5", label = "Kimi K2.5", description = "Moonshot K2.5 via OpenRouter" },
-    { id = "moonshotai/kimi-k3", label = "Kimi K3", description = "Moonshot K3 via OpenRouter" },
+    { id = "moonshotai/kimi-k3", label = "Kimi K3", description = "Moonshot K3 via OpenRouter", request_params = { reasoning = { effort = "low" } } },
     { id = "deepseek/deepseek-v4-pro", label = "DeepSeek V4 Pro", description = "DeepSeek V4 Pro via OpenRouter" },
     { id = "nousresearch/hermes-4-405b", label = "Hermes 4 405B", description = "Nous Hermes 4 405B via OpenRouter" },
     { id = "minimax/minimax-m3", label = "MiniMax M3", description = "MiniMax M3 via OpenRouter" },
