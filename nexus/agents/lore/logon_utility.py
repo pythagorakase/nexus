@@ -896,7 +896,7 @@ class LogonUtility:
             )
         return pass_provider
 
-    def _writer_system_prompt(self) -> Optional[str]:
+    def _writer_system_prompt(self) -> str:
         """Return the storyteller system prompt scoped to the writer pass.
 
         The single-pass core doctrine instructs authoring updates,
