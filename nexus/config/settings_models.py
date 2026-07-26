@@ -270,6 +270,34 @@ class ModelConfig(BaseModel):
                 )
         return self
 
+    @model_validator(mode="after")
+    def _validate_request_params_transport(self) -> "ModelConfig":
+        """request_params only reach chat-completions requests (issue #580).
+
+        Native SDK providers return no endpoint, and the 'responses'
+        transport's request builders never merge request_params — configuring
+        them there would silently no-op, which is exactly the failure mode
+        the field exists to prevent.
+        """
+        for provider, config in self.api_models.items():
+            offenders = [entry.id for entry in config.models if entry.request_params]
+            if not offenders:
+                continue
+            if provider in NATIVE_API_PROVIDERS:
+                raise ValueError(
+                    f"request_params on models {offenders} of native provider "
+                    f"'{provider}' would be silently ignored; the field only "
+                    "applies to chat_completions transports."
+                )
+            if config.structured_transport != "chat_completions":
+                raise ValueError(
+                    f"request_params on models {offenders} of provider "
+                    f"'{provider}' require structured_transport = "
+                    "'chat_completions'; the 'responses' transport ignores "
+                    "them."
+                )
+        return self
+
 
 class NarrativeConfig(BaseModel):
     """Narrative test mode settings."""

@@ -886,6 +886,10 @@ class OpenAIProvider(LLMProvider):
         }
         if self.supports_temperature and self.temperature is not None:
             request_params["temperature"] = self.temperature
+        if self.request_params:
+            # Registry request_params (issue #580) apply to plain completions
+            # too — Orrery narration reaches OpenRouter through this path.
+            request_params["extra_body"] = copy.deepcopy(self.request_params)
 
         response = self.client.chat.completions.create(**request_params)
         choices = getattr(response, "choices", None) or []

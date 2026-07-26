@@ -595,6 +595,28 @@ def test_request_params_reserved_keys_rejected() -> None:
         Settings(**raw)
 
 
+def test_request_params_rejected_on_native_provider() -> None:
+    """Natively-served models cannot carry silently-ignored request_params."""
+    raw = _nexus_toml_dict()
+    raw["global"]["model"]["api_models"]["openai"]["models"][0]["request_params"] = {
+        "reasoning": {"effort": "low"}
+    }
+
+    with pytest.raises(ValidationError, match="native provider 'openai'"):
+        Settings(**raw)
+
+
+def test_request_params_rejected_on_responses_transport() -> None:
+    """The responses transport never merges request_params — reject loudly."""
+    raw = _nexus_toml_dict()
+    raw["global"]["model"]["api_models"]["test"]["models"][0]["request_params"] = {
+        "reasoning": {"effort": "low"}
+    }
+
+    with pytest.raises(ValidationError, match="require structured_transport"):
+        Settings(**raw)
+
+
 def test_shipped_kimi_k3_carries_reasoning_damping() -> None:
     """K3's registry entry damps reasoning so it cannot think away its budget."""
     settings = Settings(**_nexus_toml_dict())

@@ -253,6 +253,7 @@ def build_native_structured_provider(
             request_timeout=(endpoint["request_timeout_seconds"] if endpoint else None),
             structured_output_retries=structured_output_retries,
             output_validator=output_validator,
+            request_params=endpoint.get("request_params") if endpoint else None,
             **openai_kwargs,
         )
     raise ValueError(f"Unsupported provider type for model {model!r}: {provider_type}")

@@ -1451,3 +1451,59 @@ def test_chat_request_without_request_params_omits_extra_body() -> None:
     )
 
     assert "extra_body" not in params
+
+
+def test_build_native_structured_provider_threads_request_params(
+    monkeypatch,
+) -> None:
+    """The shared factory must not drop registry request_params (#583 review)."""
+    from nexus.api import native_structured_output as nso
+
+    endpoint = {
+        "base_url": "https://openrouter.ai/api/v1",
+        "api_key": "test-key",
+        "structured_transport": "chat_completions",
+        "request_timeout_seconds": None,
+        "request_params": {"reasoning": {"effort": "low"}},
+    }
+    monkeypatch.setattr(
+        "nexus.config.get_openai_compatible_endpoint", lambda _model: endpoint
+    )
+    monkeypatch.setattr(
+        "nexus.config.loader.get_provider_for_model", lambda _model: "openrouter"
+    )
+
+    provider = nso.build_native_structured_provider(
+        model="moonshotai/kimi-k3",
+        max_tokens=1000,
+        system_prompt="s",
+        structured_output_retries=1,
+    )
+
+    assert provider.request_params == {"reasoning": {"effort": "low"}}
+
+
+def test_plain_chat_completion_merges_request_params() -> None:
+    """Orrery narration's plain-completion path must apply the damping too."""
+
+    provider = OpenAIProvider(
+        model="moonshotai/kimi-k3",
+        api_key="test-key",
+        base_url="https://openrouter.ai/api/v1",
+        structured_transport="chat_completions",
+        request_params={"reasoning": {"effort": "low"}},
+    )
+    captured = {}
+
+    class FakeCompletions:
+        def create(self, **kwargs):
+            captured.update(kwargs)
+            return SimpleNamespace(choices=[], usage=None)
+
+    provider.client = SimpleNamespace(
+        chat=SimpleNamespace(completions=FakeCompletions())
+    )
+
+    provider._get_completion_chat_completions("Prompt")
+
+    assert captured["extra_body"] == {"reasoning": {"effort": "low"}}
