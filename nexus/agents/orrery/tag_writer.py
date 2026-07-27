@@ -21,6 +21,7 @@ scheduled-expiry column used by duration-bearing tags.
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import AbstractSet, Any, Literal, Optional, TypeAlias
@@ -30,6 +31,7 @@ from nexus.agents.orrery.tag_constants import CANONICAL_TAGS
 from nexus.agents.orrery.tag_library import VALID_ENTITY_KINDS
 from nexus.agents.orrery.tag_schemas import OrreryTagBestowal
 
+logger = logging.getLogger(__name__)
 
 # Split the retired source-kind literal so grep checks catch live usage sites.
 _DISALLOWED_SOURCE_KINDS = frozenset({"auto_" "registered"})
@@ -665,6 +667,45 @@ async def _chunk_world_time_async(
     )
 
 
+def _has_current_entity_tag(cur: Any, *, entity_id: int, tag_id: int) -> bool:
+    """Return whether one entity/tag pair already has an uncleared row."""
+
+    cur.execute(
+        """
+        SELECT id
+        FROM entity_tags
+        WHERE entity_id = %s
+          AND tag_id = %s
+          AND cleared_at IS NULL
+        LIMIT 1
+        """,
+        (entity_id, tag_id),
+    )
+    return cur.fetchone() is not None
+
+
+async def _has_current_entity_tag_async(
+    conn: Any, *, entity_id: int, tag_id: int
+) -> bool:
+    """Asyncpg twin of ``_has_current_entity_tag``."""
+
+    return (
+        await conn.fetchval(
+            """
+            SELECT id
+            FROM entity_tags
+            WHERE entity_id = $1
+              AND tag_id = $2
+              AND cleared_at IS NULL
+            LIMIT 1
+            """,
+            entity_id,
+            tag_id,
+        )
+        is not None
+    )
+
+
 def _insert_entity_tag(
     cur: Any,
     *,
@@ -682,6 +723,19 @@ def _insert_entity_tag(
             f"Unsupported entity tag reapplication_policy={reapplication_policy!r}"
         )
     if reapplication_policy == "extend_expiry" and duration_override is None:
+        if source_kind == "skald_inline" and _has_current_entity_tag(
+            cur,
+            entity_id=entity_id,
+            tag_id=tag_id,
+        ):
+            logger.info(
+                "Ignoring storyteller reapplication of active extend_expiry "
+                "entity tag entity_id=%s tag_id=%s: the storyteller wire "
+                "cannot express duration_override",
+                entity_id,
+                tag_id,
+            )
+            return False
         raise ValueError(
             "reapplication_policy='extend_expiry' requires duration_override"
         )
@@ -796,6 +850,19 @@ async def _insert_entity_tag_async(
             f"Unsupported entity tag reapplication_policy={reapplication_policy!r}"
         )
     if reapplication_policy == "extend_expiry" and duration_override is None:
+        if source_kind == "skald_inline" and await _has_current_entity_tag_async(
+            conn,
+            entity_id=entity_id,
+            tag_id=tag_id,
+        ):
+            logger.info(
+                "Ignoring storyteller reapplication of active extend_expiry "
+                "entity tag entity_id=%s tag_id=%s: the storyteller wire "
+                "cannot express duration_override",
+                entity_id,
+                tag_id,
+            )
+            return False
         raise ValueError(
             "reapplication_policy='extend_expiry' requires duration_override"
         )

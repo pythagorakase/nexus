@@ -13,7 +13,7 @@ output validator can hand issues back to the model while it still owns the turn.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from difflib import get_close_matches
 import logging
 from typing import Any, FrozenSet, List, Mapping, Optional, Tuple
@@ -39,6 +39,9 @@ class StorytellerVocabulary:
     tag_names_by_kind: Mapping[str, FrozenSet[str]]
     pair_tag_names: FrozenSet[str]
     event_types: FrozenSet[str]
+    tag_reapplication_policies_by_kind: Mapping[str, Mapping[str, str]] = field(
+        default_factory=dict
+    )
 
 
 def read_storyteller_vocabulary(dbname: str) -> StorytellerVocabulary:
@@ -49,15 +52,27 @@ def read_storyteller_vocabulary(dbname: str) -> StorytellerVocabulary:
         "place": set(),
         "faction": set(),
     }
+    policies_by_kind: dict[str, dict[str, str]] = {
+        "character": {},
+        "place": {},
+        "faction": {},
+    }
     for entry in read_tag_library(dbname):
         if entry.entity_kind in tags_by_kind:
             tags_by_kind[entry.entity_kind].add(entry.tag)
+            if entry.reapplication_policy is not None:
+                policies_by_kind[entry.entity_kind][
+                    entry.tag
+                ] = entry.reapplication_policy
     return StorytellerVocabulary(
         tag_names_by_kind={
             kind: frozenset(tag_names) for kind, tag_names in tags_by_kind.items()
         },
         pair_tag_names=frozenset(read_pair_tag_library(dbname)),
         event_types=frozenset(read_event_types(dbname)),
+        tag_reapplication_policies_by_kind={
+            kind: dict(policies) for kind, policies in policies_by_kind.items()
+        },
     )
 
 
@@ -130,6 +145,20 @@ def _validate_bestowal_against_vocabulary(
                         candidates=allowed_tags,
                         suggestion_limit=suggestion_limit,
                     )
+                )
+            elif (
+                field_name == "applied_tags"
+                and vocabulary.tag_reapplication_policies_by_kind.get(
+                    entity_kind, {}
+                ).get(tag_name)
+                == "extend_expiry"
+            ):
+                issues.append(
+                    f"{field_name}: Tag {tag_name!r} uses "
+                    "reapplication_policy='extend_expiry', which requires "
+                    "duration_override; storyteller tags_add cannot express "
+                    "duration_override. If the tag is already active, leave it "
+                    "unchanged; otherwise omit it."
                 )
     return issues
 
@@ -341,7 +370,9 @@ def build_storyteller_tag_validator(
                 "pair_tag_hints, use the exact registered pair-tag name; pair tags "
                 "may contain colons (e.g. 'contact:social'). For "
                 "replacement_event_type, use an exact registered event type. Drop "
-                "any value with no registered equivalent. Fix every listed "
+                "any value with no registered equivalent. A tags_add issue that "
+                "requires duration_override is not expressible on the storyteller "
+                "wire; omit that tag. Fix every listed "
                 f"path and resubmit the complete response:\n{formatted}"
             )
         return output
