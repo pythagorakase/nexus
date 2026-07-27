@@ -180,6 +180,8 @@ class FakeSession:
         self.max_chunk_id = max_chunk_id
         self.max_id_queries = 0
         self.world_time_queries = 0
+        self.actor_binding_world_times: list[object] = []
+        self.actor_faction_query_params: list[object] = []
         self.executed_sql: list[str] = []
 
     def __enter__(self):
@@ -266,6 +268,7 @@ class FakeSession:
             assert "JOIN entity_tags et" in sql
             assert "et.expires_at_world_time > :current_world_time" in sql
             assert _params["current_world_time"] in {None, self.world_time}
+            self.actor_binding_world_times.append(_params["current_world_time"])
             return FakeResult(self.ephemeral_actor_rows)
         if "/* orrery:actor_bindings_inbound_ephemeral_pair_tags */" in sql:
             assert "pt.is_ephemeral = true" in sql
@@ -305,6 +308,7 @@ class FakeSession:
             assert "'obligation', 'handles', 'authority_over'" in sql
             assert "ept.cleared_at IS NULL" in sql
             assert "NOT pt.deprecated" in sql
+            self.actor_faction_query_params.append(_params)
             return FakeResult(self.actor_faction_pair_tag_rows)
         if "/* orrery:actor_faction_bindings_rosters */" in sql:
             assert "pt.tag LIKE 'status:%'" in sql
@@ -2201,30 +2205,31 @@ def test_compose_actor_target_bindings_yields_both_directions() -> None:
 def test_compose_actor_faction_bindings_is_distinct_and_ordered() -> None:
     """Institutional edges are direction-agnostic, distinct, and ID-sorted."""
 
+    session = FakeSession(
+        chunk_ref_actor_rows=[{"entity_id": 1}],
+        actor_faction_pair_tag_rows=[
+            {
+                "subject_entity_id": 10,
+                "object_entity_id": 1,
+                "subject_kind": "faction",
+                "object_kind": "character",
+            },
+            {
+                "subject_entity_id": 1,
+                "object_entity_id": 9,
+                "subject_kind": "character",
+                "object_kind": "faction",
+            },
+            {
+                "subject_entity_id": 1,
+                "object_entity_id": 9,
+                "subject_kind": "character",
+                "object_kind": "faction",
+            },
+        ],
+    )
     bindings = compose_actor_faction_bindings(
-        FakeSession(
-            chunk_ref_actor_rows=[{"entity_id": 1}],
-            actor_faction_pair_tag_rows=[
-                {
-                    "subject_entity_id": 10,
-                    "object_entity_id": 1,
-                    "subject_kind": "faction",
-                    "object_kind": "character",
-                },
-                {
-                    "subject_entity_id": 1,
-                    "object_entity_id": 9,
-                    "subject_kind": "character",
-                    "object_kind": "faction",
-                },
-                {
-                    "subject_entity_id": 1,
-                    "object_entity_id": 9,
-                    "subject_kind": "character",
-                    "object_kind": "faction",
-                },
-            ],
-        ),
+        session,
         anchor_chunk_id=100,
         window_chunks=30,
     )
@@ -2232,6 +2237,10 @@ def test_compose_actor_faction_bindings_is_distinct_and_ordered() -> None:
     assert bindings == (
         {Slot.ACTOR: 1, Slot.FACTION: 9},
         {Slot.ACTOR: 1, Slot.FACTION: 10},
+    )
+    assert session.actor_faction_query_params == [{"actor_ids": [1]}]
+    assert any(
+        "ept.subject_entity_id = ANY(:actor_ids)" in sql for sql in session.executed_sql
     )
 
 
@@ -2747,6 +2756,70 @@ def test_enabled_composition_sources_keep_production_and_audit_in_parity() -> No
             ("roster_parity", (("actor", 1), ("faction", 9))),
         }
     )
+
+
+def test_resolve_and_explain_actor_expiry_use_anchor_clock_with_override() -> None:
+    """What-if state time must not split production and audit actor bindings."""
+
+    anchor_world_time = datetime(2073, 10, 31, 12, tzinfo=timezone.utc)
+    override_world_time = datetime(2073, 11, 2, 12, tzinfo=timezone.utc)
+    template = Template(
+        id="world_time_parity",
+        priority=10,
+        drive_band=DriveBand.PROJECT_IDENTITY,
+        blurb="Actor-expiry parity fixture.",
+        required_slots=(Slot.ACTOR,),
+        package_gate=ALWAYS,
+        branches=(Branch("act", ALWAYS, "{actor} acts."),),
+    )
+
+    def session() -> FakeSession:
+        return FakeSession(
+            world_time=anchor_world_time,
+            chunk_ref_actor_rows=[{"entity_id": 1}],
+            ephemeral_actor_rows=[{"entity_id": 2}],
+            active_entity_rows=[{"id": 1}, {"id": 2}],
+            entity_name_rows=[
+                {"id": 1, "name": "Mara"},
+                {"id": 2, "name": "Vale"},
+            ],
+        )
+
+    production_session = session()
+    audit_session = session()
+    proposal = resolve_dry_run(
+        production_session,
+        (template,),
+        anchor_chunk_id=100,
+        window_chunks=30,
+        world_time_override=override_world_time,
+    )
+    report = explain_dry_run(
+        audit_session,
+        (template,),
+        anchor_chunk_id=100,
+        window_chunks=30,
+        world_time_override=override_world_time,
+    )
+
+    production = {
+        (draft.template_id, draft.bindings["actor"]) for draft in proposal.resolutions
+    }
+    audited = {
+        (group.actor_stack.winner_id, group.actor_entity_id) for group in report.actors
+    }
+    assert (
+        audited
+        == production
+        == {
+            ("world_time_parity", 1),
+            ("world_time_parity", 2),
+        }
+    )
+    assert production_session.actor_binding_world_times == [anchor_world_time]
+    assert audit_session.actor_binding_world_times == [anchor_world_time]
+    assert production_session.world_time_queries == 1
+    assert audit_session.world_time_queries == 1
 
 
 def test_actor_target_routes_preserve_contact_only_recruitment_continuity() -> None:

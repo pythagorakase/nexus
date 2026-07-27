@@ -1016,9 +1016,22 @@ def _load_hostile_character_pairs(session: Any) -> Tuple[_EntityPair, ...]:
 
 def _load_institutional_pair_rows(
     session: Any,
+    *,
+    actor_ids: Optional[Iterable[int]] = None,
 ) -> Tuple[_InstitutionalPairRow, ...]:
     """Load active institutional edges for in-memory actor filtering."""
 
+    actor_id_list = sorted(set(actor_ids)) if actor_ids is not None else None
+    actor_filter = (
+        """
+                  AND (
+                        ept.subject_entity_id = ANY(:actor_ids)
+                        OR ept.object_entity_id = ANY(:actor_ids)
+                      )
+        """
+        if actor_id_list is not None
+        else ""
+    )
     return tuple(
         (
             int(row["subject_entity_id"]),
@@ -1028,7 +1041,7 @@ def _load_institutional_pair_rows(
         )
         for row in session.execute(
             text(
-                """
+                f"""
                 /* orrery:actor_faction_bindings_institutional_pair_tags */
                 SELECT DISTINCT
                        ept.subject_entity_id,
@@ -1047,8 +1060,10 @@ def _load_institutional_pair_rows(
                         pt.tag LIKE 'status:%'
                         OR pt.tag IN ('obligation', 'handles', 'authority_over')
                       )
+                  {actor_filter}
                 """
-            )
+            ),
+            {"actor_ids": actor_id_list} if actor_id_list is not None else {},
         ).mappings()
     )
 
@@ -1624,7 +1639,10 @@ def compose_actor_faction_bindings(
     institutional_rows = (
         composition_cache.institutional_pair_rows()
         if composition_cache is not None
-        else _load_institutional_pair_rows(session)
+        else _load_institutional_pair_rows(
+            session,
+            actor_ids=actor_id_set,
+        )
     )
     for subject_id, object_id, subject_kind, object_kind in institutional_rows:
         if subject_id in actor_id_set and object_kind == "faction":
@@ -2381,10 +2399,19 @@ def resolve_dry_run(
             )
         )
 
+    # Actor-candidate expiry historically uses the stored anchor clock even
+    # when world_time_override drives state what-if evaluation. Preserve that
+    # contract (and explain_dry_run parity) while reusing the normal anchor
+    # read when no override is present.
+    composition_world_time = (
+        state.world_time
+        if world_time_override is None
+        else _load_world_time(session, anchor_chunk_id=anchor_chunk_id)
+    )
     composition_cache = _CompositionSourceCache.load(
         session,
         anchor_chunk_id=anchor_chunk_id,
-        world_time=state.world_time,
+        world_time=composition_world_time,
     )
     drafts: list[OrreryResolutionDraft] = []
     scene_pressure_results: list[Resolution] = []
