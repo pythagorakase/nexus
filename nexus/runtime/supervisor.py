@@ -168,6 +168,10 @@ class Supervisor:
             self._gateway_port_override = gateway_port_override()
         except ValueError as exc:
             raise RuntimeError_(str(exc)) from exc
+        # The default instance's state dir stays visible under an override:
+        # it is the ownership ledger for fixed-port siblings (see
+        # _start_service's borrow path).
+        self._base_state_dir = self.state_dir
         if self._gateway_port_override is not None:
             gateway = self.runtime.services.get("gateway")
             if gateway is None:
@@ -175,6 +179,14 @@ class Supervisor:
                     f"{GATEWAY_PORT_ENV} is set but nexus.toml has no "
                     "[runtime.services.gateway] to apply it to."
                 )
+            for name, service in self.runtime.services.items():
+                if name != "gateway" and service.port == self._gateway_port_override:
+                    raise RuntimeError_(
+                        f"{GATEWAY_PORT_ENV}={self._gateway_port_override} "
+                        f"collides with [runtime.services.{name}] port "
+                        f"{service.port}; pick a port no service is "
+                        "configured on."
+                    )
             gateway.port = self._gateway_port_override
             self.state_dir = self.state_dir / f"gateway-{gateway.port}"
 
@@ -240,6 +252,27 @@ class Supervisor:
 
     def _write_pidfile(self, name: str, record: Dict[str, Any]) -> None:
         self._pidfile(name).write_text(json.dumps(record, indent=2))
+
+    def _sibling_owned_by_default(
+        self, name: str, service: RuntimeServiceSettings
+    ) -> bool:
+        """True when the default instance's ledger owns this service's port.
+
+        The proof is the default state dir's pidfile: a live pid recorded on
+        exactly the configured port. A foreign process answering the health
+        path does not qualify — health alone is not ownership.
+        """
+        path = self._base_state_dir / f"{name}.pid.json"
+        if not path.exists():
+            return False
+        try:
+            record = json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError):
+            return False
+        return (
+            _pid_alive(int(record.get("pid", -1)))
+            and int(record.get("port", -1)) == service.port
+        )
 
     # ------------------------------------------------------------------
     # Spawning
@@ -350,24 +383,36 @@ class Supervisor:
             )
         if existing:
             self._pidfile(name).unlink()  # stale pidfile from a dead process
-        if _port_open(service.host, service.port):
-            if (
-                self._gateway_port_override is not None
-                and name != "gateway"
-                and self._probe(
-                    f"http://{service.host}:{service.port}{service.health_path}"
-                )
+        if self._gateway_port_override is not None and name != "gateway":
+            # Fixed-port siblings (the mock provider) belong to the default
+            # instance. An override instance borrows one only when the
+            # default state ledger proves the listener is the managed
+            # sibling — pidfile alive, same port, healthy — and never
+            # spawns its own, so a later default `nexus up` always finds
+            # its ports either free or owned by its own pidfiles.
+            if self._sibling_owned_by_default(name, service) and self._probe(
+                f"http://{service.host}:{service.port}{service.health_path}"
             ):
-                # Override instances share healthy fixed-port siblings (the
-                # mock provider) with the default instance instead of
-                # refusing: the gateway is the isolated piece, and stopping
-                # this instance must not tear down the sibling it borrowed.
                 return {
                     "attached": True,
                     "service": name,
                     "port": service.port,
                     "host": service.host,
                 }
+            if not _port_open(service.host, service.port):
+                return {
+                    "skipped": True,
+                    "service": name,
+                    "port": service.port,
+                    "host": service.host,
+                    "reason": (
+                        "fixed-port sibling is not running; start the "
+                        "default stack if this instance needs it"
+                    ),
+                }
+            # Port open but not verifiably ours: fall through to the
+            # unmanaged-port refusal below.
+        if _port_open(service.host, service.port):
             occupant = _describe_port_occupant(service.port)
             listener = f" Listener: {occupant}." if occupant else ""
             raise RuntimeError_(
@@ -433,6 +478,8 @@ class Supervisor:
                         f"attached to existing {name} on "
                         f"http://{service.host}:{service.port}"
                     )
+                elif echo and record.get("skipped"):
+                    print(f"skipped {name}: {record['reason']}")
                 elif echo:
                     print(
                         f"started {name} (pid {record['pid']}) on "

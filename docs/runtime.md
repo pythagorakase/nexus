@@ -155,11 +155,16 @@ processes, and they fail loudly in other profiles.
   available.
 - `NEXUS_GATEWAY_PORT=<port>` runs the gateway on an alternate port with
   fully isolated state (`state_dir/gateway-<port>/`), so an agent or test
-  session coexists with the desktop app's instance on one checkout. An
-  override instance borrows a healthy fixed-port sibling (the mock
-  provider) instead of refusing, and `nexus down` under the override stops
-  only the override instance. The desktop shell never sets this — its
-  `runtimeOrigin` is pinned to the configured port.
+  session coexists with the desktop app's instance on one checkout.
+  Fixed-port siblings (the mock provider) always belong to the default
+  instance: an override instance borrows one only when the default state
+  ledger proves the listener is managed (live pidfile on that port, and
+  healthy), skips it loudly when it is not running, and never spawns its
+  own — so the default stack starts cleanly in either order. A foreign
+  listener answering the health path is still refused; overrides equal to
+  a configured sibling port are rejected at startup. `nexus down` under
+  the override stops only the override instance. The desktop shell never
+  sets this — its `runtimeOrigin` is pinned to the configured port.
 
 ## CLI Surface
 
