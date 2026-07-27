@@ -308,6 +308,10 @@ class LogonUtility:
         # (schema type, wire class) tuples for two-pass entries, because the
         # pinned gaia seat can run a different wire class than the writer.
         self._schema_format_cache: Dict[Any, Dict[str, Any]] = {}
+        # One setting snapshot per utility instance: both seats of a
+        # two-pass turn must compose against the same SettingCard.
+        self._setting_context: Optional[str] = None
+        self._setting_context_loaded = False
 
     def _turn_pipeline(self) -> Literal["single_pass", "two_pass"]:
         """Return the validated non-bootstrap storyteller pipeline lever."""
@@ -375,7 +379,21 @@ class LogonUtility:
         return system_prompt
 
     def _load_setting_context(self) -> Optional[str]:
-        """Fetch and render the persisted SettingCard from global_variables."""
+        """Fetch and render the persisted SettingCard from global_variables.
+
+        The first call performs the read; the snapshot is then cached for
+        the instance's lifetime so the writer and gaia seats of a two-pass
+        turn always compose against the same setting.
+        """
+
+        if self._setting_context_loaded:
+            return self._setting_context
+        self._setting_context = self._fetch_setting_context()
+        self._setting_context_loaded = True
+        return self._setting_context
+
+    def _fetch_setting_context(self) -> Optional[str]:
+        """Perform the actual SettingCard read behind the snapshot cache."""
         from nexus.api.slot_utils import require_slot_dbname
 
         try:

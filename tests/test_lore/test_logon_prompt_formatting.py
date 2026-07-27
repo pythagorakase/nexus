@@ -147,6 +147,41 @@ def test_gaia_system_prompt_includes_setting_card(
     assert "## Setting Context: Veyra" in prompt
 
 
+def test_setting_snapshot_is_shared_across_seats(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """One SettingCard read serves both seats of a two-pass turn."""
+
+    connects = 0
+
+    def counting_connect(**_kwargs: Any) -> _FakeConnection:
+        nonlocal connects
+        connects += 1
+        return _FakeConnection((_setting_card(),))
+
+    monkeypatch.setattr(
+        "nexus.api.slot_utils.require_slot_dbname",
+        lambda **_kwargs: "save_05",
+    )
+    monkeypatch.setattr(
+        "nexus.agents.lore.logon_utility.format_tag_library_for_prompt",
+        lambda _dbname: "",
+    )
+    monkeypatch.setattr(
+        "nexus.agents.lore.logon_utility.psycopg2.connect",
+        counting_connect,
+    )
+
+    two_pass = {"API Settings": {"apex": {"turn_pipeline": "two_pass"}}}
+    utility = LogonUtility(two_pass, dbname="save_05")
+    writer = utility._load_system_prompt()
+    gaia = utility._gaia_system_prompt(wire_type="openai")
+
+    assert connects == 1
+    assert "## Setting Context: Veyra" in writer
+    assert "## Setting Context: Veyra" in gaia
+
+
 def test_load_system_prompt_appends_bootstrap_supplement_only_for_bootstrap(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
