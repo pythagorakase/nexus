@@ -126,8 +126,13 @@ def _describe_port_occupant(port: int) -> Optional[str]:
         described = " ".join(ps.stdout.split())
         if not described:
             return None
-        pid, etime, *command = described.split(" ", 2)
-        return f"pid={pid} elapsed={etime} {' '.join(command)}"
+        parts = described.split(" ", 2)
+        if len(parts) < 2:
+            # A process that exited between the lsof snapshot and the ps
+            # call can leave a truncated line; diagnostics never raise.
+            return None
+        command = parts[2] if len(parts) == 3 else ""
+        return f"pid={parts[0]} elapsed={parts[1]} {command}".rstrip()
     except (OSError, subprocess.SubprocessError):
         return None
 
