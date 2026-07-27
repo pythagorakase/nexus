@@ -28,3 +28,34 @@ RUNTIME_STATUS_PATH = "/runtime/status"
 # /runtime/status reports the profile/ports of the config that actually
 # launched it (test harnesses point this at temp configs).
 RUNTIME_CONFIG_ENV = "NEXUS_RUNTIME_CONFIG"
+
+# Environment seam: run the gateway on an alternate port with isolated
+# runtime state (pidfiles/logs under a per-port subdirectory). This is the
+# designated lane for agent and test sessions, so a live-testing gateway can
+# never squat the desktop app's configured port — the collision that
+# motivated it was an orphaned test gateway from a dead session holding
+# :8002. The desktop shell never sets this; interactive test shells export
+# it before `nexus up`.
+GATEWAY_PORT_ENV = "NEXUS_GATEWAY_PORT"
+
+
+def gateway_port_override() -> "int | None":
+    """Parse the gateway port override from the environment.
+
+    Returns None when unset; raises ValueError loudly on garbage so a typo
+    can never silently fall back to the configured port.
+    """
+    import os
+
+    raw = os.environ.get(GATEWAY_PORT_ENV)
+    if raw is None or raw.strip() == "":
+        return None
+    try:
+        port = int(raw)
+    except ValueError as exc:
+        raise ValueError(
+            f"{GATEWAY_PORT_ENV} must be an integer port, got {raw!r}"
+        ) from exc
+    if not 1 <= port <= 65535:
+        raise ValueError(f"{GATEWAY_PORT_ENV} must be 1-65535, got {port}")
+    return port

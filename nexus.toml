@@ -1151,7 +1151,7 @@ follow_poll_seconds = 0.5 # poll interval for `nexus logs -f`
 # argv template — {python} is the current interpreter; no shell in the path
 command = ["{python}", "-m", "uvicorn", "nexus.api.narrative:app", "--host", "{host}", "--port", "{port}"]
 host = "127.0.0.1"
-port = 8002
+port = 8002 # the desktop shell's runtimeOrigin pins this; agent/test shells export NEXUS_GATEWAY_PORT for an isolated-state instance on another port
 health_path = "/health"
 autorestart = "on-failure"  # honored by the foreground supervisor only
 

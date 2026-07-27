@@ -25,6 +25,7 @@ from nexus.runtime.contract import (
     NEXUS_AUTH_HEADER,
     RUNTIME_CONFIG_ENV,
     RUNTIME_STATUS_PATH,
+    gateway_port_override,
 )
 
 
@@ -75,7 +76,12 @@ def build_runtime_status() -> Dict[str, Any]:
     if runtime and runtime.profile == "local":
         gateway = runtime.services.get("gateway")
         if gateway:
-            status["services"]["gateway"]["port"] = gateway.port
+            # A NEXUS_GATEWAY_PORT instance inherits the override in its
+            # environment; report the port actually serving this request,
+            # not the configured default.
+            status["services"]["gateway"]["port"] = (
+                gateway_port_override() or gateway.port
+            )
         mock = runtime.services.get("mock_openai")
         test_provider = settings.global_.model.api_models.get("test")
         mock_enabled = (

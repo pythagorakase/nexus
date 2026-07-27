@@ -151,6 +151,15 @@ processes, and they fail loudly in other profiles.
   Ctrl+C. `./iris` is a thin alias for exactly this.
 - `nexus up` refuses ports held by unmanaged processes and refuses to
   double-start; partial startups are rolled back so `up` is all-or-nothing.
+  The refusal identifies the listener (pid, age, command) when `lsof` is
+  available.
+- `NEXUS_GATEWAY_PORT=<port>` runs the gateway on an alternate port with
+  fully isolated state (`state_dir/gateway-<port>/`), so an agent or test
+  session coexists with the desktop app's instance on one checkout. An
+  override instance borrows a healthy fixed-port sibling (the mock
+  provider) instead of refusing, and `nexus down` under the override stops
+  only the override instance. The desktop shell never sets this — its
+  `runtimeOrigin` is pinned to the configured port.
 
 ## CLI Surface
 
