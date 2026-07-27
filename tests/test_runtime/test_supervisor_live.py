@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import socket
 import subprocess
 import sys
@@ -30,6 +31,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 GATEWAY_PORT = 8032
 MOCK_PORT = 5133
 EXTERNAL_GATEWAY_PORT = 8034
+OVERRIDE_GATEWAY_PORT = 8036
 TEST_SLOT = 5
 
 pytestmark = pytest.mark.requires_postgres
@@ -68,9 +70,16 @@ def _write_config(
     return path
 
 
-def _cli(*args: str, config: Path, timeout: float = 120) -> dict:
+def _cli(
+    *args: str,
+    config: Path,
+    timeout: float = 120,
+    env_extra: dict | None = None,
+) -> dict:
     env = dict(os.environ)
     env["PYTHONPATH"] = str(REPO_ROOT)
+    if env_extra:
+        env.update(env_extra)
     completed = subprocess.run(
         [sys.executable, "-m", "nexus.cli", "--json", *args, "--config", str(config)],
         capture_output=True,
@@ -181,11 +190,135 @@ def test_up_refuses_port_held_by_unmanaged_process(tmp_path):
         result = _cli("up", config=config)
         assert result["_returncode"] == 1
         assert "already in use by an unmanaged process" in result["error"]
+        # The refusal identifies the squatter (this pytest process) and
+        # points test shells at the isolated-port lane.
+        if shutil.which("lsof"):
+            assert "Listener: pid=" in result["error"]
+        assert "NEXUS_GATEWAY_PORT" in result["error"]
         state_dir = tmp_path / "state"
         assert not list(state_dir.glob("*.pid.json"))
     finally:
         blocker.close()
         _down(config)
+
+
+def test_gateway_port_override_coexists_with_default_instance(tmp_path):
+    """NEXUS_GATEWAY_PORT runs an isolated-state gateway beside the default."""
+    config = _write_config(tmp_path)
+    override_env = {"NEXUS_GATEWAY_PORT": str(OVERRIDE_GATEWAY_PORT)}
+    try:
+        base = _cli("up", config=config)
+        assert base["_returncode"] == 0
+
+        result = _cli("up", config=config, env_extra=override_env)
+        assert result["_returncode"] == 0
+        assert result["services"]["gateway"]["port"] == OVERRIDE_GATEWAY_PORT
+        # The fixed-port sibling is borrowed from the default instance, not
+        # respawned and not refused.
+        assert result["services"]["mock_openai"].get("attached") is True
+        assert _port_open("127.0.0.1", OVERRIDE_GATEWAY_PORT)
+        assert _port_open("127.0.0.1", GATEWAY_PORT)
+
+        # Isolated state: each instance keeps its own pidfiles.
+        override_state = tmp_path / "state" / f"gateway-{OVERRIDE_GATEWAY_PORT}"
+        assert (override_state / "gateway.pid.json").exists()
+        assert (tmp_path / "state" / "gateway.pid.json").exists()
+
+        # The override instance reports the port actually serving requests.
+        status = requests.get(
+            f"http://127.0.0.1:{OVERRIDE_GATEWAY_PORT}/runtime/status",
+            timeout=10,
+        ).json()
+        assert status["services"]["gateway"]["port"] == OVERRIDE_GATEWAY_PORT
+
+        # Downing the override instance leaves the default stack running.
+        down = _cli("down", config=config, env_extra=override_env)
+        assert set(down["stopped"]) == {"gateway"}
+        assert not _port_open("127.0.0.1", OVERRIDE_GATEWAY_PORT)
+        assert _port_open("127.0.0.1", GATEWAY_PORT)
+        assert _port_open("127.0.0.1", MOCK_PORT)
+    finally:
+        _cli("down", config=config, env_extra=override_env)
+        _down(config)
+
+
+def test_gateway_port_override_garbage_is_loud(tmp_path):
+    """A malformed override refuses to start anything, with a clear error."""
+    config = _write_config(tmp_path)
+    result = _cli("up", config=config, env_extra={"NEXUS_GATEWAY_PORT": "styrofoam"})
+    assert result["_returncode"] == 1
+    assert "NEXUS_GATEWAY_PORT must be an integer port" in result["error"]
+    assert not _port_open("127.0.0.1", GATEWAY_PORT)
+
+
+def test_gateway_port_override_first_then_default_stack(tmp_path):
+    """Reverse order: override-first skips siblings, so default still owns them."""
+    config = _write_config(tmp_path)
+    override_env = {"NEXUS_GATEWAY_PORT": str(OVERRIDE_GATEWAY_PORT)}
+    try:
+        first = _cli("up", config=config, env_extra=override_env)
+        assert first["_returncode"] == 0, first
+        # No default stack yet: the fixed-port sibling is skipped, never
+        # spawned into the override's isolated state.
+        assert first["services"]["mock_openai"].get("skipped") is True
+        assert _port_open("127.0.0.1", OVERRIDE_GATEWAY_PORT)
+        assert not _port_open("127.0.0.1", MOCK_PORT)
+
+        # The default stack then starts cleanly and owns its siblings.
+        base = _cli("up", config=config)
+        assert base["_returncode"] == 0, base
+        assert base["services"]["mock_openai"].get("pid")
+        assert _port_open("127.0.0.1", GATEWAY_PORT)
+        assert _port_open("127.0.0.1", MOCK_PORT)
+    finally:
+        _cli("down", config=config, env_extra=override_env)
+        _down(config)
+
+
+def test_override_refuses_foreign_healthy_listener_on_sibling_port(tmp_path):
+    """Health 200 alone is not ownership; a foreign listener is still refused."""
+    config = _write_config(tmp_path)
+    override_env = {"NEXUS_GATEWAY_PORT": str(OVERRIDE_GATEWAY_PORT)}
+    foreign = subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            (
+                "from http.server import BaseHTTPRequestHandler, HTTPServer\n"
+                "class H(BaseHTTPRequestHandler):\n"
+                "    def do_GET(self):\n"
+                "        self.send_response(200)\n"
+                "        self.end_headers()\n"
+                "        self.wfile.write(b'ok')\n"
+                "    def log_message(self, *a):\n"
+                "        pass\n"
+                f"HTTPServer(('127.0.0.1', {MOCK_PORT}), H).serve_forever()\n"
+            ),
+        ],
+    )
+    try:
+        deadline = time.monotonic() + 10
+        while not _port_open("127.0.0.1", MOCK_PORT):
+            assert time.monotonic() < deadline, "foreign listener never bound"
+            time.sleep(0.1)
+        result = _cli("up", config=config, env_extra=override_env)
+        assert result["_returncode"] == 1
+        assert "already in use by an unmanaged process" in result["error"]
+        # All-or-nothing: the already-started override gateway rolled back.
+        assert not _port_open("127.0.0.1", OVERRIDE_GATEWAY_PORT)
+    finally:
+        foreign.terminate()
+        foreign.wait(timeout=10)
+        _cli("down", config=config, env_extra=override_env)
+
+
+def test_gateway_port_override_sibling_collision_is_loud(tmp_path):
+    """An override equal to another service's port is a config error."""
+    config = _write_config(tmp_path)
+    result = _cli("up", config=config, env_extra={"NEXUS_GATEWAY_PORT": str(MOCK_PORT)})
+    assert result["_returncode"] == 1
+    assert "collides with [runtime.services.mock_openai]" in result["error"]
+    assert not _port_open("127.0.0.1", MOCK_PORT)
 
 
 def test_mock_openai_auto_gating_follows_test_provider(tmp_path):

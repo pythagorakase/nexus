@@ -35,8 +35,10 @@ from nexus.config.settings_models import (
     Settings,
 )
 from nexus.runtime.contract import (
+    GATEWAY_PORT_ENV,
     RUNTIME_CONFIG_ENV,
     RUNTIME_STATUS_PATH,
+    gateway_port_override,
 )
 from nexus.runtime.remote_auth import build_runtime_request_auth
 
@@ -96,6 +98,45 @@ def _port_open(host: str, port: int, timeout: float = 0.5) -> bool:
         return sock.connect_ex((host, port)) == 0
 
 
+def _describe_port_occupant(port: int) -> Optional[str]:
+    """Best-effort identity of the process listening on a local port.
+
+    Diagnostics only: returns ``"pid=<pid> elapsed=<etime> <command>"`` via
+    lsof+ps on POSIX hosts, or None when the tools are unavailable or the
+    listener cannot be resolved. Never raises.
+    """
+    if os.name != "posix":  # pragma: no cover - Windows host path
+        return None
+    try:
+        lsof = subprocess.run(
+            ["lsof", "-ti", f"tcp:{port}", "-sTCP:LISTEN"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        pids = lsof.stdout.split()
+        if not pids:
+            return None
+        ps = subprocess.run(
+            ["ps", "-o", "pid=,etime=,command=", "-p", pids[0]],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        described = " ".join(ps.stdout.split())
+        if not described:
+            return None
+        parts = described.split(" ", 2)
+        if len(parts) < 2:
+            # A process that exited between the lsof snapshot and the ps
+            # call can leave a truncated line; diagnostics never raise.
+            return None
+        command = parts[2] if len(parts) == 3 else ""
+        return f"pid={parts[0]} elapsed={parts[1]} {command}".rstrip()
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
 def _tail_lines(path: Path, count: int) -> List[str]:
     if not path.exists():
         return []
@@ -124,6 +165,35 @@ class Supervisor:
         self.root = repo_root()
         state_dir = Path(self.runtime.state_dir)
         self.state_dir = state_dir if state_dir.is_absolute() else self.root / state_dir
+        # NEXUS_GATEWAY_PORT: run this instance's gateway on an alternate
+        # port with fully isolated state (pidfiles, logs, slot bookkeeping),
+        # so agent/test sessions and the desktop app can coexist on one
+        # checkout without ever contending for the configured port.
+        try:
+            self._gateway_port_override = gateway_port_override()
+        except ValueError as exc:
+            raise RuntimeError_(str(exc)) from exc
+        # The default instance's state dir stays visible under an override:
+        # it is the ownership ledger for fixed-port siblings (see
+        # _start_service's borrow path).
+        self._base_state_dir = self.state_dir
+        if self._gateway_port_override is not None:
+            gateway = self.runtime.services.get("gateway")
+            if gateway is None:
+                raise RuntimeError_(
+                    f"{GATEWAY_PORT_ENV} is set but nexus.toml has no "
+                    "[runtime.services.gateway] to apply it to."
+                )
+            for name, service in self.runtime.services.items():
+                if name != "gateway" and service.port == self._gateway_port_override:
+                    raise RuntimeError_(
+                        f"{GATEWAY_PORT_ENV}={self._gateway_port_override} "
+                        f"collides with [runtime.services.{name}] port "
+                        f"{service.port}; pick a port no service is "
+                        "configured on."
+                    )
+            gateway.port = self._gateway_port_override
+            self.state_dir = self.state_dir / f"gateway-{gateway.port}"
 
     @classmethod
     def from_config(cls, config_path: Optional[Path] = None) -> "Supervisor":
@@ -187,6 +257,27 @@ class Supervisor:
 
     def _write_pidfile(self, name: str, record: Dict[str, Any]) -> None:
         self._pidfile(name).write_text(json.dumps(record, indent=2))
+
+    def _sibling_owned_by_default(
+        self, name: str, service: RuntimeServiceSettings
+    ) -> bool:
+        """True when the default instance's ledger owns this service's port.
+
+        The proof is the default state dir's pidfile: a live pid recorded on
+        exactly the configured port. A foreign process answering the health
+        path does not qualify — health alone is not ownership.
+        """
+        path = self._base_state_dir / f"{name}.pid.json"
+        if not path.exists():
+            return False
+        try:
+            record = json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError):
+            return False
+        return (
+            _pid_alive(int(record.get("pid", -1)))
+            and int(record.get("port", -1)) == service.port
+        )
 
     # ------------------------------------------------------------------
     # Spawning
@@ -297,11 +388,45 @@ class Supervisor:
             )
         if existing:
             self._pidfile(name).unlink()  # stale pidfile from a dead process
+        if self._gateway_port_override is not None and name != "gateway":
+            # Fixed-port siblings (the mock provider) belong to the default
+            # instance. An override instance borrows one only when the
+            # default state ledger proves the listener is the managed
+            # sibling — pidfile alive, same port, healthy — and never
+            # spawns its own, so a later default `nexus up` always finds
+            # its ports either free or owned by its own pidfiles.
+            if self._sibling_owned_by_default(name, service) and self._probe(
+                f"http://{service.host}:{service.port}{service.health_path}"
+            ):
+                return {
+                    "attached": True,
+                    "service": name,
+                    "port": service.port,
+                    "host": service.host,
+                }
+            if not _port_open(service.host, service.port):
+                return {
+                    "skipped": True,
+                    "service": name,
+                    "port": service.port,
+                    "host": service.host,
+                    "reason": (
+                        "fixed-port sibling is not running; start the "
+                        "default stack if this instance needs it"
+                    ),
+                }
+            # Port open but not verifiably ours: fall through to the
+            # unmanaged-port refusal below.
         if _port_open(service.host, service.port):
+            occupant = _describe_port_occupant(service.port)
+            listener = f" Listener: {occupant}." if occupant else ""
             raise RuntimeError_(
                 f"Port {service.port} is already in use by an unmanaged process; "
                 f"refusing to spawn '{name}'. Adjust [runtime.services.{name}] "
-                f"port or stop the other process."
+                f"port or stop the other process.{listener} If the listener is "
+                "a stale NEXUS service from a dead session, kill that pid. "
+                f"Agent/test shells should export {GATEWAY_PORT_ENV} to run on "
+                "a separate port with isolated state."
             )
         pid = self._spawn(name, service, slot, detached=detached)
         self._await_healthy(name, service, pid)
@@ -353,7 +478,14 @@ class Supervisor:
                     name, service, resolved_slot, detached=not foreground
                 )
                 started[name] = record
-                if echo:
+                if echo and record.get("attached"):
+                    print(
+                        f"attached to existing {name} on "
+                        f"http://{service.host}:{service.port}"
+                    )
+                elif echo and record.get("skipped"):
+                    print(f"skipped {name}: {record['reason']}")
+                elif echo:
                     print(
                         f"started {name} (pid {record['pid']}) on "
                         f"http://{service.host}:{service.port}"
