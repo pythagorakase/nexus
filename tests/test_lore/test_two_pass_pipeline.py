@@ -762,8 +762,8 @@ def test_gaia_prompt_is_concise_and_self_contained() -> None:
     # referencing a core document the seat never receives.
     assert "storyteller_core.md" not in prompt
     assert "recent narrative over retrieved context over" in normalized_prompt
-    assert "The prose is finished — your medium is state" in prompt
-    assert "Riff off it, never against it" in prompt
+    assert "The prose is finished — Gaia's medium is state" in prompt
+    assert "riffs off it, never against it" in prompt
     assert (
         "`characters`, `places`, `factions`, and `relationships`" in normalized_prompt
     )
