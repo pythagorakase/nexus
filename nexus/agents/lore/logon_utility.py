@@ -27,14 +27,14 @@ from nexus.agents.logon.apex_schema import (  # noqa: E402
 from nexus.agents.logon.skald_wire import (  # noqa: E402
     PresenceBaseline,
     PresenceRef,
-    SkaldClerkWire,
+    SkaldGaiaWire,
     SkaldTurnWire,
     SkaldWriterWire,
     combine_two_pass,
     hydrate_skald_turn,
-    skald_clerk_lenient_schema,
-    skald_clerk_prompt_guide,
-    skald_clerk_strict_text_format,
+    skald_gaia_lenient_schema,
+    skald_gaia_prompt_guide,
+    skald_gaia_strict_text_format,
     skald_wire_lenient_schema,
     skald_wire_prompt_guide,
     skald_wire_strict_text_format,
@@ -59,9 +59,9 @@ from nexus.memory.retrieval_coverage import coerce_chunk_id  # noqa: E402
 
 logger = logging.getLogger("nexus.lore.logon")
 
-# One resolved storyteller/clerk seat: (model id, registry provider name,
+# One resolved storyteller/gaia seat: (model id, registry provider name,
 # OpenAI-compatible endpoint or None, wire class). Shared by the slot-model
-# route and the pinned clerk route so the tuple shape cannot drift.
+# route and the pinned gaia route so the tuple shape cannot drift.
 StorytellerRoute = tuple[
     str,
     str,
@@ -306,7 +306,7 @@ class LogonUtility:
         self._validation_dbname: Optional[str] = None
         # Keyed by schema type for single-pass entries and by
         # (schema type, wire class) tuples for two-pass entries, because the
-        # pinned clerk seat can run a different wire class than the writer.
+        # pinned gaia seat can run a different wire class than the writer.
         self._schema_format_cache: Dict[Any, Dict[str, Any]] = {}
 
     def _turn_pipeline(self) -> Literal["single_pass", "two_pass"]:
@@ -399,16 +399,16 @@ class LogonUtility:
                 conn.close()
 
     @staticmethod
-    def _load_clerk_system_prompt() -> str:
-        """Load the dedicated clerk instructions without per-turn material."""
+    def _load_gaia_system_prompt() -> str:
+        """Load the dedicated gaia instructions without per-turn material."""
 
         prompts_dir = Path(__file__).parent.parent.parent.parent / "prompts"
-        clerk_prompt_path = prompts_dir / "storyteller_clerk.md"
-        clerk_prompt = clerk_prompt_path.read_text()
-        if not clerk_prompt.strip():
-            raise ValueError(f"Clerk prompt is empty: {clerk_prompt_path}")
-        logger.info("Loaded storyteller clerk prompt (%s chars)", len(clerk_prompt))
-        return clerk_prompt
+        gaia_prompt_path = prompts_dir / "storyteller_gaia.md"
+        gaia_prompt = gaia_prompt_path.read_text()
+        if not gaia_prompt.strip():
+            raise ValueError(f"Gaia prompt is empty: {gaia_prompt_path}")
+        logger.info("Loaded storyteller Gaia prompt (%s chars)", len(gaia_prompt))
+        return gaia_prompt
 
     @staticmethod
     def _load_writer_pass_note() -> str:
@@ -901,7 +901,7 @@ class LogonUtility:
         """Return the storyteller system prompt scoped to the writer pass.
 
         The single-pass core doctrine instructs authoring updates,
-        adjudications, and declarations — clerk work. Grammar-enforced
+        adjudications, and declarations — gaia work. Grammar-enforced
         writers physically cannot overflow into those fields, but schema-free
         writers (OpenRouter passthrough) obey the doctrine over the repair
         loop, so the writer pass must be told its own scope explicitly (live
@@ -920,72 +920,68 @@ class LogonUtility:
             return note
         return f"{system_prompt}\n\n{note}"
 
-    def _resolve_clerk_route(self) -> Optional[StorytellerRoute]:
-        """Resolve the pinned clerk seat, or None to follow the slot model.
+    def _resolve_gaia_route(self) -> Optional[StorytellerRoute]:
+        """Resolve the pinned gaia seat, or None to follow the slot model.
 
-        Returns None whenever the clerk should ride the proven clone path:
-        no clerk_model configured; the active writer is the TEST mock (TEST
+        Returns None whenever the gaia should ride the proven clone path:
+        no gaia_model configured; the active writer is the TEST mock (TEST
         slots stay self-contained and offline); or the pinned model IS the
         slot model (a fresh provider would be an identical twin).
         """
         apex_settings = self.settings.get("API Settings", {}).get("apex", {})
-        clerk_model = apex_settings.get("clerk_model")
-        if not clerk_model:
+        gaia_model = apex_settings.get("gaia_model")
+        if not gaia_model:
             return None
         if self._provider_type_name is None:
-            raise RuntimeError(
-                "Clerk route resolution requires an initialized provider"
-            )
+            raise RuntimeError("Gaia route resolution requires an initialized provider")
         if self._provider_type_name == "test":
             return None
         turn_model = getattr(self.provider, "model", None)
         if turn_model is None:
             raise RuntimeError(
-                "Clerk route resolution requires the active provider's model"
+                "Gaia route resolution requires the active provider's model"
             )
-        if clerk_model == turn_model:
+        if gaia_model == turn_model:
             return None
 
-        provider_type = get_provider_for_model(clerk_model)
+        provider_type = get_provider_for_model(gaia_model)
         if provider_type is None:
-            raise ValueError(
-                f"clerk_model {clerk_model!r} is not in the model registry"
-            )
+            raise ValueError(f"gaia_model {gaia_model!r} is not in the model registry")
         from nexus.config import get_openai_compatible_endpoint
 
-        endpoint = get_openai_compatible_endpoint(clerk_model)
+        endpoint = get_openai_compatible_endpoint(gaia_model)
         base_url = endpoint["base_url"] if endpoint else None
-        clerk_wire: Literal["openai", "anthropic", "local"]
+        gaia_wire: Literal["openai", "anthropic", "local"]
         if provider_type == "anthropic":
-            clerk_wire = "anthropic"
+            gaia_wire = "anthropic"
         elif provider_type == "openai" or base_url:
-            clerk_wire = "local" if base_url else "openai"
+            gaia_wire = "local" if base_url else "openai"
         else:
-            raise ValueError(f"Unsupported clerk provider type: {provider_type}")
-        return clerk_model, provider_type, endpoint, clerk_wire
+            raise ValueError(f"Unsupported gaia provider type: {provider_type}")
+        return gaia_model, provider_type, endpoint, gaia_wire
 
-    def _build_clerk_provider(
+    def _build_gaia_provider(
         self,
-        clerk_route: StorytellerRoute,
+        gaia_route: StorytellerRoute,
         *,
         system_prompt: Optional[str],
         output_validator: Any,
         anthropic_transport: Optional[Literal["prompted", "tool_envelope"]],
     ) -> "OpenAIProvider | AnthropicProvider":
-        """Construct a fresh provider for the pinned clerk seat.
+        """Construct a fresh provider for the pinned gaia seat.
 
-        Mirrors _initialize_provider's constructor arguments so the clerk
+        Mirrors _initialize_provider's constructor arguments so the gaia
         inherits the same apex generation settings as the writer, differing
         only in model, endpoint, and transport.
         """
-        clerk_model, _provider_type, endpoint, clerk_wire = clerk_route
+        gaia_model, _provider_type, endpoint, gaia_wire = gaia_route
         apex_settings = self.settings.get("API Settings", {}).get("apex", {})
         structured_output_retries = apex_settings.get("structured_output_retries", 3)
-        if clerk_wire == "anthropic":
+        if gaia_wire == "anthropic":
             if anthropic_transport is None:
-                raise ValueError("Anthropic clerk seat requires an explicit transport")
+                raise ValueError("Anthropic gaia seat requires an explicit transport")
             return AnthropicProvider(
-                model=clerk_model,
+                model=gaia_model,
                 max_tokens=apex_settings.get(
                     "max_output_tokens", apex_settings.get("max_tokens", 4000)
                 ),
@@ -1003,7 +999,7 @@ class LogonUtility:
         )
         request_timeout = endpoint["request_timeout_seconds"] if endpoint else None
         return OpenAIProvider(
-            model=clerk_model,
+            model=gaia_model,
             temperature=apex_settings.get("temperature", 0.7),
             max_output_tokens=apex_settings.get("max_output_tokens", 25000),
             reasoning_effort=apex_settings.get("reasoning_effort", "medium"),
@@ -1017,26 +1013,26 @@ class LogonUtility:
             request_params=endpoint.get("request_params") if endpoint else None,
         )
 
-    def _clerk_effective_window(self, clerk_route: StorytellerRoute) -> int:
-        """Resolve the pinned clerk provider's own context ceiling.
+    def _gaia_effective_window(self, gaia_route: StorytellerRoute) -> int:
+        """Resolve the pinned gaia provider's own context ceiling.
 
-        The clerk prompt (turn context + finished writer output) must be
-        enforced against the CLERK provider's window, not the writer's — a
-        32K local writer with a 75K frontier clerk must not false-raise.
+        The gaia prompt (turn context + finished writer output) must be
+        enforced against the GAIA provider's window, not the writer's — a
+        32K local writer with a 75K frontier gaia must not false-raise.
         """
-        _model, provider_type, _endpoint, clerk_wire = clerk_route
+        _model, provider_type, _endpoint, gaia_wire = gaia_route
         return resolve_storyteller_context_window(
-            self.settings, clerk_wire, provider_type
+            self.settings, gaia_wire, provider_type
         )
 
-    def _resolve_anthropic_two_pass_clerk_transport(
+    def _resolve_anthropic_two_pass_gaia_transport(
         self,
         wire_type: Optional[Literal["openai", "anthropic", "local"]] = None,
     ) -> Optional[Literal["prompted", "tool_envelope"]]:
-        """Resolve the schema-free Anthropic clerk arm or reject native.
+        """Resolve the schema-free Anthropic gaia arm or reject native.
 
-        ``wire_type`` is the CLERK seat's wire class (defaults to the active
-        provider's). A non-Anthropic clerk needs no Anthropic transport even
+        ``wire_type`` is the GAIA seat's wire class (defaults to the active
+        provider's). A non-Anthropic gaia needs no Anthropic transport even
         under an Anthropic writer, and vice versa.
         """
 
@@ -1051,47 +1047,47 @@ class LogonUtility:
         if self._provider_wire_type == "anthropic":
             transport = self.provider.structured_transport
         else:
-            # Pinned Anthropic clerk under a non-Anthropic writer: the active
+            # Pinned Anthropic gaia under a non-Anthropic writer: the active
             # provider carries no Anthropic transport, so read the setting.
             apex_settings = self.settings.get("API Settings", {}).get("apex", {})
             transport = apex_settings.get("anthropic_storyteller_transport", "prompted")
         if transport == "native":
             raise ValueError(
                 "Anthropic two-pass execution cannot use "
-                "anthropic_storyteller_transport='native': the clerk wire cannot "
+                "anthropic_storyteller_transport='native': the gaia wire cannot "
                 "compile under Anthropic native enforcement (probe G2b, issue #566). "
-                "Choose 'prompted' or 'tool_envelope' for the clerk."
+                "Choose 'prompted' or 'tool_envelope' for the gaia."
             )
         if transport not in {"prompted", "tool_envelope"}:
             raise ValueError(
-                "Anthropic two-pass clerk transport must be 'prompted' or "
+                "Anthropic two-pass gaia transport must be 'prompted' or "
                 f"'tool_envelope', got {transport!r}"
             )
         return cast(Literal["prompted", "tool_envelope"], transport)
 
-    def _clerk_system_prompt(
+    def _gaia_system_prompt(
         self,
         *,
         wire_type: Optional[Literal["openai", "anthropic", "local"]] = None,
         anthropic_transport: Optional[Literal["prompted", "tool_envelope"]] = None,
     ) -> str:
-        """Build the pass-two system content for the clerk seat's wire class."""
+        """Build the pass-two system content for the gaia seat's wire class."""
 
         effective_wire = (
             wire_type if wire_type is not None else self._provider_wire_type
         )
-        system_prompt = self._load_clerk_system_prompt()
+        system_prompt = self._load_gaia_system_prompt()
         if effective_wire == "anthropic":
             if anthropic_transport is None:
                 raise ValueError(
-                    "Anthropic clerk system prompt requires an explicit transport"
+                    "Anthropic gaia system prompt requires an explicit transport"
                 )
             if anthropic_transport == "prompted":
-                system_prompt = f"{system_prompt}\n\n{skald_clerk_prompt_guide()}"
+                system_prompt = f"{system_prompt}\n\n{skald_gaia_prompt_guide()}"
         return system_prompt
 
     @staticmethod
-    def _format_clerk_user_prompt(
+    def _format_gaia_user_prompt(
         turn_prompt: str,
         writer: SkaldWriterWire,
     ) -> str:
@@ -1136,16 +1132,16 @@ class LogonUtility:
         presence_baseline: Optional[PresenceBaseline],
         effective_context_window: Optional[int],
     ) -> StoryTurnResponse:
-        """Run synchronous writer and clerk calls, then hydrate once."""
+        """Run synchronous writer and gaia calls, then hydrate once."""
 
         if self.provider is None:
             raise RuntimeError("Two-pass generation requires an initialized provider")
-        clerk_route = self._resolve_clerk_route()
-        clerk_wire = (
-            clerk_route[3] if clerk_route is not None else self._provider_wire_type
+        gaia_route = self._resolve_gaia_route()
+        gaia_wire = (
+            gaia_route[3] if gaia_route is not None else self._provider_wire_type
         )
-        anthropic_clerk_transport = self._resolve_anthropic_two_pass_clerk_transport(
-            clerk_wire
+        anthropic_gaia_transport = self._resolve_anthropic_two_pass_gaia_transport(
+            gaia_wire
         )
         writer_provider = self._clone_provider_for_two_pass(
             system_prompt=self._writer_system_prompt(),
@@ -1162,44 +1158,44 @@ class LogonUtility:
         if not isinstance(writer, SkaldWriterWire):
             raise TypeError("LOGON writer pass returned a non-SkaldWriterWire response")
 
-        clerk_prompt = self._format_clerk_user_prompt(turn_prompt, writer)
-        clerk_window = (
-            self._clerk_effective_window(clerk_route)
-            if clerk_route is not None
+        gaia_prompt = self._format_gaia_user_prompt(turn_prompt, writer)
+        gaia_window = (
+            self._gaia_effective_window(gaia_route)
+            if gaia_route is not None
             else effective_context_window
         )
         self._enforce_final_prompt_window(
-            clerk_prompt,
-            effective_context_window=clerk_window,
+            gaia_prompt,
+            effective_context_window=gaia_window,
         )
-        clerk_system_prompt = self._clerk_system_prompt(
-            wire_type=clerk_wire,
-            anthropic_transport=anthropic_clerk_transport,
+        gaia_system_prompt = self._gaia_system_prompt(
+            wire_type=gaia_wire,
+            anthropic_transport=anthropic_gaia_transport,
         )
-        clerk_validator = getattr(self.provider, "output_validator", None)
-        if clerk_route is not None:
-            clerk_provider: Any = self._build_clerk_provider(
-                clerk_route,
-                system_prompt=clerk_system_prompt,
-                output_validator=clerk_validator,
-                anthropic_transport=anthropic_clerk_transport,
+        gaia_validator = getattr(self.provider, "output_validator", None)
+        if gaia_route is not None:
+            gaia_provider: Any = self._build_gaia_provider(
+                gaia_route,
+                system_prompt=gaia_system_prompt,
+                output_validator=gaia_validator,
+                anthropic_transport=anthropic_gaia_transport,
             )
         else:
-            clerk_provider = self._clone_provider_for_two_pass(
-                system_prompt=clerk_system_prompt,
-                output_validator=clerk_validator,
-                anthropic_transport=anthropic_clerk_transport,
+            gaia_provider = self._clone_provider_for_two_pass(
+                system_prompt=gaia_system_prompt,
+                output_validator=gaia_validator,
+                anthropic_transport=anthropic_gaia_transport,
             )
-        clerk, _clerk_response = clerk_provider.get_structured_completion(
-            clerk_prompt,
-            SkaldClerkWire,
-            **self._two_pass_schema_format_kwargs(SkaldClerkWire, wire_type=clerk_wire),
+        gaia, _gaia_response = gaia_provider.get_structured_completion(
+            gaia_prompt,
+            SkaldGaiaWire,
+            **self._two_pass_schema_format_kwargs(SkaldGaiaWire, wire_type=gaia_wire),
         )
-        if not isinstance(clerk, SkaldClerkWire):
-            raise TypeError("LOGON clerk pass returned a non-SkaldClerkWire response")
+        if not isinstance(gaia, SkaldGaiaWire):
+            raise TypeError("LOGON gaia pass returned a non-SkaldGaiaWire response")
 
         return self._hydrate_provider_response(
-            combine_two_pass(writer, clerk),
+            combine_two_pass(writer, gaia),
             SkaldTurnWire,
             presence_baseline=presence_baseline,
         )
@@ -1211,16 +1207,16 @@ class LogonUtility:
         presence_baseline: Optional[PresenceBaseline],
         effective_context_window: Optional[int],
     ) -> StoryTurnResponse:
-        """Run asynchronous writer and clerk calls, then hydrate once."""
+        """Run asynchronous writer and gaia calls, then hydrate once."""
 
         if self.provider is None:
             raise RuntimeError("Two-pass generation requires an initialized provider")
-        clerk_route = self._resolve_clerk_route()
-        clerk_wire = (
-            clerk_route[3] if clerk_route is not None else self._provider_wire_type
+        gaia_route = self._resolve_gaia_route()
+        gaia_wire = (
+            gaia_route[3] if gaia_route is not None else self._provider_wire_type
         )
-        anthropic_clerk_transport = self._resolve_anthropic_two_pass_clerk_transport(
-            clerk_wire
+        anthropic_gaia_transport = self._resolve_anthropic_two_pass_gaia_transport(
+            gaia_wire
         )
         writer_provider = self._clone_provider_for_two_pass(
             system_prompt=self._writer_system_prompt(),
@@ -1239,44 +1235,44 @@ class LogonUtility:
         if not isinstance(writer, SkaldWriterWire):
             raise TypeError("LOGON writer pass returned a non-SkaldWriterWire response")
 
-        clerk_prompt = self._format_clerk_user_prompt(turn_prompt, writer)
-        clerk_window = (
-            self._clerk_effective_window(clerk_route)
-            if clerk_route is not None
+        gaia_prompt = self._format_gaia_user_prompt(turn_prompt, writer)
+        gaia_window = (
+            self._gaia_effective_window(gaia_route)
+            if gaia_route is not None
             else effective_context_window
         )
         self._enforce_final_prompt_window(
-            clerk_prompt,
-            effective_context_window=clerk_window,
+            gaia_prompt,
+            effective_context_window=gaia_window,
         )
-        clerk_system_prompt = self._clerk_system_prompt(
-            wire_type=clerk_wire,
-            anthropic_transport=anthropic_clerk_transport,
+        gaia_system_prompt = self._gaia_system_prompt(
+            wire_type=gaia_wire,
+            anthropic_transport=anthropic_gaia_transport,
         )
-        clerk_validator = getattr(self.provider, "output_validator", None)
-        if clerk_route is not None:
-            clerk_provider: Any = self._build_clerk_provider(
-                clerk_route,
-                system_prompt=clerk_system_prompt,
-                output_validator=clerk_validator,
-                anthropic_transport=anthropic_clerk_transport,
+        gaia_validator = getattr(self.provider, "output_validator", None)
+        if gaia_route is not None:
+            gaia_provider: Any = self._build_gaia_provider(
+                gaia_route,
+                system_prompt=gaia_system_prompt,
+                output_validator=gaia_validator,
+                anthropic_transport=anthropic_gaia_transport,
             )
         else:
-            clerk_provider = self._clone_provider_for_two_pass(
-                system_prompt=clerk_system_prompt,
-                output_validator=clerk_validator,
-                anthropic_transport=anthropic_clerk_transport,
+            gaia_provider = self._clone_provider_for_two_pass(
+                system_prompt=gaia_system_prompt,
+                output_validator=gaia_validator,
+                anthropic_transport=anthropic_gaia_transport,
             )
-        clerk, _clerk_response = await clerk_provider.get_structured_completion_async(
-            clerk_prompt,
-            SkaldClerkWire,
-            **self._two_pass_schema_format_kwargs(SkaldClerkWire, wire_type=clerk_wire),
+        gaia, _gaia_response = await gaia_provider.get_structured_completion_async(
+            gaia_prompt,
+            SkaldGaiaWire,
+            **self._two_pass_schema_format_kwargs(SkaldGaiaWire, wire_type=gaia_wire),
         )
-        if not isinstance(clerk, SkaldClerkWire):
-            raise TypeError("LOGON clerk pass returned a non-SkaldClerkWire response")
+        if not isinstance(gaia, SkaldGaiaWire):
+            raise TypeError("LOGON gaia pass returned a non-SkaldGaiaWire response")
 
         return self._hydrate_provider_response(
-            combine_two_pass(writer, clerk),
+            combine_two_pass(writer, gaia),
             SkaldTurnWire,
             presence_baseline=presence_baseline,
         )
@@ -1485,11 +1481,11 @@ class LogonUtility:
         """Return the frozen transport schema arguments for one pass.
 
         ``wire_type`` is the wire class of the provider EXECUTING the pass —
-        the pinned clerk seat may run a different class than the writer.
+        the pinned gaia seat may run a different class than the writer.
         """
 
-        if schema_model not in {SkaldWriterWire, SkaldClerkWire}:
-            raise TypeError("Two-pass schema formatting requires writer or clerk wire")
+        if schema_model not in {SkaldWriterWire, SkaldGaiaWire}:
+            raise TypeError("Two-pass schema formatting requires writer or gaia wire")
         effective_wire = (
             wire_type if wire_type is not None else self._provider_wire_type
         )
@@ -1512,14 +1508,14 @@ class LogonUtility:
                 "text_format": (
                     skald_writer_strict_text_format()
                     if schema_model is SkaldWriterWire
-                    else skald_clerk_strict_text_format()
+                    else skald_gaia_strict_text_format()
                 )
             }
         elif effective_wire == "local":
             lenient_schema = (
                 skald_writer_lenient_schema()
                 if schema_model is SkaldWriterWire
-                else skald_clerk_lenient_schema()
+                else skald_gaia_lenient_schema()
             )
             kwargs = {
                 "text_format": openai_response_text_format(
@@ -1536,16 +1532,16 @@ class LogonUtility:
                     )
                 }
             else:
-                clerk_transport = self._resolve_anthropic_two_pass_clerk_transport(
+                gaia_transport = self._resolve_anthropic_two_pass_gaia_transport(
                     effective_wire
                 )
-                if clerk_transport == "prompted":
+                if gaia_transport == "prompted":
                     kwargs = {}
-                elif clerk_transport == "tool_envelope":
-                    kwargs = {"input_schema": skald_clerk_lenient_schema()}
+                elif gaia_transport == "tool_envelope":
+                    kwargs = {"input_schema": skald_gaia_lenient_schema()}
                 else:
                     raise AssertionError(
-                        "Anthropic clerk transport resolution returned no transport"
+                        "Anthropic gaia transport resolution returned no transport"
                     )
         else:
             raise ValueError(

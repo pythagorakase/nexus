@@ -14,10 +14,10 @@ from nexus.agents.logon.apex_schema import (
     StorytellerResponseExtended,
 )
 from nexus.agents.logon.skald_wire import (
-    SkaldClerkWire,
+    SkaldGaiaWire,
     SkaldTurnWire,
     SkaldWriterWire,
-    skald_clerk_lenient_schema,
+    skald_gaia_lenient_schema,
     skald_wire_lenient_schema,
     skald_writer_lenient_schema,
 )
@@ -55,8 +55,8 @@ def _wire_response() -> SkaldTurnWire:
     )
 
 
-def _clerk_response() -> SkaldClerkWire:
-    return SkaldClerkWire()
+def _gaia_response() -> SkaldGaiaWire:
+    return SkaldGaiaWire()
 
 
 def _contains_key(value: object, key: str) -> bool:
@@ -298,12 +298,12 @@ def test_two_pass_writer_native_config_reaches_shipped_anthropic_request(
         assert request_output_config["effort"] == expected_effort
 
 
-def test_two_pass_clerk_tool_envelope_reaches_forced_non_strict_tool() -> None:
+def test_two_pass_gaia_tool_envelope_reaches_forced_non_strict_tool() -> None:
     utility = LogonUtility({})
     utility._provider_wire_type = "anthropic"
     utility.provider = SimpleNamespace(structured_transport="tool_envelope")
-    schema_kwargs = utility._two_pass_schema_format_kwargs(SkaldClerkWire)
-    clerk = _clerk_response()
+    schema_kwargs = utility._two_pass_schema_format_kwargs(SkaldGaiaWire)
+    gaia = _gaia_response()
     captured = {}
 
     class FakeMessages:
@@ -314,7 +314,7 @@ def test_two_pass_clerk_tool_envelope_reaches_forced_non_strict_tool() -> None:
                     SimpleNamespace(
                         type="tool_use",
                         name="submit_structured_response",
-                        input=clerk.model_dump(mode="json"),
+                        input=gaia.model_dump(mode="json"),
                     ),
                 ],
                 usage=SimpleNamespace(input_tokens=33, output_tokens=44),
@@ -330,13 +330,13 @@ def test_two_pass_clerk_tool_envelope_reaches_forced_non_strict_tool() -> None:
 
     parsed, _llm_response = provider.get_structured_completion(
         "Record the durable state.",
-        SkaldClerkWire,
+        SkaldGaiaWire,
         **schema_kwargs,
     )
 
-    assert parsed == clerk
+    assert parsed == gaia
     assert captured["tools"][0]["name"] == "submit_structured_response"
-    assert captured["tools"][0]["input_schema"] == skald_clerk_lenient_schema()
+    assert captured["tools"][0]["input_schema"] == skald_gaia_lenient_schema()
     assert "strict" not in captured["tools"][0]
     assert captured["tool_choice"] == {
         "type": "tool",
@@ -346,12 +346,12 @@ def test_two_pass_clerk_tool_envelope_reaches_forced_non_strict_tool() -> None:
 
 
 @pytest.mark.asyncio
-async def test_two_pass_clerk_tool_envelope_async_uses_effort_only_config() -> None:
+async def test_two_pass_gaia_tool_envelope_async_uses_effort_only_config() -> None:
     utility = LogonUtility({})
     utility._provider_wire_type = "anthropic"
     utility.provider = SimpleNamespace(structured_transport="tool_envelope")
-    schema_kwargs = utility._two_pass_schema_format_kwargs(SkaldClerkWire)
-    clerk = _clerk_response()
+    schema_kwargs = utility._two_pass_schema_format_kwargs(SkaldGaiaWire)
+    gaia = _gaia_response()
     captured = {}
 
     class FakeMessages:
@@ -362,7 +362,7 @@ async def test_two_pass_clerk_tool_envelope_async_uses_effort_only_config() -> N
                     SimpleNamespace(
                         type="tool_use",
                         name="submit_structured_response",
-                        input=clerk.model_dump(mode="json"),
+                        input=gaia.model_dump(mode="json"),
                     ),
                 ],
                 usage=SimpleNamespace(input_tokens=33, output_tokens=44),
@@ -379,13 +379,13 @@ async def test_two_pass_clerk_tool_envelope_async_uses_effort_only_config() -> N
 
     parsed, _llm_response = await provider.get_structured_completion_async(
         "Record the durable state.",
-        SkaldClerkWire,
+        SkaldGaiaWire,
         **schema_kwargs,
     )
 
-    assert parsed == clerk
+    assert parsed == gaia
     assert captured["tools"][0]["name"] == "submit_structured_response"
-    assert captured["tools"][0]["input_schema"] == skald_clerk_lenient_schema()
+    assert captured["tools"][0]["input_schema"] == skald_gaia_lenient_schema()
     assert "strict" not in captured["tools"][0]
     assert captured["tool_choice"] == {
         "type": "tool",

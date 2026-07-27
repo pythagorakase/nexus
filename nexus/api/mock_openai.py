@@ -978,7 +978,7 @@ def _mock_storyteller_response(prompt: str) -> Dict[str, Any]:
 
 
 _WRITER_WIRE_FIELDS = ("narrative", "choices", "scene", "presence", "operations")
-_CLERK_WIRE_FIELDS = ("updates", "orrery_adjudications", "new_entities")
+_GAIA_WIRE_FIELDS = ("updates", "orrery_adjudications", "new_entities")
 
 
 def _mock_writer_response(prompt: str) -> Dict[str, Any]:
@@ -993,10 +993,10 @@ def _mock_writer_response(prompt: str) -> Dict[str, Any]:
     return {key: full[key] for key in _WRITER_WIRE_FIELDS if key in full}
 
 
-def _mock_clerk_response(prompt: str) -> Dict[str, Any]:
-    """Project the clerk pass of the two-pass pipeline from the full fixture."""
+def _mock_gaia_response(prompt: str) -> Dict[str, Any]:
+    """Project the gaia pass of the two-pass pipeline from the full fixture."""
     full = _mock_storyteller_response(prompt)
-    return {key: full[key] for key in _CLERK_WIRE_FIELDS if key in full}
+    return {key: full[key] for key in _GAIA_WIRE_FIELDS if key in full}
 
 
 def _responses_payload(
@@ -1120,7 +1120,7 @@ async def responses_create(request: ResponsesRequest):
     # Storyteller response the caller validates against. The full turn wire
     # (SkaldTurnWire) exposes BOTH narrative and updates; the two-pass split
     # separates them (SkaldWriterWire = narrative/presence without updates,
-    # SkaldClerkWire = updates without narrative — extra=forbid, so each pass
+    # SkaldGaiaWire = updates without narrative — extra=forbid, so each pass
     # must receive only its own projection); bootstrap requests
     # (StorytellerResponseBootstrap) carry neither updates nor presence.
     output_fields = _requested_output_properties(request)
@@ -1137,11 +1137,11 @@ async def responses_create(request: ResponsesRequest):
             )
         if "updates" in output_fields:
             logger.info(
-                "[MOCK] Skald clerk wire requested (%d Orrery proposals)",
+                "[MOCK] Skald gaia wire requested (%d Orrery proposals)",
                 len(proposal_ids),
             )
             return _responses_payload(
-                _mock_clerk_response(input_text),
+                _mock_gaia_response(input_text),
                 final_result_tool=final_result_tool,
             )
         if "presence" in output_fields:
