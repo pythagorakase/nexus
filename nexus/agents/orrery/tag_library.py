@@ -37,6 +37,7 @@ class TagLibraryEntry:
     description: str
     category_description: str
     prompt_order: int
+    reapplication_policy: Optional[str] = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,7 +110,8 @@ def read_tag_library(
                     r.prompt_order,
                     t.tag,
                     t.is_ephemeral,
-                    t.description
+                    t.description,
+                    t.reapplication_policy::text AS reapplication_policy
                 FROM tag_category_registry r
                 JOIN tags t ON t.category = r.category
                 WHERE {' AND '.join(where)}
@@ -130,6 +132,11 @@ def read_tag_library(
                     description=str(row["description"] or ""),
                     category_description=str(row["category_description"] or ""),
                     prompt_order=int(row["prompt_order"]),
+                    reapplication_policy=(
+                        str(row["reapplication_policy"])
+                        if row.get("reapplication_policy") is not None
+                        else None
+                    ),
                 )
                 for row in cur.fetchall()
             ]

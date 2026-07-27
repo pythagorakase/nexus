@@ -199,6 +199,23 @@ class FakeCursor:
             )
             self.rowcount = 1
             return
+        if sql_upper.startswith("SELECT ID") and "FROM ENTITY_TAGS" in sql_upper:
+            entity_id, tag_id = params
+            current = next(
+                (
+                    row
+                    for row in self.entity_tags
+                    if row["entity_id"] == entity_id
+                    and row["tag_id"] == tag_id
+                    and row["cleared_at"] is None
+                ),
+                None,
+            )
+            self._next_row = (
+                _FakeRow({"id": current["id"]}, ["id"]) if current is not None else None
+            )
+            self.rowcount = 1 if current is not None else 0
+            return
         if sql_upper.startswith("INSERT INTO ENTITY_TAGS"):
             (
                 entity_id,
@@ -513,6 +530,40 @@ def test_extend_expiry_policy_requires_duration_override():
         )
 
     assert cur.entity_tags == []
+
+
+def test_storyteller_extend_expiry_reapplication_without_duration_is_noop():
+    tag_id = hash("recently_protective") & 0xFFFFFF
+    original_expiry = _WORLD_TIME + timedelta(hours=1)
+    cur = FakeCursor(
+        tags=_registered(
+            ("recently_protective", "disposition", True, "extend_expiry"),
+        ),
+        entity_tags=[
+            {
+                "entity_id": 42,
+                "tag_id": tag_id,
+                "applied_at_world_time": _WORLD_TIME,
+                "expires_at_world_time": original_expiry,
+                "source_kind": "system",
+                "cleared_at": None,
+            }
+        ],
+    )
+
+    counters = apply_tag_bestowal(
+        cur,
+        entity_id=42,
+        entity_kind="character",
+        bestowal=OrreryTagBestowal(applied_tags=["recently_protective"]),
+        world_time=_WORLD_TIME + timedelta(minutes=15),
+        source_kind="skald_inline",
+    )
+
+    assert counters["applied"] == 0
+    assert len(cur.entity_tags) == 1
+    assert cur.entity_tags[0]["expires_at_world_time"] == original_expiry
+    assert cur.entity_tags[0]["source_kind"] == "system"
 
 
 def test_replace_policy_restamps_existing_open_row():

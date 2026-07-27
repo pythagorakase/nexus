@@ -65,6 +65,27 @@ def test_read_pair_tag_library_uses_shared_connection(monkeypatch) -> None:
     assert tag_library.read_pair_tag_library("save_05") == ["hiding", "shelters"]
 
 
+def test_read_tag_library_captures_reapplication_policy(monkeypatch) -> None:
+    rows = [
+        {
+            "entity_kind": "character",
+            "category": "disposition",
+            "category_description": "Recent conduct.",
+            "prompt_order": 10,
+            "tag": "recently_protective",
+            "is_ephemeral": True,
+            "description": "Recently acted to protect someone.",
+            "reapplication_policy": "extend_expiry",
+        }
+    ]
+    monkeypatch.setattr(tag_library, "_connect", lambda _dbname: _Conn(rows))
+
+    entries = tag_library.read_tag_library("save_05")
+
+    assert len(entries) == 1
+    assert entries[0].reapplication_policy == "extend_expiry"
+
+
 def _fake_entries() -> list[tag_library.TagLibraryEntry]:
     return [
         tag_library.TagLibraryEntry(

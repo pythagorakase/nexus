@@ -40,6 +40,12 @@ class FakeRegistryCursor:
             "human": (1, "bodyform", False, None),
             "perceptive": (2, "disposition", False, None),
             "haven": (3, "place_class", False, None),
+            "recently_protective": (
+                4,
+                "disposition",
+                True,
+                "extend_expiry",
+            ),
         }
         # tag -> (id, subject_kinds, object_kinds)
         self.pair_tags = {
@@ -128,12 +134,15 @@ class FakeRegistryConnection:
 def _test_vocabulary() -> StorytellerVocabulary:
     return StorytellerVocabulary(
         tag_names_by_kind={
-            "character": frozenset({"human", "perceptive"}),
+            "character": frozenset({"human", "perceptive", "recently_protective"}),
             "place": frozenset({"haven"}),
             "faction": frozenset({"loyalist"}),
         },
         pair_tag_names=frozenset({"protects", "contact:social", "status:junior"}),
         event_types=frozenset({"evade_pursuit", "slept"}),
+        tag_reapplication_policies_by_kind={
+            "character": {"recently_protective": "extend_expiry"},
+        },
     )
 
 
@@ -151,6 +160,12 @@ def _stub_storyteller_vocabulary_readers(
         lambda _dbname: [
             _tag_entry("character", "bodyform", "human"),
             _tag_entry("character", "disposition", "perceptive"),
+            _tag_entry(
+                "character",
+                "disposition",
+                "recently_protective",
+                reapplication_policy="extend_expiry",
+            ),
             _tag_entry("place", "place_class", "haven"),
             _tag_entry("faction", "ideology", "loyalist"),
         ],
@@ -349,6 +364,31 @@ def test_cached_catalog_validates_single_tags_per_kind_and_field(
     assert kind in issues[0]
 
 
+def test_cached_catalog_rejects_unexpressible_extend_expiry_add() -> None:
+    response = _storyteller_response(
+        updates=_updates_block(
+            characters=[
+                {
+                    "name": "Brena Tideloft",
+                    "tags_add": ["recently_protective"],
+                }
+            ]
+        )
+    )
+
+    issues = collect_orrery_tag_issues(
+        response,
+        FakeRegistryCursor(),
+        vocabulary=_test_vocabulary(),
+    )
+
+    assert len(issues) == 1
+    assert issues[0].startswith("updates.characters[0]: applied_tags:")
+    assert "reapplication_policy='extend_expiry'" in issues[0]
+    assert "storyteller tags_add cannot express duration_override" in issues[0]
+    assert "leave it unchanged" in issues[0]
+
+
 def test_new_entity_hint_issues_are_path_qualified_and_aggregated() -> None:
     response = _response(
         new_entities=[
@@ -433,6 +473,7 @@ def test_replacement_event_type_uses_cached_catalog() -> None:
             {
                 "proposal_id": "proposal-valid",
                 "action": "replace",
+                "replacement_state_delta": {},
                 "replacement_event_type": "slept",
             }
         ]
@@ -442,6 +483,7 @@ def test_replacement_event_type_uses_cached_catalog() -> None:
             {
                 "proposal_id": "proposal-invalid",
                 "action": "replace",
+                "replacement_state_delta": {},
                 "replacement_event_type": "invented_event",
             }
         ]
@@ -638,6 +680,40 @@ async def test_storyteller_validator_attributes_declaration_failure_to_model_ret
 
 
 @pytest.mark.asyncio
+async def test_storyteller_validator_retries_unexpressible_extend_expiry_add(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from nexus.api import db_pool
+
+    monkeypatch.setattr(
+        db_pool,
+        "get_connection",
+        lambda _dbname: FakeRegistryConnection(FakeRegistryCursor()),
+    )
+    validator = build_storyteller_tag_validator("test_slot")
+    assert validator is not None
+
+    with pytest.raises(ModelRetry) as exc_info:
+        await validator(
+            SimpleNamespace(retry=0),
+            _storyteller_response(
+                updates=_updates_block(
+                    characters=[
+                        {
+                            "name": "Brena Tideloft",
+                            "tags_add": ["recently_protective"],
+                        }
+                    ]
+                )
+            ),
+        )
+
+    assert "updates.characters[0]" in exc_info.value.message
+    assert "requires duration_override" in exc_info.value.message
+    assert "omit that tag" in exc_info.value.message
+
+
+@pytest.mark.asyncio
 async def test_storyteller_validator_reads_each_catalog_once_per_attempt(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -701,6 +777,7 @@ async def test_storyteller_validator_reads_each_catalog_once_per_attempt(
             {
                 "proposal_id": "proposal-1",
                 "action": "replace",
+                "replacement_state_delta": {},
                 "replacement_event_type": "slept",
             }
         ],
@@ -980,6 +1057,7 @@ def _retry_boundary_response(
                 {
                     "proposal_id": "proposal-1",
                     "action": "replace",
+                    "replacement_state_delta": {},
                     "replacement_event_type": ("slept" if valid else "sleptt"),
                 }
             ]
@@ -1151,7 +1229,13 @@ def test_validator_skipped_without_slot_database() -> None:
     assert build_storyteller_tag_validator("save_05") is not None
 
 
-def _tag_entry(entity_kind: str, category: str, tag: str) -> TagLibraryEntry:
+def _tag_entry(
+    entity_kind: str,
+    category: str,
+    tag: str,
+    *,
+    reapplication_policy: Optional[str] = None,
+) -> TagLibraryEntry:
     return TagLibraryEntry(
         entity_kind=entity_kind,
         category=category,
@@ -1160,4 +1244,5 @@ def _tag_entry(entity_kind: str, category: str, tag: str) -> TagLibraryEntry:
         description=f"{tag} description",
         category_description=f"{category} description",
         prompt_order=10,
+        reapplication_policy=reapplication_policy,
     )
