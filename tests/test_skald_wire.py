@@ -1349,14 +1349,47 @@ async def test_async_non_bootstrap_logon_requires_parent_chunk_id() -> None:
 
 
 def test_storyteller_prompt_defines_reset_and_world_layer_semantics() -> None:
-    prompt = (Path(__file__).parents[1] / "prompts" / "storyteller_core.md").read_text()
+    prompts_dir = Path(__file__).parents[1] / "prompts"
+    prompt = (prompts_dir / "storyteller_core.md").read_text()
     assert "on a reset, list the full roster instead of `enter` / `exit`" in prompt
-    assert "When present, include all four arrays" in prompt
-    assert "Omit the whole block when there are no updates" in prompt
-    assert "`updates[]`" not in prompt
     assert "A flashback is a scene set in the past" in prompt
     assert "atemporal means dreams or time-abnormal realms" in prompt
     assert "extradiegetic means the user addressing out-of-game" in prompt
+    # The updates contract moved out of core with the two-DM split: the
+    # single-pass supplement carries it for one-mind turns, and gaia.md
+    # carries its own phrasing for the second seat.
+    supplement = (prompts_dir / "storyteller_single_pass.md").read_text()
+    assert "When present, include all four arrays" in supplement
+    assert "Omit the whole block when there are no updates" in supplement
+    assert "`updates[]`" not in supplement
+    assert "`updates[]`" not in prompt
+
+
+def test_state_authoring_documents_share_core_invariants() -> None:
+    """The duplicated state doctrine may not drift between its two homes.
+
+    Per-seat prompts are deliberately self-contained (no runtime include),
+    so the invariants shared by the single-pass supplement and gaia.md are
+    policed here instead of by composition.
+    """
+    prompts_dir = Path(__file__).parents[1] / "prompts"
+    documents = {
+        "single_pass": (prompts_dir / "storyteller_single_pass.md").read_text(),
+        "gaia": (prompts_dir / "storyteller_gaia.md").read_text(),
+    }
+    for name, doc in documents.items():
+        normalized = " ".join(doc.split())
+        # The four update namespaces, exact and exhaustive.
+        assert (
+            "`characters`, `places`, `factions`, and `relationships`" in normalized
+        ), name
+        # Registered vocabulary only; invention is prohibited.
+        assert "registered" in normalized, name
+        assert "rather than invent" in normalized, name
+        # Accept-by-silence adjudication semantics.
+        assert "Accept by silence" in normalized, name
+        # Declarations use the prose name exactly.
+        assert "exactly as written in the prose" in normalized, name
 
 
 def test_sync_logon_reads_and_supplies_parent_baseline(

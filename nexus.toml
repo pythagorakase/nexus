@@ -25,7 +25,7 @@ default_slot_model = "TEST"
 [global.model.api_models.openai]
 # Terra as default (owner, 2026-07-27): GPT-5.5's API rates equal Sol's
 # while Terra is half price — 5.5 stays selectable but earns no default.
-roles = { default = "gpt-5.6-terra" }
+roles = { default = "gpt-5.6-terra", gaia = "gpt-5.6-sol" }
 models = [
     { id = "o3", label = "o3", unsupported_params = ["temperature", "top_p"] },
     { id = "gpt-5.5", label = "GPT-5.5", unsupported_params = ["temperature", "top_p"] },
@@ -1065,7 +1065,7 @@ turn_pipeline = "two_pass" # "single_pass" or "two_pass"; two_pass default per #
 # freely. Unset to have Gaia follow the slot model (required for
 # fully-local/offline installs). TEST-provider slots always stay
 # self-contained regardless of this setting.
-gaia_model = "@openai.default"
+gaia_model = "@openai.gaia" # Sol: the string-puller seat per the 2026-07-27 night-session bake-off
 structured_output_retries = 3 # Validation retry budget for structured story turns
 # HTTP client timeout for a narrative continue turn. Frontier generation runs
 # inside the request and blocks the API worker, so status polls aren't answered
