@@ -23,7 +23,9 @@ default_slot_model = "TEST"
 # outright for that model (e.g. temperature on reasoning-class models).
 # Config load refuses any consumer section that configures one of them.
 [global.model.api_models.openai]
-roles = { default = "gpt-5.5" }
+# Terra as default (owner, 2026-07-27): GPT-5.5's API rates equal Sol's
+# while Terra is half price — 5.5 stays selectable but earns no default.
+roles = { default = "gpt-5.6-terra" }
 models = [
     { id = "o3", label = "o3", unsupported_params = ["temperature", "top_p"] },
     { id = "gpt-5.5", label = "GPT-5.5", unsupported_params = ["temperature", "top_p"] },
