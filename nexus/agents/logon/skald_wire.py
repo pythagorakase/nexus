@@ -381,7 +381,7 @@ class SkaldWriterWire(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-class SkaldClerkWire(BaseModel):
+class SkaldGaiaWire(BaseModel):
     """Provider-facing durable state record for pass two."""
 
     updates: Optional[UpdatesBlock] = Field(
@@ -439,19 +439,19 @@ class SkaldTurnWire(BaseModel):
 
 def combine_two_pass(
     writer: SkaldWriterWire,
-    clerk: SkaldClerkWire,
+    gaia: SkaldGaiaWire,
 ) -> SkaldTurnWire:
-    """Combine writer and clerk outputs into the existing full wire contract."""
+    """Combine writer and gaia outputs into the existing full wire contract."""
 
     return SkaldTurnWire(
         narrative=writer.narrative,
         choices=writer.choices,
         scene=writer.scene,
         presence=writer.presence,
-        updates=clerk.updates,
+        updates=gaia.updates,
         operations=writer.operations,
-        orrery_adjudications=clerk.orrery_adjudications,
-        new_entities=clerk.new_entities,
+        orrery_adjudications=gaia.orrery_adjudications,
+        new_entities=gaia.new_entities,
     )
 
 
@@ -753,11 +753,11 @@ def skald_writer_strict_text_format() -> Dict[str, Any]:
     return openai_response_text_format(SkaldWriterWire, schema=schema)
 
 
-def skald_clerk_strict_text_format() -> Dict[str, Any]:
-    """Build the strict OpenAI Responses text format for clerk passes."""
+def skald_gaia_strict_text_format() -> Dict[str, Any]:
+    """Build the strict OpenAI Responses text format for gaia passes."""
 
-    schema = strict_json_schema(SkaldClerkWire)
-    return openai_response_text_format(SkaldClerkWire, schema=schema)
+    schema = strict_json_schema(SkaldGaiaWire)
+    return openai_response_text_format(SkaldGaiaWire, schema=schema)
 
 
 def skald_wire_lenient_schema() -> Dict[str, Any]:
@@ -772,10 +772,10 @@ def skald_writer_lenient_schema() -> Dict[str, Any]:
     return de_null_schema(SkaldWriterWire.model_json_schema())
 
 
-def skald_clerk_lenient_schema() -> Dict[str, Any]:
-    """Build the omittable-field schema for clerk passes."""
+def skald_gaia_lenient_schema() -> Dict[str, Any]:
+    """Build the omittable-field schema for gaia passes."""
 
-    return de_null_schema(SkaldClerkWire.model_json_schema())
+    return de_null_schema(SkaldGaiaWire.model_json_schema())
 
 
 def _prompt_guide_ref_name(ref: str) -> str:
@@ -963,10 +963,10 @@ def skald_wire_prompt_guide() -> str:
     return _render_prompt_guide(skald_wire_lenient_schema())
 
 
-def skald_clerk_prompt_guide() -> str:
-    """Render a compact prompted-output guide for the clerk pass."""
+def skald_gaia_prompt_guide() -> str:
+    """Render a compact prompted-output guide for the gaia pass."""
 
     return _render_prompt_guide(
-        skald_clerk_lenient_schema(),
+        skald_gaia_lenient_schema(),
         include_descriptions=False,
     )

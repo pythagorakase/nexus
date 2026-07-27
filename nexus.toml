@@ -1056,13 +1056,14 @@ reasoning_effort = "medium"   # Reasoning effort level (low/medium/high)
 max_output_tokens = 25000     # Maximum tokens for generated narrative
 anthropic_storyteller_transport = "prompted" # "prompted", "native", or "tool_envelope"
 turn_pipeline = "two_pass" # "single_pass" or "two_pass"; two_pass default per #578 casting ruling (owner, 2026-07-26)
-# Pinned clerk seat (#578 rung 2): the state-custody pass always runs on this
-# registry model, giving OpenAI native grammar enforcement on updates /
-# adjudications / declarations while the slot model picker rotates the prose
-# chair freely. Unset to have the clerk follow the slot model (required for
+# Gaia — the turn's second movement (#578 rung 2, renamed from "clerk"):
+# the world's half of the turn (updates, Orrery adjudications, new-entity
+# declarations) always runs on this registry model under OpenAI native
+# grammar enforcement, while the slot model picker rotates the prose chair
+# freely. Unset to have Gaia follow the slot model (required for
 # fully-local/offline installs). TEST-provider slots always stay
 # self-contained regardless of this setting.
-clerk_model = "@openai.default"
+gaia_model = "@openai.default"
 structured_output_retries = 3 # Validation retry budget for structured story turns
 # HTTP client timeout for a narrative continue turn. Frontier generation runs
 # inside the request and blocks the API worker, so status polls aren't answered

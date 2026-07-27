@@ -1,4 +1,4 @@
-"""Tests for the config-switched writer and clerk storyteller pipeline."""
+"""Tests for the config-switched writer and gaia storyteller pipeline."""
 
 from __future__ import annotations
 
@@ -20,13 +20,13 @@ from nexus.agents.logon.orrery_tag_validation import (
 from nexus.agents.logon.skald_wire import (
     PresenceBaseline,
     PresenceRef,
-    SkaldClerkWire,
+    SkaldGaiaWire,
     SkaldTurnWire,
     SkaldWriterWire,
     hydrate_skald_turn,
-    skald_clerk_lenient_schema,
-    skald_clerk_prompt_guide,
-    skald_clerk_strict_text_format,
+    skald_gaia_lenient_schema,
+    skald_gaia_prompt_guide,
+    skald_gaia_strict_text_format,
     skald_writer_lenient_schema,
     skald_writer_strict_text_format,
 )
@@ -57,7 +57,7 @@ WRITER_PAYLOAD: dict[str, Any] = {
         }
     },
 }
-CLERK_PAYLOAD: dict[str, Any] = {
+GAIA_PAYLOAD: dict[str, Any] = {
     "updates": {
         "characters": [
             {
@@ -237,7 +237,7 @@ class _FixtureConnection:
         return _FixtureCursor()
 
 
-def _clerk_payload_with_character_tag(tag: str) -> dict[str, Any]:
+def _gaia_payload_with_character_tag(tag: str) -> dict[str, Any]:
     return {
         "updates": {
             "characters": [
@@ -317,7 +317,7 @@ def _expected_schema_kwargs(
     if provider_type == "openai":
         return (
             {"text_format": skald_writer_strict_text_format()},
-            {"text_format": skald_clerk_strict_text_format()},
+            {"text_format": skald_gaia_strict_text_format()},
         )
     if provider_type == "local":
         return (
@@ -329,17 +329,17 @@ def _expected_schema_kwargs(
             },
             {
                 "text_format": openai_response_text_format(
-                    SkaldClerkWire,
-                    schema=skald_clerk_lenient_schema(),
+                    SkaldGaiaWire,
+                    schema=skald_gaia_lenient_schema(),
                 )
             },
         )
     if anthropic_transport not in {"prompted", "tool_envelope"}:
         raise ValueError("Successful Anthropic test requires a schema-free transport")
-    clerk_kwargs = (
+    gaia_kwargs = (
         {}
         if anthropic_transport == "prompted"
-        else {"input_schema": skald_clerk_lenient_schema()}
+        else {"input_schema": skald_gaia_lenient_schema()}
     )
     return (
         {
@@ -348,7 +348,7 @@ def _expected_schema_kwargs(
                 schema=skald_writer_lenient_schema(),
             )
         },
-        clerk_kwargs,
+        gaia_kwargs,
     )
 
 
@@ -359,52 +359,50 @@ def _assert_two_pass_calls(
 ) -> None:
     writer = SkaldWriterWire.model_validate(WRITER_PAYLOAD)
     assert len(provider.calls) == 2
-    writer_call, clerk_call = provider.calls
-    expected_writer_kwargs, expected_clerk_kwargs = _expected_schema_kwargs(
+    writer_call, gaia_call = provider.calls
+    expected_writer_kwargs, expected_gaia_kwargs = _expected_schema_kwargs(
         provider_type,
         anthropic_transport,
     )
 
     assert writer_call["schema_model"] is SkaldWriterWire
-    assert clerk_call["schema_model"] is SkaldClerkWire
+    assert gaia_call["schema_model"] is SkaldGaiaWire
     assert writer_call["kwargs"] == expected_writer_kwargs
-    assert clerk_call["kwargs"] == expected_clerk_kwargs
+    assert gaia_call["kwargs"] == expected_gaia_kwargs
     assert writer_call["output_validator"] is None
-    assert clerk_call["output_validator"] is None
+    assert gaia_call["output_validator"] is None
     assert writer_call["structured_output_retries"] == 3
-    assert clerk_call["structured_output_retries"] == 3
-    # Writer pass = core doctrine + explicit scope note (clerk work excluded);
+    assert gaia_call["structured_output_retries"] == 3
+    # Writer pass = core doctrine + explicit scope note (gaia work excluded);
     # schema-free writers obey the core prompt over the repair loop without it.
     assert writer_call["system_prompt"].startswith("Core storyteller prompt")
     assert "# Writer Pass" in writer_call["system_prompt"]
-    assert "# Writer Pass" not in clerk_call["system_prompt"]
-    assert "## Skald Clerk" in clerk_call["system_prompt"]
-    assert clerk_call["prompt"].startswith(writer_call["prompt"])
-    assert writer.narrative in clerk_call["prompt"]
+    assert "# Writer Pass" not in gaia_call["system_prompt"]
+    assert "## Gaia" in gaia_call["system_prompt"]
+    assert gaia_call["prompt"].startswith(writer_call["prompt"])
+    assert writer.narrative in gaia_call["prompt"]
     assert writer.scene is not None
-    assert writer.scene.model_dump_json(exclude_none=True) in clerk_call["prompt"]
+    assert writer.scene.model_dump_json(exclude_none=True) in gaia_call["prompt"]
     assert writer.presence is not None
-    assert writer.presence.model_dump_json(exclude_none=True) in clerk_call["prompt"]
+    assert writer.presence.model_dump_json(exclude_none=True) in gaia_call["prompt"]
 
     if provider_type == "anthropic":
         assert anthropic_transport is not None
         assert writer_call["structured_transport"] == "native"
-        assert clerk_call["structured_transport"] == anthropic_transport
+        assert gaia_call["structured_transport"] == anthropic_transport
         if anthropic_transport == "prompted":
-            assert clerk_call["kwargs"] == {}
-            assert clerk_call["system_prompt"].endswith(skald_clerk_prompt_guide())
+            assert gaia_call["kwargs"] == {}
+            assert gaia_call["system_prompt"].endswith(skald_gaia_prompt_guide())
         else:
-            assert clerk_call["kwargs"] == {
-                "input_schema": skald_clerk_lenient_schema()
-            }
-            assert "output_config" not in clerk_call["kwargs"]
-            assert skald_clerk_prompt_guide() not in clerk_call["system_prompt"]
-            assert "=== OUTPUT FORMAT ===" not in clerk_call["system_prompt"]
+            assert gaia_call["kwargs"] == {"input_schema": skald_gaia_lenient_schema()}
+            assert "output_config" not in gaia_call["kwargs"]
+            assert skald_gaia_prompt_guide() not in gaia_call["system_prompt"]
+            assert "=== OUTPUT FORMAT ===" not in gaia_call["system_prompt"]
     else:
         assert anthropic_transport is None
         assert writer_call["structured_transport"] == "responses"
-        assert clerk_call["structured_transport"] == "responses"
-        assert "=== OUTPUT FORMAT ===" not in clerk_call["system_prompt"]
+        assert gaia_call["structured_transport"] == "responses"
+        assert "=== OUTPUT FORMAT ===" not in gaia_call["system_prompt"]
 
 
 def _assert_matches_independently_parsed_single_pass(
@@ -438,7 +436,7 @@ def test_sync_two_pass_pipeline_uses_provider_specific_transports(
 ) -> None:
     utility, provider = _utility(
         provider_type,
-        [WRITER_PAYLOAD, CLERK_PAYLOAD],
+        [WRITER_PAYLOAD, GAIA_PAYLOAD],
         anthropic_transport=anthropic_transport,
     )
     monkeypatch.setattr(
@@ -474,7 +472,7 @@ async def test_async_two_pass_pipeline_uses_provider_specific_transports(
 ) -> None:
     utility, provider = _utility(
         provider_type,
-        [WRITER_PAYLOAD, CLERK_PAYLOAD],
+        [WRITER_PAYLOAD, GAIA_PAYLOAD],
         anthropic_transport=anthropic_transport,
     )
 
@@ -521,7 +519,7 @@ def test_sync_anthropic_two_pass_rejects_native_before_provider_call(
         )
 
     message = str(exc_info.value)
-    assert "clerk wire cannot compile under Anthropic native enforcement" in message
+    assert "gaia wire cannot compile under Anthropic native enforcement" in message
     assert "probe G2b, issue #566" in message
     assert "'prompted'" in message
     assert "'tool_envelope'" in message
@@ -557,7 +555,7 @@ async def test_async_anthropic_two_pass_rejects_native_before_provider_call(
         )
 
     message = str(exc_info.value)
-    assert "clerk wire cannot compile under Anthropic native enforcement" in message
+    assert "gaia wire cannot compile under Anthropic native enforcement" in message
     assert "probe G2b, issue #566" in message
     assert "'prompted'" in message
     assert "'tool_envelope'" in message
@@ -571,7 +569,7 @@ def test_two_pass_hydration_matches_independent_single_pass_parse(
 
     utility, _provider = _utility(
         "openai",
-        [WRITER_PAYLOAD, CLERK_PAYLOAD],
+        [WRITER_PAYLOAD, GAIA_PAYLOAD],
     )
     monkeypatch.setattr(
         utility,
@@ -587,10 +585,10 @@ def test_two_pass_hydration_matches_independent_single_pass_parse(
     _assert_matches_independently_parsed_single_pass(actual)
 
 
-def test_real_vocabulary_validator_belongs_to_clerk_and_consumes_repair(
+def test_real_vocabulary_validator_belongs_to_gaia_and_consumes_repair(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The shipped validator traverses clerk fields and never reaches writer."""
+    """The shipped validator traverses gaia fields and never reaches writer."""
 
     from nexus.agents.logon import orrery_tag_validation
     from nexus.api import db_pool
@@ -623,8 +621,8 @@ def test_real_vocabulary_validator_belongs_to_clerk_and_consumes_repair(
         "openai",
         [
             WRITER_PAYLOAD,
-            _clerk_payload_with_character_tag("unregistered"),
-            _clerk_payload_with_character_tag("perceptive"),
+            _gaia_payload_with_character_tag("unregistered"),
+            _gaia_payload_with_character_tag("perceptive"),
         ],
         output_validator=validator,
         structured_output_retries=1,
@@ -642,8 +640,8 @@ def test_real_vocabulary_validator_belongs_to_clerk_and_consumes_repair(
 
     assert [call["schema_model"] for call in provider.calls] == [
         SkaldWriterWire,
-        SkaldClerkWire,
-        SkaldClerkWire,
+        SkaldGaiaWire,
+        SkaldGaiaWire,
     ]
     assert provider.calls[0]["output_validator"] is None
     assert all(call["output_validator"] is validator for call in provider.calls[1:])
@@ -658,7 +656,7 @@ def test_real_vocabulary_validator_belongs_to_clerk_and_consumes_repair(
     assert bestowal.applied_tags == ["perceptive"]
 
 
-def test_writer_failure_short_circuits_before_clerk_or_hydration(
+def test_writer_failure_short_circuits_before_gaia_or_hydration(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     utility, provider = _utility("openai", [RuntimeError("writer exhausted repairs")])
@@ -680,12 +678,12 @@ def test_writer_failure_short_circuits_before_clerk_or_hydration(
 
 
 @pytest.mark.asyncio
-async def test_clerk_failure_raises_without_partial_hydration(
+async def test_gaia_failure_raises_without_partial_hydration(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     utility, provider = _utility(
         "anthropic",
-        [WRITER_PAYLOAD, RuntimeError("clerk exhausted repairs")],
+        [WRITER_PAYLOAD, RuntimeError("gaia exhausted repairs")],
         anthropic_transport="prompted",
     )
     hydrated: list[object] = []
@@ -695,7 +693,7 @@ async def test_clerk_failure_raises_without_partial_hydration(
         lambda *args, **kwargs: hydrated.append((args, kwargs)),
     )
 
-    with pytest.raises(RuntimeError, match="clerk exhausted repairs"):
+    with pytest.raises(RuntimeError, match="gaia exhausted repairs"):
         await utility.generate_narrative_async(
             _context(),
             effective_context_window=75_000,
@@ -703,7 +701,7 @@ async def test_clerk_failure_raises_without_partial_hydration(
 
     assert [call["schema_model"] for call in provider.calls] == [
         SkaldWriterWire,
-        SkaldClerkWire,
+        SkaldGaiaWire,
     ]
     assert hydrated == []
 
@@ -744,36 +742,40 @@ async def test_async_bootstrap_request_ignores_two_pass_lever() -> None:
     assert provider.calls[0]["schema_model"] is StorytellerResponseBootstrap
 
 
-def test_clerk_prompt_is_concise_and_references_core_doctrine() -> None:
-    prompt_path = Path(__file__).parents[2] / "prompts" / "storyteller_clerk.md"
+def test_gaia_prompt_is_concise_and_references_core_doctrine() -> None:
+    prompt_path = Path(__file__).parents[2] / "prompts" / "storyteller_gaia.md"
     prompt = prompt_path.read_text()
     normalized_prompt = " ".join(prompt.split())
 
     assert len(prompt.splitlines()) < 60
     assert "storyteller_core.md" in prompt
-    assert "Do not rewrite, continue, summarize, or embellish" in prompt
+    # The Gaia reframe (owner, 2026-07-27) replaced the prohibition list
+    # with equivalent positive doctrine: the prose/state boundary and the
+    # canon guardrail.
+    assert "The prose is finished — your medium is state" in prompt
+    assert "Author from it, never against it" in prompt
     assert (
         "`characters`, `places`, `factions`, and `relationships`" in normalized_prompt
     )
 
 
-# --- Pinned clerk seat (#578 rung 2) -----------------------------------------
+# --- Pinned gaia seat (#578 rung 2) -----------------------------------------
 
 
-def _pinned_clerk_utility(
+def _pinned_gaia_utility(
     provider_type: str,
     outputs: list[object],
     *,
     anthropic_transport: str | None = None,
 ) -> tuple[LogonUtility, _RecordingProvider]:
-    """Writer runs the active provider; clerk_model pins a different seat."""
+    """Writer runs the active provider; gaia_model pins a different seat."""
 
     utility, provider = _utility(
         provider_type,
         outputs,
         anthropic_transport=anthropic_transport,
     )
-    utility.settings["API Settings"]["apex"]["clerk_model"] = "pinned-clerk-model"
+    utility.settings["API Settings"]["apex"]["gaia_model"] = "pinned-gaia-model"
     utility.settings["Agent Settings"] = {
         "LORE": {
             "token_budget": {
@@ -785,12 +787,12 @@ def _pinned_clerk_utility(
     return utility, provider
 
 
-def _patch_clerk_registry(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Register the fake pinned clerk id as a native OpenAI model."""
+def _patch_gaia_registry(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Register the fake pinned gaia id as a native OpenAI model."""
 
     monkeypatch.setattr(
         "nexus.agents.lore.logon_utility.get_provider_for_model",
-        lambda model_id: "openai" if model_id == "pinned-clerk-model" else None,
+        lambda model_id: "openai" if model_id == "pinned-gaia-model" else None,
     )
     monkeypatch.setattr(
         "nexus.config.get_openai_compatible_endpoint",
@@ -798,30 +800,30 @@ def _patch_clerk_registry(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-def _install_clerk_capture(
+def _install_gaia_capture(
     utility: LogonUtility,
     monkeypatch: pytest.MonkeyPatch,
-    clerk_recorder: _RecordingProvider,
+    gaia_recorder: _RecordingProvider,
 ) -> tuple[dict[str, Any], list[Any]]:
-    """Capture the clerk build args and every enforcement window."""
+    """Capture the gaia build args and every enforcement window."""
 
     captured: dict[str, Any] = {}
 
     def fake_build(
-        clerk_route: Any,
+        gaia_route: Any,
         *,
         system_prompt: Any,
         output_validator: Any,
         anthropic_transport: Any,
     ) -> _RecordingProvider:
-        captured["route"] = clerk_route
+        captured["route"] = gaia_route
         captured["system_prompt"] = system_prompt
         captured["anthropic_transport"] = anthropic_transport
-        clerk_recorder.system_prompt = system_prompt
-        clerk_recorder.output_validator = output_validator
-        return clerk_recorder
+        gaia_recorder.system_prompt = system_prompt
+        gaia_recorder.output_validator = output_validator
+        return gaia_recorder
 
-    monkeypatch.setattr(utility, "_build_clerk_provider", fake_build)
+    monkeypatch.setattr(utility, "_build_gaia_provider", fake_build)
 
     windows: list[Any] = []
     real_enforce = utility._enforce_final_prompt_window
@@ -839,25 +841,25 @@ def _install_clerk_capture(
     [
         ("anthropic", "prompted"),
         ("local", None),
-        # Native + two_pass was rejected outright (probe G2b); with the clerk
+        # Native + two_pass was rejected outright (probe G2b); with the gaia
         # pinned OFF Anthropic, the writer's native output_config compiles
         # (G2a) and the pipeline must proceed.
         ("anthropic", "native"),
     ],
 )
-def test_sync_pinned_clerk_runs_fresh_openai_seat(
+def test_sync_pinned_gaia_runs_fresh_openai_seat(
     writer_type: str,
     writer_transport: str | None,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    utility, provider = _pinned_clerk_utility(
+    utility, provider = _pinned_gaia_utility(
         writer_type,
         [WRITER_PAYLOAD],
         anthropic_transport=writer_transport,
     )
-    _patch_clerk_registry(monkeypatch)
-    clerk_recorder = _RecordingProvider([CLERK_PAYLOAD])
-    captured, windows = _install_clerk_capture(utility, monkeypatch, clerk_recorder)
+    _patch_gaia_registry(monkeypatch)
+    gaia_recorder = _RecordingProvider([GAIA_PAYLOAD])
+    captured, windows = _install_gaia_capture(utility, monkeypatch, gaia_recorder)
     monkeypatch.setattr(
         utility,
         "_read_presence_baseline_for_context",
@@ -869,32 +871,32 @@ def test_sync_pinned_clerk_runs_fresh_openai_seat(
         effective_context_window=32_000,
     )
 
-    # Writer ran on the active provider's clone; clerk on the pinned seat.
+    # Writer ran on the active provider's clone; gaia on the pinned seat.
     assert len(provider.calls) == 1
     assert provider.calls[0]["schema_model"] is SkaldWriterWire
-    assert len(clerk_recorder.calls) == 1
-    clerk_call = clerk_recorder.calls[0]
-    assert clerk_call["schema_model"] is SkaldClerkWire
-    # Heterogeneous kwargs: strict OpenAI clerk schema under this writer wire.
-    assert clerk_call["kwargs"] == {"text_format": skald_clerk_strict_text_format()}
-    assert captured["route"][0] == "pinned-clerk-model"
+    assert len(gaia_recorder.calls) == 1
+    gaia_call = gaia_recorder.calls[0]
+    assert gaia_call["schema_model"] is SkaldGaiaWire
+    # Heterogeneous kwargs: strict OpenAI gaia schema under this writer wire.
+    assert gaia_call["kwargs"] == {"text_format": skald_gaia_strict_text_format()}
+    assert captured["route"][0] == "pinned-gaia-model"
     assert captured["route"][3] == "openai"
     assert captured["anthropic_transport"] is None
-    assert "## Skald Clerk" in captured["system_prompt"]
-    assert skald_clerk_prompt_guide() not in captured["system_prompt"]
-    # Clerk enforcement used the CLERK provider's window, not the writer's 32K.
+    assert "## Gaia" in captured["system_prompt"]
+    assert skald_gaia_prompt_guide() not in captured["system_prompt"]
+    # Gaia enforcement used the GAIA provider's window, not the writer's 32K.
     assert windows[-1] == 75_000
     assert response.narrative == WRITER_PAYLOAD["narrative"]
 
 
 @pytest.mark.asyncio
-async def test_async_pinned_clerk_runs_fresh_openai_seat(
+async def test_async_pinned_gaia_runs_fresh_openai_seat(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    utility, provider = _pinned_clerk_utility("local", [WRITER_PAYLOAD])
-    _patch_clerk_registry(monkeypatch)
-    clerk_recorder = _RecordingProvider([CLERK_PAYLOAD])
-    captured, windows = _install_clerk_capture(utility, monkeypatch, clerk_recorder)
+    utility, provider = _pinned_gaia_utility("local", [WRITER_PAYLOAD])
+    _patch_gaia_registry(monkeypatch)
+    gaia_recorder = _RecordingProvider([GAIA_PAYLOAD])
+    captured, windows = _install_gaia_capture(utility, monkeypatch, gaia_recorder)
 
     async def read_baseline(
         _context_payload: dict[str, Any],
@@ -914,60 +916,60 @@ async def test_async_pinned_clerk_runs_fresh_openai_seat(
     )
 
     assert len(provider.calls) == 1
-    assert len(clerk_recorder.calls) == 1
-    assert clerk_recorder.calls[0]["kwargs"] == {
-        "text_format": skald_clerk_strict_text_format()
+    assert len(gaia_recorder.calls) == 1
+    assert gaia_recorder.calls[0]["kwargs"] == {
+        "text_format": skald_gaia_strict_text_format()
     }
     assert captured["route"][3] == "openai"
     assert windows[-1] == 75_000
     assert response.narrative == WRITER_PAYLOAD["narrative"]
 
 
-def test_clerk_route_guards_fall_back_to_the_clone_path(
+def test_gaia_route_guards_fall_back_to_the_clone_path(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Unset, TEST-provider, and same-model configs all keep the clone path."""
 
     unset_utility, _provider = _utility("openai", [])
-    assert unset_utility._resolve_clerk_route() is None
+    assert unset_utility._resolve_gaia_route() is None
 
     test_utility, _provider = _utility("openai", [])
-    test_utility.settings["API Settings"]["apex"]["clerk_model"] = "pinned-clerk-model"
+    test_utility.settings["API Settings"]["apex"]["gaia_model"] = "pinned-gaia-model"
     test_utility._provider_type_name = "test"
-    assert test_utility._resolve_clerk_route() is None
+    assert test_utility._resolve_gaia_route() is None
 
     same_utility, same_provider = _utility("openai", [])
-    same_utility.settings["API Settings"]["apex"]["clerk_model"] = same_provider.model
-    assert same_utility._resolve_clerk_route() is None
+    same_utility.settings["API Settings"]["apex"]["gaia_model"] = same_provider.model
+    assert same_utility._resolve_gaia_route() is None
 
     junk_utility, _provider = _utility("openai", [])
-    junk_utility.settings["API Settings"]["apex"]["clerk_model"] = "pinned-clerk-model"
+    junk_utility.settings["API Settings"]["apex"]["gaia_model"] = "pinned-gaia-model"
     monkeypatch.setattr(
         "nexus.agents.lore.logon_utility.get_provider_for_model",
         lambda _model_id: None,
     )
     with pytest.raises(ValueError, match="not in the model registry"):
-        junk_utility._resolve_clerk_route()
+        junk_utility._resolve_gaia_route()
 
 
-def test_anthropic_clerk_under_non_anthropic_writer_reads_the_setting() -> None:
-    """A pinned Anthropic clerk must honor the configured transport loudly."""
+def test_anthropic_gaia_under_non_anthropic_writer_reads_the_setting() -> None:
+    """A pinned Anthropic gaia must honor the configured transport loudly."""
 
     utility, _provider = _utility("openai", [])
     utility.settings["API Settings"]["apex"][
         "anthropic_storyteller_transport"
     ] = "native"
-    with pytest.raises(ValueError, match="clerk wire cannot"):
-        utility._resolve_anthropic_two_pass_clerk_transport("anthropic")
+    with pytest.raises(ValueError, match="gaia wire cannot"):
+        utility._resolve_anthropic_two_pass_gaia_transport("anthropic")
 
 
 def test_two_pass_schema_kwargs_cache_is_wire_keyed() -> None:
     """The same schema must yield per-wire kwargs, never a stale cache hit."""
 
     utility, _provider = _utility("anthropic", [], anthropic_transport="prompted")
-    anthropic_kwargs = utility._two_pass_schema_format_kwargs(SkaldClerkWire)
+    anthropic_kwargs = utility._two_pass_schema_format_kwargs(SkaldGaiaWire)
     openai_kwargs = utility._two_pass_schema_format_kwargs(
-        SkaldClerkWire, wire_type="openai"
+        SkaldGaiaWire, wire_type="openai"
     )
     assert anthropic_kwargs == {}
-    assert openai_kwargs == {"text_format": skald_clerk_strict_text_format()}
+    assert openai_kwargs == {"text_format": skald_gaia_strict_text_format()}

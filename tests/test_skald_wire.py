@@ -43,15 +43,15 @@ from nexus.agents.logon.apex_schema import (
 from nexus.agents.logon.skald_wire import (
     PresenceBaseline,
     PresenceRef,
-    SkaldClerkWire,
+    SkaldGaiaWire,
     SkaldTurnWire,
     SkaldWriterWire,
     _prompt_guide_type,
     combine_two_pass,
     hydrate_skald_turn,
-    skald_clerk_lenient_schema,
-    skald_clerk_prompt_guide,
-    skald_clerk_strict_text_format,
+    skald_gaia_lenient_schema,
+    skald_gaia_prompt_guide,
+    skald_gaia_strict_text_format,
     skald_wire_lenient_schema,
     skald_wire_prompt_guide,
     skald_wire_strict_text_format,
@@ -145,7 +145,7 @@ RICH_WIRE_PAYLOAD: dict[str, Any] = {
             {
                 "name": "Brena Tideloft",
                 "id": 7,
-                "activity": "tracking the drowned clerk",
+                "activity": "tracking the drowned gaia",
                 "location": 41,
                 "emotional_state": "alert but composed",
                 "observations": [{"key": "clue", "value": "heard the drowned bell"}],
@@ -199,7 +199,7 @@ RICH_WIRE_PAYLOAD: dict[str, Any] = {
             "action": "replace",
             "note": "The immediate danger keeps Brena alert.",
             "replacement_state_delta": {
-                "character_current_activity": "tracking the drowned clerk",
+                "character_current_activity": "tracking the drowned gaia",
                 "entity_tags_add": ["alert"],
             },
             "replacement_event_type": "evade_pursuit",
@@ -226,7 +226,7 @@ RICH_WIRE_PAYLOAD: dict[str, Any] = {
 
 def test_two_pass_wire_fields_match_and_partition_full_wire() -> None:
     writer_fields = SkaldWriterWire.model_fields
-    clerk_fields = SkaldClerkWire.model_fields
+    gaia_fields = SkaldGaiaWire.model_fields
     full_fields = SkaldTurnWire.model_fields
 
     assert list(writer_fields) == [
@@ -236,15 +236,15 @@ def test_two_pass_wire_fields_match_and_partition_full_wire() -> None:
         "presence",
         "operations",
     ]
-    assert list(clerk_fields) == [
+    assert list(gaia_fields) == [
         "updates",
         "orrery_adjudications",
         "new_entities",
     ]
-    assert set(writer_fields).isdisjoint(clerk_fields)
-    assert set(writer_fields) | set(clerk_fields) == set(full_fields)
+    assert set(writer_fields).isdisjoint(gaia_fields)
+    assert set(writer_fields) | set(gaia_fields) == set(full_fields)
 
-    for field_name, split_field in {**writer_fields, **clerk_fields}.items():
+    for field_name, split_field in {**writer_fields, **gaia_fields}.items():
         full_field = full_fields[field_name]
         assert split_field.annotation == full_field.annotation
         assert split_field.default == full_field.default
@@ -261,22 +261,22 @@ def test_combine_two_pass_is_property_complete() -> None:
             if field_name in SkaldWriterWire.model_fields
         }
     )
-    clerk = SkaldClerkWire.model_validate(
+    gaia = SkaldGaiaWire.model_validate(
         {
             field_name: field_value
             for field_name, field_value in RICH_WIRE_PAYLOAD.items()
-            if field_name in SkaldClerkWire.model_fields
+            if field_name in SkaldGaiaWire.model_fields
         }
     )
 
     sources = {
         field_name: getattr(source, field_name)
-        for source in (writer, clerk)
+        for source in (writer, gaia)
         for field_name in source.__class__.model_fields
     }
     assert set(sources) == set(SkaldTurnWire.model_fields)
 
-    combined = combine_two_pass(writer, clerk)
+    combined = combine_two_pass(writer, gaia)
     for field_name in SkaldTurnWire.model_fields:
         assert getattr(combined, field_name) == sources[field_name]
     assert combined.model_dump(mode="json") == SkaldTurnWire.model_validate(
@@ -286,29 +286,29 @@ def test_combine_two_pass_is_property_complete() -> None:
 
 def test_two_pass_strict_and_lenient_schema_shapes() -> None:
     writer_strict = skald_writer_strict_text_format()
-    clerk_strict = skald_clerk_strict_text_format()
+    gaia_strict = skald_gaia_strict_text_format()
     writer_lenient = skald_writer_lenient_schema()
-    clerk_lenient = skald_clerk_lenient_schema()
+    gaia_lenient = skald_gaia_lenient_schema()
 
     assert writer_strict["name"] == "SkaldWriterWire"
-    assert clerk_strict["name"] == "SkaldClerkWire"
+    assert gaia_strict["name"] == "SkaldGaiaWire"
     assert set(writer_strict["schema"]["properties"]) == set(
         SkaldWriterWire.model_fields
     )
-    assert set(clerk_strict["schema"]["properties"]) == set(SkaldClerkWire.model_fields)
+    assert set(gaia_strict["schema"]["properties"]) == set(SkaldGaiaWire.model_fields)
     assert set(writer_strict["schema"]["required"]) == set(SkaldWriterWire.model_fields)
-    assert set(clerk_strict["schema"]["required"]) == set(SkaldClerkWire.model_fields)
+    assert set(gaia_strict["schema"]["required"]) == set(SkaldGaiaWire.model_fields)
     assert writer_strict["schema"]["additionalProperties"] is False
-    assert clerk_strict["schema"]["additionalProperties"] is False
+    assert gaia_strict["schema"]["additionalProperties"] is False
 
     assert set(writer_lenient["properties"]) == set(SkaldWriterWire.model_fields)
-    assert set(clerk_lenient["properties"]) == set(SkaldClerkWire.model_fields)
+    assert set(gaia_lenient["properties"]) == set(SkaldGaiaWire.model_fields)
     assert writer_lenient["required"] == ["narrative", "choices"]
-    assert clerk_lenient.get("required", []) == []
+    assert gaia_lenient.get("required", []) == []
     assert writer_lenient["additionalProperties"] is False
-    assert clerk_lenient["additionalProperties"] is False
+    assert gaia_lenient["additionalProperties"] is False
     assert "anyOf" not in writer_lenient["properties"]["scene"]
-    assert "anyOf" not in clerk_lenient["properties"]["updates"]
+    assert "anyOf" not in gaia_lenient["properties"]["updates"]
 
 
 def _assert_canonical_fields_equal(
@@ -387,7 +387,7 @@ def _rich_canonical_expectation(wire: SkaldTurnWire) -> StorytellerResponseExten
                     character_id=7,
                     character_name="Brena Tideloft",
                     current_location=41,
-                    current_activity="tracking the drowned clerk",
+                    current_activity="tracking the drowned gaia",
                     emotional_state="alert but composed",
                     extra_observations=[
                         NamedObservation(
@@ -1101,11 +1101,11 @@ def test_skald_wire_prompt_guide_is_deterministic_and_complete() -> None:
             assert matching_lines[0][len(prefix) :].split("|", 1)[0]
 
 
-def test_skald_clerk_prompt_guide_is_deterministic_and_complete() -> None:
-    schema = skald_clerk_lenient_schema()
-    first = skald_clerk_prompt_guide()
+def test_skald_gaia_prompt_guide_is_deterministic_and_complete() -> None:
+    schema = skald_gaia_lenient_schema()
+    first = skald_gaia_prompt_guide()
 
-    assert first == skald_clerk_prompt_guide()
+    assert first == skald_gaia_prompt_guide()
     assert first.startswith("=== OUTPUT FORMAT ===\n")
     rendered_property_names = []
     for line in first.splitlines():
@@ -1144,11 +1144,11 @@ def test_skald_wire_prompt_guide_stays_within_token_budget() -> None:
     assert len(encoding.encode(skald_wire_prompt_guide())) <= 1_400
 
 
-def test_skald_clerk_prompt_guide_stays_within_token_budget() -> None:
+def test_skald_gaia_prompt_guide_stays_within_token_budget() -> None:
     tiktoken = pytest.importorskip("tiktoken")
     encoding = tiktoken.get_encoding("o200k_base")
 
-    assert len(encoding.encode(skald_clerk_prompt_guide())) <= 900
+    assert len(encoding.encode(skald_gaia_prompt_guide())) <= 900
 
 
 def test_wire_schema_size_and_description_budget() -> None:

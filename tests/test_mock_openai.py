@@ -8,14 +8,14 @@ from nexus.agents.logon.apex_schema import (
     StorytellerResponseBootstrap,
 )
 from nexus.agents.logon.skald_wire import (
-    SkaldClerkWire,
+    SkaldGaiaWire,
     SkaldTurnWire,
     SkaldWriterWire,
 )
 from nexus.api.mock_openai import (
     ResponsesRequest,
     _collect_text,
-    _mock_clerk_response,
+    _mock_gaia_response,
     _mock_storyteller_response,
     _mock_writer_response,
     _requested_output_properties,
@@ -228,17 +228,17 @@ def test_mock_two_pass_projections_partition_the_full_fixture() -> None:
 
     full = _mock_storyteller_response(_ORRERY_PROMPT)
     writer = _mock_writer_response(_ORRERY_PROMPT)
-    clerk = _mock_clerk_response(_ORRERY_PROMPT)
+    gaia = _mock_gaia_response(_ORRERY_PROMPT)
 
     SkaldWriterWire.model_validate(writer)
-    SkaldClerkWire.model_validate(clerk)
-    assert set(writer) | set(clerk) == set(full)
-    assert set(writer) & set(clerk) == set()
+    SkaldGaiaWire.model_validate(gaia)
+    assert set(writer) | set(gaia) == set(full)
+    assert set(writer) & set(gaia) == set()
 
 
 @pytest.mark.asyncio
 async def test_mock_responses_routes_writer_schema_to_writer_projection() -> None:
-    """The two-pass writer request must not receive bootstrap or clerk fields.
+    """The two-pass writer request must not receive bootstrap or gaia fields.
 
     Regression for the PR #579 Codex P1: before signature routing, a writer
     schema (no updates property) fell through to the cached bootstrap payload.
@@ -259,42 +259,42 @@ async def test_mock_responses_routes_writer_schema_to_writer_projection() -> Non
 
 
 @pytest.mark.asyncio
-async def test_mock_responses_routes_clerk_schema_to_clerk_projection() -> None:
-    """The two-pass clerk request must not receive narrative/choices extras.
+async def test_mock_responses_routes_gaia_schema_to_gaia_projection() -> None:
+    """The two-pass gaia request must not receive narrative/choices extras.
 
-    Regression for the PR #579 Codex P1: the clerk schema contains the updates
+    Regression for the PR #579 Codex P1: the gaia schema contains the updates
     property, so the old routing returned the FULL turn payload, whose
-    narrative/choices are forbidden extras under SkaldClerkWire.
+    narrative/choices are forbidden extras under SkaldGaiaWire.
     """
 
     response = await responses_create(
         ResponsesRequest(
             model="TEST",
             input=[{"role": "user", "content": _ORRERY_PROMPT}],
-            tools=[_final_result_tool(SkaldClerkWire)],
+            tools=[_final_result_tool(SkaldGaiaWire)],
         )
     )
 
     payload = json.loads(response["output_text"])
-    parsed = SkaldClerkWire.model_validate(payload)
+    parsed = SkaldGaiaWire.model_validate(payload)
     assert "narrative" not in payload
     assert [item.action for item in parsed.orrery_adjudications] == ["defer"]
 
 
 @pytest.mark.asyncio
-async def test_mock_responses_clerk_schema_without_proposals_is_empty() -> None:
-    """A proposal-free clerk request returns a valid all-defaults payload."""
+async def test_mock_responses_gaia_schema_without_proposals_is_empty() -> None:
+    """A proposal-free gaia request returns a valid all-defaults payload."""
 
     response = await responses_create(
         ResponsesRequest(
             model="TEST",
             input=[{"role": "user", "content": "Continue the protagonist story."}],
-            tools=[_final_result_tool(SkaldClerkWire)],
+            tools=[_final_result_tool(SkaldGaiaWire)],
         )
     )
 
     payload = json.loads(response["output_text"])
-    parsed = SkaldClerkWire.model_validate(payload)
+    parsed = SkaldGaiaWire.model_validate(payload)
     assert payload == {}
     assert parsed.updates is None
     assert parsed.orrery_adjudications == []
