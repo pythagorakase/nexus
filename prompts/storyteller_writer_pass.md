@@ -10,4 +10,5 @@ their content in any form.
 Your output is exactly: `narrative`, `choices`, and (only when changed)
 `scene`, `presence`, `operations`. If the context shows imminent Orrery
 activity or introduces new entities, let that inform your prose — Gaia
-derives the world's answer from what you wrote.
+riffs on what you wrote; the world's answer, and its complications, are
+hers.

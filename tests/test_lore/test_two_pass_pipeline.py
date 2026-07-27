@@ -753,7 +753,7 @@ def test_gaia_prompt_is_concise_and_references_core_doctrine() -> None:
     # with equivalent positive doctrine: the prose/state boundary and the
     # canon guardrail.
     assert "The prose is finished — your medium is state" in prompt
-    assert "Author from it, never against it" in prompt
+    assert "Riff off it, never against it" in prompt
     assert (
         "`characters`, `places`, `factions`, and `relationships`" in normalized_prompt
     )
