@@ -46,4 +46,4 @@ Orrery (Bethesda Creation Engine × Dwarf Fortress: radiant routines, autonomous
 
 The protagonist's tags and the starting location's `place_affordance` tags were already bestowed during the wizard (in `submit_wildcard_trait` and `submit_starting_scenario`). Don't re-apply them.
 
-The bootstrap response contains prose and choices only. On subsequent turns, persistent new entities flow through the `new_entities` declaration channel described in `storyteller_core.md`; do not emit entity records from this bootstrap response.
+The bootstrap response contains prose and choices only. On subsequent turns, persistent new entities flow through the `new_entities` declaration channel; do not emit entity records from this bootstrap response.

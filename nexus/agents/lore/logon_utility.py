@@ -324,7 +324,6 @@ class LogonUtility:
 
     def _load_system_prompt(self, is_bootstrap: Optional[bool] = None) -> str:
         """Load and combine storyteller instructions with live slot context."""
-        from nexus.api.slot_utils import require_slot_dbname
 
         is_bootstrap = self.bootstrap_mode if is_bootstrap is None else is_bootstrap
 
@@ -345,6 +344,16 @@ class LogonUtility:
             )
 
         system_prompt = core_prompt
+        # Core is the writer-scoped Skald document. When one mind holds both
+        # chairs on an ongoing turn — single-pass mode — append the
+        # state-authorship supplement carrying Gaia's portfolio. Bootstrap
+        # never gets it: the bootstrap schema is prose and choices only.
+        if not is_bootstrap and self._turn_pipeline() == "single_pass":
+            supplement = (prompts_dir / "storyteller_single_pass.md").read_text()
+            system_prompt = f"{system_prompt}\n\n---\n\n{supplement}"
+            logger.info(
+                "Appended single-pass state supplement (%s chars)", len(supplement)
+            )
         if is_bootstrap:
             bootstrap_path = prompts_dir / "storyteller_bootstrap.md"
             try:
@@ -360,7 +369,15 @@ class LogonUtility:
                     bootstrap_path,
                 )
 
-        # Query setting from global_variables
+        setting_content = self._load_setting_context()
+        if setting_content:
+            return f"{system_prompt}\n\n{setting_content}"
+        return system_prompt
+
+    def _load_setting_context(self) -> Optional[str]:
+        """Fetch and render the persisted SettingCard from global_variables."""
+        from nexus.api.slot_utils import require_slot_dbname
+
         try:
             db = require_slot_dbname(dbname=self.dbname)
             conn = psycopg2.connect(host="localhost", database=db, user="pythagor")
@@ -375,25 +392,20 @@ class LogonUtility:
                             "Setting data found in global_variables but no "
                             "promptable fields were present"
                         )
-                        return system_prompt
-
-                    # Combine core prompt with setting
-                    combined_prompt = f"{system_prompt}\n\n{setting_content}"
+                        return None
                     logger.info(
-                        "Combined prompt with setting context (%s chars)",
-                        len(setting_content),
+                        "Loaded setting context (%s chars)", len(setting_content)
                     )
-                    return combined_prompt
-                else:
-                    logger.warning(
-                        "No setting data found in global_variables, using core "
-                        "prompt only"
-                    )
-                    return system_prompt
+                    return setting_content
+                logger.warning(
+                    "No setting data found in global_variables, using core "
+                    "prompt only"
+                )
+                return None
 
         except Exception as e:
             logger.error(f"Failed to load setting from database: {e}")
-            return system_prompt
+            return None
         finally:
             if "conn" in locals():
                 conn.close()
@@ -1077,6 +1089,11 @@ class LogonUtility:
             wire_type if wire_type is not None else self._provider_wire_type
         )
         system_prompt = self._load_gaia_system_prompt()
+        # Gaia authors canon-adjacent text (update notes, entity summaries)
+        # and needs the same setting idiom the writer works in.
+        setting_content = self._load_setting_context()
+        if setting_content:
+            system_prompt = f"{system_prompt}\n\n{setting_content}"
         if effective_wire == "anthropic":
             if anthropic_transport is None:
                 raise ValueError(

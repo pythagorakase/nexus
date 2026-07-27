@@ -103,10 +103,48 @@ def test_load_system_prompt_without_setting_row_returns_core_prompt(
     _patch_setting_row(monkeypatch, None)
     core_prompt = (PROMPTS_DIR / "storyteller_core.md").read_text()
 
-    prompt = LogonUtility({}, dbname="save_05")._load_system_prompt()
+    two_pass = {"API Settings": {"apex": {"turn_pipeline": "two_pass"}}}
+    prompt = LogonUtility(two_pass, dbname="save_05")._load_system_prompt()
 
     assert prompt == core_prompt
     assert "Setting Context:" not in prompt
+
+
+def test_load_system_prompt_state_supplement_follows_pipeline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Single-pass turns carry Gaia's portfolio; two-pass writers do not."""
+
+    _patch_setting_row(monkeypatch, None)
+    supplement = (PROMPTS_DIR / "storyteller_single_pass.md").read_text()
+
+    single = LogonUtility({}, dbname="save_05")._load_system_prompt()
+    assert supplement in single
+
+    two_pass = {"API Settings": {"apex": {"turn_pipeline": "two_pass"}}}
+    writer_base = LogonUtility(two_pass, dbname="save_05")._load_system_prompt()
+    assert "# Single Pass" not in writer_base
+
+    # Bootstrap never carries the state supplement in either mode: the
+    # bootstrap schema is prose and choices only.
+    for settings in ({}, two_pass):
+        bootstrap = LogonUtility(
+            settings, dbname="save_05", bootstrap_mode=True
+        )._load_system_prompt()
+        assert "# Single Pass" not in bootstrap
+
+
+def test_gaia_system_prompt_includes_setting_card(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Gaia authors canon-adjacent text and receives the setting idiom."""
+
+    _patch_setting_row(monkeypatch, (_setting_card(),))
+
+    prompt = LogonUtility({}, dbname="save_05")._gaia_system_prompt(wire_type="openai")
+
+    assert "## Gaia" in prompt
+    assert "## Setting Context: Veyra" in prompt
 
 
 def test_load_system_prompt_appends_bootstrap_supplement_only_for_bootstrap(

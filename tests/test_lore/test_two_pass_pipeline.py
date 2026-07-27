@@ -40,6 +40,14 @@ from nexus.api.native_structured_output import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _hermetic_setting_context(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep gaia system prompts DB-free here; setting-card composition is
+    covered in test_logon_prompt_formatting."""
+
+    monkeypatch.setattr(LogonUtility, "_load_setting_context", lambda self: None)
+
+
 WRITER_PAYLOAD: dict[str, Any] = {
     "narrative": 'Iona says, "Wait."\nThe drowned bell answers.',
     "choices": [
@@ -742,16 +750,18 @@ async def test_async_bootstrap_request_ignores_two_pass_lever() -> None:
     assert provider.calls[0]["schema_model"] is StorytellerResponseBootstrap
 
 
-def test_gaia_prompt_is_concise_and_references_core_doctrine() -> None:
+def test_gaia_prompt_is_concise_and_self_contained() -> None:
     prompt_path = Path(__file__).parents[2] / "prompts" / "storyteller_gaia.md"
     prompt = prompt_path.read_text()
     normalized_prompt = " ".join(prompt.split())
 
     assert len(prompt.splitlines()) < 60
-    assert "storyteller_core.md" in prompt
-    # The Gaia reframe (owner, 2026-07-27) replaced the prohibition list
-    # with equivalent positive doctrine: the prose/state boundary and the
-    # canon guardrail.
+    # The persona rewrite (owner brief, 2026-07-27) made gaia.md
+    # self-sufficient: the shared doctrine it needs (canon hierarchy,
+    # setting idiom, sincere beliefs) is inlined in Gaia's voice instead of
+    # referencing a core document the seat never receives.
+    assert "storyteller_core.md" not in prompt
+    assert "recent narrative over retrieved context over" in normalized_prompt
     assert "The prose is finished — your medium is state" in prompt
     assert "Riff off it, never against it" in prompt
     assert (
