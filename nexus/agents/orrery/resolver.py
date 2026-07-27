@@ -919,18 +919,323 @@ def _load_project_states(session: Any) -> dict[int, ProjectState]:
     return states
 
 
+_EntityPair = tuple[int, int]
+_InstitutionalPairRow = tuple[int, int, str, str]
+
+
+def _load_character_relationship_pairs(session: Any) -> Tuple[_EntityPair, ...]:
+    """Load the active character-relationship source once for route reuse."""
+
+    return tuple(
+        (
+            int(row["source_entity_id"]),
+            int(row["target_entity_id"]),
+        )
+        for row in session.execute(
+            text(
+                """
+                /* orrery:actor_target_bindings_character_relationships */
+                SELECT er.source_entity_id, er.target_entity_id
+                FROM entity_relationships_v er
+                JOIN entities es ON es.id = er.source_entity_id
+                JOIN entities et ON et.id = er.target_entity_id
+                WHERE er.relationship_scope = 'character'
+                  AND er.source_entity_id IS NOT NULL
+                  AND er.target_entity_id IS NOT NULL
+                  AND es.kind = 'character'
+                  AND et.kind = 'character'
+                  AND es.is_active = true
+                  AND et.is_active = true
+                """
+            )
+        ).mappings()
+    )
+
+
+def _load_social_contact_pairs(session: Any) -> Tuple[_EntityPair, ...]:
+    """Load active directed social-contact edges."""
+
+    return tuple(
+        (
+            int(row["source_entity_id"]),
+            int(row["target_entity_id"]),
+        )
+        for row in session.execute(
+            text(
+                """
+                /* orrery:actor_target_bindings_social_contacts */
+                SELECT ept.subject_entity_id AS source_entity_id,
+                       ept.object_entity_id AS target_entity_id
+                FROM entity_pair_tags ept
+                JOIN pair_tags pt ON pt.id = ept.pair_tag_id
+                JOIN entities es ON es.id = ept.subject_entity_id
+                JOIN entities et ON et.id = ept.object_entity_id
+                WHERE pt.tag = 'contact:social'
+                  AND NOT pt.deprecated
+                  AND ept.cleared_at IS NULL
+                  AND es.kind = 'character'
+                  AND et.kind = 'character'
+                  AND es.is_active = true
+                  AND et.is_active = true
+                """
+            )
+        ).mappings()
+    )
+
+
+def _load_hostile_character_pairs(session: Any) -> Tuple[_EntityPair, ...]:
+    """Load active character-only hostility edges."""
+
+    return tuple(
+        (
+            int(row["source_entity_id"]),
+            int(row["target_entity_id"]),
+        )
+        for row in session.execute(
+            text(
+                """
+                /* orrery:actor_target_bindings_hostile_edges */
+                SELECT ept.subject_entity_id AS source_entity_id,
+                       ept.object_entity_id AS target_entity_id
+                FROM entity_pair_tags ept
+                JOIN pair_tags pt ON pt.id = ept.pair_tag_id
+                JOIN entities es ON es.id = ept.subject_entity_id
+                JOIN entities et ON et.id = ept.object_entity_id
+                WHERE pt.tag IN ('hostile_to', 'hunting')
+                  AND NOT pt.deprecated
+                  AND ept.cleared_at IS NULL
+                  AND es.kind = 'character'
+                  AND et.kind = 'character'
+                  AND es.is_active = true
+                  AND et.is_active = true
+                """
+            )
+        ).mappings()
+    )
+
+
+def _load_institutional_pair_rows(
+    session: Any,
+) -> Tuple[_InstitutionalPairRow, ...]:
+    """Load active institutional edges for in-memory actor filtering."""
+
+    return tuple(
+        (
+            int(row["subject_entity_id"]),
+            int(row["object_entity_id"]),
+            str(row["subject_kind"]),
+            str(row["object_kind"]),
+        )
+        for row in session.execute(
+            text(
+                """
+                /* orrery:actor_faction_bindings_institutional_pair_tags */
+                SELECT DISTINCT
+                       ept.subject_entity_id,
+                       ept.object_entity_id,
+                       subject_entity.kind AS subject_kind,
+                       object_entity.kind AS object_kind
+                FROM entity_pair_tags ept
+                JOIN pair_tags pt ON pt.id = ept.pair_tag_id
+                JOIN entities subject_entity
+                  ON subject_entity.id = ept.subject_entity_id
+                JOIN entities object_entity
+                  ON object_entity.id = ept.object_entity_id
+                WHERE ept.cleared_at IS NULL
+                  AND NOT pt.deprecated
+                  AND (
+                        pt.tag LIKE 'status:%'
+                        OR pt.tag IN ('obligation', 'handles', 'authority_over')
+                      )
+                """
+            )
+        ).mappings()
+    )
+
+
+def _load_actor_faction_roster_pairs(session: Any) -> Tuple[_EntityPair, ...]:
+    """Load active character/faction roster pairs."""
+
+    return tuple(
+        sorted(
+            {
+                (int(row["member_id"]), int(row["faction_id"]))
+                for row in session.execute(
+                    text(
+                        """
+                        /* orrery:actor_faction_bindings_rosters */
+                        SELECT DISTINCT
+                               CASE
+                                   WHEN subject_entity.kind = 'character'
+                                   THEN subject_entity.id
+                                   ELSE object_entity.id
+                               END AS member_id,
+                               CASE
+                                   WHEN subject_entity.kind = 'faction'
+                                   THEN subject_entity.id
+                                   ELSE object_entity.id
+                               END AS faction_id
+                        FROM entity_pair_tags ept
+                        JOIN pair_tags pt ON pt.id = ept.pair_tag_id
+                        JOIN entities subject_entity
+                          ON subject_entity.id = ept.subject_entity_id
+                        JOIN entities object_entity
+                          ON object_entity.id = ept.object_entity_id
+                        WHERE pt.tag LIKE 'status:%'
+                          AND NOT pt.deprecated
+                          AND ept.cleared_at IS NULL
+                          AND subject_entity.is_active = true
+                          AND object_entity.is_active = true
+                          AND (
+                              (subject_entity.kind = 'character'
+                               AND object_entity.kind = 'faction')
+                              OR (subject_entity.kind = 'faction'
+                                  AND object_entity.kind = 'character')
+                          )
+                        """
+                    )
+                ).mappings()
+            }
+        )
+    )
+
+
+@dataclass
+class _CompositionSourceCache:
+    """One resolver tick's lazily hydrated binding-source candidates."""
+
+    session: Any
+    anchor_chunk_id: Optional[int]
+    world_time: Optional[datetime]
+    present_actor_ids: frozenset[int]
+    _character_relationship_pairs: Optional[Tuple[_EntityPair, ...]] = field(
+        default=None,
+        init=False,
+        repr=False,
+    )
+    _social_contact_pairs: Optional[Tuple[_EntityPair, ...]] = field(
+        default=None,
+        init=False,
+        repr=False,
+    )
+    _hostile_character_pairs: Optional[Tuple[_EntityPair, ...]] = field(
+        default=None,
+        init=False,
+        repr=False,
+    )
+    _institutional_pair_rows: Optional[Tuple[_InstitutionalPairRow, ...]] = field(
+        default=None,
+        init=False,
+        repr=False,
+    )
+    _actor_faction_roster_pairs: Optional[Tuple[_EntityPair, ...]] = field(
+        default=None,
+        init=False,
+        repr=False,
+    )
+
+    @classmethod
+    def load(
+        cls,
+        session: Any,
+        *,
+        anchor_chunk_id: Optional[int],
+        world_time: Optional[datetime],
+    ) -> "_CompositionSourceCache":
+        """Create one tick cache and hydrate the shared presence boundary."""
+
+        return cls(
+            session=session,
+            anchor_chunk_id=anchor_chunk_id,
+            world_time=world_time,
+            present_actor_ids=frozenset(
+                _present_actor_ids_at_anchor(
+                    session,
+                    anchor_chunk_id=anchor_chunk_id,
+                )
+            ),
+        )
+
+    def validate_scope(
+        self,
+        session: Any,
+        *,
+        anchor_chunk_id: Optional[int],
+    ) -> None:
+        """Fail if a tick-local cache is accidentally reused out of scope."""
+
+        if self.session is not session or self.anchor_chunk_id != anchor_chunk_id:
+            raise ValueError("composition source cache belongs to a different tick")
+
+    def character_relationship_pairs(self) -> Tuple[_EntityPair, ...]:
+        if self._character_relationship_pairs is None:
+            self._character_relationship_pairs = _load_character_relationship_pairs(
+                self.session
+            )
+        return self._character_relationship_pairs
+
+    def social_contact_pairs(self) -> Tuple[_EntityPair, ...]:
+        if self._social_contact_pairs is None:
+            self._social_contact_pairs = _load_social_contact_pairs(self.session)
+        return self._social_contact_pairs
+
+    def hostile_character_pairs(self) -> Tuple[_EntityPair, ...]:
+        if self._hostile_character_pairs is None:
+            self._hostile_character_pairs = _load_hostile_character_pairs(self.session)
+        return self._hostile_character_pairs
+
+    def institutional_pair_rows(self) -> Tuple[_InstitutionalPairRow, ...]:
+        if self._institutional_pair_rows is None:
+            self._institutional_pair_rows = _load_institutional_pair_rows(self.session)
+        return self._institutional_pair_rows
+
+    def actor_faction_roster_pairs(self) -> Tuple[_EntityPair, ...]:
+        if self._actor_faction_roster_pairs is None:
+            self._actor_faction_roster_pairs = _load_actor_faction_roster_pairs(
+                self.session
+            )
+        return self._actor_faction_roster_pairs
+
+
+def _composition_present_actor_ids(
+    session: Any,
+    *,
+    anchor_chunk_id: Optional[int],
+    composition_cache: Optional[_CompositionSourceCache],
+) -> set[int]:
+    """Use cached scene presence or preserve the direct-call fallback read."""
+
+    if composition_cache is None:
+        return _present_actor_ids_at_anchor(
+            session,
+            anchor_chunk_id=anchor_chunk_id,
+        )
+    composition_cache.validate_scope(
+        session,
+        anchor_chunk_id=anchor_chunk_id,
+    )
+    return set(composition_cache.present_actor_ids)
+
+
 def compose_actor_bindings(
     session: Any,
     *,
     anchor_chunk_id: Optional[int],
     window_chunks: int,
+    composition_cache: Optional[_CompositionSourceCache] = None,
 ) -> Tuple[Bindings, ...]:
     """Compose ACTOR-only bindings for recently relevant off-screen characters."""
 
     actor_ids: set[int] = set()
-    current_world_time = _load_world_time(session, anchor_chunk_id=anchor_chunk_id)
-    present_actor_ids = _present_actor_ids_at_anchor(
-        session, anchor_chunk_id=anchor_chunk_id
+    current_world_time = (
+        composition_cache.world_time
+        if composition_cache is not None
+        else _load_world_time(session, anchor_chunk_id=anchor_chunk_id)
+    )
+    present_actor_ids = _composition_present_actor_ids(
+        session,
+        anchor_chunk_id=anchor_chunk_id,
+        composition_cache=composition_cache,
     )
 
     if anchor_chunk_id is not None:
@@ -1080,6 +1385,7 @@ def compose_actor_target_bindings(
     target_presence: str = "offscreen",
     include_social_contacts: bool = False,
     include_hostile_edges: bool = False,
+    composition_cache: Optional[_CompositionSourceCache] = None,
 ) -> Tuple[Bindings, ...]:
     """Compose ACTOR+TARGET bindings from actors' relational neighborhoods.
 
@@ -1115,12 +1421,15 @@ def compose_actor_target_bindings(
             session,
             anchor_chunk_id=anchor_chunk_id,
             window_chunks=window_chunks,
+            composition_cache=composition_cache,
         )
         actor_id_set = {bindings[Slot.ACTOR] for bindings in actor_only}
     else:
         actor_id_set = set(actor_ids)
-    present_actor_ids = _present_actor_ids_at_anchor(
-        session, anchor_chunk_id=anchor_chunk_id
+    present_actor_ids = _composition_present_actor_ids(
+        session,
+        anchor_chunk_id=anchor_chunk_id,
+        composition_cache=composition_cache,
     )
     actor_id_set -= present_actor_ids
     if not actor_id_set:
@@ -1150,83 +1459,43 @@ def compose_actor_target_bindings(
         ):
             pairs.add((target, source))
 
-    for row in session.execute(
-        text(
-            """
-            /* orrery:actor_target_bindings_character_relationships */
-            SELECT er.source_entity_id, er.target_entity_id
-            FROM entity_relationships_v er
-            JOIN entities es ON es.id = er.source_entity_id
-            JOIN entities et ON et.id = er.target_entity_id
-            WHERE er.relationship_scope = 'character'
-              AND er.source_entity_id IS NOT NULL
-              AND er.target_entity_id IS NOT NULL
-              AND es.kind = 'character'
-              AND et.kind = 'character'
-              AND es.is_active = true
-              AND et.is_active = true
-            """
-        )
-    ).mappings():
+    relationship_pairs = (
+        composition_cache.character_relationship_pairs()
+        if composition_cache is not None
+        else _load_character_relationship_pairs(session)
+    )
+    for source_id, target_id in relationship_pairs:
         add_candidate(
-            int(row["source_entity_id"]),
-            int(row["target_entity_id"]),
+            source_id,
+            target_id,
             reverse=True,
         )
 
     if include_social_contacts:
-        for row in session.execute(
-            text(
-                """
-                /* orrery:actor_target_bindings_social_contacts */
-                SELECT ept.subject_entity_id AS source_entity_id,
-                       ept.object_entity_id AS target_entity_id
-                FROM entity_pair_tags ept
-                JOIN pair_tags pt ON pt.id = ept.pair_tag_id
-                JOIN entities es ON es.id = ept.subject_entity_id
-                JOIN entities et ON et.id = ept.object_entity_id
-                WHERE pt.tag = 'contact:social'
-                  AND NOT pt.deprecated
-                  AND ept.cleared_at IS NULL
-                  AND es.kind = 'character'
-                  AND et.kind = 'character'
-                  AND es.is_active = true
-                  AND et.is_active = true
-                """
-            )
-        ).mappings():
+        social_pairs = (
+            composition_cache.social_contact_pairs()
+            if composition_cache is not None
+            else _load_social_contact_pairs(session)
+        )
+        for source_id, target_id in social_pairs:
             add_candidate(
-                int(row["source_entity_id"]),
-                int(row["target_entity_id"]),
+                source_id,
+                target_id,
                 reverse=False,
             )
 
     if include_hostile_edges:
-        for row in session.execute(
-            text(
-                """
-                /* orrery:actor_target_bindings_hostile_edges */
-                SELECT ept.subject_entity_id AS source_entity_id,
-                       ept.object_entity_id AS target_entity_id
-                FROM entity_pair_tags ept
-                JOIN pair_tags pt ON pt.id = ept.pair_tag_id
-                JOIN entities es ON es.id = ept.subject_entity_id
-                JOIN entities et ON et.id = ept.object_entity_id
-                WHERE pt.tag IN ('hostile_to', 'hunting')
-                  AND NOT pt.deprecated
-                  AND ept.cleared_at IS NULL
-                  AND es.kind = 'character'
-                  AND et.kind = 'character'
-                  AND es.is_active = true
-                  AND et.is_active = true
-                """
-            )
-        ).mappings():
+        hostile_pairs = (
+            composition_cache.hostile_character_pairs()
+            if composition_cache is not None
+            else _load_hostile_character_pairs(session)
+        )
+        for source_id, target_id in hostile_pairs:
             # Faction-endpoint hostility deliberately composes nothing until
             # an authored desire names that faction.
             add_candidate(
-                int(row["source_entity_id"]),
-                int(row["target_entity_id"]),
+                source_id,
+                target_id,
                 reverse=True,
             )
 
@@ -1241,6 +1510,7 @@ def compose_acquaintance_bindings(
     *,
     anchor_chunk_id: Optional[int],
     actor_ids: Iterable[int],
+    composition_cache: Optional[_CompositionSourceCache] = None,
 ) -> Tuple[Bindings, ...]:
     """Compose canonical off-screen stranger pairs sharing one place.
 
@@ -1250,8 +1520,10 @@ def compose_acquaintance_bindings(
     """
 
     actor_id_set = set(actor_ids)
-    present_actor_ids = _present_actor_ids_at_anchor(
-        session, anchor_chunk_id=anchor_chunk_id
+    present_actor_ids = _composition_present_actor_ids(
+        session,
+        anchor_chunk_id=anchor_chunk_id,
+        composition_cache=composition_cache,
     )
     actor_id_set -= present_actor_ids
     if not actor_id_set:
@@ -1316,6 +1588,7 @@ def compose_actor_faction_bindings(
     include_rosters: bool = False,
     roster_reach: int = 2,
     orbit_distance: Optional[Mapping[tuple[int, int], int]] = None,
+    composition_cache: Optional[_CompositionSourceCache] = None,
 ) -> Tuple[Bindings, ...]:
     """Compose ACTOR+FACTION bindings from active institutional pair tags.
 
@@ -1332,12 +1605,15 @@ def compose_actor_faction_bindings(
             session,
             anchor_chunk_id=anchor_chunk_id,
             window_chunks=window_chunks,
+            composition_cache=composition_cache,
         )
         actor_id_set = {bindings[Slot.ACTOR] for bindings in actor_only}
     else:
         actor_id_set = set(actor_ids)
-    actor_id_set -= _present_actor_ids_at_anchor(
-        session, anchor_chunk_id=anchor_chunk_id
+    actor_id_set -= _composition_present_actor_ids(
+        session,
+        anchor_chunk_id=anchor_chunk_id,
+        composition_cache=composition_cache,
     )
     if not actor_id_set:
         return ()
@@ -1345,83 +1621,23 @@ def compose_actor_faction_bindings(
         raise ValueError("roster_reach must be between 1 and 4")
 
     pairs: set[tuple[int, int]] = set()
-    for row in session.execute(
-        text(
-            """
-            /* orrery:actor_faction_bindings_institutional_pair_tags */
-            SELECT DISTINCT
-                   ept.subject_entity_id,
-                   ept.object_entity_id,
-                   subject_entity.kind AS subject_kind,
-                   object_entity.kind AS object_kind
-            FROM entity_pair_tags ept
-            JOIN pair_tags pt ON pt.id = ept.pair_tag_id
-            JOIN entities subject_entity
-              ON subject_entity.id = ept.subject_entity_id
-            JOIN entities object_entity
-              ON object_entity.id = ept.object_entity_id
-            WHERE ept.cleared_at IS NULL
-              AND NOT pt.deprecated
-              AND (
-                    pt.tag LIKE 'status:%'
-                    OR pt.tag IN ('obligation', 'handles', 'authority_over')
-                  )
-              AND (
-                    ept.subject_entity_id = ANY(:actor_ids)
-                    OR ept.object_entity_id = ANY(:actor_ids)
-                  )
-            """
-        ),
-        {"actor_ids": sorted(actor_id_set)},
-    ).mappings():
-        subject_id = int(row["subject_entity_id"])
-        object_id = int(row["object_entity_id"])
-        if subject_id in actor_id_set and row["object_kind"] == "faction":
+    institutional_rows = (
+        composition_cache.institutional_pair_rows()
+        if composition_cache is not None
+        else _load_institutional_pair_rows(session)
+    )
+    for subject_id, object_id, subject_kind, object_kind in institutional_rows:
+        if subject_id in actor_id_set and object_kind == "faction":
             pairs.add((subject_id, object_id))
-        if object_id in actor_id_set and row["subject_kind"] == "faction":
+        if object_id in actor_id_set and subject_kind == "faction":
             pairs.add((object_id, subject_id))
 
     if include_rosters:
         assert orbit_distance is not None
-        live_rosters = sorted(
-            {
-                (int(row["member_id"]), int(row["faction_id"]))
-                for row in session.execute(
-                    text(
-                        """
-                        /* orrery:actor_faction_bindings_rosters */
-                        SELECT DISTINCT
-                               CASE
-                                   WHEN subject_entity.kind = 'character'
-                                   THEN subject_entity.id
-                                   ELSE object_entity.id
-                               END AS member_id,
-                               CASE
-                                   WHEN subject_entity.kind = 'faction'
-                                   THEN subject_entity.id
-                                   ELSE object_entity.id
-                               END AS faction_id
-                        FROM entity_pair_tags ept
-                        JOIN pair_tags pt ON pt.id = ept.pair_tag_id
-                        JOIN entities subject_entity
-                          ON subject_entity.id = ept.subject_entity_id
-                        JOIN entities object_entity
-                          ON object_entity.id = ept.object_entity_id
-                        WHERE pt.tag LIKE 'status:%'
-                          AND NOT pt.deprecated
-                          AND ept.cleared_at IS NULL
-                          AND subject_entity.is_active = true
-                          AND object_entity.is_active = true
-                          AND (
-                              (subject_entity.kind = 'character'
-                               AND object_entity.kind = 'faction')
-                              OR (subject_entity.kind = 'faction'
-                                  AND object_entity.kind = 'character')
-                          )
-                        """
-                    )
-                ).mappings()
-            }
+        live_rosters = (
+            composition_cache.actor_faction_roster_pairs()
+            if composition_cache is not None
+            else _load_actor_faction_roster_pairs(session)
         )
         for actor_id in sorted(actor_id_set):
             for member_id, faction_id in live_rosters:
@@ -1451,6 +1667,7 @@ def compose_actor_target_faction_bindings(
     include_rosters: bool = False,
     roster_reach: int = 2,
     orbit_distance: Optional[Mapping[tuple[int, int], int]] = None,
+    composition_cache: Optional[_CompositionSourceCache] = None,
 ) -> Tuple[Bindings, ...]:
     """Compose the deterministic product of target and faction candidates."""
 
@@ -1461,6 +1678,7 @@ def compose_actor_target_faction_bindings(
                 session,
                 anchor_chunk_id=anchor_chunk_id,
                 window_chunks=window_chunks,
+                composition_cache=composition_cache,
             )
         }
     else:
@@ -1473,6 +1691,7 @@ def compose_actor_target_faction_bindings(
         target_presence=target_presence,
         include_social_contacts=include_social_contacts,
         include_hostile_edges=include_hostile_edges,
+        composition_cache=composition_cache,
     )
     faction_bindings = compose_actor_faction_bindings(
         session,
@@ -1482,6 +1701,7 @@ def compose_actor_target_faction_bindings(
         include_rosters=include_rosters,
         roster_reach=roster_reach,
         orbit_distance=orbit_distance,
+        composition_cache=composition_cache,
     )
     targets_by_actor: dict[int, set[int]] = {}
     for binding in target_bindings:
@@ -1516,6 +1736,7 @@ def compose_project_target_bindings(
     anchor_chunk_id: Optional[int],
     actor_ids: Iterable[int],
     target_presence: str = "offscreen",
+    composition_cache: Optional[_CompositionSourceCache] = None,
 ) -> Tuple[Bindings, ...]:
     """Bind character-project actors to their durable project target.
 
@@ -1526,8 +1747,10 @@ def compose_project_target_bindings(
 
     if target_presence not in {"offscreen", "present"}:
         raise ValueError("target_presence must be 'offscreen' or 'present'")
-    present_actor_ids = _present_actor_ids_at_anchor(
-        session, anchor_chunk_id=anchor_chunk_id
+    present_actor_ids = _composition_present_actor_ids(
+        session,
+        anchor_chunk_id=anchor_chunk_id,
+        composition_cache=composition_cache,
     )
     actor_id_set = set(actor_ids) - present_actor_ids
     pairs: list[tuple[int, int]] = []
@@ -1554,11 +1777,14 @@ def compose_project_faction_bindings(
     state: WorldState,
     anchor_chunk_id: Optional[int],
     actor_ids: Iterable[int],
+    composition_cache: Optional[_CompositionSourceCache] = None,
 ) -> Tuple[Bindings, ...]:
     """Bind project actors to their immutable stored faction counterparty."""
 
-    present_actor_ids = _present_actor_ids_at_anchor(
-        session, anchor_chunk_id=anchor_chunk_id
+    present_actor_ids = _composition_present_actor_ids(
+        session,
+        anchor_chunk_id=anchor_chunk_id,
+        composition_cache=composition_cache,
     )
     pairs: list[tuple[int, int]] = []
     for actor_id in sorted(set(actor_ids) - present_actor_ids):
@@ -1590,6 +1816,7 @@ def compose_actor_faction_routes(
     window_chunks: int,
     actor_ids: Iterable[int],
     composition_settings: Optional[Any] = None,
+    composition_cache: Optional[_CompositionSourceCache] = None,
 ) -> Tuple[tuple[Bindings, Tuple[Template, ...]], ...]:
     """Route institutional and stored-project faction bindings by template."""
 
@@ -1602,6 +1829,7 @@ def compose_actor_faction_routes(
         anchor_chunk_id=anchor_chunk_id,
         window_chunks=window_chunks,
         actor_ids=actor_id_set,
+        composition_cache=composition_cache,
     )
     roster_enabled, roster_reach = _roster_composition_settings(composition_settings)
     roster = (
@@ -1613,6 +1841,7 @@ def compose_actor_faction_routes(
             include_rosters=True,
             roster_reach=roster_reach,
             orbit_distance=state.orbit_distance,
+            composition_cache=composition_cache,
         )
         if roster_enabled and any(t.courts_factions for t in templates_tuple)
         else ()
@@ -1622,6 +1851,7 @@ def compose_actor_faction_routes(
         state=state,
         anchor_chunk_id=anchor_chunk_id,
         actor_ids=actor_id_set,
+        composition_cache=composition_cache,
     )
     institutional_pairs = {
         (binding[Slot.ACTOR], binding[Slot.FACTION]) for binding in institutional
@@ -1662,6 +1892,7 @@ def compose_actor_target_faction_routes(
     actor_ids: Iterable[int],
     target_presence: str = "offscreen",
     composition_settings: Optional[Any] = None,
+    composition_cache: Optional[_CompositionSourceCache] = None,
 ) -> Tuple[tuple[Bindings, Tuple[Template, ...]], ...]:
     """Route target-candidate products with institutional/project factions."""
 
@@ -1675,6 +1906,7 @@ def compose_actor_target_faction_routes(
         window_chunks=window_chunks,
         actor_ids=actor_id_set,
         target_presence=target_presence,
+        composition_cache=composition_cache,
     )
     social_targets = (
         compose_actor_target_bindings(
@@ -1684,6 +1916,7 @@ def compose_actor_target_faction_routes(
             actor_ids=actor_id_set,
             target_presence=target_presence,
             include_social_contacts=True,
+            composition_cache=composition_cache,
         )
         if any(template.starts_from_social_contact for template in templates_tuple)
         else ()
@@ -1699,6 +1932,7 @@ def compose_actor_target_faction_routes(
             actor_ids=actor_id_set,
             target_presence=target_presence,
             include_hostile_edges=True,
+            composition_cache=composition_cache,
         )
         if hostile_enabled
         and any(template.composes_from_hostility for template in templates_tuple)
@@ -1711,6 +1945,7 @@ def compose_actor_target_faction_routes(
             anchor_chunk_id=anchor_chunk_id,
             actor_ids=actor_id_set,
             target_presence=target_presence,
+            composition_cache=composition_cache,
         )
         if any(template.binds_project_target for template in templates_tuple)
         else ()
@@ -1720,6 +1955,7 @@ def compose_actor_target_faction_routes(
         anchor_chunk_id=anchor_chunk_id,
         window_chunks=window_chunks,
         actor_ids=actor_id_set,
+        composition_cache=composition_cache,
     )
     roster_enabled, roster_reach = _roster_composition_settings(composition_settings)
     roster_factions = (
@@ -1731,6 +1967,7 @@ def compose_actor_target_faction_routes(
             include_rosters=True,
             roster_reach=roster_reach,
             orbit_distance=state.orbit_distance,
+            composition_cache=composition_cache,
         )
         if roster_enabled and any(t.courts_factions for t in templates_tuple)
         else ()
@@ -1741,6 +1978,7 @@ def compose_actor_target_faction_routes(
             state=state,
             anchor_chunk_id=anchor_chunk_id,
             actor_ids=actor_id_set,
+            composition_cache=composition_cache,
         )
         if any(template.binds_project_faction for template in templates_tuple)
         else ()
@@ -1810,6 +2048,7 @@ def compose_actor_target_routes(
     actor_ids: Iterable[int],
     target_presence: str = "offscreen",
     composition_settings: Optional[Any] = None,
+    composition_cache: Optional[_CompositionSourceCache] = None,
 ) -> Tuple[tuple[Bindings, Tuple[Template, ...]], ...]:
     """Route each ACTOR/TARGET binding to its authorized template stack.
 
@@ -1839,6 +2078,7 @@ def compose_actor_target_routes(
         actor_ids=actor_id_set,
         target_presence=target_presence,
         include_social_contacts=False,
+        composition_cache=composition_cache,
     )
     add_routes(relationship_bindings, templates_tuple)
 
@@ -1853,6 +2093,7 @@ def compose_actor_target_routes(
             actor_ids=actor_id_set,
             target_presence=target_presence,
             include_social_contacts=True,
+            composition_cache=composition_cache,
         )
         add_routes(social_bindings, social_templates)
 
@@ -1869,6 +2110,7 @@ def compose_actor_target_routes(
             actor_ids=actor_id_set,
             target_presence=target_presence,
             include_hostile_edges=True,
+            composition_cache=composition_cache,
         )
         add_routes(hostile_bindings, hostile_templates)
 
@@ -1882,6 +2124,7 @@ def compose_actor_target_routes(
             session,
             anchor_chunk_id=anchor_chunk_id,
             actor_ids=actor_id_set,
+            composition_cache=composition_cache,
         )
         add_routes(acquaintance_bindings, acquaintance_templates)
 
@@ -1895,6 +2138,7 @@ def compose_actor_target_routes(
             anchor_chunk_id=anchor_chunk_id,
             actor_ids=actor_id_set,
             target_presence=target_presence,
+            composition_cache=composition_cache,
         )
         add_routes(project_bindings, project_templates)
 
@@ -2137,6 +2381,11 @@ def resolve_dry_run(
             )
         )
 
+    composition_cache = _CompositionSourceCache.load(
+        session,
+        anchor_chunk_id=anchor_chunk_id,
+        world_time=state.world_time,
+    )
     drafts: list[OrreryResolutionDraft] = []
     scene_pressure_results: list[Resolution] = []
 
@@ -2144,6 +2393,7 @@ def resolve_dry_run(
         session,
         anchor_chunk_id=anchor_chunk_id,
         window_chunks=window_chunks,
+        composition_cache=composition_cache,
     )
     actor_ids = {bindings[Slot.ACTOR] for bindings in actor_bindings}
     for bindings in actor_bindings:
@@ -2170,6 +2420,7 @@ def resolve_dry_run(
             actor_ids=actor_ids,
             target_presence="offscreen",
             composition_settings=composition_settings,
+            composition_cache=composition_cache,
         )
         for bindings, routed_templates in offscreen_routes:
             resolution = evaluate_stack(
@@ -2199,6 +2450,7 @@ def resolve_dry_run(
                 actor_ids=actor_ids,
                 target_presence="present",
                 composition_settings=composition_settings,
+                composition_cache=composition_cache,
             )
             for bindings, routed_templates in present_routes:
                 resolution = evaluate_stack(
@@ -2221,6 +2473,7 @@ def resolve_dry_run(
             window_chunks=window_chunks,
             actor_ids=actor_ids,
             composition_settings=composition_settings,
+            composition_cache=composition_cache,
         )
         offscreen_routes += faction_routes
         for bindings, routed_templates in faction_routes:
@@ -2245,6 +2498,7 @@ def resolve_dry_run(
             actor_ids=actor_ids,
             target_presence="offscreen",
             composition_settings=composition_settings,
+            composition_cache=composition_cache,
         )
         offscreen_routes += triple_routes
         for bindings, routed_templates in triple_routes:
@@ -2275,6 +2529,7 @@ def resolve_dry_run(
                 actor_ids=actor_ids,
                 target_presence="present",
                 composition_settings=composition_settings,
+                composition_cache=composition_cache,
             )
             present_routes += triple_pressure_routes
             for bindings, routed_templates in triple_pressure_routes:
@@ -2305,42 +2560,44 @@ def resolve_dry_run(
         for value in draft.bindings.values():
             if isinstance(value, int):
                 draft_entity_ids.add(value)
-    draft_entity_names = _load_entity_names(session, draft_entity_ids)
+
+    present_need_pressure_specs = _present_need_pressure_specs(
+        state,
+        present_actor_ids=set(composition_cache.present_actor_ids),
+        need_tuning=need_tuning,
+    )
+    pressure_entity_ids = _entity_ids_from_resolutions(scene_pressure_results) | {
+        spec["actor_entity_id"] for spec in present_need_pressure_specs
+    }
+    name_entity_ids = draft_entity_ids | pressure_entity_ids
+    if state.mood_enabled:
+        name_entity_ids.update(composition_cache.present_actor_ids)
+    entity_names = _load_entity_names(session, name_entity_ids)
+
     drafts = [
         replace(
             draft,
             binding_names={
-                slot: _entity_label(value, draft_entity_names)
+                slot: _entity_label(value, entity_names)
                 for slot, value in draft.bindings.items()
             },
             narrative_stub=_render_bound_text(
                 draft.narrative_stub,
                 draft.bindings,
-                draft_entity_names,
+                entity_names,
                 template_id=draft.template_id,
             ),
         )
         for draft in drafts
     ]
 
-    present_need_pressure_specs = _present_need_pressure_specs(
-        state,
-        present_actor_ids=_present_actor_ids_at_anchor(
-            session, anchor_chunk_id=anchor_chunk_id
-        ),
-        need_tuning=need_tuning,
-    )
-    pressure_entity_ids = _entity_ids_from_resolutions(scene_pressure_results) | {
-        spec["actor_entity_id"] for spec in present_need_pressure_specs
-    }
-    pressure_entity_names = _load_entity_names(session, pressure_entity_ids)
     scene_pressures = tuple(
-        _scene_pressure_from_resolution(resolution, pressure_entity_names)
+        _scene_pressure_from_resolution(resolution, entity_names)
         for resolution in scene_pressure_results
     ) + tuple(
         _scene_pressure_from_need_spec(
             spec,
-            pressure_entity_names,
+            entity_names,
             need_tuning=need_tuning,
         )
         for spec in present_need_pressure_specs
@@ -2361,18 +2618,14 @@ def resolve_dry_run(
             {"weather": state.weather, "time_of_day": state.time_of_day}
         )
     if state.mood_enabled:
-        present_actor_ids = _present_actor_ids_at_anchor(
-            session, anchor_chunk_id=anchor_chunk_id
-        )
-        present_names = _load_entity_names(session, present_actor_ids)
         moods = [
             {
                 "entity_id": entity_id,
-                "name": present_names[entity_id],
+                "name": entity_names[entity_id],
                 "mood": mood,
             }
-            for entity_id in sorted(present_actor_ids)
-            if entity_id in present_names
+            for entity_id in sorted(composition_cache.present_actor_ids)
+            if entity_id in entity_names
             if (mood := active_mood(state, {Slot.ACTOR: entity_id}, slot=Slot.ACTOR))
             is not None
         ]
@@ -2383,7 +2636,7 @@ def resolve_dry_run(
         actor_count=len(unique_actors),
         resolutions=tuple(drafts),
         scene_pressures=scene_pressures,
-        joint_beats=detect_joint_beats(drafts, draft_entity_names),
+        joint_beats=detect_joint_beats(drafts, entity_names),
         communication_graph=state.communication_graph,
         epistemics_settings={
             "enabled": epistemics_policy.enabled,

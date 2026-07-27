@@ -2954,6 +2954,109 @@ def test_resolve_dry_run_routes_present_targets_to_scene_pressures() -> None:
     assert "state_delta" not in pressure.to_dict()
 
 
+def test_resolve_dry_run_reuses_composition_sources_once_per_tick() -> None:
+    """Route fanout filters cached source rows instead of repeating SQL reads."""
+
+    pair_template = Template(
+        id="cached_pair_sources",
+        priority=10,
+        drive_band=DriveBand.PROJECT_IDENTITY,
+        blurb="Exercise every pair source.",
+        required_slots=(Slot.ACTOR, Slot.TARGET),
+        package_gate=ALWAYS,
+        branches=(
+            Branch(
+                label="Pair act",
+                conditions=ALWAYS,
+                narrative_stub="{actor} acts toward {target}.",
+                scene_pressure_stub="{actor} pressures {target}.",
+            ),
+        ),
+        present_target_policy=PresentTargetPolicy.STORYTELLER_PRESSURE,
+        starts_from_social_contact=True,
+        composes_from_hostility=True,
+    )
+    triple_template = Template(
+        id="cached_triple_sources",
+        priority=10,
+        drive_band=DriveBand.PROJECT_IDENTITY,
+        blurb="Exercise pair and institutional source fanout.",
+        required_slots=(Slot.ACTOR, Slot.TARGET, Slot.FACTION),
+        package_gate=ALWAYS,
+        branches=(
+            Branch(
+                label="Triple act",
+                conditions=ALWAYS,
+                narrative_stub="{actor} acts toward {target} for {faction}.",
+                scene_pressure_stub="{actor} pressures {target} for {faction}.",
+            ),
+        ),
+        present_target_policy=PresentTargetPolicy.STORYTELLER_PRESSURE,
+        starts_from_social_contact=True,
+        composes_from_hostility=True,
+    )
+    session = FakeSession(
+        present_actor_rows=[{"entity_id": 2}],
+        actor_target_relationship_rows=[
+            {"source_entity_id": 1, "target_entity_id": 2},
+            {"source_entity_id": 1, "target_entity_id": 3},
+        ],
+        actor_target_social_contact_rows=[
+            {"source_entity_id": 1, "target_entity_id": 4},
+        ],
+        actor_target_hostile_edge_rows=[
+            {"source_entity_id": 1, "target_entity_id": 5},
+        ],
+        actor_faction_pair_tag_rows=[
+            {
+                "subject_entity_id": 1,
+                "object_entity_id": 9,
+                "subject_kind": "character",
+                "object_kind": "faction",
+            }
+        ],
+        entity_name_rows=[
+            {"id": 1, "name": "Mara"},
+            {"id": 2, "name": "Vale"},
+            {"id": 3, "name": "Iris"},
+            {"id": 4, "name": "Joryn"},
+            {"id": 5, "name": "Brena"},
+            {"id": 9, "name": "The Sluice Guild"},
+        ],
+    )
+
+    proposal = resolve_dry_run(
+        session,
+        (pair_template, triple_template),
+        anchor_chunk_id=100,
+        window_chunks=30,
+        composition_settings={"hostile_source_enabled": True},
+    )
+
+    offscreen_targets = {
+        draft.bindings["target"]
+        for draft in proposal.resolutions
+        if "target" in draft.bindings
+    }
+    present_targets = {
+        pressure.bindings["target"] for pressure in proposal.scene_pressures
+    }
+    assert {3, 4, 5} <= offscreen_targets
+    assert present_targets == {2}
+
+    def query_count(tag: str) -> int:
+        marker = f"/* orrery:{tag} */"
+        return sum(marker in sql for sql in session.executed_sql)
+
+    assert query_count("present_actor_ids_at_anchor") == 1
+    assert query_count("actor_target_bindings_character_relationships") == 1
+    assert query_count("actor_target_bindings_social_contacts") == 1
+    assert query_count("actor_target_bindings_hostile_edges") == 1
+    assert query_count("actor_faction_bindings_institutional_pair_tags") == 1
+    assert query_count("anchor_world_time") == 1
+    assert query_count("entity_names") == 1
+
+
 def test_resolve_dry_run_routes_present_need_debt_to_scene_pressure() -> None:
     """On-screen actors get prompt-only need pressure, not resolutions."""
 
