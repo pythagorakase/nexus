@@ -531,9 +531,9 @@ async def _submit_scenario_impl(
         raise ModelRetry(
             "submit_starting_scenario rejected: base_timestamp conflicts with "
             "the accepted SettingCard date. Expected "
-            f"{date_constraint.describe()} from SettingCard.time_period and/or "
-            f"diegetic_artifact; received {received}. Repair base_timestamp to "
-            "match the accepted setting before resubmitting."
+            f"{date_constraint.describe()} from SettingCard.time_period and any "
+            f"matching full diegetic_artifact date; received {received}. Repair "
+            "base_timestamp to match the accepted setting before resubmitting."
         )
 
     # Store seed and location_sketch in cache

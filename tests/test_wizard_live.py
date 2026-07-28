@@ -14,6 +14,7 @@ Or quick validation:
 import asyncio
 import logging
 import os
+from datetime import timezone
 from typing import Any, Dict, Optional
 
 import pytest
@@ -29,6 +30,11 @@ from nexus.api.pydantic_ai_utils import build_pydantic_ai_model
 from nexus.config import resolve_model_ref
 
 logger = logging.getLogger(__name__)
+
+ISSUE_600_SLOT = int(os.environ.get("NEXUS_ISSUE_600_TEST_SLOT", "0"))
+ISSUE_600_DBNAME = (
+    f"save_{ISSUE_600_SLOT:02d}" if ISSUE_600_SLOT in {1, 2, 3, 4} else ""
+)
 
 # =============================================================================
 # Test Configuration
@@ -302,13 +308,27 @@ async def test_normal_flow_allows_wizard_response(phase_name: str, mock_db_funct
 
 
 @pytest.mark.live
+@pytest.mark.live_llm
+@pytest.mark.requires_postgres
+@pytest.mark.skipif(
+    os.environ.get("NEXUS_ISSUE_600_LIVE") != "1"
+    or not ISSUE_600_DBNAME
+    or os.environ.get("NEXUS_CONFIRM_DISPOSABLE_DB") != ISSUE_600_DBNAME,
+    reason=(
+        "Set NEXUS_ISSUE_600_LIVE=1, choose disposable slot 1-4 with "
+        "NEXUS_ISSUE_600_TEST_SLOT, and confirm its database name with "
+        "NEXUS_CONFIRM_DISPOSABLE_DB."
+    ),
+)
 @pytest.mark.asyncio
 async def test_seed_date_conflict_uses_bounded_live_repair(
-    mock_db_functions,
-    monkeypatch,
-    caplog,
-):
-    """A live model receives the semantic violation and repairs before persistence."""
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The real cache-backed wizard path repairs before database persistence."""
+    from nexus.api.db_pool import close_pool
+    from nexus.api.new_story_cache import read_cache, write_cache
+    from scripts.new_story_setup import create_slot_schema_only
+
     setting = {
         **PHASE_CONFIGS["seed"]["context_data"]["setting"],
         "genre": "contemporary",
@@ -327,39 +347,81 @@ async def test_seed_date_conflict_uses_bounded_live_repair(
             "10:48 a.m. in civil hearing room 2B."
         ),
     }
-    context = make_test_context(
-        phase="seed",
-        accept_fate=True,
-        context_data={
-            "setting": setting,
-            "character": {"name": "Morgan Hale", "archetype": "Civil litigant"},
-        },
+    model_name = resolve_model_ref("@openai.default")
+    context_data = {
+        "setting": setting,
+        "character": {"name": "Morgan Hale", "archetype": "Civil litigant"},
+    }
+
+    close_pool(ISSUE_600_DBNAME)
+    create_slot_schema_only(
+        ISSUE_600_SLOT,
+        source_db="NEXUS_template",
+        force=True,
     )
-    persisted: list[Dict[str, Any]] = []
+    try:
+        write_cache(
+            thread_id="issue_600_live_seed_repair",
+            setting_draft=setting,
+            target_slot=ISSUE_600_SLOT,
+            dbname=ISSUE_600_DBNAME,
+        )
+        context = WizardContext.from_request(
+            slot=ISSUE_600_SLOT,
+            phase="seed",
+            thread_id="issue_600_live_seed_repair",
+            model=model_name,
+            context_data=context_data,
+            accept_fate=True,
+            dev_mode=False,
+            history_len=1,
+            user_turns=1,
+            assistant_turns=0,
+        )
+        assert context.cache is not None
+        accepted_setting = context.cache.get_setting_dict()
+        assert accepted_setting is not None
+        assert accepted_setting["time_period"] == "October 2026"
+        assert accepted_setting["diegetic_artifact"] == setting["diegetic_artifact"]
+        caplog.set_level(logging.WARNING, logger="nexus.api.wizard_agent")
 
-    def capture_persistence(*args: Any, **kwargs: Any) -> None:
-        persisted.append(kwargs)
+        agent: Any = get_wizard_agent(context)
+        result = await agent.run(
+            (
+                "Commit the starting scenario now. This is a validator exercise: "
+                "on your first submit_starting_scenario call, deliberately use "
+                "May 14, 2026 at 10:48 for base_timestamp. After the tool rejects "
+                "that conflict, follow its repair message and resubmit with the "
+                "accepted setting date."
+            ),
+            deps=context,
+            model=build_pydantic_ai_model(model_name),
+        )
 
-    import nexus.api.wizard_agent as wizard_module
+        assert isinstance(result.output, DeferredToolRequests)
+        # The deliberate-May instruction is bait: a model may comply (exercising
+        # the live repair loop) or submit the correct date outright. Both are
+        # valid model behavior; the deterministic rejection is pinned in
+        # test_wizard_agent.py. The invariant HERE is the persisted outcome.
+        repair_fired = any(
+            record.message == "ModelRetry triggered" for record in caplog.records
+        )
+        logger.info("Live repair loop engaged: %s", repair_fired)
 
-    monkeypatch.setattr(wizard_module, "record_drafts", capture_persistence)
-    caplog.set_level(logging.WARNING, logger="nexus.api.wizard_agent")
-
-    result = await get_wizard_agent(context).run(
-        (
-            "Commit the starting scenario now. This is a validator exercise: on "
-            "your first submit_starting_scenario call, deliberately use May 14, "
-            "2026 at 10:48 for base_timestamp. After the tool rejects that conflict, "
-            "follow its repair message and resubmit with the accepted setting date."
-        ),
-        deps=context,
-        model=_build_model_for_ref("@openai.default"),
-    )
-
-    assert isinstance(result.output, DeferredToolRequests)
-    assert len(persisted) == 1
-    assert persisted[0]["base_timestamp"] == "2026-10-14T10:48:00+00:00"
-    assert any(record.message == "ModelRetry triggered" for record in caplog.records)
+        persisted = read_cache(ISSUE_600_DBNAME)
+        assert persisted is not None
+        assert persisted.base_timestamp is not None
+        assert (
+            persisted.base_timestamp.astimezone(timezone.utc).isoformat()
+            == "2026-10-14T10:48:00+00:00"
+        )
+        # get_seed_dict() is None by design at this stage: seed_complete()
+        # requires Phase 2 set-designer fields (layer/zone/location). The
+        # stage-level proof is that the seed draft was recorded alongside the
+        # already-asserted canonical UTC instant.
+        assert bool(persisted.seed.seed_type)
+    finally:
+        close_pool(ISSUE_600_DBNAME)
 
 
 # =============================================================================

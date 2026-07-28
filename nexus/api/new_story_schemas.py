@@ -38,11 +38,11 @@ _MONTH_DAY_YEAR_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _MONTH_YEAR_PATTERN = re.compile(
-    rf"\b(?P<month>{_MONTH_PATTERN})\s+(?P<year>[1-9]\d{{0,3}})\b",
+    rf"\b(?P<month>{_MONTH_PATTERN})\s+(?P<year>[1-9]\d{{2,3}})\b",
     re.IGNORECASE,
 )
 _YEAR_MONTH_PATTERN = re.compile(
-    rf"\b(?P<year>[1-9]\d{{0,3}})\s+(?P<month>{_MONTH_PATTERN})\b",
+    rf"\b(?P<year>[1-9]\d{{2,3}})\s+(?P<month>{_MONTH_PATTERN})\b",
     re.IGNORECASE,
 )
 _DAY_MONTH_PATTERN = re.compile(
@@ -127,24 +127,33 @@ def _day_candidates(text: str, *, year: int, month: int) -> set[int]:
     return days
 
 
+def _matching_full_date_days(text: str, *, year: int, month: int) -> set[int]:
+    """Extract days only from full dates matching an established year/month."""
+    days: set[int] = set()
+    for pattern in (_DAY_MONTH_YEAR_PATTERN, _MONTH_DAY_YEAR_PATTERN):
+        for match in pattern.finditer(text):
+            if (
+                int(match.group("year")) == year
+                and _MONTH_NUMBERS[match.group("month").lower()] == month
+            ):
+                days.add(int(match.group("day")))
+    return days
+
+
 def extract_setting_date_constraint(
     setting: "SettingCard",
 ) -> Optional[SettingDateConstraint]:
     """Extract an unambiguous Gregorian date constraint from a setting artifact.
 
-    ``time_period`` is authoritative when it contains one named month/year.
-    Otherwise the diegetic artifact is used only when all of its parseable dates
-    agree. An exact day is included only when one day is unambiguous. Prose with
-    no safely parseable date deliberately produces no constraint.
+    Only ``time_period`` may establish the year and month. Once established, an
+    exact day may come from ``time_period`` or from one full artifact date that
+    agrees with that year/month. Historical or otherwise unrelated artifact
+    dates never establish or replace the setting period.
     """
     period_candidates = _year_month_candidates(setting.time_period)
-    if len(period_candidates) == 1:
-        year, month = next(iter(period_candidates))
-    else:
-        artifact_candidates = _year_month_candidates(setting.diegetic_artifact)
-        if period_candidates or len(artifact_candidates) != 1:
-            return None
-        year, month = next(iter(artifact_candidates))
+    if len(period_candidates) != 1:
+        return None
+    year, month = next(iter(period_candidates))
 
     period_days = _day_candidates(setting.time_period, year=year, month=month)
     if len(period_days) == 1:
@@ -152,7 +161,7 @@ def extract_setting_date_constraint(
     elif period_days:
         day = None
     else:
-        artifact_days = _day_candidates(
+        artifact_days = _matching_full_date_days(
             setting.diegetic_artifact,
             year=year,
             month=month,

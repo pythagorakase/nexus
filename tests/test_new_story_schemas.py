@@ -40,6 +40,30 @@ from nexus.api.new_story_generator import StoryComponentGenerator
 RUN_LIVE_LLM = os.environ.get("NEXUS_RUN_LIVE_LLM") == "1"
 
 
+def _dated_setting(
+    *,
+    time_period: str,
+    diegetic_artifact: str = "A contemporary civic notice.",
+) -> SettingCard:
+    """Build a setting card for deterministic date-extraction tests."""
+    return SettingCard(
+        genre=Genre.CONTEMPORARY,
+        world_name="Cook County",
+        time_period=time_period,
+        tech_level=TechLevel.MODERN,
+        magic_exists=False,
+        magic_description=None,
+        political_structure="Municipal and county government",
+        major_conflict="A contested civil hearing",
+        tone="balanced",
+        themes=["justice"],
+        cultural_notes="Contemporary Chicago civic procedure.",
+        language_notes=None,
+        geographic_scope="regional",
+        diegetic_artifact=diegetic_artifact,
+    )
+
+
 class TestNewStorySchemas:
     """Test the Pydantic schemas for new story initialization."""
 
@@ -73,17 +97,10 @@ class TestNewStorySchemas:
         json_data = setting.model_dump_json()
         assert "Aethermoor" in json_data
 
-    def test_setting_date_constraint_uses_period_and_artifact_date(self):
+    def test_setting_date_constraint_uses_period_and_artifact_date(self) -> None:
         """The issue #600 date is extracted without an LLM judgment pass."""
-        setting = SettingCard(
-            genre=Genre.CONTEMPORARY,
-            world_name="Cook County",
+        setting = _dated_setting(
             time_period="October 2026",
-            tech_level=TechLevel.MODERN,
-            political_structure="Municipal and county government",
-            major_conflict="A contested civil hearing",
-            themes=["justice"],
-            cultural_notes="Contemporary Chicago civic procedure.",
             diegetic_artifact=(
                 "Hearing notice — Date: 14 October 2026. Proceedings begin at "
                 "10:48 a.m. in civil hearing room 2B."
@@ -95,21 +112,62 @@ class TestNewStorySchemas:
         assert constraint is not None
         assert (constraint.year, constraint.month, constraint.day) == (2026, 10, 14)
 
-    def test_setting_date_constraint_skips_unparseable_period(self):
-        """Secondary-world prose without an explicit Earth date stays unconstrained."""
-        setting = SettingCard(
-            genre=Genre.FANTASY,
-            world_name="Aethermoor",
-            time_period="Age of Twilight",
-            tech_level=TechLevel.MEDIEVAL,
-            political_structure="Feudal kingdoms",
-            major_conflict="The northern succession crisis",
-            themes=["duty"],
-            cultural_notes="Oaths bind the realm's great houses.",
-            diegetic_artifact="The fifth bell of autumn opens the council season.",
+    def test_setting_date_constraint_ignores_artifact_only_historical_date(
+        self,
+    ) -> None:
+        """A historical plaque cannot establish a present-day story date."""
+        setting = _dated_setting(
+            time_period="Present day",
+            diegetic_artifact=(
+                "The lobby plaque commemorates 14 October 1918; "
+                "the story is present-day."
+            ),
         )
 
         assert extract_setting_date_constraint(setting) is None
+
+    def test_setting_date_constraint_ignores_nonmatching_artifact_date(self) -> None:
+        """An artifact day contributes only when its full date matches the period."""
+        setting = _dated_setting(
+            time_period="October 2026",
+            diegetic_artifact="The lobby plaque commemorates 14 October 1918.",
+        )
+
+        constraint = extract_setting_date_constraint(setting)
+
+        assert constraint is not None
+        assert (constraint.year, constraint.month, constraint.day) == (2026, 10, None)
+
+    @pytest.mark.parametrize(
+        "time_period",
+        [
+            "Age of Twilight",
+            "May 14",
+            "20 October revolutions",
+            "4 July celebrations",
+            "October 2026 and November 2026",
+        ],
+    )
+    def test_setting_date_constraint_skips_unparseable_or_ambiguous_period(
+        self,
+        time_period: str,
+    ) -> None:
+        """Day-like numbers and multiple dates never become a hard constraint."""
+        assert (
+            extract_setting_date_constraint(
+                _dated_setting(time_period=time_period),
+            )
+            is None
+        )
+
+    def test_setting_date_constraint_accepts_three_digit_year(self) -> None:
+        """A three-digit fantasy year remains a valid explicit period anchor."""
+        constraint = extract_setting_date_constraint(
+            _dated_setting(time_period="October 887"),
+        )
+
+        assert constraint is not None
+        assert (constraint.year, constraint.month, constraint.day) == (887, 10, None)
 
     def test_character_sheet_creation(self):
         """Test creating a valid CharacterSheet with Mind's Eye Theatre traits."""
