@@ -1359,8 +1359,8 @@ def test_storyteller_prompt_defines_reset_and_world_layer_semantics() -> None:
     # single-pass supplement carries it for one-mind turns, and gaia.md
     # carries its own phrasing for the second seat.
     supplement = (prompts_dir / "storyteller_single_pass.md").read_text()
-    assert "When present, include all four arrays" in supplement
-    assert "Omit the whole block when there are no updates" in supplement
+    assert "When present, Skald includes all four arrays" in supplement
+    assert "omits the whole block when there are no updates" in supplement
     assert "`updates[]`" not in supplement
     assert "`updates[]`" not in prompt
 
@@ -1387,7 +1387,7 @@ def test_state_authoring_documents_share_core_invariants() -> None:
         assert "registered" in normalized, name
         assert "rather than invent" in normalized, name
         # Accept-by-silence adjudication semantics.
-        assert "Accept by silence" in normalized, name
+        assert "accepts by silence" in normalized, name
         # Declarations use the prose name exactly.
         assert "exactly as written in the prose" in normalized, name
 
