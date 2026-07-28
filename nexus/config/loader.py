@@ -197,18 +197,23 @@ def get_all_api_models(ui_only: bool = False) -> List[dict]:
     return result
 
 
-def get_provider_for_model(model_id: str) -> Optional[str]:
+def get_provider_for_model(
+    model_id: str, path: Union[str, Path, None] = None
+) -> Optional[str]:
     """
     Look up which provider a model belongs to.
 
     Args:
         model_id: A registry model identifier from nexus.toml's api_models section
+        path: Configuration file whose registry should be queried. When omitted,
+            use the active runtime config.
 
     Returns:
         Provider name ("openai", "anthropic", "test") or None if not found
     """
-    for provider, models in get_api_models_by_provider().items():
-        if any(m["id"] == model_id for m in models):
+    settings = load_settings(path)
+    for provider, config in settings.global_.model.api_models.items():
+        if any(model.id == model_id for model in config.models):
             return provider
     return None
 
@@ -227,7 +232,9 @@ def get_native_structured_output_override(model_id: str) -> Optional[bool]:
     return None
 
 
-def get_openai_compatible_endpoint(model_id: str) -> Optional[Dict[str, Any]]:
+def get_openai_compatible_endpoint(
+    model_id: str, path: Union[str, Path, None] = None
+) -> Optional[Dict[str, Any]]:
     """
     Resolve the OpenAI-compatible endpoint for a registry model, if any.
 
@@ -239,6 +246,8 @@ def get_openai_compatible_endpoint(model_id: str) -> Optional[Dict[str, Any]]:
 
     Args:
         model_id: Concrete model ID from the api_models registry
+        path: Configuration file whose registry should be queried. When omitted,
+            use the active runtime config.
 
     Returns:
         ``{"base_url": ..., "api_key": ..., "structured_transport": ...,
@@ -253,8 +262,8 @@ def get_openai_compatible_endpoint(model_id: str) -> Optional[Dict[str, Any]]:
     """
     from nexus.config.settings_models import NATIVE_API_PROVIDERS
 
-    settings = load_settings()
-    provider = get_provider_for_model(model_id)
+    settings = load_settings(path)
+    provider = get_provider_for_model(model_id, path)
     if provider is None or provider in NATIVE_API_PROVIDERS:
         return None
     entry = settings.global_.model.api_models[provider]

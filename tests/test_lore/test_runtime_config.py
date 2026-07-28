@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Any, Dict, NamedTuple, cast
 
 import pytest
 import tomlkit
@@ -21,6 +21,16 @@ REPO_CONFIG = REPO_ROOT / "nexus.toml"
 pytestmark = pytest.mark.requires_postgres
 
 
+class AlternateConfig(NamedTuple):
+    """Registry-derived alternate config and its resolved storyteller seats."""
+
+    path: Path
+    writer_value: str
+    writer_model: str
+    gaia_value: str
+    gaia_model: str
+
+
 def _role_refs_by_target(settings: Settings) -> Dict[str, str]:
     """Return real registry role references keyed by their resolved model IDs."""
     refs: Dict[str, str] = {}
@@ -30,31 +40,43 @@ def _role_refs_by_target(settings: Settings) -> Dict[str, str]:
     return refs
 
 
-def _write_alternate_config(tmp_path: Path) -> Tuple[Path, str, str]:
-    """Write a real config whose writer and Gaia swap registry-backed roles."""
+def _write_alternate_config(tmp_path: Path) -> AlternateConfig:
+    """Write a real config using any two distinct registry models."""
     repository_settings = load_settings(REPO_CONFIG)
-    repository_writer = repository_settings.apex.model
-    repository_gaia = repository_settings.apex.gaia_model
-    assert repository_gaia is not None
-    assert repository_writer != repository_gaia
-
     role_refs = _role_refs_by_target(repository_settings)
-    alternate_writer_ref = role_refs[repository_gaia]
-    alternate_gaia_ref = role_refs[repository_writer]
+    distinct_models: list[str] = []
+    seen_models: set[str] = set()
+    for provider in repository_settings.global_.model.api_models.values():
+        for model in provider.models:
+            if model.id not in seen_models:
+                seen_models.add(model.id)
+                distinct_models.append(model.id)
+    if len(distinct_models) < 2:
+        pytest.skip("runtime-config precedence needs two distinct registry models")
+    config_values = [
+        (model_id, role_refs.get(model_id, model_id)) for model_id in distinct_models
+    ]
+    # Exercise role resolution when roles exist, while remaining valid for a
+    # future registry whose model entries do not all have named roles.
+    config_values.sort(key=lambda item: (not item[1].startswith("@"), item[0]))
+    (writer_model, writer_value), (gaia_model, gaia_value) = config_values[:2]
 
     document = tomlkit.parse(REPO_CONFIG.read_text(encoding="utf-8"))
-    document["apex"]["model"] = alternate_writer_ref
-    document["apex"]["gaia_model"] = alternate_gaia_ref
+    apex = cast(Any, document["apex"])
+    apex["model"] = writer_value
+    apex["gaia_model"] = gaia_value
     alternate_path = tmp_path / "alternate-nexus.toml"
     alternate_path.write_text(tomlkit.dumps(document), encoding="utf-8")
 
     alternate_settings = load_settings(alternate_path)
-    assert alternate_settings.apex.model != repository_writer
-    assert alternate_settings.apex.gaia_model != repository_gaia
-    return (
-        alternate_path,
-        alternate_settings.apex.model,
-        alternate_settings.apex.gaia_model,
+    assert alternate_settings.apex.model == writer_model
+    assert alternate_settings.apex.gaia_model == gaia_model
+    return AlternateConfig(
+        path=alternate_path,
+        writer_value=writer_value,
+        writer_model=writer_model,
+        gaia_value=gaia_value,
+        gaia_model=gaia_model,
     )
 
 
@@ -64,26 +86,30 @@ def test_lore_honors_runtime_config_for_both_storyteller_seats(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """The managed-runtime config reaches LORE and LOGON without a paid turn."""
-    alternate_path, alternate_writer, alternate_gaia = _write_alternate_config(tmp_path)
-    monkeypatch.setenv(RUNTIME_CONFIG_ENV, str(alternate_path))
+    alternate = _write_alternate_config(tmp_path)
+    monkeypatch.setenv(RUNTIME_CONFIG_ENV, str(alternate.path))
     caplog.set_level(logging.INFO, logger="nexus.lore")
 
     lore = LORE(enable_logon=False, slot=1)
     try:
         apex = lore.settings["API Settings"]["apex"]
-        assert lore.settings_path == alternate_path.resolve()
-        assert apex["model"] == alternate_writer
-        assert apex["gaia_model"] == alternate_gaia
+        assert lore.settings_path == alternate.path.resolve()
+        assert apex["model"] == alternate.writer_model
+        assert apex["gaia_model"] == alternate.gaia_model
 
         routing = LogonUtility(
             lore.settings,
             dbname="save_01",
-            model_override=alternate_writer,
+            model_override=alternate.writer_value,
+            settings_path=lore.settings_path,
         )
-        assert routing.settings["API Settings"]["apex"]["gaia_model"] == alternate_gaia
-        assert routing.resolve_storyteller_route()[0] == alternate_writer
+        assert (
+            routing.settings["API Settings"]["apex"]["gaia_model"]
+            == alternate.gaia_model
+        )
+        assert routing.resolve_storyteller_route()[0] == alternate.writer_model
         assert any(
-            f"effective config path {alternate_path.resolve()}" in message
+            f"effective config path {alternate.path.resolve()}" in message
             for message in caplog.messages
         )
     finally:
@@ -95,16 +121,22 @@ def test_explicit_lore_settings_path_beats_runtime_environment(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """An explicit caller path remains authoritative over the runtime env var."""
-    alternate_path, _, _ = _write_alternate_config(tmp_path)
-    monkeypatch.setenv(RUNTIME_CONFIG_ENV, str(alternate_path))
-    repository_settings = load_settings(REPO_CONFIG)
+    alternate = _write_alternate_config(tmp_path)
+    missing_runtime_config = tmp_path / "missing-runtime.toml"
+    monkeypatch.setenv(RUNTIME_CONFIG_ENV, str(missing_runtime_config))
 
-    lore = LORE(settings_path=str(REPO_CONFIG), enable_logon=False, slot=1)
+    lore = LORE(settings_path=str(alternate.path), enable_logon=True, slot=1)
     try:
         apex = lore.settings["API Settings"]["apex"]
-        assert lore.settings_path == REPO_CONFIG.resolve()
-        assert apex["model"] == repository_settings.apex.model
-        assert apex["gaia_model"] == repository_settings.apex.gaia_model
+        assert lore.settings_path == alternate.path.resolve()
+        assert apex["model"] == alternate.writer_model
+        assert apex["gaia_model"] == alternate.gaia_model
+
+        lore.ensure_logon()
+        assert lore.logon is not None
+        assert lore.logon.settings_path == alternate.path.resolve()
+        lore.logon.model_override = alternate.writer_value
+        assert lore.logon.resolve_storyteller_route()[0] == alternate.writer_model
     finally:
         lore.close()
 

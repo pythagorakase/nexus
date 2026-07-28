@@ -804,11 +804,13 @@ def _patch_gaia_registry(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(
         "nexus.agents.lore.logon_utility.get_provider_for_model",
-        lambda model_id: "openai" if model_id == "pinned-gaia-model" else None,
+        lambda model_id, path=None: (
+            "openai" if model_id == "pinned-gaia-model" else None
+        ),
     )
     monkeypatch.setattr(
         "nexus.config.get_openai_compatible_endpoint",
-        lambda model_id: None,
+        lambda model_id, path=None: None,
     )
 
 
@@ -958,7 +960,7 @@ def test_gaia_route_guards_fall_back_to_the_clone_path(
     junk_utility.settings["API Settings"]["apex"]["gaia_model"] = "pinned-gaia-model"
     monkeypatch.setattr(
         "nexus.agents.lore.logon_utility.get_provider_for_model",
-        lambda _model_id: None,
+        lambda _model_id, _path=None: None,
     )
     with pytest.raises(ValueError, match="not in the model registry"):
         junk_utility._resolve_gaia_route()

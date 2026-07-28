@@ -323,7 +323,11 @@ class LORE:
             from nexus.api.slot_utils import require_slot_dbname
 
             db = require_slot_dbname(dbname=self.dbname, slot=self.slot)
-            self.logon = LogonUtility(self.settings, dbname=db)
+            self.logon = LogonUtility(
+                self.settings,
+                dbname=db,
+                settings_path=self.settings_path,
+            )
             self._logon_initialized = True
             logger.info("LOGON utility initialized on first use")
         except Exception as e:
