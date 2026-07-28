@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal
 from typing import Any, Iterable, Optional
 
@@ -14,7 +14,11 @@ from nexus.agents.orrery.status_family import (
     normalize_status_level,
     status_tag_for_level,
 )
-from nexus.agents.orrery.substrate import CONTACT_PAIR_TAGS, contact_pair_tag_for_kind
+from nexus.agents.orrery.substrate import (
+    CONTACT_PAIR_TAGS,
+    ContactKind,
+    contact_pair_tag_for_kind,
+)
 from nexus.agents.orrery.tag_writer import (
     apply_exclusive_tag_bestowal,
     apply_pair_tag_bestowal,
@@ -94,6 +98,42 @@ class _ResolvedTarget:
     entity_id: Optional[int]
     name: Optional[str]
     pending_stub: bool = False
+    relationship_owner_trait: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class _NamedTargetCandidate:
+    """One selected trait target that may create a named entity stub."""
+
+    entity_kind: str
+    name: str
+    trait: str
+    role: str
+
+
+_ResolvedNamedTargets = dict[tuple[str, str], _ResolvedTarget]
+_TRAIT_PACKAGE_ORDER = {
+    trait: index
+    for index, trait in enumerate(
+        (
+            "resources",
+            "fame",
+            "status",
+            "allies",
+            "contacts",
+            "enemies",
+            "domain",
+            "patron",
+            "dependents",
+            "obligations",
+        )
+    )
+}
+_RELATIONSHIP_TYPE_BY_TRAIT = {
+    "patron": PATRON_RELATIONSHIP_TYPE,
+    "dependents": DEPENDENT_RELATIONSHIP_TYPE,
+    "obligations": OBLIGATION_RELATIONSHIP_TYPE,
+}
 
 
 PAIR_TAG_RELATIONSHIP_TYPES = frozenset({"ally", "hostile_to"}) | frozenset(
@@ -124,8 +164,18 @@ def compile_character_traits(
         character_entity_id=character_entity_id,
         dry_run=dry_run,
     )
+    trait_entries = character.get_trait_entries()
+    selected_traits = {canonical_trait_name(str(trait.name)) for trait in trait_entries}
+    resolved_named_targets = _pre_resolve_named_targets(
+        cur,
+        result=result,
+        selected_traits=selected_traits,
+        inputs=inputs,
+        protagonist_character_id=character_id,
+        dry_run=dry_run,
+    )
 
-    for trait in character.get_trait_entries():
+    for trait in trait_entries:
         trait_name = str(trait.name)
         canonical_trait = canonical_trait_name(trait_name)
         if canonical_trait == "resources":
@@ -159,6 +209,7 @@ def compile_character_traits(
                 trait=trait_name,
                 character_entity_id=character_entity_id,
                 typed_input=inputs.status,
+                resolved_named_targets=resolved_named_targets,
                 dry_run=dry_run,
             )
         elif canonical_trait in RELATIONSHIP_DEFAULTS:
@@ -179,6 +230,7 @@ def compile_character_traits(
                 trait=trait_name,
                 character_entity_id=character_entity_id,
                 typed_input=inputs.domain,
+                resolved_named_targets=resolved_named_targets,
                 dry_run=dry_run,
             )
         elif canonical_trait == "patron":
@@ -189,6 +241,7 @@ def compile_character_traits(
                 character_id=character_id,
                 character_entity_id=character_entity_id,
                 typed_input=inputs.patron,
+                resolved_named_targets=resolved_named_targets,
                 dry_run=dry_run,
             )
         elif canonical_trait == "dependents":
@@ -199,6 +252,7 @@ def compile_character_traits(
                 character_id=character_id,
                 character_entity_id=character_entity_id,
                 typed_input=inputs.dependents,
+                resolved_named_targets=resolved_named_targets,
                 dry_run=dry_run,
             )
         elif canonical_trait == "obligations":
@@ -209,6 +263,7 @@ def compile_character_traits(
                 character_id=character_id,
                 character_entity_id=character_entity_id,
                 typed_input=inputs.obligations,
+                resolved_named_targets=resolved_named_targets,
                 dry_run=dry_run,
             )
         else:
@@ -222,6 +277,7 @@ def compile_character_traits(
                 ),
             )
 
+    _canonicalize_result(result)
     _refresh_counters(result)
     return result
 
@@ -381,6 +437,151 @@ def reconcile_trait_relationship_pair_tags(cur: Any) -> list[TraitRelationshipDr
     return drift
 
 
+def _pre_resolve_named_targets(
+    cur: Any,
+    *,
+    result: TraitCompileResult,
+    selected_traits: set[str],
+    inputs: TraitCompileInputs,
+    protagonist_character_id: int,
+    dry_run: bool,
+) -> _ResolvedNamedTargets:
+    """Resolve every selected, stub-creatable named target before dispatch."""
+
+    candidates: dict[tuple[str, str], _NamedTargetCandidate] = {}
+
+    def add_candidate(
+        *, entity_kind: str, name: Optional[str], trait: str, role: str
+    ) -> None:
+        if name is None:
+            return
+        key = (entity_kind, name)
+        candidates.setdefault(
+            key,
+            _NamedTargetCandidate(
+                entity_kind=entity_kind,
+                name=name,
+                trait=trait,
+                role=role,
+            ),
+        )
+
+    domain = inputs.domain
+    if (
+        "domain" in selected_traits
+        and domain is not None
+        and domain.place_id is None
+        and domain.place_entity_id is None
+        and _registered_pair_tag_exists(cur, DOMAIN_PAIR_TAG)
+    ):
+        add_candidate(
+            entity_kind="place", name=domain.name, trait="domain", role="domain"
+        )
+
+    patron = inputs.patron
+    if (
+        "patron" in selected_traits
+        and patron is not None
+        and patron.character_id is None
+        and patron.character_entity_id is None
+        and all(
+            _registered_pair_tag_exists(cur, function)
+            for function in dict.fromkeys(patron.functions)
+        )
+    ):
+        add_candidate(
+            entity_kind="character",
+            name=patron.name,
+            trait="patron",
+            role="patron",
+        )
+
+    dependents = inputs.dependents
+    if (
+        "dependents" in selected_traits
+        and dependents is not None
+        and dependents.targets
+        and _registered_pair_tag_exists(cur, DEPENDENT_PAIR_TAG)
+    ):
+        for dependent_target in dependents.targets:
+            if (
+                dependent_target.character_id is None
+                and dependent_target.character_entity_id is None
+            ):
+                add_candidate(
+                    entity_kind="character",
+                    name=dependent_target.name,
+                    trait="dependents",
+                    role="dependent",
+                )
+
+    obligations = inputs.obligations
+    if (
+        "obligations" in selected_traits
+        and obligations is not None
+        and obligations.targets
+        and _registered_pair_tag_exists(cur, OBLIGATION_PAIR_TAG)
+    ):
+        for obligation_target in obligations.targets:
+            if (
+                obligation_target.counterparty_id is None
+                and obligation_target.counterparty_entity_id is None
+            ):
+                add_candidate(
+                    entity_kind=obligation_target.counterparty_kind,
+                    name=obligation_target.name,
+                    trait="obligations",
+                    role="obligation_counterparty",
+                )
+
+    resolved_targets: _ResolvedNamedTargets = {}
+    table_by_kind = {
+        "character": "characters",
+        "place": "places",
+        "faction": "factions",
+    }
+    for key, candidate in candidates.items():
+        table = table_by_kind[candidate.entity_kind]
+        cur.execute(
+            f"SELECT id, entity_id, name FROM {table} WHERE name = %s ORDER BY id",
+            (candidate.name,),
+        )
+        rows = cur.fetchall()
+        if not rows:
+            resolved = _create_target_stub(
+                cur,
+                result=result,
+                trait=candidate.trait,
+                entity_kind=candidate.entity_kind,
+                name=candidate.name,
+                role=candidate.role,
+                dry_run=dry_run,
+            )
+            resolved_targets[key] = replace(
+                resolved,
+                relationship_owner_trait=(
+                    candidate.trait if candidate.entity_kind == "character" else None
+                ),
+            )
+        elif len(rows) == 1:
+            row = rows[0]
+            resolved = _ResolvedTarget(
+                row_id=_row_value(row, "id", 0),
+                entity_id=_row_value(row, "entity_id", 1),
+                name=_row_value(row, "name", 2),
+                relationship_owner_trait=(
+                    candidate.trait if candidate.entity_kind == "character" else None
+                ),
+            )
+            if not (
+                candidate.entity_kind == "character"
+                and resolved.row_id == protagonist_character_id
+            ):
+                resolved_targets[key] = resolved
+
+    return resolved_targets
+
+
 def _compile_single_entity_level(
     cur: Any,
     *,
@@ -441,6 +642,7 @@ def _compile_status(
     trait: str,
     character_entity_id: int,
     typed_input: Optional[StatusTraitInput],
+    resolved_named_targets: _ResolvedNamedTargets,
     dry_run: bool,
 ) -> None:
     if typed_input is None:
@@ -464,11 +666,20 @@ def _compile_status(
         return
 
     scope_faction_entity_id = typed_input.scope_faction_entity_id
+    scope_faction_name: Optional[str] = None
     if scope_faction_entity_id is None and typed_input.scope_faction_name:
-        scope_faction_entity_id = _lookup_faction_entity_id(
-            cur, typed_input.scope_faction_name
+        resolved_scope = resolved_named_targets.get(
+            ("faction", typed_input.scope_faction_name)
         )
-        if scope_faction_entity_id is None:
+        if resolved_scope is not None:
+            scope_faction_entity_id = resolved_scope.entity_id
+            if resolved_scope.pending_stub:
+                scope_faction_name = resolved_scope.name
+        else:
+            scope_faction_entity_id = _lookup_faction_entity_id(
+                cur, typed_input.scope_faction_name
+            )
+        if scope_faction_entity_id is None and scope_faction_name is None:
             _add_remainder(
                 result,
                 trait=trait,
@@ -477,7 +688,7 @@ def _compile_status(
                 details={"scope_faction_name": typed_input.scope_faction_name},
             )
             return
-    if scope_faction_entity_id is None:
+    if scope_faction_entity_id is None and scope_faction_name is None:
         _add_remainder(
             result,
             trait=trait,
@@ -499,6 +710,8 @@ def _compile_status(
 
     inserted: Optional[bool] = None
     if not dry_run:
+        if scope_faction_entity_id is None:
+            raise AssertionError("apply-mode status scope must have an entity id")
         inserted = apply_status_pair_tag_bestowal(
             cur,
             subject_entity_id=character_entity_id,
@@ -512,6 +725,7 @@ def _compile_status(
             trait=trait,
             subject_entity_id=character_entity_id,
             object_entity_id=scope_faction_entity_id,
+            object_name=scope_faction_name,
             tag=tag,
             inserted=inserted,
             dry_run=dry_run,
@@ -682,7 +896,7 @@ def _resolve_contact_pair_tag(
     *,
     trait: str,
     target: RelationshipTargetInput,
-) -> Optional[tuple[str, str]]:
+) -> Optional[tuple[str, ContactKind]]:
     if target.contact_kind is not None:
         kind_pair_tag = contact_pair_tag_for_kind(target.contact_kind)
         if target.pair_tag is not None and target.pair_tag != kind_pair_tag:
@@ -739,6 +953,7 @@ def _compile_domain(
     trait: str,
     character_entity_id: int,
     typed_input: Optional[DomainTraitInput],
+    resolved_named_targets: _ResolvedNamedTargets,
     dry_run: bool,
 ) -> None:
     """Compile Domain to ``claims(protagonist -> place)`` per the design target."""
@@ -768,6 +983,7 @@ def _compile_domain(
         place_id=typed_input.place_id,
         place_entity_id=typed_input.place_entity_id,
         name=typed_input.name,
+        resolved_named_targets=resolved_named_targets,
         dry_run=dry_run,
     )
     if resolved is None:
@@ -807,6 +1023,7 @@ def _compile_patron(
     character_id: int,
     character_entity_id: int,
     typed_input: Optional[PatronTraitInput],
+    resolved_named_targets: _ResolvedNamedTargets,
     dry_run: bool,
 ) -> None:
     """Compile Patron per #305: relationship row plus user-affirmed functions."""
@@ -841,6 +1058,7 @@ def _compile_patron(
         target_character_entity_id=typed_input.character_entity_id,
         name=typed_input.name,
         protagonist_character_id=character_id,
+        resolved_named_targets=resolved_named_targets,
         dry_run=dry_run,
     )
     if resolved is None:
@@ -900,6 +1118,7 @@ def _compile_dependents(
     character_id: int,
     character_entity_id: int,
     typed_input: Optional[DependentsTraitInput],
+    resolved_named_targets: _ResolvedNamedTargets,
     dry_run: bool,
 ) -> None:
     """Compile Dependents per the settled target: protects edge + bond row."""
@@ -930,6 +1149,7 @@ def _compile_dependents(
             character_id=character_id,
             character_entity_id=character_entity_id,
             target=target,
+            resolved_named_targets=resolved_named_targets,
             dry_run=dry_run,
         )
 
@@ -942,6 +1162,7 @@ def _compile_dependent_target(
     character_id: int,
     character_entity_id: int,
     target: DependentTargetInput,
+    resolved_named_targets: _ResolvedNamedTargets,
     dry_run: bool,
 ) -> None:
     resolved = _resolve_character_target(
@@ -953,6 +1174,7 @@ def _compile_dependent_target(
         target_character_entity_id=target.character_entity_id,
         name=target.name,
         protagonist_character_id=character_id,
+        resolved_named_targets=resolved_named_targets,
         dry_run=dry_run,
     )
     if resolved is None:
@@ -1009,6 +1231,7 @@ def _compile_obligations(
     character_id: int,
     character_entity_id: int,
     typed_input: Optional[ObligationsTraitInput],
+    resolved_named_targets: _ResolvedNamedTargets,
     dry_run: bool,
 ) -> None:
     """Compile Obligations to ``obligation(protagonist -> counterparty)``."""
@@ -1039,6 +1262,7 @@ def _compile_obligations(
             character_id=character_id,
             character_entity_id=character_entity_id,
             target=target,
+            resolved_named_targets=resolved_named_targets,
             dry_run=dry_run,
         )
 
@@ -1051,6 +1275,7 @@ def _compile_obligation_target(
     character_id: int,
     character_entity_id: int,
     target: ObligationTargetInput,
+    resolved_named_targets: _ResolvedNamedTargets,
     dry_run: bool,
 ) -> None:
     if target.counterparty_kind == "character":
@@ -1063,6 +1288,7 @@ def _compile_obligation_target(
             target_character_entity_id=target.counterparty_entity_id,
             name=target.name,
             protagonist_character_id=character_id,
+            resolved_named_targets=resolved_named_targets,
             dry_run=dry_run,
         )
     else:
@@ -1073,6 +1299,7 @@ def _compile_obligation_target(
             faction_id=target.counterparty_id,
             faction_entity_id=target.counterparty_entity_id,
             name=target.name,
+            resolved_named_targets=resolved_named_targets,
             dry_run=dry_run,
         )
     if resolved is None:
@@ -1139,6 +1366,32 @@ def _write_trait_relationship(
 ) -> None:
     """Record (and on apply, upsert) a compiler-authored relationship row."""
 
+    canonical_trait = canonical_trait_name(trait)
+    relationship_owner_trait = target.relationship_owner_trait
+    if (
+        relationship_owner_trait is not None
+        and relationship_owner_trait != canonical_trait
+    ):
+        _add_remainder(
+            result,
+            trait=trait,
+            reason_code=TraitCompileReasonCode.RELATIONSHIP_PAIR_CONFLICT,
+            message=(
+                "The shared character target already has a higher-precedence "
+                "selected trait for its single relationship row."
+            ),
+            details={
+                "constraint": "character_relationships_pkey",
+                "target_name": target.name,
+                "winner_trait": relationship_owner_trait,
+                "winner_relationship_type": _RELATIONSHIP_TYPE_BY_TRAIT[
+                    relationship_owner_trait
+                ],
+                "displaced_relationship_type": relationship_type,
+            },
+        )
+        return
+
     if dry_run:
         reported_emotional_valence = _project_authored_valence_for_report(
             emotional_valence
@@ -1186,57 +1439,70 @@ def _resolve_character_target(
     target_character_entity_id: Optional[int],
     name: Optional[str],
     protagonist_character_id: int,
+    resolved_named_targets: _ResolvedNamedTargets,
     dry_run: bool,
 ) -> Optional[_ResolvedTarget]:
     """Resolve a character target by id, entity id, or exact name (stub-creatable)."""
 
-    if target_character_id is not None:
-        cur.execute(
-            "SELECT id, entity_id, name FROM characters WHERE id = %s",
-            (target_character_id,),
-        )
-        rows = cur.fetchall()
-    elif target_character_entity_id is not None:
-        cur.execute(
-            "SELECT id, entity_id, name FROM characters WHERE entity_id = %s",
-            (target_character_entity_id,),
-        )
-        rows = cur.fetchall()
-    elif name:
-        cur.execute(
-            "SELECT id, entity_id, name FROM characters WHERE name = %s ORDER BY id",
-            (name,),
-        )
-        rows = cur.fetchall()
-        if not rows:
-            return _create_target_stub(
-                cur,
-                result=result,
-                trait=trait,
-                entity_kind="character",
-                name=name,
-                role=role,
-                dry_run=dry_run,
-            )
+    pre_resolved = None
+    if (
+        target_character_id is None
+        and target_character_entity_id is None
+        and name is not None
+    ):
+        pre_resolved = resolved_named_targets.get(("character", name))
+
+    resolved: Optional[_ResolvedTarget]
+    if pre_resolved is not None:
+        resolved = pre_resolved
     else:
-        _add_remainder(
+        if target_character_id is not None:
+            cur.execute(
+                "SELECT id, entity_id, name FROM characters WHERE id = %s",
+                (target_character_id,),
+            )
+            rows = cur.fetchall()
+        elif target_character_entity_id is not None:
+            cur.execute(
+                "SELECT id, entity_id, name FROM characters WHERE entity_id = %s",
+                (target_character_entity_id,),
+            )
+            rows = cur.fetchall()
+        elif name:
+            cur.execute(
+                "SELECT id, entity_id, name FROM characters WHERE name = %s ORDER BY id",
+                (name,),
+            )
+            rows = cur.fetchall()
+            if not rows:
+                return _create_target_stub(
+                    cur,
+                    result=result,
+                    trait=trait,
+                    entity_kind="character",
+                    name=name,
+                    role=role,
+                    dry_run=dry_run,
+                )
+        else:
+            _add_remainder(
+                result,
+                trait=trait,
+                reason_code=TraitCompileReasonCode.MISSING_STRUCTURED_TRAIT_INPUT,
+                message=f"{trait} target requires a character id, entity id, or name.",
+            )
+            return None
+
+        resolved = _single_row_target(
             result,
             trait=trait,
-            reason_code=TraitCompileReasonCode.MISSING_STRUCTURED_TRAIT_INPUT,
-            message=f"{trait} target requires a character id, entity id, or name.",
+            rows=rows,
+            lookup={
+                "character_id": target_character_id,
+                "character_entity_id": target_character_entity_id,
+                "name": name,
+            },
         )
-        return None
-
-    resolved = _single_row_target(
-        result,
-        trait=trait,
-        rows=rows,
-        lookup={
-            "character_id": target_character_id,
-            "character_entity_id": target_character_entity_id,
-            "name": name,
-        },
-    )
     if resolved is None:
         return None
     if resolved.row_id == protagonist_character_id:
@@ -1259,10 +1525,17 @@ def _resolve_place_target(
     place_id: Optional[int],
     place_entity_id: Optional[int],
     name: Optional[str],
+    resolved_named_targets: _ResolvedNamedTargets,
     dry_run: bool,
 ) -> Optional[_ResolvedTarget]:
     """Resolve a place target by id, entity id, or exact name (stub-creatable)."""
 
+    pre_resolved = None
+    if place_id is None and place_entity_id is None and name is not None:
+        pre_resolved = resolved_named_targets.get(("place", name))
+
+    if pre_resolved is not None:
+        return pre_resolved
     if place_id is not None:
         cur.execute(
             "SELECT id, entity_id, name FROM places WHERE id = %s",
@@ -1320,10 +1593,17 @@ def _resolve_faction_target(
     faction_id: Optional[int],
     faction_entity_id: Optional[int],
     name: Optional[str],
+    resolved_named_targets: _ResolvedNamedTargets,
     dry_run: bool,
 ) -> Optional[_ResolvedTarget]:
     """Resolve a faction target by id, entity id, or exact name (stub-creatable)."""
 
+    pre_resolved = None
+    if faction_id is None and faction_entity_id is None and name is not None:
+        pre_resolved = resolved_named_targets.get(("faction", name))
+
+    if pre_resolved is not None:
+        return pre_resolved
     if faction_id is not None:
         cur.execute(
             "SELECT id, entity_id, name FROM factions WHERE id = %s",
@@ -1742,6 +2022,20 @@ def _refresh_counters(result: TraitCompileResult) -> None:
         created_relationships=len(result.created_relationships),
         prose_only_remainders=len(result.prose_only_remainders),
     )
+
+
+def _canonicalize_result(result: TraitCompileResult) -> None:
+    """Order every result collection independently of selected trait order."""
+
+    def sort_key(item: Any) -> tuple[int, str]:
+        trait = canonical_trait_name(str(item.trait))
+        return _TRAIT_PACKAGE_ORDER.get(trait, len(_TRAIT_PACKAGE_ORDER)), trait
+
+    result.applied_single_entity_tags.sort(key=sort_key)
+    result.applied_pair_tags.sort(key=sort_key)
+    result.created_entities.sort(key=sort_key)
+    result.created_relationships.sort(key=sort_key)
+    result.prose_only_remainders.sort(key=sort_key)
 
 
 def _row_value(row: Any, key: str, index: int) -> Any:

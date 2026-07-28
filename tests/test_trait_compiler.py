@@ -1,3 +1,4 @@
+# mypy: disable-error-code=call-arg
 """Tests for deterministic trait-to-Orrery compilation."""
 
 from __future__ import annotations
@@ -9,7 +10,7 @@ from typing import Any, Optional
 
 import pytest
 
-from nexus.api.new_story_schemas import CharacterSheet, CharacterTrait
+from nexus.api.new_story_schemas import CharacterSheet, CharacterTrait, TraitName
 from nexus.api.trait_compiler import (
     apply_character_trait_compilation,
     compile_character_traits,
@@ -37,7 +38,7 @@ class TraitCompilerCursor:
     """Fake psycopg cursor for the compiler and Orrery writer SQL shapes."""
 
     def __init__(self, *, fail_relationship: bool = False):
-        self.tags = {
+        self.tags: dict[str, dict[str, Any]] = {
             "wealthy": {"id": 10, "category": "role.resources"},
             "known": {"id": 11, "category": "role.fame"},
             "poor": {"id": 12, "category": "role.resources"},
@@ -45,7 +46,7 @@ class TraitCompilerCursor:
         self.category_registry = {
             "character": {"role.resources", "role.fame"},
         }
-        self.pair_tags = {
+        self.pair_tags: dict[str, dict[str, Any]] = {
             "status:senior": {
                 "id": 100,
                 "subject_kinds": ["character", "faction"],
@@ -378,10 +379,10 @@ class TraitCompilerCursor:
 
         if normalized.startswith("UPDATE ENTITY_PAIR_TAGS EPT"):
             subject_id, object_id, tags = params
-            tag_by_id = {row["id"]: tag for tag, row in self.pair_tags.items()}
+            pair_tag_by_id = {row["id"]: tag for tag, row in self.pair_tags.items()}
             cleared = 0
             for row in self.entity_pair_tags:
-                tag = tag_by_id[row["pair_tag_id"]]
+                tag = pair_tag_by_id[row["pair_tag_id"]]
                 if (
                     row["subject_entity_id"] == subject_id
                     and row["object_entity_id"] == object_id
@@ -455,7 +456,7 @@ class TraitCompilerCursor:
             rung = int(emotional_valence.split("|", maxsplit=1)[0])
             stored_valence = canonical_literals[rung]
             valence_current = Decimal(rung) / Decimal("5.5")
-            relationship = {
+            relationship: dict[str, Any] = {
                 "character1_id": character1_id,
                 "character2_id": character2_id,
                 "relationship_type": relationship_type,
@@ -486,7 +487,7 @@ class TraitCompilerCursor:
         if "AND CR.CHARACTER1_ID IS NULL" in normalized:
             tags = set(params[0])
             rows = []
-            tag_by_id = {row["id"]: tag for tag, row in self.pair_tags.items()}
+            pair_tag_by_id = {row["id"]: tag for tag, row in self.pair_tags.items()}
             entity_to_character = {
                 row["entity_id"]: character_id
                 for character_id, row in self.characters.items()
@@ -500,7 +501,7 @@ class TraitCompilerCursor:
                 for character1_id, character2_id in relationship_keys
             }
             for row in self.entity_pair_tags:
-                tag = tag_by_id[row["pair_tag_id"]]
+                tag = pair_tag_by_id[row["pair_tag_id"]]
                 character1_id = entity_to_character.get(row["subject_entity_id"])
                 character2_id = entity_to_character.get(row["object_entity_id"])
                 if (
@@ -528,12 +529,12 @@ class TraitCompilerCursor:
                 character_id: row["entity_id"]
                 for character_id, row in self.characters.items()
             }
-            tag_by_id = {row["id"]: tag for tag, row in self.pair_tags.items()}
+            pair_tag_by_id = {row["id"]: tag for tag, row in self.pair_tags.items()}
             active_pair_keys = {
                 (
                     row["subject_entity_id"],
                     row["object_entity_id"],
-                    tag_by_id[row["pair_tag_id"]],
+                    pair_tag_by_id[row["pair_tag_id"]],
                 )
                 for row in self.entity_pair_tags
                 if row["cleared_at"] is None
@@ -545,8 +546,8 @@ class TraitCompilerCursor:
                 pair_tag = extra_data.get("trait_compiler_pair_tag")
                 if pair_tag not in tags:
                     continue
-                character1_entity_id = character_to_entity[row["character1_id"]]
-                character2_entity_id = character_to_entity[row["character2_id"]]
+                character1_entity_id = character_to_entity[int(row["character1_id"])]
+                character2_entity_id = character_to_entity[int(row["character2_id"])]
                 pair_key = (
                     character1_entity_id,
                     character2_entity_id,
@@ -589,7 +590,7 @@ class TraitCompilerCursor:
 
 
 def _character(
-    *trait_names: str,
+    *trait_names: TraitName,
     inputs: TraitCompileInputs | None = None,
 ) -> CharacterSheet:
     traits = [
@@ -760,10 +761,13 @@ def test_contacts_pair_tag_requires_kind() -> None:
 
     assert result.applied_pair_tags == []
     assert cur.entity_pair_tags == []
-    assert result.prose_only_remainders[0].reason_code == (
+    remainder = next(
+        item for item in result.prose_only_remainders if item.trait == "contacts"
+    )
+    assert remainder.reason_code == (
         TraitCompileReasonCode.MISSING_STRUCTURED_TRAIT_INPUT
     )
-    assert "contact_kind" in result.prose_only_remainders[0].message
+    assert "contact_kind" in remainder.message
 
 
 def test_contact_kind_pair_tag_writes_kind_specific_edge() -> None:
@@ -857,10 +861,13 @@ def test_unknown_contact_pair_tag_is_structured_remainder() -> None:
 
     assert result.applied_pair_tags == []
     assert cur.entity_pair_tags == []
-    assert result.prose_only_remainders[0].reason_code == (
+    remainder = next(
+        item for item in result.prose_only_remainders if item.trait == "contacts"
+    )
+    assert remainder.reason_code == (
         TraitCompileReasonCode.MISSING_STRUCTURED_TRAIT_INPUT
     )
-    assert result.prose_only_remainders[0].details["pair_tag"] == "contact:trade"
+    assert remainder.details["pair_tag"] == "contact:trade"
 
 
 def test_enemy_pair_tag_can_point_from_target_to_protagonist() -> None:
@@ -1094,7 +1101,9 @@ def test_domain_unknown_place_id_is_structured_remainder() -> None:
         dry_run=True,
     )
 
-    remainder = result.prose_only_remainders[0]
+    remainder = next(
+        item for item in result.prose_only_remainders if item.trait == "domain"
+    )
     assert remainder.trait == "domain"
     assert remainder.reason_code == TraitCompileReasonCode.AMBIGUOUS_TARGET
     assert remainder.details["place_id"] == 999
@@ -1207,7 +1216,9 @@ def test_patron_unregistered_function_is_structured_remainder() -> None:
         character_entity_id=501,
     )
 
-    remainder = result.prose_only_remainders[0]
+    remainder = next(
+        item for item in result.prose_only_remainders if item.trait == "patron"
+    )
     assert remainder.trait == "patron"
     assert remainder.reason_code == TraitCompileReasonCode.REGISTRY_MISSING_PAIR_TAG
     assert remainder.details["pair_tag"] == "sponsors"
@@ -1262,7 +1273,9 @@ def test_dependent_target_resolving_to_protagonist_is_remainder() -> None:
         character_entity_id=501,
     )
 
-    remainder = result.prose_only_remainders[0]
+    remainder = next(
+        item for item in result.prose_only_remainders if item.trait == "dependents"
+    )
     assert remainder.trait == "dependents"
     assert remainder.reason_code == TraitCompileReasonCode.AMBIGUOUS_TARGET
     assert "protagonist" in remainder.message
@@ -1285,7 +1298,9 @@ def test_ambiguous_target_name_is_structured_remainder() -> None:
         dry_run=True,
     )
 
-    remainder = result.prose_only_remainders[0]
+    remainder = next(
+        item for item in result.prose_only_remainders if item.trait == "dependents"
+    )
     assert remainder.trait == "dependents"
     assert remainder.reason_code == TraitCompileReasonCode.AMBIGUOUS_TARGET
     assert remainder.details["match_count"] == 2
@@ -1403,6 +1418,17 @@ def test_dry_run_coalesces_duplicate_pending_stubs() -> None:
         item for item in result.applied_pair_tags if item.tag == "obligation"
     ]
     assert obligation_tags[0].object_name == "Magistrate Hale"
+    assert [item.relationship_type for item in result.created_relationships] == [
+        "patron"
+    ]
+    remainder = next(
+        item
+        for item in result.prose_only_remainders
+        if item.reason_code == TraitCompileReasonCode.RELATIONSHIP_PAIR_CONFLICT
+    )
+    assert remainder.reason_code == TraitCompileReasonCode.RELATIONSHIP_PAIR_CONFLICT
+    assert remainder.trait == "obligations"
+    assert remainder.details["winner_trait"] == "patron"
 
 
 def test_apply_resolves_second_reference_to_created_stub() -> None:
@@ -1432,10 +1458,17 @@ def test_apply_resolves_second_reference_to_created_stub() -> None:
         item for item in result.applied_pair_tags if item.tag == "obligation"
     ]
     assert obligation_tags[0].object_entity_id == stub_entity_id
-    assert {item.relationship_type for item in result.created_relationships} == {
-        "patron",
-        "obligation",
-    }
+    assert [item.relationship_type for item in result.created_relationships] == [
+        "patron"
+    ]
+    remainder = next(
+        item
+        for item in result.prose_only_remainders
+        if item.reason_code == TraitCompileReasonCode.RELATIONSHIP_PAIR_CONFLICT
+    )
+    assert remainder.reason_code == TraitCompileReasonCode.RELATIONSHIP_PAIR_CONFLICT
+    assert remainder.trait == "obligations"
+    assert remainder.details["winner_trait"] == "patron"
 
 
 def test_standard_selection_with_full_inputs_has_zero_remainders() -> None:
