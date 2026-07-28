@@ -10,12 +10,13 @@ tests/test_trait_compiler_integration.py``
 
 from __future__ import annotations
 
+from itertools import permutations
 from typing import Any, Optional
 
 import psycopg2
 import pytest
 
-from nexus.api.new_story_schemas import CharacterSheet, CharacterTrait
+from nexus.api.new_story_schemas import CharacterSheet, CharacterTrait, TraitName
 from nexus.api.trait_compiler import (
     apply_character_trait_compilation,
     compile_character_traits,
@@ -28,7 +29,10 @@ from nexus.api.trait_compiler_schemas import (
     ObligationsTraitInput,
     ObligationTargetInput,
     PatronTraitInput,
+    RelationshipTargetInput,
+    RelationshipTraitInput,
     SingleEntityTraitInput,
+    StatusTraitInput,
     TraitCompileInputs,
 )
 
@@ -39,6 +43,8 @@ PATRON_NAME = "M5 Trait Test Hale"
 OBLIGATION_CHARACTER_NAME = "M5 Trait Test Collector"
 OBLIGATION_FACTION_NAME = "M5 Trait Test Tithe"
 DEPENDENT_NAME = "M5 Trait Test Pip"
+DUNLOW_FACTION_NAME = "Dunlow County Circuit Court [issue 602 rollback test]"
+DUNLOW_ENEMY_NAME = "Dunlow County Circuit Court Clerk"
 
 
 def _install_valence_shadow(cur: Any) -> None:
@@ -113,7 +119,7 @@ def _install_valence_shadow(cur: Any) -> None:
 
 
 def _character_sheet(
-    *trait_names: str, inputs: Optional[TraitCompileInputs]
+    *trait_names: TraitName, inputs: Optional[TraitCompileInputs]
 ) -> CharacterSheet:
     traits = [
         CharacterTrait(name=trait_name, description=f"{trait_name} trait prose")
@@ -155,6 +161,24 @@ def _insert_protagonist(cur: Any) -> tuple[int, int]:
     return row[0], row[1]
 
 
+def _insert_dunlow_enemy(cur: Any) -> tuple[int, int]:
+    cur.execute(
+        """
+        INSERT INTO characters (name, summary, background, extra_data)
+        VALUES (%s, %s, %s, '{}'::jsonb)
+        RETURNING id, entity_id
+        """,
+        (
+            DUNLOW_ENEMY_NAME,
+            "An adverse court clerk for the issue 602 permutation test.",
+            "Created inside a rollback-only trait compiler test.",
+        ),
+    )
+    row = cur.fetchone()
+    assert row is not None
+    return row[0], row[1]
+
+
 def _active_pair_tags(cur: Any, subject_entity_id: int) -> set[tuple[str, int]]:
     cur.execute(
         """
@@ -167,6 +191,212 @@ def _active_pair_tags(cur: Any, subject_entity_id: int) -> set[tuple[str, int]]:
         (subject_entity_id,),
     )
     return {(row[0], row[1]) for row in cur.fetchall()}
+
+
+@pytest.mark.requires_postgres
+def test_dunlow_shared_faction_is_permutation_invariant_on_save_05() -> None:
+    """Every live-trio ordering shares one planned or materialized faction."""
+
+    try:
+        conn = psycopg2.connect(dbname=TEST_DBNAME)
+    except psycopg2.Error as exc:  # pragma: no cover - environment guard
+        pytest.skip(f"{TEST_DBNAME} PostgreSQL test database unavailable: {exc}")
+
+    canonical_snapshots = []
+    try:
+        with conn.cursor() as cur:
+            _install_valence_shadow(cur)
+            cur.execute(
+                "SELECT COUNT(*) FROM factions WHERE name = %s",
+                (DUNLOW_FACTION_NAME,),
+            )
+            assert cur.fetchone() == (0,), "rollback test faction must start absent"
+
+            selected_traits: tuple[TraitName, TraitName, TraitName] = (
+                "status",
+                "enemies",
+                "obligations",
+            )
+            for trait_order in permutations(selected_traits):
+                cur.execute("SAVEPOINT issue_602_permutation")
+                try:
+                    character_id, character_entity_id = _insert_protagonist(cur)
+                    enemy_id, enemy_entity_id = _insert_dunlow_enemy(cur)
+                    inputs = TraitCompileInputs(
+                        status=StatusTraitInput(
+                            scope_faction_name=DUNLOW_FACTION_NAME,
+                            scope_faction_entity_id=None,
+                            level="senior",
+                        ),
+                        enemies=RelationshipTraitInput(
+                            targets=[
+                                RelationshipTargetInput(
+                                    character_id=enemy_id,
+                                    character_entity_id=enemy_entity_id,
+                                    name=DUNLOW_ENEMY_NAME,
+                                    relationship_type=None,
+                                    emotional_valence=None,
+                                    dynamic="",
+                                    recent_events="",
+                                    history="",
+                                    apply_pair_tag=True,
+                                    pair_tag=None,
+                                    pair_tag_direction="protagonist_to_target",
+                                    contact_kind=None,
+                                )
+                            ]
+                        ),
+                        obligations=ObligationsTraitInput(
+                            targets=[
+                                ObligationTargetInput(
+                                    counterparty_kind="faction",
+                                    counterparty_id=None,
+                                    counterparty_entity_id=None,
+                                    name=DUNLOW_FACTION_NAME,
+                                    emotional_valence=None,
+                                    dynamic="",
+                                    recent_events="",
+                                    history="",
+                                )
+                            ]
+                        ),
+                    )
+                    sheet = _character_sheet(*trait_order, inputs=inputs)
+
+                    dry_result = compile_character_traits(
+                        cur,
+                        character=sheet,
+                        character_id=character_id,
+                        character_entity_id=character_entity_id,
+                        dry_run=True,
+                    )
+                    assert dry_result.prose_only_remainders == []
+                    assert [
+                        (item.trait, item.entity_kind, item.name)
+                        for item in dry_result.created_entities
+                    ] == [("obligations", "faction", DUNLOW_FACTION_NAME)]
+                    dry_pair_targets = {
+                        (
+                            item.trait,
+                            item.tag,
+                            item.object_name
+                            or (
+                                DUNLOW_ENEMY_NAME
+                                if item.object_entity_id == enemy_entity_id
+                                else None
+                            ),
+                        )
+                        for item in dry_result.applied_pair_tags
+                    }
+                    assert dry_pair_targets == {
+                        ("status", "status:senior", DUNLOW_FACTION_NAME),
+                        ("enemies", "hostile_to", DUNLOW_ENEMY_NAME),
+                        ("obligations", "obligation", DUNLOW_FACTION_NAME),
+                    }
+                    cur.execute(
+                        "SELECT COUNT(*) FROM factions WHERE name = %s",
+                        (DUNLOW_FACTION_NAME,),
+                    )
+                    assert cur.fetchone() == (0,)
+
+                    apply_result = apply_character_trait_compilation(
+                        cur,
+                        character=sheet,
+                        character_id=character_id,
+                        character_entity_id=character_entity_id,
+                    )
+                    assert apply_result.prose_only_remainders == []
+                    assert len(apply_result.created_entities) == 1
+                    created_faction = apply_result.created_entities[0]
+                    assert created_faction.name == DUNLOW_FACTION_NAME
+                    assert created_faction.entity_id is not None
+                    faction_entity_id = created_faction.entity_id
+
+                    apply_pair_targets = {
+                        (
+                            item.trait,
+                            item.tag,
+                            (
+                                DUNLOW_FACTION_NAME
+                                if item.object_entity_id == faction_entity_id
+                                else (
+                                    DUNLOW_ENEMY_NAME
+                                    if item.object_entity_id == enemy_entity_id
+                                    else None
+                                )
+                            ),
+                        )
+                        for item in apply_result.applied_pair_tags
+                    }
+                    assert apply_pair_targets == dry_pair_targets
+
+                    cur.execute(
+                        "SELECT id, entity_id FROM factions WHERE name = %s",
+                        (DUNLOW_FACTION_NAME,),
+                    )
+                    assert cur.fetchall() == [
+                        (created_faction.row_id, faction_entity_id)
+                    ]
+                    active_tags = _active_pair_tags(cur, character_entity_id)
+                    canonical_db_tags = {
+                        (
+                            tag,
+                            (
+                                DUNLOW_FACTION_NAME
+                                if object_id == faction_entity_id
+                                else (
+                                    DUNLOW_ENEMY_NAME
+                                    if object_id == enemy_entity_id
+                                    else str(object_id)
+                                )
+                            ),
+                        )
+                        for tag, object_id in active_tags
+                    }
+                    cur.execute(
+                        """
+                        SELECT cr.relationship_type, c2.name,
+                               cr.extra_data->>'source'
+                        FROM character_relationships cr
+                        JOIN characters c2 ON c2.id = cr.character2_id
+                        WHERE cr.character1_id = %s
+                        ORDER BY cr.relationship_type, c2.name
+                        """,
+                        (character_id,),
+                    )
+                    canonical_relationships = tuple(cur.fetchall())
+                    canonical_snapshots.append(
+                        (
+                            frozenset(canonical_db_tags),
+                            canonical_relationships,
+                            tuple(
+                                item.model_dump(mode="json")
+                                for item in apply_result.prose_only_remainders
+                            ),
+                        )
+                    )
+                finally:
+                    cur.execute("ROLLBACK TO SAVEPOINT issue_602_permutation")
+                    cur.execute("RELEASE SAVEPOINT issue_602_permutation")
+
+            assert len(canonical_snapshots) == 6
+            assert all(
+                snapshot == canonical_snapshots[0]
+                for snapshot in canonical_snapshots[1:]
+            )
+            assert canonical_snapshots[0][0] == frozenset(
+                {
+                    ("status:senior", DUNLOW_FACTION_NAME),
+                    ("hostile_to", DUNLOW_ENEMY_NAME),
+                    ("obligation", DUNLOW_FACTION_NAME),
+                }
+            )
+            assert canonical_snapshots[0][1] == (
+                ("enemy", DUNLOW_ENEMY_NAME, "trait_compiler"),
+            )
+    finally:
+        conn.rollback()
+        conn.close()
 
 
 @pytest.mark.requires_postgres
@@ -185,22 +415,42 @@ def test_full_trait_selection_compiles_on_save_05() -> None:
             character_id, character_entity_id = _insert_protagonist(cur)
 
             inputs = TraitCompileInputs(
-                domain=DomainTraitInput(name=DOMAIN_PLACE_NAME),
+                domain=DomainTraitInput(
+                    place_id=None,
+                    place_entity_id=None,
+                    name=DOMAIN_PLACE_NAME,
+                ),
                 patron=PatronTraitInput(
+                    character_id=None,
+                    character_entity_id=None,
                     name=PATRON_NAME,
                     functions=["sponsors", "mentors"],
+                    emotional_valence=None,
                     dynamic="Backs the protagonist's ventures discreetly.",
+                    recent_events="",
+                    history="",
                 ),
                 obligations=ObligationsTraitInput(
                     targets=[
                         ObligationTargetInput(
                             counterparty_kind="character",
+                            counterparty_id=None,
+                            counterparty_entity_id=None,
                             name=OBLIGATION_CHARACTER_NAME,
+                            emotional_valence=None,
                             dynamic="A patient ledger, collected in favors.",
+                            recent_events="",
+                            history="",
                         ),
                         ObligationTargetInput(
                             counterparty_kind="faction",
+                            counterparty_id=None,
+                            counterparty_entity_id=None,
                             name=OBLIGATION_FACTION_NAME,
+                            emotional_valence=None,
+                            dynamic="",
+                            recent_events="",
+                            history="",
                         ),
                     ]
                 ),
@@ -313,7 +563,17 @@ def test_dependents_apply_and_dry_run_audit_on_save_05() -> None:
 
             inputs = TraitCompileInputs(
                 dependents=DependentsTraitInput(
-                    targets=[DependentTargetInput(name=DEPENDENT_NAME)]
+                    targets=[
+                        DependentTargetInput(
+                            character_id=None,
+                            character_entity_id=None,
+                            name=DEPENDENT_NAME,
+                            emotional_valence=None,
+                            dynamic="",
+                            recent_events="",
+                            history="",
+                        )
+                    ]
                 ),
                 resources=SingleEntityTraitInput(level="wealthy"),
                 fame=SingleEntityTraitInput(level="known"),
