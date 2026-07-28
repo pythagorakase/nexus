@@ -15,11 +15,16 @@ class DummyResponse:
     """Minimal requests.Response double for CLI tests."""
 
     def __init__(
-        self, payload: dict[str, Any], ok: bool = True, text: str = ""
+        self,
+        payload: dict[str, Any],
+        ok: bool = True,
+        text: str = "",
+        status_code: int = 200,
     ) -> None:
         self.payload = payload
         self.ok = ok
         self.text = text
+        self.status_code = status_code
 
     def json(self) -> dict[str, Any]:
         """Return response JSON."""
@@ -230,6 +235,72 @@ def test_deterministic_trait_confirmation_exposes_wildcard_intro(monkeypatch) ->
     assert posts[0]["message"] == ""
     assert posts[0]["trait_choice"] == 0
     assert "Proceeding to wildcard" in posts[1]["message"]
+
+
+def test_trait_confirmation_intro_failure_exposes_recovery(monkeypatch) -> None:
+    """A failed wildcard intro must preserve success and name a retry command."""
+    posts: list[dict[str, Any]] = []
+
+    def fake_get(url: str, **kwargs: Any) -> DummyResponse:
+        assert url.endswith("/api/slot/5/state")
+        return DummyResponse(
+            {
+                "is_empty": False,
+                "is_wizard_mode": True,
+                "phase": "character",
+                "subphase": "traits",
+                "trait_menu": [{"id": 1, "name": "allies"}],
+                "can_confirm": True,
+            }
+        )
+
+    def fake_post(url: str, json: dict[str, Any], **kwargs: Any) -> DummyResponse:
+        assert url.endswith("/api/story/new/chat")
+        posts.append(json)
+        if len(posts) == 1:
+            return DummyResponse(
+                {
+                    "message": "Generating artifact...",
+                    "phase": "character",
+                    "subphase": "wildcard",
+                    "subphase_complete": True,
+                    "phase_complete": False,
+                    "artifact_type": "submit_trait_selection",
+                }
+            )
+        return DummyResponse(
+            {},
+            ok=False,
+            text='{"detail":"Wildcard intro unavailable"}',
+            status_code=503,
+        )
+
+    monkeypatch.setattr(cli.requests, "get", fake_get)
+    monkeypatch.setattr(cli.requests, "post", fake_post)
+
+    result = cli.run_continue(
+        Namespace(
+            slot=5,
+            model=None,
+            user_text="Exactly those three: 1, 2, 3.",
+            choice=None,
+            accept_fate=False,
+            dev=False,
+        )
+    )
+
+    recovery_command = (
+        'nexus continue --slot 5 --user-text "Continue to the wildcard step."'
+    )
+    assert result["success"] is True
+    assert result["intro_error"] == {
+        "detail": '{"detail":"Wildcard intro unavailable"}',
+        "status_code": 503,
+    }
+    assert result["intro_recovery_command"] == recovery_command
+    assert "Traits were saved" in result["message"]
+    assert recovery_command in result["message"]
+    assert len(posts) == 2
 
 
 @pytest.mark.parametrize("confirmation_path", ["free-text", "deterministic"])

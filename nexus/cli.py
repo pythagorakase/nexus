@@ -1166,8 +1166,38 @@ def _apply_traits_to_wildcard_transition(
     if model:
         intro_payload["model"] = model
 
-    intro_response = _api_post(url, json=intro_payload, timeout=120)
+    recovery_command = (
+        f'nexus continue --slot {slot} --user-text "Continue to the wildcard step."'
+    )
+    try:
+        intro_response = _api_post(url, json=intro_payload, timeout=120)
+    except requests.exceptions.RequestException as exc:
+        result["intro_error"] = {
+            "detail": str(exc),
+            "status_code": None,
+        }
+        result["intro_recovery_command"] = recovery_command
+        result["message"] = (
+            f"{result.get('message') or 'Traits confirmed.'} Traits were saved, "
+            "but the wildcard introduction could not be loaded. Retry with: "
+            f"{recovery_command}"
+        )
+        return
+
     if not intro_response.ok:
+        detail = intro_response.text.strip() or (
+            f"Wildcard intro request failed with HTTP {intro_response.status_code}."
+        )
+        result["intro_error"] = {
+            "detail": detail,
+            "status_code": intro_response.status_code,
+        }
+        result["intro_recovery_command"] = recovery_command
+        result["message"] = (
+            f"{result.get('message') or 'Traits confirmed.'} Traits were saved, "
+            "but the wildcard introduction could not be loaded. Retry with: "
+            f"{recovery_command}"
+        )
         return
 
     intro_data = intro_response.json()
