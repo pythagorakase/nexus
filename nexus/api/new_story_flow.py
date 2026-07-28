@@ -5,6 +5,7 @@ Headless helpers to manage new-story setup per slot.
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional, TYPE_CHECKING
 
@@ -18,6 +19,7 @@ from nexus.api.new_story_cache import (
     read_cache_raw,
     write_cache,
 )
+from nexus.api.new_story_schemas import StorySeed
 from nexus.api.save_slots import clear_active, get_slot_model, upsert_slot
 from nexus.api.slot_utils import slot_dbname, all_slots
 from scripts.new_story_setup import create_slot_schema_only
@@ -156,6 +158,21 @@ def record_drafts(
         location: Optional initial location dictionary
         base_timestamp: Optional ISO timestamp string
     """
+    if seed is not None:
+        accepted_seed_timestamp = StorySeed.model_validate(seed).get_base_datetime()
+        if base_timestamp is None:
+            raise ValueError(
+                "A seed draft requires its accepted base_timestamp for persistence"
+            )
+        persisted_timestamp = datetime.fromisoformat(base_timestamp)
+        if persisted_timestamp.tzinfo is None:
+            raise ValueError("Seed base_timestamp must be timezone-aware")
+        if persisted_timestamp.astimezone(timezone.utc) != accepted_seed_timestamp:
+            raise ValueError(
+                "Persisted base_timestamp must equal the accepted seed "
+                f"base_timestamp ({accepted_seed_timestamp.isoformat()})"
+            )
+
     dbname = slot_dbname(slot_number)
     cache = read_cache(dbname)
 

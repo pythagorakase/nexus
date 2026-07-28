@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import calendar
 import json
 import logging
 from dataclasses import dataclass
@@ -32,6 +33,7 @@ from nexus.api.new_story_schemas import (
     TraitSelection,
     WildcardTrait,
     WizardResponse,
+    extract_setting_date_constraint,
 )
 from nexus.api.slot_utils import slot_dbname
 from nexus.api.trait_compiler_schemas import canonical_trait_name
@@ -505,6 +507,34 @@ async def _submit_scenario_impl(
     """
     _log_retry(ctx, "submit_starting_scenario")
     _ensure_phase(ctx, "seed", "submit_starting_scenario")
+
+    setting_data: Optional[Dict[str, Any]] = None
+    if ctx.deps.cache is not None:
+        get_setting_dict = getattr(ctx.deps.cache, "get_setting_dict", None)
+        if get_setting_dict is None:
+            raise TypeError("Wizard seed context cache cannot provide its setting")
+        setting_data = get_setting_dict()
+    elif ctx.deps.context_data is not None:
+        setting_data = ctx.deps.context_data.get("setting")
+
+    if setting_data is None:
+        raise RuntimeError("Seed submission requires an accepted setting artifact")
+
+    setting = SettingCard.model_validate(setting_data)
+    date_constraint = extract_setting_date_constraint(setting)
+    seed_timestamp = submission.seed.base_timestamp
+    if date_constraint and date_constraint.conflicts_with(seed_timestamp):
+        received = (
+            f"{calendar.month_name[seed_timestamp.month]} {seed_timestamp.day}, "
+            f"{seed_timestamp.year}"
+        )
+        raise ModelRetry(
+            "submit_starting_scenario rejected: base_timestamp conflicts with "
+            "the accepted SettingCard date. Expected "
+            f"{date_constraint.describe()} from SettingCard.time_period and/or "
+            f"diegetic_artifact; received {received}. Repair base_timestamp to "
+            "match the accepted setting before resubmitting."
+        )
 
     # Store seed and location_sketch in cache
     # Note: layer/zone/location will be populated by Phase 2 (set designer)

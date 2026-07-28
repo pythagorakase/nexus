@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from typing import Any
 
@@ -65,7 +65,7 @@ class DummyRunContext:
 def make_context(phase: str, context_data=None) -> WizardContext:
     return WizardContext(
         slot=1,
-        cache=object(),
+        cache=None,
         phase=phase,
         thread_id="thread-1",
         model="gpt-5.1",
@@ -310,7 +310,12 @@ async def test_submit_starting_scenario_sets_tool_result(monkeypatch):
 
     monkeypatch.setattr(wizard_module, "record_drafts", capture_record_drafts)
 
-    ctx = DummyRunContext(make_context(phase="seed"))
+    ctx = DummyRunContext(
+        make_context(
+            phase="seed",
+            context_data={"setting": sample_setting().model_dump()},
+        )
+    )
     with pytest.raises(CallDeferred):
         await submit_starting_scenario(ctx, sample_seed_submission())
 
@@ -321,6 +326,65 @@ async def test_submit_starting_scenario_sets_tool_result(monkeypatch):
     assert result["phase_complete"] is False
     assert result["requires_set_design"] is True
     assert "location_sketch" in result
+
+
+@pytest.mark.asyncio
+async def test_submit_starting_scenario_rejects_setting_date_conflict(
+    monkeypatch,
+) -> None:
+    """A conflicting model timestamp must enter repair before persistence."""
+    persisted = False
+
+    def capture_record_drafts(*args: Any, **kwargs: Any) -> None:
+        nonlocal persisted
+        persisted = True
+
+    setting = sample_setting().model_copy(
+        update={
+            "genre": Genre.CONTEMPORARY,
+            "time_period": "October 2026",
+            "tech_level": TechLevel.MODERN,
+            "diegetic_artifact": (
+                "Court calendar — Date: 14 October 2026. The hearing opens at "
+                "10:48 a.m. in civil hearing room 2B."
+            ),
+        }
+    )
+    submission = sample_seed_submission()
+    submission.seed.base_timestamp = StoryTimestamp(
+        year=2026,
+        month=5,
+        day=14,
+        hour=10,
+        minute=48,
+    )
+    monkeypatch.setattr(wizard_module, "record_drafts", capture_record_drafts)
+
+    ctx: Any = DummyRunContext(
+        make_context(
+            phase="seed",
+            context_data={"setting": setting.model_dump()},
+        )
+    )
+    with pytest.raises(ModelRetry, match="Expected October 14, 2026"):
+        await submit_starting_scenario(ctx, submission)
+
+    assert persisted is False
+
+
+def test_record_drafts_rejects_timestamp_different_from_seed() -> None:
+    """The persistence boundary must not split the accepted seed from its anchor."""
+    submission = sample_seed_submission()
+
+    with pytest.raises(
+        ValueError,
+        match="Persisted base_timestamp must equal the accepted seed",
+    ):
+        new_story_flow.record_drafts(
+            1,
+            seed=submission.seed.model_dump(),
+            base_timestamp="1347-05-03T18:15:00+00:00",
+        )
 
 
 def test_seed_timestamp_round_trips_through_record_drafts(monkeypatch) -> None:
@@ -370,7 +434,9 @@ def test_seed_timestamp_round_trips_through_record_drafts(monkeypatch) -> None:
     )
 
     assert stored_cache is not None
-    assert stored_cache.get_seed_dict()["base_timestamp"]["year"] == 1347
+    stored_seed = stored_cache.get_seed_dict()
+    assert stored_seed is not None
+    assert stored_seed["base_timestamp"]["year"] == 1347
 
 
 def test_get_seed_dict_rejects_missing_diegetic_timestamp() -> None:
@@ -390,6 +456,37 @@ def test_get_seed_dict_rejects_missing_diegetic_timestamp() -> None:
         match="Seed is complete but no diegetic base timestamp was persisted",
     ):
         cache.get_seed_dict()
+
+
+def test_get_seed_dict_normalizes_timestamp_display_offset() -> None:
+    """PostgreSQL session offsets must not change the accepted seed wall time."""
+    cache = _row_to_cache(
+        {
+            "seed_type": "crisis",
+            "layer_name": "Cook County",
+            "zone_name": "Chicago",
+            "initial_location": {"name": "Civil hearing room 2B"},
+            "base_timestamp": datetime(
+                2026,
+                10,
+                14,
+                5,
+                48,
+                tzinfo=timezone(-timedelta(hours=5)),
+            ),
+        }
+    )
+
+    seed = cache.get_seed_dict()
+
+    assert seed is not None
+    assert seed["base_timestamp"] == {
+        "year": 2026,
+        "month": 10,
+        "day": 14,
+        "hour": 10,
+        "minute": 48,
+    }
 
 
 @pytest.mark.asyncio

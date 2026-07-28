@@ -111,7 +111,25 @@ PHASE_CONFIGS: Dict[str, Dict[str, Any]] = {
     "seed": {
         "phase": "seed",
         "context_data": {
-            "setting": {"genre": "fantasy", "world_name": "Valdoria"},
+            "setting": {
+                "genre": "fantasy",
+                "secondary_genres": [],
+                "world_name": "Valdoria",
+                "time_period": "Late medieval",
+                "tech_level": "medieval",
+                "magic_exists": True,
+                "magic_description": "Ancient magic survives in ruined keeps.",
+                "political_structure": "Contested feudal monarchy",
+                "major_conflict": "Rival houses compete for the empty throne.",
+                "tone": "dark",
+                "themes": ["redemption", "duty"],
+                "cultural_notes": "Oaths and lineage govern public life.",
+                "geographic_scope": "regional",
+                "diegetic_artifact": (
+                    "A royal gazette describing the succession crisis and the "
+                    "old vows that bind Valdoria's houses."
+                ),
+            },
             "character": {"name": "Kael Stormwind", "archetype": "Reluctant Hero"},
         },
         "expected_tool": "submit_starting_scenario",
@@ -281,6 +299,67 @@ async def test_normal_flow_allows_wizard_response(phase_name: str, mock_db_funct
 
     output_type = type(result.output).__name__
     logger.info(f"✓ {phase_name}/accept_fate=False: Got {output_type}")
+
+
+@pytest.mark.live
+@pytest.mark.asyncio
+async def test_seed_date_conflict_uses_bounded_live_repair(
+    mock_db_functions,
+    monkeypatch,
+    caplog,
+):
+    """A live model receives the semantic violation and repairs before persistence."""
+    setting = {
+        **PHASE_CONFIGS["seed"]["context_data"]["setting"],
+        "genre": "contemporary",
+        "world_name": "Cook County",
+        "time_period": "October 2026",
+        "tech_level": "modern",
+        "magic_exists": False,
+        "magic_description": None,
+        "political_structure": "Municipal and county government",
+        "major_conflict": "A contested civil hearing",
+        "tone": "balanced",
+        "themes": ["justice", "accountability"],
+        "cultural_notes": "Contemporary Chicago civic procedure.",
+        "diegetic_artifact": (
+            "Hearing notice — Date: 14 October 2026. Proceedings begin at "
+            "10:48 a.m. in civil hearing room 2B."
+        ),
+    }
+    context = make_test_context(
+        phase="seed",
+        accept_fate=True,
+        context_data={
+            "setting": setting,
+            "character": {"name": "Morgan Hale", "archetype": "Civil litigant"},
+        },
+    )
+    persisted: list[Dict[str, Any]] = []
+
+    def capture_persistence(*args: Any, **kwargs: Any) -> None:
+        persisted.append(kwargs)
+
+    import nexus.api.wizard_agent as wizard_module
+
+    monkeypatch.setattr(wizard_module, "record_drafts", capture_persistence)
+    caplog.set_level(logging.WARNING, logger="nexus.api.wizard_agent")
+
+    result = await get_wizard_agent(context).run(
+        (
+            "Commit the starting scenario now. This is a validator exercise: on "
+            "your first submit_starting_scenario call, deliberately use May 14, "
+            "2026 at 10:48 for base_timestamp. After the tool rejects that conflict, "
+            "follow its repair message and resubmit with the accepted setting date."
+        ),
+        deps=context,
+        model=_build_model_for_ref("@openai.default"),
+    )
+
+    assert isinstance(result.output, DeferredToolRequests)
+    assert len(persisted) == 1
+    assert persisted[0]["base_timestamp"] == "2026-10-14T10:48:00+00:00"
+    assert any(record.message == "ModelRetry triggered" for record in caplog.records)
 
 
 # =============================================================================
