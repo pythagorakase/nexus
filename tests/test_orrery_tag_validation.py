@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast, List, Literal, Optional, Tuple
 
@@ -1157,6 +1158,7 @@ async def test_exhausted_declaration_validation_never_reaches_incubator(
 
     class InvalidDeclarationLore:
         def __init__(self, *_args: Any, **_kwargs: Any) -> None:
+            self.settings_path = Path("test-settings.toml")
             self.turn_context = SimpleNamespace(error_log=[])
 
         async def process_turn(

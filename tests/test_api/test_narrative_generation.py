@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -56,6 +57,7 @@ async def test_lore_phase_failure_is_reported_before_adapter_coercion(
 
         def __init__(self, *args: Any, **kwargs: Any) -> None:
             self.kwargs = kwargs
+            self.settings_path = Path("test-settings.toml")
             self.turn_context = SimpleNamespace(
                 error_log=[
                     "TurnPhase.WARM_ANALYSIS: FATAL: No warm slice chunks retrieved."
@@ -126,6 +128,7 @@ async def test_continuation_threads_logon_model_into_incubator(
         calls: list[tuple[str, int, str | None]] = []
 
         def __init__(self, *args: Any, **kwargs: Any) -> None:
+            self.settings_path = Path("test-settings.toml")
             self.turn_context = SimpleNamespace(error_log=[], orrery_proposal=None)
 
         async def process_turn(

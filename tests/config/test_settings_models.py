@@ -149,12 +149,12 @@ def test_shipped_turn_pipeline_is_two_pass() -> None:
     assert settings.apex.turn_pipeline == "two_pass"
 
 
-def test_shipped_gaia_model_resolves_to_openai_registry_id() -> None:
-    """Committed gaia seat = @openai.default, resolved concrete at load (#578)."""
+def test_shipped_gaia_model_resolves_to_openai_gaia_registry_id() -> None:
+    """Committed Gaia seat resolves through its dedicated OpenAI role (#592)."""
     settings = Settings(**_nexus_toml_dict())
 
-    openai_default = settings.global_.model.api_models["openai"].roles["default"]
-    assert settings.apex.gaia_model == openai_default
+    openai_gaia = settings.global_.model.api_models["openai"].roles["gaia"]
+    assert settings.apex.gaia_model == openai_gaia
     assert not settings.apex.gaia_model.startswith("@")
 
 
