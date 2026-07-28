@@ -755,7 +755,9 @@ def test_gaia_prompt_is_concise_and_self_contained() -> None:
     prompt = prompt_path.read_text()
     normalized_prompt = " ".join(prompt.split())
 
-    assert len(prompt.splitlines()) < 60
+    # Word count, not line count: the file keeps one line per paragraph, so
+    # line count no longer measures concision (currently ~500 words).
+    assert len(prompt.split()) < 600
     # The persona rewrite (owner brief, 2026-07-27) made gaia.md
     # self-sufficient: the shared doctrine it needs (canon hierarchy,
     # setting idiom, sincere beliefs) is inlined in Gaia's voice instead of
