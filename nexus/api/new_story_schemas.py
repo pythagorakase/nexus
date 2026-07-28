@@ -7,9 +7,12 @@ from LLM providers during the setup conversation phase.
 
 from __future__ import annotations
 
+import calendar
+import re
+from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Literal
 from enum import Enum
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
 
@@ -17,6 +20,157 @@ from nexus.agents.orrery.tag_schemas import OrreryTagBestowal
 from nexus.api.trait_compiler_schemas import TraitCompileInputs
 
 LEGACY_ORRERY_PROPOSAL_KEY = "new_tag_proposals"
+
+_MONTH_NUMBERS = {
+    name.lower(): number for number, name in enumerate(calendar.month_name) if name
+}
+_MONTH_PATTERN = "|".join(calendar.month_name[1:])
+_DAY_MONTH_YEAR_PATTERN = re.compile(
+    rf"\b(?P<day>[1-9]|[12]\d|3[01])\s+"
+    rf"(?P<month>{_MONTH_PATTERN})\s*,?\s*"
+    r"(?P<year>[1-9]\d{0,3})\b",
+    re.IGNORECASE,
+)
+_MONTH_DAY_YEAR_PATTERN = re.compile(
+    rf"\b(?P<month>{_MONTH_PATTERN})\s+"
+    r"(?P<day>[1-9]|[12]\d|3[01])(?:st|nd|rd|th)?(?:\s*,\s*|\s+)"
+    r"(?P<year>[1-9]\d{0,3})\b",
+    re.IGNORECASE,
+)
+_MONTH_YEAR_PATTERN = re.compile(
+    rf"\b(?P<month>{_MONTH_PATTERN})\s+(?P<year>[1-9]\d{{2,3}})\b",
+    re.IGNORECASE,
+)
+_YEAR_MONTH_PATTERN = re.compile(
+    rf"\b(?P<year>[1-9]\d{{2,3}})\s+(?P<month>{_MONTH_PATTERN})\b",
+    re.IGNORECASE,
+)
+_DAY_MONTH_PATTERN = re.compile(
+    rf"\b(?P<day>[1-9]|[12]\d|3[01])\s+" rf"(?P<month>{_MONTH_PATTERN})\b",
+    re.IGNORECASE,
+)
+_MONTH_DAY_PATTERN = re.compile(
+    rf"\b(?P<month>{_MONTH_PATTERN})\s+"
+    r"(?P<day>[1-9]|[12]\d|3[01])(?:st|nd|rd|th)?\b",
+    re.IGNORECASE,
+)
+
+
+@dataclass(frozen=True)
+class SettingDateConstraint:
+    """Unambiguous Gregorian date fields extracted from an accepted setting."""
+
+    year: int
+    month: int
+    day: Optional[int] = None
+
+    def conflicts_with(self, timestamp: "StoryTimestamp") -> bool:
+        """Return whether a seed timestamp contradicts an explicit setting field."""
+        return (
+            timestamp.year != self.year
+            or timestamp.month != self.month
+            or (self.day is not None and timestamp.day != self.day)
+        )
+
+    def describe(self) -> str:
+        """Render the constraint for a model-facing repair error."""
+        month_name = calendar.month_name[self.month]
+        if self.day is not None:
+            return f"{month_name} {self.day}, {self.year}"
+        return f"{month_name} {self.year}"
+
+
+def _year_month_candidates(text: str) -> set[tuple[int, int]]:
+    """Extract explicit named-month/year pairs from text."""
+    candidates: set[tuple[int, int]] = set()
+    date_spans: list[tuple[int, int]] = []
+    for pattern in (_DAY_MONTH_YEAR_PATTERN, _MONTH_DAY_YEAR_PATTERN):
+        for match in pattern.finditer(text):
+            date_spans.append(match.span())
+            candidates.add(
+                (
+                    int(match.group("year")),
+                    _MONTH_NUMBERS[match.group("month").lower()],
+                )
+            )
+    for pattern in (_MONTH_YEAR_PATTERN, _YEAR_MONTH_PATTERN):
+        for match in pattern.finditer(text):
+            start, end = match.span()
+            if any(
+                start < date_end and end > date_start
+                for date_start, date_end in date_spans
+            ):
+                continue
+            candidates.add(
+                (
+                    int(match.group("year")),
+                    _MONTH_NUMBERS[match.group("month").lower()],
+                )
+            )
+    return candidates
+
+
+def _day_candidates(text: str, *, year: int, month: int) -> set[int]:
+    """Extract days tied to the selected explicit year and month."""
+    days: set[int] = set()
+    for pattern in (_DAY_MONTH_YEAR_PATTERN, _MONTH_DAY_YEAR_PATTERN):
+        for match in pattern.finditer(text):
+            if (
+                int(match.group("year")) == year
+                and _MONTH_NUMBERS[match.group("month").lower()] == month
+            ):
+                days.add(int(match.group("day")))
+    for pattern in (_DAY_MONTH_PATTERN, _MONTH_DAY_PATTERN):
+        for match in pattern.finditer(text):
+            if _MONTH_NUMBERS[match.group("month").lower()] == month:
+                days.add(int(match.group("day")))
+    return days
+
+
+def _matching_full_date_days(text: str, *, year: int, month: int) -> set[int]:
+    """Extract days only from full dates matching an established year/month."""
+    days: set[int] = set()
+    for pattern in (_DAY_MONTH_YEAR_PATTERN, _MONTH_DAY_YEAR_PATTERN):
+        for match in pattern.finditer(text):
+            if (
+                int(match.group("year")) == year
+                and _MONTH_NUMBERS[match.group("month").lower()] == month
+            ):
+                days.add(int(match.group("day")))
+    return days
+
+
+def extract_setting_date_constraint(
+    setting: "SettingCard",
+) -> Optional[SettingDateConstraint]:
+    """Extract an unambiguous Gregorian date constraint from a setting artifact.
+
+    Only ``time_period`` may establish the year and month. Once established, an
+    exact day may come from ``time_period`` or from one full artifact date that
+    agrees with that year/month. Historical or otherwise unrelated artifact
+    dates never establish or replace the setting period.
+    """
+    period_candidates = _year_month_candidates(setting.time_period)
+    if len(period_candidates) != 1:
+        return None
+    year, month = next(iter(period_candidates))
+
+    period_days = _day_candidates(setting.time_period, year=year, month=month)
+    if len(period_days) == 1:
+        day: Optional[int] = next(iter(period_days))
+    elif period_days:
+        day = None
+    else:
+        artifact_days = _matching_full_date_days(
+            setting.diegetic_artifact,
+            year=year,
+            month=month,
+        )
+        day = next(iter(artifact_days)) if len(artifact_days) == 1 else None
+
+    if day is not None and day > calendar.monthrange(year, month)[1]:
+        day = None
+    return SettingDateConstraint(year=year, month=month, day=day)
 
 
 def _strip_legacy_orrery_proposals(value: Any) -> Any:
@@ -1026,7 +1180,7 @@ class TransitionData(BaseModel):
 
     # Timing
     base_timestamp: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        ...,
         description="In-game starting time",
     )
 
@@ -1041,6 +1195,19 @@ class TransitionData(BaseModel):
         False, description="All required fields complete"
     )
     validated: bool = Field(False, description="Data has been validated")
+
+    @model_validator(mode="after")
+    def validate_base_timestamp_matches_seed(self) -> "TransitionData":
+        """Require the final world-clock anchor to equal the accepted seed time."""
+        if self.base_timestamp.tzinfo is None:
+            raise ValueError("base_timestamp must be timezone-aware")
+        seed_timestamp = self.seed.get_base_datetime()
+        if self.base_timestamp.astimezone(timezone.utc) != seed_timestamp:
+            raise ValueError(
+                "base_timestamp must equal the accepted seed base_timestamp "
+                f"({seed_timestamp.isoformat()})"
+            )
+        return self
 
     def validate_completeness(self) -> bool:
         """

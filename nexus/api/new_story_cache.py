@@ -14,7 +14,7 @@ import json
 import logging
 import os
 from dataclasses import dataclass, field, asdict
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from nexus.api.db_pool import get_connection
@@ -315,8 +315,12 @@ class WizardCache:
             raise ValueError(
                 "Seed is complete but no diegetic base timestamp was persisted"
             )
-        # Build base_timestamp dict for StoryTimestamp schema
-        ts = self.base_timestamp
+        # TIMESTAMPTZ may be returned in the PostgreSQL session timezone. Rebuild
+        # the seed from its canonical UTC fields so transition validation compares
+        # the accepted instant rather than the connection's display timezone.
+        if self.base_timestamp.tzinfo is None:
+            raise ValueError("Persisted diegetic base timestamp must be timezone-aware")
+        ts = self.base_timestamp.astimezone(timezone.utc)
         base_timestamp_dict = {
             "year": ts.year,
             "month": ts.month,

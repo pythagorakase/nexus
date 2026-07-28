@@ -32,11 +32,36 @@ from nexus.api.new_story_schemas import (
     StorySeedType,
     PlaceExtraData,
     WildcardTrait,
+    extract_setting_date_constraint,
 )
 from nexus.api.new_story_db_mapper import NewStoryDatabaseMapper
 from nexus.api.new_story_generator import StoryComponentGenerator
 
 RUN_LIVE_LLM = os.environ.get("NEXUS_RUN_LIVE_LLM") == "1"
+
+
+def _dated_setting(
+    *,
+    time_period: str,
+    diegetic_artifact: str = "A contemporary civic notice.",
+) -> SettingCard:
+    """Build a setting card for deterministic date-extraction tests."""
+    return SettingCard(
+        genre=Genre.CONTEMPORARY,
+        world_name="Cook County",
+        time_period=time_period,
+        tech_level=TechLevel.MODERN,
+        magic_exists=False,
+        magic_description=None,
+        political_structure="Municipal and county government",
+        major_conflict="A contested civil hearing",
+        tone="balanced",
+        themes=["justice"],
+        cultural_notes="Contemporary Chicago civic procedure.",
+        language_notes=None,
+        geographic_scope="regional",
+        diegetic_artifact=diegetic_artifact,
+    )
 
 
 class TestNewStorySchemas:
@@ -59,8 +84,8 @@ class TestNewStorySchemas:
             cultural_notes="Honor-based society with strict magical laws",
             geographic_scope="regional",
             diegetic_artifact="From the Chronicles of the Twilight Age: In the realm of Aethermoor, "
-                             "where ley lines pulse with elemental power, the great kingdoms stand vigilant "
-                             "against the creeping Shadow Plague from the frozen north...",
+            "where ley lines pulse with elemental power, the great kingdoms stand vigilant "
+            "against the creeping Shadow Plague from the frozen north...",
         )
 
         assert setting.world_name == "Aethermoor"
@@ -72,6 +97,78 @@ class TestNewStorySchemas:
         json_data = setting.model_dump_json()
         assert "Aethermoor" in json_data
 
+    def test_setting_date_constraint_uses_period_and_artifact_date(self) -> None:
+        """The issue #600 date is extracted without an LLM judgment pass."""
+        setting = _dated_setting(
+            time_period="October 2026",
+            diegetic_artifact=(
+                "Hearing notice — Date: 14 October 2026. Proceedings begin at "
+                "10:48 a.m. in civil hearing room 2B."
+            ),
+        )
+
+        constraint = extract_setting_date_constraint(setting)
+
+        assert constraint is not None
+        assert (constraint.year, constraint.month, constraint.day) == (2026, 10, 14)
+
+    def test_setting_date_constraint_ignores_artifact_only_historical_date(
+        self,
+    ) -> None:
+        """A historical plaque cannot establish a present-day story date."""
+        setting = _dated_setting(
+            time_period="Present day",
+            diegetic_artifact=(
+                "The lobby plaque commemorates 14 October 1918; "
+                "the story is present-day."
+            ),
+        )
+
+        assert extract_setting_date_constraint(setting) is None
+
+    def test_setting_date_constraint_ignores_nonmatching_artifact_date(self) -> None:
+        """An artifact day contributes only when its full date matches the period."""
+        setting = _dated_setting(
+            time_period="October 2026",
+            diegetic_artifact="The lobby plaque commemorates 14 October 1918.",
+        )
+
+        constraint = extract_setting_date_constraint(setting)
+
+        assert constraint is not None
+        assert (constraint.year, constraint.month, constraint.day) == (2026, 10, None)
+
+    @pytest.mark.parametrize(
+        "time_period",
+        [
+            "Age of Twilight",
+            "May 14",
+            "20 October revolutions",
+            "4 July celebrations",
+            "October 2026 and November 2026",
+        ],
+    )
+    def test_setting_date_constraint_skips_unparseable_or_ambiguous_period(
+        self,
+        time_period: str,
+    ) -> None:
+        """Day-like numbers and multiple dates never become a hard constraint."""
+        assert (
+            extract_setting_date_constraint(
+                _dated_setting(time_period=time_period),
+            )
+            is None
+        )
+
+    def test_setting_date_constraint_accepts_three_digit_year(self) -> None:
+        """A three-digit fantasy year remains a valid explicit period anchor."""
+        constraint = extract_setting_date_constraint(
+            _dated_setting(time_period="October 887"),
+        )
+
+        assert constraint is not None
+        assert (constraint.year, constraint.month, constraint.day) == (887, 10, None)
+
     def test_character_sheet_creation(self):
         """Test creating a valid CharacterSheet with Mind's Eye Theatre traits."""
         character = CharacterSheet(
@@ -79,9 +176,9 @@ class TestNewStorySchemas:
             summary="A half-elf arcane investigator searching for her missing parents",
             appearance="Tall half-elf with silver hair and violet eyes, bearing arcane tattoos that glow faintly",
             background="Orphaned at a young age when her parents vanished during a magical experiment. "
-                       "Raised by the Order of the Silver Eye, she now investigates arcane crimes.",
+            "Raised by the Order of the Silver Eye, she now investigates arcane crimes.",
             personality="Cautious and analytical, with a dry sense of humor. She keeps people at arm's length "
-                       "but fiercely protects those she allows into her circle.",
+            "but fiercely protects those she allows into her circle.",
             trait_1=CharacterTrait(
                 name="allies",
                 description="Master Aldric, her mentor and father figure within the Order",
@@ -97,7 +194,7 @@ class TestNewStorySchemas:
             # Required wildcard trait
             wildcard_name="Arcane Tattoos",
             wildcard_description="Mystical tattoos that glow when magic is near, granting her "
-                                "supernatural perception but marking her as unusual",
+            "supernatural perception but marking her as unusual",
         )
 
         assert character.name == "Lyra Shadowheart"
@@ -177,17 +274,19 @@ class TestNewStorySchemas:
             seed_type=StorySeedType.MYSTERY,
             title="The Vanishing Merchants",
             situation="Three merchant caravans have disappeared on the road to Westmarch in the past moon. "
-                     "You've been hired to investigate the latest disappearance.",
+            "You've been hired to investigate the latest disappearance.",
             hook="The merchants were carrying rare magical artifacts that could be dangerous if misused",
             immediate_goal="Find clues at the last known campsite",
             stakes="More disappearances could cripple trade and starve the region",
             tension_source="Time pressure - another caravan departs tomorrow",
-            base_timestamp=StoryTimestamp(year=1347, month=9, day=15, hour=16, minute=30),
+            base_timestamp=StoryTimestamp(
+                year=1347, month=9, day=15, hour=16, minute=30
+            ),
             weather="Gathering storm clouds",
             key_npcs=["Innkeeper Gareth", "Caravan guard survivor", "Local ranger"],
             secrets="The blue flames are caused by a rogue fire elemental bound to a cursed artifact. "
-                   "The innkeeper's brother was the first to disappear and secretly joined the bandits. "
-                   "The 'survivor' is actually the bandit leader's spy, feeding false information."
+            "The innkeeper's brother was the first to disappear and secretly joined the bandits. "
+            "The 'survivor' is actually the bandit leader's spy, feeding false information.",
         )
 
         assert seed.seed_type == StorySeedType.MYSTERY
@@ -229,7 +328,7 @@ class TestNewStorySchemas:
             name="The Last Light Inn",
             place_type="fixed_location",
             summary="A sturdy stone inn at the edge of civilization, serving as the final bastion "
-                   "of safety before the treacherous mountain passes.",
+            "of safety before the treacherous mountain passes.",
             history="Built fifty years ago by a retired soldier who wanted a quiet life",
             current_status="Busy with travelers fleeing the troubles to the north",
             secrets="A hidden cellar contains evidence of smuggling operations",
@@ -257,7 +356,7 @@ class TestNewStorySchemas:
         """Test creating a valid ZoneDefinition."""
         zone = ZoneDefinition(
             name="Westmarch Frontier",
-            summary="A lawless frontier region between civilization and the wild mountains"
+            summary="A lawless frontier region between civilization and the wild mountains",
         )
 
         assert zone.name == "Westmarch Frontier"
@@ -268,7 +367,7 @@ class TestNewStorySchemas:
         layer = LayerDefinition(
             name="Aethermoor",
             type=LayerType.PLANET,
-            description="A mirror-Earth world where magic flows through ley lines"
+            description="A mirror-Earth world where magic flows through ley lines",
         )
 
         assert layer.name == "Aethermoor"
@@ -321,7 +420,7 @@ class TestNewStorySchemas:
             stakes="Test stakes",
             tension_source="Test tension",
             base_timestamp=StoryTimestamp(year=2024, month=6, day=15, hour=9, minute=0),
-            secrets="Test secrets: hidden plot information that the user never sees - NPC agendas and twists"
+            secrets="Test secrets: hidden plot information that the user never sees - NPC agendas and twists",
         )
 
         place = PlaceProfile(
@@ -344,16 +443,16 @@ class TestNewStorySchemas:
         layer = LayerDefinition(
             name="Test World",
             type=LayerType.PLANET,
-            description="A test world for validation"
+            description="A test world for validation",
         )
 
         zone = ZoneDefinition(
             name="Test Zone",
-            summary="A test zone region with sufficient description for validation"
+            summary="A test zone region with sufficient description for validation",
         )
 
         # Create transition data
-        transition = TransitionData(
+        transition_kwargs = dict(
             setting=setting,
             character=character,
             seed=seed,
@@ -361,13 +460,25 @@ class TestNewStorySchemas:
             zone=zone,
             location=place,
             thread_id="test_thread_123",
-            base_timestamp=datetime.now(timezone.utc)
+            base_timestamp=seed.get_base_datetime(),
         )
+        transition = TransitionData(**transition_kwargs)
 
         # Validate
         assert transition.validate_completeness() is True
         assert transition.ready_for_transition is True
         assert transition.validated is True
+
+        with pytest.raises(
+            ValidationError,
+            match="base_timestamp must equal the accepted seed base_timestamp",
+        ):
+            TransitionData(
+                **{
+                    **transition_kwargs,
+                    "base_timestamp": datetime(2024, 5, 15, 9, tzinfo=timezone.utc),
+                }
+            )
 
 
 class TestDatabaseMapper:
@@ -386,7 +497,7 @@ class TestDatabaseMapper:
             summary="A battle-hardened mercenary seeking redemption for past deeds",
             appearance="Battle-scarred warrior with piercing blue eyes and a commanding presence",
             background="A veteran of many wars, seeking redemption for past deeds in service of a tyrant. "
-                       "Now he fights for the innocent.",
+            "Now he fights for the innocent.",
             personality="Stoic and honorable, with a fierce protective instinct",
             trait_1=CharacterTrait(
                 name="allies",
@@ -431,7 +542,7 @@ class TestDatabaseMapper:
         """Create a sample zone for testing."""
         return ZoneDefinition(
             name="Borderlands",
-            summary="A lawless frontier region where civilization meets the wilderness"
+            summary="A lawless frontier region where civilization meets the wilderness",
         )
 
     def test_character_mapping(self, mapper, sample_character):
@@ -526,14 +637,18 @@ class TestStructuredOutputIntegration:
         )
 
         character = generator.generate_character_sheet(
-            setting,
-            "Create a young mage seeking knowledge"
+            setting, "Create a young mage seeking knowledge"
         )
 
         assert isinstance(character, CharacterSheet)
         assert character.name
         assert character.summary
-        assert len({character.trait_1.name, character.trait_2.name, character.trait_3.name}) == 3
+        assert (
+            len(
+                {character.trait_1.name, character.trait_2.name, character.trait_3.name}
+            )
+            == 3
+        )
         assert character.wildcard_name
 
 
