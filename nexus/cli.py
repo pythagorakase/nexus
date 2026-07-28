@@ -1139,6 +1139,44 @@ def _generation_timeout_seconds() -> int:
     return load_settings().apex.generation_timeout_seconds
 
 
+def _apply_traits_to_wildcard_transition(
+    *,
+    url: str,
+    slot: int,
+    data: Dict[str, Any],
+    result: Dict[str, Any],
+    model: Optional[str],
+) -> None:
+    """Fetch and attach the wildcard intro after trait confirmation."""
+    if not (
+        data.get("subphase_complete")
+        and data.get("phase") == "character"
+        and data.get("subphase") == "wildcard"
+    ):
+        return
+
+    intro_payload = {
+        "slot": slot,
+        "message": (
+            "[SYSTEM] Phase character subphase traits complete. "
+            "Proceeding to wildcard. Please introduce the next subphase."
+        ),
+        "current_phase": "character",
+    }
+    if model:
+        intro_payload["model"] = model
+
+    intro_response = _api_post(url, json=intro_payload, timeout=120)
+    if not intro_response.ok:
+        return
+
+    intro_data = intro_response.json()
+    result["next_phase_intro"] = intro_data.get("message")
+    result["choices"] = intro_data.get("choices", [])
+    result["phase"] = intro_data.get("phase") or "character"
+    result["subphase"] = "wildcard"
+
+
 def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
     """
     Advance the story (wizard or narrative).
@@ -1266,39 +1304,7 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                     response.raise_for_status()
                     data = response.json()
 
-                    # Check if confirmed traits need a wildcard intro.
-                    if data.get("subphase_complete"):
-                        next_subphase = data.get("subphase")  # Should be "wildcard"
-                        if next_subphase:
-                            # Request Skald intro for next subphase
-                            intro_payload = {
-                                "slot": args.slot,
-                                "message": (
-                                    "[SYSTEM] Phase character subphase traits "
-                                    f"complete. Proceeding to {next_subphase}. "
-                                    "Please introduce the next subphase."
-                                ),
-                                "current_phase": "character",
-                            }
-                            if model_to_use:
-                                intro_payload["model"] = model_to_use
-
-                            intro_response = _api_post(
-                                url, json=intro_payload, timeout=120
-                            )
-                            if intro_response.ok:
-                                intro_data = intro_response.json()
-                                return {
-                                    "success": True,
-                                    "message": data.get("message", ""),
-                                    "next_phase_intro": intro_data.get("message"),
-                                    "choices": intro_data.get("choices", []),
-                                    "phase": "character",
-                                    "subphase": next_subphase,
-                                }
-
-                    # Return for toggles or if the intro request failed.
-                    return {
+                    result = {
                         "success": True,
                         "message": data.get("message", ""),
                         "phase": data.get("phase"),
@@ -1307,6 +1313,14 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                         "can_confirm": data.get("can_confirm", False),
                         "subphase_complete": data.get("subphase_complete", False),
                     }
+                    _apply_traits_to_wildcard_transition(
+                        url=url,
+                        slot=args.slot,
+                        data=data,
+                        result=result,
+                        model=model_to_use,
+                    )
+                    return result
 
                 # Resolve --choice to user text if provided (non-trait mode)
                 user_text = args.user_text or ""
@@ -1334,6 +1348,14 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                         "success": False,
                         "error": "Cannot combine --dev with --accept-fate.",
                     }
+                if not user_text.strip() and not args.accept_fate:
+                    return {
+                        "success": False,
+                        "error": (
+                            "Wizard continue requires non-empty text, --choice, "
+                            "or --accept-fate."
+                        ),
+                    }
                 if args.dev:
                     payload["dev"] = True
                 if model_to_use:
@@ -1355,7 +1377,16 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                     "trait_menu": data.get("trait_menu"),
                     "can_confirm": data.get("can_confirm", False),
                     "subphase": data.get("subphase"),
+                    "subphase_complete": data.get("subphase_complete", False),
                 }
+
+                _apply_traits_to_wildcard_transition(
+                    url=url,
+                    slot=args.slot,
+                    data=data,
+                    result=result,
+                    model=model_to_use,
+                )
 
                 # Auto-transition: if phase completed, trigger next phase intro
                 if data.get("phase_complete"):

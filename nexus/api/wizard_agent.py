@@ -427,6 +427,7 @@ async def _submit_traits_impl(
         "phase_complete": phase_complete,
         "subphase_complete": True,
         "phase": ctx.deps.phase,
+        "subphase": "wildcard",
         "artifact_type": "submit_trait_selection",
         "data": response_data,
     }

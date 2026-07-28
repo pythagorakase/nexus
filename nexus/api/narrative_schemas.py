@@ -8,7 +8,7 @@ serialization of API requests and responses.
 from datetime import datetime
 from typing import Dict, List, Optional, Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 # Re-export ChoiceSelection from shared module for backward compatibility
 from nexus.api.choice_handling import ChoiceSelection
@@ -276,6 +276,20 @@ class ChatRequest(BaseModel):
     # Trait selection operations (character phase, traits subphase)
     # 0 = confirm selection, 1-10 = toggle trait by ID
     trait_choice: Optional[int] = None
+
+    @model_validator(mode="after")
+    def validate_wizard_input(self) -> "ChatRequest":
+        """Reject blank conversational turns before any provider call."""
+        if (
+            not self.message.strip()
+            and not self.accept_fate
+            and self.trait_choice is None
+        ):
+            raise ValueError(
+                "Wizard message must be non-empty unless accept_fate or "
+                "trait_choice is provided."
+            )
+        return self
 
     @field_validator("model")
     @classmethod

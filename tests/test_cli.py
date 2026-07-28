@@ -5,6 +5,8 @@ import sys
 from argparse import Namespace
 from typing import Any
 
+import pytest
+
 from nexus import cli
 from nexus.cli import _is_terminal_generation_status
 
@@ -101,6 +103,175 @@ def test_continue_posts_choice_to_backend_without_preapproving(
     assert payload["choice"] == 1
     assert payload["accept_fate"] is False
     assert payload["user_text"] == ""
+
+
+def test_free_text_trait_confirmation_exposes_wildcard_intro(monkeypatch) -> None:
+    """Free-text trait submission should immediately return the next action."""
+    posts: list[dict[str, Any]] = []
+
+    def fake_get(url: str, **kwargs: Any) -> DummyResponse:
+        assert url.endswith("/api/slot/5/state")
+        return DummyResponse(
+            {
+                "is_empty": False,
+                "is_wizard_mode": True,
+                "phase": "character",
+                "subphase": "traits",
+                "trait_menu": [{"id": 1, "name": "allies"}],
+                "can_confirm": True,
+            }
+        )
+
+    def fake_post(url: str, json: dict[str, Any], **kwargs: Any) -> DummyResponse:
+        assert url.endswith("/api/story/new/chat")
+        posts.append(json)
+        if len(posts) == 1:
+            return DummyResponse(
+                {
+                    "message": "Generating artifact...",
+                    "phase": "character",
+                    "subphase": "wildcard",
+                    "subphase_complete": True,
+                    "phase_complete": False,
+                    "artifact_type": "submit_trait_selection",
+                }
+            )
+        return DummyResponse(
+            {
+                "message": "What singular gift or burden defines Mara?",
+                "choices": ["A storm answers her anger."],
+                "phase": "character",
+            }
+        )
+
+    monkeypatch.setattr(cli.requests, "get", fake_get)
+    monkeypatch.setattr(cli.requests, "post", fake_post)
+
+    result = cli.run_continue(
+        Namespace(
+            slot=5,
+            model=None,
+            user_text="Exactly those three: 1, 2, 3.",
+            choice=None,
+            accept_fate=False,
+            dev=False,
+        )
+    )
+
+    assert result["success"] is True
+    assert result["subphase_complete"] is True
+    assert result["subphase"] == "wildcard"
+    assert result["next_phase_intro"] == "What singular gift or burden defines Mara?"
+    assert result["choices"] == ["A storm answers her anger."]
+    assert len(posts) == 2
+    assert posts[0]["message"] == "Exactly those three: 1, 2, 3."
+    assert "Proceeding to wildcard" in posts[1]["message"]
+
+
+def test_deterministic_trait_confirmation_exposes_wildcard_intro(monkeypatch) -> None:
+    """Choice-based trait confirmation should retain its wildcard transition."""
+    posts: list[dict[str, Any]] = []
+
+    def fake_get(url: str, **kwargs: Any) -> DummyResponse:
+        assert url.endswith("/api/slot/5/state")
+        return DummyResponse(
+            {
+                "is_empty": False,
+                "is_wizard_mode": True,
+                "phase": "character",
+                "subphase": "traits",
+                "trait_menu": [{"id": 1, "name": "allies"}],
+                "can_confirm": True,
+            }
+        )
+
+    def fake_post(url: str, json: dict[str, Any], **kwargs: Any) -> DummyResponse:
+        assert url.endswith("/api/story/new/chat")
+        posts.append(json)
+        if len(posts) == 1:
+            return DummyResponse(
+                {
+                    "message": "Traits confirmed. Moving to wildcard definition.",
+                    "phase": "character",
+                    "subphase": "wildcard",
+                    "subphase_complete": True,
+                }
+            )
+        return DummyResponse(
+            {
+                "message": "Name the exception that makes Mara unforgettable.",
+                "choices": ["She remembers futures that never happened."],
+                "phase": "character",
+            }
+        )
+
+    monkeypatch.setattr(cli.requests, "get", fake_get)
+    monkeypatch.setattr(cli.requests, "post", fake_post)
+
+    result = cli.run_continue(
+        Namespace(
+            slot=5,
+            model=None,
+            user_text=None,
+            choice=0,
+            accept_fate=False,
+            dev=False,
+        )
+    )
+
+    assert result["success"] is True
+    assert result["subphase_complete"] is True
+    assert result["subphase"] == "wildcard"
+    assert result["next_phase_intro"] == (
+        "Name the exception that makes Mara unforgettable."
+    )
+    assert result["choices"] == ["She remembers futures that never happened."]
+    assert len(posts) == 2
+    assert posts[0]["message"] == ""
+    assert posts[0]["trait_choice"] == 0
+    assert "Proceeding to wildcard" in posts[1]["message"]
+
+
+@pytest.mark.parametrize("confirmation_path", ["free-text", "deterministic"])
+def test_plain_continue_after_trait_confirmation_stays_local(
+    monkeypatch, confirmation_path: str
+) -> None:
+    """Neither trait-confirmation route may lead to an empty provider message."""
+
+    def fake_get(url: str, **kwargs: Any) -> DummyResponse:
+        assert url.endswith("/api/slot/5/state")
+        return DummyResponse(
+            {
+                "is_empty": False,
+                "is_wizard_mode": True,
+                "phase": "character",
+                "subphase": "wildcard",
+                "choices": ["Define Mara's impossible inheritance."],
+                "confirmation_path": confirmation_path,
+            }
+        )
+
+    def fail_post(*args: Any, **kwargs: Any) -> DummyResponse:
+        raise AssertionError("Plain wizard continue must not make an API POST")
+
+    monkeypatch.setattr(cli.requests, "get", fake_get)
+    monkeypatch.setattr(cli.requests, "post", fail_post)
+
+    result = cli.run_continue(
+        Namespace(
+            slot=5,
+            model=None,
+            user_text=None,
+            choice=None,
+            accept_fate=False,
+            dev=False,
+        )
+    )
+
+    assert result == {
+        "success": False,
+        "error": "Wizard continue requires non-empty text, --choice, or --accept-fate.",
+    }
 
 
 class FakeWizardCache:
