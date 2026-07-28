@@ -331,38 +331,41 @@ def test_sync_generation_rejects_mid_turn_route_drift(
 
 @pytest.mark.requires_postgres
 def test_lore_keeps_logon_lazy(patched_provider: Dict[str, int]) -> None:
-    """LORE should not initialize LOGON on construction when lazy mode is enabled."""
+    """LORE should construct LOGON without eagerly constructing its provider."""
 
     lore = LORE(debug=True, enable_logon=True)
     assert patched_provider["count"] == 0
     assert lore.logon is None
-
-
-@pytest.mark.requires_postgres
-def test_logon_initializes_on_first_use(
-    patched_provider: Dict[str, int], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """LOGON provider should initialize only when requested."""
-
-    lore = LORE(debug=True, enable_logon=True)
     lore.ensure_logon()
     assert lore.logon is not None
+    assert lore.logon.provider is None
     assert patched_provider["count"] == 0
 
-    # This DB-backed utility legitimately demands a parent id for the
-    # presence baseline; the test's subject is provider laziness, so the
-    # reader is stubbed at its consumption seam.
-    monkeypatch.setattr(
-        "nexus.agents.lore.logon_utility.read_presence_baseline",
-        lambda _dbname, _parent_chunk_id: None,
+
+def test_logon_initializes_provider_on_first_generation(
+    patched_provider: Dict[str, int],
+) -> None:
+    """The first narrative generation should initialize the provider exactly once."""
+
+    # Provider laziness is independent of the production two-pass default.
+    # Pin the simplest generation route so this regression test does not absorb
+    # database, contextual-tag-library, or writer/Gaia fixture contracts.
+    logon = LogonUtility(
+        {"API Settings": {"apex": {"turn_pipeline": "single_pass"}}},
+        model_override="dummy-model",
     )
-    payload = _minimal_payload()
-    payload["metadata"] = {"target_chunk_id": 1}
-    response = lore.logon.generate_narrative(payload)
+    assert logon.provider is None
+    assert patched_provider["count"] == 0
+
+    response = logon.generate_narrative(
+        _minimal_payload(),
+        effective_context_window=75_000,
+    )
+
     assert patched_provider["count"] == 1
-    assert isinstance(lore.logon.provider, _DummyProvider)
-    assert lore.logon.provider.calls == 1
-    assert lore.logon.provider.schema_models == [SkaldTurnWire]
+    assert isinstance(logon.provider, _DummyProvider)
+    assert logon.provider.calls == 1
+    assert logon.provider.schema_models == [SkaldTurnWire]
     assert response.narrative.startswith("dummy:")
     assert response.generation_model == "dummy-model"
 

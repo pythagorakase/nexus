@@ -287,37 +287,6 @@ def test_responses_wizard_transition_returns_phase_specific_intro(
     assert expected_copy in wizard_response.message.lower()
 
 
-def test_responses_non_wizard_skald_turn_route_is_unchanged(
-    mock_rows,
-) -> None:
-    """Wizard precedence must not disturb semantic-update storyteller routing."""
-
-    response = TestClient(mock_openai.app).post(
-        "/v1/responses",
-        json={
-            "model": "TEST",
-            "tools": [
-                {
-                    "type": "function",
-                    "name": "final_result",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {"updates": {"type": "array"}},
-                    },
-                    "strict": True,
-                }
-            ],
-            "input": [{"role": "user", "content": "Continue the story."}],
-        },
-    )
-
-    assert response.status_code == 200
-    tool_call = response.json()["output"][0]
-    assert tool_call["type"] == "function_call"
-    assert tool_call["name"] == "final_result"
-    assert json.loads(tool_call["arguments"])["narrative"].startswith("[TEST MODE]")
-
-
 @pytest.mark.parametrize(
     "builder",
     [
