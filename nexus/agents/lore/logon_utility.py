@@ -11,7 +11,7 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import Any, Dict, Literal, Mapping, Optional, cast
+from typing import Any, Dict, Literal, Mapping, Optional, Union, cast
 
 import psycopg2
 
@@ -280,6 +280,7 @@ class LogonUtility:
         dbname: Optional[str] = None,
         model_override: Optional[str] = None,
         bootstrap_mode: bool = False,
+        settings_path: Optional[Union[str, Path]] = None,
     ):
         """
         Initialize LOGON utility with configured provider.
@@ -291,11 +292,16 @@ class LogonUtility:
             model_override: Optional model to use instead of settings/slot config.
                            If None, will check slot's configured model first.
             bootstrap_mode: Whether this LOGON instance is generating chunk #1.
+            settings_path: Effective configuration path that owns this LOGON
+                stack. Registry lookups remain bound to it when provided.
         """
         self.settings = settings
         self.dbname = dbname
         self.model_override = model_override
         self.bootstrap_mode = bootstrap_mode
+        self.settings_path = (
+            Path(settings_path).resolve() if settings_path is not None else None
+        )
         self.provider: Optional[OpenAIProvider | AnthropicProvider] = None
         self._system_prompt: Optional[str] = None
         self._provider_bootstrap_mode: Optional[bool] = None
@@ -511,9 +517,13 @@ class LogonUtility:
             return None
 
     @staticmethod
-    def _resolve_generation_model(model: str) -> str:
+    def _resolve_generation_model(
+        model: str, settings_path: Optional[Path] = None
+    ) -> str:
         """Resolve a runtime roster reference before constructing the provider."""
-        return resolve_model_ref(model) if model.startswith("@") else model
+        return (
+            resolve_model_ref(model, settings_path) if model.startswith("@") else model
+        )
 
     def _resolve_storyteller_route(self) -> StorytellerRoute:
         """Resolve the active model, endpoint, and storyteller wire class."""
@@ -527,17 +537,17 @@ class LogonUtility:
             model = apex_settings.get("model", "gpt-4o")
         if not isinstance(model, str) or not model.strip():
             raise RuntimeError("LOGON could not resolve a storyteller model id")
-        model = self._resolve_generation_model(model)
+        model = self._resolve_generation_model(model, self.settings_path)
 
-        provider_type = get_provider_for_model(model) or apex_settings.get(
-            "provider", "openai"
-        )
+        provider_type = get_provider_for_model(
+            model, self.settings_path
+        ) or apex_settings.get("provider", "openai")
 
         # OpenAI-compatible base_url routing (mock TEST server, local servers):
         # the endpoint lives in [global.model.api_models] (#401).
         from nexus.config import get_openai_compatible_endpoint
 
-        endpoint = get_openai_compatible_endpoint(model)
+        endpoint = get_openai_compatible_endpoint(model, self.settings_path)
         base_url = endpoint["base_url"] if endpoint else None
 
         provider_wire_type: Literal["openai", "anthropic", "local"]
@@ -974,12 +984,12 @@ class LogonUtility:
         if gaia_model == turn_model:
             return None
 
-        provider_type = get_provider_for_model(gaia_model)
+        provider_type = get_provider_for_model(gaia_model, self.settings_path)
         if provider_type is None:
             raise ValueError(f"gaia_model {gaia_model!r} is not in the model registry")
         from nexus.config import get_openai_compatible_endpoint
 
-        endpoint = get_openai_compatible_endpoint(gaia_model)
+        endpoint = get_openai_compatible_endpoint(gaia_model, self.settings_path)
         base_url = endpoint["base_url"] if endpoint else None
         gaia_wire: Literal["openai", "anthropic", "local"]
         if provider_type == "anthropic":

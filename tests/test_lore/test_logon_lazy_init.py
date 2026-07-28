@@ -135,7 +135,7 @@ def test_runtime_roster_reference_resolves_before_provider_call(
 
     seen: list[str] = []
 
-    def fake_resolve(model_ref: str) -> str:
+    def fake_resolve(model_ref: str, path: object = None) -> str:
         seen.append(model_ref)
         return "resolved-roster-model"
 
@@ -189,11 +189,11 @@ def test_anthropic_storyteller_transport_and_guide_follow_settings(
     monkeypatch.setattr(
         logon_utility,
         "get_provider_for_model",
-        lambda _model: "anthropic",
+        lambda _model, _path=None: "anthropic",
     )
     monkeypatch.setattr(
         "nexus.config.get_openai_compatible_endpoint",
-        lambda _model: None,
+        lambda _model, _path=None: None,
     )
     monkeypatch.setattr(
         "nexus.agents.logon.orrery_tag_validation." "build_storyteller_tag_validator",
@@ -254,11 +254,11 @@ def test_storyteller_route_resolves_without_constructing_provider(
     """Budget classification reuses LOGON routing while provider init stays lazy."""
     monkeypatch.setattr(
         "nexus.agents.lore.logon_utility.get_provider_for_model",
-        lambda _model: provider_type,
+        lambda _model, _path=None: provider_type,
     )
     monkeypatch.setattr(
         "nexus.config.get_openai_compatible_endpoint",
-        lambda _model: {"base_url": base_url} if base_url else None,
+        lambda _model, _path=None: {"base_url": base_url} if base_url else None,
     )
     logon = LogonUtility({}, model_override="storyteller-model")
 

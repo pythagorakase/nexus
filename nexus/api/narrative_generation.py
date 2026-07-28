@@ -162,6 +162,10 @@ async def generate_narrative_async(
 
             # Initialize LORE with LOGON enabled for API calls
             lore = LORE(enable_logon=True, debug=True, slot=slot)
+            logger.info(
+                "LORE narrative generation is using effective config path %s",
+                lore.settings_path,
+            )
 
             # The per-turn LORE stack MUST be closed when the turn finishes:
             # it is a reference-cycle island holding an engine pool, and

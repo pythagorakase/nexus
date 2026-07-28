@@ -15,7 +15,6 @@ The architecture has been refactored to use modular utility classes:
 - ContentProcessor: Manages content chunking, processing, and storage
 """
 
-import os
 import re
 import uuid
 import logging
@@ -67,25 +66,13 @@ if not settings_logger.handlers:
 # Load settings
 def load_settings() -> Dict[str, Any]:
     """Load settings using centralized config loader."""
-    try:
-        # Import here to avoid circular imports
-        from nexus.config import load_settings_as_dict
+    # Import here to avoid circular imports. With no explicit path, the
+    # centralized loader owns runtime-config precedence and raises on errors.
+    from nexus.config import load_settings_as_dict
 
-        # Check for environment variable override
-        settings_path_env = os.environ.get("NEXUS_SETTINGS_PATH")
-        if settings_path_env:
-            settings_logger.info(
-                f"Using settings path from environment: {settings_path_env}"
-            )
-            settings = load_settings_as_dict(settings_path_env)
-        else:
-            settings = load_settings_as_dict()
-
-        settings_logger.info("Loaded settings via centralized config loader")
-        return settings
-    except Exception as e:
-        settings_logger.error(f"Error loading settings: {e}")
-        return {}
+    settings = load_settings_as_dict()
+    settings_logger.info("Loaded settings via centralized config loader")
+    return settings
 
 
 # Global settings
