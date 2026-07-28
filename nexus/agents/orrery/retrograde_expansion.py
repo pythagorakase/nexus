@@ -11,6 +11,7 @@ from nexus.agents.logon.apex_schema import Coordinates
 from nexus.agents.orrery.geo_authoring import geo_prompt_from_context
 from nexus.agents.orrery.retrograde_junctions import resolve_junctions
 from nexus.agents.orrery.retrograde_packet import (
+    COLD_START_RELATIONSHIP_TYPES_BY_TRAIT,
     CORE_ENTITIES_HEADING,
     NAMED_SEED_NPCS_HEADING,
 )
@@ -640,6 +641,7 @@ def render_expansion_prompt(
         "selected_seed_ids": candidates.selected_seed_ids,
         "selected_candidates": selected_candidates,
         "selected_junctions": selected_junctions,
+        "trait_constraints": seed_generation_request.get("trait_constraints", []),
         "core_prompt_sections": (
             seed_generation_request.get("prompt_sections", [])[:4]
         ),
@@ -724,6 +726,10 @@ def validate_expansion_plan(
         candidates_by_id={
             candidate.seed_id: candidate for candidate in candidates.candidates
         },
+        forbidden_relationship_traits=_forbidden_relationship_traits(
+            seed_generation_request
+        ),
+        protagonist_ref=_packet_protagonist_ref(packet),
         known_entity_keys=_packet_known_entity_keys(packet),
         max_new_entity_stubs=_budget_entity_stub_cap(seed_generation_request),
     )
@@ -792,10 +798,19 @@ def generate_expansion_with_skald(
             ) from exc
 
     provider.output_validator = _validate_output
-    response, _llm_response = provider.get_structured_completion(
-        prompt,
-        RetrogradeExpansionWireResponse,
-    )
+    try:
+        response, _llm_response = provider.get_structured_completion(
+            prompt,
+            RetrogradeExpansionWireResponse,
+        )
+    except RuntimeError as exc:
+        last_error = exc.__cause__
+        if isinstance(last_error, ModelRetry):
+            raise RuntimeError(
+                "Retrograde expansion exhausted validation retries: "
+                f"{last_error.message}"
+            ) from exc
+        raise
     if not isinstance(response, RetrogradeExpansionPlanResponse):
         raise TypeError(
             "Skald expansion call returned "
@@ -816,6 +831,8 @@ def _expansion_contract_issues(
     selected_junctions: list[dict[str, Any]],
     vocabulary: SeedEligibleVocabulary,
     candidates_by_id: Mapping[str, Any],
+    forbidden_relationship_traits: Mapping[str, str],
+    protagonist_ref: Optional[str],
     known_entity_keys: Optional[set[tuple[str, str]]] = None,
     max_new_entity_stubs: Optional[int] = None,
 ) -> list[str]:
@@ -910,6 +927,8 @@ def _expansion_contract_issues(
                 entity_kinds=entity_kinds,
                 relationship_types=relationship_types,
                 event_refs=event_refs,
+                forbidden_relationship_traits=forbidden_relationship_traits,
+                protagonist_ref=protagonist_ref,
             )
         )
 
@@ -1137,6 +1156,51 @@ def _packet_known_entity_keys(packet: Mapping[str, Any]) -> set[tuple[str, str]]
     return keys
 
 
+def _packet_protagonist_ref(packet: Mapping[str, Any]) -> Optional[str]:
+    """Return the protagonist's exact prompt-local name from a packet."""
+
+    scaffolds = packet.get("candidate_scaffolds")
+    if isinstance(scaffolds, Mapping):
+        for card in scaffolds.get("core_entities") or ():
+            if isinstance(card, Mapping) and card.get("role") == "protagonist":
+                name = card.get("name")
+                if name:
+                    return str(name)
+
+    seed_generation_request = packet.get("seed_generation_request")
+    if isinstance(seed_generation_request, Mapping):
+        for section in seed_generation_request.get("prompt_sections") or ():
+            if not isinstance(section, Mapping):
+                continue
+            if section.get("heading") != CORE_ENTITIES_HEADING:
+                continue
+            for card in section.get("items") or ():
+                if isinstance(card, Mapping) and card.get("role") == "protagonist":
+                    name = card.get("name")
+                    if name:
+                        return str(name)
+    return None
+
+
+def _forbidden_relationship_traits(
+    seed_generation_request: Mapping[str, Any],
+) -> dict[str, str]:
+    """Map forbidden mechanical relationship types back to their source trait."""
+
+    forbidden: dict[str, str] = {}
+    for constraint in seed_generation_request.get("trait_constraints") or ():
+        if not isinstance(constraint, Mapping):
+            continue
+        if constraint.get("cold_start_relationships") != "forbidden":
+            continue
+        trait = str(constraint.get("trait") or "")
+        for relationship_type in COLD_START_RELATIONSHIP_TYPES_BY_TRAIT.get(
+            trait, frozenset()
+        ):
+            forbidden[relationship_type] = trait
+    return forbidden
+
+
 def _budget_entity_stub_cap(
     seed_generation_request: Mapping[str, Any],
 ) -> Optional[int]:
@@ -1271,6 +1335,8 @@ def _relationship_plan_issues(
     entity_kinds: set[str],
     relationship_types: set[str],
     event_refs: set[str],
+    forbidden_relationship_traits: Mapping[str, str],
+    protagonist_ref: Optional[str],
 ) -> list[str]:
     issues: list[str] = []
     prefix = f"relationship {relationship_plan.relationship_type!r}"
@@ -1299,6 +1365,26 @@ def _relationship_plan_issues(
         issues.append(
             f"{prefix} references unknown source_event_ref "
             f"{relationship_plan.source_event_ref!r}"
+        )
+    constrained_trait = forbidden_relationship_traits.get(
+        relationship_plan.relationship_type
+    )
+    relationship_refs = {
+        normalize_entity_ref(relationship_plan.subject_ref),
+        normalize_entity_ref(relationship_plan.object_ref),
+    }
+    if (
+        constrained_trait is not None
+        and protagonist_ref is not None
+        and normalize_entity_ref(protagonist_ref) in relationship_refs
+    ):
+        issues.append(
+            "cold_start_relationships_forbidden: "
+            f"relationship {relationship_plan.relationship_type!r} involving "
+            f"protagonist {protagonist_ref!r} violates trait "
+            f"{constrained_trait!r} cold_start_relationships='forbidden'; "
+            "retain any supporting backstory event but remove the mechanical "
+            "relationship row"
         )
     return issues
 
@@ -1535,6 +1621,12 @@ def _hard_validation_rules() -> list[str]:
         (
             "relationship mechanics currently support only character->character "
             "rows; express faction/place pressure through events or pair tags."
+        ),
+        (
+            "A trait with cold_start_relationships='forbidden' prohibits its "
+            "matching relationship mechanic when either endpoint is the "
+            "protagonist. Keep permissible backstory events; omit only the "
+            "forbidden relationship row."
         ),
         (
             "project_plan may carry only a woven selected seed's exact "

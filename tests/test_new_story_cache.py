@@ -1,5 +1,7 @@
 """Tests for the normalized new-story setup cache."""
 
+from typing import Any
+
 from nexus.api.new_story_cache import (
     CharacterData,
     SuggestedTrait,
@@ -11,7 +13,7 @@ import nexus.api.new_story_cache as cache_module
 
 class FakeCursor:
     def __init__(self) -> None:
-        self.calls = []
+        self.calls: list[tuple[str, Any]] = []
         self.rowcount = 1
 
     def __enter__(self):
@@ -20,7 +22,7 @@ class FakeCursor:
     def __exit__(self, *_exc):
         return False
 
-    def execute(self, sql, params=None):
+    def execute(self, sql: str, params: Any = None) -> None:
         self.calls.append((sql, params))
         self.rowcount = 1
 
@@ -114,7 +116,9 @@ def test_row_to_cache_reads_character_orrery_tags() -> None:
 
     assert cache.character.orrery_tags == bestowal
     assert cache.character.trait_compile_result == compile_result
-    assert cache.get_character_dict()["wildcard"]["orrery_tags"] == bestowal
+    character_dict = cache.get_character_dict()
+    assert character_dict is not None
+    assert character_dict["wildcard"]["orrery_tags"] == bestowal
 
 
 def test_write_cache_marks_three_selected_traits_confirmed(monkeypatch) -> None:
@@ -132,12 +136,22 @@ def test_write_cache_marks_three_selected_traits_confirmed(monkeypatch) -> None:
                     "enemies": "Powerful people want her silenced.",
                     "obligations": "A dying archivist gave her one last charge.",
                 },
+                "trait_constraints": [
+                    {
+                        "trait": "enemies",
+                        "cold_start_relationships": "forbidden",
+                    }
+                ],
             }
         },
     )
 
     assert any(
         "traits_confirmed = TRUE" in sql for sql, _params in fake_conn.cursor_obj.calls
+    )
+    assert any(
+        params == ("Powerful people want her silenced.", "forbidden", "enemies")
+        for _sql, params in fake_conn.cursor_obj.calls
     )
 
 
@@ -161,7 +175,7 @@ def test_write_cache_canonicalizes_legacy_reputation_trait(monkeypatch) -> None:
     )
 
     assert any(
-        params == ("Her name has started to travel.", "fame")
+        params == ("Her name has started to travel.", "allowed", "fame")
         for _sql, params in fake_conn.cursor_obj.calls
     )
 
@@ -188,7 +202,7 @@ def test_write_cache_preserves_rationale_across_fame_alias(
     )
 
     assert any(
-        params == ("Her name has started to travel.", "fame")
+        params == ("Her name has started to travel.", "allowed", "fame")
         for _sql, params in fake_conn.cursor_obj.calls
     )
 

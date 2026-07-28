@@ -48,6 +48,56 @@ def test_expansion_plan_accepts_row_shaped_dry_run_output() -> None:
     assert response.event_plan[0].event_type == vocabulary["event_types"][0]
 
 
+def test_expansion_rejects_forbidden_pc_relationship_but_keeps_event() -> None:
+    """A future-only enemy trait blocks only the mechanical cold-start row."""
+
+    vocabulary = _expansion_test_vocabulary()
+    packet = _packet(vocabulary)
+    packet["seed_generation_request"]["trait_constraints"] = [
+        {"trait": "enemies", "cold_start_relationships": "forbidden"}
+    ]
+    payload = _valid_expansion(vocabulary)
+    payload["relationship_plan"][0]["relationship_type"] = "enemy"
+
+    with pytest.raises(
+        RetrogradeExpansionValidationError,
+        match="cold_start_relationships_forbidden.*enemy.*Mara.*enemies",
+    ):
+        validate_expansion_plan(
+            payload=payload,
+            packet=packet,
+            seed_candidate_response=_seed_response(vocabulary),
+        )
+
+    payload["relationship_plan"] = []
+    repaired = validate_expansion_plan(
+        payload=payload,
+        packet=packet,
+        seed_candidate_response=_seed_response(vocabulary),
+    )
+
+    assert repaired.relationship_plan == []
+    assert repaired.event_plan[0].event_ref == "retro_event_001"
+
+
+def test_expansion_prompt_names_future_only_relationship_constraint() -> None:
+    """R6 can repair a forbidden row because the typed constraint is visible."""
+
+    vocabulary = _expansion_test_vocabulary()
+    packet = _packet(vocabulary)
+    packet["seed_generation_request"]["trait_constraints"] = [
+        {"trait": "enemies", "cold_start_relationships": "forbidden"}
+    ]
+
+    prompt = render_expansion_prompt(
+        packet=packet,
+        seed_candidate_response=_seed_response(vocabulary),
+    )
+
+    assert '"cold_start_relationships": "forbidden"' in prompt
+    assert "Keep permissible backstory events" in prompt
+
+
 def test_wire_expansion_response_omits_deterministic_fields() -> None:
     """Provider grammar excludes fields the runtime already knows."""
 

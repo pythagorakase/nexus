@@ -469,6 +469,23 @@ class TraitRationales(BaseModel):
         return {k: v for k, v in self.model_dump().items() if v is not None}
 
 
+class TraitConstraint(BaseModel):
+    """One selected trait's explicit cold-start materialization constraint."""
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    trait: TraitName = Field(..., description="Selected trait this constraint governs")
+    cold_start_relationships: Literal["allowed", "forbidden"] = Field(
+        default="allowed",
+        description=(
+            "Whether setup may create preexisting mechanical relationship rows "
+            "for this trait. Use 'forbidden' when the player says the relationship "
+            "may arise only during future play, such as no preexisting personal "
+            "nemesis. Backstory events without a relationship row remain allowed."
+        ),
+    )
+
+
 class TraitSuggestion(BaseModel):
     """Suggested trait with explicit rationale."""
 
@@ -530,7 +547,9 @@ class CharacterConceptSubmission(BaseModel):
     def to_character_concept(self) -> "CharacterConcept":
         """Convert tool submission into the internal CharacterConcept schema."""
         suggested_names = [item.name for item in self.suggested_traits]
-        rationales = {item.name: item.rationale for item in self.suggested_traits}
+        rationales: Dict[str, str] = {
+            str(item.name): item.rationale for item in self.suggested_traits
+        }
         return CharacterConcept(
             archetype=self.archetype,
             background=self.background,
@@ -578,7 +597,7 @@ class CharacterConcept(BaseModel):
         description="3 trait names that would create interesting story tensions for this character",
     )
     trait_rationales: TraitRationales = Field(
-        default_factory=TraitRationales,
+        default_factory=lambda: TraitRationales.model_validate({}),
         description="Rationales for each suggested trait explaining why it fits this character",
     )
 
@@ -629,6 +648,14 @@ class TraitSelection(BaseModel):
         default_factory=list,
         description="The 3 traits Skald pre-selected as fitting for this character",
     )
+    trait_constraints: List[TraitConstraint] = Field(
+        default_factory=list,
+        max_length=3,
+        description=(
+            "Per-trait setup constraints inferred from the player's wording. "
+            "Omitted traits default to allowing cold-start relationship rows."
+        ),
+    )
 
     @field_validator("selected_traits")
     @classmethod
@@ -637,6 +664,20 @@ class TraitSelection(BaseModel):
         if len(set(v)) != 3:
             raise ValueError("Must select exactly 3 unique traits")
         return v
+
+    @model_validator(mode="after")
+    def validate_trait_constraints(self) -> "TraitSelection":
+        """Keep constraints unique and scoped to the confirmed selection."""
+
+        constrained_traits = [constraint.trait for constraint in self.trait_constraints]
+        if len(constrained_traits) != len(set(constrained_traits)):
+            raise ValueError("Trait constraints must name unique traits")
+        unselected = sorted(set(constrained_traits) - set(self.selected_traits))
+        if unselected:
+            raise ValueError(
+                f"Trait constraints reference unselected traits: {unselected}"
+            )
+        return self
 
 
 class WildcardTrait(BaseModel):
@@ -740,6 +781,9 @@ class CharacterCreationState(BaseModel):
             if not self.wildcard:
                 missing.append("wildcard")
             raise ValueError(f"Cannot assemble CharacterSheet - missing: {missing}")
+        assert self.concept is not None
+        assert self.trait_selection is not None
+        assert self.wildcard is not None
 
         # Build trait entries
         trait_entries: List[CharacterTrait] = []
@@ -959,24 +1003,24 @@ class PlaceExtraData(BaseModel):
 
     atmosphere: Optional[str] = Field(None, description="Mood and feeling of the place")
     resources: List[str] = Field(
-        default_factory=list, max_items=5, description="Available resources"
+        default_factory=list, max_length=5, description="Available resources"
     )
     dangers: List[str] = Field(
-        default_factory=list, max_items=5, description="Known threats or hazards"
+        default_factory=list, max_length=5, description="Known threats or hazards"
     )
     ruler: Optional[str] = Field(None, description="Who controls or governs this place")
     factions: List[str] = Field(
-        default_factory=list, max_items=5, description="Active factions or groups"
+        default_factory=list, max_length=5, description="Active factions or groups"
     )
     culture: Optional[str] = Field(
         None, description="Cultural characteristics and customs"
     )
     economy: Optional[str] = Field(None, description="Economic base and activities")
     nearby_landmarks: List[str] = Field(
-        default_factory=list, max_items=5, description="Nearby notable locations"
+        default_factory=list, max_length=5, description="Nearby notable locations"
     )
     rumors: List[str] = Field(
-        default_factory=list, max_items=3, description="Current rumors or gossip"
+        default_factory=list, max_length=3, description="Current rumors or gossip"
     )
 
 
@@ -1018,7 +1062,7 @@ class PlaceProfile(BaseModel):
     # Inhabitants (stored as text array in database)
     inhabitants: List[str] = Field(
         default_factory=list,
-        max_items=10,
+        max_length=10,
         description="Who lives, works, or frequents this location",
     )
 
@@ -1129,7 +1173,7 @@ class SpecificLocation(BaseModel):
     smells: Optional[str] = Field(None, description="What can be smelled")
 
     # Access and movement
-    entrances: List[str] = Field(..., min_items=1, description="How to enter/exit")
+    entrances: List[str] = Field(..., min_length=1, description="How to enter/exit")
     connected_areas: List[str] = Field(
         default_factory=list, description="Adjacent areas"
     )
@@ -1142,13 +1186,13 @@ class SpecificLocation(BaseModel):
         default_factory=list, description="Who's typically here"
     )
     objects: List[str] = Field(
-        ..., min_items=1, description="Notable objects or furniture"
+        ..., min_length=1, description="Notable objects or furniture"
     )
     lighting: Literal["dark", "dim", "normal", "bright", "variable"] = Field("normal")
 
     # Activity
     typical_activities: List[str] = Field(
-        ..., min_items=1, description="What happens here"
+        ..., min_length=1, description="What happens here"
     )
     busy_times: Optional[str] = Field(
         None, description="When this location is most active"

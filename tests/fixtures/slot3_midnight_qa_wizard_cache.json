@@ -1,0 +1,94 @@
+{
+  "source": {
+    "slot": 3,
+    "qa_date": "2026-07-28",
+    "story": "The Frozen Clock"
+  },
+  "setting": {
+    "genre": "thriller",
+    "secondary_genres": ["contemporary", "mystery"],
+    "world_name": "Dunlow County, Arkansas",
+    "time_period": "October 2026",
+    "tech_level": "modern",
+    "magic_exists": false,
+    "magic_description": null,
+    "political_structure": "A conventional U.S. county government with elected judges, a county clerk, sheriff's office, and emergency management.",
+    "major_conflict": "At 10:48 a.m., a cyberattack disrupts the courthouse as flash-floodwater breaches the lower level and an evacuation order gives everyone twelve minutes to leave.",
+    "tone": "dark",
+    "themes": ["institutional fragility", "duty under pressure", "evidence and truth", "triage", "public trust"],
+    "cultural_notes": "Dunlow is a river-county seat where courthouse favors are remembered longer than official rulings and plain language matters during emergencies.",
+    "language_notes": "Official speech favors clipped emergency phrasing: confirmed, unconfirmed, hold position, and egress route.",
+    "geographic_scope": "local",
+    "diegetic_artifact": "DUNLOW COUNTY EMERGENCY MANAGEMENT: At 10:48 a.m. the courthouse enters a compound cyberattack and flood emergency. Preserve life over property and records; relay verified information with source and time."
+  },
+  "character": {
+    "concept": {
+      "name": "Jules Mercer",
+      "archetype": "Injured freelance court reporter trapped in a failing courthouse evacuation",
+      "background": "Jules became a court reporter because precise records gave them a way to work within institutions that too often mistake access needs for incompetence. Profoundly deaf, they communicate through ASL and lip-reading and cannot hear alarms, radios, footsteps, voices behind them, or off-screen sounds. They are covering civil hearing DC-26-184 because the freelance fee matters for rent, but they will not risk a life merely to preserve a transcript.",
+      "appearance": "Jules is a 38-year-old brown-skinned person with close-cropped black hair and rain-darkened charcoal courthouse clothes. Their left forearm is immobilized in a bright orange rigid splint, while their usable right hand is ink-stained.",
+      "suggested_traits": ["status", "enemies", "obligations"],
+      "trait_rationales": {
+        "status": "Jules's status is strictly procedural: they are the contract reporter assigned to civil hearing DC-26-184, with no special authority or access.",
+        "enemies": "Jules begins with no preexisting personal nemesis. This trait foregrounds opposition that may arise only if an adverse party or attacker reacts to what Jules actually witnesses or carries during play.",
+        "obligations": "Jules needs the DC-26-184 fee to make rent and is professionally bound to an accurate record, but neither obligation outweighs immediate human safety."
+      }
+    },
+    "trait_selection": {
+      "selected_traits": ["status", "enemies", "obligations"],
+      "trait_rationales": {
+        "status": "Jules's status is strictly procedural: they are the contract reporter assigned to civil hearing DC-26-184, with no special authority or access.",
+        "enemies": "Jules begins with no preexisting personal nemesis. This trait foregrounds opposition that may arise only if an adverse party or attacker reacts to what Jules actually witnesses or carries during play.",
+        "obligations": "Jules needs the DC-26-184 fee to make rent and is professionally bound to an accurate record, but neither obligation outweighs immediate human safety."
+      },
+      "suggested_by_llm": ["status", "enemies", "obligations"],
+      "trait_constraints": [
+        {"trait": "enemies", "cold_start_relationships": "forbidden"}
+      ]
+    },
+    "wildcard": {
+      "wildcard_name": "Verification Habit",
+      "wildcard_description": "Using their usable right hand, Jules writes an exact timestamp, floor or room, visible source, and CONFIRMED or UNCONFIRMED on the paper evacuation map before relying on any claim."
+    }
+  },
+  "seed": {
+    "story_seed": {
+      "seed_type": "crisis",
+      "title": "The Frozen Clock",
+      "situation": "At 10:48 a.m. in Civil Hearing Room 2B, the wall clock freezes and a silent evacuation alert appears. Exactly six people are present, and the stenotype transcript remains in Jules's case, but no document is worth a life.",
+      "hook": "A twelve-minute evacuation begins with conflicting, incomplete visible information: the courthouse is under cyberattack, water has affected the basement, and no one knows which routes or messages can be trusted.",
+      "immediate_goal": "Understand the visible evacuation instruction, account for the five other people in Room 2B, and reach a safe exit without treating unverified claims as fact.",
+      "stakes": "Six people may be delayed, separated, injured, or directed into danger; preserving later evidence cannot take priority over survival.",
+      "tension_source": "Jules cannot hear alarms or off-screen sounds, their splinted wrist limits signing and grip, technology is failing, and access routes may be compromised.",
+      "weather": "Heavy rain outside; basement flooding is confirmed, while water above the basement requires evidence.",
+      "key_npcs": ["Judge Mara Venn", "Bailiff Theo Pike", "Lena Ortiz", "Grant Shaw", "Nia Bell"],
+      "secrets": "No villain is preselected. Any later opposition to Jules must arise from what they actually witness, record, or carry during the evacuation, not from a preexisting personal enemy.",
+      "base_timestamp": {"year": 2026, "month": 5, "day": 14, "hour": 6, "minute": 48}
+    },
+    "layer": {
+      "name": "Earth",
+      "type": "planet",
+      "description": "A modern Earth where rain-lashed local institutions and fragile public systems can turn routine civic life into a crisis."
+    },
+    "zone": {
+      "name": "Dunlow County, Arkansas",
+      "summary": "A fictional Arkansas county centered on its aging county seat and vulnerable to abrupt autumn flash flooding."
+    },
+    "initial_location": {
+      "name": "Civil Hearing Room 2B, Dunlow County Courthouse",
+      "place_type": "fixed_location",
+      "summary": "A wood-paneled civil courtroom on the courthouse second floor with a wall clock stalled at 10:48 a.m. and a monitor showing a silent evacuation alert.",
+      "history": "Hearing Room 2B handles civil disputes, probate matters, and administrative hearings.",
+      "current_status": "Six people are caught in an evacuation as heavy rain floods the basement and the alert provides no audible guidance.",
+      "secrets": "The alert's exact wording, sender, and timestamp could establish what hazard officials believed existed.",
+      "inhabitants": ["Jules Mercer", "Judge Mara Venn", "Bailiff Theo Pike", "Lena Ortiz", "Grant Shaw", "Nia Bell"],
+      "latitude": 34.7445,
+      "longitude": -92.2896,
+      "extra_data": {
+        "atmosphere": "Claustrophobic civic formality ruptured by silent technological failure.",
+        "culture": "Formal county-courthouse procedure and institutional hierarchy.",
+        "rumors": ["The evacuation warning may concern more than floodwater."]
+      }
+    }
+  }
+}

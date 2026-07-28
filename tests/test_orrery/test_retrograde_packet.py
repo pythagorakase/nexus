@@ -52,7 +52,7 @@ class FakeRetrogradeCache:
             },
         }
 
-    def get_seed_dict(self) -> dict[str, object]:
+    def get_seed_dict(self) -> dict[str, object] | None:
         return {
             "seed_type": "inciting pressure",
             "title": "The Ledger Wakes",
@@ -125,11 +125,17 @@ def test_retrograde_packet_is_dry_run_and_selection_oriented() -> None:
         section for section in sections if section["heading"] == "Trait hooks"
     )
     assert trait_section["items"] == [
-        {"kind": "trait", "name": "resources", "rationale": "Money opens doors."},
+        {
+            "kind": "trait",
+            "name": "resources",
+            "rationale": "Money opens doors.",
+            "cold_start_relationships": "allowed",
+        },
         {
             "kind": "trait",
             "name": "status",
             "rationale": "The badge matters narrowly.",
+            "cold_start_relationships": "allowed",
         },
         {
             "kind": "wildcard",

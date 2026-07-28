@@ -22,6 +22,14 @@ WEIRD_LEVELS = frozenset({"low", "medium", "high"})
 # silent heading drift would empty that set and hard-block valid expansions.
 CORE_ENTITIES_HEADING = "Core entities"
 NAMED_SEED_NPCS_HEADING = "Named seed NPCs"
+COLD_START_RELATIONSHIP_TYPES_BY_TRAIT: Mapping[str, frozenset[str]] = {
+    "allies": frozenset({"ally"}),
+    "contacts": frozenset({"contact"}),
+    "patron": frozenset({"patron"}),
+    "dependents": frozenset({"dependent"}),
+    "enemies": frozenset({"enemy"}),
+    "obligations": frozenset({"obligation"}),
+}
 SEED_BUDGETS: Mapping[str, Mapping[str, int]] = {
     "low": {"generate_candidates": 6, "select_target": 3, "deferred_secret_cap": 1},
     "medium": {"generate_candidates": 9, "select_target": 4, "deferred_secret_cap": 2},
@@ -225,6 +233,9 @@ def build_seed_generation_request(
         "coverage_functions": list(RETROGRADE_COVERAGE_FUNCTIONS),
         "candidate_graph": candidate_graph,
         "selection_rubric": _selection_rubric(level),
+        "trait_constraints": list(
+            _mapping(candidate_scaffolds.get("trait_hooks")).get("constraints") or []
+        ),
         "prompt_sections": _seed_prompt_sections(candidate_scaffolds),
         "candidate_response_schema": seed_candidate_response_schema(),
         "candidate_output_schema": {
@@ -381,6 +392,11 @@ def _selection_rubric(level: str) -> dict[str, Any]:
             (
                 "Reject seeds that require unregistered tags, recursive entity "
                 "expansion, or timeline contortions."
+            ),
+            (
+                "Reject candidates whose mechanical_hints would violate any "
+                "trait constraint, while allowing backstory events that do not "
+                "materialize the forbidden relationship row."
             ),
             "Prefer fewer, sharper surviving seeds over a busy history web.",
         ],
@@ -554,6 +570,7 @@ def _candidate_scaffolds(
         "trait_hooks": {
             "selected_traits": selected_traits,
             "rationales": trait_selection.get("trait_rationales") or {},
+            "constraints": trait_selection.get("trait_constraints") or [],
             "wildcard": {
                 "name": wildcard.get("wildcard_name"),
                 "description": wildcard.get("wildcard_description"),
@@ -661,10 +678,22 @@ def _trait_prompt_items(value: Any) -> list[dict[str, Any]]:
     hooks = _mapping(value)
     selected_traits = hooks.get("selected_traits") or []
     rationales = _mapping(hooks.get("rationales"))
+    constraints = {
+        str(constraint.get("trait")): constraint.get(
+            "cold_start_relationships", "allowed"
+        )
+        for constraint in hooks.get("constraints") or []
+        if isinstance(constraint, Mapping) and constraint.get("trait")
+    }
     wildcard = _mapping(hooks.get("wildcard"))
 
     items: list[dict[str, Any]] = [
-        {"kind": "trait", "name": trait, "rationale": rationales.get(str(trait))}
+        {
+            "kind": "trait",
+            "name": trait,
+            "rationale": rationales.get(str(trait)),
+            "cold_start_relationships": constraints.get(str(trait), "allowed"),
+        }
         for trait in selected_traits
         if trait
     ]

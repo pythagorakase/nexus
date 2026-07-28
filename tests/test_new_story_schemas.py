@@ -29,6 +29,9 @@ from nexus.api.new_story_schemas import (
     TransitionData,
     Genre,
     TechLevel,
+    TraitConstraint,
+    TraitRationales,
+    TraitSelection,
     StorySeedType,
     PlaceExtraData,
     WildcardTrait,
@@ -204,6 +207,58 @@ class TestNewStorySchemas:
             character.trait_2.name,
             character.trait_3.name,
         }
+
+    def test_trait_selection_types_future_only_relationship_constraint(self):
+        """Trait confirmation preserves an explicit no-preexisting-row boundary."""
+
+        selection = TraitSelection(
+            selected_traits=["status", "enemies", "obligations"],
+            trait_rationales=TraitRationales(
+                status="Jules has a narrow procedural role.",
+                enemies="No preexisting personal nemesis; opposition arises in play.",
+                obligations="The transcript fee matters, but lives matter more.",
+            ),
+            trait_constraints=[
+                TraitConstraint(trait="enemies", cold_start_relationships="forbidden")
+            ],
+        )
+
+        dumped = selection.model_dump(mode="json")
+        assert dumped["trait_constraints"] == [
+            {"trait": "enemies", "cold_start_relationships": "forbidden"}
+        ]
+
+    def test_trait_selection_defaults_unstated_relationships_to_allowed(self):
+        """Existing selections keep current behavior when no boundary is stated."""
+
+        selection = TraitSelection(
+            selected_traits=["status", "enemies", "obligations"],
+            trait_rationales=TraitRationales(
+                status="A narrow procedural role.",
+                enemies="The player delegates adversary invention.",
+                obligations="A professional duty.",
+            ),
+        )
+
+        assert selection.trait_constraints == []
+
+    def test_trait_selection_rejects_constraint_for_unselected_trait(self):
+        """A model cannot attach a boundary to a trait it did not confirm."""
+
+        with pytest.raises(ValidationError, match="unselected traits"):
+            TraitSelection(
+                selected_traits=["status", "resources", "obligations"],
+                trait_rationales=TraitRationales(
+                    status="A narrow procedural role.",
+                    resources="The player delegates asset invention.",
+                    obligations="A professional duty.",
+                ),
+                trait_constraints=[
+                    TraitConstraint(
+                        trait="enemies", cold_start_relationships="forbidden"
+                    )
+                ],
+            )
 
     def test_character_state_strips_legacy_orrery_tag_proposals(self):
         """Persisted wizard state may predate the locked Orrery vocabulary."""
