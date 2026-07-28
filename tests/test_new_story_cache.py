@@ -150,7 +150,13 @@ def test_write_cache_marks_three_selected_traits_confirmed(monkeypatch) -> None:
         "traits_confirmed = TRUE" in sql for sql, _params in fake_conn.cursor_obj.calls
     )
     assert any(
-        params == ("Powerful people want her silenced.", "forbidden", "enemies")
+        params
+        == (
+            "Powerful people want her silenced.",
+            "forbidden",
+            "[]",
+            "enemies",
+        )
         for _sql, params in fake_conn.cursor_obj.calls
     )
 
@@ -175,7 +181,7 @@ def test_write_cache_canonicalizes_legacy_reputation_trait(monkeypatch) -> None:
     )
 
     assert any(
-        params == ("Her name has started to travel.", "allowed", "fame")
+        params == ("Her name has started to travel.", "allowed", "[]", "fame")
         for _sql, params in fake_conn.cursor_obj.calls
     )
 
@@ -202,7 +208,7 @@ def test_write_cache_preserves_rationale_across_fame_alias(
     )
 
     assert any(
-        params == ("Her name has started to travel.", "allowed", "fame")
+        params == ("Her name has started to travel.", "allowed", "[]", "fame")
         for _sql, params in fake_conn.cursor_obj.calls
     )
 

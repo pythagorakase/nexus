@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Iterable, Literal, TypedDict
+from typing import Iterable, Literal, Mapping, TypedDict
 
 from nexus.agents.orrery.catalog import collect_template_vocabulary
-from nexus.agents.orrery.pair_tag_registry import PAIR_TAG_SEED
+from nexus.agents.orrery.pair_tag_registry import (
+    PAIR_TAG_SEED,
+    PAIR_TAG_SEMANTIC_CATEGORIES,
+)
 from nexus.agents.orrery.status_family import STATUS_LEVELS, status_tag_for_level
 from nexus.agents.orrery.substrate import EntityKind, Slot
 from nexus.agents.orrery.tag_library import (
@@ -48,6 +51,15 @@ class PairTagPrimitive(TypedDict):
     subject_kinds: list[str]
     object_kinds: list[str]
     is_ephemeral: bool
+    semantic_categories: list[str]
+
+
+class RelationshipTypePrimitive(TypedDict):
+    """One relationship type with the missing registry semantics made explicit."""
+
+    relationship_type: str
+    semantic_categories: list[str]
+    default_emotional_valence: str
 
 
 SeedTagPolicy = Literal["stable_seed", "event_anchored", "prompt_visible_only"]
@@ -84,6 +96,7 @@ class SeedEligibleVocabulary(TypedDict):
     event_type_categories: dict[str, str]
     place_classes: list[str]
     relationship_types: list[str]
+    relationship_type_definitions: list[RelationshipTypePrimitive]
 
 
 # Seed-eligible vs prompt-visible category split (issue #300, settled in M4).
@@ -140,6 +153,38 @@ EVENT_ANCHORED_TAG_CATEGORIES: frozenset[str] = frozenset(
 RUNTIME_ONLY_TAG_CATEGORY_PREFIX = "orrery_"
 
 
+# ``character_relationships.relationship_type`` is free text and has no
+# registry table. This companion registry makes the valence/category metadata
+# used by persistence and cold-start constraints explicit. Enumeration refuses
+# a template relationship type that is absent here, preventing a newly added
+# adversarial primitive from silently bypassing player constraints.
+RELATIONSHIP_TYPE_DEFINITIONS: Mapping[str, tuple[str, frozenset[str]]] = {
+    "ally": ("+3|trusting", frozenset({"affiliative"})),
+    "asset": ("0|neutral", frozenset({"contact"})),
+    "captor": ("-3|resentful", frozenset({"adversarial", "patronage"})),
+    "chosen_kin": ("+3|trusting", frozenset({"affiliative", "dependency"})),
+    "companion": ("+3|trusting", frozenset({"affiliative"})),
+    "comrade": ("0|neutral", frozenset({"affiliative"})),
+    "enemy": ("-3|resentful", frozenset({"adversarial"})),
+    "family": ("+3|trusting", frozenset({"affiliative", "dependency"})),
+    "friend": ("+3|trusting", frozenset({"affiliative"})),
+    "guardian": (
+        "+3|trusting",
+        frozenset({"affiliative", "dependency", "patronage"}),
+    ),
+    "handler": ("0|neutral", frozenset({"contact", "patronage"})),
+    "lover": ("0|neutral", frozenset({"affiliative"})),
+    "mentor": ("+3|trusting", frozenset({"affiliative", "patronage"})),
+    "partner": ("0|neutral", frozenset({"affiliative"})),
+    "patron": ("0|neutral", frozenset({"patronage"})),
+    "rival": ("-3|resentful", frozenset({"adversarial"})),
+    "romantic": ("+3|trusting", frozenset({"affiliative"})),
+    "romantic_partner": ("0|neutral", frozenset({"affiliative"})),
+    "spouse": ("0|neutral", frozenset({"affiliative", "dependency"})),
+    "ward": ("+3|trusting", frozenset({"dependency"})),
+}
+
+
 def enumerate_seed_eligible_vocabulary(
     dbname: str | None = None,
 ) -> SeedEligibleVocabulary:
@@ -175,6 +220,10 @@ def enumerate_seed_eligible_vocabulary(
         | set(registry_vocab["registered_single_entity_tags"])
     )
     pair_tag_definitions = _load_pair_tag_definitions()
+    relationship_types = _sorted_strings(template_vocab["relationship_types"])
+    relationship_type_definitions = _load_relationship_type_definitions(
+        relationship_types
+    )
 
     return {
         "entity_kinds": sorted(kind.value for kind in EntityKind),
@@ -203,7 +252,8 @@ def enumerate_seed_eligible_vocabulary(
         "event_types": event_types,
         "event_type_categories": event_type_categories,
         "place_classes": _sorted_strings(template_vocab["place_classes"]),
-        "relationship_types": _sorted_strings(template_vocab["relationship_types"]),
+        "relationship_types": relationship_types,
+        "relationship_type_definitions": relationship_type_definitions,
     }
 
 
@@ -334,12 +384,18 @@ def _load_pair_tag_definitions() -> list[PairTagPrimitive]:
         is_ephemeral,
         _description,
     ) in PAIR_TAG_SEED:
+        semantic_categories = PAIR_TAG_SEMANTIC_CATEGORIES.get(str(tag))
+        if not semantic_categories:
+            raise ValueError(
+                "Seed-eligible pair tag is missing semantic classification: " f"{tag!r}"
+            )
         definitions.append(
             {
                 "tag": str(tag),
                 "subject_kinds": [str(kind) for kind in subject_kinds],
                 "object_kinds": [str(kind) for kind in object_kinds],
                 "is_ephemeral": bool(is_ephemeral),
+                "semantic_categories": sorted(semantic_categories),
             }
         )
     definitions.extend(
@@ -348,10 +404,52 @@ def _load_pair_tag_definitions() -> list[PairTagPrimitive]:
             "subject_kinds": ["character", "faction"],
             "object_kinds": ["faction"],
             "is_ephemeral": False,
+            "semantic_categories": ["status"],
         }
         for level in STATUS_LEVELS
     )
     return sorted(definitions, key=lambda item: item["tag"])
+
+
+def _load_relationship_type_definitions(
+    relationship_types: Iterable[str],
+) -> list[RelationshipTypePrimitive]:
+    """Return complete relationship metadata, refusing unclassified types."""
+
+    definitions: list[RelationshipTypePrimitive] = []
+    for relationship_type in sorted(str(value) for value in relationship_types):
+        metadata = RELATIONSHIP_TYPE_DEFINITIONS.get(relationship_type)
+        if metadata is None:
+            raise ValueError(
+                "Seed-eligible relationship type is missing semantic and "
+                f"valence classification: {relationship_type!r}"
+            )
+        default_valence, semantic_categories = metadata
+        if default_valence.startswith("-") and "adversarial" not in semantic_categories:
+            raise ValueError(
+                "Negative-valence seed-eligible relationship type is not "
+                f"classified as adversarial: {relationship_type!r}"
+            )
+        definitions.append(
+            {
+                "relationship_type": relationship_type,
+                "semantic_categories": sorted(semantic_categories),
+                "default_emotional_valence": default_valence,
+            }
+        )
+    return definitions
+
+
+def relationship_type_default_emotional_valence(relationship_type: str) -> str:
+    """Return the canonical setup valence for a classified relationship type."""
+
+    metadata = RELATIONSHIP_TYPE_DEFINITIONS.get(str(relationship_type))
+    if metadata is None:
+        raise ValueError(
+            "Relationship type is missing semantic and valence classification: "
+            f"{relationship_type!r}"
+        )
+    return metadata[0]
 
 
 def _sorted_strings(values: Iterable[object]) -> list[str]:

@@ -318,6 +318,47 @@ class CharacterTrait(BaseModel):
     )
 
 
+class TraitConstraint(BaseModel):
+    """One selected trait's explicit cold-start materialization constraint."""
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    trait: TraitName = Field(..., description="Selected trait this constraint governs")
+    cold_start_relationships: Literal["allowed", "forbidden"] = Field(
+        default="allowed",
+        description=(
+            "Whether setup may create preexisting mechanical relationship or "
+            "pair-tag rows for this trait. Use 'forbidden' when the player says "
+            "the relationship may arise only during future play, such as no "
+            "preexisting personal nemesis. Backstory events without a mechanical "
+            "relationship remain allowed."
+        ),
+    )
+    preexisting_relationship_targets: List[str] = Field(
+        default_factory=list,
+        max_length=8,
+        description=(
+            "Concrete people or factions the player explicitly established as "
+            "preexisting targets for this trait. Never invent entries."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def reject_forbidden_named_targets(self) -> "TraitConstraint":
+        """A named setup target contradicts a future-opposition-only boundary."""
+
+        if (
+            self.cold_start_relationships == "forbidden"
+            and self.preexisting_relationship_targets
+        ):
+            raise ValueError(
+                f"Trait {self.trait!r} cannot forbid cold-start relationships "
+                "while naming preexisting relationship targets: "
+                f"{self.preexisting_relationship_targets}"
+            )
+        return self
+
+
 class CharacterSheet(BaseModel):
     """
     Character definition following Mind's Eye Theatre trait philosophy.
@@ -392,14 +433,31 @@ class CharacterSheet(BaseModel):
             "Traits without structured inputs remain prose-only remainders."
         ),
     )
+    trait_constraints: List[TraitConstraint] = Field(
+        default_factory=list,
+        max_length=3,
+        description=(
+            "Confirmed per-trait cold-start constraints carried into transition "
+            "materialization."
+        ),
+    )
 
     @model_validator(mode="after")
     def validate_unique_traits(self) -> "CharacterSheet":
-        """Ensure trait names are unique across the three slots."""
+        """Ensure traits and their cold-start constraints stay aligned."""
+
         names = [self.trait_1.name, self.trait_2.name, self.trait_3.name]
         if len(set(names)) != 3:
             raise ValueError(
                 "Trait names must be unique across trait_1/trait_2/trait_3."
+            )
+        constrained_traits = [constraint.trait for constraint in self.trait_constraints]
+        if len(constrained_traits) != len(set(constrained_traits)):
+            raise ValueError("Trait constraints must name unique traits")
+        unselected = sorted(set(constrained_traits) - set(names))
+        if unselected:
+            raise ValueError(
+                f"Trait constraints reference unselected traits: {unselected}"
             )
         return self
 
@@ -467,23 +525,6 @@ class TraitRationales(BaseModel):
     def to_dict(self) -> Dict[str, str]:
         """Convert to dict with only non-None values."""
         return {k: v for k, v in self.model_dump().items() if v is not None}
-
-
-class TraitConstraint(BaseModel):
-    """One selected trait's explicit cold-start materialization constraint."""
-
-    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
-
-    trait: TraitName = Field(..., description="Selected trait this constraint governs")
-    cold_start_relationships: Literal["allowed", "forbidden"] = Field(
-        default="allowed",
-        description=(
-            "Whether setup may create preexisting mechanical relationship rows "
-            "for this trait. Use 'forbidden' when the player says the relationship "
-            "may arise only during future play, such as no preexisting personal "
-            "nemesis. Backstory events without a relationship row remain allowed."
-        ),
-    )
 
 
 class TraitSuggestion(BaseModel):
@@ -813,6 +854,7 @@ class CharacterCreationState(BaseModel):
             trait_3=trait_entries[2],
             orrery_tags=self.wildcard.orrery_tags,
             trait_compile_inputs=self.trait_compile_inputs,
+            trait_constraints=self.trait_selection.trait_constraints,
         )
 
 

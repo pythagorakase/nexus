@@ -130,12 +130,16 @@ def test_retrograde_packet_is_dry_run_and_selection_oriented() -> None:
             "name": "resources",
             "rationale": "Money opens doors.",
             "cold_start_relationships": "allowed",
+            "blocked_relationship_types": [],
+            "blocked_pair_tags": [],
         },
         {
             "kind": "trait",
             "name": "status",
             "rationale": "The badge matters narrowly.",
             "cold_start_relationships": "allowed",
+            "blocked_relationship_types": [],
+            "blocked_pair_tags": [],
         },
         {
             "kind": "wildcard",
@@ -157,6 +161,46 @@ def test_retrograde_packet_is_dry_run_and_selection_oriented() -> None:
         {"kind": "character", "role": "seed_npc", "name": "Vale"}
     ]
     assert packet["vocabulary_summary"]["event_types"] > 0
+
+
+def test_packet_materializes_enemy_constraint_from_registered_vocabulary() -> None:
+    """The packet blocks the full adversarial class, including pair tags."""
+
+    class EnemiesForbiddenCache(FakeRetrogradeCache):
+        def get_character_dict(self) -> dict[str, object]:
+            character = super().get_character_dict()
+            character["trait_selection"] = {
+                "selected_traits": ["status", "enemies", "obligations"],
+                "trait_rationales": {
+                    "status": "The badge matters narrowly.",
+                    "enemies": "No preexisting personal nemesis.",
+                    "obligations": "A professional duty remains.",
+                },
+                "trait_constraints": [
+                    {
+                        "trait": "enemies",
+                        "cold_start_relationships": "forbidden",
+                    }
+                ],
+            }
+            return character
+
+    packet = build_retrograde_dry_run_packet(
+        slot=5,
+        dbname="save_05",
+        cache=EnemiesForbiddenCache(),
+        vocabulary=enumerate_seed_eligible_vocabulary(),
+        settings=load_settings(),
+        weird_level="low",
+    )
+
+    constraint = packet["seed_generation_request"]["trait_constraints"][0]
+    assert constraint["blocked_relationship_types"] == ["captor", "enemy", "rival"]
+    assert constraint["blocked_pair_tags"] == ["hunting"]
+    assert packet["seed_generation_request"]["protagonist_identity"] == {
+        "canonical_ref": "Mara",
+        "known_aliases": [],
+    }
 
 
 def test_retrograde_packet_budget_carries_entity_stub_cap() -> None:

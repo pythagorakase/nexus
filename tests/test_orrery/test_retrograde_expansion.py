@@ -52,10 +52,10 @@ def test_expansion_rejects_forbidden_pc_relationship_but_keeps_event() -> None:
     """A future-only enemy trait blocks only the mechanical cold-start row."""
 
     vocabulary = _expansion_test_vocabulary()
-    packet = _packet(vocabulary)
-    packet["seed_generation_request"]["trait_constraints"] = [
-        {"trait": "enemies", "cold_start_relationships": "forbidden"}
-    ]
+    packet = _packet(
+        vocabulary,
+        constraints=[{"trait": "enemies", "cold_start_relationships": "forbidden"}],
+    )
     payload = _valid_expansion(vocabulary)
     payload["relationship_plan"][0]["relationship_type"] = "enemy"
 
@@ -80,14 +80,124 @@ def test_expansion_rejects_forbidden_pc_relationship_but_keeps_event() -> None:
     assert repaired.event_plan[0].event_ref == "retro_event_001"
 
 
+def test_expansion_rejects_forbidden_enemy_rival_relationship() -> None:
+    """The adversarial class blocks registered rival rows for the PC."""
+
+    vocabulary = _expansion_test_vocabulary()
+    packet = _packet(
+        vocabulary,
+        constraints=[{"trait": "enemies", "cold_start_relationships": "forbidden"}],
+    )
+    payload = _valid_expansion(vocabulary)
+    payload["relationship_plan"][0]["relationship_type"] = "rival"
+
+    with pytest.raises(
+        RetrogradeExpansionValidationError,
+        match="cold_start_relationships_forbidden.*rival.*enemies",
+    ):
+        validate_expansion_plan(
+            payload=payload,
+            packet=packet,
+            seed_candidate_response=_seed_response(vocabulary),
+        )
+
+
+def test_expansion_rejects_forbidden_enemy_captor_relationship() -> None:
+    """The adversarial class blocks registered captor rows for the PC."""
+
+    vocabulary = _expansion_test_vocabulary()
+    packet = _packet(
+        vocabulary,
+        constraints=[{"trait": "enemies", "cold_start_relationships": "forbidden"}],
+    )
+    payload = _valid_expansion(vocabulary)
+    payload["relationship_plan"][0]["relationship_type"] = "captor"
+
+    with pytest.raises(
+        RetrogradeExpansionValidationError,
+        match="cold_start_relationships_forbidden.*captor.*enemies",
+    ):
+        validate_expansion_plan(
+            payload=payload,
+            packet=packet,
+            seed_candidate_response=_seed_response(vocabulary),
+        )
+
+
+def test_expansion_rejects_forbidden_enemy_hunting_pair_tag() -> None:
+    """The adversarial class blocks registered hunting edges for the PC."""
+
+    vocabulary = _expansion_test_vocabulary()
+    packet = _packet(
+        vocabulary,
+        constraints=[{"trait": "enemies", "cold_start_relationships": "forbidden"}],
+    )
+    payload = _valid_expansion(vocabulary)
+    payload["relationship_plan"] = []
+    payload["pair_tag_plan"] = [
+        {
+            "subject_ref": "Vale",
+            "subject_kind": "character",
+            "tag": "hunting",
+            "object_ref": "Mara",
+            "object_kind": "character",
+            "source_event_ref": "retro_event_001",
+        }
+    ]
+
+    with pytest.raises(
+        RetrogradeExpansionValidationError,
+        match="cold_start_relationships_forbidden.*hunting.*enemies",
+    ):
+        validate_expansion_plan(
+            payload=payload,
+            packet=packet,
+            seed_candidate_response=_seed_response(vocabulary),
+        )
+
+
+def test_expansion_rejects_protagonist_first_name_alias() -> None:
+    """A first-name ref cannot bypass constraints or mint a second PC stub."""
+
+    vocabulary = _expansion_test_vocabulary()
+    packet = _packet(
+        vocabulary,
+        constraints=[{"trait": "enemies", "cold_start_relationships": "forbidden"}],
+        protagonist_name="Jules Mercer",
+    )
+    payload = _valid_expansion(vocabulary)
+    payload["relationship_plan"][0]["subject_ref"] = "Jules"
+    payload["relationship_plan"][0]["relationship_type"] = "rival"
+    seed_response = _seed_response_base(vocabulary)
+    edge = packet["seed_generation_request"]["candidate_graph"]["dangling_edges"][0]
+    for candidate in seed_response["candidates"]:
+        candidate["claimed_edges"] = [
+            {
+                "edge_id": edge["edge_id"],
+                "open_endpoint_name": "The Salt Ledger",
+                "open_endpoint_kind": edge["open_endpoint_kind"],
+            }
+        ]
+
+    with pytest.raises(
+        RetrogradeExpansionValidationError,
+        match="protagonist_duplicate_stub_forbidden.*jules",
+    ):
+        validate_expansion_plan(
+            payload=payload,
+            packet=packet,
+            seed_candidate_response=seed_response,
+        )
+
+
 def test_expansion_prompt_names_future_only_relationship_constraint() -> None:
     """R6 can repair a forbidden row because the typed constraint is visible."""
 
     vocabulary = _expansion_test_vocabulary()
-    packet = _packet(vocabulary)
-    packet["seed_generation_request"]["trait_constraints"] = [
-        {"trait": "enemies", "cold_start_relationships": "forbidden"}
-    ]
+    packet = _packet(
+        vocabulary,
+        constraints=[{"trait": "enemies", "cold_start_relationships": "forbidden"}],
+    )
 
     prompt = render_expansion_prompt(
         packet=packet,
@@ -1065,7 +1175,13 @@ def _expansion_test_vocabulary() -> SeedEligibleVocabulary:
     return vocabulary
 
 
-def _packet(vocabulary: SeedEligibleVocabulary) -> dict[str, Any]:
+def _packet(
+    vocabulary: SeedEligibleVocabulary,
+    *,
+    constraints: list[dict[str, Any]] | None = None,
+    protagonist_name: str = "Mara",
+) -> dict[str, Any]:
+    protagonist_tokens = protagonist_name.split()
     return {
         "seed_generation_request": build_seed_generation_request(
             candidate_scaffolds={
@@ -1073,13 +1189,19 @@ def _packet(vocabulary: SeedEligibleVocabulary) -> dict[str, Any]:
                     {
                         "kind": "character",
                         "role": "protagonist",
-                        "name": "Mara",
+                        "name": protagonist_name,
                         "summary": "Debt tracker.",
                     }
                 ],
                 "named_seed_npcs": [],
                 "pressure_axes": [],
-                "trait_hooks": {},
+                "trait_hooks": {"constraints": constraints or []},
+                "protagonist_identity": {
+                    "canonical_ref": protagonist_name,
+                    "known_aliases": (
+                        [protagonist_tokens[0]] if len(protagonist_tokens) > 1 else []
+                    ),
+                },
             },
             vocabulary=vocabulary,
             weird={"level": "medium", "genre": "cyberpunk", "raw_midpoint": 0.5},

@@ -11,7 +11,6 @@ from nexus.agents.logon.apex_schema import Coordinates
 from nexus.agents.orrery.geo_authoring import geo_prompt_from_context
 from nexus.agents.orrery.retrograde_junctions import resolve_junctions
 from nexus.agents.orrery.retrograde_packet import (
-    COLD_START_RELATIONSHIP_TYPES_BY_TRAIT,
     CORE_ENTITIES_HEADING,
     NAMED_SEED_NPCS_HEADING,
 )
@@ -642,6 +641,7 @@ def render_expansion_prompt(
         "selected_candidates": selected_candidates,
         "selected_junctions": selected_junctions,
         "trait_constraints": seed_generation_request.get("trait_constraints", []),
+        "protagonist_identity": seed_generation_request.get("protagonist_identity", {}),
         "core_prompt_sections": (
             seed_generation_request.get("prompt_sections", [])[:4]
         ),
@@ -718,6 +718,10 @@ def validate_expansion_plan(
         selected_seed_ids=list(candidates.selected_seed_ids),
     )
     geo_authoring = packet.get("geo_authoring")
+    (
+        forbidden_relationship_traits,
+        forbidden_pair_tag_traits,
+    ) = _forbidden_cold_start_mechanics(seed_generation_request)
     issues = _expansion_contract_issues(
         response=response,
         selected_seed_ids=selected_seed_ids,
@@ -726,10 +730,9 @@ def validate_expansion_plan(
         candidates_by_id={
             candidate.seed_id: candidate for candidate in candidates.candidates
         },
-        forbidden_relationship_traits=_forbidden_relationship_traits(
-            seed_generation_request
-        ),
-        protagonist_ref=_packet_protagonist_ref(packet),
+        forbidden_relationship_traits=forbidden_relationship_traits,
+        forbidden_pair_tag_traits=forbidden_pair_tag_traits,
+        protagonist_identity=_packet_protagonist_identity(packet),
         known_entity_keys=_packet_known_entity_keys(packet),
         max_new_entity_stubs=_budget_entity_stub_cap(seed_generation_request),
     )
@@ -831,12 +834,19 @@ def _expansion_contract_issues(
     selected_junctions: list[dict[str, Any]],
     vocabulary: SeedEligibleVocabulary,
     candidates_by_id: Mapping[str, Any],
-    forbidden_relationship_traits: Mapping[str, str],
-    protagonist_ref: Optional[str],
+    forbidden_relationship_traits: Mapping[str, set[str]],
+    forbidden_pair_tag_traits: Mapping[str, set[str]],
+    protagonist_identity: Mapping[str, Any],
     known_entity_keys: Optional[set[tuple[str, str]]] = None,
     max_new_entity_stubs: Optional[int] = None,
 ) -> list[str]:
     issues: list[str] = []
+    issues.extend(
+        _protagonist_duplicate_ref_issues(
+            response=response,
+            protagonist_identity=protagonist_identity,
+        )
+    )
     issues.extend(
         _new_entity_budget_issues(
             response=response,
@@ -917,6 +927,8 @@ def _expansion_contract_issues(
                 pair_definitions=pair_definitions,
                 event_refs=event_refs,
                 status_edge_counts=status_edge_counts,
+                forbidden_pair_tag_traits=forbidden_pair_tag_traits,
+                protagonist_identity=protagonist_identity,
             )
         )
 
@@ -928,7 +940,7 @@ def _expansion_contract_issues(
                 relationship_types=relationship_types,
                 event_refs=event_refs,
                 forbidden_relationship_traits=forbidden_relationship_traits,
-                protagonist_ref=protagonist_ref,
+                protagonist_identity=protagonist_identity,
             )
         )
 
@@ -1116,6 +1128,66 @@ def _collect_plan_entity_keys(
     return keys
 
 
+def _protagonist_normalized_refs(
+    protagonist_identity: Mapping[str, Any],
+) -> tuple[Optional[str], set[str]]:
+    """Return the canonical normalized ref and all explicitly known aliases."""
+
+    canonical_value = protagonist_identity.get("canonical_ref")
+    if not canonical_value:
+        return None, set()
+    canonical_ref = normalize_entity_ref(str(canonical_value))
+    aliases = {
+        normalize_entity_ref(str(alias))
+        for alias in protagonist_identity.get("known_aliases") or ()
+        if str(alias).strip()
+    }
+    return canonical_ref, aliases
+
+
+def _ref_matches_protagonist(
+    entity_ref: str,
+    protagonist_identity: Mapping[str, Any],
+) -> bool:
+    """Match canonical name, known aliases, and strict name-token subsets."""
+
+    canonical_ref, aliases = _protagonist_normalized_refs(protagonist_identity)
+    if canonical_ref is None:
+        return False
+    normalized_ref = normalize_entity_ref(entity_ref)
+    if normalized_ref == canonical_ref or normalized_ref in aliases:
+        return True
+    canonical_tokens = frozenset(canonical_ref.split())
+    candidate_tokens = frozenset(normalized_ref.split())
+    return bool(candidate_tokens) and candidate_tokens < canonical_tokens
+
+
+def _protagonist_duplicate_ref_issues(
+    *,
+    response: RetrogradeExpansionPlanResponse,
+    protagonist_identity: Mapping[str, Any],
+) -> list[str]:
+    """Refuse alias/subset refs that would stage a second protagonist row."""
+
+    canonical_ref, _aliases = _protagonist_normalized_refs(protagonist_identity)
+    if canonical_ref is None:
+        return []
+    duplicate_refs = sorted(
+        normalized_ref
+        for entity_kind, normalized_ref in _collect_plan_entity_keys(response)
+        if entity_kind == "character"
+        and normalized_ref != canonical_ref
+        and _ref_matches_protagonist(normalized_ref, protagonist_identity)
+    )
+    if not duplicate_refs:
+        return []
+    return [
+        "protagonist_duplicate_stub_forbidden: character refs are aliases or "
+        "strict name-token subsets of the protagonist and may not mint a second "
+        f"character row: {duplicate_refs}"
+    ]
+
+
 def _packet_known_entity_keys(packet: Mapping[str, Any]) -> set[tuple[str, str]]:
     """First-class starting entity keys known to the Retrograde packet.
 
@@ -1156,19 +1228,49 @@ def _packet_known_entity_keys(packet: Mapping[str, Any]) -> set[tuple[str, str]]
     return keys
 
 
-def _packet_protagonist_ref(packet: Mapping[str, Any]) -> Optional[str]:
-    """Return the protagonist's exact prompt-local name from a packet."""
+def _packet_protagonist_identity(packet: Mapping[str, Any]) -> dict[str, Any]:
+    """Return canonical and known alias refs for the packet protagonist."""
+
+    def coerce(value: Any) -> Optional[dict[str, Any]]:
+        if not isinstance(value, Mapping):
+            return None
+        canonical_ref = value.get("canonical_ref")
+        if not canonical_ref:
+            return None
+        aliases = value.get("known_aliases") or []
+        if not isinstance(aliases, list):
+            raise RetrogradeExpansionValidationError(
+                "packet protagonist_identity.known_aliases must be a list"
+            )
+        return {
+            "canonical_ref": str(canonical_ref),
+            "known_aliases": [str(alias) for alias in aliases if str(alias).strip()],
+        }
 
     scaffolds = packet.get("candidate_scaffolds")
     if isinstance(scaffolds, Mapping):
+        identity = coerce(scaffolds.get("protagonist_identity"))
+        if identity is not None:
+            return identity
         for card in scaffolds.get("core_entities") or ():
             if isinstance(card, Mapping) and card.get("role") == "protagonist":
                 name = card.get("name")
                 if name:
-                    return str(name)
+                    details = card.get("details")
+                    aliases = (
+                        details.get("known_aliases", [])
+                        if isinstance(details, Mapping)
+                        else []
+                    )
+                    return (
+                        coerce({"canonical_ref": name, "known_aliases": aliases}) or {}
+                    )
 
     seed_generation_request = packet.get("seed_generation_request")
     if isinstance(seed_generation_request, Mapping):
+        identity = coerce(seed_generation_request.get("protagonist_identity"))
+        if identity is not None:
+            return identity
         for section in seed_generation_request.get("prompt_sections") or ():
             if not isinstance(section, Mapping):
                 continue
@@ -1178,27 +1280,45 @@ def _packet_protagonist_ref(packet: Mapping[str, Any]) -> Optional[str]:
                 if isinstance(card, Mapping) and card.get("role") == "protagonist":
                     name = card.get("name")
                     if name:
-                        return str(name)
-    return None
+                        details = card.get("details")
+                        aliases = (
+                            details.get("known_aliases", [])
+                            if isinstance(details, Mapping)
+                            else []
+                        )
+                        return (
+                            coerce({"canonical_ref": name, "known_aliases": aliases})
+                            or {}
+                        )
+    return {}
 
 
-def _forbidden_relationship_traits(
+def _forbidden_cold_start_mechanics(
     seed_generation_request: Mapping[str, Any],
-) -> dict[str, str]:
-    """Map forbidden mechanical relationship types back to their source trait."""
+) -> tuple[dict[str, set[str]], dict[str, set[str]]]:
+    """Index packet-materialized blocked mechanics back to source traits."""
 
-    forbidden: dict[str, str] = {}
+    relationship_traits: dict[str, set[str]] = {}
+    pair_tag_traits: dict[str, set[str]] = {}
     for constraint in seed_generation_request.get("trait_constraints") or ():
         if not isinstance(constraint, Mapping):
             continue
         if constraint.get("cold_start_relationships") != "forbidden":
             continue
         trait = str(constraint.get("trait") or "")
-        for relationship_type in COLD_START_RELATIONSHIP_TYPES_BY_TRAIT.get(
-            trait, frozenset()
+        if (
+            "blocked_relationship_types" not in constraint
+            or "blocked_pair_tags" not in constraint
         ):
-            forbidden[relationship_type] = trait
-    return forbidden
+            raise RetrogradeExpansionValidationError(
+                "cold_start_constraint_unmaterialized: forbidden trait "
+                f"{trait!r} is missing vocabulary-derived blocked sets"
+            )
+        for relationship_type in constraint.get("blocked_relationship_types") or ():
+            relationship_traits.setdefault(str(relationship_type), set()).add(trait)
+        for pair_tag in constraint.get("blocked_pair_tags") or ():
+            pair_tag_traits.setdefault(str(pair_tag), set()).add(trait)
+    return relationship_traits, pair_tag_traits
 
 
 def _budget_entity_stub_cap(
@@ -1289,6 +1409,8 @@ def _pair_tag_plan_issues(
     pair_definitions: Mapping[str, Mapping[str, Any]],
     event_refs: set[str],
     status_edge_counts: Mapping[tuple[str, str, str, str], int],
+    forbidden_pair_tag_traits: Mapping[str, set[str]],
+    protagonist_identity: Mapping[str, Any],
 ) -> list[str]:
     issues: list[str] = []
     prefix = f"pair tag {pair_plan.tag!r}"
@@ -1326,6 +1448,29 @@ def _pair_tag_plan_issues(
             f"{pair_plan.subject_ref!r} -> {pair_plan.object_ref!r}; plan only "
             "the final standing and express the status arc in event_plan"
         )
+    constrained_traits = forbidden_pair_tag_traits.get(pair_plan.tag, set())
+    involves_protagonist = (
+        pair_plan.subject_kind == "character"
+        and _ref_matches_protagonist(
+            pair_plan.subject_ref,
+            protagonist_identity,
+        )
+    ) or (
+        pair_plan.object_kind == "character"
+        and _ref_matches_protagonist(
+            pair_plan.object_ref,
+            protagonist_identity,
+        )
+    )
+    if constrained_traits and involves_protagonist:
+        issues.append(
+            "cold_start_relationships_forbidden: "
+            f"pair tag {pair_plan.tag!r} involving protagonist "
+            f"{protagonist_identity.get('canonical_ref')!r} violates trait(s) "
+            f"{sorted(constrained_traits)!r} cold_start_relationships='forbidden'; "
+            "retain any supporting backstory event but remove the mechanical "
+            "pair-tag row"
+        )
     return issues
 
 
@@ -1335,8 +1480,8 @@ def _relationship_plan_issues(
     entity_kinds: set[str],
     relationship_types: set[str],
     event_refs: set[str],
-    forbidden_relationship_traits: Mapping[str, str],
-    protagonist_ref: Optional[str],
+    forbidden_relationship_traits: Mapping[str, set[str]],
+    protagonist_identity: Mapping[str, Any],
 ) -> list[str]:
     issues: list[str] = []
     prefix = f"relationship {relationship_plan.relationship_type!r}"
@@ -1366,23 +1511,34 @@ def _relationship_plan_issues(
             f"{prefix} references unknown source_event_ref "
             f"{relationship_plan.source_event_ref!r}"
         )
-    constrained_trait = forbidden_relationship_traits.get(
-        relationship_plan.relationship_type
+    constrained_traits = forbidden_relationship_traits.get(
+        relationship_plan.relationship_type,
+        set(),
     )
-    relationship_refs = {
-        normalize_entity_ref(relationship_plan.subject_ref),
-        normalize_entity_ref(relationship_plan.object_ref),
-    }
+    involves_protagonist = (
+        relationship_plan.subject_kind == "character"
+        and _ref_matches_protagonist(
+            relationship_plan.subject_ref,
+            protagonist_identity,
+        )
+    ) or (
+        relationship_plan.object_kind == "character"
+        and _ref_matches_protagonist(
+            relationship_plan.object_ref,
+            protagonist_identity,
+        )
+    )
     if (
-        constrained_trait is not None
-        and protagonist_ref is not None
-        and normalize_entity_ref(protagonist_ref) in relationship_refs
+        constrained_traits
+        and protagonist_identity.get("canonical_ref")
+        and involves_protagonist
     ):
         issues.append(
             "cold_start_relationships_forbidden: "
             f"relationship {relationship_plan.relationship_type!r} involving "
-            f"protagonist {protagonist_ref!r} violates trait "
-            f"{constrained_trait!r} cold_start_relationships='forbidden'; "
+            f"protagonist {protagonist_identity.get('canonical_ref')!r} violates "
+            f"trait(s) {sorted(constrained_traits)!r} "
+            "cold_start_relationships='forbidden'; "
             "retain any supporting backstory event but remove the mechanical "
             "relationship row"
         )
@@ -1624,9 +1780,9 @@ def _hard_validation_rules() -> list[str]:
         ),
         (
             "A trait with cold_start_relationships='forbidden' prohibits its "
-            "matching relationship mechanic when either endpoint is the "
-            "protagonist. Keep permissible backstory events; omit only the "
-            "forbidden relationship row."
+            "blocked relationship and pair-tag mechanics when either endpoint "
+            "is the protagonist or a listed alias. Keep permissible backstory "
+            "events; omit only the forbidden mechanical row."
         ),
         (
             "project_plan may carry only a woven selected seed's exact "
@@ -1712,6 +1868,7 @@ def _seed_vocabulary(value: Any) -> SeedEligibleVocabulary:
         "multi_entity_tag_definitions",
         "event_types",
         "relationship_types",
+        "relationship_type_definitions",
     )
     missing = [key for key in required_keys if key not in vocabulary]
     if missing:

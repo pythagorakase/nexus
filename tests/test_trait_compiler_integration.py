@@ -17,7 +17,12 @@ from typing import Any, Optional
 import psycopg2
 import pytest
 
-from nexus.api.new_story_schemas import CharacterSheet, CharacterTrait, TraitName
+from nexus.api.new_story_schemas import (
+    CharacterSheet,
+    CharacterTrait,
+    TraitConstraint,
+    TraitName,
+)
 from nexus.api.trait_compiler import (
     apply_character_trait_compilation,
     compile_character_traits,
@@ -123,7 +128,9 @@ def _install_valence_shadow(cur: Any) -> None:
 
 
 def _character_sheet(
-    *trait_names: TraitName, inputs: Optional[TraitCompileInputs]
+    *trait_names: TraitName,
+    inputs: Optional[TraitCompileInputs],
+    constraints: Optional[list[TraitConstraint]] = None,
 ) -> CharacterSheet:
     traits = [
         CharacterTrait(name=trait_name, description=f"{trait_name} trait prose")
@@ -144,6 +151,7 @@ def _character_sheet(
         trait_2=traits[1],
         trait_3=traits[2],
         trait_compile_inputs=inputs,
+        trait_constraints=constraints or [],
     )
 
 
@@ -960,6 +968,87 @@ def test_dependents_apply_and_dry_run_audit_on_save_05() -> None:
                 (character_id,),
             )
             assert cur.fetchall() == [("dependent", "+3|trusting", "protects")]
+    finally:
+        conn.rollback()
+        conn.close()
+
+
+@pytest.mark.requires_postgres
+def test_forbidden_relationship_traits_have_dry_run_apply_parity_on_save_05() -> None:
+    """The constraint gate precedes #605 target pre-resolution in both modes."""
+
+    try:
+        conn = psycopg2.connect(dbname=TEST_DBNAME)
+    except psycopg2.Error as exc:  # pragma: no cover - environment guard
+        pytest.skip(f"{TEST_DBNAME} PostgreSQL test database unavailable: {exc}")
+
+    try:
+        with conn.cursor() as cur:
+            _install_valence_shadow(cur)
+            character_id, character_entity_id = _insert_protagonist(cur)
+            inputs = TraitCompileInputs.model_validate(
+                {
+                    "patron": {
+                        "name": PATRON_NAME,
+                        "functions": ["mentors", "protects"],
+                    },
+                    "dependents": {"targets": [{"name": DEPENDENT_NAME}]},
+                    "obligations": {
+                        "targets": [
+                            {
+                                "counterparty_kind": "character",
+                                "name": OBLIGATION_CHARACTER_NAME,
+                            }
+                        ]
+                    },
+                }
+            )
+            constraints = [
+                TraitConstraint.model_validate(
+                    {"trait": trait, "cold_start_relationships": "forbidden"}
+                )
+                for trait in ("patron", "dependents", "obligations")
+            ]
+            sheet = _character_sheet(
+                "patron",
+                "dependents",
+                "obligations",
+                inputs=inputs,
+                constraints=constraints,
+            )
+
+            dry_result = compile_character_traits(
+                cur,
+                character=sheet,
+                character_id=character_id,
+                character_entity_id=character_entity_id,
+                dry_run=True,
+            )
+            apply_result = apply_character_trait_compilation(
+                cur,
+                character=sheet,
+                character_id=character_id,
+                character_entity_id=character_entity_id,
+            )
+
+            for result in (dry_result, apply_result):
+                assert result.created_entities == []
+                assert result.created_relationships == []
+                assert result.applied_pair_tags == []
+                assert {item.reason_code for item in result.prose_only_remainders} == {
+                    TraitCompileReasonCode.COLD_START_RELATIONSHIPS_FORBIDDEN
+                }
+            cur.execute(
+                "SELECT count(*) FROM characters WHERE name = ANY(%s)",
+                ([PATRON_NAME, DEPENDENT_NAME, OBLIGATION_CHARACTER_NAME],),
+            )
+            assert cur.fetchone() == (0,)
+            cur.execute(
+                "SELECT count(*) FROM character_relationships "
+                "WHERE character1_id = %s",
+                (character_id,),
+            )
+            assert cur.fetchone() == (0,)
     finally:
         conn.rollback()
         conn.close()

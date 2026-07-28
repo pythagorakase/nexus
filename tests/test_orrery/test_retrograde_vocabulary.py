@@ -88,11 +88,38 @@ def test_seed_eligible_vocabulary_includes_pair_tag_kind_constraints() -> None:
     assert definitions["hunting"]["subject_kinds"] == ["character", "faction"]
     assert definitions["hunting"]["object_kinds"] == ["character"]
     assert definitions["hunting"]["is_ephemeral"] is True
+    assert definitions["hunting"]["semantic_categories"] == ["adversarial"]
     assert STATUS_TAGS <= set(definitions)
     for tag in STATUS_TAGS:
         assert definitions[tag]["subject_kinds"] == ["character", "faction"]
         assert definitions[tag]["object_kinds"] == ["faction"]
         assert definitions[tag]["is_ephemeral"] is False
+        assert definitions[tag]["semantic_categories"] == ["status"]
+
+
+def test_seed_relationship_types_carry_semantic_and_valence_metadata() -> None:
+    """Constraint classification is registered metadata, not string equality."""
+
+    vocabulary = enumerate_seed_eligible_vocabulary()
+    definitions = {
+        item["relationship_type"]: item
+        for item in vocabulary["relationship_type_definitions"]
+    }
+
+    for relationship_type in ("captor", "enemy", "rival"):
+        assert "adversarial" in definitions[relationship_type]["semantic_categories"]
+        assert definitions[relationship_type]["default_emotional_valence"].startswith(
+            "-"
+        )
+
+
+def test_unclassified_seed_relationship_type_fails_loudly() -> None:
+    """A new seed-eligible relation cannot silently bypass constraint classes."""
+
+    with pytest.raises(ValueError, match="missing semantic and valence"):
+        retrograde_vocabulary._load_relationship_type_definitions(
+            ["unclassified_future_threat"]
+        )
 
 
 def test_seed_eligible_vocabulary_classifies_registered_categories(

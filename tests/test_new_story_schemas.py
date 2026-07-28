@@ -225,7 +225,11 @@ class TestNewStorySchemas:
 
         dumped = selection.model_dump(mode="json")
         assert dumped["trait_constraints"] == [
-            {"trait": "enemies", "cold_start_relationships": "forbidden"}
+            {
+                "trait": "enemies",
+                "cold_start_relationships": "forbidden",
+                "preexisting_relationship_targets": [],
+            }
         ]
 
     def test_trait_selection_defaults_unstated_relationships_to_allowed(self):
@@ -257,6 +261,26 @@ class TestNewStorySchemas:
                     TraitConstraint(
                         trait="enemies", cold_start_relationships="forbidden"
                     )
+                ],
+            )
+
+    def test_trait_selection_rejects_forbidden_named_target_contradiction(self):
+        """A future-only boundary cannot affirm a setup relationship target."""
+
+        with pytest.raises(ValidationError, match="cannot forbid.*Doctor Voss"):
+            TraitSelection(
+                selected_traits=["status", "patron", "obligations"],
+                trait_rationales=TraitRationales(
+                    status="Jules has a narrow procedural role.",
+                    patron="Doctor Voss is an explicitly established patron.",
+                    obligations="The transcript fee matters, but lives matter more.",
+                ),
+                trait_constraints=[
+                    {
+                        "trait": "patron",
+                        "cold_start_relationships": "forbidden",
+                        "preexisting_relationship_targets": ["Doctor Voss"],
+                    }
                 ],
             )
 

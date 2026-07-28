@@ -768,6 +768,11 @@ class NewStoryDatabaseMapper:
         for trait in character.get_trait_entries():
             extra_data[trait.name] = trait.description
 
+        extra_data["trait_constraints"] = [
+            constraint.model_dump(mode="json")
+            for constraint in character.trait_constraints
+        ]
+
         # Add required wildcard trait
         extra_data["wildcard"] = {
             "name": character.wildcard_name,

@@ -7,7 +7,6 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from hashlib import sha256
 import os
-import re
 from typing import Iterator, Literal, Optional, Sequence
 
 import psycopg2
@@ -19,10 +18,9 @@ from nexus.agents.orrery.resolver import (
     load_anchor_world_time,
     load_current_entity_tags,
 )
-from nexus.api.slot_utils import get_slot_db_url
+from nexus.api.slot_utils import get_slot_db_url, require_slot_dbname
 
 VALID_ENTITY_KINDS = frozenset({"character", "faction", "place"})
-_SLOT_DB_RE = re.compile(r"^save_0[1-5]$")
 EntityKind = Literal["character", "faction", "place"]
 
 
@@ -660,9 +658,4 @@ def _resolve_dbname(dbname: Optional[str]) -> str:
             resolved = f"save_{int(slot):02d}"
         else:
             resolved = os.environ.get("PGDATABASE", "")
-    if not _SLOT_DB_RE.match(resolved):
-        raise ValueError(
-            "Orrery tag library requires a slot database name "
-            f"(save_01..save_05), got {resolved!r}"
-        )
-    return resolved
+    return require_slot_dbname(dbname=resolved)

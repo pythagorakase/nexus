@@ -120,10 +120,10 @@ async def test_live_trait_confirmation_persists_and_threads_constraint() -> None
     assert context.last_tool_result is not None
     submitted = context.last_tool_result["data"]["character_state"]["trait_selection"]
     submitted_constraints = {
-        row["trait"]: row["cold_start_relationships"]
-        for row in submitted["trait_constraints"]
+        row["trait"]: row for row in submitted["trait_constraints"]
     }
-    assert submitted_constraints["enemies"] == "forbidden"
+    assert submitted_constraints["enemies"]["cold_start_relationships"] == "forbidden"
+    assert submitted_constraints["enemies"]["preexisting_relationship_targets"] == []
 
     hydrated = read_cache(DBNAME)
     assert hydrated is not None
@@ -136,17 +136,27 @@ async def test_live_trait_confirmation_persists_and_threads_constraint() -> None
         weird_level="low",
     )
     packet_constraints = {
-        row["trait"]: row["cold_start_relationships"]
+        row["trait"]: row
         for row in packet["candidate_scaffolds"]["trait_hooks"]["constraints"]
     }
-    assert packet_constraints["enemies"] == "forbidden"
+    assert packet_constraints["enemies"]["cold_start_relationships"] == "forbidden"
+    assert packet_constraints["enemies"]["blocked_relationship_types"] == [
+        "captor",
+        "enemy",
+        "rival",
+    ]
+    assert packet_constraints["enemies"]["blocked_pair_tags"] == ["hunting"]
     request_constraints = {
-        row["trait"]: row["cold_start_relationships"]
+        row["trait"]: row
         for row in packet["seed_generation_request"]["trait_constraints"]
     }
-    assert request_constraints["enemies"] == "forbidden"
+    assert request_constraints["enemies"] == packet_constraints["enemies"]
     selection_prompt = render_seed_selection_prompt(
         seed_generation_request=packet["seed_generation_request"],
         candidates_payload={"candidates": []},
     )
     assert '"cold_start_relationships": "forbidden"' in selection_prompt
+    assert '"blocked_relationship_types": [' in selection_prompt
+    assert '"rival"' in selection_prompt
+    assert '"blocked_pair_tags": [' in selection_prompt
+    assert '"hunting"' in selection_prompt

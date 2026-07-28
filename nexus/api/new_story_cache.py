@@ -72,24 +72,33 @@ def _trait_rationale(
     )
 
 
-def _trait_constraint_map(value: Any) -> Dict[str, str]:
+def _trait_constraint_map(value: Any) -> Dict[str, Dict[str, Any]]:
     """Index TraitSelection constraint rows by canonical trait name."""
 
     if not isinstance(value, list):
         return {}
-    constraints: Dict[str, str] = {}
+    constraints: Dict[str, Dict[str, Any]] = {}
     for entry in value:
         if not isinstance(entry, Mapping):
             continue
         trait_name = entry.get("trait")
         relationship_policy = entry.get("cold_start_relationships", "allowed")
-        if trait_name in VALID_TRAITS and relationship_policy in {
-            "allowed",
-            "forbidden",
-        }:
-            constraints[canonical_trait_name(str(trait_name))] = str(
-                relationship_policy
-            )
+        named_targets = entry.get("preexisting_relationship_targets") or []
+        if (
+            trait_name in VALID_TRAITS
+            and relationship_policy
+            in {
+                "allowed",
+                "forbidden",
+            }
+            and isinstance(named_targets, list)
+        ):
+            constraints[canonical_trait_name(str(trait_name))] = {
+                "cold_start_relationships": str(relationship_policy),
+                "preexisting_relationship_targets": [
+                    str(target) for target in named_targets if str(target).strip()
+                ],
+            }
     return constraints
 
 
@@ -158,6 +167,7 @@ class SuggestedTrait:
     trait: str
     rationale: str
     cold_start_relationships: Literal["allowed", "forbidden"] = "allowed"
+    preexisting_relationship_targets: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -308,6 +318,9 @@ class WizardCache:
             {
                 "trait": st.trait,
                 "cold_start_relationships": st.cold_start_relationships,
+                "preexisting_relationship_targets": list(
+                    st.preexisting_relationship_targets
+                ),
             }
             for st in self.character.suggested_traits
         ]
@@ -421,7 +434,8 @@ def read_cache(dbname: Optional[str] = None) -> Optional[WizardCache]:
             # Load trait data from assets.traits
             cur.execute(
                 """
-                SELECT id, name, rationale, is_selected, cold_start_relationships
+                SELECT id, name, rationale, is_selected, cold_start_relationships,
+                       preexisting_relationship_targets
                 FROM assets.traits
                 ORDER BY id
                 """
@@ -435,6 +449,9 @@ def read_cache(dbname: Optional[str] = None) -> Optional[WizardCache]:
                     rationale=r["rationale"] or "",
                     cold_start_relationships=r.get("cold_start_relationships")
                     or "allowed",
+                    preexisting_relationship_targets=list(
+                        r.get("preexisting_relationship_targets") or []
+                    ),
                 )
                 for r in traits_rows
                 if r["is_selected"] and r["id"] <= 10
@@ -699,7 +716,8 @@ def confirm_trait_selection(dbname: Optional[str]) -> List[str]:
             # Clear rationales for non-selected traits
             cur.execute(
                 "UPDATE assets.traits SET rationale = NULL, "
-                "cold_start_relationships = 'allowed' "
+                "cold_start_relationships = 'allowed', "
+                "preexisting_relationship_targets = '[]'::jsonb "
                 "WHERE is_selected = FALSE AND id <= 10"
             )
 
@@ -831,7 +849,8 @@ def write_suggested_traits(
             # First deselect all optional traits (not wildcard)
             cur.execute(
                 "UPDATE assets.traits SET is_selected = FALSE, rationale = NULL, "
-                "cold_start_relationships = 'allowed' WHERE id <= 10"
+                "cold_start_relationships = 'allowed', "
+                "preexisting_relationship_targets = '[]'::jsonb WHERE id <= 10"
             )
 
             # Select and set rationale for each suggested trait
@@ -869,7 +888,8 @@ def clear_suggested_traits(dbname: Optional[str] = None) -> None:
         with conn.cursor() as cur:
             cur.execute(
                 "UPDATE assets.traits SET is_selected = FALSE, rationale = NULL, "
-                "cold_start_relationships = 'allowed' WHERE id <= 10"
+                "cold_start_relationships = 'allowed', "
+                "preexisting_relationship_targets = '[]'::jsonb WHERE id <= 10"
             )
     logger.info(
         "Cleared trait selections in %s", dbname or os.environ.get("PGDATABASE")
@@ -999,7 +1019,8 @@ def clear_cache(dbname: Optional[str] = None) -> None:
             # Reset traits: deselect optional traits, clear rationales, reset wildcard name
             cur.execute(
                 "UPDATE assets.traits SET is_selected = FALSE, rationale = NULL, "
-                "cold_start_relationships = 'allowed' WHERE id <= 10"
+                "cold_start_relationships = 'allowed', "
+                "preexisting_relationship_targets = '[]'::jsonb WHERE id <= 10"
             )
             cur.execute(
                 "UPDATE assets.traits SET name = 'wildcard', rationale = NULL WHERE id = 11"
@@ -1095,7 +1116,8 @@ def clear_character_phase(dbname: Optional[str] = None) -> None:
             cur.execute(
                 """
                 UPDATE assets.traits SET is_selected = FALSE, rationale = NULL,
-                    cold_start_relationships = 'allowed' WHERE id <= 10;
+                    cold_start_relationships = 'allowed',
+                    preexisting_relationship_targets = '[]'::jsonb WHERE id <= 10;
                 UPDATE assets.traits SET name = 'wildcard', rationale = NULL WHERE id = 11;
                 """
             )
@@ -1164,7 +1186,8 @@ def clear_setting_phase(dbname: Optional[str] = None) -> None:
             cur.execute(
                 """
                 UPDATE assets.traits SET is_selected = FALSE, rationale = NULL,
-                    cold_start_relationships = 'allowed' WHERE id <= 10;
+                    cold_start_relationships = 'allowed',
+                    preexisting_relationship_targets = '[]'::jsonb WHERE id <= 10;
                 UPDATE assets.traits SET name = 'wildcard', rationale = NULL WHERE id = 11;
                 """
             )
@@ -1295,7 +1318,8 @@ def write_cache(
                         # Clear previous selections, then set new ones
                         cur.execute(
                             "UPDATE assets.traits SET is_selected = FALSE, "
-                            "rationale = NULL, cold_start_relationships = 'allowed' "
+                            "rationale = NULL, cold_start_relationships = 'allowed', "
+                            "preexisting_relationship_targets = '[]'::jsonb "
                             "WHERE id <= 10"
                         )
                         for trait_name in selected:
@@ -1305,17 +1329,26 @@ def write_cache(
                                 trait_name=trait_name,
                                 storage_name=storage_name,
                             )
+                            constraint = constraints.get(storage_name, {})
                             cur.execute(
                                 """
                                 UPDATE assets.traits
                                 SET is_selected = TRUE,
                                     rationale = %s,
-                                    cold_start_relationships = %s
+                                    cold_start_relationships = %s,
+                                    preexisting_relationship_targets = %s::jsonb
                                 WHERE name = %s
                                 """,
                                 (
                                     rationale,
-                                    constraints.get(storage_name, "allowed"),
+                                    constraint.get(
+                                        "cold_start_relationships", "allowed"
+                                    ),
+                                    json.dumps(
+                                        constraint.get(
+                                            "preexisting_relationship_targets", []
+                                        )
+                                    ),
                                     storage_name,
                                 ),
                             )

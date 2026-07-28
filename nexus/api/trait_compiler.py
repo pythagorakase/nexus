@@ -46,6 +46,7 @@ from nexus.api.trait_compiler_schemas import (
     TraitRelationshipDrift,
     UnresolvedTrait,
     canonical_trait_name,
+    suppress_cold_start_relationship_inputs,
 )
 
 
@@ -159,6 +160,13 @@ def compile_character_traits(
     """
 
     inputs = _coerce_inputs(trait_compile_inputs or character.trait_compile_inputs)
+    forbidden_traits = {
+        canonical_trait_name(str(constraint.trait))
+        for constraint in character.trait_constraints
+        if constraint.cold_start_relationships == "forbidden"
+    }
+    inputs = suppress_cold_start_relationship_inputs(inputs, forbidden_traits)
+    suppressed_traits = set(inputs.suppressed_cold_start_relationship_traits)
     result = TraitCompileResult(
         character_id=character_id,
         character_entity_id=character_entity_id,
@@ -178,6 +186,21 @@ def compile_character_traits(
     for trait in trait_entries:
         trait_name = str(trait.name)
         canonical_trait = canonical_trait_name(trait_name)
+        if canonical_trait in suppressed_traits:
+            _add_remainder(
+                result,
+                trait=trait_name,
+                reason_code=(TraitCompileReasonCode.COLD_START_RELATIONSHIPS_FORBIDDEN),
+                message=(
+                    "Setup-time relationship and pair-tag materialization was "
+                    "suppressed by the confirmed trait constraint."
+                ),
+                details={
+                    "cold_start_relationships": "forbidden",
+                    "suppressed_trait_input": canonical_trait,
+                },
+            )
+            continue
         if canonical_trait == "resources":
             _compile_single_entity_level(
                 cur,

@@ -38,19 +38,18 @@ from nexus.api.new_story_cache import (
     read_cache,
     write_wizard_choices,
 )
-from nexus.api.new_story_flow import perform_transition_with_retrograde, record_drafts
+from nexus.api.new_story_flow import (
+    build_transition_data_from_cache,
+    perform_transition_with_retrograde,
+    record_drafts,
+)
 from nexus.api.new_story_generator import generate_set_design
 from nexus.api.new_story_schemas import (
-    SettingCard,
-    CharacterSheet,
-    StorySeed,
-    LayerDefinition,
-    ZoneDefinition,
-    PlaceProfile,
     CharacterCreationState,
+    SettingCard,
+    StorySeed,
     TraitSelection,
     TraitRationales,
-    TransitionData,
     WizardResponse,
 )
 from nexus.api.pydantic_ai_utils import build_message_history, build_pydantic_ai_model
@@ -990,21 +989,7 @@ async def transition_to_narrative_endpoint(request: TransitionRequest):
 
     # Build TransitionData from cache
     try:
-        # Get character dict and assemble CharacterSheet from CharacterCreationState
-        char_draft = cache.get_character_dict()
-        state = CharacterCreationState(**char_draft)
-        char_sheet = state.to_character_sheet().model_dump()
-
-        transition_data = TransitionData(
-            setting=SettingCard(**cache.get_setting_dict()),
-            character=CharacterSheet(**char_sheet),
-            seed=StorySeed(**cache.get_seed_dict()),
-            layer=LayerDefinition(**cache.get_layer_dict()),
-            zone=ZoneDefinition(**cache.get_zone_dict()),
-            location=PlaceProfile(**cache.get_initial_location()),
-            base_timestamp=cache.base_timestamp,
-            thread_id=cache.thread_id or "",
-        )
+        transition_data = build_transition_data_from_cache(cache)
     except ValidationError as e:
         # Fail loudly per user directive
         logger.error(f"Validation error building TransitionData: {e}")
