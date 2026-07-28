@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal
 from typing import Any, Iterable, Optional
 
@@ -98,6 +98,7 @@ class _ResolvedTarget:
     entity_id: Optional[int]
     name: Optional[str]
     pending_stub: bool = False
+    relationship_owner_trait: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -111,6 +112,28 @@ class _NamedTargetCandidate:
 
 
 _ResolvedNamedTargets = dict[tuple[str, str], _ResolvedTarget]
+_TRAIT_PACKAGE_ORDER = {
+    trait: index
+    for index, trait in enumerate(
+        (
+            "resources",
+            "fame",
+            "status",
+            "allies",
+            "contacts",
+            "enemies",
+            "domain",
+            "patron",
+            "dependents",
+            "obligations",
+        )
+    )
+}
+_RELATIONSHIP_TYPE_BY_TRAIT = {
+    "patron": PATRON_RELATIONSHIP_TYPE,
+    "dependents": DEPENDENT_RELATIONSHIP_TYPE,
+    "obligations": OBLIGATION_RELATIONSHIP_TYPE,
+}
 
 
 PAIR_TAG_RELATIONSHIP_TYPES = frozenset({"ally", "hostile_to"}) | frozenset(
@@ -254,6 +277,7 @@ def compile_character_traits(
                 ),
             )
 
+    _canonicalize_result(result)
     _refresh_counters(result)
     return result
 
@@ -524,7 +548,7 @@ def _pre_resolve_named_targets(
         )
         rows = cur.fetchall()
         if not rows:
-            resolved_targets[key] = _create_target_stub(
+            resolved = _create_target_stub(
                 cur,
                 result=result,
                 trait=candidate.trait,
@@ -533,12 +557,21 @@ def _pre_resolve_named_targets(
                 role=candidate.role,
                 dry_run=dry_run,
             )
+            resolved_targets[key] = replace(
+                resolved,
+                relationship_owner_trait=(
+                    candidate.trait if candidate.entity_kind == "character" else None
+                ),
+            )
         elif len(rows) == 1:
             row = rows[0]
             resolved = _ResolvedTarget(
                 row_id=_row_value(row, "id", 0),
                 entity_id=_row_value(row, "entity_id", 1),
                 name=_row_value(row, "name", 2),
+                relationship_owner_trait=(
+                    candidate.trait if candidate.entity_kind == "character" else None
+                ),
             )
             if not (
                 candidate.entity_kind == "character"
@@ -1333,6 +1366,32 @@ def _write_trait_relationship(
 ) -> None:
     """Record (and on apply, upsert) a compiler-authored relationship row."""
 
+    canonical_trait = canonical_trait_name(trait)
+    relationship_owner_trait = target.relationship_owner_trait
+    if (
+        relationship_owner_trait is not None
+        and relationship_owner_trait != canonical_trait
+    ):
+        _add_remainder(
+            result,
+            trait=trait,
+            reason_code=TraitCompileReasonCode.RELATIONSHIP_PAIR_CONFLICT,
+            message=(
+                "The shared character target already has a higher-precedence "
+                "selected trait for its single relationship row."
+            ),
+            details={
+                "constraint": "character_relationships_pkey",
+                "target_name": target.name,
+                "winner_trait": relationship_owner_trait,
+                "winner_relationship_type": _RELATIONSHIP_TYPE_BY_TRAIT[
+                    relationship_owner_trait
+                ],
+                "displaced_relationship_type": relationship_type,
+            },
+        )
+        return
+
     if dry_run:
         reported_emotional_valence = _project_authored_valence_for_report(
             emotional_valence
@@ -1963,6 +2022,20 @@ def _refresh_counters(result: TraitCompileResult) -> None:
         created_relationships=len(result.created_relationships),
         prose_only_remainders=len(result.prose_only_remainders),
     )
+
+
+def _canonicalize_result(result: TraitCompileResult) -> None:
+    """Order every result collection independently of selected trait order."""
+
+    def sort_key(item: Any) -> tuple[int, str]:
+        trait = canonical_trait_name(str(item.trait))
+        return _TRAIT_PACKAGE_ORDER.get(trait, len(_TRAIT_PACKAGE_ORDER)), trait
+
+    result.applied_single_entity_tags.sort(key=sort_key)
+    result.applied_pair_tags.sort(key=sort_key)
+    result.created_entities.sort(key=sort_key)
+    result.created_relationships.sort(key=sort_key)
+    result.prose_only_remainders.sort(key=sort_key)
 
 
 def _row_value(row: Any, key: str, index: int) -> Any:

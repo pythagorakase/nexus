@@ -10,6 +10,7 @@ tests/test_trait_compiler_integration.py``
 
 from __future__ import annotations
 
+import json
 from itertools import permutations
 from typing import Any, Optional
 
@@ -34,6 +35,8 @@ from nexus.api.trait_compiler_schemas import (
     SingleEntityTraitInput,
     StatusTraitInput,
     TraitCompileInputs,
+    TraitCompileReasonCode,
+    TraitCompileResult,
 )
 
 TEST_DBNAME = "save_05"
@@ -45,6 +48,7 @@ OBLIGATION_FACTION_NAME = "M5 Trait Test Tithe"
 DEPENDENT_NAME = "M5 Trait Test Pip"
 DUNLOW_FACTION_NAME = "Dunlow County Circuit Court [issue 602 rollback test]"
 DUNLOW_ENEMY_NAME = "Dunlow County Circuit Court Clerk"
+SHARED_CHARACTER_NAME = "Magistrate Hale [issue 602 rollback test]"
 
 
 def _install_valence_shadow(cur: Any) -> None:
@@ -193,6 +197,90 @@ def _active_pair_tags(cur: Any, subject_entity_id: int) -> set[tuple[str, int]]:
     return {(row[0], row[1]) for row in cur.fetchall()}
 
 
+def _normalized_result_surface(
+    result: TraitCompileResult,
+    *,
+    entity_names: dict[int, str],
+    row_names: dict[int, str],
+    include_execution_fields: bool,
+) -> str:
+    """Serialize the complete result surface with generated ids replaced by names."""
+
+    def entity_identity(entity_id: Optional[int], name: Optional[str]) -> Optional[str]:
+        if name is not None:
+            return name
+        if entity_id is None:
+            return None
+        return entity_names.get(entity_id, f"entity:{entity_id}")
+
+    def row_identity(row_id: Optional[int], name: Optional[str]) -> Optional[str]:
+        if name is not None:
+            return name
+        if row_id is None:
+            return None
+        return row_names.get(row_id, f"character:{row_id}")
+
+    surface: dict[str, Any] = {
+        "applied_single_entity_tags": [
+            {
+                "trait": item.trait,
+                "entity": entity_identity(item.entity_id, None),
+                "tag": item.tag,
+                "category": item.category,
+                **(
+                    {"inserted": item.inserted, "dry_run": item.dry_run}
+                    if include_execution_fields
+                    else {}
+                ),
+            }
+            for item in result.applied_single_entity_tags
+        ],
+        "applied_pair_tags": [
+            {
+                "trait": item.trait,
+                "subject": entity_identity(item.subject_entity_id, item.subject_name),
+                "object": entity_identity(item.object_entity_id, item.object_name),
+                "tag": item.tag,
+                **(
+                    {"inserted": item.inserted, "dry_run": item.dry_run}
+                    if include_execution_fields
+                    else {}
+                ),
+            }
+            for item in result.applied_pair_tags
+        ],
+        "created_entities": [
+            {
+                "trait": item.trait,
+                "entity_kind": item.entity_kind,
+                "name": item.name,
+                **({"dry_run": item.dry_run} if include_execution_fields else {}),
+            }
+            for item in result.created_entities
+        ],
+        "created_relationships": [
+            {
+                "trait": item.trait,
+                "character1": row_identity(item.character1_id, None),
+                "character2": row_identity(item.character2_id, item.character2_name),
+                "relationship_type": item.relationship_type,
+                "emotional_valence": item.emotional_valence,
+                "pair_tag": item.pair_tag,
+                "contact_kind": item.contact_kind,
+                **({"dry_run": item.dry_run} if include_execution_fields else {}),
+            }
+            for item in result.created_relationships
+        ],
+        "prose_only_remainders": [
+            item.model_dump(mode="json") for item in result.prose_only_remainders
+        ],
+        "counters": result.counters.model_dump(mode="json"),
+    }
+    if include_execution_fields:
+        surface["dry_run"] = result.dry_run
+    return json.dumps(surface, sort_keys=True)
+
+
 @pytest.mark.requires_postgres
 def test_dunlow_shared_faction_is_permutation_invariant_on_save_05() -> None:
     """Every live-trio ordering shares one planned or materialized faction."""
@@ -202,7 +290,9 @@ def test_dunlow_shared_faction_is_permutation_invariant_on_save_05() -> None:
     except psycopg2.Error as exc:  # pragma: no cover - environment guard
         pytest.skip(f"{TEST_DBNAME} PostgreSQL test database unavailable: {exc}")
 
-    canonical_snapshots = []
+    dry_result_surfaces: list[str] = []
+    apply_result_surfaces: list[str] = []
+    canonical_db_snapshots = []
     try:
         with conn.cursor() as cur:
             _install_valence_shadow(cur)
@@ -298,6 +388,28 @@ def test_dunlow_shared_faction_is_permutation_invariant_on_save_05() -> None:
                         (DUNLOW_FACTION_NAME,),
                     )
                     assert cur.fetchone() == (0,)
+                    entity_names = {
+                        character_entity_id: "protagonist",
+                        enemy_entity_id: DUNLOW_ENEMY_NAME,
+                    }
+                    row_names = {
+                        character_id: "protagonist",
+                        enemy_id: DUNLOW_ENEMY_NAME,
+                    }
+                    dry_result_surfaces.append(
+                        _normalized_result_surface(
+                            dry_result,
+                            entity_names=entity_names,
+                            row_names=row_names,
+                            include_execution_fields=True,
+                        )
+                    )
+                    dry_semantic_surface = _normalized_result_surface(
+                        dry_result,
+                        entity_names=entity_names,
+                        row_names=row_names,
+                        include_execution_fields=False,
+                    )
 
                     apply_result = apply_character_trait_compilation(
                         cur,
@@ -311,6 +423,24 @@ def test_dunlow_shared_faction_is_permutation_invariant_on_save_05() -> None:
                     assert created_faction.name == DUNLOW_FACTION_NAME
                     assert created_faction.entity_id is not None
                     faction_entity_id = created_faction.entity_id
+                    entity_names[faction_entity_id] = DUNLOW_FACTION_NAME
+                    apply_result_surfaces.append(
+                        _normalized_result_surface(
+                            apply_result,
+                            entity_names=entity_names,
+                            row_names=row_names,
+                            include_execution_fields=True,
+                        )
+                    )
+                    assert (
+                        _normalized_result_surface(
+                            apply_result,
+                            entity_names=entity_names,
+                            row_names=row_names,
+                            include_execution_fields=False,
+                        )
+                        == dry_semantic_surface
+                    )
 
                     apply_pair_targets = {
                         (
@@ -365,7 +495,7 @@ def test_dunlow_shared_faction_is_permutation_invariant_on_save_05() -> None:
                         (character_id,),
                     )
                     canonical_relationships = tuple(cur.fetchall())
-                    canonical_snapshots.append(
+                    canonical_db_snapshots.append(
                         (
                             frozenset(canonical_db_tags),
                             canonical_relationships,
@@ -379,20 +509,224 @@ def test_dunlow_shared_faction_is_permutation_invariant_on_save_05() -> None:
                     cur.execute("ROLLBACK TO SAVEPOINT issue_602_permutation")
                     cur.execute("RELEASE SAVEPOINT issue_602_permutation")
 
-            assert len(canonical_snapshots) == 6
+            assert len(dry_result_surfaces) == 6
+            assert len(apply_result_surfaces) == 6
             assert all(
-                snapshot == canonical_snapshots[0]
-                for snapshot in canonical_snapshots[1:]
+                surface == dry_result_surfaces[0] for surface in dry_result_surfaces[1:]
             )
-            assert canonical_snapshots[0][0] == frozenset(
+            assert all(
+                surface == apply_result_surfaces[0]
+                for surface in apply_result_surfaces[1:]
+            )
+            assert len(canonical_db_snapshots) == 6
+            assert all(
+                snapshot == canonical_db_snapshots[0]
+                for snapshot in canonical_db_snapshots[1:]
+            )
+            assert canonical_db_snapshots[0][0] == frozenset(
                 {
                     ("status:senior", DUNLOW_FACTION_NAME),
                     ("hostile_to", DUNLOW_ENEMY_NAME),
                     ("obligation", DUNLOW_FACTION_NAME),
                 }
             )
-            assert canonical_snapshots[0][1] == (
+            assert canonical_db_snapshots[0][1] == (
                 ("enemy", DUNLOW_ENEMY_NAME, "trait_compiler"),
+            )
+    finally:
+        conn.rollback()
+        conn.close()
+
+
+@pytest.mark.requires_postgres
+def test_shared_character_relationship_is_permutation_invariant_on_save_05() -> None:
+    """Patron deterministically owns a shared one-row relationship slot."""
+
+    try:
+        conn = psycopg2.connect(dbname=TEST_DBNAME)
+    except psycopg2.Error as exc:  # pragma: no cover - environment guard
+        pytest.skip(f"{TEST_DBNAME} PostgreSQL test database unavailable: {exc}")
+
+    dry_result_surfaces: list[str] = []
+    apply_result_surfaces: list[str] = []
+    canonical_db_snapshots = []
+    try:
+        with conn.cursor() as cur:
+            _install_valence_shadow(cur)
+            cur.execute(
+                "SELECT COUNT(*) FROM characters WHERE name = %s",
+                (SHARED_CHARACTER_NAME,),
+            )
+            assert cur.fetchone() == (0,), "rollback test character must start absent"
+
+            selected_traits: tuple[TraitName, TraitName, TraitName] = (
+                "patron",
+                "obligations",
+                "resources",
+            )
+            for trait_order in permutations(selected_traits):
+                cur.execute("SAVEPOINT issue_602_relationship_permutation")
+                try:
+                    character_id, character_entity_id = _insert_protagonist(cur)
+                    inputs = TraitCompileInputs(
+                        patron=PatronTraitInput(
+                            character_id=None,
+                            character_entity_id=None,
+                            name=SHARED_CHARACTER_NAME,
+                            functions=[],
+                            emotional_valence=None,
+                            dynamic="A formal sponsor with exacting expectations.",
+                            recent_events="",
+                            history="",
+                        ),
+                        obligations=ObligationsTraitInput(
+                            targets=[
+                                ObligationTargetInput(
+                                    counterparty_kind="character",
+                                    counterparty_id=None,
+                                    counterparty_entity_id=None,
+                                    name=SHARED_CHARACTER_NAME,
+                                    emotional_valence=None,
+                                    dynamic="A debt owed to the same sponsor.",
+                                    recent_events="",
+                                    history="",
+                                )
+                            ]
+                        ),
+                        resources=SingleEntityTraitInput(level="wealthy"),
+                    )
+                    sheet = _character_sheet(*trait_order, inputs=inputs)
+                    entity_names = {character_entity_id: "protagonist"}
+                    row_names = {character_id: "protagonist"}
+
+                    dry_result = compile_character_traits(
+                        cur,
+                        character=sheet,
+                        character_id=character_id,
+                        character_entity_id=character_entity_id,
+                        dry_run=True,
+                    )
+                    assert [
+                        (item.trait, item.entity_kind, item.name)
+                        for item in dry_result.created_entities
+                    ] == [("patron", "character", SHARED_CHARACTER_NAME)]
+                    assert [
+                        (item.trait, item.relationship_type)
+                        for item in dry_result.created_relationships
+                    ] == [("patron", "patron")]
+                    assert len(dry_result.prose_only_remainders) == 1
+                    dry_remainder = dry_result.prose_only_remainders[0]
+                    assert (
+                        dry_remainder.reason_code
+                        == TraitCompileReasonCode.RELATIONSHIP_PAIR_CONFLICT
+                    )
+                    assert dry_remainder.trait == "obligations"
+                    assert dry_remainder.details == {
+                        "constraint": "character_relationships_pkey",
+                        "target_name": SHARED_CHARACTER_NAME,
+                        "winner_trait": "patron",
+                        "winner_relationship_type": "patron",
+                        "displaced_relationship_type": "obligation",
+                    }
+                    cur.execute(
+                        "SELECT COUNT(*) FROM characters WHERE name = %s",
+                        (SHARED_CHARACTER_NAME,),
+                    )
+                    assert cur.fetchone() == (0,)
+                    dry_result_surfaces.append(
+                        _normalized_result_surface(
+                            dry_result,
+                            entity_names=entity_names,
+                            row_names=row_names,
+                            include_execution_fields=True,
+                        )
+                    )
+                    dry_semantic_surface = _normalized_result_surface(
+                        dry_result,
+                        entity_names=entity_names,
+                        row_names=row_names,
+                        include_execution_fields=False,
+                    )
+
+                    apply_result = apply_character_trait_compilation(
+                        cur,
+                        character=sheet,
+                        character_id=character_id,
+                        character_entity_id=character_entity_id,
+                    )
+                    assert len(apply_result.created_entities) == 1
+                    created_character = apply_result.created_entities[0]
+                    assert created_character.trait == "patron"
+                    assert created_character.name == SHARED_CHARACTER_NAME
+                    assert created_character.row_id is not None
+                    assert created_character.entity_id is not None
+                    row_names[created_character.row_id] = SHARED_CHARACTER_NAME
+                    entity_names[created_character.entity_id] = SHARED_CHARACTER_NAME
+                    assert [
+                        (item.trait, item.relationship_type)
+                        for item in apply_result.created_relationships
+                    ] == [("patron", "patron")]
+                    assert [
+                        item.model_dump(mode="json")
+                        for item in apply_result.prose_only_remainders
+                    ] == [
+                        item.model_dump(mode="json")
+                        for item in dry_result.prose_only_remainders
+                    ]
+                    apply_result_surfaces.append(
+                        _normalized_result_surface(
+                            apply_result,
+                            entity_names=entity_names,
+                            row_names=row_names,
+                            include_execution_fields=True,
+                        )
+                    )
+                    assert (
+                        _normalized_result_surface(
+                            apply_result,
+                            entity_names=entity_names,
+                            row_names=row_names,
+                            include_execution_fields=False,
+                        )
+                        == dry_semantic_surface
+                    )
+
+                    cur.execute(
+                        """
+                        SELECT cr.relationship_type,
+                               cr.extra_data->>'trait',
+                               c2.name
+                        FROM character_relationships cr
+                        JOIN characters c2 ON c2.id = cr.character2_id
+                        WHERE cr.character1_id = %s
+                          AND cr.character2_id = %s
+                        """,
+                        (character_id, created_character.row_id),
+                    )
+                    relationship_rows = tuple(cur.fetchall())
+                    assert relationship_rows == (
+                        ("patron", "patron", SHARED_CHARACTER_NAME),
+                    )
+                    canonical_db_snapshots.append(relationship_rows)
+                finally:
+                    cur.execute(
+                        "ROLLBACK TO SAVEPOINT issue_602_relationship_permutation"
+                    )
+                    cur.execute("RELEASE SAVEPOINT issue_602_relationship_permutation")
+
+            assert len(dry_result_surfaces) == 6
+            assert all(
+                surface == dry_result_surfaces[0] for surface in dry_result_surfaces[1:]
+            )
+            assert len(apply_result_surfaces) == 6
+            assert all(
+                surface == apply_result_surfaces[0]
+                for surface in apply_result_surfaces[1:]
+            )
+            assert len(canonical_db_snapshots) == 6
+            assert all(
+                snapshot == canonical_db_snapshots[0]
+                for snapshot in canonical_db_snapshots[1:]
             )
     finally:
         conn.rollback()

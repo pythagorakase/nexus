@@ -35,6 +35,7 @@ class TraitCompileReasonCode(str, Enum):
     UNSUPPORTED_WILDCARD_DECOMPOSITION = "unsupported_wildcard_decomposition"
     REGISTRY_MISSING_TAG = "registry_missing_tag"
     REGISTRY_MISSING_PAIR_TAG = "registry_missing_pair_tag"
+    RELATIONSHIP_PAIR_CONFLICT = "relationship_pair_conflict"
 
 
 class SingleEntityTraitInput(BaseModel):
