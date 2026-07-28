@@ -32,20 +32,19 @@ Each directive gets 5 SQL queries by default (configurable via nexus.toml: [lore
 """
 
 import asyncio
-import logging
 import json
+import logging
+import os
+import sys
 import time
-from typing import Any, Dict, List, Optional, Union
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Union
 
 # Import NEXUS configuration loader
 from nexus.config import load_settings_as_dict
+from nexus.config.loader import RUNTIME_CONFIG_ENV
 
-# Handle imports based on how the module is run
-import sys
-from pathlib import Path
-
-# Add parent directories to path for imports
+# Support legacy top-level ``utils`` imports when the module is run directly.
 current_dir = Path(__file__).parent
 sys.path.insert(0, str(current_dir))
 sys.path.insert(0, str(current_dir.parent.parent))
@@ -113,7 +112,8 @@ class LORE:
         Initialize LORE agent.
 
         Args:
-            settings_path: Path to nexus.toml (defaults to the repo root copy)
+            settings_path: Path to nexus.toml. Explicit paths take precedence;
+                otherwise NEXUS_RUNTIME_CONFIG is honored before the repo root.
             debug: Enable debug logging
             enable_logon: Whether to enable LOGON utility
             dbname: Database name (save_01 through save_05).
@@ -159,21 +159,34 @@ class LORE:
         Uses Pydantic models for validation and type safety. nexus.toml is
         the sole runtime configuration file (settings.json was retired).
         """
-        if not settings_path:
-            config_dir = Path(__file__).parent.parent.parent.parent
-            settings_path = config_dir / "nexus.toml"
+        raw_settings_path: Union[str, Path]
+        if settings_path is None:
+            runtime_settings_path = os.environ.get(RUNTIME_CONFIG_ENV)
+            if runtime_settings_path is not None:
+                raw_settings_path = runtime_settings_path
+            else:
+                config_dir = Path(__file__).parent.parent.parent.parent
+                raw_settings_path = config_dir / "nexus.toml"
+        else:
+            raw_settings_path = settings_path
 
-        self.settings_path = settings_path  # Store for later use
+        effective_settings_path = Path(raw_settings_path).resolve()
+        self.settings_path = effective_settings_path
 
         try:
-            settings = load_settings_as_dict(settings_path)
-            logger.info(f"✓ Loaded and validated settings from {settings_path}")
+            settings = load_settings_as_dict(effective_settings_path)
+            logger.info(
+                "✓ Loaded and validated settings from effective config path %s",
+                effective_settings_path,
+            )
             return settings
         except Exception as e:
-            logger.error(f"Failed to load settings from {settings_path}: {e}")
+            logger.error(
+                "Failed to load settings from %s: %s", effective_settings_path, e
+            )
             raise RuntimeError(
                 f"Cannot initialize LORE without valid configuration: {e}\n"
-                f"Tried: {settings_path}"
+                f"Tried: {effective_settings_path}"
             ) from e
 
     def _load_system_prompt(self) -> str:
