@@ -272,6 +272,8 @@ async def test_submit_trait_selection_advances_state(monkeypatch):
     result = ctx.deps.last_tool_result
     assert result["artifact_type"] == "submit_trait_selection"
     assert result["phase_complete"] is False
+    assert result["subphase_complete"] is True
+    assert result["subphase"] == "wildcard"
 
 
 @pytest.mark.asyncio

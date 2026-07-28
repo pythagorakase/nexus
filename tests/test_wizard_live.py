@@ -35,7 +35,8 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 # Phase configurations for testing
-# Note: Phase 3 (traits) is deterministic with accept_fate, so not tested here
+# Trait accept_fate is deterministic, while free-text confirmation still uses
+# live inference and is covered by the normal-flow test below.
 PHASE_CONFIGS: Dict[str, Dict[str, Any]] = {
     "setting": {
         "phase": "setting",
@@ -50,6 +51,31 @@ PHASE_CONFIGS: Dict[str, Dict[str, Any]] = {
         },
         "expected_tool": "submit_character_concept",
         "prompt": "Create a reluctant hero - a former soldier haunted by past decisions.",
+    },
+    "traits": {
+        "phase": "character",
+        "context_data": {
+            "setting": {"genre": "fantasy", "world_name": "Valdoria"},
+            "character_state": {
+                "concept": {
+                    "name": "Kael Stormwind",
+                    "archetype": "Reluctant Hero",
+                    "background": "A former soldier haunted by past decisions.",
+                    "appearance": "Weathered, scarred, and dressed for the road.",
+                    "suggested_traits": ["allies", "contacts", "patron"],
+                    "trait_rationales": {
+                        "allies": "Fellow deserters still answer his calls.",
+                        "contacts": "Old scouts pass him guarded intelligence.",
+                        "patron": "A hidden noble finances his search for justice.",
+                    },
+                }
+            },
+        },
+        "expected_tool": "submit_trait_selection",
+        "prompt": (
+            "Confirm exactly these three traits now: allies, contacts, and patron. "
+            "Use the stated rationales and submit the selection."
+        ),
     },
     "wildcard": {
         "phase": "character",
@@ -217,7 +243,9 @@ async def test_accept_fate_forces_tool_call(
 
 @pytest.mark.live
 @pytest.mark.asyncio
-@pytest.mark.parametrize("phase_name", ["setting", "concept", "wildcard", "seed"])
+@pytest.mark.parametrize(
+    "phase_name", ["setting", "concept", "traits", "wildcard", "seed"]
+)
 async def test_normal_flow_allows_wizard_response(phase_name: str, mock_db_functions):
     """
     Sanity check: accept_fate=False should allow WizardResponse.
@@ -242,9 +270,14 @@ async def test_normal_flow_allows_wizard_response(phase_name: str, mock_db_funct
         model=model,
     )
 
-    # With accept_fate=False, either WizardResponse or tool call is valid
-    # (the model may choose to call the tool or present options)
+    # Free-text trait confirmation must submit the selected traits. Other
+    # phases may either respond conversationally or submit their artifact.
     assert result.output is not None, "Should have some output"
+    if phase_name == "traits":
+        assert isinstance(result.output, DeferredToolRequests)
+        assert context.last_tool_name == config["expected_tool"]
+        assert context.last_tool_result is not None
+        assert context.last_tool_result["subphase"] == "wildcard"
 
     output_type = type(result.output).__name__
     logger.info(f"✓ {phase_name}/accept_fate=False: Got {output_type}")

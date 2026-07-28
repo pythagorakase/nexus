@@ -95,6 +95,25 @@ def wizard_model_lock_candidate(
     return bool(request_model and slot_model and request_model != slot_model)
 
 
+def _wizard_subphase_for_state(
+    phase: str,
+    *,
+    has_concept: bool,
+    has_traits: bool,
+    has_wildcard: bool,
+) -> str:
+    """Name the canonical wizard subphase represented by persisted state."""
+    if phase != "character":
+        return "none"
+    if not has_concept:
+        return "concept"
+    if not has_traits:
+        return "traits"
+    if not has_wildcard:
+        return "wildcard"
+    return "complete"
+
+
 def _hydrate_character_context(request: ChatRequest) -> Optional[Dict[str, Any]]:
     """Load character_state from cache if in character phase and no context provided."""
     if request.current_phase != "character" or request.context_data is not None:
@@ -249,10 +268,29 @@ async def new_story_chat_endpoint(request: ChatRequest):
         if request.current_phase is None:
             request.current_phase = state.wizard_state.phase
 
-        request.context_data = _hydrate_character_context(request)
+        state_phase = state.wizard_state.phase
+        state_subphase = _wizard_subphase_for_state(
+            state_phase,
+            has_concept=state.wizard_state.has_concept,
+            has_traits=state.wizard_state.has_traits,
+            has_wildcard=state.wizard_state.has_wildcard,
+        )
+
+        if request.trait_choice is not None and not (
+            state_phase == "character" and state_subphase == "traits"
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "trait_choice is only valid during phase 'character', "
+                    "subphase 'traits'; current wizard state is phase "
+                    f"'{state_phase}', subphase '{state_subphase}'. Send a "
+                    "non-empty message to continue the current wizard step."
+                ),
+            )
 
         # Handle trait toggle/confirm operations (no LLM call needed)
-        if request.trait_choice is not None and request.current_phase == "character":
+        if request.trait_choice is not None:
             from nexus.api.new_story_cache import (
                 confirm_trait_selection,
                 get_selected_trait_count,
@@ -312,6 +350,17 @@ async def new_story_chat_endpoint(request: ChatRequest):
                         f"Invalid trait_choice: {request.trait_choice}. Must be 0-10."
                     ),
                 )
+
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "trait_choice could not be applied because wizard state changed; "
+                    f"last observed phase was '{state_phase}', subphase "
+                    f"'{state_subphase}'. Reload the wizard state before retrying."
+                ),
+            )
+
+        request.context_data = _hydrate_character_context(request)
 
         dev_mode = request.dev
         if request.message:
