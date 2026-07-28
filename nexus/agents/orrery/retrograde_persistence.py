@@ -30,6 +30,7 @@ from nexus.agents.orrery.retrograde_markers import (
     RETROGRADE_PROLOGUE_MARKER,
 )
 from nexus.agents.orrery.retrograde_vocabulary import (
+    fold_entity_ref_for_identity,
     normalize_entity_ref,
     relationship_type_default_emotional_valence,
 )
@@ -2822,18 +2823,22 @@ def _protagonist_duplicate_stub_blockers(
 
     if protagonist_identity is None:
         return []
-    canonical_ref = normalize_entity_ref(protagonist_identity.name)
-    canonical_tokens = frozenset(canonical_ref.split())
-    alias_refs = {normalize_entity_ref(alias) for alias in protagonist_identity.aliases}
+    folded_canonical = fold_entity_ref_for_identity(protagonist_identity.name)
+    canonical_tokens = frozenset(folded_canonical.split())
+    alias_refs = {
+        fold_entity_ref_for_identity(alias) for alias in protagonist_identity.aliases
+    }
     duplicate_refs: list[str] = []
     for row in entity_stub_rows:
         if row.get("status") != "would_insert" or row.get("entity_kind") != "character":
             continue
         entity_ref = str(row.get("entity_ref") or "")
-        normalized_ref = normalize_entity_ref(entity_ref)
-        candidate_tokens = frozenset(normalized_ref.split())
-        if normalized_ref in alias_refs or (
-            candidate_tokens and candidate_tokens < canonical_tokens
+        folded_ref = fold_entity_ref_for_identity(entity_ref)
+        candidate_tokens = frozenset(folded_ref.split())
+        if (
+            folded_ref in alias_refs
+            or folded_ref == folded_canonical
+            or (candidate_tokens and candidate_tokens <= canonical_tokens)
         ):
             duplicate_refs.append(entity_ref)
     if not duplicate_refs:
@@ -2842,8 +2847,9 @@ def _protagonist_duplicate_stub_blockers(
         {
             "id": "protagonist_duplicate_stub_forbidden",
             "reason": (
-                "Retrograde may not create a character stub whose normalized "
-                "name is a protagonist alias or strict name-token subset: "
+                "Retrograde may not create a character stub whose folded "
+                "name is a protagonist alias, name-token subset, or "
+                "permutation: "
                 f"{sorted(set(duplicate_refs))}; canonical protagonist is "
                 f"{protagonist_identity.name!r}"
             ),

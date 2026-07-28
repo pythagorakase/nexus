@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import unicodedata
 from typing import Iterable, Literal, Mapping, TypedDict
 
 from nexus.agents.orrery.catalog import collect_template_vocabulary
@@ -42,6 +43,20 @@ def normalize_entity_ref(value: str) -> str:
     """
 
     return " ".join(value.split()).casefold()
+
+
+def fold_entity_ref_for_identity(value: str) -> str:
+    """Aggressively fold a ref for protagonist-identity comparison ONLY.
+
+    Adds diacritic stripping on top of ``normalize_entity_ref`` so accent or
+    token-order variants of the protagonist's name cannot mint a second
+    protagonist row. Never use this for general ref resolution: two distinct
+    characters may legitimately differ only by diacritics.
+    """
+
+    decomposed = unicodedata.normalize("NFKD", value)
+    stripped = "".join(ch for ch in decomposed if not unicodedata.combining(ch))
+    return normalize_entity_ref(stripped)
 
 
 class PairTagPrimitive(TypedDict):

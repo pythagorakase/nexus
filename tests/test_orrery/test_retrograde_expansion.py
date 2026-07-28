@@ -190,6 +190,43 @@ def test_expansion_rejects_protagonist_first_name_alias() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    "variant_ref",
+    ["Mercer Jules", "JÚLES MERCER"],
+    ids=["token-permutation", "diacritic-variant"],
+)
+def test_expansion_rejects_protagonist_name_variants(variant_ref: str) -> None:
+    """Token permutations and diacritic variants cannot mint a second PC."""
+
+    vocabulary = _expansion_test_vocabulary()
+    packet = _packet(
+        vocabulary,
+        constraints=[{"trait": "enemies", "cold_start_relationships": "forbidden"}],
+        protagonist_name="Jules Mercer",
+    )
+    payload = _valid_expansion(vocabulary)
+    payload["relationship_plan"][0]["subject_ref"] = variant_ref
+    payload["relationship_plan"][0]["relationship_type"] = "rival"
+    seed_response = _seed_response_base(vocabulary)
+    edge = packet["seed_generation_request"]["candidate_graph"]["dangling_edges"][0]
+    for candidate in seed_response["candidates"]:
+        candidate["claimed_edges"] = [
+            {
+                "edge_id": edge["edge_id"],
+                "open_endpoint_name": "The Salt Ledger",
+                "open_endpoint_kind": edge["open_endpoint_kind"],
+            }
+        ]
+
+    with pytest.raises(RetrogradeExpansionValidationError) as excinfo:
+        validate_expansion_plan(
+            payload=payload,
+            packet=packet,
+            seed_candidate_response=seed_response,
+        )
+    assert "protagonist_duplicate_stub_forbidden" in str(excinfo.value)
+
+
 def test_expansion_prompt_names_future_only_relationship_constraint() -> None:
     """R6 can repair a forbidden row because the typed constraint is visible."""
 

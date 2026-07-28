@@ -22,6 +22,7 @@ from nexus.agents.orrery.retrograde_seed_candidates import (
 from nexus.agents.orrery.retrograde_vocabulary import (
     ENTITY_REF_MAX_LENGTH,
     SeedEligibleVocabulary,
+    fold_entity_ref_for_identity,
     normalize_entity_ref,
 )
 
@@ -1149,17 +1150,20 @@ def _ref_matches_protagonist(
     entity_ref: str,
     protagonist_identity: Mapping[str, Any],
 ) -> bool:
-    """Match canonical name, known aliases, and strict name-token subsets."""
+    """Match canonical name, aliases, and name-token subsets or permutations."""
 
     canonical_ref, aliases = _protagonist_normalized_refs(protagonist_identity)
     if canonical_ref is None:
         return False
-    normalized_ref = normalize_entity_ref(entity_ref)
-    if normalized_ref == canonical_ref or normalized_ref in aliases:
+    folded_ref = fold_entity_ref_for_identity(entity_ref)
+    folded_canonical = fold_entity_ref_for_identity(canonical_ref)
+    if folded_ref == folded_canonical or folded_ref in {
+        fold_entity_ref_for_identity(alias) for alias in aliases
+    }:
         return True
-    canonical_tokens = frozenset(canonical_ref.split())
-    candidate_tokens = frozenset(normalized_ref.split())
-    return bool(candidate_tokens) and candidate_tokens < canonical_tokens
+    canonical_tokens = frozenset(folded_canonical.split())
+    candidate_tokens = frozenset(folded_ref.split())
+    return bool(candidate_tokens) and candidate_tokens <= canonical_tokens
 
 
 def _protagonist_duplicate_ref_issues(
