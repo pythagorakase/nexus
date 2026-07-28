@@ -11,7 +11,12 @@ from typing import List
 
 import pytest
 
-from nexus.api.new_story_schemas import CharacterSheet, CharacterTrait, SettingCard
+from nexus.api.new_story_schemas import (
+    CharacterSheet,
+    CharacterTrait,
+    SettingCard,
+    TraitConstraint,
+)
 from nexus.api.trait_compiler_schemas import (
     DependentsTraitInput,
     DependentTargetInput,
@@ -31,10 +36,15 @@ from nexus.api.trait_input_derivation import (
     render_trait_input_prompt,
     selected_canonical_traits,
     selected_trait_compile_inputs_model,
+    traits_requiring_derived_inputs,
 )
 
 
-def _character(trait_names: List[str]) -> CharacterSheet:
+def _character(
+    trait_names: List[str],
+    *,
+    constraints: List[TraitConstraint] | None = None,
+) -> CharacterSheet:
     traits = [
         CharacterTrait(name=name, description=f"{name} description for testing")
         for name in trait_names
@@ -53,6 +63,7 @@ def _character(trait_names: List[str]) -> CharacterSheet:
         trait_1=traits[0],
         trait_2=traits[1],
         trait_3=traits[2],
+        trait_constraints=constraints or [],
     )
 
 
@@ -236,6 +247,29 @@ def test_prompt_renders_selected_traits_and_vocabulary() -> None:
     assert '"magnate"' in prompt  # resource vocabulary present
     assert '"sovereign"' in prompt  # status vocabulary present
     assert "Hard Rules" in prompt
+
+
+def test_forbidden_relationship_trait_is_removed_before_derivation() -> None:
+    """The structured schema cannot emit a mintable target for a forbidden trait."""
+
+    character = _character(
+        ["status", "enemies", "obligations"],
+        constraints=[
+            TraitConstraint(
+                trait="enemies",
+                cold_start_relationships="forbidden",
+            )
+        ],
+    )
+
+    assert traits_requiring_derived_inputs(character) == ["status", "obligations"]
+    schema = selected_trait_compile_inputs_model(
+        traits_requiring_derived_inputs(character)
+    ).model_json_schema()
+    assert "enemies" not in schema["properties"]
+    prompt = render_trait_input_prompt(character=character, setting=_setting())
+    assert '"forbidden_cold_start_relationship_traits": [' in prompt
+    assert '"enemies"' in prompt
 
 
 def test_prompt_requires_existing_prompt_file() -> None:

@@ -542,6 +542,8 @@ def render_seed_generation_prompt(
         "coverage_functions": seed_generation_request.get("coverage_functions", []),
         "candidate_graph": seed_generation_request.get("candidate_graph", {}),
         "selection_rubric": seed_generation_request.get("selection_rubric", {}),
+        "trait_constraints": seed_generation_request.get("trait_constraints", []),
+        "protagonist_identity": seed_generation_request.get("protagonist_identity", {}),
         "project_intent_policy": seed_generation_request.get(
             "project_intent_policy",
             {
@@ -1408,6 +1410,7 @@ def _seed_vocabulary(value: Any) -> SeedEligibleVocabulary:
         "multi_entity_tag_definitions",
         "event_types",
         "relationship_types",
+        "relationship_type_definitions",
     )
     missing = [key for key in required_keys if key not in vocabulary]
     if missing:
@@ -1511,6 +1514,8 @@ def render_seed_selection_prompt(
         ),
         "budget": seed_generation_request.get("budget", {}),
         "selection_rubric": seed_generation_request.get("selection_rubric", {}),
+        "trait_constraints": seed_generation_request.get("trait_constraints", []),
+        "protagonist_identity": seed_generation_request.get("protagonist_identity", {}),
         "weird_policy": seed_generation_request.get("weird_policy", {}),
         "attachment_contract": (
             seed_generation_request.get("candidate_graph", {}) or {}
@@ -1531,7 +1536,11 @@ def render_seed_selection_prompt(
         "coverage functions, honor their claimed dangling edges with "
         "conviction rather than lip service, and would take real creative "
         "work to weave into the story — merge-difficulty is value, not "
-        "risk. Reject seeds that ignore their claimed edges.\n"
+        "risk. Reject seeds that ignore their claimed edges or whose mechanical "
+        "hints violate a trait constraint: specifically, relationship or pair-tag "
+        "hints in a forbidden trait's explicit blocked sets that involve the "
+        "protagonist or an alias. A backstory event alone does not violate a "
+        "relationship constraint.\n"
         "Resolved junction seed pairs are atomic: select both member seeds "
         "or reject both. A pair consumes two ordinary selection slots.\n"
         "Every non-selected candidate must appear in rejected_seed_ids.\n\n"

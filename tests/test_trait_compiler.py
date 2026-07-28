@@ -10,7 +10,12 @@ from typing import Any, Optional
 
 import pytest
 
-from nexus.api.new_story_schemas import CharacterSheet, CharacterTrait, TraitName
+from nexus.api.new_story_schemas import (
+    CharacterSheet,
+    CharacterTrait,
+    TraitConstraint,
+    TraitName,
+)
 from nexus.api.trait_compiler import (
     apply_character_trait_compilation,
     compile_character_traits,
@@ -592,6 +597,7 @@ class TraitCompilerCursor:
 def _character(
     *trait_names: TraitName,
     inputs: TraitCompileInputs | None = None,
+    constraints: list[TraitConstraint] | None = None,
 ) -> CharacterSheet:
     traits = [
         CharacterTrait(name=trait_name, description=f"{trait_name} description")
@@ -609,6 +615,7 @@ def _character(
         trait_2=traits[1],
         trait_3=traits[2],
         trait_compile_inputs=inputs,
+        trait_constraints=constraints or [],
     )
 
 
@@ -631,6 +638,124 @@ def test_no_typed_inputs_returns_structured_remainders() -> None:
     assert {item.reason_code for item in result.prose_only_remainders} == {
         TraitCompileReasonCode.MISSING_STRUCTURED_TRAIT_INPUT
     }
+
+
+def test_forbidden_relationship_traits_never_reach_named_target_prepass() -> None:
+    """Patron/dependent/obligation targets become structured suppressions."""
+
+    cur = TraitCompilerCursor()
+    inputs = TraitCompileInputs.model_validate(
+        {
+            "patron": {
+                "name": "Doctor Voss",
+                "functions": ["mentors", "protects"],
+            },
+            "dependents": {"targets": [{"name": "Juno Reyes"}]},
+            "obligations": {
+                "targets": [
+                    {
+                        "counterparty_kind": "character",
+                        "name": "Magistrate Hale",
+                    }
+                ]
+            },
+        }
+    )
+    constraints = [
+        TraitConstraint.model_validate(
+            {"trait": trait, "cold_start_relationships": "forbidden"}
+        )
+        for trait in ("patron", "dependents", "obligations")
+    ]
+
+    result = apply_character_trait_compilation(
+        cur,
+        character=_character(
+            "patron",
+            "dependents",
+            "obligations",
+            inputs=inputs,
+            constraints=constraints,
+        ),
+        character_id=1,
+        character_entity_id=501,
+    )
+
+    assert result.created_entities == []
+    assert result.created_relationships == []
+    assert result.applied_pair_tags == []
+    assert cur.characters == {
+        1: {"entity_id": 501, "name": "Mara"},
+        2: {"entity_id": 502, "name": "Bren"},
+    }
+    assert cur.character_relationships == []
+    assert cur.entity_pair_tags == []
+    assert {
+        (item.trait, item.reason_code) for item in result.prose_only_remainders
+    } == {
+        (
+            "patron",
+            TraitCompileReasonCode.COLD_START_RELATIONSHIPS_FORBIDDEN,
+        ),
+        (
+            "dependents",
+            TraitCompileReasonCode.COLD_START_RELATIONSHIPS_FORBIDDEN,
+        ),
+        (
+            "obligations",
+            TraitCompileReasonCode.COLD_START_RELATIONSHIPS_FORBIDDEN,
+        ),
+    }
+
+
+def test_forbidden_enemies_blocks_relationship_defaults() -> None:
+    """A pre-resolved enemy input cannot mint either mechanical layer."""
+
+    cur = TraitCompilerCursor()
+    inputs = TraitCompileInputs.model_validate(
+        {
+            "enemies": {
+                "targets": [
+                    {
+                        "character_id": 2,
+                        "character_entity_id": 502,
+                        "apply_pair_tag": True,
+                        "pair_tag": "hostile_to",
+                    }
+                ]
+            }
+        }
+    )
+
+    result = apply_character_trait_compilation(
+        cur,
+        character=_character(
+            "enemies",
+            "resources",
+            "domain",
+            inputs=inputs,
+            constraints=[
+                TraitConstraint(
+                    trait="enemies",
+                    cold_start_relationships="forbidden",
+                )
+            ],
+        ),
+        character_id=1,
+        character_entity_id=501,
+    )
+
+    assert result.created_relationships == []
+    assert result.applied_pair_tags == []
+    assert cur.character_relationships == []
+    assert cur.entity_pair_tags == []
+    enemy_remainder = next(
+        item for item in result.prose_only_remainders if item.trait == "enemies"
+    )
+    assert (
+        enemy_remainder.reason_code
+        == TraitCompileReasonCode.COLD_START_RELATIONSHIPS_FORBIDDEN
+    )
 
 
 def test_resources_and_reputation_compile_to_single_entity_tags() -> None:

@@ -34,6 +34,56 @@ logger = logging.getLogger("nexus.api.new_story_flow")
 MOCK_WIZARD_MODEL = "TEST"
 
 
+def build_transition_data_from_cache(cache: Any) -> "TransitionData":
+    """Hydrate the canonical transition package through wizard-cache adapters."""
+
+    from nexus.api.new_story_schemas import (
+        CharacterCreationState,
+        CharacterSheet,
+        LayerDefinition,
+        PlaceProfile,
+        SettingCard,
+        StorySeed,
+        TransitionData,
+        ZoneDefinition,
+    )
+
+    character_draft = cache.get_character_dict()
+    setting_draft = cache.get_setting_dict()
+    seed_draft = cache.get_seed_dict()
+    layer_draft = cache.get_layer_dict()
+    zone_draft = cache.get_zone_dict()
+    location_draft = cache.get_initial_location()
+    if any(
+        value is None
+        for value in (
+            character_draft,
+            setting_draft,
+            seed_draft,
+            layer_draft,
+            zone_draft,
+            location_draft,
+            cache.base_timestamp,
+        )
+    ):
+        raise ValueError("Wizard cache is incomplete for transition hydration")
+
+    character_state = CharacterCreationState.model_validate(character_draft)
+    character_sheet = character_state.to_character_sheet()
+    return TransitionData.model_validate(
+        {
+            "setting": SettingCard.model_validate(setting_draft),
+            "character": CharacterSheet.model_validate(character_sheet.model_dump()),
+            "seed": StorySeed.model_validate(seed_draft),
+            "layer": LayerDefinition.model_validate(layer_draft),
+            "zone": ZoneDefinition.model_validate(zone_draft),
+            "location": PlaceProfile.model_validate(location_draft),
+            "base_timestamp": cache.base_timestamp,
+            "thread_id": cache.thread_id or "",
+        }
+    )
+
+
 def resolve_setup_model(
     slot_model: Optional[str],
     *,

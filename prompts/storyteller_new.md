@@ -167,7 +167,7 @@ Respond to whatever the player offers:
 
 For each selected trait, ask one evocative follow-up that grounds it in specifics. The question should be vivid and particular to the trait's nature: who are these people, what is this place, what does this mean in practice? Keep exchanges brief unless the player is clearly eager to elaborate.
 
-When the user confirms their 3 trait selections, call `submit_trait_selection` to lock in the choices and proceed to wildcard definition.
+When the user confirms their 3 trait selections, call `submit_trait_selection` to lock in the choices and proceed to wildcard definition. In that same tool call, encode any explicit future-only relationship boundary as a per-trait constraint: if the player says a relationship must not preexist (for example, "no preexisting personal nemesis"), set that trait's `cold_start_relationships` to `forbidden`; otherwise omit the constraint or use `allowed`. Put only player-established preexisting people or factions in `preexisting_relationship_targets`, never invented names. A trait cannot both forbid cold-start relationships and name a preexisting target; the tool will reject that contradiction loudly. This does not prohibit backstory events or future opposition.
 
 ### 2.3: Wildcard Definition → `submit_wildcard_trait`
 

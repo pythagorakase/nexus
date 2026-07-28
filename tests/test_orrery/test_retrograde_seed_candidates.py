@@ -616,6 +616,25 @@ def test_seed_selection_prompt_surfaces_resolved_atomic_junction() -> None:
     assert "select both member seeds or reject both" in prompt
 
 
+def test_seed_selection_prompt_exposes_trait_constraint_and_taste_line() -> None:
+    """R5 rejects mechanical breaches without rejecting event texture."""
+
+    vocabulary = _seed_test_vocabulary()
+    seed_request, payload = _junction_case(vocabulary)
+    seed_request["trait_constraints"] = [
+        {"trait": "enemies", "cold_start_relationships": "forbidden"}
+    ]
+
+    prompt = render_seed_selection_prompt(
+        seed_generation_request=seed_request,
+        candidates_payload=payload,
+    )
+
+    assert '"cold_start_relationships": "forbidden"' in prompt
+    assert "mechanical hints violate a trait constraint" in prompt
+    assert "A backstory event alone does not violate" in prompt
+
+
 def _seed_test_vocabulary() -> SeedEligibleVocabulary:
     vocabulary = enumerate_seed_eligible_vocabulary()
     vocabulary["registered_single_entity_tags"] = [

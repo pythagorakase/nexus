@@ -22,6 +22,16 @@ WEIRD_LEVELS = frozenset({"low", "medium", "high"})
 # silent heading drift would empty that set and hard-block valid expansions.
 CORE_ENTITIES_HEADING = "Core entities"
 NAMED_SEED_NPCS_HEADING = "Named seed NPCs"
+COLD_START_RELATIONSHIP_CATEGORIES_BY_TRAIT: Mapping[str, frozenset[str]] = {
+    "allies": frozenset({"affiliative"}),
+    "contacts": frozenset({"contact"}),
+    "patron": frozenset({"patronage"}),
+    "dependents": frozenset({"dependency"}),
+    "enemies": frozenset({"adversarial"}),
+    "obligations": frozenset({"obligation"}),
+    "status": frozenset({"status"}),
+    "domain": frozenset({"domain"}),
+}
 SEED_BUDGETS: Mapping[str, Mapping[str, int]] = {
     "low": {"generate_candidates": 6, "select_target": 3, "deferred_secret_cap": 1},
     "medium": {"generate_candidates": 9, "select_target": 4, "deferred_secret_cap": 2},
@@ -100,6 +110,15 @@ def build_retrograde_dry_run_packet(
         initial_location=initial_location,
         trait_compile_inputs=trait_compile_inputs,
     )
+    trait_hooks = dict(_mapping(candidate_scaffolds.get("trait_hooks")))
+    trait_hooks["constraints"] = _materialize_trait_constraints(
+        trait_hooks.get("constraints"),
+        vocabulary=vocabulary,
+    )
+    candidate_scaffolds = {
+        **candidate_scaffolds,
+        "trait_hooks": trait_hooks,
+    }
     if settings.orrery is None:
         raise ValueError("settings.orrery is required for Retrograde budgets")
     junction_count = getattr(
@@ -210,6 +229,10 @@ def build_seed_generation_request(
         graph_settings=graph_settings,
         junction_count=junction_count,
     )
+    trait_constraints = _materialize_trait_constraints(
+        _mapping(candidate_scaffolds.get("trait_hooks")).get("constraints"),
+        vocabulary=vocabulary,
+    )
 
     return {
         "schema_version": SEED_REQUEST_SCHEMA_VERSION,
@@ -225,6 +248,10 @@ def build_seed_generation_request(
         "coverage_functions": list(RETROGRADE_COVERAGE_FUNCTIONS),
         "candidate_graph": candidate_graph,
         "selection_rubric": _selection_rubric(level),
+        "trait_constraints": trait_constraints,
+        "protagonist_identity": dict(
+            _mapping(candidate_scaffolds.get("protagonist_identity"))
+        ),
         "prompt_sections": _seed_prompt_sections(candidate_scaffolds),
         "candidate_response_schema": seed_candidate_response_schema(),
         "candidate_output_schema": {
@@ -382,6 +409,12 @@ def _selection_rubric(level: str) -> dict[str, Any]:
                 "Reject seeds that require unregistered tags, recursive entity "
                 "expansion, or timeline contortions."
             ),
+            (
+                "Reject candidates whose relationship or pair-tag mechanical_hints "
+                "appear in a forbidden constraint's explicit blocked sets and "
+                "involve the protagonist. Backstory events without those rows "
+                "remain allowed."
+            ),
             "Prefer fewer, sharper surviving seeds over a busy history web.",
         ],
         "weird_level_adjustment": {
@@ -502,6 +535,7 @@ def _candidate_scaffolds(
     trait_selection = _mapping(character.get("trait_selection"))
     wildcard = _mapping(character.get("wildcard"))
     selected_traits = list(trait_selection.get("selected_traits") or ())
+    protagonist_identity = _protagonist_identity(concept.get("name"))
 
     return {
         "core_entities": [
@@ -513,6 +547,7 @@ def _candidate_scaffolds(
                 details={
                     "archetype": concept.get("archetype"),
                     "appearance": concept.get("appearance"),
+                    "known_aliases": protagonist_identity["known_aliases"],
                 },
             ),
             _compact_card(
@@ -544,6 +579,7 @@ def _candidate_scaffolds(
             for name in seed.get("key_npcs", [])
             if name
         ],
+        "protagonist_identity": protagonist_identity,
         "pressure_axes": [
             _axis("stakes", seed.get("stakes")),
             _axis("tension_source", seed.get("tension_source")),
@@ -554,6 +590,7 @@ def _candidate_scaffolds(
         "trait_hooks": {
             "selected_traits": selected_traits,
             "rationales": trait_selection.get("trait_rationales") or {},
+            "constraints": trait_selection.get("trait_constraints") or [],
             "wildcard": {
                 "name": wildcard.get("wildcard_name"),
                 "description": wildcard.get("wildcard_description"),
@@ -661,16 +698,107 @@ def _trait_prompt_items(value: Any) -> list[dict[str, Any]]:
     hooks = _mapping(value)
     selected_traits = hooks.get("selected_traits") or []
     rationales = _mapping(hooks.get("rationales"))
+    constraints = {
+        str(constraint.get("trait")): constraint
+        for constraint in hooks.get("constraints") or []
+        if isinstance(constraint, Mapping) and constraint.get("trait")
+    }
     wildcard = _mapping(hooks.get("wildcard"))
 
     items: list[dict[str, Any]] = [
-        {"kind": "trait", "name": trait, "rationale": rationales.get(str(trait))}
+        {
+            "kind": "trait",
+            "name": trait,
+            "rationale": rationales.get(str(trait)),
+            "cold_start_relationships": _mapping(constraints.get(str(trait))).get(
+                "cold_start_relationships", "allowed"
+            ),
+            "blocked_relationship_types": list(
+                _mapping(constraints.get(str(trait))).get(
+                    "blocked_relationship_types", []
+                )
+            ),
+            "blocked_pair_tags": list(
+                _mapping(constraints.get(str(trait))).get("blocked_pair_tags", [])
+            ),
+        }
         for trait in selected_traits
         if trait
     ]
     if wildcard:
         items.append({"kind": "wildcard", **dict(wildcard)})
     return items
+
+
+def _materialize_trait_constraints(
+    value: Any,
+    *,
+    vocabulary: SeedEligibleVocabulary,
+) -> list[dict[str, Any]]:
+    """Resolve forbidden trait categories to registered mechanical primitives."""
+
+    if not value:
+        return []
+
+    relationship_definitions = {
+        str(definition["relationship_type"]): set(definition["semantic_categories"])
+        for definition in vocabulary["relationship_type_definitions"]
+    }
+    pair_definitions = {
+        str(definition["tag"]): set(definition["semantic_categories"])
+        for definition in vocabulary["multi_entity_tag_definitions"]
+    }
+
+    materialized: list[dict[str, Any]] = []
+    for raw_constraint in value or ():
+        if not isinstance(raw_constraint, Mapping):
+            raise ValueError("Trait constraints must be mapping objects")
+        trait = str(raw_constraint.get("trait") or "")
+        policy = str(raw_constraint.get("cold_start_relationships") or "allowed")
+        if not trait:
+            raise ValueError("Trait constraint is missing trait")
+        categories = COLD_START_RELATIONSHIP_CATEGORIES_BY_TRAIT.get(trait)
+        if policy == "forbidden" and not categories:
+            raise ValueError(
+                "Forbidden cold-start relationship trait has no semantic "
+                f"category mapping: {trait!r}"
+            )
+        blocked_relationship_types = sorted(
+            relationship_type
+            for relationship_type, primitive_categories in relationship_definitions.items()
+            if categories and primitive_categories & set(categories)
+        )
+        blocked_pair_tags = sorted(
+            pair_tag
+            for pair_tag, primitive_categories in pair_definitions.items()
+            if categories and primitive_categories & set(categories)
+        )
+        constraint = {
+            key: item
+            for key, item in raw_constraint.items()
+            if key not in {"blocked_relationship_types", "blocked_pair_tags"}
+        }
+        constraint["cold_start_relationships"] = policy
+        constraint["blocked_relationship_types"] = (
+            blocked_relationship_types if policy == "forbidden" else []
+        )
+        constraint["blocked_pair_tags"] = (
+            blocked_pair_tags if policy == "forbidden" else []
+        )
+        materialized.append(constraint)
+    return materialized
+
+
+def _protagonist_identity(name: Any) -> dict[str, Any]:
+    """Build prompt-visible canonical and natural alias refs for the protagonist."""
+
+    canonical_ref = " ".join(str(name or "").split())
+    tokens = canonical_ref.split()
+    known_aliases = [tokens[0]] if len(tokens) > 1 else []
+    return {
+        "canonical_ref": canonical_ref,
+        "known_aliases": known_aliases,
+    }
 
 
 def _axis(kind: str, text: Any) -> dict[str, Any]:

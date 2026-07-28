@@ -14,6 +14,10 @@ mechanical state (relationship rows, pair-tags, stub entities).
    targets have no database rows, so the compiler records them as prose
    remainders either way. Provide named targets for them only when the
    prose names concrete people (the names seed world-history coverage).
+   `traits_to_compile` is the authoritative subset after player constraints.
+   Never derive an input or invent a target for a trait listed in
+   `forbidden_cold_start_relationship_traits`; the transition records that
+   trait as a structured suppression remainder instead.
 2. Never set any database id field (`character_id`, `character_entity_id`,
    `place_id`, `place_entity_id`, `counterparty_id`, `counterparty_entity_id`,
    `scope_faction_entity_id`). This is a brand-new world: there are no existing

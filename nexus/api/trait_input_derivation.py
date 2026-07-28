@@ -26,8 +26,10 @@ from pydantic import BaseModel, ConfigDict, create_model
 from nexus.agents.orrery.status_family import STATUS_LEVELS
 from nexus.api.trait_compiler import FAME_TAGS, RESOURCE_TAGS
 from nexus.api.trait_compiler_schemas import (
+    RELATIONSHIP_BEARING_TRAIT_FIELDS,
     TraitCompileInputs,
     canonical_trait_name,
+    suppress_cold_start_relationship_inputs,
 )
 
 if TYPE_CHECKING:
@@ -61,6 +63,33 @@ def selected_canonical_traits(character: "CharacterSheet") -> List[str]:
 
     return [
         canonical_trait_name(str(trait.name)) for trait in character.get_trait_entries()
+    ]
+
+
+def forbidden_cold_start_relationship_traits(
+    character: "CharacterSheet",
+) -> List[str]:
+    """Return selected traits whose setup-time relations are forbidden."""
+
+    return sorted(
+        {
+            canonical_trait_name(str(constraint.trait))
+            for constraint in character.trait_constraints
+            if constraint.cold_start_relationships == "forbidden"
+            and canonical_trait_name(str(constraint.trait))
+            in RELATIONSHIP_BEARING_TRAIT_FIELDS
+        }
+    )
+
+
+def traits_requiring_derived_inputs(character: "CharacterSheet") -> List[str]:
+    """Return selected fields the model may populate after constraints apply."""
+
+    forbidden = set(forbidden_cold_start_relationship_traits(character))
+    return [
+        trait
+        for trait in selected_canonical_traits(character)
+        if trait not in forbidden
     ]
 
 
@@ -211,8 +240,11 @@ def render_trait_input_prompt(
         raise FileNotFoundError(f"Trait input deriver prompt not found: {PROMPT_PATH}")
     instructions = PROMPT_PATH.read_text()
 
+    forbidden_traits = forbidden_cold_start_relationship_traits(character)
     payload = {
         "selected_traits": selected_canonical_traits(character),
+        "traits_to_compile": traits_requiring_derived_inputs(character),
+        "forbidden_cold_start_relationship_traits": forbidden_traits,
         "character": {
             "name": character.name,
             "summary": character.summary,
@@ -263,7 +295,8 @@ def derive_trait_compile_inputs(
 
     from nexus.api.native_structured_output import build_native_structured_provider
 
-    selected = selected_canonical_traits(character)
+    selected = traits_requiring_derived_inputs(character)
+    forbidden_traits = forbidden_cold_start_relationship_traits(character)
     prompt = render_trait_input_prompt(character=character, setting=setting)
     schema_model = selected_trait_compile_inputs_model(selected)
 
@@ -298,7 +331,7 @@ def derive_trait_compile_inputs(
             "Trait input derivation returned "
             f"{type(output).__name__}, expected TraitCompileInputs"
         )
-    return output
+    return suppress_cold_start_relationship_inputs(output, forbidden_traits)
 
 
 def ensure_trait_compile_inputs(
@@ -324,9 +357,13 @@ def ensure_trait_compile_inputs(
 
     character = transition_data.character
     if character.trait_compile_inputs is not None:
+        character.trait_compile_inputs = suppress_cold_start_relationship_inputs(
+            character.trait_compile_inputs,
+            forbidden_cold_start_relationship_traits(character),
+        )
         logger.info(
             "Slot %s character already has trait_compile_inputs; skipping "
-            "derivation",
+            "derivation after enforcing cold-start constraints",
             slot,
         )
         return None
@@ -360,4 +397,7 @@ def ensure_trait_compile_inputs(
         "derived": True,
         "model": model_name,
         "traits": derived_traits,
+        "suppressed_cold_start_relationship_traits": list(
+            derived.suppressed_cold_start_relationship_traits
+        ),
     }

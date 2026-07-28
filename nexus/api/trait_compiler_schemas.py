@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, Iterable, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -15,6 +15,18 @@ FameLevel = Literal["obscure", "known", "renowned", "legendary"]
 PairTagDirection = Literal["protagonist_to_target", "target_to_protagonist"]
 PatronFunction = Literal["mentors", "sponsors", "protects", "authority_over"]
 ObligationCounterpartyKind = Literal["character", "faction"]
+RELATIONSHIP_BEARING_TRAIT_FIELDS = frozenset(
+    {
+        "status",
+        "allies",
+        "contacts",
+        "enemies",
+        "domain",
+        "patron",
+        "dependents",
+        "obligations",
+    }
+)
 
 
 def canonical_trait_name(trait_name: str) -> str:
@@ -36,6 +48,7 @@ class TraitCompileReasonCode(str, Enum):
     REGISTRY_MISSING_TAG = "registry_missing_tag"
     REGISTRY_MISSING_PAIR_TAG = "registry_missing_pair_tag"
     RELATIONSHIP_PAIR_CONFLICT = "relationship_pair_conflict"
+    COLD_START_RELATIONSHIPS_FORBIDDEN = "cold_start_relationships_forbidden"
 
 
 class SingleEntityTraitInput(BaseModel):
@@ -301,6 +314,33 @@ class TraitCompileInputs(BaseModel):
     patron: Optional[PatronTraitInput] = None
     dependents: Optional[DependentsTraitInput] = None
     obligations: Optional[ObligationsTraitInput] = None
+    suppressed_cold_start_relationship_traits: List[str] = Field(
+        default_factory=list,
+        description=(
+            "Selected traits whose setup-time relationship and pair-tag inputs "
+            "were suppressed by an explicit cold-start constraint."
+        ),
+    )
+
+
+def suppress_cold_start_relationship_inputs(
+    inputs: TraitCompileInputs,
+    forbidden_traits: Iterable[str],
+) -> TraitCompileInputs:
+    """Remove mintable relationship inputs and record the suppressed traits."""
+
+    suppressed = sorted(
+        {
+            canonical_trait_name(str(trait))
+            for trait in forbidden_traits
+            if canonical_trait_name(str(trait)) in RELATIONSHIP_BEARING_TRAIT_FIELDS
+        }
+    )
+    updates: Dict[str, Any] = {
+        trait: None for trait in suppressed if trait in TraitCompileInputs.model_fields
+    }
+    updates["suppressed_cold_start_relationship_traits"] = suppressed
+    return inputs.model_copy(update=updates)
 
 
 class AppliedTag(BaseModel):

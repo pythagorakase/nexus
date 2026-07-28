@@ -794,6 +794,8 @@ class FakeRetrogradePersistenceCursor:
                     }
                 )
             self._result = rows
+        elif "orrery:retrograde:protagonist_identity" in sql:
+            self._result = [{"id": 11, "name": "Mara", "alias": None}]
         elif "orrery:retrograde:event_types" in sql:
             event_types = self.vocabulary["event_types"]
             if self.omit_first_event_type:

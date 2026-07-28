@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Sequence
+from typing import Mapping, Sequence
 
 
 PairTagSeedRow = tuple[str, list[str], list[str], bool, str]
@@ -103,3 +103,24 @@ PAIR_TAG_SEED: Sequence[PairTagSeedRow] = (
         "Subject teaches or trains the target.",
     ),
 )
+
+
+# Prompt-time semantic classification for every seed-eligible pair-tag above.
+# The database registry stores kind constraints and lifecycle metadata, but it
+# has no category column for pair tags. Retrograde therefore carries this
+# explicit companion metadata and fails enumeration when a newly registered
+# built-in row is missing a classification.
+PAIR_TAG_SEMANTIC_CATEGORIES: Mapping[str, frozenset[str]] = {
+    "knows_location": frozenset({"location_knowledge"}),
+    "can_access": frozenset({"access"}),
+    "claims": frozenset({"domain"}),
+    "resides_at": frozenset({"residence"}),
+    "operates_from": frozenset({"operational_base"}),
+    "originates_from": frozenset({"origin"}),
+    "hunting": frozenset({"adversarial"}),
+    "handles": frozenset({"contact", "patronage"}),
+    "obligation": frozenset({"obligation"}),
+    "authority_over": frozenset({"patronage"}),
+    "protects": frozenset({"affiliative", "dependency", "patronage"}),
+    "mentors": frozenset({"affiliative", "patronage"}),
+}

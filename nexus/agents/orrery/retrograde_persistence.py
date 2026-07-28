@@ -29,7 +29,11 @@ from nexus.agents.orrery.retrograde_expansion import (
 from nexus.agents.orrery.retrograde_markers import (
     RETROGRADE_PROLOGUE_MARKER,
 )
-from nexus.agents.orrery.retrograde_vocabulary import normalize_entity_ref
+from nexus.agents.orrery.retrograde_vocabulary import (
+    fold_entity_ref_for_identity,
+    normalize_entity_ref,
+    relationship_type_default_emotional_valence,
+)
 from nexus.agents.orrery.status_family import STATUS_TAGS, level_from_status_tag
 from nexus.agents.orrery.substrate import ProjectPolicy, coerce_project_policy
 from nexus.agents.orrery.tag_writer import apply_status_pair_tag_bestowal
@@ -102,6 +106,15 @@ class _ProjectRefDecision:
     winning_seed_id: Optional[str] = None
 
 
+@dataclass(frozen=True, slots=True)
+class _PersistedProtagonistIdentity:
+    """Canonical protagonist name plus aliases loaded from normalized tables."""
+
+    character_id: int
+    name: str
+    aliases: frozenset[str]
+
+
 def build_retrograde_persistence_plan(
     cur: Any,
     *,
@@ -158,6 +171,9 @@ def build_retrograde_persistence_plan(
             )
     existing_prologue_id = _find_prologue_chunk_id(cur)
     entity_index = _load_entity_index(cur)
+    protagonist_identity = (
+        _load_persisted_protagonist_identity(cur) if create_missing_entities else None
+    )
     project_ref_decisions = (
         _arbitrate_project_refs(
             expansion,
@@ -212,13 +228,16 @@ def build_retrograde_persistence_plan(
         project_event_origin=project_event_origin,
         project_event_ref_prefix=project_event_ref_prefix,
         project_log_context=project_log_context,
+        protagonist_identity=protagonist_identity,
     )
     if dry_run:
         return manifest
 
     blockers = list(manifest["execute_blockers"])
     if blockers:
-        formatted = "; ".join(blocker["reason"] for blocker in blockers)
+        formatted = "; ".join(
+            f"{blocker['id']}: {blocker['reason']}" for blocker in blockers
+        )
         raise ValueError(f"Retrograde expansion is not safe to execute: {formatted}")
 
     inserted_stub_keys = _insert_missing_entity_stubs(
@@ -262,6 +281,7 @@ def build_retrograde_persistence_plan(
         project_event_origin=project_event_origin,
         project_event_ref_prefix=project_event_ref_prefix,
         project_log_context=project_log_context,
+        protagonist_identity=protagonist_identity,
     )
 
 
@@ -295,6 +315,7 @@ def _build_plan(
     project_event_origin: str,
     project_event_ref_prefix: Optional[str],
     project_log_context: Optional[str],
+    protagonist_identity: Optional[_PersistedProtagonistIdentity],
 ) -> dict[str, Any]:
     counters: Counter[str] = Counter()
     reference_issues: list[dict[str, Any]] = []
@@ -311,6 +332,12 @@ def _build_plan(
         create_missing_entities=create_missing_entities,
         inserted_stub_keys=inserted_stub_keys,
         project_ref_decisions=project_ref_decisions,
+    )
+    execute_blockers.extend(
+        _protagonist_duplicate_stub_blockers(
+            entity_stub_rows=entity_stub_rows,
+            protagonist_identity=protagonist_identity,
+        )
     )
     creatable_refs = frozenset(
         (row["entity_kind"], normalize_entity_ref(row["entity_ref"]))
@@ -2615,6 +2642,37 @@ def _load_entity_index(cur: Any) -> dict[tuple[str, str], list[_EntityRecord]]:
     return index
 
 
+def _load_persisted_protagonist_identity(
+    cur: Any,
+) -> Optional[_PersistedProtagonistIdentity]:
+    """Load the canonical player character and normalized alias rows."""
+
+    cur.execute(
+        """
+        /* orrery:retrograde:protagonist_identity */
+        SELECT c.id, c.name, ca.alias
+        FROM global_variables gv
+        JOIN characters c ON c.id = gv.user_character
+        LEFT JOIN character_aliases ca ON ca.character_id = c.id
+        WHERE gv.id = TRUE
+        ORDER BY ca.alias
+        """
+    )
+    rows = cur.fetchall()
+    if not rows:
+        return None
+    character_id = int(_row_value(rows[0], "id", 0))
+    name = str(_row_value(rows[0], "name", 1))
+    aliases = frozenset(
+        str(alias) for row in rows if (alias := _row_value(row, "alias", 2)) is not None
+    )
+    return _PersistedProtagonistIdentity(
+        character_id=character_id,
+        name=name,
+        aliases=aliases,
+    )
+
+
 def _load_event_types(cur: Any) -> set[str]:
     cur.execute(
         """
@@ -2754,6 +2812,49 @@ def _plan_entity_stubs(
             row["candidates"] = [_entity_record_json(match) for match in matches]
         rows.append(row)
     return rows
+
+
+def _protagonist_duplicate_stub_blockers(
+    *,
+    entity_stub_rows: Sequence[Mapping[str, Any]],
+    protagonist_identity: Optional[_PersistedProtagonistIdentity],
+) -> list[dict[str, str]]:
+    """Block new character stubs that alias or abbreviate the protagonist."""
+
+    if protagonist_identity is None:
+        return []
+    folded_canonical = fold_entity_ref_for_identity(protagonist_identity.name)
+    canonical_tokens = frozenset(folded_canonical.split())
+    alias_refs = {
+        fold_entity_ref_for_identity(alias) for alias in protagonist_identity.aliases
+    }
+    duplicate_refs: list[str] = []
+    for row in entity_stub_rows:
+        if row.get("status") != "would_insert" or row.get("entity_kind") != "character":
+            continue
+        entity_ref = str(row.get("entity_ref") or "")
+        folded_ref = fold_entity_ref_for_identity(entity_ref)
+        candidate_tokens = frozenset(folded_ref.split())
+        if (
+            folded_ref in alias_refs
+            or folded_ref == folded_canonical
+            or (candidate_tokens and candidate_tokens <= canonical_tokens)
+        ):
+            duplicate_refs.append(entity_ref)
+    if not duplicate_refs:
+        return []
+    return [
+        {
+            "id": "protagonist_duplicate_stub_forbidden",
+            "reason": (
+                "Retrograde may not create a character stub whose folded "
+                "name is a protagonist alias, name-token subset, or "
+                "permutation: "
+                f"{sorted(set(duplicate_refs))}; canonical protagonist is "
+                f"{protagonist_identity.name!r}"
+            ),
+        }
+    ]
 
 
 def _collect_expansion_entity_refs(
@@ -3050,23 +3151,7 @@ def _relationship_extra_data(
 
 
 def _default_emotional_valence(relationship_type: str) -> str:
-    positive = {
-        "ally",
-        "chosen_kin",
-        "companion",
-        "family",
-        "friend",
-        "guardian",
-        "mentor",
-        "romantic",
-        "ward",
-    }
-    negative = {"captor", "enemy", "rival"}
-    if relationship_type in positive:
-        return "+3|trusting"
-    if relationship_type in negative:
-        return "-3|resentful"
-    return "0|neutral"
+    return relationship_type_default_emotional_valence(relationship_type)
 
 
 def _source_kind_blockers(cur: Any) -> list[dict[str, str]]:
