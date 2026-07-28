@@ -100,6 +100,7 @@ def test_handle_user_input_writes_exact_coverage_and_empty_detection() -> None:
                 },
                 memnon=LiveReferenceMemnon(connection, int(covered.chunk_id)),
                 provider_wire_type="openai",
+                provider_name="openai",
             )
             manager.handle_storyteller_response(
                 narrative="The prior scene closes.",
