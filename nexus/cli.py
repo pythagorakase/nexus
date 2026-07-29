@@ -38,7 +38,8 @@ import os
 from pathlib import Path
 import sys
 import time
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any, Callable, Dict, List, Mapping, Optional
+import uuid
 
 import requests
 
@@ -908,6 +909,10 @@ def emit_output(payload: Dict[str, Any], as_json: bool, truncate: bool = False) 
     # Human-readable output
     if payload.get("error"):
         print(f"Error: {payload['error']}")
+        return
+
+    if payload.get("usage"):
+        _print_usage(payload)
         return
 
     # Display message/storyteller text
@@ -3015,6 +3020,85 @@ def run_logs(args: argparse.Namespace) -> Dict[str, Any]:
         return {"success": False, "error": str(exc)}
 
 
+def run_usage(args: argparse.Namespace) -> Dict[str, Any]:
+    """Return exact provider-reported usage for one UTC day or run."""
+
+    from nexus.telemetry.usage import summarize_usage
+
+    return {
+        "success": True,
+        "usage": summarize_usage(day=args.day, run_id=args.run),
+    }
+
+
+def _run_with_cli_usage(
+    args: argparse.Namespace,
+    command: Callable[[argparse.Namespace], Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Correlate all provider calls made by one in-process CLI invocation."""
+
+    from nexus.telemetry.usage import usage_context
+
+    with usage_context(
+        slot=getattr(args, "slot", None),
+        run_id=uuid.uuid4().hex[:12],
+    ):
+        return command(args)
+
+
+def _print_usage(payload: Dict[str, Any]) -> None:
+    """Render provider-reported usage without conflating prompt estimates."""
+
+    usage = payload["usage"]
+    day = usage["day"]
+    openai = usage["openai_day_total"]
+    print(f"OpenAI API-reported tokens (UTC day {day}): " f"{openai['total_tokens']:,}")
+    if openai["unknown_usage_events"]:
+        print(
+            "OpenAI responses with unknown API usage: "
+            f"{openai['unknown_usage_events']:,}"
+        )
+
+    allowance = usage.get("allowance") or {}
+    for provider, values in sorted(allowance.items()):
+        print(
+            f"{provider} allowance: {values['used']:,} / "
+            f"{values['allowance']:,} (remaining {values['remaining']:,}; "
+            f"unknown events {values['unknown_usage_events']:,})"
+        )
+
+    for title, key in (("Providers", "providers"), ("Seats", "seats")):
+        print()
+        print(f"{title}:")
+        rows = usage.get(key) or {}
+        if not rows:
+            print("  (none)")
+            continue
+        header = ("NAME", "INPUT", "OUTPUT", "TOTAL", "EVENTS", "UNKNOWN")
+        values = [
+            (
+                name,
+                totals["input"],
+                totals["output"],
+                totals["total"],
+                totals["events"],
+                totals["unknown_usage_events"],
+            )
+            for name, totals in sorted(rows.items())
+        ]
+        widths = [
+            max(len(str(row[index])) for row in [header] + values)
+            for index in range(len(header))
+        ]
+        for row in [header] + values:
+            print(
+                "  "
+                + "  ".join(
+                    str(cell).ljust(widths[index]) for index, cell in enumerate(row)
+                )
+            )
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build CLI argument parser with subcommands."""
     parser = argparse.ArgumentParser(
@@ -3025,6 +3109,7 @@ Examples:
   nexus up                      Start the runtime (gateway + enabled services)
   nexus up --foreground         Stay attached; Ctrl+C tears down
   nexus status                  Runtime health, processes, slot, version
+  nexus usage --day 2026-07-29 Show exact API-reported UTC-day token usage
   nexus logs gateway -f         Follow the gateway log
   nexus down                    Stop the runtime
   nexus load --slot 5           Show current state of slot 5
@@ -3120,6 +3205,28 @@ Examples:
         "-f", "--follow", action="store_true", help="Follow the log"
     )
     _add_config_arg(logs_parser)
+
+    usage_parser = subparsers.add_parser(
+        "usage",
+        help="Show exact provider-reported API token usage",
+    )
+    usage_parser.add_argument(
+        "--json",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Emit JSON output",
+    )
+    usage_parser.add_argument(
+        "--truncate",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Truncate long text fields (accepted for global CLI consistency)",
+    )
+    usage_parser.add_argument(
+        "--day",
+        help="UTC quota day in YYYY-MM-DD format (default: current UTC day)",
+    )
+    usage_parser.add_argument("--run", help="Filter events by correlation run id")
 
     # load command
     load_parser = subparsers.add_parser("load", help="Display current slot state")
@@ -3703,6 +3810,8 @@ def main() -> int:
         result = run_status(args)
     elif args.command == "logs":
         result = run_logs(args)
+    elif args.command == "usage":
+        result = run_usage(args)
     elif args.command == "load":
         result = run_load(args)
     elif args.command == "continue":
@@ -3716,13 +3825,13 @@ def main() -> int:
     elif args.command == "clear":
         result = run_clear(args)
     elif args.command == "trait-audit":
-        result = run_trait_audit(args)
+        result = _run_with_cli_usage(args, run_trait_audit)
     elif args.command == "retrograde-packet":
         result = run_retrograde_packet(args)
     elif args.command == "retrograde-seed-candidates":
-        result = run_retrograde_seed_candidates(args)
+        result = _run_with_cli_usage(args, run_retrograde_seed_candidates)
     elif args.command == "retrograde-expand-seeds":
-        result = run_retrograde_expand_seeds(args)
+        result = _run_with_cli_usage(args, run_retrograde_expand_seeds)
     elif args.command == "retrograde-apply-expansion":
         result = run_retrograde_apply_expansion(args)
     elif args.command == "retrograde-embed-history":

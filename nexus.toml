@@ -1138,6 +1138,19 @@ reasoning_effort = "high"     # Reasoning effort level (low/medium/high)
 max_choice_text_length = 1000  # Maximum length of choice text
 
 # =============================================================================
+# Provider-reported API token usage (issue #626)
+# =============================================================================
+
+[usage]
+enabled = true
+usage_dir = ".nexus/runtime/usage"  # relative paths resolve against the repo root; shared by gateway/CLI/worker processes
+
+[usage.daily_allowance]
+# Per-provider daily API-token allowances (UTC day), used for readout only —
+# measurement, never enforcement. Providers without an entry show no allowance.
+openai = 2500000
+
+# =============================================================================
 # Managed Runtime (issue #396) — nexus up / down / restart / status / logs
 # =============================================================================
 

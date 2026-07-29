@@ -793,6 +793,7 @@ def generate_expansion_with_skald(
             "Return a non-mutating expansion plan only."
         ),
         structured_output_retries=get_wizard_retry_budget(),
+        seat="retrograde_expansion",
     )
 
     async def _validate_output(

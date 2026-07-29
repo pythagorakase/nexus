@@ -590,6 +590,48 @@ class RuntimeGatewaySettings(BaseModel):
         return self
 
 
+class UsageSettings(BaseModel):
+    """Provider-reported API token telemetry configuration."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = Field(
+        default=True,
+        description="Whether completed provider responses are recorded",
+    )
+    usage_dir: str = Field(
+        default=".nexus/runtime/usage",
+        description=(
+            "Shared usage JSONL directory; relative paths resolve against the "
+            "repository root"
+        ),
+    )
+    daily_allowance: Dict[str, int] = Field(
+        default_factory=dict,
+        description=(
+            "Optional per-provider UTC-day API-token allowances used for "
+            "measurement readout only"
+        ),
+    )
+
+    @field_validator("daily_allowance")
+    @classmethod
+    def _validate_daily_allowances(cls, value: Dict[str, int]) -> Dict[str, int]:
+        """Require positive provider allowances."""
+
+        invalid = {
+            provider: allowance
+            for provider, allowance in value.items()
+            if allowance < 1
+        }
+        if invalid:
+            raise ValueError(
+                "daily_allowance values must be at least 1: "
+                f"{sorted(invalid.items())}"
+            )
+        return value
+
+
 class RuntimeSettings(BaseModel):
     """Managed runtime configuration (nexus up / down / status / logs)."""
 
@@ -3203,6 +3245,10 @@ class Settings(BaseModel):
     runtime: Optional[RuntimeSettings] = Field(
         default=None,
         description="Managed runtime settings (nexus up/down/status/logs)",
+    )
+    usage: UsageSettings = Field(
+        default_factory=UsageSettings,
+        description="Provider-reported API token telemetry settings",
     )
 
     @model_validator(mode="before")

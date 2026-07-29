@@ -82,6 +82,7 @@ from nexus.api.native_structured_output import (
     retry_prompt,
     run_output_validator,
 )
+from nexus.telemetry.usage import record_anthropic_response
 
 # Configure logging
 logging.basicConfig(
@@ -296,6 +297,8 @@ class AnthropicProvider(LLMProvider):
         structured_transport: Literal["native", "prompted", "tool_envelope"] = "native",
         structured_output_retries: Optional[int] = None,
         output_validator: Optional[Any] = None,
+        usage_provider_name: Optional[str] = None,
+        usage_seat: Optional[str] = None,
     ):
         """
         Initialize Anthropic provider.
@@ -317,6 +320,8 @@ class AnthropicProvider(LLMProvider):
                 output agents (apex.structured_output_retries in nexus.toml)
             output_validator: Optional async pydantic_ai output validator
                 registered on structured agents (may raise ModelRetry)
+            usage_provider_name: Registry provider name for billing identity
+            usage_seat: Optional logical operation recorded for each response
         """
         self.top_p = top_p
         self.top_k = top_k
@@ -336,6 +341,8 @@ class AnthropicProvider(LLMProvider):
             else self.STRUCTURED_OUTPUT_RETRIES
         )
         self.output_validator = output_validator
+        self.usage_provider_name = usage_provider_name or "anthropic"
+        self.usage_seat = usage_seat
 
         # Validate thinking configuration
         if thinking_enabled and thinking_budget_tokens is None:
@@ -452,6 +459,8 @@ class AnthropicProvider(LLMProvider):
                 "budget_tokens": self.thinking_budget_tokens,
             }
 
+        response: Any = None
+        usage_outcome: Literal["accepted", "error"] = "error"
         try:
             # Call the API
             if extra_body:
@@ -478,7 +487,7 @@ class AnthropicProvider(LLMProvider):
             )
 
             # Create and return a standardized response
-            return LLMResponse(
+            result = LLMResponse(
                 content=content,
                 input_tokens=response.usage.input_tokens,
                 output_tokens=response.usage.output_tokens,
@@ -487,6 +496,8 @@ class AnthropicProvider(LLMProvider):
                 cache_creation_tokens=cache_creation_tokens,
                 cache_read_tokens=cache_read_tokens,
             )
+            usage_outcome = "accepted"
+            return result
         except Exception as e:
             # Handle API errors
             logger.error(f"Error calling Anthropic API: {str(e)}")
@@ -516,6 +527,16 @@ class AnthropicProvider(LLMProvider):
 
             # Re-raise other exceptions
             raise
+        finally:
+            if response is not None:
+                record_anthropic_response(
+                    response,
+                    provider=self.usage_provider_name,
+                    model=cast(str, self.model),
+                    seat=self.usage_seat,
+                    attempt=1,
+                    outcome=usage_outcome,
+                )
 
     def get_structured_completion(
         self,
@@ -648,6 +669,8 @@ class AnthropicProvider(LLMProvider):
         active_prompt = prompt
         last_error: Optional[BaseException] = None
         for attempt in range(self.structured_output_retries + 1):
+            response: Any = None
+            usage_outcome: Literal["accepted", "rejected_validation", "error"] = "error"
             try:
                 response = self.client.beta.messages.create(
                     **self._build_native_structured_request_params(
@@ -665,19 +688,33 @@ class AnthropicProvider(LLMProvider):
                         self.output_validator, parsed_output, retry=attempt
                     )
                 )
-                return parsed_output, self._native_response_to_llm_response(
+                llm_response = self._native_response_to_llm_response(
                     parsed_output, response
                 )
+                usage_outcome = "accepted"
+                return parsed_output, llm_response
             except ModelRetry as exc:
                 last_error = exc
+                usage_outcome = "rejected_validation"
                 if attempt >= self.structured_output_retries:
                     raise
                 active_prompt = retry_prompt(prompt, exc.message)
             except (ValidationError, json.JSONDecodeError, ValueError) as exc:
                 last_error = exc
+                usage_outcome = "rejected_validation"
                 if attempt >= self.structured_output_retries:
                     raise
                 active_prompt = retry_prompt(prompt, str(exc))
+            finally:
+                if response is not None:
+                    record_anthropic_response(
+                        response,
+                        provider=self.usage_provider_name,
+                        model=cast(str, self.model),
+                        seat=self.usage_seat,
+                        attempt=attempt + 1,
+                        outcome=usage_outcome,
+                    )
 
         raise RuntimeError("Structured completion failed") from last_error
 
@@ -695,6 +732,8 @@ class AnthropicProvider(LLMProvider):
         active_prompt = prompt
         last_error: Optional[BaseException] = None
         for attempt in range(self.structured_output_retries + 1):
+            response: Any = None
+            usage_outcome: Literal["accepted", "rejected_validation", "error"] = "error"
             try:
                 response = self.client.beta.messages.create(
                     **self._build_tool_envelope_structured_request_params(
@@ -714,20 +753,34 @@ class AnthropicProvider(LLMProvider):
                         retry=attempt,
                     )
                 )
-                return parsed_output, self._native_response_to_llm_response(
+                llm_response = self._native_response_to_llm_response(
                     parsed_output,
                     response,
                 )
+                usage_outcome = "accepted"
+                return parsed_output, llm_response
             except ModelRetry as exc:
                 last_error = exc
+                usage_outcome = "rejected_validation"
                 if attempt >= self.structured_output_retries:
                     raise
                 active_prompt = retry_prompt(prompt, exc.message)
             except (ValidationError, json.JSONDecodeError, ValueError) as exc:
                 last_error = exc
+                usage_outcome = "rejected_validation"
                 if attempt >= self.structured_output_retries:
                     raise
                 active_prompt = retry_prompt(prompt, str(exc))
+            finally:
+                if response is not None:
+                    record_anthropic_response(
+                        response,
+                        provider=self.usage_provider_name,
+                        model=cast(str, self.model),
+                        seat=self.usage_seat,
+                        attempt=attempt + 1,
+                        outcome=usage_outcome,
+                    )
 
         raise RuntimeError("Structured completion failed") from last_error
 
@@ -743,6 +796,8 @@ class AnthropicProvider(LLMProvider):
         active_prompt = prompt
         last_error: Optional[BaseException] = None
         for attempt in range(self.structured_output_retries + 1):
+            response: Any = None
+            usage_outcome: Literal["accepted", "rejected_validation", "error"] = "error"
             try:
                 response = self.client.beta.messages.create(
                     **self._build_prompted_structured_request_params(active_prompt)
@@ -758,20 +813,34 @@ class AnthropicProvider(LLMProvider):
                         retry=attempt,
                     )
                 )
-                return parsed_output, self._native_response_to_llm_response(
+                llm_response = self._native_response_to_llm_response(
                     parsed_output,
                     response,
                 )
+                usage_outcome = "accepted"
+                return parsed_output, llm_response
             except ModelRetry as exc:
                 last_error = exc
+                usage_outcome = "rejected_validation"
                 if attempt >= self.structured_output_retries:
                     raise
                 active_prompt = retry_prompt(prompt, exc.message)
             except (ValidationError, json.JSONDecodeError, ValueError) as exc:
                 last_error = exc
+                usage_outcome = "rejected_validation"
                 if attempt >= self.structured_output_retries:
                     raise
                 active_prompt = retry_prompt(prompt, str(exc))
+            finally:
+                if response is not None:
+                    record_anthropic_response(
+                        response,
+                        provider=self.usage_provider_name,
+                        model=cast(str, self.model),
+                        seat=self.usage_seat,
+                        attempt=attempt + 1,
+                        outcome=usage_outcome,
+                    )
 
         raise RuntimeError("Structured completion failed") from last_error
 

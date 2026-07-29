@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from typing import Iterable
 
 import psycopg2
 import pytest
+
+from nexus.telemetry import usage as usage_telemetry
 
 
 def _flag_enabled(name: str) -> bool:
@@ -37,6 +40,21 @@ def _forbid_unopted_postgres_connections(monkeypatch: pytest.MonkeyPatch) -> Non
         )
 
     monkeypatch.setattr(psycopg2, "connect", fail_connect)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_provider_usage(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Keep every fabricated provider response out of runtime telemetry."""
+
+    config = usage_telemetry._RecorderConfig(
+        enabled=True,
+        usage_dir=tmp_path / "usage",
+        daily_allowance={"openai": 2_500_000},
+    )
+    monkeypatch.setattr(usage_telemetry, "_config", config)
 
 
 def pytest_collection_modifyitems(

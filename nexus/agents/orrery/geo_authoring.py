@@ -90,6 +90,7 @@ def author_place_coordinates(
         max_tokens=max_tokens,
         system_prompt=prompt,
         structured_output_retries=get_wizard_retry_budget(),
+        seat="geo_authoring",
     )
     response, _llm_response = provider.get_structured_completion(
         prompt,

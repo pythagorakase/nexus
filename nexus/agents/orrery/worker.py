@@ -18,6 +18,7 @@ from nexus.agents.orrery.retrograde_maturation import (
 )
 from nexus.config import load_settings_as_dict
 from nexus.config.settings_models import OrreryNarrationSettings, OrreryPromoteSettings
+from nexus.telemetry.usage import usage_context
 
 logger = logging.getLogger("nexus.orrery.worker")
 
@@ -259,7 +260,12 @@ def drain_narration_outbox_sync(
         failed = 0
         for row in rows:
             try:
-                narration_text = _generate_narration(provider, row)
+                with usage_context(
+                    seat="orrery_narration",
+                    slot=(int(row["slot"]) if row.get("slot") is not None else None),
+                    run_id=str(row["job_id"]),
+                ):
+                    narration_text = _generate_narration(provider, row)
                 descriptor = _perceptual_descriptor(row)
                 with conn:
                     with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -657,6 +663,8 @@ def _narration_provider(settings: Mapping[str, Any]) -> Any:
             temperature=narration.temperature,
             max_tokens=narration.max_output_tokens,
             system_prompt=NARRATION_SYSTEM_PROMPT,
+            usage_provider_name=provider_name,
+            usage_seat="orrery_narration",
         )
     if provider_name == "openai":
         return OpenAIProvider(
@@ -664,6 +672,8 @@ def _narration_provider(settings: Mapping[str, Any]) -> Any:
             temperature=narration.temperature,
             max_output_tokens=narration.max_output_tokens,
             system_prompt=NARRATION_SYSTEM_PROMPT,
+            usage_provider_name=provider_name,
+            usage_seat="orrery_narration",
         )
     # Any other provider must be the model's own registry provider with an
     # OpenAI-compatible base_url (mock TEST server, Ollama, vLLM, ...).
@@ -679,6 +689,8 @@ def _narration_provider(settings: Mapping[str, Any]) -> Any:
             structured_transport=endpoint["structured_transport"],
             request_timeout=endpoint["request_timeout_seconds"],
             request_params=endpoint.get("request_params"),
+            usage_provider_name=provider_name,
+            usage_seat="orrery_narration",
         )
     raise ValueError(f"Unsupported Orrery narration provider: {provider_name}")
 

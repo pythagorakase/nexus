@@ -174,6 +174,7 @@ class _RecordingProvider:
                 "output_validator": self.output_validator,
                 "structured_transport": self.structured_transport,
                 "structured_output_retries": self.structured_output_retries,
+                "usage_seat": getattr(self, "usage_seat", None),
             }
         )
 
@@ -408,6 +409,8 @@ def _assert_two_pass_calls(
     assert writer_call["output_validator"] is not gaia_call["output_validator"]
     assert writer_call["structured_output_retries"] == 3
     assert gaia_call["structured_output_retries"] == 3
+    assert writer_call["usage_seat"] == "skald_writer"
+    assert gaia_call["usage_seat"] == "gaia"
     # Writer pass = core doctrine + explicit scope note (gaia work excluded);
     # schema-free writers obey the core prompt over the repair loop without it.
     assert writer_call["system_prompt"].startswith("Core storyteller prompt")
@@ -927,6 +930,7 @@ def _install_gaia_capture(
         captured["anthropic_transport"] = anthropic_transport
         gaia_recorder.system_prompt = system_prompt
         gaia_recorder.output_validator = output_validator
+        gaia_recorder.usage_seat = "gaia"
         return gaia_recorder
 
     monkeypatch.setattr(utility, "_build_gaia_provider", fake_build)
@@ -983,6 +987,8 @@ def test_sync_pinned_gaia_runs_fresh_openai_seat(
     assert len(gaia_recorder.calls) == 1
     gaia_call = gaia_recorder.calls[0]
     assert gaia_call["schema_model"] is SkaldGaiaWire
+    assert provider.calls[0]["usage_seat"] == "skald_writer"
+    assert gaia_call["usage_seat"] == "gaia"
     # Heterogeneous kwargs: strict OpenAI gaia schema under this writer wire.
     assert gaia_call["kwargs"] == {"text_format": skald_gaia_strict_text_format()}
     assert captured["route"][0] == "pinned-gaia-model"

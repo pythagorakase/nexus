@@ -62,6 +62,7 @@ from nexus.config.settings_models import (
     OrreryRetrogradeRetrievalSettings,
     Settings,
 )
+from nexus.telemetry.usage import usage_context
 
 logger = logging.getLogger("nexus.orrery.retrograde_maturation")
 
@@ -559,14 +560,18 @@ def drain_maturation_jobs_sync(
         failed = 0
         for row in rows:
             try:
-                _mature_one(
-                    conn,
-                    row=row,
-                    cfg=cfg,
-                    settings_dict=settings_dict,
-                    settings=typed_settings,
-                    slot=slot,
-                )
+                with usage_context(
+                    slot=(int(row["slot"]) if row.get("slot") is not None else None),
+                    run_id=str(row["job_id"]),
+                ):
+                    _mature_one(
+                        conn,
+                        row=row,
+                        cfg=cfg,
+                        settings_dict=settings_dict,
+                        settings=typed_settings,
+                        slot=slot,
+                    )
                 matured += 1
             except Exception as exc:
                 failed += 1

@@ -84,6 +84,7 @@ class StoryComponentGenerator:
             max_tokens=self._max_tokens,
             system_prompt=system_prompt,
             structured_output_retries=self._retry_budget,
+            seat="new_story",
         )
         result, _llm_response = provider.get_structured_completion(
             self._prompt_with_history(user_prompt, message_history),
@@ -608,6 +609,7 @@ cold climates, coastal coordinates for harbors, etc.)."""
         max_tokens=get_wizard_max_tokens(),
         system_prompt=system_prompt,
         structured_output_retries=get_wizard_retry_budget(),
+        seat="set_designer",
     )
 
     output, _llm_response = await provider.get_structured_completion_async(

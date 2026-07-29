@@ -1477,6 +1477,7 @@ class SummaryGenerator:
                 structured_output_retries=self._structured_output_retries,
                 temperature=(None if self.is_reasoning_model else self.temperature),
                 reasoning_effort=(self.effort if self.is_reasoning_model else None),
+                seat="summaries",
             )
             logger.info(
                 "Initialized %s summary provider for %s using %s",

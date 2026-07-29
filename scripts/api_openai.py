@@ -54,6 +54,7 @@ from typing import (
     Type,
     TypeVar,
     Literal,
+    cast,
 )
 from datetime import datetime, timedelta
 
@@ -86,6 +87,10 @@ from nexus.api.native_structured_output import (
     openai_response_text_format,
     retry_prompt,
     run_output_validator,
+)
+from nexus.telemetry.usage import (
+    provider_name_from_base_url,
+    record_openai_response,
 )
 
 # Configure logging
@@ -297,6 +302,8 @@ class OpenAIProvider(LLMProvider):
         structured_output_retries: Optional[int] = None,
         output_validator: Optional[Any] = None,
         request_params: Optional[Dict[str, Any]] = None,
+        usage_provider_name: Optional[str] = None,
+        usage_seat: Optional[str] = None,
     ):
         """
         Initialize OpenAI provider with additional reasoning parameter.
@@ -323,6 +330,8 @@ class OpenAIProvider(LLMProvider):
             request_params: Per-model provider-specific request-body params
                 from the registry (issue #580), merged into chat-completions
                 calls via the SDK's extra_body
+            usage_provider_name: Registry provider name for billing identity
+            usage_seat: Optional logical operation recorded for each response
         """
         self.reasoning_effort = reasoning_effort
         # Deep copy: nested param objects (e.g. {"reasoning": {"effort": ...}})
@@ -330,6 +339,11 @@ class OpenAIProvider(LLMProvider):
         self.request_params = copy.deepcopy(request_params) if request_params else {}
         self.max_output_tokens = max_output_tokens or max_tokens
         self.base_url = base_url
+        self.usage_provider_name = usage_provider_name or provider_name_from_base_url(
+            native_name="openai",
+            base_url=base_url,
+        )
+        self.usage_seat = usage_seat
         self.request_timeout = request_timeout
         if structured_transport not in {"responses", "chat_completions"}:
             raise ValueError(
@@ -503,6 +517,8 @@ class OpenAIProvider(LLMProvider):
         active_prompt = prompt
         last_error: Optional[BaseException] = None
         for attempt in range(self.structured_output_retries + 1):
+            response: Any = None
+            usage_outcome: Literal["accepted", "rejected_validation", "error"] = "error"
             try:
                 try:
                     response = self.client.responses.parse(
@@ -529,19 +545,34 @@ class OpenAIProvider(LLMProvider):
                         self.output_validator, parsed_output, retry=attempt
                     )
                 )
-                return parsed_output, self._native_response_to_llm_response(
+                llm_response = self._native_response_to_llm_response(
                     parsed_output, response
                 )
+                usage_outcome = "accepted"
+                return parsed_output, llm_response
             except ModelRetry as exc:
                 last_error = exc
+                usage_outcome = "rejected_validation"
                 if attempt >= self.structured_output_retries:
                     raise
                 active_prompt = retry_prompt(prompt, exc.message)
             except (ValidationError, json.JSONDecodeError, ValueError) as exc:
                 last_error = exc
+                usage_outcome = "rejected_validation"
                 if attempt >= self.structured_output_retries:
                     raise
                 active_prompt = retry_prompt(prompt, str(exc))
+            finally:
+                if response is not None:
+                    record_openai_response(
+                        response,
+                        provider=self.usage_provider_name,
+                        model=cast(str, self.model),
+                        seat=self.usage_seat,
+                        attempt=attempt + 1,
+                        outcome=usage_outcome,
+                        transport="responses",
+                    )
 
         raise RuntimeError("Structured completion failed") from last_error
 
@@ -601,6 +632,8 @@ class OpenAIProvider(LLMProvider):
         active_prompt = prompt
         last_error: Optional[BaseException] = None
         for attempt in range(self.structured_output_retries + 1):
+            response: Any = None
+            usage_outcome: Literal["accepted", "rejected_validation", "error"] = "error"
             try:
                 response = self.client.chat.completions.create(
                     **self._build_chat_structured_request_params(
@@ -613,19 +646,34 @@ class OpenAIProvider(LLMProvider):
                         self.output_validator, parsed_output, retry=attempt
                     )
                 )
-                return parsed_output, self._chat_response_to_llm_response(
+                llm_response = self._chat_response_to_llm_response(
                     parsed_output, response
                 )
+                usage_outcome = "accepted"
+                return parsed_output, llm_response
             except ModelRetry as exc:
                 last_error = exc
+                usage_outcome = "rejected_validation"
                 if attempt >= self.structured_output_retries:
                     raise
                 active_prompt = retry_prompt(prompt, exc.message)
             except (ValidationError, json.JSONDecodeError, ValueError) as exc:
                 last_error = exc
+                usage_outcome = "rejected_validation"
                 if attempt >= self.structured_output_retries:
                     raise
                 active_prompt = retry_prompt(prompt, str(exc))
+            finally:
+                if response is not None:
+                    record_openai_response(
+                        response,
+                        provider=self.usage_provider_name,
+                        model=cast(str, self.model),
+                        seat=self.usage_seat,
+                        attempt=attempt + 1,
+                        outcome=usage_outcome,
+                        transport="chat_completions",
+                    )
 
         raise RuntimeError("Structured chat completion failed") from last_error
 
@@ -863,14 +911,28 @@ class OpenAIProvider(LLMProvider):
             )
             return self._get_completion_chat_completions(prompt)
 
-        # Format response to match our standard format
-        return LLMResponse(
-            content=response.output_text,
-            input_tokens=response.usage.input_tokens,
-            output_tokens=response.usage.output_tokens,
-            model=self.model,
-            raw_response=response,
-        )
+        usage_outcome: Literal["accepted", "error"] = "error"
+        try:
+            # Format response to match our standard format
+            result = LLMResponse(
+                content=response.output_text,
+                input_tokens=response.usage.input_tokens,
+                output_tokens=response.usage.output_tokens,
+                model=cast(str, self.model),
+                raw_response=response,
+            )
+            usage_outcome = "accepted"
+            return result
+        finally:
+            record_openai_response(
+                response,
+                provider=self.usage_provider_name,
+                model=cast(str, self.model),
+                seat=self.usage_seat,
+                attempt=1,
+                outcome=usage_outcome,
+                transport="responses",
+            )
 
     def _get_completion_chat_completions(self, prompt: str) -> LLMResponse:
         """Get an unstructured completion through Chat Completions."""
@@ -892,17 +954,31 @@ class OpenAIProvider(LLMProvider):
             request_params["extra_body"] = copy.deepcopy(self.request_params)
 
         response = self.client.chat.completions.create(**request_params)
-        choices = getattr(response, "choices", None) or []
-        message = getattr(choices[0], "message", None) if choices else None
-        content = getattr(message, "content", "") if message else ""
-        usage = getattr(response, "usage", None)
-        return LLMResponse(
-            content=content,
-            input_tokens=getattr(usage, "prompt_tokens", 0) if usage else 0,
-            output_tokens=getattr(usage, "completion_tokens", 0) if usage else 0,
-            model=self.model,
-            raw_response=response,
-        )
+        usage_outcome: Literal["accepted", "error"] = "error"
+        try:
+            choices = getattr(response, "choices", None) or []
+            message = getattr(choices[0], "message", None) if choices else None
+            content = getattr(message, "content", "") if message else ""
+            usage = getattr(response, "usage", None)
+            result = LLMResponse(
+                content=content,
+                input_tokens=getattr(usage, "prompt_tokens", 0) if usage else 0,
+                output_tokens=(getattr(usage, "completion_tokens", 0) if usage else 0),
+                model=cast(str, self.model),
+                raw_response=response,
+            )
+            usage_outcome = "accepted"
+            return result
+        finally:
+            record_openai_response(
+                response,
+                provider=self.usage_provider_name,
+                model=cast(str, self.model),
+                seat=self.usage_seat,
+                attempt=1,
+                outcome=usage_outcome,
+                transport="chat_completions",
+            )
 
     def _get_api_key(self) -> str:
         """Get OpenAI API key via the central secret manager (Keychain)."""
