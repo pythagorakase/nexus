@@ -351,15 +351,21 @@ def _stub_seed_completion_requests(
     monkeypatch.setattr(cli.requests, "post", fake_post)
 
 
-@pytest.mark.parametrize("status_code", [400, 422, 500])
+@pytest.mark.parametrize(
+    "status_code,requests_ok", [(300, True), (400, False), (422, False), (500, False)]
+)
 def test_seed_completion_transition_http_failure_exits_nonzero_with_retry(
-    monkeypatch, capsys, status_code: int
+    monkeypatch, capsys, status_code: int, requests_ok: bool
 ) -> None:
-    """A persisted seed cannot make a failed atomic transition look successful."""
+    """A persisted seed cannot make a failed atomic transition look successful.
+
+    requests.Response.ok is True for any status < 400, so a 3xx must fail
+    the strict 2xx contract even while ok=True.
+    """
     detail = f'{{"detail":"Atomic transition failed with {status_code}"}}'
     _stub_seed_completion_requests(
         monkeypatch,
-        DummyResponse({}, ok=False, text=detail, status_code=status_code),
+        DummyResponse({}, ok=requests_ok, text=detail, status_code=status_code),
     )
     monkeypatch.setattr(
         sys,

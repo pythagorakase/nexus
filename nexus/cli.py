@@ -1492,7 +1492,7 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                                 status_code=None,
                                 status="timeout",
                             )
-                        if not transition_response.ok:
+                        if not 200 <= transition_response.status_code < 300:
                             detail = transition_response.text.strip() or (
                                 "Transition request failed with HTTP "
                                 f"{transition_response.status_code}."
