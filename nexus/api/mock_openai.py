@@ -652,7 +652,7 @@ async def chat_completions(request: ChatCompletionRequest):
     forced_tool = get_forced_tool(request.tool_choice)
 
     logger.info(f"[MOCK] Phase: {phase}, Subphase: {subphase}")
-    logger.info(f"[MOCK] User message: {user_msg[:100]}...")
+    logger.info("[MOCK] User message received (%s chars)", len(user_msg))
     if forced_tool:
         logger.info(f"[MOCK] Forced tool: {forced_tool} (Accept Fate)")
 
@@ -972,14 +972,24 @@ def _mock_storyteller_response(prompt: str) -> Dict[str, Any]:
             "Pause and reassess the pressure around the scene.",
             "Shift attention to the quieter off-screen consequence.",
         ],
+        "letter": (
+            "[TEST MODE] Preserve the unresolved pressure for the next exchange."
+        ),
     }
     if adjudications:
         response["orrery_adjudications"] = adjudications
     return response
 
 
-_WRITER_WIRE_FIELDS = ("narrative", "choices", "scene", "presence", "operations")
-_GAIA_WIRE_FIELDS = ("updates", "orrery_adjudications", "new_entities")
+_WRITER_WIRE_FIELDS = (
+    "narrative",
+    "choices",
+    "scene",
+    "presence",
+    "operations",
+    "letter",
+)
+_GAIA_WIRE_FIELDS = ("updates", "orrery_adjudications", "new_entities", "letter")
 
 
 def _mock_writer_response(prompt: str) -> Dict[str, Any]:

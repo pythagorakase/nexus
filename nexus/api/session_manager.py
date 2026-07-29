@@ -19,6 +19,8 @@ from uuid import UUID, uuid4
 
 logger = logging.getLogger("nexus.api.session_manager")
 
+_PRIVATE_CONTEXT_KEYS = frozenset({"storyteller_correspondence"})
+
 
 def _utcnow() -> datetime:
     """Return the current UTC time with timezone information."""
@@ -38,6 +40,22 @@ def _parse_datetime(value: str) -> datetime:
     """Parse an ISO formatted datetime string."""
 
     return datetime.fromisoformat(value)
+
+
+def _without_private_context(value: Any) -> Any:
+    """Copy JSON-like context while structurally omitting private channels."""
+
+    if isinstance(value, dict):
+        return {
+            key: _without_private_context(item)
+            for key, item in value.items()
+            if key not in _PRIVATE_CONTEXT_KEYS
+        }
+    if isinstance(value, list):
+        return [_without_private_context(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_without_private_context(item) for item in value)
+    return value
 
 
 class SessionNotFoundError(Exception):
@@ -140,10 +158,14 @@ class SessionState:
 class SessionManager:
     """Manage story session persistence on the filesystem."""
 
-    def __init__(self, base_path: Optional[Path] = None, *, max_context_files: int = 50):
-        raw_base_path = Path(base_path).expanduser() if base_path is not None else Path(
-            __file__
-        ).resolve().parents[2] / "sessions"
+    def __init__(
+        self, base_path: Optional[Path] = None, *, max_context_files: int = 50
+    ):
+        raw_base_path = (
+            Path(base_path).expanduser()
+            if base_path is not None
+            else Path(__file__).resolve().parents[2] / "sessions"
+        )
         self.base_path = raw_base_path.resolve(strict=False)
         self.base_path.mkdir(parents=True, exist_ok=True)
         self.max_context_files = max_context_files
@@ -164,7 +186,9 @@ class SessionManager:
                     with metadata_path.open("w", encoding="utf-8") as handle:
                         json.dump(payload, handle, indent=2)
             except Exception as exc:  # pragma: no cover - recovery best effort
-                logger.warning("Failed to recover session metadata %s: %s", metadata_path, exc)
+                logger.warning(
+                    "Failed to recover session metadata %s: %s", metadata_path, exc
+                )
 
     async def _get_lock(self, session_id: str) -> asyncio.Lock:
         """Return the asyncio lock associated with a session."""
@@ -182,7 +206,10 @@ class SessionManager:
         session_path = (self.base_path / normalized_session_id).resolve(strict=False)
 
         # Prevent path traversal attacks
-        if self.base_path not in session_path.parents and session_path != self.base_path:
+        if (
+            self.base_path not in session_path.parents
+            and session_path != self.base_path
+        ):
             raise ValueError("Session path resolves outside base directory")
         return session_path
 
@@ -322,13 +349,14 @@ class SessionManager:
             turn_id = str(uuid4())
             created_at = _utcnow()
 
+            stored_context = _without_private_context(context_payload or {})
             context_path: Optional[str] = None
-            if context_payload:
+            if stored_context:
                 context_dir = self._context_dir(session_id)
                 context_dir.mkdir(parents=True, exist_ok=True)
                 context_path = f"{turn_id}.json"
                 with (context_dir / context_path).open("w", encoding="utf-8") as handle:
-                    json.dump(context_payload, handle, indent=2, default=str)
+                    json.dump(stored_context, handle, indent=2, default=str)
 
             turn = SessionTurn(
                 turn_id=turn_id,
@@ -369,7 +397,9 @@ class SessionManager:
             return []
         return turns[::-1][offset : offset + limit]
 
-    async def load_context(self, session_id: str, turn_id: Optional[str] = None) -> Dict[str, Any]:
+    async def load_context(
+        self, session_id: str, turn_id: Optional[str] = None
+    ) -> Dict[str, Any]:
         """Return the stored context payload for the most recent or specified turn."""
 
         state = await self.load_session(session_id)
@@ -434,13 +464,14 @@ class SessionManager:
 
             turn_id = state.turns[-1].turn_id
 
+            stored_context = _without_private_context(context_payload or {})
             context_path: Optional[str] = None
-            if context_payload:
+            if stored_context:
                 context_dir = self._context_dir(session_id)
                 context_dir.mkdir(parents=True, exist_ok=True)
                 context_path = f"{turn_id}.json"
                 with (context_dir / context_path).open("w", encoding="utf-8") as handle:
-                    json.dump(context_payload, handle, indent=2, default=str)
+                    json.dump(stored_context, handle, indent=2, default=str)
 
             new_turn = SessionTurn(
                 turn_id=turn_id,
@@ -490,7 +521,9 @@ class SessionManager:
         """Background cleanup hook executed after a turn completes."""
 
         try:
-            await self.update_metadata(session_id, last_accessed=_utcnow(), current_phase="idle")
+            await self.update_metadata(
+                session_id, last_accessed=_utcnow(), current_phase="idle"
+            )
             # Prune old context files to prevent unbounded disk usage
             await self.prune_session_context(session_id)
         except SessionNotFoundError:
@@ -514,4 +547,3 @@ class SessionManager:
                 yield SessionMetadata.from_dict(payload)
             except Exception as exc:  # pragma: no cover
                 logger.debug("Skipping metadata at %s: %s", metadata_path, exc)
-

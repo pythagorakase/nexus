@@ -1053,6 +1053,25 @@ warm_slice_default = true        # Include warm slice by default
 max_sql_iterations = 5           # Max iterations for agentic SQL generation
 
 # =============================================================================
+# Storyteller Private Correspondence
+# =============================================================================
+
+[storyteller.correspondence]
+# Hysteresis is denominated in accepted turn exchange pairs. A post-accept
+# compaction fires when the current exchange pushes the uncompacted journal
+# above the ceiling, retaining the prior floor plus the newly accepted turn.
+floor_turns = 5
+ceiling_turns = 10
+compaction_model = "@openai.gaia"
+# Semantic limits are enforced inside the bounded structured-output repair
+# loops. Their configured worst case consumes 8K of the 12K context budget.
+max_letter_tokens = 300
+max_digest_tokens = 2000
+# The complete digest + verbatim exchange block is structural context. Exceeding
+# this cap is a should-never-fire invariant, never permission to truncate.
+max_rendered_tokens = 12000
+
+# =============================================================================
 # APEX API Settings (Story Generation)
 # =============================================================================
 

@@ -998,6 +998,26 @@ class TurnCycleManager:
             "memory_state": turn_context.memory_state,
         }
 
+        if (
+            getattr(self.lore, "enable_logon", True)
+            and turn_context.target_chunk_id is not None
+        ):
+            logon = getattr(self.lore, "logon", None)
+            memory_manager = getattr(self.lore, "memory_manager", None)
+            if logon is None or memory_manager is None:
+                raise RuntimeError(
+                    "Private correspondence assembly requires LOGON and the "
+                    "memory manager"
+                )
+            dbname = getattr(logon, "dbname", None)
+            if not isinstance(dbname, str) or not dbname:
+                raise RuntimeError(
+                    "Private correspondence assembly requires the slot database"
+                )
+            turn_context.context_payload["storyteller_correspondence"] = (
+                memory_manager.assemble_correspondence_context(dbname)
+            )
+
         if turn_context.note:
             turn_context.context_payload["note"] = turn_context.note
 
@@ -1435,6 +1455,9 @@ class TurnCycleManager:
                 expected_model=turn_context.apex_model,
                 expected_wire_type=turn_context.provider_wire_type,
                 effective_context_window=effective_context_window,
+            )
+            turn_context.private_correspondence = (
+                self.lore.logon.take_generated_correspondence()
             )
 
             # Store the full structured response

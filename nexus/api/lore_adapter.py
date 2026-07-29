@@ -14,6 +14,7 @@ from nexus.api.choice_handling import (
     normalize_choice_object,
     selected_text_from_choice_object,
 )
+from nexus.memory.correspondence import GeneratedCorrespondence
 
 logger = logging.getLogger("nexus.api.lore_adapter")
 
@@ -125,6 +126,7 @@ def response_to_incubator(
     user_text: str,
     session_id: str,
     orrery_proposal: Optional[Any] = None,
+    correspondence: Optional[GeneratedCorrespondence] = None,
 ) -> Dict[str, Any]:
     """
     Transform a LORE StoryTurnResponse into incubator table format.
@@ -169,6 +171,12 @@ def response_to_incubator(
         "orrery_proposal": _serialize_orrery_proposal(orrery_proposal),
         "orrery_adjudications": extract_orrery_adjudications(response),
         "new_entities": extract_new_entities(response),
+        "correspondence_writer_letter": (
+            correspondence.writer_letter if correspondence is not None else None
+        ),
+        "correspondence_gaia_letter": (
+            correspondence.gaia_letter if correspondence is not None else None
+        ),
         "session_id": session_id,
         "llm_response_id": getattr(response, "response_id", None),
         "status": "provisional",

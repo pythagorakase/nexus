@@ -81,6 +81,7 @@ def _print_verification(slot: int) -> int:
     try:
         with conn.cursor() as cur:
             verdicts = verify_checkpoints_sync(cur)
+            correspondence_findings = _verify_correspondence_provenance(cur)
     finally:
         conn.close()
 
@@ -88,6 +89,15 @@ def _print_verification(slot: int) -> int:
         print(
             f"slot {slot}: fewer than two checkpoints at distinct chunks — "
             "nothing to verify"
+        )
+        if correspondence_findings:
+            for finding in correspondence_findings:
+                print(f"slot {slot}: correspondence provenance DRIFT: {finding}")
+            return 1
+        print(
+            f"slot {slot}: correspondence provenance ok "
+            "(authorial channel excluded from world-state replay; "
+            "chunk-versioned undo invariants hold)"
         )
         return 0
     total_drift = 0
@@ -108,6 +118,16 @@ def _print_verification(slot: int) -> int:
         for drift in verdict.drifts:
             total_drift += 1
             print(f"  {json.dumps(asdict(drift), default=str)}")
+    if correspondence_findings:
+        for finding in correspondence_findings:
+            total_drift += 1
+            print(f"slot {slot}: correspondence provenance DRIFT: {finding}")
+    else:
+        print(
+            f"slot {slot}: correspondence provenance ok "
+            "(authorial channel excluded from world-state replay; "
+            "chunk-versioned undo invariants hold)"
+        )
     if total_drift:
         print(
             f"{total_drift} drift finding(s): a writer mutated checkpointed "
@@ -115,6 +135,72 @@ def _print_verification(slot: int) -> int:
         )
         return 1
     return 0
+
+
+def _verify_correspondence_provenance(cur: Any) -> list[str]:
+    """Audit the explicit non-ledger replay contract from migration 099."""
+
+    cur.execute(
+        """
+        SELECT
+            to_regclass('storyteller_correspondence_letters'),
+            to_regclass('storyteller_correspondence_digest_versions')
+        """
+    )
+    tables = cur.fetchone()
+    if not tables or tables[0] is None or tables[1] is None:
+        return []
+
+    findings: list[str] = []
+    cur.execute(
+        """
+        SELECT l.chunk_id
+        FROM storyteller_correspondence_letters AS l
+        LEFT JOIN narrative_chunks AS nc ON nc.id = l.chunk_id
+        WHERE nc.id IS NULL
+        LIMIT 10
+        """
+    )
+    orphan_letters = [row[0] for row in cur.fetchall()]
+    if orphan_letters:
+        findings.append(f"orphan letter chunks={orphan_letters}")
+
+    cur.execute(
+        """
+        SELECT chunk_id, array_agg(seat ORDER BY seat)
+        FROM storyteller_correspondence_letters
+        GROUP BY chunk_id
+        HAVING array_agg(seat ORDER BY seat) NOT IN (
+            ARRAY['gaia', 'writer']::text[],
+            ARRAY['single_pass']::text[]
+        )
+        ORDER BY chunk_id
+        LIMIT 10
+        """
+    )
+    malformed_pairs = [(row[0], row[1]) for row in cur.fetchall()]
+    if malformed_pairs:
+        findings.append(f"non-atomic exchanges={malformed_pairs}")
+
+    cur.execute(
+        """
+        SELECT d.accepting_chunk_id, d.compacted_through_chunk_id
+        FROM storyteller_correspondence_digest_versions AS d
+        LEFT JOIN narrative_chunks AS accepting
+          ON accepting.id = d.accepting_chunk_id
+        LEFT JOIN narrative_chunks AS compacted
+          ON compacted.id = d.compacted_through_chunk_id
+        WHERE accepting.id IS NULL
+           OR compacted.id IS NULL
+           OR d.compacted_through_chunk_id > d.accepting_chunk_id
+        ORDER BY d.accepting_chunk_id
+        LIMIT 10
+        """
+    )
+    invalid_digests = [tuple(row) for row in cur.fetchall()]
+    if invalid_digests:
+        findings.append(f"invalid digest provenance={invalid_digests}")
+    return findings
 
 
 def main() -> None:

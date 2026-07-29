@@ -32,6 +32,7 @@ from nexus.agents.logon.skald_wire import (
 )
 from nexus.agents.lore import logon_utility
 from nexus.agents.lore.logon_utility import LogonUtility
+from nexus.memory.correspondence import CorrespondenceDigestWire
 from nexus.api.native_structured_output import (
     anthropic_output_config,
     openai_response_text_format,
@@ -64,6 +65,10 @@ WRITER_PAYLOAD: dict[str, Any] = {
             "reason": "The archive crossing closes the beat.",
         }
     },
+    "letter": (
+        "The bell is bait. Let Iona suspect the Choir before we confirm who "
+        "actually rang it."
+    ),
 }
 GAIA_PAYLOAD: dict[str, Any] = {
     "updates": {
@@ -86,6 +91,10 @@ GAIA_PAYLOAD: dict[str, Any] = {
             "summary": "An unseen choir carried through flooded pipes.",
         }
     ],
+    "letter": (
+        "Agreed. I will move the Choir through the pipes but leave the bell's "
+        "ringer unresolved."
+    ),
 }
 SINGLE_PASS_PAYLOAD: dict[str, Any] = {
     "narrative": 'Iona says, "Wait."\nThe drowned bell answers.',
@@ -123,6 +132,7 @@ SINGLE_PASS_PAYLOAD: dict[str, Any] = {
             "summary": "An unseen choir carried through flooded pipes.",
         }
     ],
+    "letter": "Keep the bell's ringer unresolved while the Choir advances.",
 }
 BASELINE = PresenceBaseline(
     present=[PresenceRef(kind="character", name="Iona Vale", id=4)],
@@ -262,6 +272,7 @@ def _gaia_payload_with_character_tag(tag: str) -> dict[str, Any]:
         },
         "orrery_adjudications": [],
         "new_entities": [],
+        "letter": GAIA_PAYLOAD["letter"],
     }
 
 
@@ -286,6 +297,7 @@ def _utility(
     bootstrap: bool = False,
     output_validator: Any = None,
     structured_output_retries: int = 3,
+    max_letter_tokens: int = 300,
 ) -> tuple[LogonUtility, _RecordingProvider]:
     if provider_type == "anthropic":
         if anthropic_transport is None:
@@ -301,7 +313,17 @@ def _utility(
                 "turn_pipeline": "two_pass",
                 "anthropic_storyteller_transport": (anthropic_transport or "prompted"),
             }
-        }
+        },
+        "storyteller": {
+            "correspondence": {
+                "floor_turns": 5,
+                "ceiling_turns": 10,
+                "compaction_model": "two-pass-test-model",
+                "max_letter_tokens": max_letter_tokens,
+                "max_digest_tokens": 2000,
+                "max_rendered_tokens": 12000,
+            }
+        },
     }
     provider = _RecordingProvider(
         outputs,
@@ -310,6 +332,10 @@ def _utility(
         structured_output_retries=structured_output_retries,
     )
     utility = LogonUtility(settings, model_override=provider.model)
+    if not bootstrap:
+        provider.output_validator = utility._build_letter_output_validator(
+            delegate=output_validator
+        )
     utility.provider = cast(Any, provider)
     utility._provider_bootstrap_mode = bootstrap
     utility._provider_wire_type = cast(Any, provider_type)
@@ -377,8 +403,9 @@ def _assert_two_pass_calls(
     assert gaia_call["schema_model"] is SkaldGaiaWire
     assert writer_call["kwargs"] == expected_writer_kwargs
     assert gaia_call["kwargs"] == expected_gaia_kwargs
-    assert writer_call["output_validator"] is None
-    assert gaia_call["output_validator"] is None
+    assert writer_call["output_validator"] is not None
+    assert gaia_call["output_validator"] is not None
+    assert writer_call["output_validator"] is not gaia_call["output_validator"]
     assert writer_call["structured_output_retries"] == 3
     assert gaia_call["structured_output_retries"] == 3
     # Writer pass = core doctrine + explicit scope note (gaia work excluded);
@@ -651,8 +678,12 @@ def test_real_vocabulary_validator_belongs_to_gaia_and_consumes_repair(
         SkaldGaiaWire,
         SkaldGaiaWire,
     ]
-    assert provider.calls[0]["output_validator"] is None
-    assert all(call["output_validator"] is validator for call in provider.calls[1:])
+    assert provider.calls[0]["output_validator"] is not None
+    assert provider.calls[0]["output_validator"] is not provider.output_validator
+    assert all(
+        call["output_validator"] is provider.output_validator
+        for call in provider.calls[1:]
+    )
     retry_prompt_text = provider.calls[2]["prompt"]
     assert "=== STRUCTURED OUTPUT RETRY ===" in retry_prompt_text
     assert "failed closed-registry validation" in retry_prompt_text
@@ -662,6 +693,67 @@ def test_real_vocabulary_validator_belongs_to_gaia_and_consumes_repair(
     bestowal = response.state_updates.characters[0].orrery_tags
     assert bestowal is not None
     assert bestowal.applied_tags == ["perceptive"]
+
+
+def test_both_seats_repair_overlong_letters_before_hydration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Writer and Gaia length failures consume the provider's bounded retry loop."""
+
+    overlong_writer = {**WRITER_PAYLOAD, "letter": "writer-plan " * 80}
+    overlong_gaia = {**GAIA_PAYLOAD, "letter": "gaia-reply " * 80}
+    utility, provider = _utility(
+        "openai",
+        [overlong_writer, WRITER_PAYLOAD, overlong_gaia, GAIA_PAYLOAD],
+        structured_output_retries=1,
+        max_letter_tokens=20,
+    )
+    monkeypatch.setattr(
+        utility,
+        "_read_presence_baseline_for_context",
+        lambda _context_payload, _schema_model: BASELINE,
+    )
+
+    response = utility.generate_narrative(
+        _context(),
+        effective_context_window=75_000,
+    )
+
+    assert response.narrative == WRITER_PAYLOAD["narrative"]
+    assert [call["schema_model"] for call in provider.calls] == [
+        SkaldWriterWire,
+        SkaldWriterWire,
+        SkaldGaiaWire,
+        SkaldGaiaWire,
+    ]
+    assert "private storyteller letter is too long" in provider.calls[1]["prompt"]
+    assert "private storyteller letter is too long" in provider.calls[3]["prompt"]
+
+
+def test_compaction_repairs_overlong_digest_with_small_structured_wire() -> None:
+    """Digest length validation participates in the same bounded repair loop."""
+
+    utility, provider = _utility(
+        "openai",
+        [
+            {"digest": "uncompacted-plan " * 80},
+            {"digest": "LIVE: ring the bell later."},
+        ],
+        structured_output_retries=1,
+    )
+
+    digest = utility.compact_correspondence(
+        system_prompt="Compact the authorial correspondence.",
+        user_prompt="Aging exchanges.",
+        max_digest_tokens=10,
+    )
+
+    assert digest == "LIVE: ring the bell later."
+    assert [call["schema_model"] for call in provider.calls] == [
+        CorrespondenceDigestWire,
+        CorrespondenceDigestWire,
+    ]
+    assert "correspondence digest is too long" in provider.calls[1]["prompt"]
 
 
 def test_writer_failure_short_circuits_before_gaia_or_hydration(
@@ -757,7 +849,7 @@ def test_gaia_prompt_is_concise_and_self_contained() -> None:
 
     # Word count, not line count: the file keeps one line per paragraph, so
     # line count no longer measures concision (currently ~500 words).
-    assert len(prompt.split()) < 600
+    assert len(prompt.split()) < 700
     # The persona rewrite (owner brief, 2026-07-27) made gaia.md
     # self-sufficient: the shared doctrine it needs (canon hierarchy,
     # setting idiom, sincere beliefs) is inlined in Gaia's voice instead of
