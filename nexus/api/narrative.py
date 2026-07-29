@@ -386,6 +386,14 @@ def _record_player_response_for_chunk(
                 return user_text
 
             if not has_new_input:
+                if choice_object and choice_object["presented"]:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            "Current chunk has unresolved choices; provide choice, "
+                            "non-empty user_text, or accept_fate."
+                        ),
+                    )
                 raise HTTPException(status_code=400, detail="No input provided")
 
             try:
@@ -554,20 +562,21 @@ async def continue_narrative(
 
     Initiates async generation and returns session_id for tracking.
     """
-    if request.model:
-        if request.slot is None:
-            raise HTTPException(
-                status_code=400,
-                detail="Model override requires a slot to persist the selection.",
-            )
-        from nexus.api.save_slots import upsert_slot
-
-        upsert_slot(request.slot, model=request.model, dbname=slot_dbname(request.slot))
-        logger.info("Persisted model %s to slot %s", request.model, request.slot)
+    if request.choice is not None and request.accept_fate:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot provide both choice and accept_fate",
+        )
+    if request.model and request.slot is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Model override requires a slot to persist the selection.",
+        )
 
     # Resolve chunk_id from slot state if not provided
     resolved_user_text = request.user_text
-    if request.chunk_id is None and request.slot is not None:
+    state = None
+    if request.slot is not None:
         from nexus.api.slot_state import get_slot_state
 
         state = get_slot_state(request.slot)
@@ -576,6 +585,8 @@ async def continue_narrative(
                 status_code=400,
                 detail="Slot is in wizard mode. Use /api/story/new/chat for wizard.",
             )
+
+    if request.chunk_id is None and state is not None:
         if state.narrative_state is not None:
             narrative_state = state.narrative_state
             if narrative_state.has_pending:
@@ -614,7 +625,7 @@ async def continue_narrative(
                 request.chunk_id = approved_chunk_id
             else:
                 request.chunk_id = narrative_state.current_chunk_id
-                if _has_player_response_input(request) and (
+                if (
                     request.choice is not None
                     or request.accept_fate
                     or narrative_state.choices
@@ -625,7 +636,7 @@ async def continue_narrative(
                         user_text=request.user_text,
                         choice=request.choice,
                         accept_fate=request.accept_fate,
-                        require_response=False,
+                        require_response=bool(narrative_state.choices),
                     )
             logger.info(
                 f"Resolved chunk_id={request.chunk_id} from slot {request.slot}"
@@ -639,6 +650,15 @@ async def continue_narrative(
             accept_fate=request.accept_fate,
             require_response=False,
         )
+
+    # A request-level override is intentionally persistent, but only after every
+    # synchronous continue validation above has succeeded. Rejected requests
+    # must not alter the model used by later turns.
+    if request.model:
+        from nexus.api.save_slots import upsert_slot
+
+        upsert_slot(request.slot, model=request.model, dbname=slot_dbname(request.slot))
+        logger.info("Persisted model %s to slot %s", request.model, request.slot)
 
     session_id = str(uuid.uuid4())
 
