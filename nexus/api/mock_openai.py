@@ -266,6 +266,7 @@ def build_story_seed_arguments(cache: Dict[str, Any]) -> Dict[str, Any]:
         "day": base_timestamp.day,
         "hour": base_timestamp.hour,
         "minute": base_timestamp.minute,
+        "second": base_timestamp.second,
     }
 
     location_name = location.get("name", "unknown location")

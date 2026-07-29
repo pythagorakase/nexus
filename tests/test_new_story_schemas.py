@@ -172,6 +172,39 @@ class TestNewStorySchemas:
         assert constraint is not None
         assert (constraint.year, constraint.month, constraint.day) == (887, 10, None)
 
+    def test_setting_date_constraint_preserves_explicit_seconds(self) -> None:
+        """A full setting datetime constrains the seed's seconds field."""
+        constraint = extract_setting_date_constraint(
+            _dated_setting(time_period="2032-02-29 23:58:30 UTC"),
+        )
+
+        assert constraint is not None
+        assert (
+            constraint.year,
+            constraint.month,
+            constraint.day,
+            constraint.second,
+        ) == (2032, 2, 29, 30)
+        assert (
+            constraint.conflicts_with(
+                StoryTimestamp(
+                    year=2032,
+                    month=2,
+                    day=29,
+                    hour=23,
+                    minute=58,
+                    second=30,
+                )
+            )
+            is False
+        )
+        assert (
+            constraint.conflicts_with(
+                StoryTimestamp(year=2032, month=2, day=29, hour=23, minute=58)
+            )
+            is True
+        )
+
     def test_character_sheet_creation(self):
         """Test creating a valid CharacterSheet with Mind's Eye Theatre traits."""
         character = CharacterSheet(
@@ -400,6 +433,45 @@ class TestNewStorySchemas:
         """February 29 on a non-leap year should fail."""
         with pytest.raises(ValidationError):
             StoryTimestamp(year=2023, month=2, day=29, hour=12, minute=0)
+
+    def test_story_timestamp_seconds_default_validate_and_convert(self):
+        """Seconds are bounded, preserved, and optional for legacy payloads."""
+        minute_only = StoryTimestamp(
+            year=2032,
+            month=2,
+            day=29,
+            hour=23,
+            minute=58,
+        )
+        explicit = StoryTimestamp(
+            year=2032,
+            month=2,
+            day=29,
+            hour=23,
+            minute=58,
+            second=30,
+        )
+
+        assert minute_only.second == 0
+        assert minute_only.to_datetime().second == 0
+        assert explicit.to_datetime() == datetime(
+            2032,
+            2,
+            29,
+            23,
+            58,
+            30,
+            tzinfo=timezone.utc,
+        )
+        with pytest.raises(ValidationError):
+            StoryTimestamp(
+                year=2032,
+                month=2,
+                day=29,
+                hour=23,
+                minute=58,
+                second=60,
+            )
 
     def test_place_profile_creation(self):
         """Test creating a valid PlaceProfile."""

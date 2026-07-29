@@ -424,6 +424,7 @@ def test_seed_timestamp_round_trips_through_record_drafts(monkeypatch) -> None:
     monkeypatch.setattr(new_story_flow, "write_cache", persist_cache)
 
     submission = sample_seed_submission()
+    submission.seed.base_timestamp.second = 30
     new_story_flow.record_drafts(
         1,
         seed=submission.seed.model_dump(),
@@ -437,6 +438,7 @@ def test_seed_timestamp_round_trips_through_record_drafts(monkeypatch) -> None:
     stored_seed = stored_cache.get_seed_dict()
     assert stored_seed is not None
     assert stored_seed["base_timestamp"]["year"] == 1347
+    assert stored_seed["base_timestamp"]["second"] == 30
 
 
 def test_get_seed_dict_rejects_missing_diegetic_timestamp() -> None:
@@ -486,6 +488,7 @@ def test_get_seed_dict_normalizes_timestamp_display_offset() -> None:
         "day": 14,
         "hour": 10,
         "minute": 48,
+        "second": 0,
     }
 
 

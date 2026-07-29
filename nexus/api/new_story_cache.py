@@ -370,6 +370,7 @@ class WizardCache:
             "day": ts.day,
             "hour": ts.hour,
             "minute": ts.minute,
+            "second": ts.second,
         }
         return {
             "seed_type": self.seed.seed_type,
