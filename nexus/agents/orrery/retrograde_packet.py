@@ -152,6 +152,7 @@ def build_retrograde_dry_run_packet(
             cache.current_phase() if hasattr(cache, "current_phase") else "unknown"
         ),
         "generated_at": datetime.now(timezone.utc).isoformat(),
+        "project_start_relationships": [],
         "inputs": {
             "setting": setting,
             "character": character,

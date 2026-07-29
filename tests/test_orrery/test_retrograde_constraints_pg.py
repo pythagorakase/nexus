@@ -23,6 +23,9 @@ from nexus.agents.orrery.retrograde_packet import build_retrograde_dry_run_packe
 from nexus.agents.orrery.retrograde_persistence import (
     build_retrograde_persistence_plan,
 )
+from nexus.agents.orrery.retrograde_project_dependencies import (
+    load_project_start_relationships,
+)
 from nexus.agents.orrery.retrograde_seed_candidates import (
     SEED_CANDIDATE_RESPONSE_SCHEMA_VERSION,
 )
@@ -641,3 +644,232 @@ def test_persistence_refuses_database_alias_stub_even_without_packet_alias(
         with conn.cursor() as cur:
             cur.execute("SELECT count(*) AS count FROM characters WHERE name = 'J.M.'")
             assert cur.fetchone()["count"] == 0
+
+
+def test_seek_redemption_dependency_is_repaired_before_mapper_transaction(
+    disposable_dbname: str,
+) -> None:
+    """A real cache path enforces direction/threshold, then persists atomically."""
+
+    cache = _hydrate_fixture(disposable_dbname)
+    transition, packet, vocabulary = _build_transition_and_packet(
+        disposable_dbname,
+        cache,
+        trait_inputs=TraitCompileInputs.model_validate({}),
+    )
+
+    with _connect(disposable_dbname, dict_cursor=True) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO characters (name, summary)
+                VALUES
+                    ('Existing Actor', 'A preexisting runtime character.'),
+                    ('Existing Target', 'A preexisting wronged character.')
+                RETURNING entity_id, id, name
+                """
+            )
+            actor, target = cur.fetchall()
+            cur.execute(
+                """
+                DELETE FROM character_relationships
+                WHERE character1_id IN (%s, %s)
+                  AND character2_id IN (%s, %s)
+                """,
+                (actor["id"], target["id"], actor["id"], target["id"]),
+            )
+            cur.execute(
+                """
+                INSERT INTO character_relationships (
+                    character1_id, character2_id, relationship_type,
+                    emotional_valence, dynamic, recent_events, history
+                ) VALUES (%s, %s, 'rival', '-1|wary', '', '', '')
+                """,
+                (target["id"], actor["id"]),
+            )
+            packet["project_start_relationships"] = load_project_start_relationships(
+                cur,
+                object_entity_id=int(actor["entity_id"]),
+            )
+
+    seed_response, expansion = _redemption_contract(
+        packet,
+        vocabulary,
+        actor_ref=str(actor["name"]),
+        target_ref=str(target["name"]),
+    )
+    validated = validate_expansion_plan(
+        payload=expansion,
+        packet=packet,
+        seed_candidate_response=seed_response,
+    )
+    assert validated.project_plan[0].project_type == "seek_redemption"
+
+    with _connect(disposable_dbname, dict_cursor=True) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE character_relationships
+                SET emotional_valence = '0|neutral'
+                WHERE character1_id = %s AND character2_id = %s
+                """,
+                (target["id"], actor["id"]),
+            )
+            packet["project_start_relationships"] = load_project_start_relationships(
+                cur,
+                object_entity_id=int(actor["entity_id"]),
+            )
+    with pytest.raises(
+        RetrogradeExpansionValidationError,
+        match="seed 'seed_01' seek_redemption.*TARGET->ACTOR wary-or-worse",
+    ):
+        validate_expansion_plan(
+            payload=expansion,
+            packet=packet,
+            seed_candidate_response=seed_response,
+        )
+
+    packet["project_start_relationships"] = [
+        {
+            "subject_ref": str(actor["name"]),
+            "object_ref": str(target["name"]),
+            "emotional_valence": "-1|wary",
+        }
+    ]
+    with pytest.raises(
+        RetrogradeExpansionValidationError,
+        match="seed 'seed_01' seek_redemption.*TARGET->ACTOR wary-or-worse",
+    ):
+        validate_expansion_plan(
+            payload=expansion,
+            packet=packet,
+            seed_candidate_response=seed_response,
+        )
+
+    unchanged_cache = read_cache(disposable_dbname)
+    assert unchanged_cache is not None
+    assert unchanged_cache.current_phase() == "ready"
+
+    packet["project_start_relationships"] = []
+    seed_response, expansion = _redemption_contract(
+        packet,
+        vocabulary,
+        actor_ref="Redemption Actor",
+        target_ref="Wronged Target",
+        planned_wrong=True,
+    )
+    validate_expansion_plan(
+        payload=expansion,
+        packet=packet,
+        seed_candidate_response=seed_response,
+    )
+
+    manifest_holder: dict[str, Any] = {}
+
+    def persist(cur: Any) -> None:
+        manifest_holder["manifest"] = build_retrograde_persistence_plan(
+            cur,
+            packet=packet,
+            seed_candidate_response=seed_response,
+            expansion_plan_payload=expansion,
+            slot=3,
+            dbname=disposable_dbname,
+            dry_run=False,
+            create_missing_entities=True,
+            summaries_enabled=False,
+            project_seeding_enabled=True,
+            project_settings=load_settings().orrery.projects,
+        )
+
+    NewStoryDatabaseMapper(dbname=disposable_dbname).perform_transition(
+        transition,
+        in_transaction=persist,
+    )
+
+    with _connect(disposable_dbname, dict_cursor=True) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT source.name AS subject_ref,
+                       target.name AS object_ref,
+                       relationship.emotional_valence::text AS emotional_valence
+                FROM character_relationships relationship
+                JOIN characters source ON source.id = relationship.character1_id
+                JOIN characters target ON target.id = relationship.character2_id
+                WHERE source.name = 'Wronged Target'
+                  AND target.name = 'Redemption Actor'
+                """
+            )
+            assert cur.fetchone() == {
+                "subject_ref": "Wronged Target",
+                "object_ref": "Redemption Actor",
+                "emotional_valence": "-3|resentful",
+            }
+            cur.execute(
+                """
+                SELECT project_type, status, stage
+                FROM character_project_states project
+                JOIN characters actor ON actor.entity_id = project.character_entity_id
+                WHERE actor.name = 'Redemption Actor'
+                """
+            )
+            assert cur.fetchone() == {
+                "project_type": "seek_redemption",
+                "status": "active",
+                "stage": "owning_the_wrong",
+            }
+
+    manifest = manifest_holder["manifest"]
+    assert manifest["counters"]["relationships_inserted"] == 1
+    assert manifest["counters"]["projects_inserted"] == 1
+
+
+def _redemption_contract(
+    packet: Mapping[str, Any],
+    vocabulary: SeedEligibleVocabulary,
+    *,
+    actor_ref: str,
+    target_ref: str,
+    planned_wrong: bool = False,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Build model outputs around the production-generated packet."""
+
+    seed_response = _seed_response(packet, vocabulary)
+    old_seed_id = seed_response["candidates"][0]["seed_id"]
+    candidate = seed_response["candidates"][0]
+    candidate["seed_id"] = "seed_01"
+    candidate["coverage_functions"] = ["unresolved_ledger"]
+    candidate["project_intent"] = {
+        "project_type": "seek_redemption",
+        "target_ref": target_ref,
+        "rationale": "The actor must answer for an old wrong.",
+    }
+    seed_response["selected_seed_ids"] = ["seed_01"]
+
+    expansion = _expansion(vocabulary)
+    expansion["selected_seed_ids"] = ["seed_01"]
+    expansion["event_plan"][0]["seed_ids"] = ["seed_01"]
+    expansion["thread_plan"][0]["seed_id"] = "seed_01"
+    expansion["project_plan"] = [
+        {
+            "seed_id": "seed_01",
+            "project_type": "seek_redemption",
+            "actor_ref": actor_ref,
+            "target_ref": target_ref,
+            "rationale": "Begin by owning the wrong.",
+        }
+    ]
+    if planned_wrong:
+        expansion["relationship_plan"] = [
+            {
+                "subject_ref": target_ref,
+                "subject_kind": "character",
+                "relationship_type": "enemy",
+                "object_ref": actor_ref,
+                "object_kind": "character",
+                "source_event_ref": "e_voss_practice_dispute",
+                "rationale": "The target remains resentful over the old wrong.",
+            }
+        ]
+    assert old_seed_id != candidate["seed_id"]
+    return seed_response, expansion

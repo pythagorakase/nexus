@@ -44,6 +44,10 @@ from nexus.agents.orrery.declaration_validation import (
     collect_new_entity_declaration_vocabulary_issues,
 )
 from nexus.agents.orrery.geo import resolve_zone_for_point, story_active_zone
+from nexus.agents.orrery.retrograde_project_dependencies import (
+    ProjectStartRelationship,
+    load_project_start_relationships,
+)
 from nexus.agents.orrery.retrograde_vocabulary import SeedEligibleVocabulary
 from nexus.agents.orrery.status_family import STATUS_TAGS, level_from_status_tag
 from nexus.agents.orrery.tag_schemas import OrreryTagBestowal
@@ -1036,6 +1040,9 @@ def build_runtime_maturation_packet(
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "maturation_target": target_card,
         "geo_authoring": geo_context,
+        "project_start_relationships": list(
+            context.get("project_start_relationships", [])
+        ),
         "declaration": declaration,
         "requesting_chunk_id": int(row["requesting_chunk_id"]),
         "weird": weird,
@@ -1327,7 +1334,24 @@ def _load_job_context(
         "chunk_excerpt": excerpt,
         "scene_entities": scene_entities,
         "geo_authoring": geo_authoring,
+        "project_start_relationships": _load_project_start_relationships(
+            cur,
+            actor_entity_id=int(row["entity_id"]),
+        ),
     }
+
+
+def _load_project_start_relationships(
+    cur: Any,
+    *,
+    actor_entity_id: int,
+) -> list[ProjectStartRelationship]:
+    """Load inbound relationship facts for runtime project validation."""
+
+    return load_project_start_relationships(
+        cur,
+        object_entity_id=actor_entity_id,
+    )
 
 
 def _apply_maturation_coordinates(

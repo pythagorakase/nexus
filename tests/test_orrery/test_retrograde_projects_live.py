@@ -383,6 +383,13 @@ def test_seek_redemption_requires_target_to_actor_negative_valence(
             specs,
             include_redemption_wrong=False,
         )
+        packet["project_start_relationships"] = [
+            {
+                "subject_ref": target,
+                "object_ref": actor,
+                "emotional_valence": "-1|wary",
+            }
+        ]
         with pytest.raises(ValueError, match="wary-or-worse"):
             build_retrograde_persistence_plan(
                 cur,
