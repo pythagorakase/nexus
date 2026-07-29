@@ -1,0 +1,24 @@
+[shift]
+# Slot 3 and port 8012 are the disposable QA lane. Never point this utility at
+# the normal port-8002 runtime.
+slot = 3
+gateway_port = 8012
+target_model = "gpt-5.6-terra" # pin: complimentary QA model group
+
+# The issue budget is a ceiling, not pressure to manufacture findings.
+issue_budget = 5
+minimum_probe_families = 5
+dry_well_families = 3
+wall_clock_minutes = 60
+
+# Run artifacts remain intentionally transient even though this utility is
+# tracked. Paths are resolved from the repository root.
+archive_root = "temp"
+
+[usage]
+# Working allowance for the owner's current complimentary-token enrollment.
+# Reconfirm current program terms before changing this value or target_model.
+# The guard stops one million tokens early so a multi-call NEXUS command cannot
+# casually cross the allowance before its post-command check.
+daily_token_limit = 10000000
+reserve_tokens = 1000000
