@@ -21,6 +21,7 @@ from nexus.api.lore_adapter import (
     response_to_incubator,
     validate_incubator_data,
 )
+from nexus.api.narrative_lease import finish_generation
 
 logger = logging.getLogger("nexus.api.narrative_generation")
 
@@ -75,6 +76,8 @@ async def generate_narrative_async(
     load_settings: Callable[[], Dict[str, Any]],
     manager: ProgressManager,
     note: Optional[str] = None,
+    expected_incubator_session: Optional[str] = None,
+    manage_generation_lease: bool = True,
 ) -> None:
     """
     Async function to generate narrative.
@@ -96,6 +99,10 @@ async def generate_narrative_async(
         manager: Progress notification manager
         note: Optional soft author's note for the storyteller (used by regenerate
             for meta-hints; ignored by bootstrap path).
+        expected_incubator_session: Existing incubator owner that this generation
+            may replace. ``None`` requires the singleton to be empty.
+        manage_generation_lease: Persist terminal durable status and release the
+            lease. Production route tasks enable this after acquisition.
     """
     conn = None
     is_bootstrap = parent_chunk_id == 0
@@ -220,24 +227,69 @@ async def generate_narrative_async(
             validate_incubator_data(incubator_data)
 
         # Write to incubator
-        await write_to_incubator(conn, incubator_data)
+        if expected_incubator_session is None:
+            await write_to_incubator(conn, incubator_data)
+        else:
+            await write_to_incubator(
+                conn,
+                incubator_data,
+                expected_incubator_session=expected_incubator_session,
+            )
+        if manage_generation_lease:
+            finish_generation(
+                conn,
+                session_id=session_id,
+                status="complete",
+                chunk_id=incubator_data["chunk_id"],
+            )
 
-        # Send progress: complete
-        await manager.send_progress(
-            session_id,
-            "complete",
-            {
-                "chunk_id": parent_chunk_id + 1,
-                "preview": incubator_data["storyteller_text"][:200] + "...",
-            },
-        )
+        # The result and terminal status are already committed. A stale
+        # WebSocket must not turn successful durable work into an error.
+        try:
+            await manager.send_progress(
+                session_id,
+                "complete",
+                {
+                    "chunk_id": parent_chunk_id + 1,
+                    "preview": incubator_data["storyteller_text"][:200] + "...",
+                },
+            )
+        except Exception as notification_exc:
+            logger.error(
+                "Failed to broadcast completed generation session %s; "
+                "durable status remains complete: %s",
+                session_id,
+                notification_exc,
+            )
 
         logger.info(f"Narrative generation complete for session {session_id}")
 
     except Exception as e:
         error_detail = _exception_detail(e)
         logger.error(f"Error generating narrative: {error_detail}")
-        await manager.send_progress(session_id, "error", {"error": error_detail})
+        if conn is not None and manage_generation_lease:
+            conn.rollback()
+            try:
+                finish_generation(
+                    conn,
+                    session_id=session_id,
+                    status="error",
+                    error=error_detail,
+                )
+            except Exception as status_exc:
+                logger.error(
+                    "Failed to persist terminal error for session %s: %s",
+                    session_id,
+                    status_exc,
+                )
+        try:
+            await manager.send_progress(session_id, "error", {"error": error_detail})
+        except Exception as notification_exc:
+            logger.error(
+                "Failed to broadcast terminal error for generation session %s: %s",
+                session_id,
+                notification_exc,
+            )
     finally:
         if conn:
             conn.close()
@@ -272,61 +324,136 @@ async def get_chunk_info(conn, chunk_id: int) -> Dict[str, Any]:
     return dict(result)
 
 
-async def write_to_incubator(conn, data: Dict[str, Any]):
-    """Write data to the incubator table."""
+async def write_to_incubator(
+    conn,
+    data: Dict[str, Any],
+    *,
+    expected_incubator_session: Optional[str] = None,
+) -> None:
+    """Persist only while the expected parent/session still owns the slot."""
     generation_model = data["generation_model"]
     if not isinstance(generation_model, str) or not generation_model.strip():
         raise ValueError("Generated incubator payload is missing its model id")
 
-    with conn.cursor() as cur:
-        # Clear any existing incubator entry (singleton table)
-        cur.execute("DELETE FROM incubator WHERE id = TRUE")
+    values = (
+        data["chunk_id"],
+        data["parent_chunk_id"],
+        data["user_text"],
+        data["storyteller_text"],
+        generation_model,
+        json.dumps(data.get("choice_object")) if data.get("choice_object") else None,
+        data.get("choice_text"),
+        json.dumps(data["metadata_updates"]),
+        json.dumps(data["entity_updates"]),
+        json.dumps(data["reference_updates"]),
+        (
+            json.dumps(data.get("orrery_proposal"))
+            if data.get("orrery_proposal")
+            else None
+        ),
+        json.dumps(data.get("orrery_adjudications", [])),
+        json.dumps(data.get("new_entities", [])),
+        data["session_id"],
+        data["llm_response_id"],
+        data["status"],
+    )
 
-        # Insert new incubator entry
-        query = """
-        INSERT INTO incubator (
-            id, chunk_id, parent_chunk_id, user_text, storyteller_text,
-            generation_model,
-            choice_object, choice_text,
-            metadata_updates, entity_updates, reference_updates,
-            orrery_proposal, orrery_adjudications,
-            new_entities, session_id, llm_response_id, status
-        ) VALUES (
-            TRUE, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-        )
-        """
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT session_id, parent_chunk_id
+                FROM narrative_generation_lease
+                WHERE id = TRUE
+                  AND session_id = %s
+                  AND parent_chunk_id = %s
+                  AND expires_at > NOW()
+                FOR UPDATE
+                """,
+                (data["session_id"], data["parent_chunk_id"]),
+            )
+            if cur.fetchone() is None:
+                raise RuntimeError(
+                    "Refusing incubator write: generation lease does not match "
+                    f"session {data['session_id']} and parent "
+                    f"{data['parent_chunk_id']}."
+                )
 
-        cur.execute(
-            query,
-            (
-                data["chunk_id"],
-                data["parent_chunk_id"],
-                data["user_text"],
-                data["storyteller_text"],
-                generation_model,
-                (
-                    json.dumps(data.get("choice_object"))
-                    if data.get("choice_object")
-                    else None
-                ),
-                data.get("choice_text"),
-                json.dumps(data["metadata_updates"]),
-                json.dumps(data["entity_updates"]),
-                json.dumps(data["reference_updates"]),
-                (
-                    json.dumps(data.get("orrery_proposal"))
-                    if data.get("orrery_proposal")
-                    else None
-                ),
-                json.dumps(data.get("orrery_adjudications", [])),
-                json.dumps(data.get("new_entities", [])),
-                data["session_id"],
-                data["llm_response_id"],
-                data["status"],
-            ),
-        )
-
-    conn.commit()
+            cur.execute(
+                """
+                SELECT session_id, parent_chunk_id
+                FROM incubator
+                WHERE id = TRUE
+                FOR UPDATE
+                """
+            )
+            incumbent = cur.fetchone()
+            if expected_incubator_session is None:
+                if incumbent is not None:
+                    raise RuntimeError(
+                        "Refusing incubator write: the singleton is owned by "
+                        f"session {incumbent['session_id']}."
+                    )
+                cur.execute(
+                    """
+                    INSERT INTO incubator (
+                        id, chunk_id, parent_chunk_id, user_text, storyteller_text,
+                        generation_model, choice_object, choice_text,
+                        metadata_updates, entity_updates, reference_updates,
+                        orrery_proposal, orrery_adjudications,
+                        new_entities, session_id, llm_response_id, status
+                    ) VALUES (
+                        TRUE, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s
+                    )
+                    """,
+                    values,
+                )
+            else:
+                if (
+                    incumbent is None
+                    or str(incumbent["session_id"]) != expected_incubator_session
+                    or incumbent["parent_chunk_id"] != data["parent_chunk_id"]
+                ):
+                    raise RuntimeError(
+                        "Refusing incubator replacement: expected session "
+                        f"{expected_incubator_session} with parent "
+                        f"{data['parent_chunk_id']}."
+                    )
+                cur.execute(
+                    """
+                    UPDATE incubator
+                    SET chunk_id = %s,
+                        parent_chunk_id = %s,
+                        user_text = %s,
+                        storyteller_text = %s,
+                        generation_model = %s,
+                        choice_object = %s,
+                        choice_text = %s,
+                        metadata_updates = %s,
+                        entity_updates = %s,
+                        reference_updates = %s,
+                        orrery_proposal = %s,
+                        orrery_adjudications = %s,
+                        new_entities = %s,
+                        session_id = %s,
+                        llm_response_id = %s,
+                        status = %s,
+                        created_at = NOW()
+                    WHERE id = TRUE
+                      AND session_id = %s
+                      AND parent_chunk_id = %s
+                    """,
+                    (*values, expected_incubator_session, data["parent_chunk_id"]),
+                )
+                if cur.rowcount != 1:
+                    raise RuntimeError(
+                        "Incubator ownership changed during conditional replacement."
+                    )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
 
 
 async def generate_bootstrap_narrative(

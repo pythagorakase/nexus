@@ -1216,6 +1216,7 @@ async def test_exhausted_declaration_validation_never_reaches_incubator(
         get_db_connection=lambda _slot: conn,
         load_settings=lambda: {},
         manager=manager,
+        manage_generation_lease=False,
     )
 
     errors = [data for _session, status, data in manager.events if status == "error"]

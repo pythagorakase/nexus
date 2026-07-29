@@ -2832,6 +2832,21 @@ class APIDatabaseSettings(BaseModel):
     )
 
 
+class APINarrativeGenerationSettings(BaseModel):
+    """Ownership settings for durable narrative generation."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    stale_lease_timeout_seconds: int = Field(
+        ...,
+        ge=1,
+        description=(
+            "Maximum seconds a generation may own a slot before the lease "
+            "may be reclaimed after a gateway crash"
+        ),
+    )
+
+
 class APIUploadsSettings(BaseModel):
     """Limits for image upload endpoints (character portraits, place images)."""
 
@@ -2859,6 +2874,9 @@ class APISettings(BaseModel):
     )
     database: APIDatabaseSettings = Field(
         ..., description="Slot database connection behavior"
+    )
+    narrative_generation: APINarrativeGenerationSettings = Field(
+        ..., description="Durable narrative generation ownership"
     )
     uploads: Optional[APIUploadsSettings] = Field(
         default=None, description="Image upload limits"
