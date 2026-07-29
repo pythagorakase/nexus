@@ -172,6 +172,15 @@ class TestNewStorySchemas:
         assert constraint is not None
         assert (constraint.year, constraint.month, constraint.day) == (887, 10, None)
 
+    def test_setting_date_constraint_ignores_version_like_datetimes(self) -> None:
+        """A 1-2 digit leading number is a version string, never a story year."""
+        assert (
+            extract_setting_date_constraint(
+                _dated_setting(time_period="Protocol v5-12-01 10:00:30"),
+            )
+            is None
+        )
+
     def test_setting_date_constraint_preserves_explicit_seconds(self) -> None:
         """A full setting datetime constrains the seed's seconds field."""
         constraint = extract_setting_date_constraint(

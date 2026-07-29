@@ -55,7 +55,7 @@ _MONTH_DAY_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _ISO_DATETIME_PATTERN = re.compile(
-    r"(?<!\d)(?P<year>[1-9]\d{0,3})-"
+    r"(?<!\d)(?P<year>[1-9]\d{2,3})-"
     r"(?P<month>0[1-9]|1[0-2])-"
     r"(?P<day>0[1-9]|[12]\d|3[01])"
     r"(?:T|\s+)(?P<hour>[01]\d|2[0-3]):"
