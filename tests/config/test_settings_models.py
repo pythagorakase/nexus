@@ -84,6 +84,25 @@ def test_summaries_follow_the_storyteller_by_default():
     assert settings.summaries.model == settings.apex.model
 
 
+def test_usage_settings_validate_and_round_trip() -> None:
+    raw = _nexus_toml_dict()
+    raw["usage"] = {
+        "enabled": True,
+        "usage_dir": ".nexus/runtime/test-usage",
+        "daily_allowance": {"openai": 1234},
+    }
+
+    settings = Settings(**raw)
+
+    assert settings.usage.enabled is True
+    assert settings.usage.usage_dir == ".nexus/runtime/test-usage"
+    assert settings.usage.daily_allowance == {"openai": 1234}
+
+    raw["usage"]["daily_allowance"]["openai"] = 0
+    with pytest.raises(ValidationError, match="daily_allowance values"):
+        Settings(**raw)
+
+
 def test_apex_tag_library_settings_round_trip() -> None:
     """Context selection and repair limits survive validated serialization."""
 

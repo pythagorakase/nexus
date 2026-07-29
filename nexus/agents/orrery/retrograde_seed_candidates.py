@@ -652,6 +652,7 @@ def generate_seed_candidates_with_skald(
             "occurred."
         ),
         structured_output_retries=get_wizard_retry_budget(),
+        seat="retrograde_seed_candidates",
     )
 
     async def _validate_output(
@@ -1612,6 +1613,7 @@ def select_seed_candidates_with_skald(
             "them. No canonical writes occur at this stage."
         ),
         structured_output_retries=get_wizard_retry_budget(),
+        seat="retrograde_seed_selection",
     )
 
     async def _validate_output(

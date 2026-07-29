@@ -39,29 +39,48 @@ def get_base_url_for_model(model: str) -> Optional[str]:
     return endpoint["base_url"] if endpoint else None
 
 
-def build_pydantic_ai_model(model: str) -> Model:
-    """Create a Pydantic AI model with the correct provider and credentials."""
+def build_pydantic_ai_model_with_provider(model: str) -> tuple[Model, str]:
+    """Create a Pydantic AI model and return its registry provider name."""
+
     provider = get_provider_for_model(model)
     if provider is None:
         raise ValueError(f"Unknown provider for model {model!r}")
     if provider == "openai":
-        legacy_provider = LegacyOpenAIProvider(model=model)
-        pyd_provider = PydanticOpenAIProvider(api_key=legacy_provider.api_key)
-        return OpenAIResponsesModel(model_name=model, provider=pyd_provider)
+        legacy_openai_provider = LegacyOpenAIProvider(model=model)
+        openai_provider = PydanticOpenAIProvider(api_key=legacy_openai_provider.api_key)
+        return (
+            OpenAIResponsesModel(model_name=model, provider=openai_provider),
+            provider,
+        )
     if provider == "anthropic":
-        legacy_provider = LegacyAnthropicProvider(model=model)
-        pyd_provider = PydanticAnthropicProvider(api_key=legacy_provider.api_key)
+        legacy_anthropic_provider = LegacyAnthropicProvider(model=model)
+        anthropic_provider = PydanticAnthropicProvider(
+            api_key=legacy_anthropic_provider.api_key
+        )
         override = get_native_structured_output_override(model)
         if override is not None:
+            base_profile = anthropic_model_profile(model)
+            if base_profile is None:
+                raise ValueError(
+                    f"Pydantic AI has no Anthropic profile for model {model!r}"
+                )
             profile = replace(
-                anthropic_model_profile(model),
+                base_profile,
                 json_schema_transformer=AnthropicJsonSchemaTransformer,
                 supports_json_schema_output=override,
             )
-            return AnthropicModel(
-                model_name=model, provider=pyd_provider, profile=profile
+            return (
+                AnthropicModel(
+                    model_name=model,
+                    provider=anthropic_provider,
+                    profile=profile,
+                ),
+                provider,
             )
-        return AnthropicModel(model_name=model, provider=pyd_provider)
+        return (
+            AnthropicModel(model_name=model, provider=anthropic_provider),
+            provider,
+        )
     # Any other provider is an OpenAI-compatible server registered via
     # base_url in [global.model.api_models] (mock TEST server, Ollama, vLLM).
     endpoint = get_openai_compatible_endpoint(model)
@@ -72,7 +91,7 @@ def build_pydantic_ai_model(model: str) -> Model:
         # Slow local servers (for example, grammar compilation) blow past the OpenAI
         # SDK's 600s default. Mirror the legacy provider call sites: hand the
         # pydantic-ai provider a client that carries the registry timeout.
-        pyd_provider = PydanticOpenAIProvider(
+        compatible_provider = PydanticOpenAIProvider(
             openai_client=AsyncOpenAI(
                 api_key=endpoint["api_key"],
                 base_url=endpoint["base_url"],
@@ -80,12 +99,25 @@ def build_pydantic_ai_model(model: str) -> Model:
             )
         )
     else:
-        pyd_provider = PydanticOpenAIProvider(
+        compatible_provider = PydanticOpenAIProvider(
             api_key=endpoint["api_key"], base_url=endpoint["base_url"]
         )
     if endpoint["structured_transport"] == "chat_completions":
-        return OpenAIChatModel(model_name=model, provider=pyd_provider)
-    return OpenAIResponsesModel(model_name=model, provider=pyd_provider)
+        return (
+            OpenAIChatModel(model_name=model, provider=compatible_provider),
+            provider,
+        )
+    return (
+        OpenAIResponsesModel(model_name=model, provider=compatible_provider),
+        provider,
+    )
+
+
+def build_pydantic_ai_model(model: str) -> Model:
+    """Create a Pydantic AI model with the correct provider and credentials."""
+
+    resolved_model, _provider = build_pydantic_ai_model_with_provider(model)
+    return resolved_model
 
 
 def build_message_history(

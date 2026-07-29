@@ -308,6 +308,7 @@ def derive_trait_compile_inputs(
             "trait compiler inputs. Follow the hard rules exactly."
         ),
         structured_output_retries=retries,
+        seat="trait_input_derivation",
     )
 
     async def _validate_output(_ctx: Any, output: BaseModel) -> TraitCompileInputs:

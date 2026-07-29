@@ -52,7 +52,10 @@ from nexus.api.new_story_schemas import (
     TraitRationales,
     WizardResponse,
 )
-from nexus.api.pydantic_ai_utils import build_message_history, build_pydantic_ai_model
+from nexus.api.pydantic_ai_utils import (
+    build_message_history,
+    build_pydantic_ai_model_with_provider,
+)
 from nexus.api.slot_utils import slot_dbname
 from nexus.api.wizard_agent import (
     WizardContext,
@@ -61,6 +64,7 @@ from nexus.api.wizard_agent import (
     apply_trait_selection_to_state,
     _character_subphase,
 )
+from nexus.telemetry.usage import record_pydantic_ai_result
 
 logger = logging.getLogger("nexus.api.wizard_chat")
 
@@ -167,6 +171,8 @@ async def _handle_accept_fate_traits(
     slot: int,
     message_history: list,
     model: Any,
+    model_name: str,
+    provider_name: str,
     model_settings: ModelSettings,
     client: ConversationsClient,
     thread_id: str,
@@ -219,6 +225,14 @@ async def _handle_accept_fate_traits(
         message_history=message_history,
         model=model,
         model_settings=model_settings,
+    )
+    record_pydantic_ai_result(
+        result,
+        provider=provider_name,
+        model=model_name,
+        seat="wizard_wildcard",
+        slot=slot,
+        run_id=thread_id,
     )
 
     if context.last_tool_result:
@@ -452,7 +466,7 @@ async def new_story_chat_endpoint(request: ChatRequest):
         )
 
         message_history = build_message_history(history)
-        model = build_pydantic_ai_model(selected_model)
+        model, provider_name = build_pydantic_ai_model_with_provider(selected_model)
         model_settings = ModelSettings(max_tokens=get_wizard_max_tokens())
 
         if dev_mode:
@@ -462,6 +476,14 @@ async def new_story_chat_endpoint(request: ChatRequest):
                 message_history=message_history,
                 model=model,
                 model_settings=model_settings,
+            )
+            record_pydantic_ai_result(
+                result,
+                provider=provider_name,
+                model=selected_model,
+                seat="wizard_debug",
+                slot=request.slot,
+                run_id=request.thread_id,
             )
             content = result.output
             client.add_message(request.thread_id, "assistant", content)
@@ -486,6 +508,8 @@ async def new_story_chat_endpoint(request: ChatRequest):
             slot=request.slot,
             message_history=message_history,
             model=model,
+            model_name=selected_model,
+            provider_name=provider_name,
             model_settings=model_settings,
             client=client,
             thread_id=request.thread_id,
@@ -506,6 +530,14 @@ async def new_story_chat_endpoint(request: ChatRequest):
             message_history=message_history,
             model=model,
             model_settings=model_settings,
+        )
+        record_pydantic_ai_result(
+            result,
+            provider=provider_name,
+            model=selected_model,
+            seat="wizard",
+            slot=request.slot,
+            run_id=request.thread_id,
         )
 
         if context.last_tool_result:
@@ -753,7 +785,7 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
     )
 
     message_history = build_message_history(history)
-    model = build_pydantic_ai_model(selected_model)
+    model, provider_name = build_pydantic_ai_model_with_provider(selected_model)
     model_settings = ModelSettings(max_tokens=get_wizard_max_tokens())
 
     async def event_stream():
@@ -764,6 +796,14 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
                 message_history=message_history,
                 model=model,
                 model_settings=model_settings,
+            )
+            record_pydantic_ai_result(
+                result,
+                provider=provider_name,
+                model=selected_model,
+                seat="wizard_debug",
+                slot=request.slot,
+                run_id=request.thread_id,
             )
             payload = {"type": "message", "message": result.output, "choices": []}
             yield json.dumps(payload) + "\n"
@@ -778,6 +818,8 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
             slot=request.slot,
             message_history=message_history,
             model=model,
+            model_name=selected_model,
+            provider_name=provider_name,
             model_settings=model_settings,
             client=client,
             thread_id=request.thread_id,

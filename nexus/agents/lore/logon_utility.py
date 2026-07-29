@@ -681,6 +681,8 @@ class LogonUtility:
                 structured_transport=anthropic_transport,
                 structured_output_retries=structured_output_retries,
                 output_validator=output_validator,
+                usage_provider_name=provider_type,
+                usage_seat="skald_single_pass",
             )
         else:
             # Native OpenAI, or any OpenAI-compatible server registered with a
@@ -698,6 +700,8 @@ class LogonUtility:
                 structured_output_retries=structured_output_retries,
                 output_validator=output_validator,
                 request_params=endpoint.get("request_params") if endpoint else None,
+                usage_provider_name=provider_type,
+                usage_seat="skald_single_pass",
             )
 
         logger.info(
@@ -976,6 +980,7 @@ class LogonUtility:
             raise RuntimeError("Correspondence compaction requires a provider")
         compaction_provider = copy.copy(self.provider)
         compaction_provider.system_prompt = system_prompt
+        compaction_provider.usage_seat = "correspondence_compaction"
         compaction_provider.output_validator = build_digest_length_validator(
             max_digest_tokens=max_digest_tokens
         )
@@ -1005,6 +1010,7 @@ class LogonUtility:
         *,
         system_prompt: Optional[str],
         output_validator: Any,
+        usage_seat: str,
         anthropic_transport: Optional[
             Literal["native", "prompted", "tool_envelope"]
         ] = None,
@@ -1016,6 +1022,7 @@ class LogonUtility:
         pass_provider = copy.copy(self.provider)
         pass_provider.system_prompt = system_prompt
         pass_provider.output_validator = output_validator
+        pass_provider.usage_seat = usage_seat
         if self._provider_wire_type == "anthropic":
             if anthropic_transport is None:
                 raise ValueError(
@@ -1107,7 +1114,7 @@ class LogonUtility:
         inherits the same apex generation settings as the writer, differing
         only in model, endpoint, and transport.
         """
-        gaia_model, _provider_type, endpoint, gaia_wire = gaia_route
+        gaia_model, provider_type, endpoint, gaia_wire = gaia_route
         apex_settings = self.settings.get("API Settings", {}).get("apex", {})
         structured_output_retries = apex_settings.get("structured_output_retries", 3)
         if gaia_wire == "anthropic":
@@ -1123,6 +1130,8 @@ class LogonUtility:
                 structured_transport=anthropic_transport,
                 structured_output_retries=structured_output_retries,
                 output_validator=output_validator,
+                usage_provider_name=provider_type,
+                usage_seat="gaia",
             )
         base_url = endpoint["base_url"] if endpoint else None
         api_key = endpoint["api_key"] if endpoint else None
@@ -1144,6 +1153,8 @@ class LogonUtility:
             structured_output_retries=structured_output_retries,
             output_validator=output_validator,
             request_params=endpoint.get("request_params") if endpoint else None,
+            usage_provider_name=provider_type,
+            usage_seat="gaia",
         )
 
     def _gaia_effective_window(self, gaia_route: StorytellerRoute) -> int:
@@ -1288,6 +1299,7 @@ class LogonUtility:
         writer_provider = self._clone_provider_for_two_pass(
             system_prompt=self._writer_system_prompt(),
             output_validator=self._build_letter_output_validator(),
+            usage_seat="skald_writer",
             anthropic_transport=(
                 "native" if self._provider_wire_type == "anthropic" else None
             ),
@@ -1326,6 +1338,7 @@ class LogonUtility:
             gaia_provider = self._clone_provider_for_two_pass(
                 system_prompt=gaia_system_prompt,
                 output_validator=gaia_validator,
+                usage_seat="gaia",
                 anthropic_transport=anthropic_gaia_transport,
             )
         gaia, _gaia_response = gaia_provider.get_structured_completion(
@@ -1369,6 +1382,7 @@ class LogonUtility:
         writer_provider = self._clone_provider_for_two_pass(
             system_prompt=self._writer_system_prompt(),
             output_validator=self._build_letter_output_validator(),
+            usage_seat="skald_writer",
             anthropic_transport=(
                 "native" if self._provider_wire_type == "anthropic" else None
             ),
@@ -1409,6 +1423,7 @@ class LogonUtility:
             gaia_provider = self._clone_provider_for_two_pass(
                 system_prompt=gaia_system_prompt,
                 output_validator=gaia_validator,
+                usage_seat="gaia",
                 anthropic_transport=anthropic_gaia_transport,
             )
         gaia, _gaia_response = await gaia_provider.get_structured_completion_async(

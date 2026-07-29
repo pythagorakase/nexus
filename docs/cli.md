@@ -51,6 +51,28 @@ the Access headers are omitted if its origin differs from
 
 ## Commands
 
+### `usage` — View Exact API Token Usage
+
+Reads the append-only provider telemetry for a UTC quota day. This command is
+slotless and does not require a running gateway. Its totals are API-reported
+usage, not NEXUS prompt-budget estimates.
+
+```bash
+# Current UTC day
+poetry run nexus usage
+
+# Specific UTC day, as machine-readable JSON
+poetry run nexus usage --json --day 2026-07-29
+
+# Restrict the event list and totals to one correlated run
+poetry run nexus usage --json --run ab12cd34ef56
+```
+
+Human output lists totals by provider and logical seat, unknown-usage response
+counts, the OpenAI-only UTC-day total, and configured readout-only allowances.
+The JSON payload places `day`, `events`, `providers`, `seats`,
+`openai_day_total`, and `allowance` under the `usage` key.
+
 ### `load` — View Current State
 
 Shows the current state of a slot: wizard phase, narrative text, or empty status.

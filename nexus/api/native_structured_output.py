@@ -206,6 +206,7 @@ def build_native_structured_provider(
     output_validator: Optional[Callable[..., Any]] = None,
     temperature: Optional[float] = None,
     reasoning_effort: Optional[str] = None,
+    seat: Optional[str] = None,
 ) -> Any:
     """Build the repo's native strict structured-output provider wrapper.
 
@@ -233,6 +234,8 @@ def build_native_structured_provider(
             system_prompt=system_prompt,
             structured_output_retries=structured_output_retries,
             output_validator=output_validator,
+            usage_provider_name=provider_type,
+            usage_seat=seat,
             **anthropic_kwargs,
         )
     if provider_type == "openai" or endpoint is not None:
@@ -254,6 +257,8 @@ def build_native_structured_provider(
             structured_output_retries=structured_output_retries,
             output_validator=output_validator,
             request_params=endpoint.get("request_params") if endpoint else None,
+            usage_provider_name=provider_type,
+            usage_seat=seat,
             **openai_kwargs,
         )
     raise ValueError(f"Unsupported provider type for model {model!r}: {provider_type}")

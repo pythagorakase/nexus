@@ -11,7 +11,8 @@ This module handles async narrative generation including:
 import json
 import logging
 import uuid
-from typing import Any, Callable, Dict, Optional, Protocol
+from functools import wraps
+from typing import Any, Awaitable, Callable, Dict, Optional, Protocol
 
 from fastapi import HTTPException
 from psycopg2.extras import RealDictCursor
@@ -22,6 +23,7 @@ from nexus.api.lore_adapter import (
     validate_incubator_data,
 )
 from nexus.api.narrative_lease import finish_generation
+from nexus.telemetry.usage import usage_context
 
 logger = logging.getLogger("nexus.api.narrative_generation")
 
@@ -66,6 +68,32 @@ class ProgressManager(Protocol):
         ...
 
 
+def _correlate_generation_usage(
+    function: Callable[..., Awaitable[None]],
+) -> Callable[..., Awaitable[None]]:
+    """Decorate the canonical background task with its usage correlation."""
+
+    @wraps(function)
+    async def wrapped(
+        session_id: str,
+        parent_chunk_id: int,
+        user_text: str,
+        slot: Optional[int] = None,
+        **kwargs: Any,
+    ) -> None:
+        with usage_context(run_id=session_id, slot=slot):
+            await function(
+                session_id,
+                parent_chunk_id,
+                user_text,
+                slot,
+                **kwargs,
+            )
+
+    return wrapped
+
+
+@_correlate_generation_usage
 async def generate_narrative_async(
     session_id: str,
     parent_chunk_id: int,
