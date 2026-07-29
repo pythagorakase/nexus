@@ -7,6 +7,9 @@
 -- chunk rewind removes that exchange and restores the preceding digest as the
 -- latest visible version. scripts/replay_state.py --verify checks these
 -- provenance and orphan invariants alongside the world-state replay audit.
+-- Digest integrity relies on accepted chunks being append-only, with any
+-- administrative rewind deleting a suffix. Non-suffix chunk surgery must
+-- rebuild correspondence digests before the slot returns to production.
 
 CREATE TABLE IF NOT EXISTS storyteller_correspondence_letters (
     id BIGSERIAL PRIMARY KEY,

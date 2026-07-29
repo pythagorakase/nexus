@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -18,6 +19,7 @@ from nexus.api.narrative_schemas import (
     ContinueNarrativeRequest,
     RegenerateNarrativeRequest,
 )
+from nexus.memory.correspondence import GeneratedCorrespondence
 
 
 @pytest.fixture(autouse=True)
@@ -149,10 +151,18 @@ async def test_continuation_threads_logon_model_into_incubator(
         """LORE double returning a provider-enriched storyteller response."""
 
         calls: list[tuple[str, int, str | None]] = []
+        secret = "PRIVATE-PROGRESS-LEAK-SENTINEL"
 
         def __init__(self, *args: Any, **kwargs: Any) -> None:
             self.settings_path = Path("test-settings.toml")
-            self.turn_context = SimpleNamespace(error_log=[], orrery_proposal=None)
+            self.turn_context = SimpleNamespace(
+                error_log=[],
+                orrery_proposal=None,
+                private_correspondence=GeneratedCorrespondence(
+                    writer_letter=self.secret,
+                    gaia_letter="PRIVATE-GAIA-PROGRESS-SENTINEL",
+                ),
+            )
 
         async def process_turn(
             self,
@@ -198,8 +208,11 @@ async def test_continuation_threads_logon_model_into_incubator(
     )
 
     assert written[0]["generation_model"] == "resolved-provider-model"
+    assert written[0]["correspondence_writer_letter"] == SuccessfulLore.secret
     assert SuccessfulLore.calls == [("Continue.", 7, None)]
     assert [status for _session, status, _data in manager.events][-1] == "complete"
+    assert SuccessfulLore.secret not in json.dumps(manager.events)
+    assert "PRIVATE-GAIA-PROGRESS-SENTINEL" not in json.dumps(manager.events)
 
 
 @pytest.mark.asyncio

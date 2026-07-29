@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
+import copy
 from pathlib import Path
 import tomllib
 from typing import Any
 
 import pytest
 from pydantic import ValidationError
+from pydantic_ai import ModelRetry
 
 from nexus.agents.logon.skald_wire import (
     SkaldGaiaWire,
@@ -23,12 +26,15 @@ from nexus.agents.logon.skald_wire import (
 )
 from nexus.agents.lore.logon_utility import LogonUtility
 from nexus.api.lore_adapter import compute_raw_text, response_to_incubator
-from nexus.config.settings_models import StorytellerCorrespondenceSettings
+from nexus.config.settings_models import Settings, StorytellerCorrespondenceSettings
 from nexus.memory import correspondence
 from nexus.memory.correspondence import (
     CorrespondenceContext,
+    CorrespondenceDigestWire,
     CorrespondenceExchange,
     GeneratedCorrespondence,
+    build_digest_length_validator,
+    build_letter_length_validator,
     plan_correspondence_compaction,
 )
 
@@ -194,13 +200,81 @@ def test_context_render_is_complete_and_token_cap_fails_loudly() -> None:
     assert "protect the unspent bell reveal" in rendered
     assert "writer letter 5" in rendered
     assert "gaia reply 5" in rendered
-    with pytest.raises(ValueError, match="Refusing to truncate"):
+    with pytest.raises(RuntimeError, match="should-never-fire invariant"):
         context.render(max_tokens=1)
 
 
-def test_correspondence_settings_reject_invalid_band_and_config_uses_role_ref() -> None:
+def test_letter_and_digest_limits_are_repairable_semantic_errors() -> None:
+    secret = "SECRET-WORD " * 20
+    letter_validator = build_letter_length_validator(max_letter_tokens=2)
+    digest_validator = build_digest_length_validator(max_digest_tokens=2)
+
+    letter_outputs = [
+        SkaldWriterWire(
+            narrative="Public.",
+            choices=["Wait.", "Leave."],
+            letter=secret,
+        ),
+        SkaldGaiaWire(letter=secret),
+        SkaldTurnWire(
+            narrative="Public.",
+            choices=["Wait.", "Leave."],
+            letter=secret,
+        ),
+    ]
+    for output in letter_outputs:
+        with pytest.raises(ModelRetry, match="letter is too long") as letter_error:
+            asyncio.run(
+                letter_validator(
+                    None,
+                    output,
+                )
+            )
+        assert secret not in str(letter_error.value)
+
+    with pytest.raises(ModelRetry, match="digest is too long") as digest_error:
+        asyncio.run(
+            digest_validator(
+                None,
+                CorrespondenceDigestWire(digest=secret),
+            )
+        )
+
+    assert secret not in str(digest_error.value)
+
+
+def test_correspondence_settings_are_mandatory_bounded_and_use_role_ref() -> None:
+    valid = {
+        "floor_turns": 5,
+        "ceiling_turns": 10,
+        "compaction_model": "@openai.gaia",
+        "max_letter_tokens": 300,
+        "max_digest_tokens": 2000,
+        "max_rendered_tokens": 12000,
+    }
     with pytest.raises(ValidationError, match="floor_turns"):
-        StorytellerCorrespondenceSettings(floor_turns=10, ceiling_turns=10)
+        StorytellerCorrespondenceSettings(
+            **{**valid, "floor_turns": 10, "ceiling_turns": 10}
+        )
+    with pytest.raises(ValidationError, match="at most 80%"):
+        StorytellerCorrespondenceSettings(**{**valid, "max_letter_tokens": 400})
+    with pytest.raises(ValidationError, match="plus exchange headings"):
+        StorytellerCorrespondenceSettings(**{**valid, "max_rendered_tokens": 8200})
+
     with Path("nexus.toml").open("rb") as handle:
         raw = tomllib.load(handle)
-    assert raw["storyteller"]["correspondence"]["compaction_model"].startswith("@")
+    configured = raw["storyteller"]["correspondence"]
+    assert configured["compaction_model"].startswith("@")
+    assert (
+        configured["ceiling_turns"] * 2 * configured["max_letter_tokens"]
+        + configured["max_digest_tokens"]
+        == 8000
+    )
+
+    missing = copy.deepcopy(raw)
+    missing.pop("storyteller")
+    with pytest.raises(
+        ValidationError,
+        match=r"missing required \[storyteller\.correspondence\] section",
+    ):
+        Settings.model_validate(missing)

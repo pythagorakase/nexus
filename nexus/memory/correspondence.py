@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import inspect
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Optional, Sequence
+from typing import Any, Awaitable, Callable, Mapping, Optional, Sequence
 
 import psycopg2
+from pydantic import BaseModel, ConfigDict, Field
 from psycopg2.extras import RealDictCursor
 
 from nexus.agents.lore.utils.chunk_operations import calculate_chunk_tokens
@@ -19,6 +21,80 @@ class GeneratedCorrespondence:
 
     writer_letter: str
     gaia_letter: Optional[str]
+
+
+class CorrespondenceDigestWire(BaseModel):
+    """Small structured response for a complete digest replacement."""
+
+    digest: str = Field(
+        min_length=1,
+        description="Complete replacement correspondence digest and nothing else.",
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
+OutputValidator = Callable[[Any, Any], Any | Awaitable[Any]]
+
+
+def build_letter_length_validator(
+    *,
+    max_letter_tokens: int,
+    delegate: Optional[OutputValidator] = None,
+) -> OutputValidator:
+    """Build a repairable semantic validator for every storyteller wire letter."""
+
+    if max_letter_tokens < 1:
+        raise ValueError("max_letter_tokens must be positive")
+
+    async def _validate(ctx: Any, output: Any) -> Any:
+        letter = getattr(output, "letter", None)
+        if isinstance(letter, str):
+            token_count = calculate_chunk_tokens(letter)
+            if token_count > max_letter_tokens:
+                from pydantic_ai import ModelRetry
+
+                raise ModelRetry(
+                    "The private storyteller letter is too long "
+                    f"({token_count} rendered tokens; limit "
+                    f"{max_letter_tokens}). Rewrite it more compactly and "
+                    "resubmit the complete response."
+                )
+        if delegate is None:
+            return output
+        result = delegate(ctx, output)
+        if inspect.isawaitable(result):
+            result = await result
+        return output if result is None else result
+
+    return _validate
+
+
+def build_digest_length_validator(*, max_digest_tokens: int) -> OutputValidator:
+    """Build a repairable semantic validator for correspondence compaction."""
+
+    if max_digest_tokens < 1:
+        raise ValueError("max_digest_tokens must be positive")
+
+    async def _validate(_ctx: Any, output: Any) -> Any:
+        if not isinstance(output, CorrespondenceDigestWire):
+            raise TypeError(
+                "Correspondence compaction validator requires "
+                "CorrespondenceDigestWire"
+            )
+        token_count = calculate_chunk_tokens(output.digest)
+        if token_count > max_digest_tokens:
+            from pydantic_ai import ModelRetry
+
+            raise ModelRetry(
+                "The complete correspondence digest is too long "
+                f"({token_count} rendered tokens; limit "
+                f"{max_digest_tokens}). Compact it further without dropping "
+                "plan judgments and resubmit the complete response."
+            )
+        return output
+
+    return _validate
 
 
 @dataclass(frozen=True)
@@ -66,11 +142,12 @@ class CorrespondenceContext:
         rendered = "\n".join(parts)
         token_count = calculate_chunk_tokens(rendered)
         if token_count > max_tokens:
-            raise ValueError(
-                "Private storyteller correspondence exceeds "
+            raise RuntimeError(
+                "Private storyteller correspondence breached its configured "
+                "should-never-fire invariant "
                 "storyteller.correspondence.max_rendered_tokens: "
-                f"{token_count} > {max_tokens}. Refusing to truncate immutable "
-                "letters or the digest."
+                f"{token_count} > {max_tokens}. The validated letter/digest "
+                "budgets are inconsistent with the rendered context."
             )
         return rendered
 

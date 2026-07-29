@@ -1063,9 +1063,12 @@ max_sql_iterations = 5           # Max iterations for agentic SQL generation
 floor_turns = 5
 ceiling_turns = 10
 compaction_model = "@openai.gaia"
+# Semantic limits are enforced inside the bounded structured-output repair
+# loops. Their configured worst case consumes 8K of the 12K context budget.
+max_letter_tokens = 300
+max_digest_tokens = 2000
 # The complete digest + verbatim exchange block is structural context. Exceeding
-# this cap is a configuration/content error rather than permission to truncate
-# immutable letters silently.
+# this cap is a should-never-fire invariant, never permission to truncate.
 max_rendered_tokens = 12000
 
 # =============================================================================

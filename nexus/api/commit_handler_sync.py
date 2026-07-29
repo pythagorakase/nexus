@@ -731,6 +731,7 @@ def compact_accepted_correspondence_sync(
     digest = utility.compact_correspondence(
         system_prompt=load_compaction_system_prompt(),
         user_prompt=plan.render_user_prompt(),
+        max_digest_tokens=int(config["max_digest_tokens"]),
     )
 
     # The model call intentionally owns no database transaction. Re-plan after

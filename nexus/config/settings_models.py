@@ -2625,23 +2625,33 @@ class StorytellerCorrespondenceSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     floor_turns: int = Field(
-        default=5,
+        ...,
         ge=1,
         description="Prior accepted exchange pairs retained verbatim after compaction.",
     )
     ceiling_turns: int = Field(
-        default=10,
+        ...,
         ge=2,
         description="Uncompacted exchange-pair count that triggers compaction.",
     )
     compaction_model: str = Field(
-        default="@openai.default",
+        ...,
         description="Registry role reference used only for correspondence compaction.",
     )
-    max_rendered_tokens: int = Field(
-        default=12000,
+    max_letter_tokens: int = Field(
+        ...,
         ge=1,
-        description="Fail-loud cap for the complete correspondence context block.",
+        description="Semantic output limit for each private storyteller letter.",
+    )
+    max_digest_tokens: int = Field(
+        ...,
+        ge=1,
+        description="Semantic output limit for a compacted correspondence digest.",
+    )
+    max_rendered_tokens: int = Field(
+        ...,
+        ge=1,
+        description="Invariant cap for the complete correspondence context block.",
     )
 
     @model_validator(mode="after")
@@ -2653,6 +2663,24 @@ class StorytellerCorrespondenceSettings(BaseModel):
                 "storyteller.correspondence.floor_turns must be less than "
                 "ceiling_turns"
             )
+        bounded_content_tokens = (
+            self.ceiling_turns * 2 * self.max_letter_tokens + self.max_digest_tokens
+        )
+        structural_overhead_tokens = 256 + self.ceiling_turns * 32
+        if (
+            bounded_content_tokens + structural_overhead_tokens
+            > self.max_rendered_tokens
+        ):
+            raise ValueError(
+                "storyteller.correspondence max_rendered_tokens cannot contain "
+                "the configured letter/digest maxima plus exchange headings"
+            )
+        if bounded_content_tokens * 5 > self.max_rendered_tokens * 4:
+            raise ValueError(
+                "storyteller.correspondence letter/digest limits must consume "
+                "at most 80% of max_rendered_tokens so structural rendering "
+                "overhead cannot reach the invariant cap"
+            )
         return self
 
 
@@ -2661,9 +2689,7 @@ class StorytellerSettings(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    correspondence: StorytellerCorrespondenceSettings = Field(
-        default_factory=StorytellerCorrespondenceSettings
-    )
+    correspondence: StorytellerCorrespondenceSettings
 
 
 # =============================================================================
@@ -3158,7 +3184,7 @@ class Settings(BaseModel):
     )
     memnon: MEMNONSettings
     memory: MemorySettings
-    storyteller: StorytellerSettings = Field(default_factory=StorytellerSettings)
+    storyteller: StorytellerSettings
     apex: APEXSettings
     summaries: SummariesSettings = Field(
         default_factory=SummariesSettings,
@@ -3178,6 +3204,22 @@ class Settings(BaseModel):
         default=None,
         description="Managed runtime settings (nexus up/down/status/logs)",
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _require_storyteller_correspondence_section(cls, value: Any) -> Any:
+        """Name the mandatory TOML section instead of constructing defaults."""
+
+        if not isinstance(value, dict):
+            return value
+        storyteller = value.get("storyteller")
+        if not isinstance(storyteller, dict) or not isinstance(
+            storyteller.get("correspondence"), dict
+        ):
+            raise ValueError(
+                "nexus.toml is missing required " "[storyteller.correspondence] section"
+            )
+        return value
 
     @model_validator(mode="after")
     def _resolve_model_references(self) -> "Settings":

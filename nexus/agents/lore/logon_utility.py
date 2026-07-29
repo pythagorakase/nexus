@@ -52,7 +52,13 @@ from nexus.agents.orrery.tag_library import (  # noqa: E402
 )
 from nexus.config.loader import get_provider_for_model, resolve_model_ref  # noqa: E402
 from nexus.memory.context_state import is_retrograde_summary  # noqa: E402
-from nexus.memory.correspondence import GeneratedCorrespondence  # noqa: E402
+from nexus.memory.correspondence import (  # noqa: E402
+    CorrespondenceDigestWire,
+    GeneratedCorrespondence,
+    build_digest_length_validator,
+    build_letter_length_validator,
+    correspondence_settings,
+)
 from nexus.memory.manager import (  # noqa: E402
     resolve_storyteller_context_window,
 )
@@ -650,10 +656,15 @@ class LogonUtility:
         except Exception:
             validation_dbname = None
         tag_library_settings = apex_settings.get("tag_library") or {}
-        output_validator = build_storyteller_tag_validator(
+        tag_output_validator = build_storyteller_tag_validator(
             validation_dbname,
             suggestion_limit=int(tag_library_settings.get("suggestion_limit", 3)),
         )
+        output_validator = tag_output_validator
+        if not provider_bootstrap_mode:
+            output_validator = self._build_letter_output_validator(
+                delegate=tag_output_validator
+            )
         self._validation_dbname = validation_dbname
         self._schema_format_cache = {}
 
@@ -942,25 +953,47 @@ class LogonUtility:
             gaia_letter=None,
         )
 
+    def _build_letter_output_validator(self, *, delegate: Any = None) -> Any:
+        """Bind the configured repairable letter limit to one provider pass."""
+
+        config = correspondence_settings(self.settings)
+        return build_letter_length_validator(
+            max_letter_tokens=int(config["max_letter_tokens"]),
+            delegate=delegate,
+        )
+
     def compact_correspondence(
         self,
         *,
         system_prompt: str,
         user_prompt: str,
+        max_digest_tokens: int,
     ) -> str:
-        """Run one isolated plain completion for a complete digest replacement."""
+        """Run one isolated structured completion with bounded digest repair."""
 
         self._ensure_provider()
         if self.provider is None:
             raise RuntimeError("Correspondence compaction requires a provider")
         compaction_provider = copy.copy(self.provider)
         compaction_provider.system_prompt = system_prompt
-        compaction_provider.output_validator = None
-        result = compaction_provider.get_completion(user_prompt)
-        content = getattr(result, "content", None)
-        if not isinstance(content, str) or not content.strip():
-            raise ValueError("Correspondence compaction returned no digest text")
-        return content.strip()
+        compaction_provider.output_validator = build_digest_length_validator(
+            max_digest_tokens=max_digest_tokens
+        )
+        if isinstance(compaction_provider, AnthropicProvider):
+            # The compact digest schema is intentionally small enough for
+            # Anthropic native enforcement even when storyteller turns use
+            # prompted/tool-envelope transport.
+            compaction_provider.structured_transport = "native"
+        parsed, _response = compaction_provider.get_structured_completion(
+            user_prompt,
+            CorrespondenceDigestWire,
+            **self._schema_format_kwargs(CorrespondenceDigestWire),
+        )
+        if not isinstance(parsed, CorrespondenceDigestWire):
+            raise TypeError(
+                "Correspondence compaction returned a non-digest wire response"
+            )
+        return parsed.digest.strip()
 
     def _is_two_pass_turn(self, schema_model: type) -> bool:
         """Return whether this non-bootstrap turn uses the bakeoff pipeline."""
@@ -1254,7 +1287,7 @@ class LogonUtility:
         )
         writer_provider = self._clone_provider_for_two_pass(
             system_prompt=self._writer_system_prompt(),
-            output_validator=None,
+            output_validator=self._build_letter_output_validator(),
             anthropic_transport=(
                 "native" if self._provider_wire_type == "anthropic" else None
             ),
@@ -1335,7 +1368,7 @@ class LogonUtility:
         )
         writer_provider = self._clone_provider_for_two_pass(
             system_prompt=self._writer_system_prompt(),
-            output_validator=None,
+            output_validator=self._build_letter_output_validator(),
             anthropic_transport=(
                 "native" if self._provider_wire_type == "anthropic" else None
             ),

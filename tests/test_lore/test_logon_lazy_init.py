@@ -224,7 +224,17 @@ def test_anthropic_storyteller_transport_and_guide_follow_settings(
                 "reasoning_effort": "medium",
                 "structured_output_retries": 2,
             }
-        }
+        },
+        "storyteller": {
+            "correspondence": {
+                "floor_turns": 5,
+                "ceiling_turns": 10,
+                "compaction_model": "claude-sonnet-4-5",
+                "max_letter_tokens": 300,
+                "max_digest_tokens": 2000,
+                "max_rendered_tokens": 12000,
+            }
+        },
     }
     utility = LogonUtility(settings, model_override="claude-sonnet-4-5")
 
