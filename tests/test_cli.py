@@ -6,6 +6,7 @@ from argparse import Namespace
 from typing import Any
 
 import pytest
+import requests
 
 from nexus import cli
 from nexus.cli import _is_terminal_generation_status
@@ -301,6 +302,143 @@ def test_trait_confirmation_intro_failure_exposes_recovery(monkeypatch) -> None:
     assert "Traits were saved" in result["message"]
     assert recovery_command in result["message"]
     assert len(posts) == 2
+
+
+def _stub_seed_completion_requests(
+    monkeypatch,
+    transition_response: DummyResponse | requests.exceptions.Timeout,
+) -> None:
+    """Stub the gateway boundary for a public seed-completion CLI command."""
+
+    def fake_get(url: str, **kwargs: Any) -> DummyResponse:
+        assert url.endswith("/api/slot/5/state")
+        return DummyResponse(
+            {
+                "is_empty": False,
+                "is_wizard_mode": True,
+                "phase": "seed",
+                "choices": ["Commit the final seed."],
+            }
+        )
+
+    def fake_post(url: str, json: dict[str, Any], **kwargs: Any) -> DummyResponse:
+        if url.endswith("/api/story/new/chat"):
+            assert json["message"] == "Commit the final seed."
+            return DummyResponse(
+                {
+                    "message": "The seed is saved.",
+                    "phase": "seed",
+                    "artifact_type": "story_seed",
+                    "data": {"title": "The Glass Orchard"},
+                    "phase_complete": True,
+                }
+            )
+        if url.endswith("/api/story/new/transition"):
+            if isinstance(transition_response, requests.exceptions.Timeout):
+                raise transition_response
+            return transition_response
+        if url.endswith("/api/narrative/continue"):
+            return DummyResponse(
+                {
+                    "storyteller_text": "Rain needles the orchard glass.",
+                    "choices": ["Enter the gate."],
+                    "chunk_id": 1,
+                }
+            )
+        raise AssertionError(f"Unexpected POST {url}")
+
+    monkeypatch.setattr(cli.requests, "get", fake_get)
+    monkeypatch.setattr(cli.requests, "post", fake_post)
+
+
+@pytest.mark.parametrize("status_code", [400, 422, 500])
+def test_seed_completion_transition_http_failure_exits_nonzero_with_retry(
+    monkeypatch, capsys, status_code: int
+) -> None:
+    """A persisted seed cannot make a failed atomic transition look successful."""
+    detail = f'{{"detail":"Atomic transition failed with {status_code}"}}'
+    _stub_seed_completion_requests(
+        monkeypatch,
+        DummyResponse({}, ok=False, text=detail, status_code=status_code),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["nexus", "--json", "continue", "--slot", "5", "--choice", "1"],
+    )
+
+    assert cli.main() == 1
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    payload = json.loads(captured.err)
+    assert payload["success"] is False
+    assert payload["phase_complete"] is True
+    assert payload["artifact_type"] == "story_seed"
+    assert payload["artifact_data"] == {"title": "The Glass Orchard"}
+    assert payload["transition_error"] == {
+        "status": "http_error",
+        "status_code": status_code,
+        "detail": detail,
+    }
+    assert payload["retry_command"] == "nexus continue --slot 5"
+    assert payload["retry_command"] in payload["error"]
+
+
+def test_seed_completion_transition_timeout_exits_nonzero_with_retry(
+    monkeypatch, capsys
+) -> None:
+    """A transition timeout reports the saved seed and an explicit retry."""
+    _stub_seed_completion_requests(
+        monkeypatch,
+        requests.exceptions.Timeout("Transition timed out after 900 seconds."),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["nexus", "--json", "continue", "--slot", "5", "--choice", "1"],
+    )
+
+    assert cli.main() == 1
+
+    payload = json.loads(capsys.readouterr().err)
+    assert payload["success"] is False
+    assert payload["phase_complete"] is True
+    assert payload["artifact_data"] == {"title": "The Glass Orchard"}
+    assert payload["transition_error"] == {
+        "status": "timeout",
+        "status_code": None,
+        "detail": "Transition timed out after 900 seconds.",
+    }
+    assert payload["retry_command"] == "nexus continue --slot 5"
+
+
+def test_seed_completion_success_transitions_and_bootstraps_narrative(
+    monkeypatch, capsys
+) -> None:
+    """A successful transition retains the seed and reports narrative success."""
+    _stub_seed_completion_requests(
+        monkeypatch,
+        DummyResponse({"retrograde": {"status": "complete"}}),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["nexus", "--json", "continue", "--slot", "5", "--choice", "1"],
+    )
+
+    assert cli.main() == 0
+
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    payload = json.loads(captured.out)
+    assert payload["success"] is True
+    assert payload["phase_complete"] is True
+    assert payload["artifact_data"] == {"title": "The Glass Orchard"}
+    assert payload["retrograde"] == {"status": "complete"}
+    assert payload["narrative_bootstrap"] is True
+    assert payload["next_phase_intro"] == "Rain needles the orchard glass."
+    assert payload["phase"] is None
 
 
 @pytest.mark.parametrize("confirmation_path", ["free-text", "deterministic"])

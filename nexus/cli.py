@@ -1139,6 +1139,34 @@ def _generation_timeout_seconds() -> int:
     return load_settings().apex.generation_timeout_seconds
 
 
+def _seed_transition_failure(
+    *,
+    result: Dict[str, Any],
+    slot: int,
+    detail: str,
+    status_code: Optional[int],
+    status: str,
+) -> Dict[str, Any]:
+    """Report a persisted seed whose narrative transition did not complete."""
+    retry_command = f"nexus continue --slot {slot}"
+    result.update(
+        {
+            "success": False,
+            "error": (
+                "Seed artifact was saved, but the narrative transition failed. "
+                f"Retry with: {retry_command}"
+            ),
+            "transition_error": {
+                "status": status,
+                "status_code": status_code,
+                "detail": detail,
+            },
+            "retry_command": retry_command,
+        }
+    )
+    return result
+
+
 def _apply_traits_to_wildcard_transition(
     *,
     url: str,
@@ -1450,32 +1478,52 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                     elif next_phase == "ready":
                         # Seed phase complete → transition to narrative mode
                         transition_url = f"{get_api_url()}/api/story/new/transition"
-                        transition_response = _api_post(
-                            transition_url,
-                            json={"slot": args.slot},
-                            timeout=_transition_timeout_seconds(),
+                        try:
+                            transition_response = _api_post(
+                                transition_url,
+                                json={"slot": args.slot},
+                                timeout=_transition_timeout_seconds(),
+                            )
+                        except requests.exceptions.Timeout as exc:
+                            return _seed_transition_failure(
+                                result=result,
+                                slot=args.slot,
+                                detail=str(exc) or "Transition request timed out.",
+                                status_code=None,
+                                status="timeout",
+                            )
+                        if not transition_response.ok:
+                            detail = transition_response.text.strip() or (
+                                "Transition request failed with HTTP "
+                                f"{transition_response.status_code}."
+                            )
+                            return _seed_transition_failure(
+                                result=result,
+                                slot=args.slot,
+                                detail=detail,
+                                status_code=transition_response.status_code,
+                                status="http_error",
+                            )
+                        result["retrograde"] = transition_response.json().get(
+                            "retrograde"
                         )
-                        if transition_response.ok:
-                            result["retrograde"] = transition_response.json().get(
-                                "retrograde"
+                        # Bootstrap narrative by calling continue endpoint
+                        continue_url = f"{get_api_url()}/api/narrative/continue"
+                        continue_payload = {"slot": args.slot, "user_text": ""}
+                        if model_to_use:
+                            continue_payload["model"] = model_to_use
+                        narrative_response = _api_post(
+                            continue_url, json=continue_payload, timeout=120
+                        )
+                        if narrative_response.ok:
+                            narrative_data = narrative_response.json()
+                            result["narrative_bootstrap"] = True
+                            result["next_phase_intro"] = narrative_data.get(
+                                "storyteller_text"
                             )
-                            # Bootstrap narrative by calling continue endpoint
-                            continue_url = f"{get_api_url()}/api/narrative/continue"
-                            continue_payload = {"slot": args.slot, "user_text": ""}
-                            if model_to_use:
-                                continue_payload["model"] = model_to_use
-                            narrative_response = _api_post(
-                                continue_url, json=continue_payload, timeout=120
-                            )
-                            if narrative_response.ok:
-                                narrative_data = narrative_response.json()
-                                result["narrative_bootstrap"] = True
-                                result["next_phase_intro"] = narrative_data.get(
-                                    "storyteller_text"
-                                )
-                                result["choices"] = narrative_data.get("choices", [])
-                                result["chunk_id"] = narrative_data.get("chunk_id")
-                                result["phase"] = None  # Clear wizard phase
+                            result["choices"] = narrative_data.get("choices", [])
+                            result["chunk_id"] = narrative_data.get("chunk_id")
+                            result["phase"] = None  # Clear wizard phase
 
                 return result
 
@@ -3707,7 +3755,10 @@ def main() -> int:
 
     # Check for errors (consistent format: success=False with error message)
     if not result.get("success", True) or result.get("error"):
-        emit_error(result.get("error", "Unknown error"), args.json)
+        if args.json and result.get("transition_error"):
+            print(json.dumps(result, indent=2, sort_keys=True), file=sys.stderr)
+        else:
+            emit_error(result.get("error", "Unknown error"), args.json)
         return 1
 
     emit_output(result, args.json, truncate=args.truncate)
