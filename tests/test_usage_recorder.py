@@ -251,6 +251,71 @@ def test_repair_loop_records_rejected_then_accepted(tmp_path: Path) -> None:
     assert summary["providers"]["openai"]["total"] == 55
 
 
+def test_exhausted_repair_labels_final_attempt_rejected_validation(
+    tmp_path: Path,
+) -> None:
+    """An exhausted repair attempt records what happened to IT, not the loop."""
+
+    bad = SimpleNamespace(
+        id="resp_bad",
+        output_parsed=None,
+        output_text='{"wrong":"shape"}',
+        usage=_usage(9, 2),
+    )
+
+    class FakeResponses:
+        def parse(self, **_kwargs: object) -> SimpleNamespace:
+            return bad
+
+    provider = OpenAIProvider(
+        model="exhaust-model",
+        api_key="test-key",
+        structured_output_retries=1,
+        usage_provider_name="openai",
+        usage_seat="trait_input_derivation",
+    )
+    provider.client = SimpleNamespace(responses=FakeResponses())
+
+    with pytest.raises(Exception):
+        provider.get_structured_completion("prompt", _StructuredAnswer)
+
+    summary = summarize_usage(usage_dir=tmp_path / "usage")
+    assert [event["outcome"] for event in summary["events"]] == [
+        "rejected_validation",
+        "rejected_validation",
+    ]
+    assert summary["providers"]["openai"]["total"] == 22
+
+
+def test_pydantic_ai_all_zero_usage_is_unknown_not_zero(tmp_path: Path) -> None:
+    """pydantic-ai RunUsage zero-fills unreported counts; record them as unknown."""
+
+    result = SimpleNamespace(
+        usage=lambda: SimpleNamespace(
+            requests=1,
+            input_tokens=0,
+            output_tokens=0,
+            total_tokens=0,
+            details={},
+        )
+    )
+
+    record_pydantic_ai_result(
+        result,
+        provider="openai",
+        model="wizard-model",
+        seat="wizard",
+    )
+
+    summary = summarize_usage(usage_dir=tmp_path / "usage")
+    event = summary["events"][0]
+    assert event["input_tokens"] is None
+    assert event["output_tokens"] is None
+    assert event["total_tokens"] is None
+    assert summary["providers"]["openai"]["total"] == 0
+    assert summary["providers"]["openai"]["unknown_usage_events"] == 1
+
+
 def test_pydantic_ai_aggregate_records_internal_request_count(
     tmp_path: Path,
 ) -> None:

@@ -695,15 +695,15 @@ class AnthropicProvider(LLMProvider):
                 return parsed_output, llm_response
             except ModelRetry as exc:
                 last_error = exc
+                usage_outcome = "rejected_validation"
                 if attempt >= self.structured_output_retries:
                     raise
-                usage_outcome = "rejected_validation"
                 active_prompt = retry_prompt(prompt, exc.message)
             except (ValidationError, json.JSONDecodeError, ValueError) as exc:
                 last_error = exc
+                usage_outcome = "rejected_validation"
                 if attempt >= self.structured_output_retries:
                     raise
-                usage_outcome = "rejected_validation"
                 active_prompt = retry_prompt(prompt, str(exc))
             finally:
                 if response is not None:
@@ -761,15 +761,15 @@ class AnthropicProvider(LLMProvider):
                 return parsed_output, llm_response
             except ModelRetry as exc:
                 last_error = exc
+                usage_outcome = "rejected_validation"
                 if attempt >= self.structured_output_retries:
                     raise
-                usage_outcome = "rejected_validation"
                 active_prompt = retry_prompt(prompt, exc.message)
             except (ValidationError, json.JSONDecodeError, ValueError) as exc:
                 last_error = exc
+                usage_outcome = "rejected_validation"
                 if attempt >= self.structured_output_retries:
                     raise
-                usage_outcome = "rejected_validation"
                 active_prompt = retry_prompt(prompt, str(exc))
             finally:
                 if response is not None:
@@ -821,15 +821,15 @@ class AnthropicProvider(LLMProvider):
                 return parsed_output, llm_response
             except ModelRetry as exc:
                 last_error = exc
+                usage_outcome = "rejected_validation"
                 if attempt >= self.structured_output_retries:
                     raise
-                usage_outcome = "rejected_validation"
                 active_prompt = retry_prompt(prompt, exc.message)
             except (ValidationError, json.JSONDecodeError, ValueError) as exc:
                 last_error = exc
+                usage_outcome = "rejected_validation"
                 if attempt >= self.structured_output_retries:
                     raise
-                usage_outcome = "rejected_validation"
                 active_prompt = retry_prompt(prompt, str(exc))
             finally:
                 if response is not None:

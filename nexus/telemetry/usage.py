@@ -538,6 +538,10 @@ def record_pydantic_ai_result(
     total_tokens = getattr(usage, "total_tokens", None)
     if total_tokens is None and input_tokens is not None and output_tokens is not None:
         total_tokens = input_tokens + output_tokens
+    if not input_tokens and not output_tokens and not total_tokens:
+        # pydantic-ai RunUsage zero-fills unreported counts; a completed
+        # request cannot cost zero input tokens, so all-zero means unreported.
+        input_tokens = output_tokens = total_tokens = None
     details = getattr(usage, "details", None) or {}
     cached_input_tokens = getattr(usage, "cache_read_tokens", None)
     if cached_input_tokens is None:

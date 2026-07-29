@@ -852,6 +852,14 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
                     ) + "\n"
 
             final_output = await streamed_result.get_output()
+            record_pydantic_ai_result(
+                streamed_result,
+                provider=provider_name,
+                model=selected_model,
+                seat="wizard",
+                slot=request.slot,
+                run_id=request.thread_id,
+            )
             if isinstance(final_output, DeferredToolRequests):
                 payload = context.last_tool_result or {
                     "message": "Wizard tool call completed without a response payload.",
