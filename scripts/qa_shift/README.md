@@ -83,7 +83,9 @@ Exit code `0` means generation may continue. Exit code `2` means stop
 generating and report. Exit code `1` means the guard itself could not establish
 a trustworthy reading, which is also a stop. Checks are appended to
 `usage_checks.jsonl`; `shift_state.json`, `usage_start.json`, and
-`usage_end.json` provide the end-to-end tally.
+`usage_end.json` provide the end-to-end tally. If UTC midnight interrupts a
+shift, `finish` explicitly re-reads the archived quota day rather than mixing
+the new day’s cumulative total with the old baseline.
 
 ## Safety boundary
 

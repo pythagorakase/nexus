@@ -55,7 +55,7 @@ class ShiftConfig:
         return self.daily_token_limit - self.reserve_tokens
 
 
-UsageReader = Callable[[Path], dict[str, Any]]
+UsageReader = Callable[[Path, str | None], dict[str, Any]]
 
 
 def _required_int(table: Mapping[str, Any], key: str) -> int:
@@ -126,12 +126,15 @@ def _config_payload(config: ShiftConfig) -> dict[str, Any]:
     return payload
 
 
-def _read_usage(repo_root: Path) -> dict[str, Any]:
+def _read_usage(repo_root: Path, day: str | None = None) -> dict[str, Any]:
     """Read exact provider-reported usage through the public NEXUS CLI."""
 
+    command = ["nexus", "usage", "--json"]
+    if day is not None:
+        command.extend(["--day", day])
     try:
         completed = subprocess.run(
-            ["nexus", "usage", "--json"],
+            command,
             cwd=repo_root,
             check=False,
             capture_output=True,
@@ -241,20 +244,27 @@ def _write_runtime_config(
             for entry in openai["models"]
             if isinstance(entry, dict) and isinstance(entry.get("id"), str)
         }
+        if config.target_model not in registered:
+            raise ShiftError(
+                f"Target model {config.target_model!r} is not registered in {source}"
+            )
+
+        model["default_slot_model"] = config.target_model
+        openai["roles"]["default"] = config.target_model
+        openai["roles"]["gaia"] = config.target_model
+        dynamic_document["usage"]["daily_allowance"][
+            "openai"
+        ] = config.daily_token_limit
+    except ShiftError:
+        raise
     except (KeyError, OSError, TypeError, tomlkit.exceptions.ParseError) as exc:
         raise ShiftError(f"Cannot derive isolated config from {source}: {exc}") from exc
-    if config.target_model not in registered:
-        raise ShiftError(
-            f"Target model {config.target_model!r} is not registered in {source}"
-        )
-
-    model["default_slot_model"] = config.target_model
-    openai["roles"]["default"] = config.target_model
-    openai["roles"]["gaia"] = config.target_model
-    dynamic_document["usage"]["daily_allowance"]["openai"] = config.daily_token_limit
 
     destination = archive / "nexus.qa.toml"
-    destination.write_text(tomlkit.dumps(document), encoding="utf-8")
+    try:
+        destination.write_text(tomlkit.dumps(document), encoding="utf-8")
+    except (OSError, TypeError) as exc:
+        raise ShiftError(f"Cannot write isolated config {destination}: {exc}") from exc
     return destination
 
 
@@ -290,7 +300,7 @@ def begin_shift(
     """Create a shift archive, isolated config, and usage baseline."""
 
     current_time = now or datetime.now(timezone.utc)
-    usage_payload = usage_reader(repo_root)
+    usage_payload = usage_reader(repo_root, None)
     usage = _usage_snapshot(usage_payload)
     if usage["unknown"]:
         raise ShiftError(
@@ -387,18 +397,21 @@ def evaluate_check(
     reasons: list[str] = []
     previous_total = int(state["last_total"])
     previous_events = int(state["last_event_count"])
-    raw_delta = usage["total"] - previous_total
-    delta = max(0, raw_delta)
+    same_quota_day = usage["day"] == state["quota_day"]
+    raw_delta = usage["total"] - previous_total if same_quota_day else None
+    delta = max(0, raw_delta) if raw_delta is not None else None
 
-    if usage["day"] != state["quota_day"]:
+    if not same_quota_day:
         reasons.append("quota_day_changed")
-    if raw_delta < 0:
+    if raw_delta is not None and raw_delta < 0:
         reasons.append("daily_total_decreased")
-    if len(usage["events"]) < previous_events:
+    if same_quota_day and len(usage["events"]) < previous_events:
         reasons.append("event_count_decreased")
         new_events: list[Any] = []
-    else:
+    elif same_quota_day:
         new_events = usage["events"][previous_events:]
+    else:
+        new_events = usage["events"]
 
     slot = int(config["slot"])
     target_model = str(config["target_model"])
@@ -456,14 +469,27 @@ def evaluate_check(
     updated = dict(state)
     updated.update(
         {
-            "last_total": usage["total"],
-            "last_event_count": len(usage["events"]),
             "last_unknown_usage_events": usage["unknown"],
             "last_checked_at": _utc_text(now),
             "checks": int(state["checks"]) + 1,
-            "max_command_delta": max(int(state["max_command_delta"]), delta),
+            "max_command_delta": (
+                max(int(state["max_command_delta"]), delta)
+                if delta is not None
+                else int(state["max_command_delta"])
+            ),
         }
     )
+    if same_quota_day:
+        updated["last_total"] = usage["total"]
+        updated["last_event_count"] = len(usage["events"])
+    else:
+        updated.update(
+            {
+                "rollover_seen_at": _utc_text(now),
+                "rollover_day": usage["day"],
+                "rollover_day_total": usage["total"],
+            }
+        )
     result = {
         "status": "stop" if reasons else "continue",
         "reasons": reasons,
@@ -474,7 +500,11 @@ def evaluate_check(
         "token_fence": token_fence,
         "tokens_before_fence": max(0, token_fence - usage["total"]),
         "openai_delta_since_last_check": delta,
-        "shift_openai_total": max(0, usage["total"] - int(state["baseline_total"])),
+        "shift_openai_total": (
+            max(0, usage["total"] - int(state["baseline_total"]))
+            if same_quota_day
+            else None
+        ),
         "max_command_delta": updated["max_command_delta"],
         "elapsed_minutes": round(elapsed_minutes, 2),
         "new_usage_events": len(new_events),
@@ -506,7 +536,7 @@ def check_shift(
     archive = archive.resolve()
     state = _load_state(archive)
     current_time = now or datetime.now(timezone.utc)
-    usage_payload = usage_reader(repo_root)
+    usage_payload = usage_reader(repo_root, None)
     result, updated = evaluate_check(
         state=state,
         usage_payload=usage_payload,
@@ -538,8 +568,14 @@ def finish_shift(
     archive = archive.resolve()
     state = _load_state(archive)
     current_time = now or datetime.now(timezone.utc)
-    usage_payload = usage_reader(repo_root)
+    quota_day = str(state["quota_day"])
+    usage_payload = usage_reader(repo_root, quota_day)
     usage = _usage_snapshot(usage_payload)
+    if usage["day"] != quota_day:
+        raise ShiftError(
+            "Final usage reader returned the wrong quota day "
+            f"({usage['day']} != {quota_day})."
+        )
     _atomic_write_json(archive / "usage_end.json", usage_payload)
 
     final_delta = max(0, usage["total"] - int(state["last_total"]))
@@ -550,7 +586,11 @@ def finish_shift(
             "ended_at": _utc_text(current_time),
             "exit_condition": exit_condition,
             "final_total": usage["total"],
+            "final_usage_day": usage["day"],
             "final_unknown_usage_events": usage["unknown"],
+            "finished_after_quota_rollover": (
+                current_time.astimezone(timezone.utc).date().isoformat() != quota_day
+            ),
             "shift_openai_total": max(0, usage["total"] - int(state["baseline_total"])),
             "max_command_delta": max(int(state["max_command_delta"]), final_delta),
         }

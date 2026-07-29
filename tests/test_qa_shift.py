@@ -108,7 +108,7 @@ def test_begin_creates_archive_and_pins_every_openai_role(
     config = replace(qa_shift.load_shift_config(), archive_root=tmp_path)
     result = qa_shift.begin_shift(
         config=config,
-        usage_reader=lambda _root: _usage(total=123),
+        usage_reader=lambda _root, _day: _usage(total=123),
         now=NOW,
     )
 
@@ -129,6 +129,30 @@ def test_begin_creates_archive_and_pins_every_openai_role(
     assert (archive / "mission_report.md").exists()
 
 
+@pytest.mark.parametrize("missing_table", ("roles", "daily_allowance"))
+def test_runtime_config_shape_errors_are_clean_shift_errors(
+    tmp_path: Path,
+    missing_table: str,
+) -> None:
+    repo = tmp_path / "repo"
+    archive = tmp_path / "archive"
+    repo.mkdir()
+    archive.mkdir()
+    document = tomlkit.parse((qa_shift.REPO_ROOT / "nexus.toml").read_text())
+    if missing_table == "roles":
+        del document["global"]["model"]["api_models"]["openai"]["roles"]
+    else:
+        del document["usage"]["daily_allowance"]
+    (repo / "nexus.toml").write_text(tomlkit.dumps(document))
+
+    with pytest.raises(qa_shift.ShiftError, match="Cannot derive isolated config"):
+        qa_shift._write_runtime_config(
+            repo_root=repo,
+            archive=archive,
+            config=qa_shift.load_shift_config(),
+        )
+
+
 def test_begin_refuses_untrustworthy_or_exhausted_usage(tmp_path: Path) -> None:
     config = replace(qa_shift.load_shift_config(), archive_root=tmp_path)
 
@@ -139,7 +163,7 @@ def test_begin_refuses_untrustworthy_or_exhausted_usage(tmp_path: Path) -> None:
         with pytest.raises(qa_shift.ShiftError):
             qa_shift.begin_shift(
                 config=config,
-                usage_reader=lambda _root, value=payload: value,
+                usage_reader=lambda _root, _day, value=payload: value,
                 now=NOW,
             )
 
@@ -221,7 +245,7 @@ def test_check_fails_closed_at_token_time_day_and_unknown_boundaries() -> None:
         expect_call=False,
         now=NOW + timedelta(minutes=60),
     )
-    rolled, _ = qa_shift.evaluate_check(
+    rolled, rolled_state = qa_shift.evaluate_check(
         state=state,
         usage_payload=_usage(total=100, day="2026-07-31"),
         expect_call=False,
@@ -237,6 +261,10 @@ def test_check_fails_closed_at_token_time_day_and_unknown_boundaries() -> None:
     assert "token_fence_reached" in fenced["reasons"]
     assert "wall_clock_reached" in timed["reasons"]
     assert "quota_day_changed" in rolled["reasons"]
+    assert rolled["shift_openai_total"] is None
+    assert rolled["openai_delta_since_last_check"] is None
+    assert rolled_state["last_total"] == 100
+    assert rolled_state["rollover_day"] == "2026-07-31"
     assert "unknown_openai_usage" in unknown["reasons"]
 
 
@@ -244,7 +272,7 @@ def test_check_and_finish_persist_end_to_end_tally(tmp_path: Path) -> None:
     config = replace(qa_shift.load_shift_config(), archive_root=tmp_path)
     begin = qa_shift.begin_shift(
         config=config,
-        usage_reader=lambda _root: _usage(total=100),
+        usage_reader=lambda _root, _day: _usage(total=100),
         now=NOW,
     )
     archive = Path(begin["archive"])
@@ -253,13 +281,13 @@ def test_check_and_finish_persist_end_to_end_tally(tmp_path: Path) -> None:
     check = qa_shift.check_shift(
         archive=archive,
         expect_call=True,
-        usage_reader=lambda _root: _usage(total=300, events=[first_event]),
+        usage_reader=lambda _root, _day: _usage(total=300, events=[first_event]),
         now=NOW + timedelta(minutes=1),
     )
     finish = qa_shift.finish_shift(
         archive=archive,
         exit_condition="dry_well",
-        usage_reader=lambda _root: _usage(total=350, events=[first_event]),
+        usage_reader=lambda _root, _day: _usage(total=350, events=[first_event]),
         now=NOW + timedelta(minutes=2),
     )
 
@@ -279,3 +307,44 @@ def test_check_and_finish_persist_end_to_end_tally(tmp_path: Path) -> None:
         "post_call",
         "finish",
     ]
+
+
+def test_finish_reads_original_quota_day_after_rollover(tmp_path: Path) -> None:
+    config = replace(qa_shift.load_shift_config(), archive_root=tmp_path)
+    begin = qa_shift.begin_shift(
+        config=config,
+        usage_reader=lambda _root, _day: _usage(total=100),
+        now=NOW,
+    )
+    archive = Path(begin["archive"])
+
+    rollover = qa_shift.check_shift(
+        archive=archive,
+        expect_call=False,
+        usage_reader=lambda _root, _day: _usage(
+            total=40,
+            day="2026-07-31",
+        ),
+        now=datetime(2026, 7, 31, 0, 1, tzinfo=timezone.utc),
+    )
+    requested_days: list[str | None] = []
+
+    def read_original_day(_root: Path, day: str | None) -> dict[str, object]:
+        requested_days.append(day)
+        return _usage(total=350, day="2026-07-30")
+
+    finish = qa_shift.finish_shift(
+        archive=archive,
+        exit_condition="token_fence",
+        usage_reader=read_original_day,
+        now=datetime(2026, 7, 31, 0, 2, tzinfo=timezone.utc),
+    )
+    state = json.loads((archive / "shift_state.json").read_text())
+
+    assert rollover["status"] == "stop"
+    assert "quota_day_changed" in rollover["reasons"]
+    assert requested_days == ["2026-07-30"]
+    assert finish["quota_day"] == "2026-07-30"
+    assert finish["shift_openai_total"] == 250
+    assert state["final_usage_day"] == "2026-07-30"
+    assert state["finished_after_quota_rollover"] is True
