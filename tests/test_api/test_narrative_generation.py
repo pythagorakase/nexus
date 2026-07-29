@@ -283,8 +283,40 @@ async def test_bootstrap_threads_logon_model_into_incubator_payload(
 
 
 @pytest.mark.asyncio
-async def test_continue_route_threads_parent_into_generation_task() -> None:
+async def test_continue_route_threads_parent_into_generation_task(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """The continue API schedules generation with its canonical parent id."""
+
+    class ChoiceFreeCursor:
+        def __enter__(self) -> "ChoiceFreeCursor":
+            return self
+
+        def __exit__(self, *_args: Any) -> None:
+            return None
+
+        def execute(self, sql: str, _params: Any = None) -> None:
+            self._from_incubator = "FROM incubator" in sql
+
+        def fetchone(self) -> dict[str, Any] | None:
+            if self._from_incubator:
+                return None
+            return {
+                "id": 17,
+                "storyteller_text": "The road runs on.",
+                "choice_object": None,
+                "choice_text": None,
+            }
+
+    class ChoiceFreeConnection(DummyConnection):
+        def cursor(self, **_kwargs: Any) -> ChoiceFreeCursor:
+            return ChoiceFreeCursor()
+
+    monkeypatch.setattr(
+        narrative,
+        "get_db_connection",
+        lambda _slot=None: ChoiceFreeConnection(),
+    )
 
     background_tasks = BackgroundTasks()
     await narrative.continue_narrative(

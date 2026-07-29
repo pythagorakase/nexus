@@ -382,11 +382,16 @@ def _record_player_response_for_chunk(
                         )
                 return existing_choice_text
 
-            if not has_new_input and not require_response:
+            has_unresolved_choices = bool(choice_object and choice_object["presented"])
+            if (
+                not has_new_input
+                and not require_response
+                and not has_unresolved_choices
+            ):
                 return user_text
 
             if not has_new_input:
-                if choice_object and choice_object["presented"]:
+                if has_unresolved_choices:
                     raise HTTPException(
                         status_code=400,
                         detail=(
@@ -641,7 +646,10 @@ async def continue_narrative(
             logger.info(
                 f"Resolved chunk_id={request.chunk_id} from slot {request.slot}"
             )
-    elif request.chunk_id and _has_player_response_input(request):
+    elif request.chunk_id:
+        # Runs even without player input: the resolver owns the
+        # unresolved-choice guard, so an explicitly addressed chunk cannot
+        # bypass it the way slot-resolved continues cannot.
         resolved_user_text = _record_player_response_for_chunk(
             slot=request.slot,
             chunk_id=request.chunk_id,

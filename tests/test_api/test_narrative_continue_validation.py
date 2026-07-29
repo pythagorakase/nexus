@@ -266,6 +266,74 @@ def test_choice_free_empty_continue_persists_override_and_starts_generation(
     assert generation_args[1:4] == (17, "", 3)
 
 
+def test_explicit_slotless_chunk_with_unresolved_choices_requires_input(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An explicitly addressed chunk cannot bypass the unresolved-choice guard."""
+    choices = ["Open the door.", "Wait in silence."]
+    connection = ChoiceConnection(
+        {
+            "id": 17,
+            "storyteller_text": "The door waits.",
+            "choice_object": {"presented": choices, "selected": None},
+            "choice_text": None,
+        }
+    )
+    monkeypatch.setattr(narrative, "get_db_connection", lambda _slot: connection)
+    model_writes = _capture_model_writes(monkeypatch)
+
+    response = TestClient(narrative.app).post(
+        "/api/narrative/continue",
+        json={"chunk_id": 17},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == (
+        "Current chunk has unresolved choices; provide choice, non-empty "
+        "user_text, or accept_fate."
+    )
+    assert model_writes == []
+    assert connection.updates == []
+
+
+def test_explicit_slotless_choice_free_chunk_keeps_empty_continue(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A choice-free explicitly addressed chunk retains empty-input continuation."""
+    connection = ChoiceConnection(
+        {
+            "id": 17,
+            "storyteller_text": "The road runs on.",
+            "choice_object": None,
+            "choice_text": None,
+        }
+    )
+    monkeypatch.setattr(narrative, "get_db_connection", lambda _slot: connection)
+    model_writes = _capture_model_writes(monkeypatch)
+    generation_calls: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
+
+    async def capture_generation(*args: Any, **kwargs: Any) -> None:
+        generation_calls.append((args, kwargs))
+
+    monkeypatch.setattr(narrative, "generate_narrative_async", capture_generation)
+    monkeypatch.setattr(
+        narrative,
+        "_trigger_locked_chunk_embedding",
+        lambda **_kwargs: None,
+    )
+
+    response = TestClient(narrative.app).post(
+        "/api/narrative/continue",
+        json={"chunk_id": 17},
+    )
+
+    assert response.status_code == 200
+    assert model_writes == []
+    assert len(generation_calls) == 1
+    generation_args, _generation_kwargs = generation_calls[0]
+    assert generation_args[1:3] == (17, "")
+
+
 def _connect(dbname: str, *, dict_cursor: bool = False) -> Any:
     """Open a direct PostgreSQL connection for a disposable clone."""
     return psycopg2.connect(
