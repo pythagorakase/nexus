@@ -24,8 +24,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
-from nexus.agents.orrery.needs import NEED_SEVERITY_PREFIX
 from nexus.agents.orrery.audit import NOT_APPLICABLE_REASON
+from nexus.agents.orrery.needs import NEED_SEVERITY_PREFIX
 from nexus.agents.orrery.reconstruction import playable_narrative_predicate
 from nexus.agents.orrery.resolver import (
     OrreryTickProposal,
@@ -254,16 +254,19 @@ def test_resolve_four_template_states_are_distinguishable(
         for stack in group["two_party_stacks"] + group["scene_pressure_stacks"]:
             stack_ids = {t["template_id"] for t in stack["templates"]}
             assert stack_ids <= MULTI_PARTY_TEMPLATE_IDS
+            # Routes pair one binding set with templates of exactly one slot
+            # signature — target for (actor, target) pairs, faction for
+            # court-patron (actor, faction) pairs — so a stack never mixes
+            # shapes, and its non-null bindings are exactly that signature.
+            signatures = {
+                frozenset(REQUIRED_SLOTS_BY_TEMPLATE[template_id])
+                for template_id in stack_ids
+            }
+            assert len(signatures) == 1
             bound = {
                 slot for slot, entity in stack["bindings"].items() if entity is not None
             }
-            assert "actor" in bound
-            # The counterparty is whatever the routed templates require:
-            # target for (actor, target) pairs, faction for court-patron
-            # (actor, faction) pairs — a pair stack never lacks both.
-            assert bound & COUNTERPARTY_SLOTS
-            for template_id in stack_ids:
-                assert REQUIRED_SLOTS_BY_TEMPLATE[template_id] <= bound
+            assert bound == set(next(iter(signatures)))
 
         # Not-applicable is exactly "no two-party binding composed", and is
         # never conflated with an evaluated-and-refused gate.
