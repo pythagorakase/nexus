@@ -44,6 +44,7 @@ def test_mock_seed_declares_fixed_diegetic_timestamp(monkeypatch) -> None:
         "day": 3,
         "hour": 22,
         "minute": 47,
+        "second": 0,
     }
 
 

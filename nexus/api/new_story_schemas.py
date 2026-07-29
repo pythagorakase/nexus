@@ -54,6 +54,15 @@ _MONTH_DAY_PATTERN = re.compile(
     r"(?P<day>[1-9]|[12]\d|3[01])(?:st|nd|rd|th)?\b",
     re.IGNORECASE,
 )
+_ISO_DATETIME_PATTERN = re.compile(
+    r"(?<!\d)(?P<year>[1-9]\d{2,3})-"
+    r"(?P<month>0[1-9]|1[0-2])-"
+    r"(?P<day>0[1-9]|[12]\d|3[01])"
+    r"(?:T|\s+)(?P<hour>[01]\d|2[0-3]):"
+    r"(?P<minute>[0-5]\d):(?P<second>[0-5]\d)"
+    r"(?:\s*(?:Z|UTC))?\b",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -63,6 +72,7 @@ class SettingDateConstraint:
     year: int
     month: int
     day: Optional[int] = None
+    second: Optional[int] = None
 
     def conflicts_with(self, timestamp: "StoryTimestamp") -> bool:
         """Return whether a seed timestamp contradicts an explicit setting field."""
@@ -70,13 +80,17 @@ class SettingDateConstraint:
             timestamp.year != self.year
             or timestamp.month != self.month
             or (self.day is not None and timestamp.day != self.day)
+            or (self.second is not None and timestamp.second != self.second)
         )
 
     def describe(self) -> str:
         """Render the constraint for a model-facing repair error."""
         month_name = calendar.month_name[self.month]
         if self.day is not None:
-            return f"{month_name} {self.day}, {self.year}"
+            description = f"{month_name} {self.day}, {self.year}"
+            if self.second is not None:
+                return f"{description} with second {self.second}"
+            return description
         return f"{month_name} {self.year}"
 
 
@@ -93,6 +107,9 @@ def _year_month_candidates(text: str) -> set[tuple[int, int]]:
                     _MONTH_NUMBERS[match.group("month").lower()],
                 )
             )
+    for match in _ISO_DATETIME_PATTERN.finditer(text):
+        date_spans.append(match.span())
+        candidates.add((int(match.group("year")), int(match.group("month"))))
     for pattern in (_MONTH_YEAR_PATTERN, _YEAR_MONTH_PATTERN):
         for match in pattern.finditer(text):
             start, end = match.span()
@@ -113,6 +130,9 @@ def _year_month_candidates(text: str) -> set[tuple[int, int]]:
 def _day_candidates(text: str, *, year: int, month: int) -> set[int]:
     """Extract days tied to the selected explicit year and month."""
     days: set[int] = set()
+    for match in _ISO_DATETIME_PATTERN.finditer(text):
+        if int(match.group("year")) == year and int(match.group("month")) == month:
+            days.add(int(match.group("day")))
     for pattern in (_DAY_MONTH_YEAR_PATTERN, _MONTH_DAY_YEAR_PATTERN):
         for match in pattern.finditer(text):
             if (
@@ -130,6 +150,9 @@ def _day_candidates(text: str, *, year: int, month: int) -> set[int]:
 def _matching_full_date_days(text: str, *, year: int, month: int) -> set[int]:
     """Extract days only from full dates matching an established year/month."""
     days: set[int] = set()
+    for match in _ISO_DATETIME_PATTERN.finditer(text):
+        if int(match.group("year")) == year and int(match.group("month")) == month:
+            days.add(int(match.group("day")))
     for pattern in (_DAY_MONTH_YEAR_PATTERN, _MONTH_DAY_YEAR_PATTERN):
         for match in pattern.finditer(text):
             if (
@@ -138,6 +161,25 @@ def _matching_full_date_days(text: str, *, year: int, month: int) -> set[int]:
             ):
                 days.add(int(match.group("day")))
     return days
+
+
+def _matching_full_date_seconds(
+    text: str,
+    *,
+    year: int,
+    month: int,
+    day: int,
+) -> set[int]:
+    """Extract seconds only from full datetimes matching the accepted date."""
+    seconds: set[int] = set()
+    for match in _ISO_DATETIME_PATTERN.finditer(text):
+        if (
+            int(match.group("year")) == year
+            and int(match.group("month")) == month
+            and int(match.group("day")) == day
+        ):
+            seconds.add(int(match.group("second")))
+    return seconds
 
 
 def extract_setting_date_constraint(
@@ -170,7 +212,25 @@ def extract_setting_date_constraint(
 
     if day is not None and day > calendar.monthrange(year, month)[1]:
         day = None
-    return SettingDateConstraint(year=year, month=month, day=day)
+    second: Optional[int] = None
+    if day is not None:
+        second_candidates = _matching_full_date_seconds(
+            setting.time_period,
+            year=year,
+            month=month,
+            day=day,
+        )
+        second_candidates.update(
+            _matching_full_date_seconds(
+                setting.diegetic_artifact,
+                year=year,
+                month=month,
+                day=day,
+            )
+        )
+        if len(second_candidates) == 1:
+            second = next(iter(second_candidates))
+    return SettingDateConstraint(year=year, month=month, day=day, second=second)
 
 
 def _strip_legacy_orrery_proposals(value: Any) -> Any:
@@ -867,9 +927,11 @@ class StoryTimestamp(BaseModel):
     we use constrained integer fields that are validated individually.
 
     Example:
-        >>> ts = StoryTimestamp(year=1347, month=9, day=15, hour=16, minute=30)
+        >>> ts = StoryTimestamp(
+        ...     year=1347, month=9, day=15, hour=16, minute=30, second=45
+        ... )
         >>> ts.to_datetime()
-        datetime(1347, 9, 15, 16, 30, 0, tzinfo=timezone.utc)
+        datetime(1347, 9, 15, 16, 30, 45, tzinfo=timezone.utc)
     """
 
     model_config = ConfigDict(str_strip_whitespace=True)
@@ -881,6 +943,12 @@ class StoryTimestamp(BaseModel):
     day: int = Field(..., ge=1, le=31, description="Day of month (1-31)")
     hour: int = Field(..., ge=0, le=23, description="Hour in 24h format (0-23)")
     minute: int = Field(..., ge=0, le=59, description="Minute (0-59)")
+    second: int = Field(
+        0,
+        ge=0,
+        le=59,
+        description="Second (0-59); use 0 when the setting specifies only minutes",
+    )
 
     @model_validator(mode="after")
     def validate_date(self) -> "StoryTimestamp":
@@ -895,14 +963,14 @@ class StoryTimestamp(BaseModel):
         return self
 
     def to_datetime(self, tz: timezone = timezone.utc) -> datetime:
-        """Convert to datetime object with seconds=0."""
+        """Convert all represented fields to a timezone-aware datetime."""
         return datetime(
             year=self.year,
             month=self.month,
             day=self.day,
             hour=self.hour,
             minute=self.minute,
-            second=0,
+            second=self.second,
             tzinfo=tz,
         )
 
@@ -954,6 +1022,7 @@ class StorySeed(BaseModel):
             "default to the current real-world date. For Earth-based historical, "
             "contemporary, or near-future settings, choose a date that fits the "
             "setting card. Choose the hour and minute to serve the opening scene."
+            " Preserve explicit seconds from the accepted setting; otherwise use 0."
         ),
     )
     weather: Optional[str] = Field(None, description="Weather conditions if relevant")

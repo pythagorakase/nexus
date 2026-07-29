@@ -1,23 +1,32 @@
 """Schema and routing coverage for TEST-mode Responses API wizard calls."""
 
 import json
-from datetime import datetime
+import os
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, Iterator, List, Tuple
 
+import psycopg2
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import BaseModel
+from psycopg2 import sql
 
 from nexus.api import mock_openai
+from nexus.api import new_story_cache as cache_module
+from nexus.api import new_story_flow
+from nexus.api.db_pool import close_all_pools
 from nexus.api.new_story_schemas import (
     CharacterConceptSubmission,
     SettingCard,
+    StorySeed,
     StorySeedSubmission,
     TraitSelection,
     WildcardTrait,
     WizardResponse,
 )
+from nexus.api.slot_utils import VALID_DBNAMES
 from nexus.api.wizard_agent import WizardContext, get_wizard_agent
 
 FIXTURE_PATH = Path(__file__).parents[1] / "fixtures" / "test_cache_wizard.json"
@@ -100,6 +109,97 @@ def _responses_tool(name: str, schema: type[BaseModel]) -> Dict[str, Any]:
         "parameters": schema.model_json_schema(),
         "strict": True,
     }
+
+
+def _connect(dbname: str) -> Any:
+    """Open a direct connection for disposable-database administration."""
+    return psycopg2.connect(
+        dbname=dbname,
+        user=os.environ.get("PGUSER", "pythagor"),
+        host=os.environ.get("PGHOST", "localhost"),
+        port=os.environ.get("PGPORT", "5432"),
+    )
+
+
+@pytest.fixture()
+def disposable_timestamp_dbname() -> Iterator[str]:
+    """Yield a current-template clone and remove it after the regression."""
+    dbname = f"nexus_test_issue_613_{uuid.uuid4().hex[:12]}"
+    admin: Any = None
+    try:
+        try:
+            admin = _connect("postgres")
+        except psycopg2.Error as exc:
+            pytest.skip(f"PostgreSQL admin connection unavailable: {exc}")
+        admin.autocommit = True
+        with admin.cursor() as cur:
+            cur.execute(
+                sql.SQL("CREATE DATABASE {} TEMPLATE {}").format(
+                    sql.Identifier(dbname),
+                    sql.Identifier("NEXUS_template"),
+                )
+            )
+        VALID_DBNAMES.add(dbname)
+        yield dbname
+    finally:
+        close_all_pools()
+        VALID_DBNAMES.discard(dbname)
+        if admin is not None:
+            with admin.cursor() as cur:
+                cur.execute(
+                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+                    "WHERE datname = %s AND pid <> pg_backend_pid()",
+                    (dbname,),
+                )
+                cur.execute(
+                    sql.SQL("DROP DATABASE IF EXISTS {}").format(sql.Identifier(dbname))
+                )
+            admin.close()
+
+
+@pytest.mark.requires_postgres
+def test_seconds_round_trip_through_cache_resume_and_transition(
+    disposable_timestamp_dbname: str,
+    monkeypatch,
+) -> None:
+    """Real PostgreSQL preserves an explicit second through transition."""
+    raw = json.loads(FIXTURE_PATH.read_text())
+    seed_payload = json.loads(raw["selected_seed"])
+    seed_payload["base_timestamp"]["second"] = 30
+    accepted_seed = StorySeed.model_validate(seed_payload)
+    expected_timestamp = accepted_seed.get_base_datetime()
+    cache_module.write_cache(
+        thread_id=raw["thread_id"],
+        setting_draft=json.loads(raw["setting_draft"]),
+        character_draft=json.loads(raw["character_draft"]),
+        selected_seed=accepted_seed.model_dump(),
+        layer_draft=json.loads(raw["layer_draft"]),
+        zone_draft=json.loads(raw["zone_draft"]),
+        initial_location=json.loads(raw["initial_location"]),
+        base_timestamp=expected_timestamp.isoformat(),
+        target_slot=4,
+        dbname=disposable_timestamp_dbname,
+    )
+    monkeypatch.setattr(
+        new_story_flow,
+        "slot_dbname",
+        lambda _slot: disposable_timestamp_dbname,
+    )
+
+    resumed = new_story_flow.resume_setup(4)
+    assert resumed is not None
+    resumed_seed = resumed.get_seed_dict()
+    assert resumed_seed is not None
+    assert resumed_seed["base_timestamp"]["second"] == 30
+
+    transition = new_story_flow.build_transition_data_from_cache(resumed)
+    assert transition.seed.base_timestamp.second == 30
+    assert transition.seed.get_base_datetime() == expected_timestamp
+    assert transition.base_timestamp == expected_timestamp
+    assert (
+        transition.base_timestamp.astimezone(timezone.utc).isoformat()
+        == "2087-11-03T22:47:30+00:00"
+    )
 
 
 def test_canned_artifact_arguments_validate_against_current_schemas() -> None:
