@@ -30,7 +30,7 @@ from nexus.agents.orrery.retrograde_markers import (
     RETROGRADE_PROLOGUE_MARKER,
 )
 from nexus.agents.orrery.retrograde_project_dependencies import (
-    planned_project_start_relationships,
+    dry_run_project_start_relationships,
     seek_redemption_dependency_issue,
 )
 from nexus.agents.orrery.retrograde_vocabulary import (
@@ -438,6 +438,7 @@ def _build_plan(
         event_origin=project_event_origin,
         event_ref_prefix=project_event_ref_prefix,
         log_context=project_log_context,
+        relationship_rows=relationship_rows,
     )
     for project_row in project_rows:
         counters[f"projects_{project_row['status']}"] += 1
@@ -1089,6 +1090,7 @@ def _plan_project_rows(
     event_origin: str,
     event_ref_prefix: Optional[str],
     log_context: Optional[str],
+    relationship_rows: Sequence[Mapping[str, Any]],
 ) -> list[dict[str, Any]]:
     """Plan or insert typed stage-one projects after relationship persistence."""
 
@@ -1238,6 +1240,8 @@ def _plan_project_rows(
             project=project,
             actor=actor,
             target=target,
+            dry_run=dry_run,
+            relationship_rows=relationship_rows,
         )
         started_event_type = PROJECT_STARTED_EVENT_TYPES[project.project_type]
         if started_event_type not in event_types:
@@ -1416,6 +1420,8 @@ def _validate_project_start_dependencies(
     project: RetrogradeProjectPlan,
     actor: Mapping[str, Any],
     target: Optional[Mapping[str, Any]],
+    dry_run: bool = False,
+    relationship_rows: Sequence[Mapping[str, Any]] = (),
 ) -> None:
     dead_character_refs = {
         normalize_entity_ref(death.entity_ref)
@@ -1455,9 +1461,7 @@ def _validate_project_start_dependencies(
         return
     if target is None:
         raise AssertionError("seek_redemption target shape was not validated")
-    available_relationships = planned_project_start_relationships(
-        expansion.relationship_plan
-    )
+    available_relationships: list[Mapping[str, Any]] = []
     if actor["resolution"] == "resolved" and target["resolution"] == "resolved":
         cur.execute(
             """
@@ -1478,6 +1482,10 @@ def _validate_project_start_dependencies(
                     "emotional_valence": str(_row_value(row, "emotional_valence", 0)),
                 }
             )
+    if dry_run:
+        available_relationships.extend(
+            dry_run_project_start_relationships(relationship_rows)
+        )
     dependency_issue = seek_redemption_dependency_issue(
         seed_id=project.seed_id,
         project_type=project.project_type,

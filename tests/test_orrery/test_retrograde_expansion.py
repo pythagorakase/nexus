@@ -514,6 +514,55 @@ def test_seek_redemption_retry_exhaustion_names_seed_and_project(
         )
 
 
+def test_unclassified_redemption_relationship_uses_structured_repair(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A schema-free invented type becomes a named ModelRetry issue."""
+
+    _vocabulary, packet, seed_response, payload = _redemption_contract()
+    payload["relationship_plan"] = [
+        {
+            "subject_ref": "Vale",
+            "subject_kind": "character",
+            "relationship_type": "invented_hostility",
+            "object_ref": "Mara",
+            "object_kind": "character",
+            "source_event_ref": "retro_event_001",
+        }
+    ]
+    invalid_output = RetrogradeExpansionPlanResponse.model_validate(payload)
+
+    class ExhaustingProvider:
+        output_validator: Any = None
+
+        def get_structured_completion(self, _prompt: str, _schema: Any) -> Any:
+            assert self.output_validator is not None
+            try:
+                asyncio.run(self.output_validator(None, invalid_output))
+            except ModelRetry as exc:
+                raise RuntimeError("structured retries exhausted") from exc
+            raise AssertionError("Invented relationship type unexpectedly validated")
+
+    monkeypatch.setattr(
+        "nexus.api.native_structured_output.build_native_structured_provider",
+        lambda **_kwargs: ExhaustingProvider(),
+    )
+
+    with pytest.raises(RuntimeError) as exc_info:
+        generate_expansion_with_skald(
+            packet=packet,
+            seed_candidate_response=seed_response,
+            model_name="@provider.unused_test",
+        )
+
+    issue = str(exc_info.value)
+    assert "exhausted validation retries" in issue
+    assert "seed_001" in issue
+    assert "relationship_plan[0].relationship_type" in issue
+    assert "invented_hostility" in issue
+    assert "seed_eligible_vocabulary.relationship_types" in issue
+
+
 @pytest.mark.parametrize(
     ("death_ref", "issue"),
     [

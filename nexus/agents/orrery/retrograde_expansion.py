@@ -962,6 +962,7 @@ def _expansion_contract_issues(
             response=response,
             candidates_by_id=candidates_by_id,
             project_start_relationships=project_start_relationships,
+            relationship_types=relationship_types,
         )
     )
 
@@ -998,13 +999,21 @@ def _project_plan_issues(
     response: RetrogradeExpansionPlanResponse,
     candidates_by_id: Mapping[str, Any],
     project_start_relationships: Sequence[Mapping[str, Any]],
+    relationship_types: set[str],
 ) -> list[str]:
     """Keep R6 project rows faithful to the selected seed intent."""
 
     issues: list[str] = []
+    planned_relationships, relationship_dependency_issues = (
+        _planned_project_dependency_relationships(
+            response=response,
+            relationship_types=relationship_types,
+        )
+    )
+    issues.extend(relationship_dependency_issues)
     available_relationships = [
         *project_start_relationships,
-        *planned_project_start_relationships(response.relationship_plan),
+        *planned_relationships,
     ]
     threads_by_seed = {thread.seed_id: thread for thread in response.thread_plan}
     projects_by_seed = {project.seed_id: project for project in response.project_plan}
@@ -1088,6 +1097,38 @@ def _project_plan_issues(
                 f"woven seed {seed_id!r} drops project_intent without a thread note"
             )
     return issues
+
+
+def _planned_project_dependency_relationships(
+    *,
+    response: RetrogradeExpansionPlanResponse,
+    relationship_types: set[str],
+) -> tuple[list[Mapping[str, Any]], list[str]]:
+    """Convert model relationship rows without escaping the repair boundary."""
+
+    redemption_seed_ids = [
+        project.seed_id
+        for project in response.project_plan
+        if project.project_type == "seek_redemption"
+    ]
+    if not redemption_seed_ids:
+        return [], []
+
+    relationships: list[Mapping[str, Any]] = []
+    issues: list[str] = []
+    for index, relationship in enumerate(response.relationship_plan):
+        try:
+            relationships.extend(planned_project_start_relationships([relationship]))
+        except ValueError as exc:
+            issues.append(
+                "seek_redemption project seed(s) "
+                f"{redemption_seed_ids!r} cannot classify "
+                f"relationship_plan[{index}].relationship_type "
+                f"{relationship.relationship_type!r}: {exc}. Use one of "
+                "seed_eligible_vocabulary.relationship_types "
+                f"{sorted(relationship_types)!r}"
+            )
+    return relationships, issues
 
 
 STUB_CREATABLE_ENTITY_KINDS = frozenset({"character", "place", "faction"})

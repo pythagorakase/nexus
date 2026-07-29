@@ -100,6 +100,37 @@ def planned_project_start_relationships(
     return facts
 
 
+def dry_run_project_start_relationships(
+    relationship_rows: Iterable[Mapping[str, Any]],
+) -> list[ProjectStartRelationship]:
+    """Project only relationship rows that persistence would materialize."""
+
+    facts: list[ProjectStartRelationship] = []
+    for row in relationship_rows:
+        status = str(row.get("status"))
+        if status == "already_present":
+            existing = row.get("existing")
+            if not isinstance(existing, Mapping):
+                raise AssertionError(
+                    "already_present relationship row is missing stored state"
+                )
+            emotional_valence = str(existing["emotional_valence"])
+        elif status == "would_insert":
+            emotional_valence = relationship_type_default_emotional_valence(
+                str(row["relationship_type"])
+            )
+        else:
+            continue
+        facts.append(
+            {
+                "subject_ref": str(row["subject_ref"]),
+                "object_ref": str(row["object_ref"]),
+                "emotional_valence": emotional_valence,
+            }
+        )
+    return facts
+
+
 def seek_redemption_dependency_issue(
     *,
     seed_id: str,

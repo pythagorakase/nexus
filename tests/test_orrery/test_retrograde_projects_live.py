@@ -404,6 +404,66 @@ def test_seek_redemption_requires_target_to_actor_negative_valence(
             )
 
 
+def test_seek_redemption_rejects_non_materializing_planned_enemy(
+    project_db: dict[str, Any],
+) -> None:
+    """An already-present friendly row defeats a planned enemy prerequisite."""
+
+    db = project_db
+    actor_id, actor = db["characters"][0]
+    target_id, target = db["characters"][8]
+    with db["conn"].cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO character_relationships (
+                character1_id, character2_id, relationship_type,
+                emotional_valence, dynamic, recent_events, history
+            )
+            SELECT target_c.id, actor_c.id, 'friend',
+                   '+2|friendly', '', '', ''
+            FROM characters target_c, characters actor_c
+            WHERE target_c.entity_id = %s
+              AND actor_c.entity_id = %s
+            """,
+            (target_id, actor_id),
+        )
+        packet, seeds, expansion = _contracts(
+            db["vocabulary"],
+            [("seed_redemption", "seek_redemption", actor, target)],
+        )
+
+        with pytest.raises(
+            ValueError,
+            match=(
+                "seed 'seed_redemption_.*' seek_redemption requires a "
+                "TARGET->ACTOR wary-or-worse relationship"
+            ),
+        ):
+            build_retrograde_persistence_plan(
+                cur,
+                packet=packet,
+                seed_candidate_response=seeds,
+                expansion_plan_payload=expansion,
+                slot=2,
+                dbname="save_02",
+                dry_run=False,
+                create_missing_entities=True,
+                project_seeding_enabled=True,
+                project_settings=load_settings().orrery.projects,
+            )
+
+        cur.execute(
+            """
+            SELECT count(*)
+            FROM character_project_states
+            WHERE character_entity_id = %s
+              AND project_type = 'seek_redemption'
+            """,
+            (actor_id,),
+        )
+        assert cur.fetchone()[0] == 0
+
+
 def test_writer_rejects_project_participants_in_death_plan(
     project_db: dict[str, Any],
 ) -> None:
