@@ -12,6 +12,10 @@ from sqlalchemy import create_engine, text
 
 from nexus.api.commit_handler_sync import commit_incubator_to_database_sync
 from nexus.api.narrative_generation import write_to_incubator
+from nexus.api.narrative_lease import (
+    acquire_generation_lease,
+    bind_generation_parent,
+)
 from nexus.api.slot_utils import get_slot_db_url
 from tests.test_orrery.claim_accounts_test_support import (
     install_claim_accounts_shadow_sync,
@@ -56,9 +60,13 @@ def provenance_db() -> Iterator[dict[str, Any]]:
     reveal_migration_sql = (
         Path(__file__).parents[2] / "migrations" / "091_backstory_secrets.sql"
     ).read_text()
+    lease_migration_sql = (
+        Path(__file__).parents[2] / "migrations" / "098_narrative_generation_lease.sql"
+    ).read_text()
     try:
         with raw_connection.cursor() as cur:
             cur.execute(migration_sql)
+            cur.execute(lease_migration_sql)
             schema = f"provenance_reveal_{uuid4().hex[:12]}"
             cur.execute(f'CREATE SCHEMA "{schema}"')
             cur.execute(f'SET LOCAL search_path = "{schema}", public')
@@ -90,6 +98,7 @@ def provenance_db() -> Iterator[dict[str, Any]]:
                 """
             )
             parent_chunk_id = cur.fetchone()[0]
+            cur.execute("DELETE FROM incubator WHERE id = TRUE")
         if parent_chunk_id is None:
             pytest.skip("save_05 needs an accepted narrative chunk")
 
@@ -138,6 +147,23 @@ def _incubator_payload(
     }
 
 
+def _own_parent(db: dict[str, Any], session_id: str) -> None:
+    """Establish the production writer precondition inside the rollback fixture."""
+    conn = db["production_connection"]
+    conflict = acquire_generation_lease(
+        conn,
+        session_id=session_id,
+        operation="continue",
+        stale_timeout_seconds=60,
+    )
+    assert conflict is None
+    bind_generation_parent(
+        conn,
+        session_id=session_id,
+        parent_chunk_id=int(db["parent_chunk_id"]),
+    )
+
+
 @pytest.mark.asyncio
 async def test_sync_accept_copies_incubator_generation_model(
     provenance_db: dict[str, Any],
@@ -145,6 +171,7 @@ async def test_sync_accept_copies_incubator_generation_model(
     """The synchronous accept path preserves the successful model id."""
 
     session_id = str(uuid4())
+    _own_parent(provenance_db, session_id)
     await write_to_incubator(
         provenance_db["production_connection"],
         _incubator_payload(
@@ -189,8 +216,13 @@ async def test_regenerate_singleton_write_replaces_generation_model(
         generation_model="regenerating-model",
     )
 
+    _own_parent(provenance_db, session_id)
     await write_to_incubator(provenance_db["production_connection"], first)
-    await write_to_incubator(provenance_db["production_connection"], second)
+    await write_to_incubator(
+        provenance_db["production_connection"],
+        second,
+        expected_incubator_session=session_id,
+    )
 
     row = (
         provenance_db["connection"]

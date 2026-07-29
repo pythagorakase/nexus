@@ -48,3 +48,11 @@ def get_max_choice_text_length() -> int:
         .get("constraints", {})
         .get("max_choice_text_length", 1000)
     )
+
+
+def get_generation_lease_timeout_seconds() -> int:
+    """Return the configured stale narrative-generation lease timeout."""
+    settings = load_settings()
+    if settings.api is None:
+        raise RuntimeError("nexus.toml is missing the required [api] section")
+    return settings.api.narrative_generation.stale_lease_timeout_seconds

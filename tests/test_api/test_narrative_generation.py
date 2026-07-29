@@ -20,6 +20,28 @@ from nexus.api.narrative_schemas import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _unit_route_generation_lease(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Keep orchestration doubles focused on task argument threading."""
+    monkeypatch.setattr(
+        narrative,
+        "_acquire_generation_owner",
+        lambda **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        narrative,
+        "_bind_generation_owner",
+        lambda **_kwargs: False,
+    )
+    monkeypatch.setattr(
+        narrative,
+        "_abandon_generation_owner",
+        lambda **_kwargs: None,
+    )
+
+
 class DummyProgressManager:
     """Capture progress events sent by narrative generation."""
 
@@ -102,6 +124,7 @@ async def test_lore_phase_failure_is_reported_before_adapter_coercion(
         get_db_connection=lambda slot: conn,
         load_settings=lambda: {},
         manager=manager,
+        manage_generation_lease=False,
     )
 
     error_events = [event for event in manager.events if event[1] == "error"]
@@ -171,6 +194,7 @@ async def test_continuation_threads_logon_model_into_incubator(
         get_db_connection=lambda slot: conn,
         load_settings=lambda: {},
         manager=manager,
+        manage_generation_lease=False,
     )
 
     assert written[0]["generation_model"] == "resolved-provider-model"
@@ -373,4 +397,6 @@ async def test_regenerate_route_threads_incubator_parent_into_generation_task(
     assert len(background_tasks.tasks) == 1
     task = background_tasks.tasks[0]
     assert task.func is narrative_generation.generate_narrative_async
+    assert task.args[0] != "pending-session"
     assert task.args[1] == 17
+    assert task.kwargs["expected_incubator_session"] == "pending-session"

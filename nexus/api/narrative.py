@@ -64,7 +64,16 @@ from nexus.api.narrative_generation import (
     write_to_incubator,
     generate_bootstrap_narrative,
 )
-from nexus.api.config_utils import get_max_choice_text_length
+from nexus.api.narrative_lease import (
+    abandon_generation,
+    acquire_generation_lease,
+    bind_generation_parent,
+    claim_parent_embedding,
+)
+from nexus.api.config_utils import (
+    get_generation_lease_timeout_seconds,
+    get_max_choice_text_length,
+)
 from nexus.api.asset_endpoints import router as asset_router
 from nexus.api.reader_endpoints import router as reader_router
 from nexus.api.local_models_endpoints import router as local_models_router
@@ -219,6 +228,7 @@ def load_settings():
 from nexus.api.narrative_schemas import (
     ContinueNarrativeRequest,
     ContinueNarrativeResponse,
+    GenerationLeaseConflictResponse,
     RegenerateNarrativeRequest,
     ApproveNarrativeRequest,
     NarrativeStatus,
@@ -316,6 +326,8 @@ def _record_player_response_for_chunk(
     choice: Optional[int],
     accept_fate: bool,
     require_response: bool,
+    connection: Any = None,
+    incubator_session_id: Optional[str] = None,
 ) -> str:
     """
     Resolve and persist the player's response for an incubator/committed chunk.
@@ -323,21 +335,35 @@ def _record_player_response_for_chunk(
     Returns:
         The response text that should be sent into the next generation.
     """
-    try:
-        conn = get_db_connection(slot)
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    owns_connection = connection is None
+    if owns_connection:
+        try:
+            conn = get_db_connection(slot)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+    else:
+        conn = connection
 
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute(
-                """
-                SELECT chunk_id AS id, storyteller_text, choice_object, choice_text
-                FROM incubator
-                WHERE chunk_id = %s
-                """,
-                (chunk_id,),
-            )
+            if incubator_session_id is None:
+                cur.execute(
+                    """
+                    SELECT chunk_id AS id, storyteller_text, choice_object, choice_text
+                    FROM incubator
+                    WHERE chunk_id = %s
+                    """,
+                    (chunk_id,),
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT chunk_id AS id, storyteller_text, choice_object, choice_text
+                    FROM incubator
+                    WHERE chunk_id = %s AND session_id = %s
+                    """,
+                    (chunk_id, incubator_session_id),
+                )
             chunk = cur.fetchone()
             is_incubator = chunk is not None
 
@@ -430,18 +456,22 @@ def _record_player_response_for_chunk(
                 choice_text=resolved.choice_text,
             )
 
-        conn.commit()
+        if owns_connection:
+            conn.commit()
         return resolved.choice_text
 
     except HTTPException:
-        conn.rollback()
+        if owns_connection:
+            conn.rollback()
         raise
     except Exception as exc:
-        conn.rollback()
+        if owns_connection:
+            conn.rollback()
         logger.error("Error recording player response for chunk %s: %s", chunk_id, exc)
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     finally:
-        conn.close()
+        if owns_connection:
+            conn.close()
 
 
 def _trigger_locked_chunk_embedding(
@@ -530,6 +560,109 @@ def _trigger_locked_chunk_embedding(
         )
 
 
+def _acquire_generation_owner(
+    *, slot: Optional[int], session_id: str, operation: str
+) -> None:
+    """Acquire the durable slot lease or raise the documented 409."""
+    conn = get_db_connection(slot)
+    try:
+        conflict = acquire_generation_lease(
+            conn,
+            session_id=session_id,
+            operation=operation,
+            stale_timeout_seconds=get_generation_lease_timeout_seconds(),
+        )
+    finally:
+        conn.close()
+    if conflict is not None:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "Another narrative generation owns this slot.",
+                "active_session_id": conflict.active_session_id,
+            },
+        )
+
+
+def _bind_generation_owner(
+    *,
+    slot: Optional[int],
+    session_id: str,
+    parent_chunk_id: int,
+    claim_embedding: bool,
+) -> bool:
+    """Bind the resolved parent and optionally claim its embedding trigger."""
+    conn = get_db_connection(slot)
+    try:
+        bind_generation_parent(
+            conn,
+            session_id=session_id,
+            parent_chunk_id=parent_chunk_id,
+        )
+        if claim_embedding:
+            return claim_parent_embedding(
+                conn,
+                session_id=session_id,
+                parent_chunk_id=parent_chunk_id,
+            )
+        return False
+    finally:
+        conn.close()
+
+
+def _abandon_generation_owner(
+    *, slot: Optional[int], session_id: str, error: str
+) -> None:
+    """Release a route-owned lease after a pre-scheduling failure."""
+    conn = get_db_connection(slot)
+    try:
+        abandon_generation(conn, session_id=session_id, error=error)
+    finally:
+        conn.close()
+
+
+def _resolve_and_approve_pending(
+    *,
+    slot: Optional[int],
+    session_id: str,
+    chunk_id: int,
+    user_text: str,
+    choice: Optional[int],
+    accept_fate: bool,
+    background_tasks: BackgroundTasks,
+) -> tuple[str, int]:
+    """Resolve the pending choice and approve it in one transaction."""
+    from nexus.api.commit_handler_sync import commit_incubator_to_database_sync
+
+    conn = get_db_connection(slot)
+    try:
+        resolved_user_text = _record_player_response_for_chunk(
+            slot=slot,
+            chunk_id=chunk_id,
+            user_text=user_text,
+            choice=choice,
+            accept_fate=accept_fate,
+            require_response=True,
+            connection=conn,
+            incubator_session_id=session_id,
+        )
+        approved_chunk_id = commit_incubator_to_database_sync(conn, session_id, slot)
+        background_tasks.add_task(_run_post_commit_orrery_work, slot)
+        return resolved_user_text, approved_chunk_id
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception as exc:
+        conn.rollback()
+        logger.error("Failed to commit narrative: %s", exc)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to commit narrative: {str(exc)}",
+        ) from exc
+    finally:
+        conn.close()
+
+
 # API Endpoints
 @app.get("/health")
 async def health_check():
@@ -553,7 +686,16 @@ async def get_config_models():
     }
 
 
-@app.post("/api/narrative/continue", response_model=ContinueNarrativeResponse)
+@app.post(
+    "/api/narrative/continue",
+    response_model=ContinueNarrativeResponse,
+    responses={
+        409: {
+            "model": GenerationLeaseConflictResponse,
+            "description": "Another generation currently owns the slot",
+        }
+    },
+)
 async def continue_narrative(
     request: ContinueNarrativeRequest, background_tasks: BackgroundTasks
 ):
@@ -578,7 +720,6 @@ async def continue_narrative(
             detail="Model override requires a slot to persist the selection.",
         )
 
-    # Resolve chunk_id from slot state if not provided
     resolved_user_text = request.user_text
     state = None
     if request.slot is not None:
@@ -591,158 +732,195 @@ async def continue_narrative(
                 detail="Slot is in wizard mode. Use /api/story/new/chat for wizard.",
             )
 
-    if request.chunk_id is None and state is not None:
-        if state.narrative_state is not None:
-            narrative_state = state.narrative_state
-            if narrative_state.has_pending:
-                if narrative_state.session_id is None:
-                    raise HTTPException(
-                        status_code=409,
-                        detail="Slot has pending incubator content that must be approved before continuing.",
+    session_id = str(uuid.uuid4())
+    _acquire_generation_owner(
+        slot=request.slot,
+        session_id=session_id,
+        operation="continue",
+    )
+    scheduled = False
+    try:
+        if request.chunk_id is None and state is not None:
+            if state.narrative_state is not None:
+                narrative_state = state.narrative_state
+                if narrative_state.has_pending:
+                    if narrative_state.session_id is None:
+                        raise HTTPException(
+                            status_code=409,
+                            detail=(
+                                "Slot has pending incubator content that must be "
+                                "approved before continuing."
+                            ),
+                        )
+                    logger.info(
+                        "Auto-approving pending incubator session %s for slot %s",
+                        narrative_state.session_id,
+                        request.slot,
                     )
+                    resolved_user_text, approved_chunk_id = (
+                        _resolve_and_approve_pending(
+                            slot=request.slot,
+                            session_id=narrative_state.session_id,
+                            chunk_id=narrative_state.current_chunk_id,
+                            user_text=request.user_text,
+                            choice=request.choice,
+                            accept_fate=request.accept_fate,
+                            background_tasks=background_tasks,
+                        )
+                    )
+                    request.chunk_id = approved_chunk_id
+                else:
+                    request.chunk_id = narrative_state.current_chunk_id
+                    if (
+                        request.choice is not None
+                        or request.accept_fate
+                        or narrative_state.choices
+                    ):
+                        resolved_user_text = _record_player_response_for_chunk(
+                            slot=request.slot,
+                            chunk_id=narrative_state.current_chunk_id,
+                            user_text=request.user_text,
+                            choice=request.choice,
+                            accept_fate=request.accept_fate,
+                            require_response=bool(narrative_state.choices),
+                        )
                 logger.info(
-                    "Auto-approving pending incubator session %s for slot %s",
-                    narrative_state.session_id,
+                    "Resolved chunk_id=%s from slot %s",
+                    request.chunk_id,
                     request.slot,
                 )
-                resolved_user_text = _record_player_response_for_chunk(
-                    slot=request.slot,
-                    chunk_id=narrative_state.current_chunk_id,
-                    user_text=request.user_text,
-                    choice=request.choice,
-                    accept_fate=request.accept_fate,
-                    require_response=True,
-                )
-                approval = await approve_narrative(
-                    session_id=narrative_state.session_id,
-                    background_tasks=background_tasks,
-                    request=ApproveNarrativeRequest(
-                        session_id=narrative_state.session_id, commit=True
-                    ),
-                    slot=request.slot,
-                )
-                approved_chunk_id = approval.get("chunk_id") if approval else None
-                if not approved_chunk_id:
-                    raise HTTPException(
-                        status_code=409,
-                        detail="Pending incubator content must be approved before continuing.",
-                    )
-                request.chunk_id = approved_chunk_id
-            else:
-                request.chunk_id = narrative_state.current_chunk_id
-                if (
-                    request.choice is not None
-                    or request.accept_fate
-                    or narrative_state.choices
-                ):
-                    resolved_user_text = _record_player_response_for_chunk(
-                        slot=request.slot,
-                        chunk_id=narrative_state.current_chunk_id,
-                        user_text=request.user_text,
-                        choice=request.choice,
-                        accept_fate=request.accept_fate,
-                        require_response=bool(narrative_state.choices),
-                    )
-            logger.info(
-                f"Resolved chunk_id={request.chunk_id} from slot {request.slot}"
+        elif request.chunk_id:
+            resolved_user_text = _record_player_response_for_chunk(
+                slot=request.slot,
+                chunk_id=request.chunk_id,
+                user_text=request.user_text,
+                choice=request.choice,
+                accept_fate=request.accept_fate,
+                require_response=False,
             )
-    elif request.chunk_id:
-        # Runs even without player input: the resolver owns the
-        # unresolved-choice guard, so an explicitly addressed chunk cannot
-        # bypass it the way slot-resolved continues cannot.
-        resolved_user_text = _record_player_response_for_chunk(
+
+        if request.model:
+            from nexus.api.save_slots import upsert_slot
+
+            upsert_slot(
+                request.slot,
+                model=request.model,
+                dbname=slot_dbname(request.slot),
+            )
+            logger.info("Persisted model %s to slot %s", request.model, request.slot)
+
+        parent_chunk_id = request.chunk_id if request.chunk_id else 0
+        is_bootstrap = parent_chunk_id == 0
+        embedding_claimed = _bind_generation_owner(
             slot=request.slot,
-            chunk_id=request.chunk_id,
-            user_text=request.user_text,
-            choice=request.choice,
-            accept_fate=request.accept_fate,
-            require_response=False,
-        )
-
-    # A request-level override is intentionally persistent, but only after every
-    # synchronous continue validation above has succeeded. Rejected requests
-    # must not alter the model used by later turns.
-    if request.model:
-        from nexus.api.save_slots import upsert_slot
-
-        upsert_slot(request.slot, model=request.model, dbname=slot_dbname(request.slot))
-        logger.info("Persisted model %s to slot %s", request.model, request.slot)
-
-    session_id = str(uuid.uuid4())
-
-    # Normalize chunk_id: None and 0 both mean bootstrap
-    parent_chunk_id = request.chunk_id if request.chunk_id else 0
-    is_bootstrap = parent_chunk_id == 0
-
-    if is_bootstrap:
-        logger.info("Starting narrative bootstrap (first chunk)")
-    else:
-        logger.info(f"Starting narrative continuation for chunk {parent_chunk_id}")
-    logger.info(f"Session ID: {session_id}")
-    logger.info(f"User text: {resolved_user_text[:100]}...")
-
-    # Send initial progress
-    await manager.send_progress(
-        session_id,
-        "initiated",
-        {
-            "chunk_id": parent_chunk_id,
-            "parent_chunk_id": parent_chunk_id,
-            "is_bootstrap": is_bootstrap,
-        },
-    )
-
-    # Start async generation in background
-    background_tasks.add_task(
-        generate_narrative_async,
-        session_id,
-        parent_chunk_id,
-        resolved_user_text,
-        request.slot,
-        get_db_connection=get_db_connection,
-        load_settings=load_settings,
-        manager=manager,
-    )
-    if not is_bootstrap and request.slot is not None:
-        background_tasks.add_task(
-            _trigger_locked_chunk_embedding,
-            slot=request.slot,
+            session_id=session_id,
             parent_chunk_id=parent_chunk_id,
+            claim_embedding=not is_bootstrap and request.slot is not None,
         )
 
-    message = (
-        "Narrative bootstrap started"
-        if is_bootstrap
-        else f"Narrative generation started for chunk {parent_chunk_id}"
-    )
-    return ContinueNarrativeResponse(
-        session_id=session_id,
-        status="processing",
-        message=message,
-    )
+        if is_bootstrap:
+            logger.info("Starting narrative bootstrap (first chunk)")
+        else:
+            logger.info("Starting narrative continuation for chunk %s", parent_chunk_id)
+        logger.info("Session ID: %s", session_id)
+        logger.info("User text: %s...", resolved_user_text[:100])
+
+        await manager.send_progress(
+            session_id,
+            "initiated",
+            {
+                "chunk_id": parent_chunk_id,
+                "parent_chunk_id": parent_chunk_id,
+                "is_bootstrap": is_bootstrap,
+                "slot": request.slot,
+            },
+        )
+
+        background_tasks.add_task(
+            generate_narrative_async,
+            session_id,
+            parent_chunk_id,
+            resolved_user_text,
+            request.slot,
+            get_db_connection=get_db_connection,
+            load_settings=load_settings,
+            manager=manager,
+            manage_generation_lease=True,
+        )
+        if embedding_claimed:
+            background_tasks.add_task(
+                _trigger_locked_chunk_embedding,
+                slot=request.slot,
+                parent_chunk_id=parent_chunk_id,
+            )
+        scheduled = True
+
+        message = (
+            "Narrative bootstrap started"
+            if is_bootstrap
+            else f"Narrative generation started for chunk {parent_chunk_id}"
+        )
+        return ContinueNarrativeResponse(
+            session_id=session_id,
+            status="processing",
+            message=message,
+        )
+    except Exception as exc:
+        if not scheduled:
+            try:
+                _abandon_generation_owner(
+                    slot=request.slot,
+                    session_id=session_id,
+                    error=str(exc),
+                )
+            except Exception as release_exc:
+                logger.error(
+                    "Failed to abandon generation lease %s: %s",
+                    session_id,
+                    release_exc,
+                )
+        raise
 
 
 @app.get("/api/narrative/status/{session_id}", response_model=NarrativeStatus)
 async def get_narrative_status(session_id: str, slot: Optional[int] = None):
-    """Get status of a narrative generation session"""
-
-    # Check WebSocket manager for active sessions
-    if session_id in manager.session_progress:
-        progress = manager.session_progress[session_id]
-        return NarrativeStatus(
-            session_id=session_id,
-            status=progress["status"],
-            chunk_id=progress.get("data", {}).get("chunk_id"),
-            parent_chunk_id=progress.get("data", {}).get("parent_chunk_id"),
-            created_at=datetime.fromisoformat(progress["timestamp"]),
-            error=progress.get("data", {}).get("error"),
-        )
-
-    # Check incubator for completed sessions
+    """Get durable status, validating every completed result binding."""
     conn = get_db_connection(slot)
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute("SELECT * FROM incubator WHERE session_id = %s", (session_id,))
+            cur.execute(
+                """
+                SELECT
+                    gs.session_id,
+                    CASE
+                        WHEN gs.status = 'complete' AND i.session_id IS NULL
+                            THEN 'error'
+                        ELSE gs.status
+                    END AS status,
+                    CASE
+                        WHEN gs.status = 'complete' AND i.session_id IS NULL
+                            THEN NULL
+                        ELSE gs.chunk_id
+                    END AS chunk_id,
+                    gs.parent_chunk_id,
+                    gs.created_at,
+                    CASE
+                        WHEN gs.status = 'complete' AND i.session_id IS NULL
+                            THEN (
+                                'Completed result is no longer loadable for '
+                                'this session.'
+                            )
+                        ELSE gs.error
+                    END AS error
+                FROM narrative_generation_sessions gs
+                LEFT JOIN incubator i
+                  ON i.session_id = gs.session_id
+                 AND i.chunk_id = gs.chunk_id
+                 AND i.parent_chunk_id = gs.parent_chunk_id
+                WHERE gs.session_id = %s
+                """,
+                (session_id,),
+            )
             result = cur.fetchone()
 
         if result:
@@ -752,7 +930,7 @@ async def get_narrative_status(session_id: str, slot: Optional[int] = None):
                 chunk_id=result["chunk_id"],
                 parent_chunk_id=result["parent_chunk_id"],
                 created_at=result["created_at"],
-                error=None,
+                error=result["error"],
             )
 
         raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
@@ -761,7 +939,16 @@ async def get_narrative_status(session_id: str, slot: Optional[int] = None):
         conn.close()
 
 
-@app.post("/api/narrative/regenerate", response_model=ContinueNarrativeResponse)
+@app.post(
+    "/api/narrative/regenerate",
+    response_model=ContinueNarrativeResponse,
+    responses={
+        409: {
+            "model": GenerationLeaseConflictResponse,
+            "description": "Another generation currently owns the slot",
+        }
+    },
+)
 async def regenerate_narrative(
     request: RegenerateNarrativeRequest,
     background_tasks: BackgroundTasks,
@@ -770,8 +957,8 @@ async def regenerate_narrative(
     Regenerate the storyteller turn currently in the incubator.
 
     Replaces the incubator's pending content with a fresh generation,
-    reusing the same parent_chunk_id, user_text, and session_id for
-    "replace in place" semantics. The CLI/UI polls
+    reusing the same parent_chunk_id and user_text while assigning a new
+    generation session. The CLI/UI polls
     /api/narrative/status/{session_id} for completion.
     """
     conn = get_db_connection(request.slot)
@@ -794,52 +981,86 @@ async def regenerate_narrative(
                     ),
                 )
 
-            session_id = str(row["session_id"])
+            incumbent_session_id = str(row["session_id"])
             chunk_id = row["chunk_id"]
             parent_chunk_id = row["parent_chunk_id"]
             user_text = row["user_text"] or ""
-            # Intentionally NOT deleting the incubator row here. write_to_incubator
-            # (called inside generate_narrative_async on success) does DELETE+INSERT
-            # atomically. If we deleted eagerly and generation later failed (LLM error,
-            # timeout, etc.), the slot would be left with no pending turn — irrecoverable
-            # data loss of the draft the user was trying to re-roll.
+            # Keep the incumbent until generation succeeds. The writer replaces
+            # it only when this exact session/parent pair is still present, so a
+            # failed re-roll preserves the draft without enabling last-writer-wins.
     finally:
         conn.close()
 
-    note = request.note.strip() if request.note else None
-    logger.info(
-        f"Regenerating chunk {chunk_id} (parent={parent_chunk_id}) for session {session_id}"
-        f"{' [with note]' if note else ''}"
-    )
-
-    await manager.send_progress(
-        session_id,
-        "initiated",
-        {
-            "chunk_id": chunk_id,
-            "parent_chunk_id": parent_chunk_id,
-            "is_bootstrap": parent_chunk_id == 0,
-            "regenerate": True,
-        },
-    )
-
-    background_tasks.add_task(
-        generate_narrative_async,
-        session_id,
-        parent_chunk_id,
-        user_text,
-        request.slot,
-        get_db_connection=get_db_connection,
-        load_settings=load_settings,
-        manager=manager,
-        note=note,
-    )
-
-    return ContinueNarrativeResponse(
+    session_id = str(uuid.uuid4())
+    _acquire_generation_owner(
+        slot=request.slot,
         session_id=session_id,
-        status="processing",
-        message=f"Regenerating chunk {chunk_id}",
+        operation="regenerate",
     )
+    scheduled = False
+    try:
+        _bind_generation_owner(
+            slot=request.slot,
+            session_id=session_id,
+            parent_chunk_id=parent_chunk_id,
+            claim_embedding=False,
+        )
+        note = request.note.strip() if request.note else None
+        logger.info(
+            "Regenerating chunk %s (parent=%s) for session %s%s",
+            chunk_id,
+            parent_chunk_id,
+            session_id,
+            " [with note]" if note else "",
+        )
+
+        await manager.send_progress(
+            session_id,
+            "initiated",
+            {
+                "chunk_id": chunk_id,
+                "parent_chunk_id": parent_chunk_id,
+                "is_bootstrap": parent_chunk_id == 0,
+                "regenerate": True,
+                "slot": request.slot,
+            },
+        )
+
+        background_tasks.add_task(
+            generate_narrative_async,
+            session_id,
+            parent_chunk_id,
+            user_text,
+            request.slot,
+            get_db_connection=get_db_connection,
+            load_settings=load_settings,
+            manager=manager,
+            note=note,
+            expected_incubator_session=incumbent_session_id,
+            manage_generation_lease=True,
+        )
+        scheduled = True
+
+        return ContinueNarrativeResponse(
+            session_id=session_id,
+            status="processing",
+            message=f"Regenerating chunk {chunk_id}",
+        )
+    except Exception as exc:
+        if not scheduled:
+            try:
+                _abandon_generation_owner(
+                    slot=request.slot,
+                    session_id=session_id,
+                    error=str(exc),
+                )
+            except Exception as release_exc:
+                logger.error(
+                    "Failed to abandon regeneration lease %s: %s",
+                    session_id,
+                    release_exc,
+                )
+        raise
 
 
 @app.post("/api/narrative/approve")

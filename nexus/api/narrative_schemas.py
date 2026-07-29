@@ -60,6 +60,21 @@ class ContinueNarrativeResponse(BaseModel):
     message: str = Field(description="Status message")
 
 
+class GenerationLeaseConflictDetail(BaseModel):
+    """Ownership details returned for a competing generation request."""
+
+    message: str = Field(description="Why the request could not start")
+    active_session_id: str = Field(
+        description="Session ID of the generation that currently owns the slot"
+    )
+
+
+class GenerationLeaseConflictResponse(BaseModel):
+    """HTTP 409 body when another generation owns the slot."""
+
+    detail: GenerationLeaseConflictDetail
+
+
 class RegenerateNarrativeRequest(BaseModel):
     """Request to regenerate the storyteller turn currently in the incubator."""
 
