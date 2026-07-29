@@ -243,15 +243,24 @@ async def generate_narrative_async(
                 chunk_id=incubator_data["chunk_id"],
             )
 
-        # Send progress: complete
-        await manager.send_progress(
-            session_id,
-            "complete",
-            {
-                "chunk_id": parent_chunk_id + 1,
-                "preview": incubator_data["storyteller_text"][:200] + "...",
-            },
-        )
+        # The result and terminal status are already committed. A stale
+        # WebSocket must not turn successful durable work into an error.
+        try:
+            await manager.send_progress(
+                session_id,
+                "complete",
+                {
+                    "chunk_id": parent_chunk_id + 1,
+                    "preview": incubator_data["storyteller_text"][:200] + "...",
+                },
+            )
+        except Exception as notification_exc:
+            logger.error(
+                "Failed to broadcast completed generation session %s; "
+                "durable status remains complete: %s",
+                session_id,
+                notification_exc,
+            )
 
         logger.info(f"Narrative generation complete for session {session_id}")
 
@@ -273,7 +282,14 @@ async def generate_narrative_async(
                     session_id,
                     status_exc,
                 )
-        await manager.send_progress(session_id, "error", {"error": error_detail})
+        try:
+            await manager.send_progress(session_id, "error", {"error": error_detail})
+        except Exception as notification_exc:
+            logger.error(
+                "Failed to broadcast terminal error for generation session %s: %s",
+                session_id,
+                notification_exc,
+            )
     finally:
         if conn:
             conn.close()

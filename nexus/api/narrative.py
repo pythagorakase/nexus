@@ -346,25 +346,29 @@ def _record_player_response_for_chunk(
 
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            if incubator_session_id is None:
-                cur.execute(
-                    """
-                    SELECT chunk_id AS id, storyteller_text, choice_object, choice_text
-                    FROM incubator
-                    WHERE chunk_id = %s
-                    """,
-                    (chunk_id,),
-                )
-            else:
-                cur.execute(
-                    """
-                    SELECT chunk_id AS id, storyteller_text, choice_object, choice_text
-                    FROM incubator
-                    WHERE chunk_id = %s AND session_id = %s
-                    """,
-                    (chunk_id, incubator_session_id),
-                )
+            cur.execute(
+                """
+                SELECT chunk_id AS id, storyteller_text, choice_object,
+                       choice_text, session_id
+                FROM incubator
+                WHERE chunk_id = %s
+                """,
+                (chunk_id,),
+            )
             chunk = cur.fetchone()
+            if (
+                chunk is not None
+                and incubator_session_id is not None
+                and str(chunk["session_id"]) != incubator_session_id
+            ):
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "message": f"Incubator session mismatch for chunk {chunk_id}.",
+                        "expected_session_id": incubator_session_id,
+                        "actual_session_id": str(chunk["session_id"]),
+                    },
+                )
             is_incubator = chunk is not None
 
             if not chunk:

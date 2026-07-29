@@ -23,6 +23,7 @@ from nexus.api import (
     chunk_workflow,
     narrative,
     narrative_generation,
+    narrative_lease,
     save_slots,
     slot_endpoints,
     slot_state,
@@ -449,13 +450,8 @@ def _route_clone_to_slot(monkeypatch: pytest.MonkeyPatch, dbname: str) -> None:
     monkeypatch.setattr(narrative, "get_db_connection", lambda _slot: _connect(dbname))
 
 
-@pytest.mark.requires_postgres
-def test_concurrent_continues_have_one_owner_and_truthful_result(
-    monkeypatch: pytest.MonkeyPatch,
-    disposable_narrative_db: str,
-) -> None:
-    """Two genuine route calls serialize on one durable slot generation lease."""
-    dbname = disposable_narrative_db
+def _reset_to_committed_parent(dbname: str) -> int:
+    """Reset a clone to one playable committed parent and return its id."""
     with _clone_connection(dbname) as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -486,6 +482,40 @@ def test_concurrent_continues_have_one_owner_and_truthful_result(
                 """,
                 (parent_chunk_id,),
             )
+    return int(parent_chunk_id)
+
+
+class ImmediateLore:
+    """Frontier-only success double for genuine route/DB pipeline tests."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        self.settings_path = Path("test-settings.toml")
+        self.turn_context = SimpleNamespace(error_log=[], orrery_proposal=None)
+
+    async def process_turn(
+        self,
+        user_text: str,
+        parent_chunk_id: int,
+        note: str | None = None,
+    ) -> StorytellerResponseMinimal:
+        return StorytellerResponseMinimal(
+            generation_model="route-lease-fixture",
+            narrative="A single train enters the station.",
+            choices=["Board it.", "Let it pass."],
+        )
+
+    def close(self) -> None:
+        return None
+
+
+@pytest.mark.requires_postgres
+def test_concurrent_continues_have_one_owner_and_truthful_result(
+    monkeypatch: pytest.MonkeyPatch,
+    disposable_narrative_db: str,
+) -> None:
+    """Concurrent calls serialize and notification failure cannot corrupt success."""
+    dbname = disposable_narrative_db
+    parent_chunk_id = _reset_to_committed_parent(dbname)
 
     _route_clone_to_slot(monkeypatch, dbname)
     entered_generation = threading.Event()
@@ -526,6 +556,22 @@ def test_concurrent_continues_have_one_owner_and_truthful_result(
         narrative,
         "_trigger_locked_chunk_embedding",
         lambda *, slot, parent_chunk_id: embedding_calls.append(parent_chunk_id),
+    )
+    original_send_progress = narrative.manager.send_progress
+
+    async def fail_completed_broadcast(
+        session_id: str,
+        status: str,
+        data: dict[str, Any] | None = None,
+    ) -> None:
+        if status == "complete":
+            raise RuntimeError("stale WebSocket fixture")
+        await original_send_progress(session_id, status, data)
+
+    monkeypatch.setattr(
+        narrative.manager,
+        "send_progress",
+        fail_completed_broadcast,
     )
 
     def post_continue() -> Any:
@@ -596,6 +642,15 @@ def test_concurrent_continues_have_one_owner_and_truthful_result(
                 }
             ]
 
+    with _connect(dbname) as conn:
+        with pytest.raises(RuntimeError, match="refusing error downgrade"):
+            narrative_lease.finish_generation(
+                conn,
+                session_id=owner_session_id,
+                status="error",
+                error="late notification failure",
+            )
+
     with TestClient(narrative.app) as client:
         status = client.get(
             f"/api/narrative/status/{owner_session_id}",
@@ -619,6 +674,256 @@ def test_concurrent_continues_have_one_owner_and_truthful_result(
     assert unloaded_status.json()["error"] == (
         "Completed result is no longer loadable for this session."
     )
+
+
+@pytest.mark.requires_postgres
+def test_errored_embedding_claim_is_reclaimed_and_scheduled(
+    monkeypatch: pytest.MonkeyPatch,
+    disposable_narrative_db: str,
+) -> None:
+    """A retry replaces an errored owner's orphan claim and schedules work."""
+    dbname = disposable_narrative_db
+    parent_chunk_id = _reset_to_committed_parent(dbname)
+    crashed_session_id = str(uuid.uuid4())
+    with _connect(dbname) as conn:
+        assert (
+            narrative_lease.acquire_generation_lease(
+                conn,
+                session_id=crashed_session_id,
+                operation="continue",
+                stale_timeout_seconds=60,
+            )
+            is None
+        )
+        narrative_lease.bind_generation_parent(
+            conn,
+            session_id=crashed_session_id,
+            parent_chunk_id=parent_chunk_id,
+        )
+        assert narrative_lease.claim_parent_embedding(
+            conn,
+            session_id=crashed_session_id,
+            parent_chunk_id=parent_chunk_id,
+        )
+        narrative_lease.finish_generation(
+            conn,
+            session_id=crashed_session_id,
+            status="error",
+            error="Simulated crash after durable claim.",
+        )
+
+    _route_clone_to_slot(monkeypatch, dbname)
+    monkeypatch.setattr(narrative_generation, "LORE", ImmediateLore)
+    embedding_calls: list[int] = []
+    monkeypatch.setattr(
+        narrative,
+        "_trigger_locked_chunk_embedding",
+        lambda *, slot, parent_chunk_id: embedding_calls.append(parent_chunk_id),
+    )
+
+    with TestClient(narrative.app) as client:
+        response = client.post("/api/narrative/continue", json={"slot": 3})
+
+    assert response.status_code == 200
+    retry_session_id = response.json()["session_id"]
+    assert embedding_calls == [parent_chunk_id]
+    with _clone_connection(dbname, dict_cursor=True) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT session_id
+                FROM narrative_parent_embedding_claims
+                WHERE parent_chunk_id = %s
+                """,
+                (parent_chunk_id,),
+            )
+            assert str(cur.fetchone()["session_id"]) == retry_session_id
+
+
+@pytest.mark.requires_postgres
+def test_live_embedding_claim_cannot_be_stolen(
+    monkeypatch: pytest.MonkeyPatch,
+    disposable_narrative_db: str,
+) -> None:
+    """A retry pipeline cannot replace a claim whose owner remains live."""
+    dbname = disposable_narrative_db
+    parent_chunk_id = _reset_to_committed_parent(dbname)
+    live_session_id = str(uuid.uuid4())
+    with _connect(dbname) as conn:
+        assert (
+            narrative_lease.acquire_generation_lease(
+                conn,
+                session_id=live_session_id,
+                operation="continue",
+                stale_timeout_seconds=60,
+            )
+            is None
+        )
+        narrative_lease.bind_generation_parent(
+            conn,
+            session_id=live_session_id,
+            parent_chunk_id=parent_chunk_id,
+        )
+        assert narrative_lease.claim_parent_embedding(
+            conn,
+            session_id=live_session_id,
+            parent_chunk_id=parent_chunk_id,
+        )
+        with conn.cursor() as cur:
+            # Simulate loss of the mutex without falsely terminalizing the
+            # session: its durable status remains live/initiated.
+            cur.execute(
+                """
+                DELETE FROM narrative_generation_lease
+                WHERE session_id = %s
+                """,
+                (live_session_id,),
+            )
+        conn.commit()
+
+    _route_clone_to_slot(monkeypatch, dbname)
+    monkeypatch.setattr(narrative_generation, "LORE", ImmediateLore)
+    embedding_calls: list[int] = []
+    monkeypatch.setattr(
+        narrative,
+        "_trigger_locked_chunk_embedding",
+        lambda *, slot, parent_chunk_id: embedding_calls.append(parent_chunk_id),
+    )
+
+    with TestClient(narrative.app) as client:
+        response = client.post("/api/narrative/continue", json={"slot": 3})
+
+    assert response.status_code == 200
+    assert embedding_calls == []
+    with _clone_connection(dbname, dict_cursor=True) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT session_id
+                FROM narrative_parent_embedding_claims
+                WHERE parent_chunk_id = %s
+                """,
+                (parent_chunk_id,),
+            )
+            assert str(cur.fetchone()["session_id"]) == live_session_id
+
+
+@pytest.mark.requires_postgres
+def test_pre_scheduling_failure_releases_embedding_claim(
+    monkeypatch: pytest.MonkeyPatch,
+    disposable_narrative_db: str,
+) -> None:
+    """Abandoning after claim but before task scheduling leaves no orphan."""
+    dbname = disposable_narrative_db
+    _reset_to_committed_parent(dbname)
+    _route_clone_to_slot(monkeypatch, dbname)
+
+    async def fail_initiated_broadcast(
+        session_id: str,
+        status: str,
+        data: dict[str, Any] | None = None,
+    ) -> None:
+        raise RuntimeError("pre-scheduling notification fixture")
+
+    monkeypatch.setattr(
+        narrative.manager,
+        "send_progress",
+        fail_initiated_broadcast,
+    )
+
+    with TestClient(narrative.app, raise_server_exceptions=False) as client:
+        response = client.post("/api/narrative/continue", json={"slot": 3})
+
+    assert response.status_code == 500
+    with _clone_connection(dbname, dict_cursor=True) as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) AS count FROM narrative_generation_lease")
+            assert cur.fetchone()["count"] == 0
+            cur.execute(
+                "SELECT COUNT(*) AS count FROM narrative_parent_embedding_claims"
+            )
+            assert cur.fetchone()["count"] == 0
+            cur.execute("SELECT status FROM narrative_generation_sessions")
+            assert cur.fetchall() == [{"status": "error"}]
+
+
+@pytest.mark.requires_postgres
+def test_pending_incubator_session_mismatch_is_409(
+    monkeypatch: pytest.MonkeyPatch,
+    disposable_narrative_db: str,
+) -> None:
+    """A stale state read cannot fall through past another incubator owner."""
+    dbname = disposable_narrative_db
+    parent_chunk_id = _reset_to_committed_parent(dbname)
+    expected_session_id = str(uuid.uuid4())
+    actual_session_id = str(uuid.uuid4())
+    choices = ["Open the door.", "Wait in silence."]
+    with _clone_connection(dbname) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO incubator (
+                    id, chunk_id, parent_chunk_id, user_text, storyteller_text,
+                    generation_model, choice_object, choice_text,
+                    metadata_updates, entity_updates, reference_updates,
+                    orrery_proposal, orrery_adjudications, new_entities,
+                    session_id, llm_response_id, status
+                ) VALUES (
+                    TRUE, %s, %s, %s, %s, %s, %s, NULL,
+                    %s, %s, %s, NULL, %s, %s, %s, %s, 'provisional'
+                )
+                """,
+                (
+                    parent_chunk_id + 1,
+                    parent_chunk_id,
+                    "Approach the door.",
+                    "The hinges begin to move.",
+                    _valid_override(),
+                    Json({"presented": choices, "selected": None}),
+                    Json({}),
+                    Json({}),
+                    Json({"characters": [], "places": [], "factions": []}),
+                    Json([]),
+                    Json([]),
+                    expected_session_id,
+                    "session-mismatch-fixture",
+                ),
+            )
+
+    _route_clone_to_slot(monkeypatch, dbname)
+    production_get_slot_state = slot_state.get_slot_state
+    changed_owner = False
+
+    def stale_slot_state(slot: int) -> SlotState:
+        nonlocal changed_owner
+        state = production_get_slot_state(slot)
+        if not changed_owner:
+            with _clone_connection(dbname) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        UPDATE incubator
+                        SET session_id = %s
+                        WHERE session_id = %s
+                        """,
+                        (actual_session_id, expected_session_id),
+                    )
+            changed_owner = True
+        return state
+
+    monkeypatch.setattr(slot_state, "get_slot_state", stale_slot_state)
+    with TestClient(narrative.app) as client:
+        response = client.post(
+            "/api/narrative/continue",
+            json={"slot": 3, "choice": 1},
+        )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == {
+        "message": f"Incubator session mismatch for chunk {parent_chunk_id + 1}.",
+        "expected_session_id": expected_session_id,
+        "actual_session_id": actual_session_id,
+    }
 
 
 @pytest.mark.requires_postgres
