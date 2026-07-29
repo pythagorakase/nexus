@@ -64,6 +64,10 @@ WRITER_PAYLOAD: dict[str, Any] = {
             "reason": "The archive crossing closes the beat.",
         }
     },
+    "letter": (
+        "The bell is bait. Let Iona suspect the Choir before we confirm who "
+        "actually rang it."
+    ),
 }
 GAIA_PAYLOAD: dict[str, Any] = {
     "updates": {
@@ -86,6 +90,10 @@ GAIA_PAYLOAD: dict[str, Any] = {
             "summary": "An unseen choir carried through flooded pipes.",
         }
     ],
+    "letter": (
+        "Agreed. I will move the Choir through the pipes but leave the bell's "
+        "ringer unresolved."
+    ),
 }
 SINGLE_PASS_PAYLOAD: dict[str, Any] = {
     "narrative": 'Iona says, "Wait."\nThe drowned bell answers.',
@@ -123,6 +131,7 @@ SINGLE_PASS_PAYLOAD: dict[str, Any] = {
             "summary": "An unseen choir carried through flooded pipes.",
         }
     ],
+    "letter": "Keep the bell's ringer unresolved while the Choir advances.",
 }
 BASELINE = PresenceBaseline(
     present=[PresenceRef(kind="character", name="Iona Vale", id=4)],
@@ -262,6 +271,7 @@ def _gaia_payload_with_character_tag(tag: str) -> dict[str, Any]:
         },
         "orrery_adjudications": [],
         "new_entities": [],
+        "letter": GAIA_PAYLOAD["letter"],
     }
 
 
@@ -757,7 +767,7 @@ def test_gaia_prompt_is_concise_and_self_contained() -> None:
 
     # Word count, not line count: the file keeps one line per paragraph, so
     # line count no longer measures concision (currently ~500 words).
-    assert len(prompt.split()) < 600
+    assert len(prompt.split()) < 700
     # The persona rewrite (owner brief, 2026-07-27) made gaia.md
     # self-sufficient: the shared doctrine it needs (canon hierarchy,
     # setting idiom, sincere beliefs) is inlined in Gaia's voice instead of

@@ -2615,6 +2615,58 @@ class MemorySettings(BaseModel):
 
 
 # =============================================================================
+# Storyteller Private Correspondence Settings
+# =============================================================================
+
+
+class StorytellerCorrespondenceSettings(BaseModel):
+    """Private writer/Gaia correspondence and hysteresis compaction."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    floor_turns: int = Field(
+        default=5,
+        ge=1,
+        description="Prior accepted exchange pairs retained verbatim after compaction.",
+    )
+    ceiling_turns: int = Field(
+        default=10,
+        ge=2,
+        description="Uncompacted exchange-pair count that triggers compaction.",
+    )
+    compaction_model: str = Field(
+        default="@openai.default",
+        description="Registry role reference used only for correspondence compaction.",
+    )
+    max_rendered_tokens: int = Field(
+        default=12000,
+        ge=1,
+        description="Fail-loud cap for the complete correspondence context block.",
+    )
+
+    @model_validator(mode="after")
+    def validate_hysteresis(self) -> "StorytellerCorrespondenceSettings":
+        """Require a nonempty hysteresis band in turn units."""
+
+        if self.floor_turns >= self.ceiling_turns:
+            raise ValueError(
+                "storyteller.correspondence.floor_turns must be less than "
+                "ceiling_turns"
+            )
+        return self
+
+
+class StorytellerSettings(BaseModel):
+    """Storyteller subsystems that are not provider request controls."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    correspondence: StorytellerCorrespondenceSettings = Field(
+        default_factory=StorytellerCorrespondenceSettings
+    )
+
+
+# =============================================================================
 # APEX API Settings Models
 # =============================================================================
 
@@ -3106,6 +3158,7 @@ class Settings(BaseModel):
     )
     memnon: MEMNONSettings
     memory: MemorySettings
+    storyteller: StorytellerSettings = Field(default_factory=StorytellerSettings)
     apex: APEXSettings
     summaries: SummariesSettings = Field(
         default_factory=SummariesSettings,
@@ -3142,6 +3195,7 @@ class Settings(BaseModel):
             (self.global_.model, "default_slot_model", False),
             (self.apex, "model", False),
             (self.apex, "gaia_model", True),
+            (self.storyteller.correspondence, "compaction_model", False),
             (self.summaries, "model", True),
             (self.wizard, "default_model", False),
             (self.wizard, "fallback_model", True),

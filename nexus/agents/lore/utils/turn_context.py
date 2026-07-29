@@ -10,6 +10,7 @@ from enum import Enum
 
 if TYPE_CHECKING:
     from nexus.agents.orrery.resolver import OrreryTickProposal
+    from nexus.memory.correspondence import GeneratedCorrespondence
 
 
 class TurnPhase(Enum):
@@ -39,6 +40,7 @@ class TurnContext:
     retrieved_passages: List[Dict] = field(default_factory=list)
     context_payload: Dict[str, Any] = field(default_factory=dict)
     apex_response: Optional[str] = None
+    private_correspondence: Optional["GeneratedCorrespondence"] = None
     error_log: List[str] = field(default_factory=list)
     token_counts: Dict[str, int] = field(default_factory=dict)
     provider_wire_type: Optional[str] = None

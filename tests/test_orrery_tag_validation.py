@@ -193,6 +193,7 @@ def _storyteller_response(
     payload: dict[str, Any] = {
         "narrative": "Marra Kest steps out from behind the sluice gate.",
         "choices": ["Question Marra.", "Keep walking."],
+        "letter": "Keep Marra's divided loyalty private for the next beat.",
         "orrery_adjudications": orrery_adjudications or [],
         "new_entities": [
             {

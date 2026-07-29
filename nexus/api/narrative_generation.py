@@ -219,6 +219,11 @@ async def generate_narrative_async(
                     orrery_proposal=(
                         lore.turn_context.orrery_proposal if lore.turn_context else None
                     ),
+                    correspondence=(
+                        getattr(lore.turn_context, "private_correspondence", None)
+                        if lore.turn_context is not None
+                        else None
+                    ),
                 )
             finally:
                 lore.close()
@@ -353,6 +358,8 @@ async def write_to_incubator(
         ),
         json.dumps(data.get("orrery_adjudications", [])),
         json.dumps(data.get("new_entities", [])),
+        data.get("correspondence_writer_letter"),
+        data.get("correspondence_gaia_letter"),
         data["session_id"],
         data["llm_response_id"],
         data["status"],
@@ -401,10 +408,12 @@ async def write_to_incubator(
                         generation_model, choice_object, choice_text,
                         metadata_updates, entity_updates, reference_updates,
                         orrery_proposal, orrery_adjudications,
-                        new_entities, session_id, llm_response_id, status
+                        new_entities, correspondence_writer_letter,
+                        correspondence_gaia_letter, session_id, llm_response_id,
+                        status
                     ) VALUES (
                         TRUE, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                        %s, %s, %s, %s, %s
+                        %s, %s, %s, %s, %s, %s, %s
                     )
                     """,
                     values,
@@ -436,6 +445,8 @@ async def write_to_incubator(
                         orrery_proposal = %s,
                         orrery_adjudications = %s,
                         new_entities = %s,
+                        correspondence_writer_letter = %s,
+                        correspondence_gaia_letter = %s,
                         session_id = %s,
                         llm_response_id = %s,
                         status = %s,

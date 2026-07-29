@@ -402,9 +402,13 @@ def disposable_narrative_db() -> Iterator[str]:
                     sql.Identifier("NEXUS_template"),
                 )
             )
-        migration_sql = Path(
-            "migrations/098_narrative_generation_lease.sql"
-        ).read_text()
+        migration_sql = "\n".join(
+            Path(path).read_text()
+            for path in (
+                "migrations/098_narrative_generation_lease.sql",
+                "migrations/099_storyteller_correspondence.sql",
+            )
+        )
         with _connect(dbname) as migration_conn:
             with migration_conn.cursor() as cur:
                 cur.execute(migration_sql)

@@ -64,12 +64,18 @@ class _DummyProvider:
             if schema_model is StorytellerResponseBootstrap
             else SkaldTurnWire
         )
+        kwargs = (
+            {"letter": "Keep the test turn private."}
+            if response_type is SkaldTurnWire
+            else {}
+        )
         return response_type(
             narrative=f"dummy:{prompt[:20]}",
             choices=[
                 "Continue.",
                 "Wait and observe.",
             ],
+            **kwargs,
         )
 
 

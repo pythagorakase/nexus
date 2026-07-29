@@ -377,6 +377,22 @@ class SkaldWriterWire(BaseModel):
         default=None,
         description="Special runtime requests, when needed.",
     )
+    letter: Optional[str] = Field(
+        ...,
+        min_length=1,
+        description=(
+            "Private letter to Gaia carrying scene intent and longer-range "
+            "authorial plans."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def validate_letter(self) -> "SkaldWriterWire":
+        """Require a substantive letter while retaining nullable strict grammar."""
+
+        if self.letter is None:
+            raise ValueError("writer letter cannot be null")
+        return self
 
     model_config = ConfigDict(extra="forbid")
 
@@ -396,6 +412,22 @@ class SkaldGaiaWire(BaseModel):
         default_factory=list,
         description="New persistent entities introduced by this turn.",
     )
+    letter: Optional[str] = Field(
+        ...,
+        min_length=1,
+        description=(
+            "Private reply to the writer accepting, bending, or retiring plans "
+            "and declaring Gaia's longer-range intentions."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def validate_letter(self) -> "SkaldGaiaWire":
+        """Require a substantive reply while retaining nullable strict grammar."""
+
+        if self.letter is None:
+            raise ValueError("Gaia letter cannot be null")
+        return self
 
     model_config = ConfigDict(extra="forbid")
 
@@ -433,6 +465,21 @@ class SkaldTurnWire(BaseModel):
         default_factory=list,
         description="New persistent entities introduced by this turn.",
     )
+    letter: Optional[str] = Field(
+        ...,
+        min_length=1,
+        description=(
+            "Private combined-seat correspondence note for single-pass turns."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def validate_letter(self) -> "SkaldTurnWire":
+        """Require the combined-seat note in single-pass mode."""
+
+        if self.letter is None:
+            raise ValueError("single-pass storyteller letter cannot be null")
+        return self
 
     model_config = ConfigDict(extra="forbid")
 
@@ -452,6 +499,7 @@ def combine_two_pass(
         operations=writer.operations,
         orrery_adjudications=gaia.orrery_adjudications,
         new_entities=gaia.new_entities,
+        letter=writer.letter,
     )
 
 

@@ -13,12 +13,14 @@ from nexus.agents.logon.skald_wire import (
     SkaldWriterWire,
 )
 from nexus.api.mock_openai import (
+    ChatCompletionRequest,
     ResponsesRequest,
     _collect_text,
     _mock_gaia_response,
     _mock_storyteller_response,
     _mock_writer_response,
     _requested_output_properties,
+    chat_completions,
     responses_create,
 )
 from nexus.api.native_structured_output import openai_response_text_format
@@ -47,9 +49,32 @@ def test_mock_non_bootstrap_payload_is_sparse_skald_wire() -> None:
 
     wire = SkaldTurnWire.model_validate(payload)
 
-    assert set(payload) == {"narrative", "choices"}
+    assert set(payload) == {"narrative", "choices", "letter"}
     assert wire.updates is None
     assert wire.model_dump(exclude_unset=True, mode="json") == payload
+
+
+@pytest.mark.asyncio
+async def test_mock_chat_completion_does_not_log_private_prompt(
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Even the TEST transport must not emit correspondence at INFO or below."""
+
+    secret = "PRIVATE-CONSPIRACY-LETTER-617"
+    monkeypatch.setattr(
+        "nexus.api.mock_openai.get_cached_phase_response",
+        lambda _phase, _subphase: {"data": {}},
+    )
+    with caplog.at_level("DEBUG", logger="nexus.api.mock_openai"):
+        await chat_completions(
+            ChatCompletionRequest(
+                model="TEST",
+                messages=[{"role": "user", "content": secret}],
+            )
+        )
+
+    assert secret not in caplog.text
 
 
 @pytest.mark.asyncio
@@ -233,7 +258,7 @@ def test_mock_two_pass_projections_partition_the_full_fixture() -> None:
     SkaldWriterWire.model_validate(writer)
     SkaldGaiaWire.model_validate(gaia)
     assert set(writer) | set(gaia) == set(full)
-    assert set(writer) & set(gaia) == set()
+    assert set(writer) & set(gaia) == {"letter"}
 
 
 @pytest.mark.asyncio
@@ -295,7 +320,8 @@ async def test_mock_responses_gaia_schema_without_proposals_is_empty() -> None:
 
     payload = json.loads(response["output_text"])
     parsed = SkaldGaiaWire.model_validate(payload)
-    assert payload == {}
+    assert set(payload) == {"letter"}
+    assert payload["letter"]
     assert parsed.updates is None
     assert parsed.orrery_adjudications == []
 

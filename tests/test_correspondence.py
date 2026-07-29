@@ -1,0 +1,206 @@
+"""Unit contracts for the private storyteller conspiracy channel."""
+
+from __future__ import annotations
+
+from pathlib import Path
+import tomllib
+from typing import Any
+
+import pytest
+from pydantic import ValidationError
+
+from nexus.agents.logon.skald_wire import (
+    SkaldGaiaWire,
+    SkaldTurnWire,
+    SkaldWriterWire,
+    hydrate_skald_turn,
+    skald_gaia_lenient_schema,
+    skald_gaia_strict_text_format,
+    skald_wire_lenient_schema,
+    skald_wire_strict_text_format,
+    skald_writer_lenient_schema,
+    skald_writer_strict_text_format,
+)
+from nexus.agents.lore.logon_utility import LogonUtility
+from nexus.api.lore_adapter import compute_raw_text, response_to_incubator
+from nexus.config.settings_models import StorytellerCorrespondenceSettings
+from nexus.memory import correspondence
+from nexus.memory.correspondence import (
+    CorrespondenceContext,
+    CorrespondenceExchange,
+    GeneratedCorrespondence,
+    plan_correspondence_compaction,
+)
+
+
+def _exchange(chunk_id: int) -> CorrespondenceExchange:
+    return CorrespondenceExchange(
+        chunk_id=chunk_id,
+        letters=(
+            ("writer", f"writer letter {chunk_id}"),
+            ("gaia", f"gaia reply {chunk_id}"),
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    ("strict_format", "lenient_schema"),
+    [
+        (skald_writer_strict_text_format, skald_writer_lenient_schema),
+        (skald_gaia_strict_text_format, skald_gaia_lenient_schema),
+        (skald_wire_strict_text_format, skald_wire_lenient_schema),
+    ],
+)
+def test_letter_compiles_required_nullable_strict_and_required_lenient(
+    strict_format: Any,
+    lenient_schema: Any,
+) -> None:
+    """OpenAI can emit null grammatically; Pydantic/repair rejects null or omission."""
+
+    strict_schema = strict_format()["schema"]
+    assert "letter" in strict_schema["required"]
+    assert {"type": "null"} in strict_schema["properties"]["letter"]["anyOf"]
+
+    lenient = lenient_schema()
+    assert "letter" in lenient["required"]
+    assert lenient["properties"]["letter"]["type"] == "string"
+
+
+@pytest.mark.parametrize(
+    "wire_type,payload",
+    [
+        (
+            SkaldWriterWire,
+            {"narrative": "A.", "choices": ["B.", "C."], "letter": None},
+        ),
+        (SkaldGaiaWire, {"letter": None}),
+        (
+            SkaldTurnWire,
+            {"narrative": "A.", "choices": ["B.", "C."], "letter": None},
+        ),
+    ],
+)
+def test_null_letters_fail_semantic_validation(
+    wire_type: Any,
+    payload: dict[str, Any],
+) -> None:
+    with pytest.raises(ValidationError, match="letter cannot be null"):
+        wire_type.model_validate(payload)
+
+
+def test_gaia_receives_writer_letter_verbatim() -> None:
+    letter = "Do not name the informer.\nPreserve this exact second line."
+    writer = SkaldWriterWire(
+        narrative="The shutters close.",
+        choices=["Wait.", "Leave."],
+        letter=letter,
+    )
+
+    prompt = LogonUtility._format_gaia_user_prompt("TURN", writer)
+
+    assert prompt.endswith(letter)
+    assert "FINISHED WRITER LETTER (VERBATIM, PRIVATE)" in prompt
+
+
+def test_private_artifacts_never_enter_public_response_or_raw_text() -> None:
+    secrets = GeneratedCorrespondence(
+        writer_letter="The mayor is the informant.",
+        gaia_letter="I will seed the ledger two scenes from now.",
+    )
+    wire = SkaldTurnWire(
+        narrative="Rain darkens the mayor's empty chair.",
+        choices=["Inspect the desk.", "Leave quietly."],
+        letter=secrets.writer_letter,
+    )
+
+    response = hydrate_skald_turn(wire)
+    public_dump = response.model_dump(mode="json")
+    incubator = response_to_incubator(
+        response,
+        parent_chunk_id=4,
+        user_text="Inspect the room.",
+        session_id="private-test",
+        correspondence=secrets,
+    )
+    raw_text = compute_raw_text(
+        incubator["storyteller_text"],
+        incubator["choice_object"],
+        incubator["choice_text"],
+    )
+
+    assert "letter" not in public_dump
+    assert "correspondence" not in public_dump
+    assert secrets.writer_letter not in raw_text
+    assert secrets.gaia_letter not in raw_text
+    assert incubator["correspondence_writer_letter"] == secrets.writer_letter
+    assert incubator["correspondence_gaia_letter"] == secrets.gaia_letter
+
+
+def test_hysteresis_compacts_only_after_ceiling_and_keeps_floor_plus_new(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ten = CorrespondenceContext(
+        digest=None,
+        compacted_through_chunk_id=None,
+        exchanges=tuple(_exchange(chunk_id) for chunk_id in range(1, 11)),
+    )
+    monkeypatch.setattr(
+        correspondence, "read_accepted_correspondence", lambda _cur: ten
+    )
+    assert (
+        plan_correspondence_compaction(
+            object(),
+            accepting_chunk_id=10,
+            floor_turns=5,
+            ceiling_turns=10,
+        )
+        is None
+    )
+
+    eleven = CorrespondenceContext(
+        digest=None,
+        compacted_through_chunk_id=None,
+        exchanges=tuple(_exchange(chunk_id) for chunk_id in range(1, 12)),
+    )
+    monkeypatch.setattr(
+        correspondence,
+        "read_accepted_correspondence",
+        lambda _cur: eleven,
+    )
+    plan = plan_correspondence_compaction(
+        object(),
+        accepting_chunk_id=11,
+        floor_turns=5,
+        ceiling_turns=10,
+    )
+
+    assert plan is not None
+    assert [item.chunk_id for item in plan.aging_exchanges] == [1, 2, 3, 4, 5]
+    assert [item.chunk_id for item in plan.recent_exchanges] == [6, 7, 8, 9, 10, 11]
+    assert plan.compacted_through_chunk_id == 5
+    for exchange in plan.aging_exchanges:
+        assert len(exchange.letters) == 2
+
+
+def test_context_render_is_complete_and_token_cap_fails_loudly() -> None:
+    context = CorrespondenceContext(
+        digest="LIVE: protect the unspent bell reveal.",
+        compacted_through_chunk_id=4,
+        exchanges=(_exchange(5),),
+    )
+
+    rendered = context.render(max_tokens=1000)
+
+    assert "protect the unspent bell reveal" in rendered
+    assert "writer letter 5" in rendered
+    assert "gaia reply 5" in rendered
+    with pytest.raises(ValueError, match="Refusing to truncate"):
+        context.render(max_tokens=1)
+
+
+def test_correspondence_settings_reject_invalid_band_and_config_uses_role_ref() -> None:
+    with pytest.raises(ValidationError, match="floor_turns"):
+        StorytellerCorrespondenceSettings(floor_turns=10, ceiling_turns=10)
+    with Path("nexus.toml").open("rb") as handle:
+        raw = tomllib.load(handle)
+    assert raw["storyteller"]["correspondence"]["compaction_model"].startswith("@")

@@ -52,6 +52,7 @@ from nexus.agents.orrery.tag_library import (  # noqa: E402
 )
 from nexus.config.loader import get_provider_for_model, resolve_model_ref  # noqa: E402
 from nexus.memory.context_state import is_retrograde_summary  # noqa: E402
+from nexus.memory.correspondence import GeneratedCorrespondence  # noqa: E402
 from nexus.memory.manager import (  # noqa: E402
     resolve_storyteller_context_window,
 )
@@ -318,6 +319,7 @@ class LogonUtility:
         # two-pass turn must compose against the same SettingCard.
         self._setting_context: Optional[str] = None
         self._setting_context_loaded = False
+        self._generated_correspondence: Optional[GeneratedCorrespondence] = None
 
     def _turn_pipeline(self) -> Literal["single_pass", "two_pass"]:
         """Return the validated non-bootstrap storyteller pipeline lever."""
@@ -790,6 +792,7 @@ class LogonUtility:
         effective_context_window: Optional[int] = None,
     ) -> StoryTurnResponse:
         """Generate narrative from context payload with structured output."""
+        self._generated_correspondence = None
         self._ensure_provider(
             context_payload,
             expected_model=expected_model,
@@ -829,6 +832,10 @@ class LogonUtility:
                         **schema_kwargs,
                     )
                 )
+                self._capture_single_pass_correspondence(
+                    parsed_response,
+                    schema_model=schema_model,
+                )
                 response = self._hydrate_provider_response(
                     parsed_response,
                     schema_model,
@@ -840,6 +847,7 @@ class LogonUtility:
             )
             return self._stamp_generation_model(response)
         except Exception:
+            self._generated_correspondence = None
             logger.exception("Failed to get structured response")
             raise
 
@@ -852,6 +860,7 @@ class LogonUtility:
         effective_context_window: Optional[int] = None,
     ) -> StoryTurnResponse:
         """Generate narrative from context payload without blocking the event loop."""
+        self._generated_correspondence = None
         self._ensure_provider(
             context_payload,
             expected_model=expected_model,
@@ -888,6 +897,10 @@ class LogonUtility:
                         **schema_kwargs,
                     )
                 )
+                self._capture_single_pass_correspondence(
+                    parsed_response,
+                    schema_model=schema_model,
+                )
                 response = self._hydrate_provider_response(
                     parsed_response,
                     schema_model,
@@ -899,8 +912,55 @@ class LogonUtility:
             )
             return self._stamp_generation_model(response)
         except Exception:
+            self._generated_correspondence = None
             logger.exception("Failed to get structured response")
             raise
+
+    def take_generated_correspondence(self) -> Optional[GeneratedCorrespondence]:
+        """Move the current private output to the turn context exactly once."""
+
+        generated = self._generated_correspondence
+        self._generated_correspondence = None
+        return generated
+
+    def _capture_single_pass_correspondence(
+        self,
+        parsed_response: Any,
+        *,
+        schema_model: type,
+    ) -> None:
+        """Capture a combined-seat letter without touching the public response."""
+
+        if schema_model is not SkaldTurnWire:
+            return
+        if not isinstance(parsed_response, SkaldTurnWire):
+            raise TypeError("Single-pass correspondence requires SkaldTurnWire")
+        if parsed_response.letter is None:
+            raise ValueError("Single-pass storyteller response omitted its letter")
+        self._generated_correspondence = GeneratedCorrespondence(
+            writer_letter=parsed_response.letter,
+            gaia_letter=None,
+        )
+
+    def compact_correspondence(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+    ) -> str:
+        """Run one isolated plain completion for a complete digest replacement."""
+
+        self._ensure_provider()
+        if self.provider is None:
+            raise RuntimeError("Correspondence compaction requires a provider")
+        compaction_provider = copy.copy(self.provider)
+        compaction_provider.system_prompt = system_prompt
+        compaction_provider.output_validator = None
+        result = compaction_provider.get_completion(user_prompt)
+        content = getattr(result, "content", None)
+        if not isinstance(content, str) or not content.strip():
+            raise ValueError("Correspondence compaction returned no digest text")
+        return content.strip()
 
     def _is_two_pass_turn(self, schema_model: type) -> bool:
         """Return whether this non-bootstrap turn uses the bakeoff pipeline."""
@@ -1154,6 +1214,8 @@ class LogonUtility:
             else "null"
         )
         choices = "\n\n".join(writer.choices)
+        if writer.letter is None:
+            raise ValueError("Writer pass omitted its private letter to Gaia")
         return "\n\n".join(
             [
                 turn_prompt,
@@ -1167,6 +1229,8 @@ class LogonUtility:
                 presence,
                 "=== FINISHED WRITER OPERATIONS (COMPACT JSON) ===",
                 operations,
+                "=== FINISHED WRITER LETTER (VERBATIM, PRIVATE) ===",
+                writer.letter,
             ]
         )
 
@@ -1238,6 +1302,12 @@ class LogonUtility:
         )
         if not isinstance(gaia, SkaldGaiaWire):
             raise TypeError("LOGON gaia pass returned a non-SkaldGaiaWire response")
+        if writer.letter is None or gaia.letter is None:
+            raise ValueError("Two-pass storyteller exchange omitted a private letter")
+        self._generated_correspondence = GeneratedCorrespondence(
+            writer_letter=writer.letter,
+            gaia_letter=gaia.letter,
+        )
 
         return self._hydrate_provider_response(
             combine_two_pass(writer, gaia),
@@ -1315,6 +1385,12 @@ class LogonUtility:
         )
         if not isinstance(gaia, SkaldGaiaWire):
             raise TypeError("LOGON gaia pass returned a non-SkaldGaiaWire response")
+        if writer.letter is None or gaia.letter is None:
+            raise ValueError("Two-pass storyteller exchange omitted a private letter")
+        self._generated_correspondence = GeneratedCorrespondence(
+            writer_letter=writer.letter,
+            gaia_letter=gaia.letter,
+        )
 
         return self._hydrate_provider_response(
             combine_two_pass(writer, gaia),
@@ -1662,6 +1738,14 @@ class LogonUtility:
                 )
                 sections.append(f"Moods: {rendered_moods}")
             sections.append("")
+
+        correspondence = context.get("storyteller_correspondence")
+        if correspondence is not None:
+            if not isinstance(correspondence, str) or not correspondence.strip():
+                raise ValueError(
+                    "storyteller_correspondence must be a nonempty rendered block"
+                )
+            sections.extend([correspondence, ""])
 
         # Add warm slice
         if context.get("warm_slice"):

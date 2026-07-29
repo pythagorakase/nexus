@@ -40,6 +40,13 @@ from nexus.api.summary_triggers import (
     schedule_summary_generation,
 )
 from nexus.api.lore_adapter import compute_raw_text
+from nexus.memory.correspondence import (
+    correspondence_settings,
+    insert_digest_version,
+    load_compaction_system_prompt,
+    persist_staged_correspondence,
+    plan_correspondence_compaction,
+)
 from nexus.api.choice_handling import (
     normalize_choice_object,
     selected_text_from_choice_object,
@@ -313,6 +320,8 @@ def commit_incubator_to_database_sync(
                            COALESCE(orrery_adjudications, '[]'::jsonb)
                                AS orrery_adjudications,
                            COALESCE(new_entities, '[]'::jsonb) AS new_entities,
+                           correspondence_writer_letter,
+                           correspondence_gaia_letter,
                            metadata_updates, entity_updates, reference_updates,
                            llm_response_id, generation_model, status
                     FROM incubator
@@ -425,6 +434,12 @@ def commit_incubator_to_database_sync(
                 # Attribute trigger-versioned writes in this transaction
                 # (relationship_versions) to the committing chunk.
                 set_commit_chunk_attribution_sync(cur, chunk_id)
+                persist_staged_correspondence(
+                    cur,
+                    chunk_id=chunk_id,
+                    writer_letter=incubator.get("correspondence_writer_letter"),
+                    gaia_letter=incubator.get("correspondence_gaia_letter"),
+                )
 
             # Step 5: Process declarations before name-reference resolution.
             maturation_result = enqueue_declared_entity_maturations(
@@ -654,6 +669,9 @@ def commit_incubator_to_database_sync(
                 "Failed to schedule summaries for session %s: %s", session_id, exc
             )
 
+    if incubator.get("correspondence_writer_letter") is not None:
+        compact_accepted_correspondence_sync(conn, accepting_chunk_id=chunk_id)
+
     # Post-commit presence-roster drift audit (issue #567): read-only
     # diagnostics over the committed chunk, outside the transaction.
     # raw_text is the committed prose (storyteller text + enacted choice);
@@ -670,6 +688,74 @@ def commit_incubator_to_database_sync(
 
     logger.info("Successfully committed chunk %s from session %s", chunk_id, session_id)
     return chunk_id
+
+
+def compact_accepted_correspondence_sync(
+    conn: Any,
+    *,
+    accepting_chunk_id: int,
+) -> bool:
+    """Run and persist post-accept hysteresis compaction when it is due."""
+
+    from nexus.agents.lore.logon_utility import LogonUtility
+    from nexus.config import load_settings_as_dict
+
+    settings = load_settings_as_dict()
+    config = correspondence_settings(settings)
+    floor_turns = int(config["floor_turns"])
+    ceiling_turns = int(config["ceiling_turns"])
+    with conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            plan = plan_correspondence_compaction(
+                cur,
+                accepting_chunk_id=accepting_chunk_id,
+                floor_turns=floor_turns,
+                ceiling_turns=ceiling_turns,
+            )
+    if plan is None:
+        return False
+
+    model = config["compaction_model"]
+    if not isinstance(model, str) or not model:
+        raise ValueError(
+            "storyteller.correspondence.compaction_model must resolve to a model"
+        )
+    dbname = getattr(getattr(conn, "info", None), "dbname", None)
+    if not isinstance(dbname, str) or not dbname:
+        raise RuntimeError("Correspondence compaction requires a slot DB connection")
+    utility = LogonUtility(
+        settings,
+        dbname=dbname,
+        model_override=model,
+    )
+    digest = utility.compact_correspondence(
+        system_prompt=load_compaction_system_prompt(),
+        user_prompt=plan.render_user_prompt(),
+    )
+
+    # The model call intentionally owns no database transaction. Re-plan after
+    # it returns and refuse to apply stale output if accepted state changed.
+    with conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            current_plan = plan_correspondence_compaction(
+                cur,
+                accepting_chunk_id=accepting_chunk_id,
+                floor_turns=floor_turns,
+                ceiling_turns=ceiling_turns,
+            )
+            if current_plan != plan:
+                raise RuntimeError(
+                    "Accepted correspondence changed during compaction; refusing "
+                    "to persist a stale digest"
+                )
+            insert_digest_version(cur, plan=plan, digest=digest)
+    logger.info(
+        "Compacted private storyteller correspondence through chunk %s at "
+        "accepting chunk %s",
+        plan.compacted_through_chunk_id,
+        accepting_chunk_id,
+    )
+    return True
 
 
 def apply_state_updates_sync(

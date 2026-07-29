@@ -52,11 +52,12 @@ def _wire_response() -> SkaldTurnWire:
     return SkaldTurnWire(
         narrative="[TEST MODE] Tool-envelope structured output.",
         choices=["Continue", "Wait"],
+        letter="Keep the next beat private.",
     )
 
 
 def _gaia_response() -> SkaldGaiaWire:
-    return SkaldGaiaWire()
+    return SkaldGaiaWire(letter="I will make room for it.")
 
 
 def _contains_key(value: object, key: str) -> bool:
@@ -255,6 +256,7 @@ def test_two_pass_writer_native_config_reaches_shipped_anthropic_request(
         {
             "narrative": "The archive door opens.",
             "choices": ["Enter.", "Wait."],
+            "letter": "Keep the bell unresolved.",
         }
     )
     captured = {}

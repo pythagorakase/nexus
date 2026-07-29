@@ -113,6 +113,9 @@ class FakeLogon:
     async def generate_narrative_async(self, _payload, **_route):
         return FakeStoryResponse()
 
+    def take_generated_correspondence(self):
+        return None
+
 
 class FailingLogon:
     """LOGON stand-in that raises before a response is surfaced."""

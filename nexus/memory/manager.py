@@ -18,6 +18,7 @@ from .context_state import (
     is_retrograde_summary,
     memory_identity,
 )
+from .correspondence import correspondence_settings, load_accepted_correspondence
 from .divergence import DivergenceDetector, DivergenceResult
 from .entity_detector import EntityMatch, HighSpecificityEntityDetector
 from .incremental import IncrementalRetriever
@@ -423,6 +424,16 @@ class ContextMemoryManager:
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
+    def assemble_correspondence_context(self, dbname: str) -> str:
+        """Render private context from accepted DB state only."""
+
+        config = correspondence_settings(self.settings)
+        max_tokens = int(config["max_rendered_tokens"])
+        return load_accepted_correspondence(
+            dbname,
+            max_tokens=max_tokens,
+        )
+
     def handle_storyteller_response(
         self,
         narrative: str,

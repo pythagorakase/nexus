@@ -90,6 +90,7 @@ COORDINATES_DESCRIPTION = (
 SPARSE_WIRE_PAYLOAD = {
     "narrative": "Rain beads on the sealed archive door.",
     "choices": ["Knock twice.", "Wait beneath the awning."],
+    "letter": "Keep the archive's second lock unrevealed until Odile arrives.",
 }
 
 BASELINE = PresenceBaseline(
@@ -124,6 +125,7 @@ RICH_WIRE_PAYLOAD: dict[str, Any] = {
         "Follow the footprints into the archive.",
         "Call for Odile before proceeding.",
     ],
+    "letter": "The drowned bell should remain a promise, not yet an answer.",
     "scene": {
         "elapsed_minutes": 1505,
         "transition": "new_episode",
@@ -235,16 +237,20 @@ def test_two_pass_wire_fields_match_and_partition_full_wire() -> None:
         "scene",
         "presence",
         "operations",
+        "letter",
     ]
     assert list(gaia_fields) == [
         "updates",
         "orrery_adjudications",
         "new_entities",
+        "letter",
     ]
-    assert set(writer_fields).isdisjoint(gaia_fields)
+    assert set(writer_fields) & set(gaia_fields) == {"letter"}
     assert set(writer_fields) | set(gaia_fields) == set(full_fields)
 
     for field_name, split_field in {**writer_fields, **gaia_fields}.items():
+        if field_name == "letter":
+            continue
         full_field = full_fields[field_name]
         assert split_field.annotation == full_field.annotation
         assert split_field.default == full_field.default
@@ -303,8 +309,8 @@ def test_two_pass_strict_and_lenient_schema_shapes() -> None:
 
     assert set(writer_lenient["properties"]) == set(SkaldWriterWire.model_fields)
     assert set(gaia_lenient["properties"]) == set(SkaldGaiaWire.model_fields)
-    assert writer_lenient["required"] == ["narrative", "choices"]
-    assert gaia_lenient.get("required", []) == []
+    assert writer_lenient["required"] == ["narrative", "choices", "letter"]
+    assert gaia_lenient["required"] == ["letter"]
     assert writer_lenient["additionalProperties"] is False
     assert gaia_lenient["additionalProperties"] is False
     assert "anyOf" not in writer_lenient["properties"]["scene"]
@@ -860,7 +866,7 @@ def test_chronology_elapsed_minutes_split(
 
 def test_lenient_sparse_round_trip_has_no_scaffold_keys() -> None:
     schema = skald_wire_lenient_schema()
-    assert schema["required"] == ["narrative", "choices"]
+    assert schema["required"] == ["narrative", "choices", "letter"]
     assert schema["properties"]["scene"] == {
         "$ref": "#/$defs/SceneDelta",
         "default": None,
@@ -1298,6 +1304,7 @@ def test_local_chat_response_format_carries_lenient_wire_schema() -> None:
     assert response_format["json_schema"]["schema"]["required"] == [
         "narrative",
         "choices",
+        "letter",
     ]
 
 
