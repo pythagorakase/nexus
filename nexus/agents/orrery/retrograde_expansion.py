@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Annotated, Any, Literal, Mapping, Optional, cast
+from typing import Annotated, Any, Literal, Mapping, Optional, Sequence, cast
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -13,6 +13,11 @@ from nexus.agents.orrery.retrograde_junctions import resolve_junctions
 from nexus.agents.orrery.retrograde_packet import (
     CORE_ENTITIES_HEADING,
     NAMED_SEED_NPCS_HEADING,
+)
+from nexus.agents.orrery.retrograde_project_dependencies import (
+    coerce_project_start_relationships,
+    planned_project_start_relationships,
+    seek_redemption_dependency_issue,
 )
 from nexus.agents.orrery.retrograde_seed_candidates import (
     RetrogradeProjectType,
@@ -642,6 +647,9 @@ def render_expansion_prompt(
         "selected_candidates": selected_candidates,
         "selected_junctions": selected_junctions,
         "trait_constraints": seed_generation_request.get("trait_constraints", []),
+        "project_start_relationships": coerce_project_start_relationships(
+            packet.get("project_start_relationships")
+        ),
         "protagonist_identity": seed_generation_request.get("protagonist_identity", {}),
         "core_prompt_sections": (
             seed_generation_request.get("prompt_sections", [])[:4]
@@ -731,6 +739,9 @@ def validate_expansion_plan(
         candidates_by_id={
             candidate.seed_id: candidate for candidate in candidates.candidates
         },
+        project_start_relationships=coerce_project_start_relationships(
+            packet.get("project_start_relationships")
+        ),
         forbidden_relationship_traits=forbidden_relationship_traits,
         forbidden_pair_tag_traits=forbidden_pair_tag_traits,
         protagonist_identity=_packet_protagonist_identity(packet),
@@ -835,6 +846,7 @@ def _expansion_contract_issues(
     selected_junctions: list[dict[str, Any]],
     vocabulary: SeedEligibleVocabulary,
     candidates_by_id: Mapping[str, Any],
+    project_start_relationships: Sequence[Mapping[str, Any]],
     forbidden_relationship_traits: Mapping[str, set[str]],
     forbidden_pair_tag_traits: Mapping[str, set[str]],
     protagonist_identity: Mapping[str, Any],
@@ -949,6 +961,8 @@ def _expansion_contract_issues(
         _project_plan_issues(
             response=response,
             candidates_by_id=candidates_by_id,
+            project_start_relationships=project_start_relationships,
+            relationship_types=relationship_types,
         )
     )
 
@@ -984,10 +998,23 @@ def _project_plan_issues(
     *,
     response: RetrogradeExpansionPlanResponse,
     candidates_by_id: Mapping[str, Any],
+    project_start_relationships: Sequence[Mapping[str, Any]],
+    relationship_types: set[str],
 ) -> list[str]:
     """Keep R6 project rows faithful to the selected seed intent."""
 
     issues: list[str] = []
+    planned_relationships, relationship_dependency_issues = (
+        _planned_project_dependency_relationships(
+            response=response,
+            relationship_types=relationship_types,
+        )
+    )
+    issues.extend(relationship_dependency_issues)
+    available_relationships = [
+        *project_start_relationships,
+        *planned_relationships,
+    ]
     threads_by_seed = {thread.seed_id: thread for thread in response.thread_plan}
     projects_by_seed = {project.seed_id: project for project in response.project_plan}
     dead_character_refs = {
@@ -1043,6 +1070,15 @@ def _project_plan_issues(
                 f"project plan seed {project.seed_id!r} character target_ref "
                 f"{project.target_ref!r} appears in death_plan"
             )
+        dependency_issue = seek_redemption_dependency_issue(
+            seed_id=project.seed_id,
+            project_type=project.project_type,
+            actor_ref=project.actor_ref,
+            target_ref=project.target_ref,
+            relationships=available_relationships,
+        )
+        if dependency_issue is not None:
+            issues.append(dependency_issue)
         thread = threads_by_seed.get(project.seed_id)
         if thread is not None and thread.status != "woven":
             issues.append(
@@ -1061,6 +1097,38 @@ def _project_plan_issues(
                 f"woven seed {seed_id!r} drops project_intent without a thread note"
             )
     return issues
+
+
+def _planned_project_dependency_relationships(
+    *,
+    response: RetrogradeExpansionPlanResponse,
+    relationship_types: set[str],
+) -> tuple[list[Mapping[str, Any]], list[str]]:
+    """Convert model relationship rows without escaping the repair boundary."""
+
+    redemption_seed_ids = [
+        project.seed_id
+        for project in response.project_plan
+        if project.project_type == "seek_redemption"
+    ]
+    if not redemption_seed_ids:
+        return [], []
+
+    relationships: list[Mapping[str, Any]] = []
+    issues: list[str] = []
+    for index, relationship in enumerate(response.relationship_plan):
+        try:
+            relationships.extend(planned_project_start_relationships([relationship]))
+        except ValueError as exc:
+            issues.append(
+                "seek_redemption project seed(s) "
+                f"{redemption_seed_ids!r} cannot classify "
+                f"relationship_plan[{index}].relationship_type "
+                f"{relationship.relationship_type!r}: {exc}. Use one of "
+                "seed_eligible_vocabulary.relationship_types "
+                f"{sorted(relationship_types)!r}"
+            )
+    return relationships, issues
 
 
 STUB_CREATABLE_ENTITY_KINDS = frozenset({"character", "place", "faction"})
@@ -1791,6 +1859,11 @@ def _hard_validation_rules() -> list[str]:
         (
             "project_plan may carry only a woven selected seed's exact "
             "project_intent; explain any dropped woven intent in thread_plan.note."
+        ),
+        (
+            "Every seek_redemption project requires a TARGET->ACTOR relationship "
+            "at wary-or-worse valence in project_start_relationships or this "
+            "response's relationship mechanics."
         ),
         (
             "Entity refs (subject_ref, object_ref, location_ref) "

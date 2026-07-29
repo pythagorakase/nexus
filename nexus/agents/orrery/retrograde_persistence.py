@@ -29,6 +29,10 @@ from nexus.agents.orrery.retrograde_expansion import (
 from nexus.agents.orrery.retrograde_markers import (
     RETROGRADE_PROLOGUE_MARKER,
 )
+from nexus.agents.orrery.retrograde_project_dependencies import (
+    dry_run_project_start_relationships,
+    seek_redemption_dependency_issue,
+)
 from nexus.agents.orrery.retrograde_vocabulary import (
     fold_entity_ref_for_identity,
     normalize_entity_ref,
@@ -434,6 +438,7 @@ def _build_plan(
         event_origin=project_event_origin,
         event_ref_prefix=project_event_ref_prefix,
         log_context=project_log_context,
+        relationship_rows=relationship_rows,
     )
     for project_row in project_rows:
         counters[f"projects_{project_row['status']}"] += 1
@@ -1085,6 +1090,7 @@ def _plan_project_rows(
     event_origin: str,
     event_ref_prefix: Optional[str],
     log_context: Optional[str],
+    relationship_rows: Sequence[Mapping[str, Any]],
 ) -> list[dict[str, Any]]:
     """Plan or insert typed stage-one projects after relationship persistence."""
 
@@ -1234,6 +1240,8 @@ def _plan_project_rows(
             project=project,
             actor=actor,
             target=target,
+            dry_run=dry_run,
+            relationship_rows=relationship_rows,
         )
         started_event_type = PROJECT_STARTED_EVENT_TYPES[project.project_type]
         if started_event_type not in event_types:
@@ -1412,6 +1420,8 @@ def _validate_project_start_dependencies(
     project: RetrogradeProjectPlan,
     actor: Mapping[str, Any],
     target: Optional[Mapping[str, Any]],
+    dry_run: bool = False,
+    relationship_rows: Sequence[Mapping[str, Any]] = (),
 ) -> None:
     dead_character_refs = {
         normalize_entity_ref(death.entity_ref)
@@ -1451,16 +1461,40 @@ def _validate_project_start_dependencies(
         return
     if target is None:
         raise AssertionError("seek_redemption target shape was not validated")
-    if not _has_redemption_wrong(
-        cur,
-        expansion=expansion,
-        actor=actor,
-        target=target,
-    ):
-        raise ValueError(
-            f"Retrograde project seed {project.seed_id!r} seek_redemption "
-            "requires a TARGET->ACTOR wary-or-worse relationship"
+    available_relationships: list[Mapping[str, Any]] = []
+    if actor["resolution"] == "resolved" and target["resolution"] == "resolved":
+        cur.execute(
+            """
+            /* orrery:retrograde:redemption_relationship */
+            SELECT cr.emotional_valence::text
+            FROM character_relationships cr
+            JOIN characters target_c ON target_c.id = cr.character1_id
+            JOIN characters actor_c ON actor_c.id = cr.character2_id
+            WHERE target_c.entity_id = %s AND actor_c.entity_id = %s
+            """,
+            (target["entity_id"], actor["entity_id"]),
         )
+        for row in cur.fetchall():
+            available_relationships.append(
+                {
+                    "subject_ref": str(target["entity_ref"]),
+                    "object_ref": str(actor["entity_ref"]),
+                    "emotional_valence": str(_row_value(row, "emotional_valence", 0)),
+                }
+            )
+    if dry_run:
+        available_relationships.extend(
+            dry_run_project_start_relationships(relationship_rows)
+        )
+    dependency_issue = seek_redemption_dependency_issue(
+        seed_id=project.seed_id,
+        project_type=project.project_type,
+        actor_ref=project.actor_ref,
+        target_ref=project.target_ref,
+        relationships=available_relationships,
+    )
+    if dependency_issue is not None:
+        raise ValueError(dependency_issue)
 
 
 def _existing_open_project_id(cur: Any, actor_entity_id: int) -> Optional[int]:
@@ -1476,51 +1510,6 @@ def _existing_open_project_id(cur: Any, actor_entity_id: int) -> Optional[int]:
     )
     row = cur.fetchone()
     return int(_row_value(row, "id", 0)) if row is not None else None
-
-
-def _has_redemption_wrong(
-    cur: Any,
-    *,
-    expansion: RetrogradeExpansionPlanResponse,
-    actor: Mapping[str, Any],
-    target: Mapping[str, Any],
-) -> bool:
-    if actor["resolution"] == "resolved" and target["resolution"] == "resolved":
-        cur.execute(
-            """
-            /* orrery:retrograde:redemption_relationship */
-            SELECT cr.emotional_valence::text
-            FROM character_relationships cr
-            JOIN characters target_c ON target_c.id = cr.character1_id
-            JOIN characters actor_c ON actor_c.id = cr.character2_id
-            WHERE target_c.entity_id = %s AND actor_c.entity_id = %s
-            LIMIT 1
-            """,
-            (target["entity_id"], actor["entity_id"]),
-        )
-        row = cur.fetchone()
-        if row is not None:
-            return _is_wary_or_worse(str(_row_value(row, "emotional_valence", 0)))
-
-    actor_ref = normalize_entity_ref(str(actor["entity_ref"]))
-    target_ref = normalize_entity_ref(str(target["entity_ref"]))
-    for relationship in expansion.relationship_plan:
-        if (
-            relationship.subject_kind == "character"
-            and relationship.object_kind == "character"
-            and normalize_entity_ref(relationship.subject_ref) == target_ref
-            and normalize_entity_ref(relationship.object_ref) == actor_ref
-            and _is_wary_or_worse(
-                _default_emotional_valence(relationship.relationship_type)
-            )
-        ):
-            return True
-    return False
-
-
-def _is_wary_or_worse(value: str) -> bool:
-    match = re.match(r"^([+-]?\d+)\|", value)
-    return match is not None and int(match.group(1)) <= -1
 
 
 def _insert_seeded_project(

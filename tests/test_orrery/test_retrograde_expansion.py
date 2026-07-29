@@ -2,18 +2,22 @@
 
 from __future__ import annotations
 
+import asyncio
 import copy
 from typing import Any
 
 import pytest
+from pydantic_ai import ModelRetry
 from pydantic import ValidationError
 
 from nexus.agents.orrery.retrograde_expansion import (
     RETROGRADE_EXPANSION_RESPONSE_SCHEMA_VERSION,
+    RetrogradeExpansionPlanResponse,
     RetrogradeExpansionWireResponse,
     RetrogradeExpansionValidationError,
     RetrogradeProjectPlan,
     coerce_expansion_response_payload,
+    generate_expansion_with_skald,
     render_expansion_prompt,
     validate_expansion_plan,
 )
@@ -359,6 +363,204 @@ def test_project_plan_carries_exact_woven_seed_intent() -> None:
     )
 
     assert response.project_plan[0].seed_id == "seed_001"
+
+
+def test_seek_redemption_requires_target_to_actor_wrong_at_r6() -> None:
+    """An impossible redemption project enters the structured repair boundary."""
+
+    _vocabulary, packet, seed_response, payload = _redemption_contract()
+
+    with pytest.raises(
+        RetrogradeExpansionValidationError,
+        match=(
+            "Retrograde project seed 'seed_001' seek_redemption requires a "
+            "TARGET->ACTOR wary-or-worse relationship"
+        ),
+    ):
+        validate_expansion_plan(
+            payload=payload,
+            packet=packet,
+            seed_candidate_response=seed_response,
+        )
+
+
+def test_seek_redemption_accepts_same_expansion_target_to_actor_wrong() -> None:
+    """The exact TARGET->ACTOR direction satisfies the R6 dependency."""
+
+    _vocabulary, packet, seed_response, payload = _redemption_contract()
+    payload["relationship_plan"] = [
+        {
+            "subject_ref": "Vale",
+            "subject_kind": "character",
+            "relationship_type": "enemy",
+            "object_ref": "Mara",
+            "object_kind": "character",
+            "source_event_ref": "retro_event_001",
+        }
+    ]
+
+    response = validate_expansion_plan(
+        payload=payload,
+        packet=packet,
+        seed_candidate_response=seed_response,
+    )
+
+    assert response.project_plan[0].project_type == "seek_redemption"
+
+
+def test_seek_redemption_rejects_reverse_expansion_relationship() -> None:
+    """ACTOR->TARGET hostility is not evidence that TARGET was wronged."""
+
+    _vocabulary, packet, seed_response, payload = _redemption_contract()
+    payload["relationship_plan"] = [
+        {
+            "subject_ref": "Mara",
+            "subject_kind": "character",
+            "relationship_type": "enemy",
+            "object_ref": "Vale",
+            "object_kind": "character",
+            "source_event_ref": "retro_event_001",
+        }
+    ]
+
+    with pytest.raises(
+        RetrogradeExpansionValidationError,
+        match="TARGET->ACTOR wary-or-worse",
+    ):
+        validate_expansion_plan(
+            payload=payload,
+            packet=packet,
+            seed_candidate_response=seed_response,
+        )
+
+
+@pytest.mark.parametrize(
+    ("emotional_valence", "accepted"),
+    [
+        ("-2|disapproving", True),
+        ("-1|wary", True),
+        ("0|neutral", False),
+    ],
+)
+def test_seek_redemption_uses_canonical_wary_threshold(
+    emotional_valence: str,
+    accepted: bool,
+) -> None:
+    """R6 uses the canonical ladder's inclusive wary boundary."""
+
+    _vocabulary, packet, seed_response, payload = _redemption_contract()
+    packet["project_start_relationships"] = [
+        {
+            "subject_ref": "Vale",
+            "object_ref": "Mara",
+            "emotional_valence": emotional_valence,
+        }
+    ]
+
+    if accepted:
+        response = validate_expansion_plan(
+            payload=payload,
+            packet=packet,
+            seed_candidate_response=seed_response,
+        )
+        assert response.project_plan[0].project_type == "seek_redemption"
+    else:
+        with pytest.raises(
+            RetrogradeExpansionValidationError,
+            match="TARGET->ACTOR wary-or-worse",
+        ):
+            validate_expansion_plan(
+                payload=payload,
+                packet=packet,
+                seed_candidate_response=seed_response,
+            )
+
+
+def test_seek_redemption_retry_exhaustion_names_seed_and_project(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Repeated invalid R6 output stays loud and never reaches persistence."""
+
+    _vocabulary, packet, seed_response, payload = _redemption_contract()
+    invalid_output = RetrogradeExpansionPlanResponse.model_validate(payload)
+
+    class ExhaustingProvider:
+        output_validator: Any = None
+
+        def get_structured_completion(self, _prompt: str, _schema: Any) -> Any:
+            assert self.output_validator is not None
+            try:
+                asyncio.run(self.output_validator(None, invalid_output))
+            except ModelRetry as exc:
+                raise RuntimeError("structured retries exhausted") from exc
+            raise AssertionError("Invalid redemption output unexpectedly validated")
+
+    monkeypatch.setattr(
+        "nexus.api.native_structured_output.build_native_structured_provider",
+        lambda **_kwargs: ExhaustingProvider(),
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match=(
+            "(?s)exhausted validation retries.*seed 'seed_001' "
+            "seek_redemption.*TARGET->ACTOR"
+        ),
+    ):
+        generate_expansion_with_skald(
+            packet=packet,
+            seed_candidate_response=seed_response,
+            model_name="@provider.unused_test",
+        )
+
+
+def test_unclassified_redemption_relationship_uses_structured_repair(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A schema-free invented type becomes a named ModelRetry issue."""
+
+    _vocabulary, packet, seed_response, payload = _redemption_contract()
+    payload["relationship_plan"] = [
+        {
+            "subject_ref": "Vale",
+            "subject_kind": "character",
+            "relationship_type": "invented_hostility",
+            "object_ref": "Mara",
+            "object_kind": "character",
+            "source_event_ref": "retro_event_001",
+        }
+    ]
+    invalid_output = RetrogradeExpansionPlanResponse.model_validate(payload)
+
+    class ExhaustingProvider:
+        output_validator: Any = None
+
+        def get_structured_completion(self, _prompt: str, _schema: Any) -> Any:
+            assert self.output_validator is not None
+            try:
+                asyncio.run(self.output_validator(None, invalid_output))
+            except ModelRetry as exc:
+                raise RuntimeError("structured retries exhausted") from exc
+            raise AssertionError("Invented relationship type unexpectedly validated")
+
+    monkeypatch.setattr(
+        "nexus.api.native_structured_output.build_native_structured_provider",
+        lambda **_kwargs: ExhaustingProvider(),
+    )
+
+    with pytest.raises(RuntimeError) as exc_info:
+        generate_expansion_with_skald(
+            packet=packet,
+            seed_candidate_response=seed_response,
+            model_name="@provider.unused_test",
+        )
+
+    issue = str(exc_info.value)
+    assert "exhausted validation retries" in issue
+    assert "seed_001" in issue
+    assert "relationship_plan[0].relationship_type" in issue
+    assert "invented_hostility" in issue
+    assert "seed_eligible_vocabulary.relationship_types" in issue
 
 
 @pytest.mark.parametrize(
@@ -1486,3 +1688,34 @@ def _valid_expansion(vocabulary: SeedEligibleVocabulary) -> dict[str, Any]:
             "explanation": "Dry-run plan only.",
         },
     }
+
+
+def _redemption_contract() -> tuple[
+    SeedEligibleVocabulary,
+    dict[str, Any],
+    dict[str, Any],
+    dict[str, Any],
+]:
+    """Return one valid project-intent contract missing only its dependency."""
+
+    vocabulary = _expansion_test_vocabulary()
+    packet = _packet(vocabulary)
+    seed_response = _seed_response(vocabulary)
+    seed_response["candidates"][0]["coverage_functions"] = ["unresolved_ledger"]
+    seed_response["candidates"][0]["project_intent"] = {
+        "project_type": "seek_redemption",
+        "target_ref": "Vale",
+        "rationale": "Mara must answer for an old wrong.",
+    }
+    payload = _valid_expansion(vocabulary)
+    payload["relationship_plan"] = []
+    payload["project_plan"] = [
+        {
+            "seed_id": "seed_001",
+            "project_type": "seek_redemption",
+            "actor_ref": "Mara",
+            "target_ref": "Vale",
+            "rationale": "Begin by owning the wrong.",
+        }
+    ]
+    return vocabulary, packet, seed_response, payload
