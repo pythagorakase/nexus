@@ -61,7 +61,7 @@ issue, dry-well, wall-clock, and token settings.
 5. Run the default pytest suite against the checked-in config (explicitly
    without `NEXUS_RUNTIME_CONFIG`) and save its complete output in the archive.
    A baseline failure is a candidate, not permission to patch it.
-6. Stop only the isolated QA lane if it is stale. Back up `save_03` with
+6. Stop only the isolated QA lane if it is stale. Back up `save_04` with
    `pg_dump -Fc`, checksum the dump, reset only the configured slot through
    `scripts/new_story_setup.py --force`, start the isolated gateway, and verify
    its health and effective model. Save the commands and outputs.
