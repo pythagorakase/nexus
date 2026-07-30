@@ -20,7 +20,7 @@ def _event(
     *,
     model: str = "gpt-5.6-terra",
     provider: str = "openai",
-    slot: int | None = 3,
+    slot: int | None = 4,
     total: int | None = 100,
 ) -> dict[str, object]:
     return {
@@ -90,7 +90,7 @@ def _state(config: qa_shift.ShiftConfig) -> dict[str, object]:
 def test_tracked_config_encodes_bounded_completion_policy() -> None:
     config = qa_shift.load_shift_config()
 
-    assert config.slot == 3
+    assert config.slot == 4
     assert config.gateway_port == 8012
     assert config.target_model == "gpt-5.6-terra"
     assert config.issue_budget == 5
