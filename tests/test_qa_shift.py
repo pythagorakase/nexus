@@ -6,12 +6,14 @@ from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
+import shlex
 import tomllib
 from typing import Any, Mapping
 
 import pytest
 import tomlkit
 
+from nexus.runtime import RUNTIME_CONFIG_ENV, Supervisor
 from scripts.qa_shift import qa_shift
 
 
@@ -132,6 +134,33 @@ def test_begin_creates_archive_and_pins_every_openai_role(
     assert (archive / "runtime_env.sh").exists()
     assert (archive / "probe_ledger.md").exists()
     assert (archive / "mission_report.md").exists()
+
+
+def test_generated_runtime_environment_selects_qa_config(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The generated shell variable selects the QA config for the supervisor."""
+    config = replace(qa_shift.load_shift_config(), archive_root=tmp_path)
+    result = qa_shift.begin_shift(
+        config=config,
+        usage_reader=lambda _root, _day: _usage(total=123),
+        now=NOW,
+    )
+    archive = Path(result["archive"])
+    environment_lines = (archive / "runtime_env.sh").read_text().splitlines()
+    runtime_export = next(
+        line
+        for line in environment_lines
+        if line.startswith(f"export {RUNTIME_CONFIG_ENV}=")
+    )
+    assignment = shlex.split(runtime_export)[1]
+    name, value = assignment.split("=", 1)
+    monkeypatch.setenv(name, value)
+
+    supervisor = Supervisor.from_config()
+
+    assert supervisor.config_path == (archive / "nexus.qa.toml").resolve()
 
 
 @pytest.mark.parametrize("missing_table", ("roles", "daily_allowance", "narration"))

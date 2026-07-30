@@ -3156,7 +3156,10 @@ Examples:
     def _add_config_arg(p: argparse.ArgumentParser) -> None:
         p.add_argument(
             "--config",
-            help="Path to nexus.toml (default: the repository's nexus.toml)",
+            help=(
+                "Path to nexus.toml (default: NEXUS_RUNTIME_CONFIG, then the "
+                "repository's nexus.toml)"
+            ),
         )
 
     up_parser = subparsers.add_parser(
