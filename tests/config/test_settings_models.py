@@ -104,11 +104,12 @@ def test_usage_settings_validate_and_round_trip() -> None:
 
 
 def test_apex_tag_library_settings_round_trip() -> None:
-    """Context selection and repair limits survive validated serialization."""
+    """Prompt, grammar, and repair controls survive validated serialization."""
 
     raw = _nexus_toml_dict()
     raw["apex"]["tag_library"] = {
         "contextual": False,
+        "schema_enums": False,
         "suggestion_limit": 2,
     }
 
@@ -116,6 +117,7 @@ def test_apex_tag_library_settings_round_trip() -> None:
     dumped = settings.model_dump()
 
     assert settings.apex.tag_library.contextual is False
+    assert settings.apex.tag_library.schema_enums is False
     assert settings.apex.tag_library.suggestion_limit == 2
     assert dumped["apex"]["tag_library"] == raw["apex"]["tag_library"]
 
@@ -124,6 +126,12 @@ def test_shipped_anthropic_storyteller_transport_is_prompted() -> None:
     settings = Settings(**_nexus_toml_dict())
 
     assert settings.apex.anthropic_storyteller_transport == "prompted"
+
+
+def test_shipped_gaia_registry_schema_enums_are_enabled() -> None:
+    settings = Settings(**_nexus_toml_dict())
+
+    assert settings.apex.tag_library.schema_enums is True
 
 
 @pytest.mark.parametrize(

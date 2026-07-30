@@ -38,6 +38,7 @@ class FakeRegistryCursor:
         self,
         *,
         entities_by_name: Optional[dict[str, list[str]]] = None,
+        entity_kinds_by_id: Optional[dict[int, str]] = None,
         faction_ids_by_name: Optional[dict[str, int]] = None,
     ) -> None:
         # tag -> (id, category, is_ephemeral, reapplication_policy)
@@ -67,6 +68,15 @@ class FakeRegistryCursor:
             if entities_by_name is None
             else entities_by_name
         )
+        self.entity_kinds_by_id = (
+            {
+                101: "character",
+                202: "place",
+                303: "faction",
+            }
+            if entity_kinds_by_id is None
+            else entity_kinds_by_id
+        )
         self.faction_ids_by_name = (
             {
                 "Office of Civic Continuity": 91,
@@ -91,7 +101,15 @@ class FakeRegistryCursor:
         return False
 
     def execute(self, sql: str, params: Tuple[Any, ...] = ()) -> None:
-        if "SELECT entity_kind" in sql:
+        if "FROM entities" in sql and "kind::text" in sql:
+            entity_ids = params[0]
+            self._result = [
+                (entity_id, self.entity_kinds_by_id[entity_id])
+                for entity_id in entity_ids
+                if entity_id in self.entity_kinds_by_id
+            ]
+            self._one = self._result[0] if self._result else None
+        elif "SELECT entity_kind" in sql:
             self._result = [
                 (kind,) for kind in self.entities_by_name.get(str(params[0]), [])
             ]
@@ -632,6 +650,222 @@ def test_replacement_event_type_uses_cached_catalog() -> None:
         "orrery_adjudications[0].replacement_event_type: Unknown or "
         "deprecated event type 'invented_event'"
     ]
+
+
+@pytest.mark.parametrize(
+    "field_name",
+    [
+        "entity_tags_add",
+        "entity_tags_remove",
+        "entity_tags_target_add",
+        "entity_tags_target_remove",
+        "entity_pair_tags_target_clear_inbound",
+    ],
+)
+def test_replacement_state_delta_rejects_every_unregistered_tag_list(
+    field_name: str,
+) -> None:
+    response = _storyteller_response(
+        orrery_adjudications=[
+            {
+                "proposal_id": "proposal-1",
+                "action": "replace",
+                "replacement_state_delta": {field_name: ["invented"]},
+            }
+        ]
+    )
+
+    issues = collect_orrery_tag_issues(
+        response,
+        FakeRegistryCursor(),
+        vocabulary=_test_vocabulary(),
+        proposal_bindings={
+            "proposal-1": {
+                "actor": 101,
+                "target": 202,
+            }
+        },
+    )
+
+    assert len(issues) == 1
+    assert f"orrery_adjudications[0].replacement_state_delta.{field_name}" in issues[0]
+    assert "'invented'" in issues[0]
+
+
+def test_replacement_state_delta_uses_actor_target_and_pair_partitions() -> None:
+    response = _storyteller_response(
+        orrery_adjudications=[
+            {
+                "proposal_id": "proposal-1",
+                "action": "replace",
+                "replacement_state_delta": {
+                    "entity_tags_add": ["human"],
+                    "entity_tags_remove": ["perceptive"],
+                    "entity_tags_target_add": ["haven"],
+                    "entity_tags_target_remove": ["haven"],
+                    "entity_pair_tags_target_clear_inbound": ["protects"],
+                },
+            }
+        ]
+    )
+
+    assert (
+        collect_orrery_tag_issues(
+            response,
+            FakeRegistryCursor(),
+            vocabulary=_test_vocabulary(),
+            proposal_bindings={
+                "proposal-1": {
+                    "actor": 101,
+                    "target": 202,
+                }
+            },
+        )
+        == []
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "field_name",
+    [
+        "entity_tags_add",
+        "entity_tags_target_add",
+        "entity_pair_tags_target_clear_inbound",
+    ],
+)
+async def test_replacement_state_delta_arm_failure_becomes_named_model_retry(
+    field_name: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Actor, target, and pair-list shapes fail inside the repair boundary."""
+
+    from nexus.api import db_pool
+
+    monkeypatch.setattr(
+        db_pool,
+        "get_connection",
+        lambda _dbname: FakeRegistryConnection(FakeRegistryCursor()),
+    )
+    validator = build_storyteller_tag_validator(
+        "test_slot",
+        proposal_bindings_provider=lambda: {
+            "proposal-1": {
+                "actor": 101,
+                "target": 202,
+            }
+        },
+    )
+    assert validator is not None
+    response = _storyteller_response(
+        orrery_adjudications=[
+            {
+                "proposal_id": "proposal-1",
+                "action": "replace",
+                "replacement_state_delta": {field_name: ["invented"]},
+            }
+        ]
+    )
+
+    with pytest.raises(ModelRetry) as exc_info:
+        await validator(SimpleNamespace(retry=0), response)
+
+    assert (
+        f"orrery_adjudications[0].replacement_state_delta.{field_name}"
+        in exc_info.value.message
+    )
+
+
+@pytest.mark.asyncio
+async def test_pair_clear_without_target_binding_becomes_named_model_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An actor-only pair clear fails while the model can repair its response."""
+
+    from nexus.api import db_pool
+
+    monkeypatch.setattr(
+        db_pool,
+        "get_connection",
+        lambda _dbname: FakeRegistryConnection(FakeRegistryCursor()),
+    )
+    validator = build_storyteller_tag_validator(
+        "test_slot",
+        proposal_bindings_provider=lambda: {
+            "proposal-1": {
+                "actor": 101,
+            }
+        },
+    )
+    assert validator is not None
+    response = _storyteller_response(
+        orrery_adjudications=[
+            {
+                "proposal_id": "proposal-1",
+                "action": "replace",
+                "replacement_state_delta": {
+                    "entity_pair_tags_target_clear_inbound": ["protects"],
+                },
+            }
+        ]
+    )
+
+    with pytest.raises(ModelRetry) as exc_info:
+        await validator(SimpleNamespace(retry=0), response)
+
+    assert (
+        "orrery_adjudications[0].replacement_state_delta."
+        "entity_pair_tags_target_clear_inbound" in exc_info.value.message
+    )
+    assert "no scalar target entity binding" in exc_info.value.message
+
+
+@pytest.mark.asyncio
+async def test_pair_clear_rejects_target_kind_excluded_by_registry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A bound target must be allowed on the pair tag's object side."""
+
+    from nexus.api import db_pool
+
+    monkeypatch.setattr(
+        db_pool,
+        "get_connection",
+        lambda _dbname: FakeRegistryConnection(FakeRegistryCursor()),
+    )
+    validator = build_storyteller_tag_validator(
+        "test_slot",
+        proposal_bindings_provider=lambda: {
+            "proposal-1": {
+                "actor": 101,
+                "target": 202,
+            }
+        },
+    )
+    assert validator is not None
+    response = _storyteller_response(
+        orrery_adjudications=[
+            {
+                "proposal_id": "proposal-1",
+                "action": "replace",
+                "replacement_state_delta": {
+                    "entity_pair_tags_target_clear_inbound": ["contact:social"],
+                },
+            }
+        ]
+    )
+
+    with pytest.raises(ModelRetry) as exc_info:
+        await validator(SimpleNamespace(retry=0), response)
+
+    assert (
+        "orrery_adjudications[0].replacement_state_delta."
+        "entity_pair_tags_target_clear_inbound" in exc_info.value.message
+    )
+    assert (
+        "pair_tag 'contact:social' does not allow object_kind='place'"
+        in exc_info.value.message
+    )
 
 
 @pytest.mark.parametrize(

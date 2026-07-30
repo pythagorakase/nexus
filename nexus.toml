@@ -1101,6 +1101,8 @@ generation_timeout_seconds = 1200
 [apex.tag_library]
 # Measurement-stage A/B lever: false restores the complete described library.
 contextual = true
+# OpenAI Gaia strict schemas use registry-keyed enum aliases for closed fields.
+schema_enums = true
 suggestion_limit = 3
 
 # =============================================================================

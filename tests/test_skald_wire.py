@@ -40,6 +40,14 @@ from nexus.agents.logon.apex_schema import (
     StorytellerResponseBootstrap,
     StorytellerResponseExtended,
 )
+from nexus.agents.logon.gaia_registry_schema import (
+    GaiaRegistryReadError,
+    GaiaRegistryVocabulary,
+    GaiaRegistryVocabularyError,
+    coerce_gaia_registry_wire,
+    gaia_registry_wire_model,
+    load_gaia_registry_wire_spec,
+)
 from nexus.agents.logon.skald_wire import (
     PresenceBaseline,
     PresenceRef,
@@ -288,6 +296,178 @@ def test_combine_two_pass_is_property_complete() -> None:
     assert combined.model_dump(mode="json") == SkaldTurnWire.model_validate(
         RICH_WIRE_PAYLOAD
     ).model_dump(mode="json")
+
+
+def test_registry_gaia_subclass_round_trips_through_static_app_contract() -> None:
+    vocabulary = GaiaRegistryVocabulary(
+        character_tags=("alert", "human"),
+        place_tags=("haven", "threshold"),
+        faction_tags=("loyalist", "secretive"),
+        pair_tags=("contact:social", "protects"),
+        event_types=("evade_pursuit", "slept"),
+    )
+    schema_model = gaia_registry_wire_model(
+        registry_digest="test638digest",
+        vocabulary=vocabulary,
+    )
+    payload = {
+        "updates": {
+            "characters": [
+                {
+                    "name": "Iona Vale",
+                    "id": 4,
+                    "activity": "listening",
+                    "tags_add": ["alert"],
+                    "tags_clear": ["human"],
+                }
+            ],
+            "places": [
+                {
+                    "name": "The Lower Sluice",
+                    "id": 9,
+                    "condition": "flooded",
+                    "tags_add": ["haven"],
+                }
+            ],
+            "factions": [
+                {
+                    "name": "The Glass Choir",
+                    "id": 13,
+                    "action": "gathers below",
+                    "tags_clear": ["secretive"],
+                }
+            ],
+            "relationships": [],
+        },
+        "orrery_adjudications": [
+            {
+                "proposal_id": "listen:abc123",
+                "action": "replace",
+                "replacement_state_delta": {},
+                "replacement_event_type": "slept",
+            }
+        ],
+        "new_entities": [
+            {
+                "kind": "character",
+                "name": "Marra Kest",
+                "summary": "A keeper with divided loyalties.",
+                "tag_hints": ["human"],
+                "pair_tag_hints": [],
+            },
+            {
+                "kind": "place",
+                "name": "The Bell Archive",
+                "summary": "A submerged registry.",
+                "tag_hints": ["threshold"],
+                "pair_tag_hints": [
+                    {
+                        "tag": "protects",
+                        "other_entity_name": "Marra Kest",
+                        "declared_entity_role": "object",
+                    }
+                ],
+            },
+            {
+                "kind": "faction",
+                "name": "The Quiet Ledger",
+                "summary": "An archivist compact.",
+                "tag_hints": ["loyalist"],
+                "pair_tag_hints": [],
+            },
+        ],
+        "letter": "I will keep the bell's owner unresolved.",
+    }
+    dynamic = schema_model.model_validate(payload)
+    static = SkaldGaiaWire.model_validate(payload)
+
+    assert isinstance(dynamic, SkaldGaiaWire)
+    coerced = coerce_gaia_registry_wire(dynamic)
+    assert coerced.__class__ is SkaldGaiaWire
+    assert coerced.model_dump(mode="json") == static.model_dump(mode="json")
+    assert [type(item) for item in coerced.new_entities] == [
+        type(item) for item in static.new_entities
+    ]
+
+    writer = SkaldWriterWire(
+        narrative="The drowned bell answers.",
+        choices=["Follow it.", "Wait."],
+        letter="Let the bell remain bait.",
+    )
+    assert combine_two_pass(writer, coerced).model_dump(
+        mode="json"
+    ) == combine_two_pass(writer, static).model_dump(mode="json")
+
+
+def test_registry_gaia_schema_reuses_each_closed_vocabulary_definition() -> None:
+    vocabulary = GaiaRegistryVocabulary(
+        character_tags=("alert", "human"),
+        place_tags=("haven", "threshold"),
+        faction_tags=("loyalist", "secretive"),
+        pair_tags=("contact:social", "protects"),
+        event_types=("evade_pursuit", "slept"),
+    )
+    schema_model = gaia_registry_wire_model(
+        registry_digest="test638defs",
+        vocabulary=vocabulary,
+    )
+    schema = skald_gaia_strict_text_format(schema_model)["schema"]
+
+    expected = {
+        "CharacterTagName": set(vocabulary.character_tags),
+        "PlaceTagName": set(vocabulary.place_tags),
+        "FactionTagName": set(vocabulary.faction_tags),
+        "PairTagName": set(vocabulary.pair_tags),
+        "EventTypeName": set(vocabulary.event_types),
+    }
+    for definition_name, values in expected.items():
+        assert set(schema["$defs"][definition_name]["enum"]) == values
+        serialized = _compact_schema_json(schema)
+        assert serialized.count(f'"#/$defs/{definition_name}"') >= 1
+        assert (
+            serialized.count(_compact_schema_json(schema["$defs"][definition_name]))
+            == 1
+        )
+
+
+def test_registry_gaia_schema_rejects_empty_vocabularies_loudly() -> None:
+    with pytest.raises(
+        GaiaRegistryVocabularyError,
+        match="non-empty character tag vocabulary",
+    ):
+        gaia_registry_wire_model(
+            registry_digest="broken-registry",
+            vocabulary=GaiaRegistryVocabulary(
+                character_tags=(),
+                place_tags=("haven",),
+                faction_tags=("loyalist",),
+                pair_tags=("protects",),
+                event_types=("slept",),
+            ),
+        )
+
+
+def test_registry_gaia_schema_wraps_registry_read_failures_loudly(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from nexus.agents.logon import gaia_registry_schema
+
+    def fail_read(_dbname: str) -> None:
+        raise RuntimeError("database unavailable")
+
+    monkeypatch.setattr(
+        gaia_registry_schema,
+        "read_storyteller_vocabulary",
+        fail_read,
+    )
+
+    with pytest.raises(
+        GaiaRegistryReadError,
+        match="qa638_broken",
+    ) as exc_info:
+        load_gaia_registry_wire_spec("qa638_broken")
+
+    assert isinstance(exc_info.value.__cause__, RuntimeError)
 
 
 def test_two_pass_strict_and_lenient_schema_shapes() -> None:
