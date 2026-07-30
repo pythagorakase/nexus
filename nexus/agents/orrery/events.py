@@ -8,8 +8,9 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
-from hashlib import sha256
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from hashlib import sha256
 import json
 from typing import Any, Mapping, Optional
 
@@ -104,6 +105,8 @@ SUPPORTED_STATE_DELTA_KEYS = frozenset(
 )
 ADJUDICATION_ACTIONS = frozenset({"defer", "replace", "void"})
 ADJUDICATION_SOURCES = frozenset({"explicit", "structured_state_update"})
+NEED_DEBT_SCORE_ABSOLUTE_LIMIT = Decimal("1000000")
+NEED_DEBT_SCORE_QUANTUM = Decimal("0.01")
 REPLACEMENT_STATE_DELTA_ALIASES = {
     "character_current_activity": "character.current_activity",
     "entity_tags_add": "entity_tags.add",
@@ -117,6 +120,10 @@ REPLACEMENT_STATE_DELTA_ALIASES = {
     "mood_set": "mood.set",
     "status_bestow": "status.bestow",
 }
+
+
+class NeedDebtScoreDomainError(ValueError):
+    """A fulfilled need debt cannot be stored in numeric(8,2)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -2614,6 +2621,38 @@ def _coerce_need_fulfillment(raw: Any) -> dict[str, Any]:
     return payload
 
 
+def _validate_need_debt_score_domain(
+    *,
+    actor_entity_id: int,
+    need_type: str,
+    debt_score: float,
+) -> None:
+    """Raise a named diagnostic before PostgreSQL rejects numeric(8,2)."""
+
+    try:
+        decimal_value = Decimal(str(debt_score))
+        if (
+            not decimal_value.is_finite()
+            or abs(decimal_value) >= NEED_DEBT_SCORE_ABSOLUTE_LIMIT
+        ):
+            raise InvalidOperation
+        stored_value = decimal_value.quantize(
+            NEED_DEBT_SCORE_QUANTUM,
+            rounding=ROUND_HALF_UP,
+        )
+    except InvalidOperation as exc:
+        raise NeedDebtScoreDomainError(
+            "need debt score outside numeric(8,2) domain: "
+            f"character={actor_entity_id}, need={need_type}, value={debt_score!r}"
+        ) from exc
+
+    if abs(stored_value) >= NEED_DEBT_SCORE_ABSOLUTE_LIMIT:
+        raise NeedDebtScoreDomainError(
+            "need debt score outside numeric(8,2) domain: "
+            f"character={actor_entity_id}, need={need_type}, value={debt_score!r}"
+        )
+
+
 def _apply_need_fulfillment_sync(
     cur: Any,
     *,
@@ -2639,6 +2678,11 @@ def _apply_need_fulfillment_sync(
         need_tuning=need_tuning,
     )
     new_debt = max(0.0, current_debt - float(payload["discharge_debt"]))
+    _validate_need_debt_score_domain(
+        actor_entity_id=actor_entity_id,
+        need_type=need_type,
+        debt_score=new_debt,
+    )
     cur.execute(
         """
         UPDATE character_need_states
@@ -2697,6 +2741,11 @@ async def _apply_need_fulfillment_async(
         need_tuning=need_tuning,
     )
     new_debt = max(0.0, current_debt - float(payload["discharge_debt"]))
+    _validate_need_debt_score_domain(
+        actor_entity_id=actor_entity_id,
+        need_type=need_type,
+        debt_score=new_debt,
+    )
     await conn.execute(
         """
         UPDATE character_need_states

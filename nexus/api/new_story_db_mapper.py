@@ -654,6 +654,18 @@ class NewStoryDatabaseMapper:
                     self.save_story_seed(transition_data.seed, cursor=cur)
                     logger.debug("Saved story seed to global_variables")
 
+                    # The world clock must exist before any character row because
+                    # the need-state trigger anchors need clocks to it (two-clocks
+                    # doctrine).
+                    cur.execute(
+                        """
+                        UPDATE global_variables
+                        SET base_timestamp = %s
+                        WHERE id = true
+                        """,
+                        (transition_data.base_timestamp,),
+                    )
+
                     # Derive character's initial state from seed context
                     # - current_activity: What they're trying to do (immediate goal)
                     # - emotional_state: How they feel given the stakes/tension
@@ -707,12 +719,6 @@ class NewStoryDatabaseMapper:
                         "Trait compilation for %s: %s",
                         transition_data.character.name,
                         trait_compile_result.counters.model_dump(),
-                    )
-
-                    # Set base timestamp (already a datetime from TransitionData)
-                    cur.execute(
-                        "UPDATE global_variables SET base_timestamp = %s WHERE id = true",
-                        (transition_data.base_timestamp,),
                     )
 
                     if in_transaction is not None:
