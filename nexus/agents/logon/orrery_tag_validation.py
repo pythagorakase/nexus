@@ -29,7 +29,10 @@ from nexus.agents.orrery.tag_library import (
     read_tag_library,
 )
 from nexus.agents.orrery.tag_schemas import OrreryTagBestowal
-from nexus.agents.orrery.tag_writer import validate_tag_bestowal
+from nexus.agents.orrery.tag_writer import (
+    validate_pair_tag_endpoint,
+    validate_tag_bestowal,
+)
 
 logger = logging.getLogger("nexus.logon.orrery_tag_validation")
 
@@ -193,7 +196,7 @@ def _replacement_entity_kinds(
     Mapping[int, Tuple[Optional[str], Optional[str]]],
     List[str],
 ]:
-    """Resolve actor/target kinds for replacement single-entity tag fields."""
+    """Resolve actor/target kinds for replacement tag fields."""
 
     requirements: List[Tuple[int, str, str, str]] = []
     for index, adjudication in enumerate(
@@ -209,6 +212,10 @@ def _replacement_entity_kinds(
         for field_name, _bestowal_field in _REPLACEMENT_TARGET_TAG_FIELDS:
             if getattr(delta, field_name, None):
                 requirements.append((index, proposal_id, "target", field_name))
+        if getattr(delta, _REPLACEMENT_PAIR_TAG_FIELD, None):
+            requirements.append(
+                (index, proposal_id, "target", _REPLACEMENT_PAIR_TAG_FIELD)
+            )
     if not requirements:
         return {}, []
 
@@ -280,10 +287,11 @@ def _replacement_pair_tag_issues(
     response: Any,
     cur: Any,
     *,
+    replacement_entity_kinds: Mapping[int, Tuple[Optional[str], Optional[str]]],
     vocabulary: Optional[StorytellerVocabulary],
     suggestion_limit: int,
 ) -> List[str]:
-    """Validate replacement inbound-clear names against the pair-tag registry."""
+    """Validate inbound-clear names and target kinds against the pair-tag registry."""
 
     issues: List[str] = []
     for index, adjudication in enumerate(
@@ -296,8 +304,23 @@ def _replacement_pair_tag_issues(
             f"orrery_adjudications[{index}].replacement_state_delta."
             f"{_REPLACEMENT_PAIR_TAG_FIELD}"
         )
+        _actor_kind, target_kind = replacement_entity_kinds.get(index, (None, None))
         for tag_name in getattr(delta, _REPLACEMENT_PAIR_TAG_FIELD, None) or []:
-            if vocabulary is None:
+            if vocabulary is not None and tag_name not in vocabulary.pair_tag_names:
+                issue = f"{path}: Unknown or deprecated pair_tag {tag_name!r}"
+                issues.append(
+                    _with_near_misses(
+                        issue,
+                        value=tag_name,
+                        candidates=vocabulary.pair_tag_names,
+                        suggestion_limit=suggestion_limit,
+                    )
+                )
+                continue
+
+            if target_kind is None:
+                if vocabulary is not None:
+                    continue
                 cur.execute(
                     """
                     SELECT id
@@ -306,20 +329,20 @@ def _replacement_pair_tag_issues(
                     """,
                     (tag_name,),
                 )
-                registered = cur.fetchone() is not None
-            else:
-                registered = tag_name in vocabulary.pair_tag_names
-            if registered:
+                if cur.fetchone() is not None:
+                    continue
+                issues.append(f"{path}: Unknown or deprecated pair_tag {tag_name!r}")
                 continue
-            issue = f"{path}: Unknown or deprecated pair_tag {tag_name!r}"
-            if vocabulary is not None:
-                issue = _with_near_misses(
-                    issue,
-                    value=tag_name,
-                    candidates=vocabulary.pair_tag_names,
-                    suggestion_limit=suggestion_limit,
+
+            try:
+                validate_pair_tag_endpoint(
+                    cur,
+                    tag=tag_name,
+                    entity_kind=target_kind,
+                    role="object",
                 )
-            issues.append(issue)
+            except ValueError as exc:
+                issues.append(f"{path}: {exc}")
     return issues
 
 
@@ -616,6 +639,7 @@ def collect_orrery_tag_issues(
         _replacement_pair_tag_issues(
             response,
             cur,
+            replacement_entity_kinds=replacement_kinds,
             vocabulary=vocabulary,
             suggestion_limit=suggestion_limit,
         )

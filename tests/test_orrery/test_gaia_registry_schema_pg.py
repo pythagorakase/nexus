@@ -30,9 +30,11 @@ from scripts.api_openai import OpenAIProvider
 
 
 # Measured against the shipped NEXUS_template registry on 2026-07-30:
-# 24,321 bytes / 5,982 o200k tokens. These ceilings retain ~10% headroom.
+# 24,321 bytes / 5,982 o200k tokens / 626 enum values. The byte and token
+# ceilings retain ~10% headroom.
 GAIA_REGISTRY_STRICT_MAX_BYTES = 26_800
 GAIA_REGISTRY_STRICT_MAX_TOKENS = 6_600
+GAIA_REGISTRY_STRICT_ENUM_VALUE_COUNT = 626
 
 # Current OpenAI Structured Outputs documentation:
 # https://developers.openai.com/api/docs/guides/structured-outputs
@@ -208,19 +210,21 @@ def test_gaia_registry_strict_schema_stays_within_measured_budget_and_limits(
     static_tokens = len(encoding.encode(static_wire))
     registry_tokens = len(encoding.encode(registry_wire))
     registry_bytes = len(registry_wire.encode("utf-8"))
+    enum_nodes = _all_enum_nodes(registry_schema)
+    enum_value_count = sum(len(node["enum"]) for node in enum_nodes)
+    enum_value_headroom = OPENAI_SCHEMA_ENUM_VALUE_LIMIT - enum_value_count
 
     print(
         "Gaia strict schema measurement: "
         f"static={len(static_wire.encode('utf-8'))} bytes/{static_tokens} tokens; "
-        f"registry={registry_bytes} bytes/{registry_tokens} tokens"
+        f"registry={registry_bytes} bytes/{registry_tokens} tokens; "
+        f"enum_values={enum_value_count}/{OPENAI_SCHEMA_ENUM_VALUE_LIMIT} "
+        f"({enum_value_headroom} headroom)"
     )
     assert registry_bytes <= GAIA_REGISTRY_STRICT_MAX_BYTES
     assert registry_tokens <= GAIA_REGISTRY_STRICT_MAX_TOKENS
-
-    enum_nodes = _all_enum_nodes(registry_schema)
-    assert sum(len(node["enum"]) for node in enum_nodes) <= (
-        OPENAI_SCHEMA_ENUM_VALUE_LIMIT
-    )
+    assert enum_value_count == GAIA_REGISTRY_STRICT_ENUM_VALUE_COUNT
+    assert enum_value_headroom >= 0
     for node in enum_nodes:
         values = [str(value) for value in node["enum"]]
         if len(values) > OPENAI_LARGE_ENUM_VALUE_THRESHOLD:

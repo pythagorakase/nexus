@@ -776,6 +776,98 @@ async def test_replacement_state_delta_arm_failure_becomes_named_model_retry(
     )
 
 
+@pytest.mark.asyncio
+async def test_pair_clear_without_target_binding_becomes_named_model_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An actor-only pair clear fails while the model can repair its response."""
+
+    from nexus.api import db_pool
+
+    monkeypatch.setattr(
+        db_pool,
+        "get_connection",
+        lambda _dbname: FakeRegistryConnection(FakeRegistryCursor()),
+    )
+    validator = build_storyteller_tag_validator(
+        "test_slot",
+        proposal_bindings_provider=lambda: {
+            "proposal-1": {
+                "actor": 101,
+            }
+        },
+    )
+    assert validator is not None
+    response = _storyteller_response(
+        orrery_adjudications=[
+            {
+                "proposal_id": "proposal-1",
+                "action": "replace",
+                "replacement_state_delta": {
+                    "entity_pair_tags_target_clear_inbound": ["protects"],
+                },
+            }
+        ]
+    )
+
+    with pytest.raises(ModelRetry) as exc_info:
+        await validator(SimpleNamespace(retry=0), response)
+
+    assert (
+        "orrery_adjudications[0].replacement_state_delta."
+        "entity_pair_tags_target_clear_inbound" in exc_info.value.message
+    )
+    assert "no scalar target entity binding" in exc_info.value.message
+
+
+@pytest.mark.asyncio
+async def test_pair_clear_rejects_target_kind_excluded_by_registry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A bound target must be allowed on the pair tag's object side."""
+
+    from nexus.api import db_pool
+
+    monkeypatch.setattr(
+        db_pool,
+        "get_connection",
+        lambda _dbname: FakeRegistryConnection(FakeRegistryCursor()),
+    )
+    validator = build_storyteller_tag_validator(
+        "test_slot",
+        proposal_bindings_provider=lambda: {
+            "proposal-1": {
+                "actor": 101,
+                "target": 202,
+            }
+        },
+    )
+    assert validator is not None
+    response = _storyteller_response(
+        orrery_adjudications=[
+            {
+                "proposal_id": "proposal-1",
+                "action": "replace",
+                "replacement_state_delta": {
+                    "entity_pair_tags_target_clear_inbound": ["contact:social"],
+                },
+            }
+        ]
+    )
+
+    with pytest.raises(ModelRetry) as exc_info:
+        await validator(SimpleNamespace(retry=0), response)
+
+    assert (
+        "orrery_adjudications[0].replacement_state_delta."
+        "entity_pair_tags_target_clear_inbound" in exc_info.value.message
+    )
+    assert (
+        "pair_tag 'contact:social' does not allow object_kind='place'"
+        in exc_info.value.message
+    )
+
+
 @pytest.mark.parametrize(
     ("other_entity_name", "entities_by_name", "message"),
     [
