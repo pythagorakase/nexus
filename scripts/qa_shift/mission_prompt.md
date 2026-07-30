@@ -70,9 +70,17 @@ issue, dry-well, wall-clock, and token settings.
    without `NEXUS_RUNTIME_CONFIG`) and save its complete output in the archive.
    A baseline failure is a candidate, not permission to patch it.
 6. Stop only the isolated QA lane if it is stale. Back up `save_04` with
-   `pg_dump -Fc`, checksum the dump, reset only the configured slot through
-   `scripts/new_story_setup.py --force`, start the isolated gateway, and verify
-   its health and effective model. Save the commands and outputs.
+   `pg_dump -Fc` and checksum the dump. Then initialize the slot:
+   - If `temp/qa_seeds/` holds at least one `.dump` file, seed from the newest
+     instead of a bare reset: drop and recreate only the configured slot
+     database, restore with `pg_restore --no-owner`, then apply pending
+     migrations with `scripts/migrate.py --slot N`. Record the seed path and
+     its sha256.
+   - Otherwise reset only the configured slot through
+     `scripts/new_story_setup.py --force`.
+
+   Start the isolated gateway and verify its health and effective model. Save
+   the commands and outputs.
 
 If any preflight step fails, write the blocker into the mission report, perform
 the applicable teardown, and stop.
@@ -108,6 +116,16 @@ Behave like an unhinged, unpredictable, but honest user. Vary malformed,
 contradictory, free-text, adversarial, concurrency, undo/regenerate, and
 continuity-sensitive inputs. A probe family is distinct only when it tests a
 different public contract or state transition, not a cosmetic prompt variant.
+
+Rotate depth as well as surface. When the slot was seeded from a mid-campaign
+dump, at least two completed probe families must target deep-state mechanics:
+correspondence compaction triggers and digest fidelity, entity/alias
+accumulation at commit time, long-horizon constraint persistence,
+undo/regenerate against a mature journal, or Orrery behavior under sustained
+ticks. Single-request contract probes against early-wizard surfaces cannot
+fill the whole roster when depth is available; the 2026-07-30 shift ran dry
+on shallow families the same night a deep campaign on the same commit hit two
+commit-path defects.
 
 For every family:
 
@@ -146,7 +164,8 @@ Always complete teardown, including early exits:
 3. Run
    `poetry run python scripts/qa_shift/qa_shift.py finish ARCHIVE
    --exit-condition CONDITION`, selecting the truthful configured condition.
-4. Complete `mission_report.md` with checkout and suite baseline, issue links,
+4. Complete `mission_report.md` with checkout and suite baseline, slot
+   initialization (seed dump path and sha256, or fresh reset), issue links,
    probe-family negative results, evidence inventory, start/end/delta/max
    usage, exit condition, and final lane/slot disposition.
 5. Return a concise scheduled-task result with the report path and issue links.

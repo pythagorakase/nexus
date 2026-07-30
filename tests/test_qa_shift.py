@@ -6,6 +6,8 @@ from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
+import tomllib
+from typing import Any, Mapping
 
 import pytest
 import tomlkit
@@ -123,13 +125,16 @@ def test_begin_creates_archive_and_pins_every_openai_role(
     assert model["default_slot_model"] == "gpt-5.6-terra"
     assert roles["default"] == "gpt-5.6-terra"
     assert roles["gaia"] == "gpt-5.6-terra"
+    assert document["wizard"]["fallback_model"] == "@openai.default"
+    assert document["orrery"]["narration"]["provider"] == "openai"
+    assert document["orrery"]["narration"]["model_ref"] == "@openai.default"
     assert document["usage"]["daily_allowance"]["openai"] == 10_000_000
     assert (archive / "runtime_env.sh").exists()
     assert (archive / "probe_ledger.md").exists()
     assert (archive / "mission_report.md").exists()
 
 
-@pytest.mark.parametrize("missing_table", ("roles", "daily_allowance"))
+@pytest.mark.parametrize("missing_table", ("roles", "daily_allowance", "narration"))
 def test_runtime_config_shape_errors_are_clean_shift_errors(
     tmp_path: Path,
     missing_table: str,
@@ -141,6 +146,8 @@ def test_runtime_config_shape_errors_are_clean_shift_errors(
     document = tomlkit.parse((qa_shift.REPO_ROOT / "nexus.toml").read_text())
     if missing_table == "roles":
         del document["global"]["model"]["api_models"]["openai"]["roles"]
+    elif missing_table == "narration":
+        del document["orrery"]["narration"]
     else:
         del document["usage"]["daily_allowance"]
     (repo / "nexus.toml").write_text(tomlkit.dumps(document))
@@ -150,6 +157,69 @@ def test_runtime_config_shape_errors_are_clean_shift_errors(
             repo_root=repo,
             archive=archive,
             config=qa_shift.load_shift_config(),
+        )
+
+
+MODEL_ROUTE_KEYS = {
+    "compaction_model",
+    "default_model",
+    "default_slot_model",
+    "fallback_model",
+    "gaia_model",
+    "model_ref",
+    "target_model",
+}
+
+DIRECTLY_PINNED_ROUTES = {
+    "global.model.default_slot_model",
+    "orrery.narration.model_ref",
+    "wizard.fallback_model",
+}
+
+NON_REMOTE_ROUTES = {
+    # Local embedding retriever; never a provider API call.
+    "memnon.retrieval.hybrid_search.target_model",
+}
+
+
+def _collect_model_routes(table: Mapping[str, Any], prefix: str = "") -> dict[str, str]:
+    routes: dict[str, str] = {}
+    for key, value in table.items():
+        path = f"{prefix}.{key}" if prefix else key
+        if isinstance(value, dict):
+            routes.update(_collect_model_routes(value, path))
+        elif isinstance(value, str) and key in MODEL_ROUTE_KEYS:
+            routes[path] = value
+    return routes
+
+
+def test_every_tracked_model_route_is_pinned_or_role_indirect() -> None:
+    """Every remote model route in nexus.toml must be covered by the QA lane.
+
+    The lane rewrites the openai roles table, so any ``@openai.<role>`` ref is
+    pinned by indirection. Every other route must be pinned directly in
+    ``_write_runtime_config`` (or be a non-remote local route). An unclassified
+    route means the isolated lane silently leaks calls to an unpinned
+    provider — the Orrery-narration leak the 2026-07-30 scratchpad audit
+    caught live, and the wizard-fallback leak found while closing it.
+    """
+    document = tomllib.loads(
+        (qa_shift.REPO_ROOT / "nexus.toml").read_text(encoding="utf-8")
+    )
+    routes = _collect_model_routes(document)
+
+    missing = (DIRECTLY_PINNED_ROUTES | NON_REMOTE_ROUTES) - set(routes)
+    assert not missing, (
+        f"Routes {sorted(missing)} vanished from nexus.toml; update the pin "
+        "roster and _write_runtime_config together"
+    )
+    for path, value in routes.items():
+        if path in DIRECTLY_PINNED_ROUTES | NON_REMOTE_ROUTES:
+            continue
+        assert value.startswith("@openai."), (
+            f"{path} = {value!r} is not covered by the QA lane's openai role "
+            "pins; pin it in _write_runtime_config and add it to "
+            "DIRECTLY_PINNED_ROUTES"
         )
 
 
