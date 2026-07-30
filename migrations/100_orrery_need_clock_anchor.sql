@@ -115,14 +115,33 @@ BEGIN
         INTO reconciliation_anchor
         FROM chunk_metadata;
 
+        -- Persist both the pre-image and exact result on every touched row.
+        -- Replay can then rebase a checkpoint baseline without inferring the
+        -- migration boundary from transaction timestamps.
         UPDATE character_need_states
-        SET last_evaluated_at = reconciliation_anchor
+        SET last_evaluated_at = reconciliation_anchor,
+            metadata = metadata || jsonb_build_object(
+                'reconciled_by',
+                'migration_100',
+                'reconciled_last_evaluated_from',
+                last_evaluated_at::text,
+                'reconciled_last_evaluated_to',
+                reconciliation_anchor::text
+            )
         WHERE last_evaluated_at < canonical_base_timestamp
            OR last_evaluated_at > reconciliation_anchor;
         GET DIAGNOSTICS evaluated_row_count = ROW_COUNT;
 
         UPDATE character_need_states
-        SET last_fulfilled_at = reconciliation_anchor
+        SET last_fulfilled_at = reconciliation_anchor,
+            metadata = metadata || jsonb_build_object(
+                'reconciled_by',
+                'migration_100',
+                'reconciled_last_fulfilled_from',
+                last_fulfilled_at::text,
+                'reconciled_last_fulfilled_to',
+                reconciliation_anchor::text
+            )
         WHERE last_fulfilled_at < canonical_base_timestamp
            OR last_fulfilled_at > reconciliation_anchor;
         GET DIAGNOSTICS fulfilled_row_count = ROW_COUNT;

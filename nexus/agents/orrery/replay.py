@@ -37,8 +37,10 @@ produces. Sections and their replay sources:
   toggled off-and-back inside the window are reset to the trigger's
   fresh-insert shape (detected chronologically from chunk-keyed
   immunity-tag events). Migration 100's deterministic primary-clock anchors
-  and one-time reconciliation are mirrored at their physical schema boundary;
-  only genuinely pre-100 wall-clock rows remain unreproducible.
+  replay from chunk-keyed ledger state. Its one-time reconciliation rebases
+  only a checkpoint baseline carrying recorded row provenance, before window
+  events replay; markerless values that current rules cannot derive become
+  narrow field-level remainders instead of inferred legacy behavior.
 - ``character_travel_states`` — forward for explicit payloads;
   ``travel.start`` resolves destinations and routes from live state at
   commit time, so windows containing travel deltas are approximate.
@@ -165,6 +167,12 @@ VOLATILE_COLUMNS: dict[str, frozenset[str]] = {
     "character_project_states": frozenset({"id", "created_at", "updated_at"}),
 }
 
+NEED_CLOCK_RECONCILIATION_MARKER = "migration_100"
+NEED_CLOCK_RECONCILIATION_COLUMNS = (
+    "last_evaluated_at",
+    "last_fulfilled_at",
+)
+
 SKALD_SCALAR_FIELDS = frozenset(
     {
         "characters.emotional_state",
@@ -277,8 +285,7 @@ class _NeedApplicabilityTransitions:
 
     went_inapplicable: set[tuple[int, str]]
     first_made_applicable_chunk: dict[tuple[int, str], int]
-    first_made_applicable_at: dict[tuple[int, str], datetime]
-    last_made_applicable_at: dict[tuple[int, str], datetime]
+    last_made_applicable_chunk: dict[tuple[int, str], int]
 
 
 def _as_document(value: Any) -> dict[str, Any]:
@@ -397,49 +404,16 @@ def canonicalize(value: Any) -> Any:
     return value
 
 
-def _as_datetime(value: Any) -> Optional[datetime]:
-    """Return a checkpoint timestamp leaf as a datetime when present."""
-
-    if value is None or isinstance(value, datetime):
-        return value
-    if isinstance(value, str):
-        return datetime.fromisoformat(value)
-    raise TypeError(f"Expected a timestamp value, got {value!r}")
-
-
-def _need_clock_migration_applied_at(cur: Any) -> Optional[datetime]:
-    """Return migration 100's physical boundary when it is installed."""
-
-    cur.execute("SELECT applied_at FROM schema_migrations WHERE version = '100'")
-    row = cur.fetchone()
-    return _row_value(row, 0) if row is not None else None
-
-
-def _checkpoint_created_at(cur: Any, checkpoint_id: int) -> datetime:
-    cur.execute(
-        "SELECT created_at FROM state_checkpoints WHERE id = %s",
-        (checkpoint_id,),
-    )
-    row = cur.fetchone()
-    if row is None:
-        raise ValueError(f"Checkpoint {checkpoint_id} does not exist")
-    return _row_value(row, 0)
-
-
-def _canonical_need_clock_as_of(
-    cur: Any, physical_time: datetime
-) -> Optional[datetime]:
-    """Rebuild migration 100's primary-clock authority at a physical boundary."""
+def _canonical_need_clock_at_chunk(cur: Any, chunk_id: int) -> Optional[datetime]:
+    """Resolve the current primary need clock from chunk-keyed ledger state."""
 
     cur.execute(
         """
         SELECT COALESCE(
             (
-                SELECT MAX(cm.world_time)
-                FROM chunk_metadata AS cm
-                JOIN narrative_chunks AS nc ON nc.id = cm.chunk_id
-                WHERE nc.created_at IS NOT NULL
-                  AND nc.created_at <= %s
+                SELECT MAX(world_time)
+                FROM chunk_metadata
+                WHERE chunk_id <= %s
             ),
             (
                 SELECT base_timestamp
@@ -448,55 +422,97 @@ def _canonical_need_clock_as_of(
             )
         )
         """,
-        (physical_time,),
+        (chunk_id,),
     )
     row = cur.fetchone()
     return _row_value(row, 0) if row is not None else None
 
 
-def _need_clock_reconciliation_authority(
+def _need_clock_provenance(metadata: Any) -> dict[str, Any]:
+    """Extract and validate migration 100's field-level row provenance."""
+
+    document = dict(_as_document(metadata) or {})
+    if document.get("reconciled_by") != NEED_CLOCK_RECONCILIATION_MARKER:
+        return {}
+    provenance: dict[str, Any] = {"reconciled_by": NEED_CLOCK_RECONCILIATION_MARKER}
+    for column in NEED_CLOCK_RECONCILIATION_COLUMNS:
+        field_name = column.removesuffix("_at")
+        from_key = f"reconciled_{field_name}_from"
+        to_key = f"reconciled_{field_name}_to"
+        has_from = from_key in document
+        has_to = to_key in document
+        if has_from != has_to:
+            raise ValueError(
+                "Migration 100 need-clock provenance has an incomplete "
+                f"{column} pre-image/result pair"
+            )
+        if has_from:
+            provenance[from_key] = document[from_key]
+            provenance[to_key] = document[to_key]
+    if len(provenance) == 1:
+        raise ValueError(
+            "Migration 100 need-clock provenance names no reconciled field"
+        )
+    return provenance
+
+
+def _live_need_clock_provenance(
     cur: Any,
-    *,
-    base_checkpoint_created_at: datetime,
-    target_checkpoint_created_at: datetime,
-) -> Optional[tuple[datetime, datetime]]:
-    """Return (base, ceiling) when migration 100 crossed this capture pair."""
+) -> dict[tuple[int, str], dict[str, Any]]:
+    """Load the exact reconciliation evidence retained on current rows."""
 
-    applied_at = _need_clock_migration_applied_at(cur)
-    if (
-        applied_at is None
-        or applied_at <= base_checkpoint_created_at
-        or applied_at > target_checkpoint_created_at
-    ):
-        return None
-    cur.execute("SELECT base_timestamp FROM global_variables WHERE id = true")
-    row = cur.fetchone()
-    canonical_base = _row_value(row, 0) if row is not None else None
-    if canonical_base is None:
-        return None
-    ceiling = _canonical_need_clock_as_of(cur, applied_at)
-    if ceiling is None:
-        return None
-    return canonical_base, ceiling
+    cur.execute(
+        """
+        SELECT character_entity_id, need_type::text, metadata
+        FROM character_need_states
+        WHERE metadata ->> 'reconciled_by' = 'migration_100'
+        """
+    )
+    return {
+        (int(entity_id), str(need_type)): _need_clock_provenance(metadata)
+        for entity_id, need_type, metadata in cur.fetchall()
+    }
 
 
-def _reconcile_need_clock_rows(
+def _rebase_reconciled_need_clock_baseline(
+    cur: Any,
     rows: list[dict[str, Any]],
     *,
-    canonical_base: datetime,
-    canonical_ceiling: datetime,
+    target_rows: Optional[list[dict[str, Any]]] = None,
 ) -> tuple[int, int]:
-    """Apply migration 100's deterministic restamp to replay working rows."""
+    """Apply recorded migration results to a baseline, before event replay."""
+
+    live_provenance = _live_need_clock_provenance(cur)
+    target_marker_keys: Optional[set[tuple[int, str]]] = None
+    if target_rows is not None:
+        # A later live marker must not rewrite checkpoint pairs whose target
+        # still predates the reconciliation. The target's own copied marker is
+        # recorded proof that this baseline-to-target window crossed it.
+        target_marker_keys = {
+            (int(row["character_entity_id"]), str(row["need_type"]))
+            for row in target_rows
+            if _need_clock_provenance(row.get("metadata"))
+        }
 
     counts = {"last_evaluated_at": 0, "last_fulfilled_at": 0}
     for row in rows:
-        for column in counts:
-            value = _as_datetime(row.get(column))
-            if value is not None and (
-                value < canonical_base or value > canonical_ceiling
-            ):
-                row[column] = _isoformat(canonical_ceiling)
+        key = (int(row["character_entity_id"]), str(row["need_type"]))
+        provenance = live_provenance.get(key)
+        if provenance is None or (
+            target_marker_keys is not None and key not in target_marker_keys
+        ):
+            continue
+        baseline_metadata = dict(_as_document(row.get("metadata")) or {})
+        if baseline_metadata.get("reconciled_by") == NEED_CLOCK_RECONCILIATION_MARKER:
+            continue
+        for column in NEED_CLOCK_RECONCILIATION_COLUMNS:
+            field_name = column.removesuffix("_at")
+            to_key = f"reconciled_{field_name}_to"
+            if to_key in provenance:
+                row[column] = provenance[to_key]
                 counts[column] += 1
+        baseline_metadata.update(provenance)
+        row["metadata"] = baseline_metadata
     return counts["last_evaluated_at"], counts["last_fulfilled_at"]
 
 
@@ -561,8 +577,8 @@ class _Replayer:
         self.target_created_at = _fetch_chunk_created_at(cur, target_chunk_id)
         self.need_tuning = load_need_tuning()
         self.project_policy = _load_project_policy()
-        self.need_clock_migration_applied_at = _need_clock_migration_applied_at(cur)
         self.missing_base_sections: set[str] = set()
+        self.need_clock_remainder_candidates: set[tuple[str, str]] = set()
         # Resolved in replay() once the base document is loaded; None means
         # legacy chunk-window behavior (issue #552).
         self.maturation_gate: Optional[frozenset[int]] = None
@@ -575,58 +591,15 @@ class _Replayer:
 
     # -- base checkpoint ---------------------------------------------------
 
-    def _uses_deterministic_need_clock(self, physical_time: datetime) -> bool:
-        """Whether migration 100 governed a write at this physical instant."""
+    def _deterministic_need_clock(self, chunk_id: int) -> datetime:
+        """Resolve the current tick/trigger anchor from chunk provenance."""
 
-        return (
-            self.need_clock_migration_applied_at is not None
-            and physical_time >= self.need_clock_migration_applied_at
-        )
-
-    def _deterministic_need_clock(self, physical_time: datetime) -> datetime:
-        """Resolve a post-migration tick/trigger anchor or fail closed."""
-
-        anchor = _canonical_need_clock_as_of(self.cur, physical_time)
+        anchor = _canonical_need_clock_at_chunk(self.cur, chunk_id)
         if anchor is None:
             raise ValueError(
                 "Replay could not resolve migration 100's canonical need clock"
             )
         return anchor
-
-    def _reconcile_need_clocks_at_migration_boundary(
-        self,
-        needs: dict[tuple[int, str], dict[str, Any]],
-        *,
-        base_checkpoint_created_at: datetime,
-        result: ReplayResult,
-    ) -> None:
-        """Mirror migration 100's unledgered repair between checkpoints."""
-
-        if self.target_checkpoint_id is None:
-            return
-        target_checkpoint_created_at = _checkpoint_created_at(
-            self.cur, self.target_checkpoint_id
-        )
-        authority = _need_clock_reconciliation_authority(
-            self.cur,
-            base_checkpoint_created_at=base_checkpoint_created_at,
-            target_checkpoint_created_at=target_checkpoint_created_at,
-        )
-        if authority is None:
-            return
-        canonical_base, canonical_ceiling = authority
-        evaluated, fulfilled = _reconcile_need_clock_rows(
-            list(needs.values()),
-            canonical_base=canonical_base,
-            canonical_ceiling=canonical_ceiling,
-        )
-        result.add_note(
-            "character_need_states",
-            "migration 100 reconciliation mirrored at the checkpoint boundary: "
-            f"last_evaluated_at rows={evaluated}, "
-            f"last_fulfilled_at rows={fulfilled}",
-            approximate=False,
-        )
 
     def load_base_checkpoint(
         self, base_checkpoint_id: Optional[int]
@@ -913,6 +886,27 @@ class _Replayer:
             (row["character_entity_id"], row["need_type"]): dict(row)
             for row in base_state["character_need_states"]
         }
+        target_need_rows = (
+            _load_checkpoint_state(self.cur, self.target_checkpoint_id)[
+                "character_need_states"
+            ]
+            if self.target_checkpoint_id is not None
+            else None
+        )
+        evaluated, fulfilled = _rebase_reconciled_need_clock_baseline(
+            self.cur,
+            list(needs.values()),
+            target_rows=target_need_rows,
+        )
+        if evaluated or fulfilled:
+            result.add_note(
+                "character_need_states",
+                "migration 100 provenance rebased the checkpoint baseline "
+                "before event replay: "
+                f"last_evaluated_at rows={evaluated}, "
+                f"last_fulfilled_at rows={fulfilled}",
+                approximate=False,
+            )
         travel = {
             row["character_entity_id"]: dict(row)
             for row in base_state["character_travel_states"]
@@ -926,8 +920,7 @@ class _Replayer:
 
         if "entities" not in self.missing_base_sections:
             self._seed_window_entity_births(entities, result)
-        born_entity_times = self._seed_window_births(characters, places, result)
-        born_entities = set(born_entity_times)
+        born_entities = self._seed_window_births(characters, places, result)
         character_entities = {
             row["entity_id"]
             for row in characters.values()
@@ -947,7 +940,7 @@ class _Replayer:
                         needs,
                         travel,
                         projects,
-                        born_entity_times,
+                        born_entities,
                         need_transitions,
                         result,
                     )
@@ -976,14 +969,8 @@ class _Replayer:
             tag_workings["entity_tags"],
             needs,
             base_chunk,
-            born_entity_times,
             need_transitions,
             result,
-        )
-        self._reconcile_need_clocks_at_migration_boundary(
-            needs,
-            base_checkpoint_created_at=base_created_at,
-            result=result,
         )
         for section, working in tag_workings.items():
             result.state[section] = sorted(working.values(), key=lambda r: r["id"])
@@ -1002,6 +989,7 @@ class _Replayer:
         result.state["character_need_states"] = [
             needs[key] for key in sorted(needs, key=lambda k: (k[0], k[1]))
         ]
+        self._mark_need_clock_remainder(result)
         result.state["character_travel_states"] = [
             travel[key] for key in sorted(travel)
         ]
@@ -1568,7 +1556,7 @@ class _Replayer:
         characters: dict[int, dict[str, Any]],
         places: dict[int, dict[str, Any]],
         result: ReplayResult,
-    ) -> dict[int, datetime]:
+    ) -> set[int]:
         """Entities INSERTed between checkpoint and N are un-ledgered.
 
         Their existence is seeded (wall-clock bounded) but their initial
@@ -1578,11 +1566,11 @@ class _Replayer:
         start ``None`` and are marked unreproducible; a ledgered write in
         the window clears the mark for the column it sets. Rows whose
         created_at equals the target chunk's are presence-uncertain (the
-        Step 8.6 stub-creation ambiguity). Returns born character entity
-        creation times for the need-applicability sync.
+        Step 8.6 stub-creation ambiguity). Returns born character entity ids
+        for the need-applicability sync.
         """
 
-        born_entity_times: dict[int, datetime] = {}
+        born_entities: set[int] = set()
         for section, sql, columns in (
             (
                 "characters",
@@ -1614,7 +1602,7 @@ class _Replayer:
                 if created_at == self.target_created_at:
                     result.uncertain_rows.add((section, str(row_id)))
                 if section == "characters" and entity_id is not None:
-                    born_entity_times[entity_id] = created_at
+                    born_entities.add(entity_id)
             if births:
                 result.add_note(
                     section,
@@ -1623,7 +1611,7 @@ class _Replayer:
                     "ledgered writes",
                     approximate=True,
                 )
-        return born_entity_times
+        return born_entities
 
     def _apply_skald_rows(
         self,
@@ -1667,30 +1655,29 @@ class _Replayer:
         needs: dict[tuple[int, str], dict[str, Any]],
         travel: dict[int, dict[str, Any]],
         projects: dict[Any, dict[str, Any]],
-        born_entity_times: dict[int, datetime],
+        born_entities: set[int],
         need_transitions: _NeedApplicabilityTransitions,
         result: ReplayResult,
     ) -> None:
         self.cur.execute(
             """
-            SELECT id, actor_entity_id, state_delta, created_at
-            FROM orrery_resolutions
+            SELECT id, actor_entity_id, state_delta FROM orrery_resolutions
             WHERE tick_chunk_id = %s ORDER BY id
             """,
             (chunk_id,),
         )
         resolutions = [
-            (row[0], row[1], _as_document(row[2]), row[3])
-            for row in self.cur.fetchall()
+            (row[0], row[1], _as_document(row[2])) for row in self.cur.fetchall()
         ]
         if not resolutions:
             return
         source_world_time = _fetch_world_time(self.cur, chunk_id)
+        used_primary_clock_fallback = source_world_time is None
+        world_time = source_world_time
+        if used_primary_clock_fallback:
+            world_time = self._deterministic_need_clock(chunk_id)
         by_entity = {row["entity_id"]: row for row in characters.values()}
-        for resolution_id, actor_entity_id, delta, committed_at in resolutions:
-            world_time = source_world_time
-            if world_time is None and self._uses_deterministic_need_clock(committed_at):
-                world_time = self._deterministic_need_clock(committed_at)
+        for resolution_id, actor_entity_id, delta in resolutions:
             unknown = set(delta) - REPLAYED_DELTA_KEYS - TAG_DELTA_KEYS
             if unknown:
                 raise ValueError(
@@ -1716,8 +1703,9 @@ class _Replayer:
                     delta["need.fulfill"],
                     world_time,
                     needs,
-                    born_entity_times,
+                    actor_entity_id in born_entities,
                     need_transitions,
+                    used_primary_clock_fallback,
                     result,
                 )
             for project_key in (
@@ -2059,10 +2047,15 @@ class _Replayer:
         raw_payload: Any,
         world_time: Optional[datetime],
         needs: dict[tuple[int, str], dict[str, Any]],
-        born_entity_times: dict[int, datetime],
+        born_in_window: bool,
         transitions: _NeedApplicabilityTransitions,
+        used_primary_clock_fallback: bool,
         result: ReplayResult,
     ) -> None:
+        if world_time is None:
+            raise ValueError(
+                f"Need fulfillment at chunk {chunk_id} has no deterministic clock"
+            )
         payload = _coerce_need_payload(raw_payload)
         need_type = payload["type"]
         key = (actor_entity_id, need_type)
@@ -2072,19 +2065,9 @@ class _Replayer:
             tag_initialized = (
                 activation_chunk is not None and activation_chunk <= chunk_id
             )
-            born_in_window = actor_entity_id in born_entity_times
-            initialized_at = (
-                transitions.first_made_applicable_at.get(key)
-                if tag_initialized
-                else born_entity_times.get(actor_entity_id)
-            )
             initial_anchor = world_time
-            deterministic_initialization = (
-                initialized_at is not None
-                and self._uses_deterministic_need_clock(initialized_at)
-            )
-            if deterministic_initialization and initialized_at is not None:
-                initial_anchor = self._deterministic_need_clock(initialized_at)
+            if tag_initialized and activation_chunk is not None:
+                initial_anchor = self._deterministic_need_clock(activation_chunk)
             needs[key] = {
                 "character_entity_id": actor_entity_id,
                 "need_type": need_type,
@@ -2102,25 +2085,8 @@ class _Replayer:
                     else {}
                 ),
             }
-            if (
-                tag_initialized
-                and activation_chunk is not None
-                and activation_chunk < chunk_id
-                and not deterministic_initialization
-            ):
-                # Migration-057-era trigger anchors came from wall time. The
-                # same post-100 path is exact because initialized_at resolves
-                # the primary clock at the trigger boundary.
-                result.unreproducible.add(
-                    ("character_need_states", row_key, "debt_score")
-                )
-                result.add_note(
-                    "character_need_states",
-                    f"pre-migration tag applicability initialized {row_key} "
-                    f"before chunk {chunk_id}; pre-fulfillment debt accrual "
-                    "is unreproducible",
-                    approximate=True,
-                )
+            if born_in_window or tag_initialized:
+                self.need_clock_remainder_candidates.add((row_key, "debt_score"))
         row = needs[key]
         last_evaluated = row.get("last_evaluated_at")
         if isinstance(last_evaluated, str):
@@ -2140,23 +2106,15 @@ class _Replayer:
         metadata = dict(row.get("metadata") or {})
         metadata["last_fulfillment"] = payload
         row["metadata"] = metadata
-        if world_time is None:
-            # Legacy pre-migration production fell back to wall-clock now()
-            # and accrued debt against it. Migration-100-era rows take the
-            # deterministic primary clock above; only the legacy history
-            # remains genuinely unreproducible.
-            for column in ("last_evaluated_at", "last_fulfilled_at", "debt_score"):
-                result.unreproducible.add(("character_need_states", row_key, column))
-            result.add_note(
-                "character_need_states",
-                f"chunk {chunk_id} has NULL world_time and predates migration "
-                f"100; legacy wall-clock need state on {row_key} is "
-                "unreproducible",
-                approximate=True,
-            )
-        else:
-            row["last_evaluated_at"] = _isoformat(world_time)
-            row["last_fulfilled_at"] = _isoformat(world_time)
+        row["last_evaluated_at"] = _isoformat(world_time)
+        row["last_fulfilled_at"] = _isoformat(world_time)
+        if used_primary_clock_fallback:
+            for column in (
+                "last_evaluated_at",
+                "last_fulfilled_at",
+                "debt_score",
+            ):
+                self.need_clock_remainder_candidates.add((row_key, column))
         result.add_note(
             "character_need_states",
             "need.fulfill replayed through effective_debt_score with the "
@@ -2164,6 +2122,49 @@ class _Replayer:
             "matches its value at original commit",
             approximate=False,
         )
+
+    def _mark_need_clock_remainder(self, result: ReplayResult) -> None:
+        """Skip only markerless need fields current replay cannot derive."""
+
+        if (
+            self.target_checkpoint_id is None
+            or not self.need_clock_remainder_candidates
+        ):
+            return
+        target_rows = _load_checkpoint_state(self.cur, self.target_checkpoint_id)[
+            "character_need_states"
+        ]
+        target_by_key = {
+            f"{row['character_entity_id']}:{row['need_type']}": row
+            for row in target_rows
+        }
+        replayed_by_key = {
+            f"{row['character_entity_id']}:{row['need_type']}": row
+            for row in result.state["character_need_states"]
+        }
+        skipped: list[tuple[str, str]] = []
+        for row_key, column in sorted(self.need_clock_remainder_candidates):
+            target = target_by_key.get(row_key)
+            replayed = replayed_by_key.get(row_key)
+            if target is None or replayed is None:
+                continue
+            if _need_clock_provenance(target.get("metadata")):
+                continue
+            if canonicalize(target.get(column)) == canonicalize(replayed.get(column)):
+                continue
+            # Remainder rule: markerless rows replay under the current,
+            # chunk-keyed deterministic helper. Only a concrete target field
+            # that rule cannot derive is unreproducible; never guess which
+            # historical helper version wrote it from wall-clock timestamps.
+            result.unreproducible.add(("character_need_states", row_key, column))
+            skipped.append((row_key, column))
+        if skipped:
+            result.add_note(
+                "character_need_states",
+                "markerless need-clock remainder under the current "
+                f"deterministic rule: {len(skipped)} field(s) unreproducible",
+                approximate=True,
+            )
 
     def _replay_travel(
         self,
@@ -2179,8 +2180,8 @@ class _Replayer:
         payload = _coerce_travel_payload(raw_payload)
         row = travel.get(actor_entity_id)
         if world_time is None:
-            # Only legacy pre-migration NULL-clock ticks reached wall time.
-            # Post-migration ticks resolve the deterministic primary clock.
+            # No chunk-keyed primary-clock input exists on this replay path;
+            # retain a narrow remainder instead of inventing wall time.
             time_columns = ["updated_at_world_time"]
             if delta_key == "travel.start":
                 time_columns.append("started_at_world_time")
@@ -2601,21 +2602,24 @@ class _Replayer:
         *,
         entity_id: int,
         need: str,
-        created_at: Optional[datetime],
+        anchor_chunk_id: Optional[int],
         result: ReplayResult,
     ) -> dict[str, Any]:
-        """Build the trigger's fresh row with the correct clock-era contract."""
+        """Build a fresh trigger row from chunk provenance when available."""
 
         row_key = f"{entity_id}:{need}"
         last_evaluated_at = None
-        if created_at is not None and self._uses_deterministic_need_clock(created_at):
-            last_evaluated_at = _isoformat(self._deterministic_need_clock(created_at))
+        if anchor_chunk_id is not None:
+            last_evaluated_at = _isoformat(
+                self._deterministic_need_clock(anchor_chunk_id)
+            )
             result.unreproducible.discard(
                 ("character_need_states", row_key, "last_evaluated_at")
             )
+            self.need_clock_remainder_candidates.add((row_key, "last_evaluated_at"))
         else:
-            # Migration 057 used wall-clock now(); only rows proven to have
-            # been created before migration 100 retain this honest skip.
+            # Character birth is not chunk-ledgered, so the current trigger's
+            # primary-clock input cannot be positioned for this fresh row.
             result.unreproducible.add(
                 ("character_need_states", row_key, "last_evaluated_at")
             )
@@ -2629,24 +2633,24 @@ class _Replayer:
             "metadata": {"synced_by": "need_applicability"},
         }
 
-    def _need_sync_trigger_times(
+    def _need_sync_trigger_chunks(
         self, entities: set[int], base_chunk: int
-    ) -> dict[int, datetime]:
-        """Return each entity's first tag-trigger instant in this window."""
+    ) -> dict[int, int]:
+        """Return each entity's first chunk-keyed tag trigger in this window."""
 
         if not entities:
             return {}
         self.cur.execute(
             """
-            SELECT entity_id, MIN(triggered_at)
+            SELECT entity_id, MIN(trigger_chunk)
             FROM (
-                SELECT et.entity_id, et.applied_at AS triggered_at
+                SELECT et.entity_id, et.source_chunk_id AS trigger_chunk
                 FROM entity_tags AS et
                 WHERE et.entity_id = ANY(%s)
                   AND et.source_chunk_id > %s
                   AND et.source_chunk_id <= %s
                 UNION ALL
-                SELECT et.entity_id, log.cleared_at AS triggered_at
+                SELECT et.entity_id, log.source_chunk_id AS trigger_chunk
                 FROM tag_clearance_log AS log
                 JOIN entity_tags AS et ON et.id = log.entity_tag_id
                 WHERE et.entity_id = ANY(%s)
@@ -2665,9 +2669,9 @@ class _Replayer:
             ),
         )
         return {
-            int(entity_id): triggered_at
-            for entity_id, triggered_at in self.cur.fetchall()
-            if triggered_at is not None
+            int(entity_id): int(trigger_chunk)
+            for entity_id, trigger_chunk in self.cur.fetchall()
+            if trigger_chunk is not None
         }
 
     def _sync_need_applicability(
@@ -2677,7 +2681,6 @@ class _Replayer:
         entity_tags_working: dict[int, dict[str, Any]],
         needs: dict[tuple[int, str], dict[str, Any]],
         base_chunk: int,
-        born_entity_times: dict[int, datetime],
         transitions: _NeedApplicabilityTransitions,
         result: ReplayResult,
     ) -> None:
@@ -2690,9 +2693,9 @@ class _Replayer:
         pure function of the final active tag set; row CONTENTS are not —
         an applicability toggle (immunity tag applied then cleared inside
         one window) makes production delete and re-insert a FRESH row, so
-        toggled rows are reset to the fresh-insert shape here. Migration 100
-        makes the fresh anchor deterministic for post-boundary rows; only
-        legacy pre-migration rows keep an unreproducible timestamp.
+        toggled rows are reset to the fresh-insert shape here. Chunk-keyed
+        tag provenance reconstructs the current deterministic anchor; an
+        un-ledgered character birth retains a narrow timestamp remainder.
         """
 
         if not affected_entities:
@@ -2714,7 +2717,7 @@ class _Replayer:
                 (list(tag_ids),),
             )
             tag_names = dict(self.cur.fetchall())
-        trigger_times = self._need_sync_trigger_times(
+        trigger_chunks = self._need_sync_trigger_chunks(
             affected_entities & character_entities, base_chunk
         )
 
@@ -2735,15 +2738,13 @@ class _Replayer:
                 key = (entity_id, need)
                 row_key = f"{entity_id}:{need}"
                 if need in applicable and key not in needs:
-                    created_at = (
-                        transitions.last_made_applicable_at.get(key)
-                        or born_entity_times.get(entity_id)
-                        or trigger_times.get(entity_id)
-                    )
+                    anchor_chunk_id = transitions.last_made_applicable_chunk.get(
+                        key
+                    ) or trigger_chunks.get(entity_id)
                     needs[key] = self._fresh_need_state(
                         entity_id=entity_id,
                         need=need,
-                        created_at=created_at,
+                        anchor_chunk_id=anchor_chunk_id,
                         result=result,
                     )
                     synthesized += 1
@@ -2758,7 +2759,9 @@ class _Replayer:
                         needs[key] = self._fresh_need_state(
                             entity_id=entity_id,
                             need=need,
-                            created_at=transitions.last_made_applicable_at.get(key),
+                            anchor_chunk_id=(
+                                transitions.last_made_applicable_chunk.get(key)
+                            ),
                             result=result,
                         )
                         reset += 1
@@ -2815,7 +2818,7 @@ class _Replayer:
         """
 
         if not entities:
-            return _NeedApplicabilityTransitions(set(), {}, {}, {})
+            return _NeedApplicabilityTransitions(set(), {}, {})
         all_immunity = frozenset().union(*NEED_IMMUNITY_TAGS.values())
         self.cur.execute(
             "SELECT id, tag FROM tags WHERE tag = ANY(%s)",
@@ -2823,7 +2826,7 @@ class _Replayer:
         )
         immunity_by_id: dict[int, str] = dict(self.cur.fetchall())
         if not immunity_by_id:
-            return _NeedApplicabilityTransitions(set(), {}, {}, {})
+            return _NeedApplicabilityTransitions(set(), {}, {})
 
         current: dict[int, set[str]] = {entity: set() for entity in entities}
         for row in base_state["entity_tags"]:
@@ -2836,7 +2839,7 @@ class _Replayer:
         def _event(entity: int, chunk: int) -> dict[str, Any]:
             return events.setdefault(
                 (entity, chunk),
-                {"added": set(), "cleared": set(), "cleared_at": None},
+                {"added": set(), "cleared": set()},
             )
 
         self.cur.execute(
@@ -2856,7 +2859,7 @@ class _Replayer:
             _event(entity_id, chunk)["added"].add(immunity_by_id[tag_id])
         self.cur.execute(
             """
-            SELECT et.entity_id, et.tag_id, l.source_chunk_id, l.cleared_at
+            SELECT et.entity_id, et.tag_id, l.source_chunk_id
             FROM tag_clearance_log l
             JOIN entity_tags et ON et.id = l.entity_tag_id
             WHERE et.entity_id = ANY(%s) AND et.tag_id = ANY(%s)
@@ -2869,18 +2872,13 @@ class _Replayer:
                 self.target_chunk_id,
             ),
         )
-        for entity_id, tag_id, chunk, cleared_at in self.cur.fetchall():
+        for entity_id, tag_id, chunk in self.cur.fetchall():
             event = _event(entity_id, chunk)
             event["cleared"].add(immunity_by_id[tag_id])
-            if cleared_at is not None and (
-                event["cleared_at"] is None or cleared_at > event["cleared_at"]
-            ):
-                event["cleared_at"] = cleared_at
 
         went_inapplicable: set[tuple[int, str]] = set()
         first_made_applicable_chunk: dict[tuple[int, str], int] = {}
-        first_made_applicable_at: dict[tuple[int, str], datetime] = {}
-        last_made_applicable_at: dict[tuple[int, str], datetime] = {}
+        last_made_applicable_chunk: dict[tuple[int, str], int] = {}
         for (entity_id, chunk), event in sorted(
             events.items(), key=lambda item: (item[0][0], item[0][1])
         ):
@@ -2906,14 +2904,11 @@ class _Replayer:
                     not applicable_before[need] or transiently_inapplicable
                 ):
                     first_made_applicable_chunk.setdefault(key, chunk)
-                    if event["cleared_at"] is not None:
-                        first_made_applicable_at.setdefault(key, event["cleared_at"])
-                        last_made_applicable_at[key] = event["cleared_at"]
+                    last_made_applicable_chunk[key] = chunk
         return _NeedApplicabilityTransitions(
             went_inapplicable,
             first_made_applicable_chunk,
-            first_made_applicable_at,
-            last_made_applicable_at,
+            last_made_applicable_chunk,
         )
 
     # -- relationship unwind ---------------------------------------------------
@@ -3145,26 +3140,20 @@ def verify_checkpoints_sync(cur: Any) -> list[CheckpointPairVerdict]:
     ):
         if base_chunk == target_chunk:
             # Same-chunk captures must be identical documents; diff them
-            # directly, except for deterministic schema-boundary authorities
-            # whose writes are intentionally mirrored by replay.
+            # directly after applying any recorded migration-100 row
+            # provenance to the baseline.
             base_stored = _load_checkpoint_state(cur, base_id)
             target_stored = _load_checkpoint_state(cur, target_id)
             boundary_notes: dict[str, list[str]] = {}
-            authority = _need_clock_reconciliation_authority(
+            evaluated, fulfilled = _rebase_reconciled_need_clock_baseline(
                 cur,
-                base_checkpoint_created_at=_checkpoint_created_at(cur, base_id),
-                target_checkpoint_created_at=_checkpoint_created_at(cur, target_id),
+                base_stored["character_need_states"],
+                target_rows=target_stored["character_need_states"],
             )
-            if authority is not None:
-                canonical_base, canonical_ceiling = authority
-                evaluated, fulfilled = _reconcile_need_clock_rows(
-                    base_stored["character_need_states"],
-                    canonical_base=canonical_base,
-                    canonical_ceiling=canonical_ceiling,
-                )
+            if evaluated or fulfilled:
                 boundary_notes["character_need_states"] = [
-                    "migration 100 reconciliation mirrored at the same-chunk "
-                    "checkpoint boundary: "
+                    "migration 100 provenance rebased the same-chunk "
+                    "checkpoint baseline: "
                     f"last_evaluated_at rows={evaluated}, "
                     f"last_fulfilled_at rows={fulfilled}"
                 ]
