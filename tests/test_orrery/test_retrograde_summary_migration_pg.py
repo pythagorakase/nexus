@@ -37,7 +37,7 @@ def _connect(dbname: str) -> Any:
 def disposable_retrograde_db() -> Iterator[Any]:
     """Yield a template clone whose name cannot collide with a save slot."""
 
-    dbname = f"nexus_test_retrograde_078_{uuid.uuid4().hex[:12]}"
+    dbname = f"qa640_retro078_{uuid.uuid4().hex[:12]}"
     admin = None
     conn = None
     try:
@@ -54,6 +54,20 @@ def disposable_retrograde_db() -> Iterator[Any]:
                 )
             )
         conn = _connect(dbname)
+        with conn.cursor() as cur:
+            # Fixture invariant: production persists the canonical clock
+            # before any character INSERT fires need-state initialization.
+            cur.execute(
+                """
+                INSERT INTO global_variables (id, new_story, base_timestamp)
+                VALUES (
+                    true, true, '2026-05-14T10:48:00+00:00'::timestamptz
+                )
+                ON CONFLICT (id) DO UPDATE
+                SET base_timestamp = EXCLUDED.base_timestamp
+                """
+            )
+        conn.commit()
         yield conn
     finally:
         if conn is not None:

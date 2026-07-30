@@ -547,10 +547,10 @@ class NewStoryDatabaseMapper:
         1. Validates transition data completeness
         2. Saves setting to global_variables
         3. Saves story seed to global_variables
-        4. Creates protagonist character
-        5. Creates complete location hierarchy (layer -> zone -> place)
-        6. Applies typed trait compilation and persists the audit result
-        7. Sets base timestamp
+        4. Sets base timestamp
+        5. Creates protagonist character
+        6. Creates complete location hierarchy (layer -> zone -> place)
+        7. Applies typed trait compilation and persists the audit result
         8. Runs the optional in_transaction hook on the same cursor (used by
            Retrograde wizard-time persistence so generated history commits
            atomically with the world; a raise rolls back everything)

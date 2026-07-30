@@ -65,7 +65,7 @@ def _connect(dbname: str, *, dict_cursor: bool = False) -> Any:
 def disposable_dbname() -> Iterator[str]:
     """Yield a current-template clone and remove it after the regression."""
 
-    dbname = f"nexus_test_issue_601_{uuid.uuid4().hex[:12]}"
+    dbname = f"qa640_issue601_{uuid.uuid4().hex[:12]}"
     admin: Any = None
     try:
         try:
@@ -88,6 +88,19 @@ def disposable_dbname() -> Iterator[str]:
                     / "097_trait_cold_start_relationship_constraints.sql"
                 )
                 cur.execute(migration.read_text())
+                # Fixture invariant: production persists the canonical clock
+                # before any character INSERT fires need-state initialization.
+                cur.execute(
+                    """
+                    INSERT INTO global_variables (
+                        id, new_story, base_timestamp
+                    ) VALUES (
+                        true, true, '2026-05-14T10:48:00+00:00'::timestamptz
+                    )
+                    ON CONFLICT (id) DO UPDATE
+                    SET base_timestamp = EXCLUDED.base_timestamp
+                    """
+                )
         VALID_DBNAMES.add(dbname)
         yield dbname
     finally:

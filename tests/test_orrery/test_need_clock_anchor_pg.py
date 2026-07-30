@@ -20,6 +20,11 @@ from nexus.agents.orrery.events import (
     _apply_need_fulfillment_sync,
 )
 from nexus.agents.orrery.needs import load_need_tuning
+from nexus.agents.orrery.reconstruction import capture_state_checkpoint_sync
+from nexus.agents.orrery.replay import (
+    reconstruct_state_at_sync,
+    verify_checkpoints_sync,
+)
 from nexus.api.db_pool import close_all_pools
 from nexus.api.new_story_cache import read_cache, write_cache
 from nexus.api.new_story_db_mapper import NewStoryDatabaseMapper
@@ -39,6 +44,8 @@ STORY_BASE = datetime(2189, 10, 17, 19, 12, tzinfo=timezone.utc)
 STORY_ANCHOR = STORY_BASE + timedelta(hours=3)
 STALE_STORY_BASE = datetime(2089, 4, 2, 8, 30, tzinfo=timezone.utc)
 POISONED_WALL_TIME = datetime(2026, 7, 30, 5, 55, 20, tzinfo=timezone.utc)
+PAST_STORY_BASE = datetime(1920, 5, 14, 10, 48, tzinfo=timezone.utc)
+PAST_STORY_ANCHOR = PAST_STORY_BASE + timedelta(hours=3)
 
 
 def _connect(dbname: str) -> Any:
@@ -72,6 +79,8 @@ def disposable_need_clock_db() -> Iterator[str]:
     """Yield a NEXUS_template clone whose name cannot collide with a save slot."""
 
     dbname = f"qa640_{uuid.uuid4().hex[:12]}"
+    source_db = os.environ.get("NEXUS_TEST_TEMPLATE_DB", "NEXUS_template")
+    assert source_db == "NEXUS_template" or source_db.startswith("qa640_")
     admin: Any = None
     try:
         try:
@@ -83,7 +92,7 @@ def disposable_need_clock_db() -> Iterator[str]:
             cur.execute(
                 sql.SQL("CREATE DATABASE {} TEMPLATE {}").format(
                     sql.Identifier(dbname),
-                    sql.Identifier("NEXUS_template"),
+                    sql.Identifier(source_db),
                 )
             )
         VALID_DBNAMES.add(dbname)
@@ -105,7 +114,7 @@ def disposable_need_clock_db() -> Iterator[str]:
 
 
 def _apply_migration_100(dbname: str) -> tuple[str, ...]:
-    """Apply migration 100 through the managed runner and return its notices."""
+    """Install or idempotently re-run migration 100 and return its notices."""
 
     discovered = {
         (version, name, path.name)
@@ -120,14 +129,23 @@ def _apply_migration_100(dbname: str) -> tuple[str, ...]:
     conn = _connect(dbname)
     try:
         with conn.cursor() as cur:
-            cur.execute("SELECT count(*) FROM schema_migrations WHERE version = '100'")
-            assert cur.fetchone()[0] == 0
-        assert migrate.apply_migration(
-            conn,
-            "100",
-            "orrery_need_clock_anchor",
-            MIGRATION_PATH,
-        )
+            cur.execute(
+                "SELECT EXISTS ("
+                "SELECT 1 FROM schema_migrations WHERE version = '100'"
+                ")"
+            )
+            already_applied = bool(cur.fetchone()[0])
+        if already_applied:
+            with conn.cursor() as cur:
+                cur.execute(MIGRATION_PATH.read_text())
+            conn.commit()
+        else:
+            assert migrate.apply_migration(
+                conn,
+                "100",
+                "orrery_need_clock_anchor",
+                MIGRATION_PATH,
+            )
         notices = tuple(conn.notices)
         with conn.cursor() as cur:
             cur.execute("SELECT name FROM schema_migrations WHERE version = '100'")
@@ -188,6 +206,19 @@ def _insert_chunk_at(cur: Any, world_time: datetime) -> int:
         (world_time, chunk_id),
     )
     return chunk_id
+
+
+def _insert_atemporal_chunk(cur: Any) -> int:
+    """Create a legitimate non-primary-layer chunk with no world clock row."""
+
+    cur.execute(
+        """
+        INSERT INTO narrative_chunks (raw_text, storyteller_text)
+        VALUES ('Issue 640 atemporal probe.', 'Issue 640 atemporal probe.')
+        RETURNING id
+        """
+    )
+    return int(cur.fetchone()[0])
 
 
 def _build_story_transition(dbname: str) -> Any:
@@ -412,6 +443,74 @@ def test_migration_reconciles_poisoned_rows_and_guards_fulfillment_domain(
             assert evaluated_at == POISONED_WALL_TIME
 
 
+def test_migration_reconciles_future_poison_in_a_past_set_story(
+    disposable_need_clock_db: str,
+) -> None:
+    """Wall time after the canon ceiling is as poisoned as time before base."""
+
+    with _transaction(disposable_need_clock_db) as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM character_need_states")
+            cur.execute("DELETE FROM chunk_metadata")
+            _set_base_timestamp(cur, PAST_STORY_BASE)
+            entity_id = _insert_character(cur, "Past-Set Clock Character")
+            _insert_chunk_at(cur, PAST_STORY_ANCHOR)
+            cur.execute(
+                """
+                UPDATE character_need_states
+                SET last_evaluated_at = CASE
+                        WHEN need_type = 'intimacy' THEN %s
+                        ELSE %s
+                    END,
+                    last_fulfilled_at = CASE
+                        WHEN need_type IN ('sleep', 'hunger') THEN %s
+                        WHEN need_type = 'thirst' THEN %s
+                        ELSE NULL
+                    END
+                WHERE character_entity_id = %s
+                """,
+                (
+                    PAST_STORY_BASE + timedelta(minutes=30),
+                    POISONED_WALL_TIME,
+                    POISONED_WALL_TIME,
+                    PAST_STORY_BASE + timedelta(minutes=15),
+                    entity_id,
+                ),
+            )
+
+    notices = _apply_migration_100(disposable_need_clock_db)
+    assert (
+        "need-clock reconciliation: last_evaluated_at rows=4, "
+        "last_fulfilled_at rows=2"
+    ) in "".join(notices)
+
+    with _transaction(disposable_need_clock_db) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT need_type::text, last_evaluated_at, last_fulfilled_at
+                FROM character_need_states
+                WHERE character_entity_id = %s
+                ORDER BY need_type::text
+                """,
+                (entity_id,),
+            )
+            reconciled = {
+                need_type: (evaluated_at, fulfilled_at)
+                for need_type, evaluated_at, fulfilled_at in cur.fetchall()
+            }
+
+    assert reconciled["intimacy"][0] == PAST_STORY_BASE + timedelta(minutes=30)
+    assert all(
+        evaluated_at == PAST_STORY_ANCHOR
+        for need_type, (evaluated_at, _fulfilled_at) in reconciled.items()
+        if need_type != "intimacy"
+    )
+    assert reconciled["sleep"][1] == PAST_STORY_ANCHOR
+    assert reconciled["hunger"][1] == PAST_STORY_ANCHOR
+    assert reconciled["thirst"][1] == PAST_STORY_BASE + timedelta(minutes=15)
+
+
 def test_migration_reconciliation_noops_without_base_timestamp(
     disposable_need_clock_db: str,
 ) -> None:
@@ -421,8 +520,11 @@ def test_migration_reconciliation_noops_without_base_timestamp(
         with conn.cursor() as cur:
             cur.execute("DELETE FROM character_need_states")
             cur.execute("DELETE FROM chunk_metadata")
-            _set_base_timestamp(cur, None)
+            # Production guarantees clock-before-characters. Seed a valid row,
+            # then remove the singleton clock to exercise migration behavior.
+            _set_base_timestamp(cur, STORY_BASE)
             entity_id = _insert_character(cur, "Unreconciled Clock Character")
+            _set_base_timestamp(cur, None)
             cur.execute(
                 """
                 UPDATE character_need_states
@@ -448,6 +550,243 @@ def test_migration_reconciliation_noops_without_base_timestamp(
                 (entity_id,),
             )
             assert cur.fetchall() == [(POISONED_WALL_TIME,)]
+
+
+def test_replay_mirrors_reconciliation_across_migration_100_boundary(
+    disposable_need_clock_db: str,
+) -> None:
+    """Verification applies migration 100's deterministic repair authority."""
+
+    with _transaction(disposable_need_clock_db) as conn:
+        with conn.cursor() as cur:
+            # A refreshed template may already carry 100. Remove only its
+            # tracking row in this disposable clone to create a local boundary.
+            cur.execute("DELETE FROM schema_migrations WHERE version = '100'")
+            cur.execute("DELETE FROM character_need_states")
+            cur.execute("DELETE FROM chunk_metadata")
+            _set_base_timestamp(cur, STORY_BASE)
+            base_chunk = _insert_chunk_at(cur, STORY_BASE)
+            entity_id = _insert_character(cur, "Replay Boundary Character")
+            cur.execute(
+                """
+                UPDATE character_need_states
+                SET last_evaluated_at = %s
+                WHERE character_entity_id = %s
+                """,
+                (POISONED_WALL_TIME, entity_id),
+            )
+            base_checkpoint_id = capture_state_checkpoint_sync(
+                cur,
+                chunk_id=base_chunk,
+                label="manual",
+            )
+            assert base_checkpoint_id is not None
+
+    with _transaction(disposable_need_clock_db) as conn:
+        with conn.cursor() as cur:
+            target_chunk = _insert_chunk_at(cur, STORY_ANCHOR)
+
+    notices = _apply_migration_100(disposable_need_clock_db)
+    assert (
+        "need-clock reconciliation: last_evaluated_at rows=5, "
+        "last_fulfilled_at rows=0"
+    ) in "".join(notices)
+
+    with _transaction(disposable_need_clock_db) as conn:
+        with conn.cursor() as cur:
+            target_checkpoint_id = capture_state_checkpoint_sync(
+                cur,
+                chunk_id=target_chunk,
+                label="manual",
+            )
+            assert target_checkpoint_id is not None
+            verdict = next(
+                item
+                for item in verify_checkpoints_sync(cur)
+                if item.base_checkpoint_id == base_checkpoint_id
+                and item.target_checkpoint_id == target_checkpoint_id
+            )
+
+    assert verdict.drifts == []
+    assert any(
+        "migration 100 reconciliation mirrored" in note
+        for note in verdict.notes["character_need_states"]
+    )
+
+
+def test_replay_reconstructs_post_migration_trigger_anchor(
+    disposable_need_clock_db: str,
+) -> None:
+    """A post-100 applicability reset has a ledger-reconstructable anchor."""
+
+    _apply_migration_100(disposable_need_clock_db)
+    with _transaction(disposable_need_clock_db) as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM character_need_states")
+            cur.execute("DELETE FROM chunk_metadata")
+            _set_base_timestamp(cur, STORY_BASE)
+            base_chunk = _insert_chunk_at(cur, STORY_BASE)
+            entity_id = _insert_character(cur, "Replay Trigger Character")
+            cur.execute("SELECT id FROM tags WHERE tag = 'inorganic'")
+            immunity_tag_id = int(cur.fetchone()[0])
+            cur.execute(
+                """
+                INSERT INTO entity_tags (
+                    entity_id, tag_id, source_kind, source_chunk_id
+                ) VALUES (%s, %s, 'template', %s)
+                RETURNING id
+                """,
+                (entity_id, immunity_tag_id, base_chunk),
+            )
+            entity_tag_id = int(cur.fetchone()[0])
+            base_checkpoint_id = capture_state_checkpoint_sync(
+                cur,
+                chunk_id=base_chunk,
+                label="manual",
+            )
+            assert base_checkpoint_id is not None
+
+    with _transaction(disposable_need_clock_db) as conn:
+        with conn.cursor() as cur:
+            target_chunk = _insert_chunk_at(cur, STORY_ANCHOR)
+            cur.execute(
+                "UPDATE entity_tags SET cleared_at = now() WHERE id = %s",
+                (entity_tag_id,),
+            )
+            cur.execute(
+                """
+                INSERT INTO tag_clearance_log (
+                    entity_tag_id, mechanism, source_chunk_id
+                ) VALUES (%s, 'authored', %s)
+                """,
+                (entity_tag_id, target_chunk),
+            )
+            target_checkpoint_id = capture_state_checkpoint_sync(
+                cur,
+                chunk_id=target_chunk,
+                label="manual",
+            )
+            assert target_checkpoint_id is not None
+
+            reconstructed = reconstruct_state_at_sync(
+                cur,
+                target_chunk,
+                base_checkpoint_id=base_checkpoint_id,
+                target_checkpoint_id=target_checkpoint_id,
+            )
+            hunger = next(
+                row
+                for row in reconstructed.state["character_need_states"]
+                if row["character_entity_id"] == entity_id
+                and row["need_type"] == "hunger"
+            )
+            verdict = next(
+                item
+                for item in verify_checkpoints_sync(cur)
+                if item.base_checkpoint_id == base_checkpoint_id
+                and item.target_checkpoint_id == target_checkpoint_id
+            )
+
+    assert (
+        datetime.fromisoformat(hunger["last_evaluated_at"]).astimezone(timezone.utc)
+        == STORY_ANCHOR
+    )
+    assert (
+        "character_need_states",
+        f"{entity_id}:hunger",
+        "last_evaluated_at",
+    ) not in reconstructed.unreproducible
+    assert verdict.drifts == []
+
+
+def test_atemporal_need_tick_and_replay_use_primary_world_clock(
+    disposable_need_clock_db: str,
+) -> None:
+    """NULL layer time uses the primary clock in both production and replay."""
+
+    _apply_migration_100(disposable_need_clock_db)
+    with _transaction(disposable_need_clock_db) as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM character_need_states")
+            cur.execute("DELETE FROM chunk_metadata")
+            _set_base_timestamp(cur, STORY_BASE)
+            base_chunk = _insert_chunk_at(cur, STORY_ANCHOR)
+            entity_id = _insert_character(cur, "Atemporal Tick Character")
+            base_checkpoint_id = capture_state_checkpoint_sync(
+                cur,
+                chunk_id=base_chunk,
+                label="manual",
+            )
+            assert base_checkpoint_id is not None
+
+    with _transaction(disposable_need_clock_db) as conn:
+        with conn.cursor() as cur:
+            target_chunk = _insert_atemporal_chunk(cur)
+            fulfillment = {"type": "thirst", "discharge_debt": 1.0}
+            _apply_need_fulfillment_sync(
+                cur,
+                actor_entity_id=entity_id,
+                fulfillment=fulfillment,
+                template_id="issue_640_atemporal_tick",
+                source_chunk_id=target_chunk,
+                need_tuning=load_need_tuning(),
+            )
+            cur.execute(
+                """
+                INSERT INTO orrery_resolutions (
+                    tick_chunk_id, template_id, binding_hash, actor_entity_id,
+                    priority, magnitude, state_delta
+                ) VALUES (
+                    %s, 'issue_640_atemporal_tick', 'issue-640-atemporal',
+                    %s, 50, 0.5, %s::jsonb
+                )
+                """,
+                (
+                    target_chunk,
+                    entity_id,
+                    json.dumps({"need.fulfill": fulfillment}),
+                ),
+            )
+            target_checkpoint_id = capture_state_checkpoint_sync(
+                cur,
+                chunk_id=target_chunk,
+                label="manual",
+            )
+            assert target_checkpoint_id is not None
+
+            reconstructed = reconstruct_state_at_sync(
+                cur,
+                target_chunk,
+                base_checkpoint_id=base_checkpoint_id,
+                target_checkpoint_id=target_checkpoint_id,
+            )
+            verdict = next(
+                item
+                for item in verify_checkpoints_sync(cur)
+                if item.base_checkpoint_id == base_checkpoint_id
+                and item.target_checkpoint_id == target_checkpoint_id
+            )
+            cur.execute(
+                """
+                SELECT last_evaluated_at, last_fulfilled_at
+                FROM character_need_states
+                WHERE character_entity_id = %s
+                  AND need_type = 'thirst'
+                """,
+                (entity_id,),
+            )
+            live_evaluated_at, live_fulfilled_at = cur.fetchone()
+
+    assert live_evaluated_at == STORY_ANCHOR
+    assert live_fulfilled_at == STORY_ANCHOR
+    row_key = f"{entity_id}:thirst"
+    for column in ("last_evaluated_at", "last_fulfilled_at", "debt_score"):
+        assert (
+            "character_need_states",
+            row_key,
+            column,
+        ) not in reconstructed.unreproducible
+    assert verdict.drifts == []
 
 
 def test_atomic_transition_replaces_stale_clock_before_protagonist_trigger(

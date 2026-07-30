@@ -117,12 +117,14 @@ BEGIN
 
         UPDATE character_need_states
         SET last_evaluated_at = reconciliation_anchor
-        WHERE last_evaluated_at < canonical_base_timestamp;
+        WHERE last_evaluated_at < canonical_base_timestamp
+           OR last_evaluated_at > reconciliation_anchor;
         GET DIAGNOSTICS evaluated_row_count = ROW_COUNT;
 
         UPDATE character_need_states
         SET last_fulfilled_at = reconciliation_anchor
-        WHERE last_fulfilled_at < canonical_base_timestamp;
+        WHERE last_fulfilled_at < canonical_base_timestamp
+           OR last_fulfilled_at > reconciliation_anchor;
         GET DIAGNOSTICS fulfilled_row_count = ROW_COUNT;
     END IF;
 
