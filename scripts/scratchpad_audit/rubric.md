@@ -13,7 +13,7 @@ Scale lineage, for cross-run comparison: v1 (0–2) saturated — 4 of 6 dimensi
 5. **The story's first exchange: Continuity is N/A** (excluded from that dimension's denominator). Note how the letters use seeded story state instead. A scored slice that begins mid-story has prior context in the journal and digests, so a slice's first exchange is scored normally.
 6. **Deferred uptake pass.** After scoring all exchanges, make a second pass for gifts taken up later than the following exchange: credit Chemistry at the exchange where the gift was *given*. When a gift is declared at N and executed at N+1, score Engagement at both if each letter engages on its own terms, but Chemistry only at N unless N+1 adds its own surprise.
 7. Notes are mandatory per exchange.
-8. **Corpus-level findings.** A thread is *dropped* only when it disappears from both subsequent letters AND subsequent digest state without being resolved or retired — digest retention counts as continued mention. Record drops in a corpus-level findings section with the exchange span, like digest fidelity. Dock Continuity only at the exchange where the drop becomes load-bearing, if any.
+8. **Corpus-level findings.** A thread is *dropped* only when it disappears from both subsequent letters AND subsequent digest state without being resolved or retired — digest retention counts as continued mention, and the silence must persist for at least five consecutive exchanges (the compaction floor). In a corpus with no digest state, the letters alone decide, against the same five-exchange threshold. Record drops in a corpus-level findings section with the exchange span, like digest fidelity. Dock Continuity only at the exchange where the drop becomes load-bearing, if any.
 
 ## Dimension 1: Specific Intent (Skald)
 
@@ -35,7 +35,7 @@ What Gaia's reply *does* with Skald's intent.
 - **3 — Reshaping uptake.** The reasons and conditions materially reshape *how* the plan will execute — Gaia's reply changes what Skald must write next without opening a new front. *Anchor (chunk 6): the confession kept "from redeeming him" while the ledger is independently given a second evidentiary edge.*
 - **4 — Counter-move.** A new front, a traded aim, or a refused element replaced with something else — the plan that comes back is not the plan that was sent. *Anchor (chunk 13, "Bent:"): an internal fault line substituted for the expected official arrival.*
 
-**Boundary rule (2 vs 3 vs 4):** conditions on the existing plan, or a bare decline = 2; conditions that reshape execution = 3; a new front, a traded aim, or a refusal with a substitute = 4. A new *instrument* inside an existing conflict — fresh machinery serving the same front — reshapes execution and stays at 3; 4 requires a new axis of conflict, not merely new machinery.
+**Boundary rule (2 vs 3 vs 4):** conditions on the existing plan, or a bare decline = 2; conditions that reshape execution = 3; a new front, a traded aim, or a refusal with a substitute = 4. A new *instrument* inside an existing conflict — fresh machinery serving the same front — reshapes execution and stays at 3; 4 requires a stake or adversarial surface the sent plan did not contain: a new party engaged, a new thing put at risk, or the sent aim traded away. If the same parties contest the same stake, however new the machinery, it is 3. *(Rescore contrast: exchange 28's retraction sheet became a manipulable vulnerability testing the hall — 4; exchange 34's consent sheet operationalized the same shelter conflict — 3.)*
 
 ## Dimension 3: World Promise (Gaia)
 
@@ -47,7 +47,7 @@ Binding the off-screen world to something Skald can build on.
 - **3 — Interlocked move.** The move engages existing threads — it advances or complicates something already live rather than adding free-floating pressure. *Anchor (chunk 20): Niko's dockmother errand left contingent while both fronts advance.*
 - **4 — Costed move.** The declared move binds Gaia's own future options — an irreversible cost, a deadline, or a constraint honored even when inconvenient. *Anchor (chunk 14): three consequences fixed in the world's posture, all of which the next scene must deliver. Anchor (chunk 27): Ressa's hold buys time only "through a dawn accounting and a new leash" — a promise with a clock on it.*
 
-**Conditional and repeated promises:** an exhaustive conditional binds — every branch pays ("must," "whichever way," all outcomes costed) — and can earn 4; an optional menu ("may," "leave room for") does not bind and caps at 3. Restating an already-binding cost or deadline does not re-earn 4: the exchange must *newly* constrain Gaia's future options.
+**Conditional and repeated promises:** a conditional promise binds when at least one branch carries a hard cost — "must," "whichever way," a named price honored if that branch occurs; "may" branches add color and neither bind nor disqualify. A promise whose every branch is optional ("may," "leave room for") binds nothing and caps at 3. Restating an already-binding cost or deadline does not re-earn 4: the exchange must *newly* constrain Gaia's future options. *Anchor (rescore exchange 28): retreat left optional ("may") while escalation "must spend an office, signature, or overt authority" — binding.*
 
 ## Dimension 4: Continuity
 
@@ -71,7 +71,7 @@ Revision over drag when play deviates. (On-path cap per Rule 4.)
 
 ## Dimension 6: Creative Chemistry
 
-Two distinct collaborators vs. one bookkeeper with two signatures. Observable proxies: **asymmetry** (different jobs, no mirroring), **surprise-with-consent** (an unrequested addition the partner can use — absent from the sent plan and usable without overriding it; a vivid elaboration of what was requested is execution, not a gift), **register** (voice distinct from procedural accounting).
+Two distinct collaborators vs. one bookkeeper with two signatures. Observable proxies: **asymmetry** (different jobs, no mirroring), **surprise-with-consent** (an unrequested addition the partner can use — the contribution itself absent from the sent plan and usable without overriding it; vivid execution of what was requested is not a gift, but unrequested operationalization of a possibility the partner merely named can be — *rescore exchange 29: Skald flagged that the false theory "may become a dangerous public distortion"; Gaia's gift was making it a circulable instrument*), **register** (voice distinct from procedural accounting).
 
 - **0 — Duplication.** The letters restate each other; either could be deleted. *(Hypothetical.)*
 - **1 — Bookkeeping.** Accurate, asymmetric, useful — wholly procedural; no play, no surprise. *Anchor (chunk 18): a status ledger — precise cost accounting that executes earlier declarations without adding anything unrequested, procedural in register throughout.*
@@ -83,7 +83,7 @@ Two distinct collaborators vs. one bookkeeper with two signatures. Observable pr
 
 Grade each compaction event separately from per-exchange scores, and *incrementally*: judge only the newly aged material and any new degradation, so an inherited weakness does not automatically weaken later versions. Every event's grade must, however, carry an **inherited losses** note listing prior-version degradations still outstanding, so cumulative state stays visible:
 
-- **Preserved** — promises, costs, epistemic boundaries, and open threads from compacted-away letters survive into the digest, and — where subsequent play exists — a live probe (steering play at a digest-only fact) is honored in subsequent prose/letters. A compaction with no subsequent play to probe (e.g. the last before a run ends) is graded on content review alone and marked **(unprobed)**.
+- **Preserved** — the *newly aged* commitments — promises, costs, epistemic boundaries, and open threads from the letters this event compacted away — survive into the digest (inherited degradations belong in the inherited-losses note, not this event's grade), and — where subsequent play exists — a live probe (steering play at a digest-only fact) is honored in subsequent prose/letters. A compaction with no subsequent play to probe (e.g. the last before a run ends) is graded on content review alone and marked **(unprobed)**.
 - **Weakened** — facts kept but binding force dropped (a named thread flattened to a generic constraint; a promise become a summary), or the live probe honored only partially. *Anchor (2026-07-30 compaction audit, digest #1): the altered childhood recording — "a public wound rather than a private clue" — retained only as "keep legal and evidentiary claims qualified," its named emotional role no longer independently recoverable.*
 - **Lost** — a compacted-away commitment contradicted or vanished from play after compaction.
 
