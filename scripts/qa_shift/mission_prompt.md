@@ -45,8 +45,12 @@ issue, dry-well, wall-clock, and token settings.
 1. Confirm `git status --short --branch` is clean and on `main`.
 2. Run `git fetch origin`. If clean `main` is merely behind, fast-forward it
    with `git merge --ff-only origin/main`. Stop on divergence or local changes.
-3. Confirm `gh auth status` and read all open and closed issues plus recent
-   merged PRs before promoting any finding.
+3. Confirm GitHub read and issue-publication access, then read all open and
+   closed issues plus recent merged PRs before promoting any finding. Use
+   `gh auth status` and `gh` when authenticated; if the local `gh` credential
+   is unavailable or invalid, use the connected GitHub app for those reads and
+   for issue publication instead. A working connected app satisfies this
+   preflight requirement.
 4. Run:
 
    ```text
@@ -122,9 +126,10 @@ A publishable issue requires:
   task (for example, `Codex — GPT-5.6-Sol`; do not copy that model name if it
   is no longer true).
 
-Create it with `gh issue create`, then re-read the published issue and verify
-its URL, body, labels/state if used, and signature. Update the ledger only
-after publication succeeds.
+Create it with `gh issue create` when authenticated, or with the connected
+GitHub app otherwise. Then re-read the published issue and verify its URL,
+body, labels/state if used, and signature. Update the ledger only after
+publication succeeds.
 
 ## Teardown and report
 
