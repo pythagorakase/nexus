@@ -11,7 +11,7 @@ holds what persists between runs.
 
 ## Contents
 
-- `rubric.md` — the anchored scoring instrument (v2.1, 0–4 per dimension,
+- `rubric.md` — the anchored scoring instrument (v2.2, 0–4 per dimension,
   six dimensions plus the digest-fidelity appendix). Version lineage and
   cross-run score mapping are documented in the rubric header.
 
