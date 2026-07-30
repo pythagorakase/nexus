@@ -43,8 +43,12 @@ issue, dry-well, wall-clock, and token settings.
 ## Preflight and run initialization
 
 1. Confirm `git status --short --branch` is clean and on `main`.
-2. Run `git fetch origin`. If clean `main` is merely behind, fast-forward it
-   with `git merge --ff-only origin/main`. Stop on divergence or local changes.
+2. Run `git fetch origin`. If it fails only because a stale HTTPS credential
+   was supplied for this public repository, retry non-interactively with
+   `GIT_TERMINAL_PROMPT=0 git -c credential.helper= fetch origin`. If clean
+   `main` is merely behind, fast-forward it with
+   `git merge --ff-only origin/main`. Stop on divergence, local changes, or any
+   other fetch failure.
 3. Confirm GitHub read and issue-publication access, then read all open and
    closed issues plus recent merged PRs before promoting any finding. Use
    `gh auth status` and `gh` when authenticated; if the local `gh` credential
