@@ -297,8 +297,8 @@ def test_unpersisted_faction_aliases_fail_before_incubation(alias: str) -> None:
     assert f"Unknown canonical faction name {alias!r}" in issues[0]
 
 
-def test_faction_update_identity_accepts_exact_row_or_same_turn_declaration() -> None:
-    """Canonical rows and deliberately declared factions remain writable."""
+def test_faction_update_identity_honors_same_turn_maturation_gate() -> None:
+    """Declared factions are writable only when commit-time stubs are enabled."""
 
     canonical = _storyteller_response(
         updates=_updates_block(
@@ -331,7 +331,19 @@ def test_faction_update_identity_accepts_exact_row_or_same_turn_declaration() ->
     cursor = FakeRegistryCursor()
 
     assert collect_faction_identity_issues(canonical, cursor) == []
-    assert collect_faction_identity_issues(declared, cursor) == []
+    disabled_issues = collect_faction_identity_issues(declared, cursor)
+    assert len(disabled_issues) == 1
+    assert (
+        "Unknown canonical faction name 'The Lantern Delegation'" in disabled_issues[0]
+    )
+    assert (
+        collect_faction_identity_issues(
+            declared,
+            cursor,
+            allow_same_turn_faction_declarations=True,
+        )
+        == []
+    )
 
 
 def test_faction_update_id_and_name_must_identify_the_same_row() -> None:

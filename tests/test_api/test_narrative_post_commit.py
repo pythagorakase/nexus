@@ -188,3 +188,57 @@ async def test_explicit_approval_runs_commit_and_compaction_off_event_loop(
     }
     assert commit_threads and commit_threads[0] != event_loop_thread
     assert connection.closed is True
+
+
+@pytest.mark.asyncio
+async def test_cancelled_approval_leaves_worker_connection_owned_until_exit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Cancellation cannot close a connection underneath the commit worker."""
+
+    commit_started = threading.Event()
+    release_commit = threading.Event()
+    connection_closed = threading.Event()
+    commit_threads: list[int] = []
+    close_threads: list[int] = []
+
+    class BlockingConnection(_PendingConnection):
+        def close(self) -> None:
+            close_threads.append(threading.get_ident())
+            connection_closed.set()
+
+    connection = BlockingConnection()
+
+    def blocking_commit(_conn: Any, _session_id: str, _slot: int | None) -> int:
+        commit_threads.append(threading.get_ident())
+        commit_started.set()
+        assert release_commit.wait(timeout=5)
+        assert not connection_closed.is_set()
+        return 42
+
+    monkeypatch.setattr(narrative, "get_db_connection", lambda _slot: connection)
+    monkeypatch.setattr(
+        commit_handler_sync,
+        "commit_incubator_to_database_sync",
+        blocking_commit,
+    )
+    approval_task = asyncio.create_task(
+        narrative._approve_narrative_impl(
+            "pending-session",
+            True,
+            4,
+        )
+    )
+
+    try:
+        assert await asyncio.to_thread(commit_started.wait, 2)
+        approval_task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await approval_task
+        assert not connection_closed.is_set()
+    finally:
+        release_commit.set()
+
+    assert await asyncio.to_thread(connection_closed.wait, 2)
+    assert commit_threads
+    assert close_threads == commit_threads

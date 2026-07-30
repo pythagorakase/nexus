@@ -625,7 +625,7 @@ def _abandon_generation_owner(
         conn.close()
 
 
-async def _resolve_and_approve_pending(
+def _resolve_and_approve_pending_sync(
     *,
     slot: Optional[int],
     session_id: str,
@@ -633,9 +633,9 @@ async def _resolve_and_approve_pending(
     user_text: str,
     choice: Optional[int],
     accept_fate: bool,
-    background_tasks: BackgroundTasks,
 ) -> tuple[str, int]:
-    """Resolve a pending choice and approve it off the event-loop thread."""
+    """Resolve and approve a pending choice with worker-owned connection life."""
+
     from nexus.api.commit_handler_sync import commit_incubator_to_database_sync
 
     conn = get_db_connection(slot)
@@ -650,13 +650,7 @@ async def _resolve_and_approve_pending(
             connection=conn,
             incubator_session_id=session_id,
         )
-        approved_chunk_id = await asyncio.to_thread(
-            commit_incubator_to_database_sync,
-            conn,
-            session_id,
-            slot,
-        )
-        background_tasks.add_task(_run_post_commit_orrery_work, slot)
+        approved_chunk_id = commit_incubator_to_database_sync(conn, session_id, slot)
         return resolved_user_text, approved_chunk_id
     except HTTPException:
         conn.rollback()
@@ -670,6 +664,31 @@ async def _resolve_and_approve_pending(
         ) from exc
     finally:
         conn.close()
+
+
+async def _resolve_and_approve_pending(
+    *,
+    slot: Optional[int],
+    session_id: str,
+    chunk_id: int,
+    user_text: str,
+    choice: Optional[int],
+    accept_fate: bool,
+    background_tasks: BackgroundTasks,
+) -> tuple[str, int]:
+    """Resolve and approve without exposing the worker connection to cancellation."""
+
+    result = await asyncio.to_thread(
+        _resolve_and_approve_pending_sync,
+        slot=slot,
+        session_id=session_id,
+        chunk_id=chunk_id,
+        user_text=user_text,
+        choice=choice,
+        accept_fate=accept_fate,
+    )
+    background_tasks.add_task(_run_post_commit_orrery_work, slot)
+    return result
 
 
 # API Endpoints
@@ -1158,13 +1177,13 @@ def _run_post_commit_orrery_work(slot: Optional[int]) -> None:
     ).start()
 
 
-async def _approve_narrative_impl(
+def _approve_narrative_sync(
     session_id: str,
     commit: bool,
     slot: Optional[int],
-    background_tasks: Optional[BackgroundTasks] = None,
-):
-    """Internal implementation for approve narrative."""
+) -> Dict[str, Any]:
+    """Read or commit one incubator row with a worker-owned connection."""
+
     conn = get_db_connection(slot)
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -1182,16 +1201,7 @@ async def _approve_narrative_impl(
             from nexus.api.commit_handler_sync import commit_incubator_to_database_sync
 
             try:
-                # Commit to database
-                chunk_id = await asyncio.to_thread(
-                    commit_incubator_to_database_sync,
-                    conn,
-                    session_id,
-                    slot,
-                )
-                if background_tasks is not None:
-                    background_tasks.add_task(_run_post_commit_orrery_work, slot)
-
+                chunk_id = commit_incubator_to_database_sync(conn, session_id, slot)
                 return {
                     "status": "committed",
                     "message": f"Narrative committed as chunk {chunk_id}",
@@ -1212,6 +1222,25 @@ async def _approve_narrative_impl(
 
     finally:
         conn.close()
+
+
+async def _approve_narrative_impl(
+    session_id: str,
+    commit: bool,
+    slot: Optional[int],
+    background_tasks: Optional[BackgroundTasks] = None,
+):
+    """Approve a narrative without exposing the worker connection to cancellation."""
+
+    result = await asyncio.to_thread(
+        _approve_narrative_sync,
+        session_id,
+        commit,
+        slot,
+    )
+    if commit and background_tasks is not None:
+        background_tasks.add_task(_run_post_commit_orrery_work, slot)
+    return result
 
 
 @app.post("/api/narrative/select-choice", response_model=SelectChoiceResponse)

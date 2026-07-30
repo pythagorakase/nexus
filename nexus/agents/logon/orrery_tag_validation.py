@@ -157,13 +157,15 @@ def collect_faction_identity_issues(
     cur: Any,
     *,
     suggestion_limit: int = 3,
+    allow_same_turn_faction_declarations: bool = False,
 ) -> List[str]:
     """Validate faction update identities before a draft reaches incubation.
 
-    Exact same-response faction declarations are allowed because the commit
-    transaction creates their canonical stubs before resolving state updates.
-    Every other update must resolve to an existing faction by exact name, and
-    a supplied ID/name pair must identify the same canonical row.
+    When runtime maturation is enabled, exact same-response faction declarations
+    are allowed because the commit transaction creates their canonical stubs
+    before resolving state updates. Every other update must resolve to an
+    existing faction by exact name, and a supplied ID/name pair must identify
+    the same canonical row.
     """
 
     sites = _faction_update_sites(response)
@@ -179,11 +181,15 @@ def collect_faction_identity_issues(
     for catalog_id, catalog_name in names_by_id.items():
         ids_by_name.setdefault(catalog_name, []).append(catalog_id)
 
-    declared_names = {
-        str(getattr(declaration, "name", ""))
-        for declaration in (getattr(response, "new_entities", None) or [])
-        if getattr(declaration, "kind", None) == "faction"
-    }
+    declared_names = (
+        {
+            str(getattr(declaration, "name", ""))
+            for declaration in (getattr(response, "new_entities", None) or [])
+            if getattr(declaration, "kind", None) == "faction"
+        }
+        if allow_same_turn_faction_declarations
+        else set()
+    )
     canonical_names = frozenset(ids_by_name)
     issues: List[str] = []
     for path, faction_id, faction_name in sites:
@@ -213,11 +219,10 @@ def collect_faction_identity_issues(
             continue
         if faction_name in declared_names:
             continue
-        issue = (
-            f"{path}: Unknown canonical faction name {faction_name!r}; use an "
-            "exact persisted name or declare a genuinely new faction in "
-            "new_entities"
-        )
+        resolution = "use an exact persisted name"
+        if allow_same_turn_faction_declarations:
+            resolution += " or declare a genuinely new faction in new_entities"
+        issue = f"{path}: Unknown canonical faction name {faction_name!r}; {resolution}"
         issues.append(
             _with_near_misses(
                 issue,
@@ -444,6 +449,7 @@ def build_storyteller_tag_validator(
     dbname: Optional[str],
     *,
     suggestion_limit: int = 3,
+    allow_same_turn_faction_declarations: bool = False,
 ) -> Optional[Any]:
     """Return an async registry output validator bound to ``dbname``.
 
@@ -477,10 +483,21 @@ def build_storyteller_tag_validator(
                         output,
                         cur,
                         suggestion_limit=suggestion_limit,
+                        allow_same_turn_faction_declarations=(
+                            allow_same_turn_faction_declarations
+                        ),
                     )
                 )
         if issues:
             formatted = "\n".join(f"- {issue}" for issue in issues)
+            declaration_guidance = (
+                "or declare a genuinely new faction in new_entities; "
+                if allow_same_turn_faction_declarations
+                else (
+                    "same-turn declarations cannot back faction updates while "
+                    "runtime maturation is disabled; "
+                )
+            )
             logger.info(
                 "Storyteller output failed registry validation "
                 "(%s issues); requesting model retry",
@@ -491,8 +508,8 @@ def build_storyteller_tag_validator(
                 "event types, or faction update identities failed closed-registry "
                 "validation. For faction updates, use an exact persisted name "
                 "shown in the ENTITY DOSSIER (and its matching canonical id when "
-                "supplying one), or declare a genuinely new faction in "
-                "new_entities; drop an update with no canonical equivalent. "
+                f"supplying one), {declaration_guidance}drop an update with no "
+                "canonical equivalent. "
                 "For tags_add, tags_clear, and tag_hints, use bare registered tag "
                 "names only (e.g. 'comfortable'), never 'category:name' "
                 "composites. For pair_tag_hints, use the exact registered pair-tag "

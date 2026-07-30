@@ -51,6 +51,9 @@ from nexus.agents.orrery.tag_library import (  # noqa: E402
     format_tag_library_for_prompt,
 )
 from nexus.config.loader import get_provider_for_model, resolve_model_ref  # noqa: E402
+from nexus.config.settings_models import (  # noqa: E402
+    OrreryRetrogradeMaturationSettings,
+)
 from nexus.memory.context_state import is_retrograde_summary  # noqa: E402
 from nexus.memory.correspondence import (  # noqa: E402
     CorrespondenceDigestWire,
@@ -657,9 +660,18 @@ class LogonUtility:
         except Exception:
             validation_dbname = None
         tag_library_settings = apex_settings.get("tag_library") or {}
+        maturation_settings = OrreryRetrogradeMaturationSettings.model_validate(
+            (
+                ((self.settings.get("orrery") or {}).get("retrograde") or {}).get(
+                    "maturation"
+                )
+            )
+            or {}
+        )
         tag_output_validator = build_storyteller_tag_validator(
             validation_dbname,
             suggestion_limit=int(tag_library_settings.get("suggestion_limit", 3)),
+            allow_same_turn_faction_declarations=maturation_settings.enabled,
         )
         output_validator = tag_output_validator
         if not provider_bootstrap_mode:
