@@ -50,6 +50,9 @@ from nexus.agents.orrery.tag_library import (  # noqa: E402
     format_contextual_tag_library,
     format_tag_library_for_prompt,
 )
+from nexus.api.native_structured_output import (  # noqa: E402
+    structured_output_error_text,
+)
 from nexus.config.loader import get_provider_for_model, resolve_model_ref  # noqa: E402
 from nexus.config.settings_models import (  # noqa: E402
     OrreryRetrogradeMaturationSettings,
@@ -874,9 +877,13 @@ class LogonUtility:
                 len(response.narrative),
             )
             return self._stamp_generation_model(response)
-        except Exception:
+        except Exception as exc:
             self._generated_correspondence = None
-            logger.exception("Failed to get structured response")
+            logger.error(
+                "Failed to get structured response: exception=%s error=%s",
+                type(exc).__name__,
+                structured_output_error_text(exc),
+            )
             raise
 
     async def generate_narrative_async(
@@ -939,9 +946,13 @@ class LogonUtility:
                 len(response.narrative),
             )
             return self._stamp_generation_model(response)
-        except Exception:
+        except Exception as exc:
             self._generated_correspondence = None
-            logger.exception("Failed to get structured response")
+            logger.error(
+                "Failed to get structured response: exception=%s error=%s",
+                type(exc).__name__,
+                structured_output_error_text(exc),
+            )
             raise
 
     def take_generated_correspondence(self) -> Optional[GeneratedCorrespondence]:
