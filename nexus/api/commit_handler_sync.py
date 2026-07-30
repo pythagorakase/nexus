@@ -326,6 +326,7 @@ def commit_incubator_to_database_sync(
                            llm_response_id, generation_model, status
                     FROM incubator
                     WHERE session_id = %s
+                    FOR UPDATE
                 """,
                     (session_id,),
                 )
@@ -654,6 +655,11 @@ def commit_incubator_to_database_sync(
                 cur.execute(
                     "DELETE FROM incubator WHERE session_id = %s", (session_id,)
                 )
+                if cur.rowcount != 1:
+                    raise RuntimeError(
+                        "Incubator ownership changed while committing session "
+                        f"{session_id}."
+                    )
                 logger.info("Cleared incubator for session %s", session_id)
 
     except Exception as e:

@@ -75,6 +75,7 @@ class CommitCursor:
     def __init__(self, connection):
         self.connection = connection
         self.result = None
+        self.rowcount = 0
 
     def __enter__(self):
         return self
@@ -85,7 +86,11 @@ class CommitCursor:
     def execute(self, sql, params=None):
         normalized = " ".join(sql.split())
         self.connection.statements.append((normalized, params))
-        if "FROM incubator" in normalized:
+        self.rowcount = 0
+        if normalized.startswith("DELETE FROM incubator"):
+            self.rowcount = 1
+            self.result = None
+        elif "FROM incubator" in normalized:
             self.result = self.connection.incubator
         elif "FROM chunk_metadata" in normalized:
             self.result = self.connection.parent_metadata
@@ -251,6 +256,10 @@ def test_sync_commit_links_same_turn_character_declaration(monkeypatch):
 
     assert chunk_id == conn.chunk_id
     assert conn.character_junctions == [(conn.chunk_id, 71, "present")]
+    assert any(
+        "FROM incubator" in sql and "FOR UPDATE" in sql
+        for sql, _params in conn.statements
+    )
 
 
 def _patch_sync_commit_runtime(monkeypatch) -> None:

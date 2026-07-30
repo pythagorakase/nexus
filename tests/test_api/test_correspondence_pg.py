@@ -5,7 +5,9 @@ from __future__ import annotations
 import asyncio
 import os
 import threading
+import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -100,6 +102,151 @@ def _seed_chunks(cur: Any, count: int) -> list[int]:
             (chunk_id, index, f"S01E01_{index:03d}"),
         )
     return ids
+
+
+def test_parallel_approvals_claim_incubator_row_once(
+    disposable_correspondence_db: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A second commit waits on the row claim and cannot replay the turn."""
+
+    dbname = disposable_correspondence_db
+    first_commit_reached_orrery = threading.Event()
+    release_first_commit = threading.Event()
+    orrery_calls: list[int] = []
+
+    def blocking_orrery(
+        conn: Any, *_args: Any, **_kwargs: Any
+    ) -> CommitOrreryTickResult:
+        orrery_calls.append(id(conn))
+        if len(orrery_calls) == 1:
+            first_commit_reached_orrery.set()
+            assert release_first_commit.wait(timeout=5)
+        return CommitOrreryTickResult()
+
+    monkeypatch.setattr(
+        commit_handler_sync,
+        "commit_orrery_tick_sync",
+        blocking_orrery,
+    )
+    monkeypatch.setattr(
+        commit_handler_sync,
+        "_orrery_checkpoint_interval",
+        lambda: 0,
+    )
+    monkeypatch.setattr(
+        "nexus.api.presence_audit.presence_audit_enabled",
+        lambda: False,
+    )
+
+    session_id = "00000000-0000-0000-0000-000000000635"
+    storyteller_text = "Only one approval may make this scene canonical."
+    with _connect(dbname) as seed_conn:
+        with seed_conn.cursor() as cur:
+            cur.execute(
+                """
+                TRUNCATE incubator, narrative_chunks
+                RESTART IDENTITY CASCADE
+                """
+            )
+            parent_chunk_id = _seed_chunks(cur, 1)[0]
+            cur.execute(
+                """
+                INSERT INTO incubator (
+                    id, chunk_id, parent_chunk_id, user_text, storyteller_text,
+                    generation_model, metadata_updates, entity_updates,
+                    reference_updates, orrery_adjudications, new_entities,
+                    session_id, llm_response_id, status
+                ) VALUES (
+                    TRUE, 2, %s, 'continue', %s, 'TEST',
+                    '{}'::jsonb, '{}'::jsonb, '{}'::jsonb,
+                    '[]'::jsonb, '[]'::jsonb, %s, 'parallel-approval',
+                    'provisional'
+                )
+                """,
+                (parent_chunk_id, storyteller_text, session_id),
+            )
+
+    first_conn = _connect(dbname)
+    second_conn = _connect(dbname)
+    monitor_conn = _connect(dbname, dict_cursor=True)
+    monitor_conn.autocommit = True
+    with second_conn.cursor() as cur:
+        cur.execute("SELECT pg_backend_pid()")
+        second_backend_pid = int(cur.fetchone()[0])
+    second_conn.commit()
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            first = executor.submit(
+                commit_handler_sync.commit_incubator_to_database_sync,
+                first_conn,
+                session_id,
+                None,
+            )
+            assert first_commit_reached_orrery.wait(timeout=2)
+            second = executor.submit(
+                commit_handler_sync.commit_incubator_to_database_sync,
+                second_conn,
+                session_id,
+                None,
+            )
+
+            lock_query = None
+            deadline = time.monotonic() + 2
+            while time.monotonic() < deadline:
+                with monitor_conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        SELECT wait_event_type, query
+                        FROM pg_stat_activity
+                        WHERE pid = %s
+                        """,
+                        (second_backend_pid,),
+                    )
+                    activity = cur.fetchone()
+                if activity and activity["wait_event_type"] == "Lock":
+                    lock_query = " ".join(activity["query"].split())
+                    break
+                time.sleep(0.01)
+
+            assert lock_query is not None
+            assert "FROM incubator" in lock_query
+            assert "FOR UPDATE" in lock_query
+            assert not second.done()
+
+            release_first_commit.set()
+            accepted_chunk_id = first.result(timeout=5)
+            with pytest.raises(
+                ValueError,
+                match=f"No incubator data found for session {session_id}",
+            ):
+                second.result(timeout=5)
+    finally:
+        release_first_commit.set()
+        first_conn.close()
+        second_conn.close()
+        monitor_conn.close()
+
+    assert orrery_calls == [id(first_conn)]
+    with _connect(dbname) as verify_conn:
+        with verify_conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT count(*)
+                FROM narrative_chunks
+                WHERE storyteller_text = %s
+                """,
+                (storyteller_text,),
+            )
+            assert cur.fetchone()[0] == 1
+            cur.execute("SELECT count(*) FROM incubator")
+            assert cur.fetchone()[0] == 0
+            cur.execute(
+                "SELECT storyteller_text FROM narrative_chunks WHERE id = %s",
+                (accepted_chunk_id,),
+            )
+            assert cur.fetchone()[0] == storyteller_text
 
 
 def test_accept_reject_hysteresis_and_digest_undo(
