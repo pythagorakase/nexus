@@ -201,9 +201,13 @@ def test_anthropic_storyteller_transport_and_guide_follow_settings(
         "nexus.config.get_openai_compatible_endpoint",
         lambda _model, _path=None: None,
     )
+
+    def capture_registry_validator(*_args: Any, **kwargs: Any) -> None:
+        captured["registry_validator_kwargs"] = kwargs
+
     monkeypatch.setattr(
         "nexus.agents.logon.orrery_tag_validation." "build_storyteller_tag_validator",
-        lambda *_args, **_kwargs: None,
+        capture_registry_validator,
     )
     monkeypatch.setattr(
         LogonUtility,
@@ -235,6 +239,7 @@ def test_anthropic_storyteller_transport_and_guide_follow_settings(
                 "max_rendered_tokens": 12000,
             }
         },
+        "orrery": {"retrograde": {"maturation": {"enabled": False}}},
     }
     utility = LogonUtility(settings, model_override="claude-sonnet-4-5")
 
@@ -242,6 +247,10 @@ def test_anthropic_storyteller_transport_and_guide_follow_settings(
 
     assert captured["structured_transport"] == expected_transport
     assert captured["reasoning_effort"] == "medium"
+    assert (
+        captured["registry_validator_kwargs"]["allow_same_turn_faction_declarations"]
+        is False
+    )
     expected_system = (
         f"Core prompt\n\n{skald_wire_prompt_guide()}" if has_guide else "Core prompt"
     )

@@ -625,7 +625,29 @@ def _abandon_generation_owner(
         conn.close()
 
 
-def _resolve_and_approve_pending(
+def _abandon_unscheduled_generation_owner(
+    *,
+    slot: Optional[int],
+    session_id: str,
+    error: str,
+) -> None:
+    """Best-effort cleanup for a route that never scheduled its generator."""
+
+    try:
+        _abandon_generation_owner(
+            slot=slot,
+            session_id=session_id,
+            error=error,
+        )
+    except Exception as release_exc:
+        logger.error(
+            "Failed to abandon generation lease %s: %s",
+            session_id,
+            release_exc,
+        )
+
+
+def _resolve_and_approve_pending_sync(
     *,
     slot: Optional[int],
     session_id: str,
@@ -633,12 +655,14 @@ def _resolve_and_approve_pending(
     user_text: str,
     choice: Optional[int],
     accept_fate: bool,
-    background_tasks: BackgroundTasks,
-) -> tuple[str, int]:
-    """Resolve the pending choice and approve it in one transaction."""
+) -> tuple[str, int, Optional[threading.Thread]]:
+    """Resolve and approve a pending choice with worker-owned connection life."""
+
     from nexus.api.commit_handler_sync import commit_incubator_to_database_sync
 
     conn = get_db_connection(slot)
+    resolved_user_text: str
+    approved_chunk_id: int
     try:
         resolved_user_text = _record_player_response_for_chunk(
             slot=slot,
@@ -651,8 +675,6 @@ def _resolve_and_approve_pending(
             incubator_session_id=session_id,
         )
         approved_chunk_id = commit_incubator_to_database_sync(conn, session_id, slot)
-        background_tasks.add_task(_run_post_commit_orrery_work, slot)
-        return resolved_user_text, approved_chunk_id
     except HTTPException:
         conn.rollback()
         raise
@@ -665,6 +687,35 @@ def _resolve_and_approve_pending(
         ) from exc
     finally:
         conn.close()
+
+    post_commit_thread = _start_post_commit_orrery_work(slot)
+    return resolved_user_text, approved_chunk_id, post_commit_thread
+
+
+async def _resolve_and_approve_pending(
+    *,
+    slot: Optional[int],
+    session_id: str,
+    chunk_id: int,
+    user_text: str,
+    choice: Optional[int],
+    accept_fate: bool,
+    background_tasks: BackgroundTasks,
+) -> tuple[str, int]:
+    """Resolve and approve without exposing the worker connection to cancellation."""
+
+    resolved_user_text, approved_chunk_id, post_commit_thread = await asyncio.to_thread(
+        _resolve_and_approve_pending_sync,
+        slot=slot,
+        session_id=session_id,
+        chunk_id=chunk_id,
+        user_text=user_text,
+        choice=choice,
+        accept_fate=accept_fate,
+    )
+    if post_commit_thread is not None:
+        background_tasks.add_task(post_commit_thread.join)
+    return resolved_user_text, approved_chunk_id
 
 
 # API Endpoints
@@ -743,6 +794,7 @@ async def continue_narrative(
         operation="continue",
     )
     scheduled = False
+    failure_reason = "Narrative request ended before generation was scheduled."
     try:
         if request.chunk_id is None and state is not None:
             if state.narrative_state is not None:
@@ -762,7 +814,7 @@ async def continue_narrative(
                         request.slot,
                     )
                     resolved_user_text, approved_chunk_id = (
-                        _resolve_and_approve_pending(
+                        await _resolve_and_approve_pending(
                             slot=request.slot,
                             session_id=narrative_state.session_id,
                             chunk_id=narrative_state.current_chunk_id,
@@ -869,21 +921,19 @@ async def continue_narrative(
             status="processing",
             message=message,
         )
-    except Exception as exc:
-        if not scheduled:
-            try:
-                _abandon_generation_owner(
-                    slot=request.slot,
-                    session_id=session_id,
-                    error=str(exc),
-                )
-            except Exception as release_exc:
-                logger.error(
-                    "Failed to abandon generation lease %s: %s",
-                    session_id,
-                    release_exc,
-                )
+    except asyncio.CancelledError:
+        failure_reason = "CancelledError"
         raise
+    except Exception as exc:
+        failure_reason = str(exc) or type(exc).__name__
+        raise
+    finally:
+        if not scheduled:
+            _abandon_unscheduled_generation_owner(
+                slot=request.slot,
+                session_id=session_id,
+                error=failure_reason,
+            )
 
 
 @app.get("/api/narrative/status/{session_id}", response_model=NarrativeStatus)
@@ -1002,6 +1052,7 @@ async def regenerate_narrative(
         operation="regenerate",
     )
     scheduled = False
+    failure_reason = "Regeneration request ended before generation was scheduled."
     try:
         _bind_generation_owner(
             slot=request.slot,
@@ -1050,27 +1101,23 @@ async def regenerate_narrative(
             status="processing",
             message=f"Regenerating chunk {chunk_id}",
         )
-    except Exception as exc:
-        if not scheduled:
-            try:
-                _abandon_generation_owner(
-                    slot=request.slot,
-                    session_id=session_id,
-                    error=str(exc),
-                )
-            except Exception as release_exc:
-                logger.error(
-                    "Failed to abandon regeneration lease %s: %s",
-                    session_id,
-                    release_exc,
-                )
+    except asyncio.CancelledError:
+        failure_reason = "CancelledError"
         raise
+    except Exception as exc:
+        failure_reason = str(exc) or type(exc).__name__
+        raise
+    finally:
+        if not scheduled:
+            _abandon_unscheduled_generation_owner(
+                slot=request.slot,
+                session_id=session_id,
+                error=failure_reason,
+            )
 
 
 @app.post("/api/narrative/approve")
-async def approve_narrative_unified(
-    request: ApproveNarrativeRequest, background_tasks: BackgroundTasks
-):
+async def approve_narrative_unified(request: ApproveNarrativeRequest):
     """
     Approve narrative and optionally commit to database.
 
@@ -1105,15 +1152,12 @@ async def approve_narrative_unified(
                 )
 
     # Now call the implementation
-    return await _approve_narrative_impl(
-        session_id, request.commit, slot, background_tasks
-    )
+    return await _approve_narrative_impl(session_id, request.commit, slot)
 
 
 @app.post("/api/narrative/approve/{session_id}")
 async def approve_narrative(
     session_id: str,
-    background_tasks: BackgroundTasks,
     request: Optional[ApproveNarrativeRequest] = None,
     slot: Optional[int] = None,
 ):
@@ -1122,9 +1166,7 @@ async def approve_narrative(
     """
     should_commit = request.commit if request else True
     effective_slot = request.slot if request and request.slot else slot
-    return await _approve_narrative_impl(
-        session_id, should_commit, effective_slot, background_tasks
-    )
+    return await _approve_narrative_impl(session_id, should_commit, effective_slot)
 
 
 def _run_post_commit_orrery_work(slot: Optional[int]) -> None:
@@ -1153,13 +1195,54 @@ def _run_post_commit_orrery_work(slot: Optional[int]) -> None:
     ).start()
 
 
-async def _approve_narrative_impl(
+def _run_post_commit_orrery_work_safely(slot: Optional[int]) -> None:
+    """Drain durable post-commit work without changing an accepted response."""
+
+    try:
+        _run_post_commit_orrery_work(slot)
+    except Exception:
+        logger.exception(
+            "Post-commit Orrery work failed for slot %s; durable queues remain.",
+            slot,
+        )
+
+
+def _start_post_commit_orrery_work(
+    slot: Optional[int],
+) -> Optional[threading.Thread]:
+    """Hand durable Orrery work off before a cancellable await can resume.
+
+    The quick outbox drain is deliberately non-daemon so graceful server
+    shutdown cannot strand it. ``_run_post_commit_orrery_work`` detaches only
+    the potentially multi-minute maturation drain.
+    """
+
+    try:
+        thread = threading.Thread(
+            target=_run_post_commit_orrery_work_safely,
+            args=(slot,),
+            name=f"orrery-post-commit-slot-{slot}",
+            daemon=False,
+        )
+        thread.start()
+        return thread
+    except Exception:
+        logger.exception(
+            "Could not start post-commit Orrery worker for slot %s; "
+            "running the drain inline.",
+            slot,
+        )
+        _run_post_commit_orrery_work_safely(slot)
+        return None
+
+
+def _approve_narrative_sync(
     session_id: str,
     commit: bool,
     slot: Optional[int],
-    background_tasks: Optional[BackgroundTasks] = None,
-):
-    """Internal implementation for approve narrative."""
+) -> tuple[Dict[str, Any], Optional[threading.Thread]]:
+    """Read or commit one incubator row with a worker-owned connection."""
+
     conn = get_db_connection(slot)
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -1177,12 +1260,8 @@ async def _approve_narrative_impl(
             from nexus.api.commit_handler_sync import commit_incubator_to_database_sync
 
             try:
-                # Commit to database
                 chunk_id = commit_incubator_to_database_sync(conn, session_id, slot)
-                if background_tasks is not None:
-                    background_tasks.add_task(_run_post_commit_orrery_work, slot)
-
-                return {
+                result = {
                     "status": "committed",
                     "message": f"Narrative committed as chunk {chunk_id}",
                     "chunk_id": chunk_id,
@@ -1194,7 +1273,7 @@ async def _approve_narrative_impl(
                 )
         else:
             # Just mark as reviewed
-            return {
+            result = {
                 "status": "reviewed",
                 "message": "Narrative reviewed but not committed",
                 "chunk_id": incubator_data["chunk_id"],
@@ -1202,6 +1281,25 @@ async def _approve_narrative_impl(
 
     finally:
         conn.close()
+
+    post_commit_thread = _start_post_commit_orrery_work(slot) if commit else None
+    return result, post_commit_thread
+
+
+async def _approve_narrative_impl(
+    session_id: str,
+    commit: bool,
+    slot: Optional[int],
+):
+    """Approve a narrative without exposing the worker connection to cancellation."""
+
+    result, _post_commit_thread = await asyncio.to_thread(
+        _approve_narrative_sync,
+        session_id,
+        commit,
+        slot,
+    )
+    return result
 
 
 @app.post("/api/narrative/select-choice", response_model=SelectChoiceResponse)

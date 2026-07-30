@@ -19,6 +19,7 @@ from nexus.agents.logon.apex_schema import (
 from nexus.agents.logon.orrery_tag_validation import (
     StorytellerVocabulary,
     build_storyteller_tag_validator,
+    collect_faction_identity_issues,
     collect_orrery_tag_issues,
 )
 from nexus.agents.logon.skald_wire import SkaldTurnWire
@@ -35,6 +36,7 @@ class FakeRegistryCursor:
         self,
         *,
         entities_by_name: Optional[dict[str, list[str]]] = None,
+        faction_ids_by_name: Optional[dict[str, int]] = None,
     ) -> None:
         # tag -> (id, category, is_ephemeral, reapplication_policy)
         self.tags = {
@@ -63,6 +65,15 @@ class FakeRegistryCursor:
             if entities_by_name is None
             else entities_by_name
         )
+        self.faction_ids_by_name = (
+            {
+                "Office of Civic Continuity": 91,
+                "The Sluice Guild": 92,
+                "Quay Witness Circle": 93,
+            }
+            if faction_ids_by_name is None
+            else faction_ids_by_name
+        )
         self.categories_by_kind = {
             "character": {"bodyform", "disposition"},
             "place": {"place_class"},
@@ -81,6 +92,12 @@ class FakeRegistryCursor:
         if "SELECT entity_kind" in sql:
             self._result = [
                 (kind,) for kind in self.entities_by_name.get(str(params[0]), [])
+            ]
+            self._one = self._result[0] if self._result else None
+        elif "SELECT id, name FROM factions" in sql:
+            self._result = [
+                (faction_id, name)
+                for name, faction_id in sorted(self.faction_ids_by_name.items())
             ]
             self._one = self._result[0] if self._result else None
         elif "tag_category_registry" in sql:
@@ -189,21 +206,26 @@ def _storyteller_response(
     pair_tag_hints: Optional[List[dict[str, str]]] = None,
     updates: Optional[dict[str, List[dict[str, Any]]]] = None,
     orrery_adjudications: Optional[List[dict[str, Any]]] = None,
+    new_entities: Optional[List[dict[str, Any]]] = None,
 ) -> SkaldTurnWire:
     payload: dict[str, Any] = {
         "narrative": "Marra Kest steps out from behind the sluice gate.",
         "choices": ["Question Marra.", "Keep walking."],
         "letter": "Keep Marra's divided loyalty private for the next beat.",
         "orrery_adjudications": orrery_adjudications or [],
-        "new_entities": [
-            {
-                "kind": "character",
-                "name": "Marra Kest",
-                "summary": "A sluice keeper with divided loyalties.",
-                "tag_hints": tag_hints or [],
-                "pair_tag_hints": pair_tag_hints or [],
-            }
-        ],
+        "new_entities": (
+            [
+                {
+                    "kind": "character",
+                    "name": "Marra Kest",
+                    "summary": "A sluice keeper with divided loyalties.",
+                    "tag_hints": tag_hints or [],
+                    "pair_tag_hints": pair_tag_hints or [],
+                }
+            ]
+            if new_entities is None
+            else new_entities
+        ),
     }
     if updates is not None:
         payload["updates"] = updates
@@ -245,6 +267,106 @@ def _updates_block_with_tag(
         "faction": "factions",
     }[kind]
     return _updates_block(**{array_name: [{"name": name, wire_field: [tag_name]}]})
+
+
+@pytest.mark.parametrize(
+    "alias",
+    [
+        "Civic Continuity Office",
+        "Blackwake Assembly",
+    ],
+)
+def test_unpersisted_faction_aliases_fail_before_incubation(alias: str) -> None:
+    """Live-reproduced prose aliases are not valid durable update identities."""
+
+    response = _storyteller_response(
+        updates=_updates_block(
+            factions=[
+                {
+                    "name": alias,
+                    "action": "tightens its control of the quay",
+                }
+            ]
+        )
+    )
+
+    issues = collect_faction_identity_issues(response, FakeRegistryCursor())
+
+    assert len(issues) == 1
+    assert issues[0].startswith("updates.factions[0]:")
+    assert f"Unknown canonical faction name {alias!r}" in issues[0]
+
+
+def test_faction_update_identity_honors_same_turn_maturation_gate() -> None:
+    """Declared factions are writable only when commit-time stubs are enabled."""
+
+    canonical = _storyteller_response(
+        updates=_updates_block(
+            factions=[
+                {
+                    "id": 91,
+                    "name": "Office of Civic Continuity",
+                    "action": "opens a formal inquiry",
+                }
+            ]
+        )
+    )
+    declared = _storyteller_response(
+        updates=_updates_block(
+            factions=[
+                {
+                    "name": "The Lantern Delegation",
+                    "action": "announces its first assembly",
+                }
+            ]
+        ),
+        new_entities=[
+            {
+                "kind": "faction",
+                "name": "The Lantern Delegation",
+                "summary": "A new delegation from the outer quay.",
+            }
+        ],
+    )
+    cursor = FakeRegistryCursor()
+
+    assert collect_faction_identity_issues(canonical, cursor) == []
+    disabled_issues = collect_faction_identity_issues(declared, cursor)
+    assert len(disabled_issues) == 1
+    assert (
+        "Unknown canonical faction name 'The Lantern Delegation'" in disabled_issues[0]
+    )
+    assert (
+        collect_faction_identity_issues(
+            declared,
+            cursor,
+            allow_same_turn_faction_declarations=True,
+        )
+        == []
+    )
+
+
+def test_faction_update_id_and_name_must_identify_the_same_row() -> None:
+    """An ID cannot silently bless a conflicting prose alias."""
+
+    response = _storyteller_response(
+        updates=_updates_block(
+            factions=[
+                {
+                    "id": 91,
+                    "name": "Civic Continuity Office",
+                    "action": "opens a formal inquiry",
+                }
+            ]
+        )
+    )
+
+    issues = collect_faction_identity_issues(response, FakeRegistryCursor())
+
+    assert issues == [
+        "updates.factions[0]: Faction id 91 is canonically named "
+        "'Office of Civic Continuity', not 'Civic Continuity Office'"
+    ]
 
 
 def test_valid_bestowals_produce_no_issues() -> None:
@@ -1041,6 +1163,27 @@ def _retry_boundary_response(
                 "loyalist" if valid else "perceptive",
             )
         )
+    if boundary == "faction_identity":
+        return _storyteller_response(
+            updates=_updates_block(
+                factions=(
+                    [
+                        {
+                            "id": 91,
+                            "name": "Office of Civic Continuity",
+                            "action": "opens a formal inquiry",
+                        }
+                    ]
+                    if valid
+                    else [
+                        {
+                            "name": "Civic Continuity Office",
+                            "action": "opens a formal inquiry",
+                        }
+                    ]
+                )
+            )
+        )
     if boundary == "tag_hints":
         return _storyteller_response(tag_hints=["human" if valid else "humam"])
     if boundary == "pair_tag_hints":
@@ -1073,6 +1216,11 @@ def _retry_boundary_response(
         ("character_applied_tags", "updates.characters[0]", "human"),
         ("place_tags_to_clear", "updates.places[0]", None),
         ("faction_applied_tags", "updates.factions[0]", None),
+        (
+            "faction_identity",
+            "updates.factions[0]",
+            "Office of Civic Continuity",
+        ),
         ("tag_hints", "new_entities[0].tag_hints", "human"),
         ("pair_tag_hints", "new_entities[0].pair_tag_hints[0].tag", "protects"),
         (

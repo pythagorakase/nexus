@@ -1,4 +1,4 @@
-"""Generation-time registry validation for storyteller Orrery vocabulary.
+"""Generation-time registry validation for storyteller output.
 
 Skald freely invents tag names (often ``category:name`` composites) when
 updating state or emitting ``new_entities`` declaration hints. The
@@ -6,9 +6,11 @@ closed-vocabulary tag writers hard-error on unknown names -- but they run
 inside the chunk COMMIT transaction, where the only outcome is a dead player
 turn (M9 gate finding).
 
-This module walks a parsed storyteller response and validates every sparse tag
-delta and declaration hint against the live registry, so LOGON's structured
-output validator can hand issues back to the model while it still owns the turn.
+Faction update names have the same failure mode: prose aliases can look valid
+while failing the commit handler's exact canonical lookup. This module walks a
+parsed storyteller response and validates both identity and vocabulary fields
+against live registries, so LOGON's structured-output validator can hand issues
+back to the model while it still owns the turn.
 """
 
 from __future__ import annotations
@@ -120,6 +122,118 @@ def _bestowal_sites(response: Any) -> List[Tuple[str, str, OrreryTagBestowal]]:
     return sites
 
 
+def _faction_update_sites(
+    response: Any,
+) -> List[Tuple[str, Optional[int], Optional[str]]]:
+    """Return faction update identities from wire or hydrated responses."""
+
+    sites: List[Tuple[str, Optional[int], Optional[str]]] = []
+    updates = getattr(response, "updates", None)
+    if updates is not None:
+        for index, update in enumerate(getattr(updates, "factions", []) or []):
+            sites.append(
+                (
+                    f"updates.factions[{index}]",
+                    getattr(update, "id", None),
+                    getattr(update, "name", None),
+                )
+            )
+
+    state_updates = getattr(response, "state_updates", None)
+    if state_updates is not None:
+        for index, update in enumerate(getattr(state_updates, "factions", []) or []):
+            sites.append(
+                (
+                    f"state_updates.factions[{index}]",
+                    getattr(update, "faction_id", None),
+                    getattr(update, "faction_name", None),
+                )
+            )
+    return sites
+
+
+def collect_faction_identity_issues(
+    response: Any,
+    cur: Any,
+    *,
+    suggestion_limit: int = 3,
+    allow_same_turn_faction_declarations: bool = False,
+) -> List[str]:
+    """Validate faction update identities before a draft reaches incubation.
+
+    When runtime maturation is enabled, exact same-response faction declarations
+    are allowed because the commit transaction creates their canonical stubs
+    before resolving state updates. Every other update must resolve to an
+    existing faction by exact name, and a supplied ID/name pair must identify
+    the same canonical row.
+    """
+
+    sites = _faction_update_sites(response)
+    if not sites:
+        return []
+
+    cur.execute("SELECT id, name FROM factions ORDER BY name, id")
+    rows = cur.fetchall()
+    names_by_id = {
+        int(_row_value(row, "id", 0)): str(_row_value(row, "name", 1)) for row in rows
+    }
+    ids_by_name: dict[str, List[int]] = {}
+    for catalog_id, catalog_name in names_by_id.items():
+        ids_by_name.setdefault(catalog_name, []).append(catalog_id)
+
+    declared_names = (
+        {
+            str(getattr(declaration, "name", ""))
+            for declaration in (getattr(response, "new_entities", None) or [])
+            if getattr(declaration, "kind", None) == "faction"
+        }
+        if allow_same_turn_faction_declarations
+        else set()
+    )
+    canonical_names = frozenset(ids_by_name)
+    issues: List[str] = []
+    for path, faction_id, faction_name in sites:
+        if faction_id is not None:
+            matched_name = names_by_id.get(faction_id)
+            if matched_name is None:
+                issues.append(f"{path}: Unknown canonical faction id {faction_id!r}")
+                continue
+            if faction_name != matched_name:
+                issues.append(
+                    f"{path}: Faction id {faction_id!r} is canonically named "
+                    f"{matched_name!r}, not {faction_name!r}"
+                )
+            continue
+
+        if not faction_name:
+            issues.append(f"{path}: Faction update requires an exact id or name")
+            continue
+        matching_ids = ids_by_name.get(faction_name, [])
+        if len(matching_ids) == 1:
+            continue
+        if len(matching_ids) > 1:
+            issues.append(
+                f"{path}: Canonical faction name {faction_name!r} is ambiguous; "
+                "supply its exact id"
+            )
+            continue
+        if faction_name in declared_names:
+            continue
+        resolution = "use an exact persisted name"
+        if allow_same_turn_faction_declarations:
+            resolution += " or declare a genuinely new faction in new_entities"
+        issue = f"{path}: Unknown canonical faction name {faction_name!r}; {resolution}"
+        issues.append(
+            _with_near_misses(
+                issue,
+                value=faction_name,
+                candidates=canonical_names,
+                suggestion_limit=suggestion_limit,
+            )
+        )
+    return issues
+
+
 def _validate_bestowal_against_vocabulary(
     *,
     entity_kind: str,
@@ -182,6 +296,14 @@ def _with_near_misses(
     if not matches:
         return issue
     return f"{issue}; did you mean: {', '.join(matches)}"
+
+
+def _row_value(row: Any, key: str, index: int) -> Any:
+    """Read one field from tuple- or mapping-shaped database rows."""
+
+    if hasattr(row, "get"):
+        return row[key]
+    return row[index]
 
 
 def _annotate_declaration_issues(
@@ -327,13 +449,14 @@ def build_storyteller_tag_validator(
     dbname: Optional[str],
     *,
     suggestion_limit: int = 3,
+    allow_same_turn_faction_declarations: bool = False,
 ) -> Optional[Any]:
-    """Return an async pydantic_ai output validator bound to ``dbname``.
+    """Return an async registry output validator bound to ``dbname``.
 
     Returns ``None`` when no slot database is in scope (nothing to validate
-    against). The validator opens a short-lived pooled connection per
-    generation attempt and raises ``ModelRetry`` listing every invalid tag so
-    the model repairs the bestowal instead of killing the commit later.
+    against). The validator opens a short-lived pooled connection per generation
+    attempt and raises ``ModelRetry`` listing invalid vocabulary and faction
+    identities so the model repairs them instead of killing the commit later.
     """
 
     if not dbname:
@@ -355,20 +478,42 @@ def build_storyteller_tag_validator(
                     vocabulary=vocabulary,
                     suggestion_limit=suggestion_limit,
                 )
+                issues.extend(
+                    collect_faction_identity_issues(
+                        output,
+                        cur,
+                        suggestion_limit=suggestion_limit,
+                        allow_same_turn_faction_declarations=(
+                            allow_same_turn_faction_declarations
+                        ),
+                    )
+                )
         if issues:
             formatted = "\n".join(f"- {issue}" for issue in issues)
+            declaration_guidance = (
+                "or declare a genuinely new faction in new_entities; "
+                if allow_same_turn_faction_declarations
+                else (
+                    "same-turn declarations cannot back faction updates while "
+                    "runtime maturation is disabled; "
+                )
+            )
             logger.info(
-                "Storyteller Orrery vocabulary failed registry validation "
+                "Storyteller output failed registry validation "
                 "(%s issues); requesting model retry",
                 len(issues),
             )
             raise ModelRetry(
-                "Your Orrery tags, new-entity declaration hints, or replacement "
-                "event types failed closed-registry validation. For tags_add, "
-                "tags_clear, and tag_hints, use bare registered tag names only "
-                "(e.g. 'comfortable'), never 'category:name' composites. For "
-                "pair_tag_hints, use the exact registered pair-tag name; pair tags "
-                "may contain colons (e.g. 'contact:social'). For "
+                "Your Orrery tags, new-entity declaration hints, replacement "
+                "event types, or faction update identities failed closed-registry "
+                "validation. For faction updates, use an exact persisted name "
+                "shown in the ENTITY DOSSIER (and its matching canonical id when "
+                f"supplying one), {declaration_guidance}drop an update with no "
+                "canonical equivalent. "
+                "For tags_add, tags_clear, and tag_hints, use bare registered tag "
+                "names only (e.g. 'comfortable'), never 'category:name' "
+                "composites. For pair_tag_hints, use the exact registered pair-tag "
+                "name; pair tags may contain colons (e.g. 'contact:social'). For "
                 "replacement_event_type, use an exact registered event type. Drop "
                 "any value with no registered equivalent. A tags_add issue that "
                 "requires duration_override is not expressible on the storyteller "

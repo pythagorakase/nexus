@@ -326,6 +326,7 @@ def commit_incubator_to_database_sync(
                            llm_response_id, generation_model, status
                     FROM incubator
                     WHERE session_id = %s
+                    FOR UPDATE
                 """,
                     (session_id,),
                 )
@@ -654,6 +655,11 @@ def commit_incubator_to_database_sync(
                 cur.execute(
                     "DELETE FROM incubator WHERE session_id = %s", (session_id,)
                 )
+                if cur.rowcount != 1:
+                    raise RuntimeError(
+                        "Incubator ownership changed while committing session "
+                        f"{session_id}."
+                    )
                 logger.info("Cleared incubator for session %s", session_id)
 
     except Exception as e:
@@ -670,7 +676,10 @@ def commit_incubator_to_database_sync(
             )
 
     if incubator.get("correspondence_writer_letter") is not None:
-        compact_accepted_correspondence_sync(conn, accepting_chunk_id=chunk_id)
+        _compact_accepted_correspondence_best_effort(
+            conn,
+            accepting_chunk_id=chunk_id,
+        )
 
     # Post-commit presence-roster drift audit (issue #567): read-only
     # diagnostics over the committed chunk, outside the transaction.
@@ -688,6 +697,35 @@ def commit_incubator_to_database_sync(
 
     logger.info("Successfully committed chunk %s from session %s", chunk_id, session_id)
     return chunk_id
+
+
+def _compact_accepted_correspondence_best_effort(
+    conn: Any,
+    *,
+    accepting_chunk_id: int,
+) -> bool:
+    """Compact after acceptance without misreporting the durable commit.
+
+    Compaction is derived from the append-only accepted correspondence journal.
+    If the provider or persistence step fails, leaving the digest absent is a
+    deterministic retry marker: the next accepted correspondence turn plans
+    compaction from the same uncompacted exchanges. The accepted narrative and
+    cleared incubator must therefore remain a successful commit.
+    """
+
+    try:
+        return compact_accepted_correspondence_sync(
+            conn,
+            accepting_chunk_id=accepting_chunk_id,
+        )
+    except Exception:
+        logger.exception(
+            "Correspondence compaction failed after chunk %s was durably "
+            "accepted; leaving the uncompacted journal intact for retry on "
+            "the next accepted correspondence turn",
+            accepting_chunk_id,
+        )
+        return False
 
 
 def compact_accepted_correspondence_sync(

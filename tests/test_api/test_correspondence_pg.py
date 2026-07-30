@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import os
+import threading
+import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -14,7 +17,7 @@ from psycopg2 import sql
 from psycopg2.extras import RealDictCursor
 
 from nexus.agents.orrery.events import CommitOrreryTickResult
-from nexus.api import commit_handler_sync
+from nexus.api import commit_handler_sync, narrative
 from nexus.api.narrative_generation import write_to_incubator
 from nexus.memory.correspondence import (
     persist_staged_correspondence,
@@ -101,6 +104,151 @@ def _seed_chunks(cur: Any, count: int) -> list[int]:
     return ids
 
 
+def test_parallel_approvals_claim_incubator_row_once(
+    disposable_correspondence_db: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A second commit waits on the row claim and cannot replay the turn."""
+
+    dbname = disposable_correspondence_db
+    first_commit_reached_orrery = threading.Event()
+    release_first_commit = threading.Event()
+    orrery_calls: list[int] = []
+
+    def blocking_orrery(
+        conn: Any, *_args: Any, **_kwargs: Any
+    ) -> CommitOrreryTickResult:
+        orrery_calls.append(id(conn))
+        if len(orrery_calls) == 1:
+            first_commit_reached_orrery.set()
+            assert release_first_commit.wait(timeout=5)
+        return CommitOrreryTickResult()
+
+    monkeypatch.setattr(
+        commit_handler_sync,
+        "commit_orrery_tick_sync",
+        blocking_orrery,
+    )
+    monkeypatch.setattr(
+        commit_handler_sync,
+        "_orrery_checkpoint_interval",
+        lambda: 0,
+    )
+    monkeypatch.setattr(
+        "nexus.api.presence_audit.presence_audit_enabled",
+        lambda: False,
+    )
+
+    session_id = "00000000-0000-0000-0000-000000000635"
+    storyteller_text = "Only one approval may make this scene canonical."
+    with _connect(dbname) as seed_conn:
+        with seed_conn.cursor() as cur:
+            cur.execute(
+                """
+                TRUNCATE incubator, narrative_chunks
+                RESTART IDENTITY CASCADE
+                """
+            )
+            parent_chunk_id = _seed_chunks(cur, 1)[0]
+            cur.execute(
+                """
+                INSERT INTO incubator (
+                    id, chunk_id, parent_chunk_id, user_text, storyteller_text,
+                    generation_model, metadata_updates, entity_updates,
+                    reference_updates, orrery_adjudications, new_entities,
+                    session_id, llm_response_id, status
+                ) VALUES (
+                    TRUE, 2, %s, 'continue', %s, 'TEST',
+                    '{}'::jsonb, '{}'::jsonb, '{}'::jsonb,
+                    '[]'::jsonb, '[]'::jsonb, %s, 'parallel-approval',
+                    'provisional'
+                )
+                """,
+                (parent_chunk_id, storyteller_text, session_id),
+            )
+
+    first_conn = _connect(dbname)
+    second_conn = _connect(dbname)
+    monitor_conn = _connect(dbname, dict_cursor=True)
+    monitor_conn.autocommit = True
+    with second_conn.cursor() as cur:
+        cur.execute("SELECT pg_backend_pid()")
+        second_backend_pid = int(cur.fetchone()[0])
+    second_conn.commit()
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            first = executor.submit(
+                commit_handler_sync.commit_incubator_to_database_sync,
+                first_conn,
+                session_id,
+                None,
+            )
+            assert first_commit_reached_orrery.wait(timeout=2)
+            second = executor.submit(
+                commit_handler_sync.commit_incubator_to_database_sync,
+                second_conn,
+                session_id,
+                None,
+            )
+
+            lock_query = None
+            deadline = time.monotonic() + 2
+            while time.monotonic() < deadline:
+                with monitor_conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        SELECT wait_event_type, query
+                        FROM pg_stat_activity
+                        WHERE pid = %s
+                        """,
+                        (second_backend_pid,),
+                    )
+                    activity = cur.fetchone()
+                if activity and activity["wait_event_type"] == "Lock":
+                    lock_query = " ".join(activity["query"].split())
+                    break
+                time.sleep(0.01)
+
+            assert lock_query is not None
+            assert "FROM incubator" in lock_query
+            assert "FOR UPDATE" in lock_query
+            assert not second.done()
+
+            release_first_commit.set()
+            accepted_chunk_id = first.result(timeout=5)
+            with pytest.raises(
+                ValueError,
+                match=f"No incubator data found for session {session_id}",
+            ):
+                second.result(timeout=5)
+    finally:
+        release_first_commit.set()
+        first_conn.close()
+        second_conn.close()
+        monitor_conn.close()
+
+    assert orrery_calls == [id(first_conn)]
+    with _connect(dbname) as verify_conn:
+        with verify_conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT count(*)
+                FROM narrative_chunks
+                WHERE storyteller_text = %s
+                """,
+                (storyteller_text,),
+            )
+            assert cur.fetchone()[0] == 1
+            cur.execute("SELECT count(*) FROM incubator")
+            assert cur.fetchone()[0] == 0
+            cur.execute(
+                "SELECT storyteller_text FROM narrative_chunks WHERE id = %s",
+                (accepted_chunk_id,),
+            )
+            assert cur.fetchone()[0] == storyteller_text
+
+
 def test_accept_reject_hysteresis_and_digest_undo(
     disposable_correspondence_db: str,
     monkeypatch: pytest.MonkeyPatch,
@@ -116,13 +264,30 @@ def test_accept_reject_hysteresis_and_digest_undo(
         "_orrery_checkpoint_interval",
         lambda: 0,
     )
-    compaction_triggers: list[int] = []
+    compaction_calls: list[dict[str, Any]] = []
+
+    def compact_without_event_loop(
+        _utility: Any,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+        max_digest_tokens: int,
+    ) -> str:
+        with pytest.raises(RuntimeError):
+            asyncio.get_running_loop()
+        compaction_calls.append(
+            {
+                "thread": threading.get_ident(),
+                "system_prompt": system_prompt,
+                "user_prompt": user_prompt,
+                "max_digest_tokens": max_digest_tokens,
+            }
+        )
+        return "Durable digest produced across the FastAPI worker boundary."
+
     monkeypatch.setattr(
-        commit_handler_sync,
-        "compact_accepted_correspondence_sync",
-        lambda _conn, *, accepting_chunk_id: (
-            compaction_triggers.append(accepting_chunk_id) or False
-        ),
+        "nexus.agents.lore.logon_utility.LogonUtility.compact_correspondence",
+        compact_without_event_loop,
     )
     monkeypatch.setattr(
         "nexus.api.presence_audit.presence_audit_enabled",
@@ -255,16 +420,30 @@ def test_accept_reject_hysteresis_and_digest_undo(
                 },
             )
         )
-        accept_conn = _connect(dbname)
-        try:
-            accepting_chunk_id = commit_handler_sync.commit_incubator_to_database_sync(
-                accept_conn,
+        event_loop_thread = threading.get_ident()
+        monkeypatch.setattr(
+            narrative,
+            "get_db_connection",
+            lambda _slot: _connect(dbname),
+        )
+        monkeypatch.setattr(
+            narrative,
+            "_start_post_commit_orrery_work",
+            lambda _slot: None,
+        )
+        approval = asyncio.run(
+            narrative._approve_narrative_impl(
                 session_id,
-                slot=None,
+                True,
+                None,
             )
-        finally:
-            accept_conn.close()
-        assert compaction_triggers == [accepting_chunk_id]
+        )
+        accepting_chunk_id = int(approval["chunk_id"])
+        assert approval["status"] == "committed"
+        assert len(compaction_calls) == 1
+        assert compaction_calls[0]["thread"] != event_loop_thread
+        assert "writer secret 5" in compaction_calls[0]["user_prompt"]
+        assert "writer secret 11" in compaction_calls[0]["user_prompt"]
 
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
@@ -294,16 +473,21 @@ def test_accept_reject_hysteresis_and_digest_undo(
                 {"seat": "gaia", "body": "gaia secret 11"},
             ]
 
-            plan = plan_correspondence_compaction(
-                cur,
-                accepting_chunk_id=accepting_chunk_id,
-                floor_turns=5,
-                ceiling_turns=10,
+            cur.execute(
+                """
+                SELECT digest, compacted_through_chunk_id
+                FROM storyteller_correspondence_digest_versions
+                WHERE accepting_chunk_id = %s
+                """,
+                (accepting_chunk_id,),
             )
-            assert plan is not None
-            assert len(plan.aging_exchanges) == 5
-            assert len(plan.recent_exchanges) == 6
-            assert all(len(exchange.letters) == 2 for exchange in plan.aging_exchanges)
+            digest = cur.fetchone()
+            assert digest == {
+                "digest": (
+                    "Durable digest produced across the FastAPI worker boundary."
+                ),
+                "compacted_through_chunk_id": chunk_ids[4],
+            }
 
             # Two immutable versions make chunk undo observable: deleting the
             # accepting chunk cascades its letters/current digest, revealing
@@ -313,16 +497,14 @@ def test_accept_reject_hysteresis_and_digest_undo(
                 INSERT INTO storyteller_correspondence_digest_versions (
                     accepting_chunk_id, compacted_through_chunk_id, digest
                 )
-                VALUES (%s, %s, 'prior digest'), (%s, %s, 'current digest')
+                VALUES (%s, %s, 'prior digest')
                 """,
                 (
                     chunk_ids[9],
                     chunk_ids[3],
-                    accepting_chunk_id,
-                    chunk_ids[4],
                 ),
             )
-            assert read_accepted_correspondence(cur).digest == "current digest"
+            assert read_accepted_correspondence(cur).digest == digest["digest"]
             cur.execute(
                 "DELETE FROM narrative_chunks WHERE id = %s",
                 (accepting_chunk_id,),

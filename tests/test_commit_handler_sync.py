@@ -75,6 +75,7 @@ class CommitCursor:
     def __init__(self, connection):
         self.connection = connection
         self.result = None
+        self.rowcount = 0
 
     def __enter__(self):
         return self
@@ -85,7 +86,11 @@ class CommitCursor:
     def execute(self, sql, params=None):
         normalized = " ".join(sql.split())
         self.connection.statements.append((normalized, params))
-        if "FROM incubator" in normalized:
+        self.rowcount = 0
+        if normalized.startswith("DELETE FROM incubator"):
+            self.rowcount = 1
+            self.result = None
+        elif "FROM incubator" in normalized:
             self.result = self.connection.incubator
         elif "FROM chunk_metadata" in normalized:
             self.result = self.connection.parent_metadata
@@ -251,6 +256,10 @@ def test_sync_commit_links_same_turn_character_declaration(monkeypatch):
 
     assert chunk_id == conn.chunk_id
     assert conn.character_junctions == [(conn.chunk_id, 71, "present")]
+    assert any(
+        "FROM incubator" in sql and "FOR UPDATE" in sql
+        for sql, _params in conn.statements
+    )
 
 
 def _patch_sync_commit_runtime(monkeypatch) -> None:
@@ -383,6 +392,45 @@ def test_sync_commit_aborts_on_unresolvable_state_update_name(monkeypatch):
     assert not any(
         sql.startswith("DELETE FROM incubator") for sql, _params in conn.statements
     )
+
+
+def test_post_commit_compaction_failure_preserves_success_and_retries(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Derived compaction cannot turn a durable acceptance into a false 500."""
+
+    attempts = []
+
+    def flaky_compaction(_conn, *, accepting_chunk_id):
+        attempts.append(accepting_chunk_id)
+        if len(attempts) == 1:
+            raise RuntimeError("provider unavailable")
+        return True
+
+    monkeypatch.setattr(
+        commit_handler_sync,
+        "compact_accepted_correspondence_sync",
+        flaky_compaction,
+    )
+    connection = object()
+
+    assert (
+        commit_handler_sync._compact_accepted_correspondence_best_effort(
+            connection,
+            accepting_chunk_id=11,
+        )
+        is False
+    )
+    assert (
+        commit_handler_sync._compact_accepted_correspondence_best_effort(
+            connection,
+            accepting_chunk_id=12,
+        )
+        is True
+    )
+    assert attempts == [11, 12]
+    assert "leaving the uncompacted journal intact for retry" in caplog.text
 
 
 def test_bootstrap_commit_seeds_setting_for_next_presence_baseline(
