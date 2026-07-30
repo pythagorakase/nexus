@@ -640,9 +640,10 @@ class LogonUtility:
 
         structured_output_retries = apex_settings.get("structured_output_retries", 3)
 
-        # Generation-time registry validation for Skald's orrery_tags: invalid
-        # names become a ModelRetry while the model still owns the turn,
-        # instead of a dead commit later (M9 gate finding).
+        # Generation-time registry validation for Skald's durable fields:
+        # invalid Orrery vocabulary and unresolved faction update identities
+        # become a ModelRetry while the model still owns the turn, instead of
+        # a dead commit later (M9 gate finding and issue #634).
         from nexus.agents.logon.orrery_tag_validation import (
             build_storyteller_tag_validator,
         )
