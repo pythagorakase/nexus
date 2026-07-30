@@ -46,6 +46,17 @@ discovery mechanism. Reconfirm the organization’s current complimentary-token
 enrollment and eligible model group before raising it or changing
 `target_model`.
 
+## Seeds
+
+Shallow single-request probes stop finding bugs once the early-game surface
+hardens; state-threshold defects (compaction, alias accumulation) only appear
+deep into a campaign. Drop a checksummed mid-campaign `pg_dump -Fc` dump into
+`temp/qa_seeds/` (ignored, conventionally preserved) and the shift seeds the
+disposable slot from the newest one instead of a bare reset, then owes at
+least two deep-state probe families per `mission_prompt.md`. Prune stale
+seeds whenever the schema or campaign shape they capture stops being
+representative.
+
 ## Usage guard
 
 Run the helper through Poetry:

@@ -1148,7 +1148,10 @@ usage_dir = ".nexus/runtime/usage"  # relative paths resolve against the repo ro
 [usage.daily_allowance]
 # Per-provider daily API-token allowances (UTC day), used for readout only —
 # measurement, never enforcement. Providers without an entry show no allowance.
-openai = 2500000
+# Owner is OpenAI usage tier 4: 10M/day complimentary for the Terra-class
+# model group (Sol/o3-class premium models have a separate 1M/24h pool this
+# readout does not track).
+openai = 10000000
 
 # =============================================================================
 # Managed Runtime (issue #396) — nexus up / down / restart / status / logs
