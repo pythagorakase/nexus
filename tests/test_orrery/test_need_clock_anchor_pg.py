@@ -184,6 +184,24 @@ def _insert_character(cur: Any, name: str) -> int:
     return entity_id
 
 
+def _insert_place(cur: Any, name: str) -> int:
+    """Insert one real-schema place and return its place-table ID."""
+
+    cur.execute(
+        "INSERT INTO entities (kind, is_active) " "VALUES ('place', true) RETURNING id"
+    )
+    entity_id = int(cur.fetchone()[0])
+    cur.execute(
+        """
+        INSERT INTO places (name, type, entity_id)
+        VALUES (%s, 'fixed_location', %s)
+        RETURNING id
+        """,
+        (name, entity_id),
+    )
+    return int(cur.fetchone()[0])
+
+
 def _insert_chunk_at(cur: Any, world_time: datetime) -> int:
     """Create a real chunk and pin its metadata to an exact test world time."""
 
@@ -577,6 +595,52 @@ def test_migration_provenance_counts_and_rerun_are_idempotent(
                 )
                 == 1
             )
+            cur.execute(
+                """
+                SELECT field, count(*)
+                FROM character_need_state_reconciliations
+                WHERE character_entity_id = %s
+                GROUP BY field
+                ORDER BY field
+                """,
+                (entity_id,),
+            )
+            audit_counts = dict(cur.fetchall())
+            assert audit_counts == {
+                "last_evaluated_at": 5,
+                "last_fulfilled_at": 1,
+            }
+            cur.execute(
+                """
+                SELECT character_entity_id, need_type::text, field,
+                       prior_value, new_value, debt_score_pre_image
+                FROM character_need_state_reconciliations
+                WHERE character_entity_id = %s
+                ORDER BY need_type::text, field
+                """,
+                (entity_id,),
+            )
+            audit_snapshot = cur.fetchall()
+            assert len(audit_snapshot) == sum(audit_counts.values())
+            for statement in (
+                """
+                UPDATE character_need_state_reconciliations
+                SET debt_score_pre_image = debt_score_pre_image
+                WHERE character_entity_id = %s
+                """,
+                """
+                DELETE FROM character_need_state_reconciliations
+                WHERE character_entity_id = %s
+                """,
+            ):
+                cur.execute("SAVEPOINT immutable_audit_probe")
+                with pytest.raises(
+                    psycopg2.errors.RaiseException,
+                    match="reconciliation audit rows are immutable",
+                ):
+                    cur.execute(statement, (entity_id,))
+                cur.execute("ROLLBACK TO SAVEPOINT immutable_audit_probe")
+                cur.execute("RELEASE SAVEPOINT immutable_audit_probe")
 
     rerun_notices = _apply_migration_100(disposable_need_clock_db)
     assert (
@@ -596,6 +660,17 @@ def test_migration_provenance_counts_and_rerun_are_idempotent(
                 (entity_id,),
             )
             assert dict(cur.fetchall()) == marker_snapshot
+            cur.execute(
+                """
+                SELECT character_entity_id, need_type::text, field,
+                       prior_value, new_value, debt_score_pre_image
+                FROM character_need_state_reconciliations
+                WHERE character_entity_id = %s
+                ORDER BY need_type::text, field
+                """,
+                (entity_id,),
+            )
+            assert cur.fetchall() == audit_snapshot
 
 
 def test_migration_reconciles_future_poison_in_a_past_set_story(
@@ -764,7 +839,7 @@ def test_replay_mirrors_reconciliation_across_migration_100_boundary(
 
     assert verdict.drifts == []
     assert any(
-        "migration 100 provenance rebased" in note
+        "migration 100 audit rebased" in note
         for note in verdict.notes["character_need_states"]
     )
 
@@ -1007,6 +1082,314 @@ def test_markerless_null_clock_mismatch_is_a_field_level_remainder(
     assert need_remainder == {("character_need_states", row_key, "last_evaluated_at")}
     assert verdict.drifts == []
     assert verdict.skipped_unreproducible >= 1
+
+
+def test_reconciled_wall_accrued_debt_is_an_absolute_remainder(
+    disposable_need_clock_db: str,
+) -> None:
+    """Migration provenance cannot make unledgered legacy accrual reproducible."""
+
+    with _transaction(disposable_need_clock_db) as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM schema_migrations WHERE version = '100'")
+            cur.execute("DELETE FROM character_need_states")
+            cur.execute("DELETE FROM chunk_metadata")
+            _set_base_timestamp(cur, STORY_BASE)
+            base_chunk = _insert_chunk_at(cur, STORY_BASE)
+            entity_id = _insert_character(cur, "Wall Accrued Debt")
+            cur.execute(
+                """
+                UPDATE character_need_states
+                SET last_evaluated_at = %s
+                WHERE character_entity_id = %s
+                """,
+                (POISONED_WALL_TIME, entity_id),
+            )
+            base_checkpoint_id = capture_state_checkpoint_sync(
+                cur,
+                chunk_id=base_chunk,
+                label="manual",
+            )
+            assert base_checkpoint_id is not None
+            cur.execute(
+                """
+                UPDATE character_need_states
+                SET debt_score = 729.13
+                WHERE character_entity_id = %s
+                  AND need_type = 'hunger'
+                """,
+                (entity_id,),
+            )
+            target_chunk = _insert_chunk_at(cur, STORY_ANCHOR)
+
+    _apply_migration_100(disposable_need_clock_db)
+    with _transaction(disposable_need_clock_db) as conn:
+        with conn.cursor() as cur:
+            target_checkpoint_id = capture_state_checkpoint_sync(
+                cur,
+                chunk_id=target_chunk,
+                label="manual",
+            )
+            assert target_checkpoint_id is not None
+            reconstructed = reconstruct_state_at_sync(
+                cur,
+                target_chunk,
+                base_checkpoint_id=base_checkpoint_id,
+                target_checkpoint_id=target_checkpoint_id,
+            )
+            post_migration_chunk = _insert_chunk_at(
+                cur,
+                STORY_ANCHOR + timedelta(hours=1),
+            )
+            post_migration_checkpoint_id = capture_state_checkpoint_sync(
+                cur,
+                chunk_id=post_migration_chunk,
+                label="manual",
+            )
+            assert post_migration_checkpoint_id is not None
+            post_migration_reconstructed = reconstruct_state_at_sync(
+                cur,
+                post_migration_chunk,
+                base_checkpoint_id=target_checkpoint_id,
+                target_checkpoint_id=post_migration_checkpoint_id,
+            )
+            verdict = next(
+                item
+                for item in verify_checkpoints_sync(cur)
+                if item.base_checkpoint_id == base_checkpoint_id
+                and item.target_checkpoint_id == target_checkpoint_id
+            )
+            post_migration_verdict = next(
+                item
+                for item in verify_checkpoints_sync(cur)
+                if item.base_checkpoint_id == target_checkpoint_id
+                and item.target_checkpoint_id == post_migration_checkpoint_id
+            )
+            cur.execute(
+                """
+                SELECT prior_value, new_value, debt_score_pre_image
+                FROM character_need_state_reconciliations
+                WHERE character_entity_id = %s
+                  AND need_type = 'hunger'
+                  AND field = 'last_evaluated_at'
+                """,
+                (entity_id,),
+            )
+            audit_row = cur.fetchone()
+
+    row_key = f"{entity_id}:hunger"
+    assert audit_row[:2] == (POISONED_WALL_TIME, STORY_ANCHOR)
+    assert float(audit_row[2]) == 729.13
+    assert (
+        "character_need_states",
+        row_key,
+        "debt_score",
+    ) in reconstructed.unreproducible
+    assert (
+        "character_need_states",
+        row_key,
+        "debt_score",
+    ) in post_migration_reconstructed.unreproducible
+    assert verdict.drifts == []
+    assert post_migration_verdict.drifts == []
+
+
+def test_reconciliation_audit_survives_need_row_delete_and_reinsert(
+    disposable_need_clock_db: str,
+) -> None:
+    """A later applicability reset cannot erase an earlier crossing's proof."""
+
+    with _transaction(disposable_need_clock_db) as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM schema_migrations WHERE version = '100'")
+            cur.execute("DELETE FROM character_need_states")
+            cur.execute("DELETE FROM chunk_metadata")
+            _set_base_timestamp(cur, STORY_BASE)
+            base_chunk = _insert_chunk_at(cur, STORY_BASE)
+            entity_id = _insert_character(cur, "Durable Audit Character")
+            cur.execute(
+                """
+                UPDATE character_need_states
+                SET last_evaluated_at = %s
+                WHERE character_entity_id = %s
+                """,
+                (POISONED_WALL_TIME, entity_id),
+            )
+            base_checkpoint_id = capture_state_checkpoint_sync(
+                cur,
+                chunk_id=base_chunk,
+                label="manual",
+            )
+            assert base_checkpoint_id is not None
+            target_chunk = _insert_chunk_at(cur, STORY_ANCHOR)
+
+    _apply_migration_100(disposable_need_clock_db)
+    with _transaction(disposable_need_clock_db) as conn:
+        with conn.cursor() as cur:
+            target_checkpoint_id = capture_state_checkpoint_sync(
+                cur,
+                chunk_id=target_chunk,
+                label="manual",
+            )
+            assert target_checkpoint_id is not None
+            post_target_chunk = _insert_chunk_at(cur, STORY_ANCHOR + timedelta(hours=1))
+
+            cur.execute("SELECT id FROM tags WHERE tag = 'inorganic'")
+            immunity_tag_id = int(cur.fetchone()[0])
+            cur.execute(
+                """
+                INSERT INTO entity_tags (
+                    entity_id, tag_id, source_kind, source_chunk_id
+                ) VALUES (%s, %s, 'template', %s)
+                RETURNING id
+                """,
+                (entity_id, immunity_tag_id, post_target_chunk),
+            )
+            immunity_row_id = int(cur.fetchone()[0])
+            cur.execute(
+                "UPDATE entity_tags SET cleared_at = now() WHERE id = %s",
+                (immunity_row_id,),
+            )
+            cur.execute(
+                """
+                INSERT INTO tag_clearance_log (
+                    entity_tag_id, mechanism, source_chunk_id
+                ) VALUES (%s, 'authored', %s)
+                """,
+                (immunity_row_id, post_target_chunk),
+            )
+            cur.execute(
+                """
+                SELECT metadata
+                FROM character_need_states
+                WHERE character_entity_id = %s
+                  AND need_type = 'hunger'
+                """,
+                (entity_id,),
+            )
+            assert cur.fetchone()[0] == {"synced_by": "need_applicability"}
+            cur.execute(
+                """
+                SELECT count(*)
+                FROM character_need_state_reconciliations
+                WHERE character_entity_id = %s
+                  AND field = 'last_evaluated_at'
+                """,
+                (entity_id,),
+            )
+            assert cur.fetchone()[0] == 5
+
+            verdict = next(
+                item
+                for item in verify_checkpoints_sync(cur)
+                if item.base_checkpoint_id == base_checkpoint_id
+                and item.target_checkpoint_id == target_checkpoint_id
+            )
+
+    assert verdict.drifts == []
+
+
+def test_legacy_atemporal_travel_start_keeps_world_times_unreproducible(
+    disposable_need_clock_db: str,
+) -> None:
+    """A pre-100 NULL-clock resolution used wall time, not today's helper."""
+
+    with _transaction(disposable_need_clock_db) as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM schema_migrations WHERE version = '100'")
+            cur.execute("DELETE FROM character_need_states")
+            cur.execute("DELETE FROM chunk_metadata")
+            _set_base_timestamp(cur, STORY_BASE)
+            base_chunk = _insert_chunk_at(cur, STORY_ANCHOR)
+            origin_id = _insert_place(cur, "Legacy Travel Origin")
+            destination_id = _insert_place(cur, "Legacy Travel Destination")
+            entity_id = _insert_character(cur, "Legacy Atemporal Traveler")
+            cur.execute(
+                "UPDATE characters SET current_location = %s WHERE entity_id = %s",
+                (origin_id, entity_id),
+            )
+            base_checkpoint_id = capture_state_checkpoint_sync(
+                cur,
+                chunk_id=base_chunk,
+                label="manual",
+            )
+            assert base_checkpoint_id is not None
+
+            target_chunk = _insert_atemporal_chunk(cur)
+            travel_payload = {
+                "origin_place_id": origin_id,
+                "destination_place_id": destination_id,
+            }
+            cur.execute(
+                """
+                INSERT INTO character_travel_states (
+                    character_entity_id, status, anchor_place_id,
+                    origin_place_id, destination_place_id,
+                    started_at_world_time, updated_at_world_time
+                ) VALUES (%s, 'in_transit', %s, %s, %s, %s, %s)
+                """,
+                (
+                    entity_id,
+                    origin_id,
+                    origin_id,
+                    destination_id,
+                    POISONED_WALL_TIME,
+                    POISONED_WALL_TIME,
+                ),
+            )
+            cur.execute(
+                """
+                INSERT INTO orrery_resolutions (
+                    tick_chunk_id, template_id, binding_hash, actor_entity_id,
+                    priority, magnitude, state_delta
+                ) VALUES (
+                    %s, 'issue_640_legacy_travel', 'issue-640-legacy-travel',
+                    %s, 50, 0.5, %s::jsonb
+                )
+                """,
+                (
+                    target_chunk,
+                    entity_id,
+                    json.dumps({"travel.start": travel_payload}),
+                ),
+            )
+
+    _apply_migration_100(disposable_need_clock_db)
+    with _transaction(disposable_need_clock_db) as conn:
+        with conn.cursor() as cur:
+            target_checkpoint_id = capture_state_checkpoint_sync(
+                cur,
+                chunk_id=target_chunk,
+                label="manual",
+            )
+            assert target_checkpoint_id is not None
+            reconstructed = reconstruct_state_at_sync(
+                cur,
+                target_chunk,
+                base_checkpoint_id=base_checkpoint_id,
+                target_checkpoint_id=target_checkpoint_id,
+            )
+            verdict = next(
+                item
+                for item in verify_checkpoints_sync(cur)
+                if item.base_checkpoint_id == base_checkpoint_id
+                and item.target_checkpoint_id == target_checkpoint_id
+            )
+
+    travel_row = next(
+        row
+        for row in reconstructed.state["character_travel_states"]
+        if row["character_entity_id"] == entity_id
+    )
+    assert travel_row["started_at_world_time"] is None
+    assert travel_row["updated_at_world_time"] is None
+    for column in ("started_at_world_time", "updated_at_world_time"):
+        assert (
+            "character_travel_states",
+            str(entity_id),
+            column,
+        ) in reconstructed.unreproducible
+    assert verdict.drifts == []
 
 
 def test_replay_reconstructs_post_migration_trigger_anchor(

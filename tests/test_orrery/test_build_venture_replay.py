@@ -59,7 +59,8 @@ def _create_schema(cur: Any, schema: str) -> None:
             ON entity_tags (entity_id, tag_id) WHERE cleared_at IS NULL;
         CREATE TABLE orrery_resolutions (
             id bigserial PRIMARY KEY, tick_chunk_id bigint NOT NULL,
-            actor_entity_id bigint, state_delta jsonb NOT NULL
+            actor_entity_id bigint, state_delta jsonb NOT NULL,
+            created_at timestamptz NOT NULL DEFAULT now()
         );
         CREATE TABLE character_project_states (
             id bigserial PRIMARY KEY, character_entity_id bigint NOT NULL,

@@ -1,5 +1,71 @@
 -- Anchor Orrery need clocks to canonical story time and repair wall-time rows.
 
+CREATE TABLE IF NOT EXISTS character_need_state_reconciliations (
+    character_entity_id bigint NOT NULL,
+    need_type character_need_type NOT NULL,
+    field text NOT NULL,
+    prior_value timestamptz NOT NULL,
+    new_value timestamptz NOT NULL,
+    debt_score_pre_image numeric(8, 2) NOT NULL,
+    reconciled_at timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT character_need_state_reconciliations_pkey
+        PRIMARY KEY (character_entity_id, need_type, field),
+    CONSTRAINT character_need_state_reconciliations_field_check
+        CHECK (field IN ('last_evaluated_at', 'last_fulfilled_at')),
+    CONSTRAINT character_need_state_reconciliations_value_change_check
+        CHECK (prior_value IS DISTINCT FROM new_value)
+);
+
+COMMENT ON TABLE character_need_state_reconciliations IS
+    'Immutable migration-100 audit ledger. One row records each need-clock field restamped from an unreproducible wall-time value; it deliberately has no foreign key to the mutable need-state row so applicability deletion and reinsertion cannot erase replay authority.';
+COMMENT ON COLUMN character_need_state_reconciliations.character_entity_id IS
+    'Entity-spine character identifier of the need row as it existed when migration 100 reconciled it.';
+COMMENT ON COLUMN character_need_state_reconciliations.need_type IS
+    'Need dimension of the reconciled row.';
+COMMENT ON COLUMN character_need_state_reconciliations.field IS
+    'Restamped timestamp field: last_evaluated_at or last_fulfilled_at.';
+COMMENT ON COLUMN character_need_state_reconciliations.prior_value IS
+    'Exact timestamp pre-image replaced by migration 100.';
+COMMENT ON COLUMN character_need_state_reconciliations.new_value IS
+    'Exact canonical story-clock timestamp written by migration 100.';
+COMMENT ON COLUMN character_need_state_reconciliations.debt_score_pre_image IS
+    'Exact stored debt_score observed before this field was restamped; legacy wall-clock accrual remains opaque to replay.';
+COMMENT ON COLUMN character_need_state_reconciliations.reconciled_at IS
+    'Database transaction time when migration 100 inserted this immutable audit record.';
+COMMENT ON CONSTRAINT character_need_state_reconciliations_pkey
+    ON character_need_state_reconciliations IS
+    'Permits at most one immutable reconciliation record per character, need, and field.';
+COMMENT ON CONSTRAINT character_need_state_reconciliations_field_check
+    ON character_need_state_reconciliations IS
+    'Restricts audit rows to the two need-clock fields migration 100 can restamp.';
+COMMENT ON CONSTRAINT character_need_state_reconciliations_value_change_check
+    ON character_need_state_reconciliations IS
+    'Requires every audit row to describe an actual timestamp change.';
+
+CREATE OR REPLACE FUNCTION reject_character_need_state_reconciliation_mutation()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RAISE EXCEPTION
+        'character need state reconciliation audit rows are immutable';
+END;
+$$;
+
+COMMENT ON FUNCTION reject_character_need_state_reconciliation_mutation() IS
+    'Rejects UPDATE and DELETE so migration-100 replay provenance remains append-only.';
+
+DROP TRIGGER IF EXISTS character_need_state_reconciliations_immutable
+    ON character_need_state_reconciliations;
+CREATE TRIGGER character_need_state_reconciliations_immutable
+BEFORE UPDATE OR DELETE ON character_need_state_reconciliations
+FOR EACH ROW
+EXECUTE FUNCTION reject_character_need_state_reconciliation_mutation();
+
+COMMENT ON TRIGGER character_need_state_reconciliations_immutable
+    ON character_need_state_reconciliations IS
+    'Protects reconciliation audit rows from mutation after their migration transaction commits.';
+
 CREATE OR REPLACE FUNCTION orrery_sync_character_need_states(
     p_character_entity_id bigint
 )
@@ -115,35 +181,104 @@ BEGIN
         INTO reconciliation_anchor
         FROM chunk_metadata;
 
-        -- Persist both the pre-image and exact result on every touched row.
-        -- Replay can then rebase a checkpoint baseline without inferring the
-        -- migration boundary from transaction timestamps.
-        UPDATE character_need_states
+        -- Lock each pre-image, insert its durable audit row, and apply the
+        -- reconciliation in one data-modifying statement. A prior audit row
+        -- wins permanently; on an ordinary re-run the candidate predicate is
+        -- empty because every touched clock already equals the anchor.
+        WITH candidates AS MATERIALIZED (
+            SELECT character_entity_id,
+                   need_type,
+                   last_evaluated_at AS prior_value,
+                   debt_score
+            FROM character_need_states
+            WHERE last_evaluated_at < canonical_base_timestamp
+               OR last_evaluated_at > reconciliation_anchor
+            FOR UPDATE
+        ),
+        inserted AS (
+            INSERT INTO character_need_state_reconciliations (
+                character_entity_id,
+                need_type,
+                field,
+                prior_value,
+                new_value,
+                debt_score_pre_image
+            )
+            SELECT character_entity_id,
+                   need_type,
+                   'last_evaluated_at',
+                   prior_value,
+                   reconciliation_anchor,
+                   debt_score
+            FROM candidates
+            ON CONFLICT (character_entity_id, need_type, field) DO NOTHING
+            RETURNING character_entity_id, need_type, field
+        )
+        UPDATE character_need_states AS cns
         SET last_evaluated_at = reconciliation_anchor,
-            metadata = metadata || jsonb_build_object(
+            metadata = cns.metadata || jsonb_build_object(
                 'reconciled_by',
                 'migration_100',
                 'reconciled_last_evaluated_from',
-                last_evaluated_at::text,
+                candidates.prior_value::text,
                 'reconciled_last_evaluated_to',
                 reconciliation_anchor::text
             )
-        WHERE last_evaluated_at < canonical_base_timestamp
-           OR last_evaluated_at > reconciliation_anchor;
+        FROM candidates
+        JOIN inserted
+          ON inserted.character_entity_id = candidates.character_entity_id
+         AND inserted.need_type = candidates.need_type
+         AND inserted.field = 'last_evaluated_at'
+        WHERE cns.character_entity_id = candidates.character_entity_id
+          AND cns.need_type = candidates.need_type;
         GET DIAGNOSTICS evaluated_row_count = ROW_COUNT;
 
-        UPDATE character_need_states
+        WITH candidates AS MATERIALIZED (
+            SELECT character_entity_id,
+                   need_type,
+                   last_fulfilled_at AS prior_value,
+                   debt_score
+            FROM character_need_states
+            WHERE last_fulfilled_at < canonical_base_timestamp
+               OR last_fulfilled_at > reconciliation_anchor
+            FOR UPDATE
+        ),
+        inserted AS (
+            INSERT INTO character_need_state_reconciliations (
+                character_entity_id,
+                need_type,
+                field,
+                prior_value,
+                new_value,
+                debt_score_pre_image
+            )
+            SELECT character_entity_id,
+                   need_type,
+                   'last_fulfilled_at',
+                   prior_value,
+                   reconciliation_anchor,
+                   debt_score
+            FROM candidates
+            ON CONFLICT (character_entity_id, need_type, field) DO NOTHING
+            RETURNING character_entity_id, need_type, field
+        )
+        UPDATE character_need_states AS cns
         SET last_fulfilled_at = reconciliation_anchor,
-            metadata = metadata || jsonb_build_object(
+            metadata = cns.metadata || jsonb_build_object(
                 'reconciled_by',
                 'migration_100',
                 'reconciled_last_fulfilled_from',
-                last_fulfilled_at::text,
+                candidates.prior_value::text,
                 'reconciled_last_fulfilled_to',
                 reconciliation_anchor::text
             )
-        WHERE last_fulfilled_at < canonical_base_timestamp
-           OR last_fulfilled_at > reconciliation_anchor;
+        FROM candidates
+        JOIN inserted
+          ON inserted.character_entity_id = candidates.character_entity_id
+         AND inserted.need_type = candidates.need_type
+         AND inserted.field = 'last_fulfilled_at'
+        WHERE cns.character_entity_id = candidates.character_entity_id
+          AND cns.need_type = candidates.need_type;
         GET DIAGNOSTICS fulfilled_row_count = ROW_COUNT;
     END IF;
 
