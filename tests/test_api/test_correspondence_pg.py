@@ -279,6 +279,11 @@ def test_accept_reject_hysteresis_and_digest_undo(
             "get_db_connection",
             lambda _slot: _connect(dbname),
         )
+        monkeypatch.setattr(
+            narrative,
+            "_start_post_commit_orrery_work",
+            lambda _slot: None,
+        )
         approval = asyncio.run(
             narrative._approve_narrative_impl(
                 session_id,
