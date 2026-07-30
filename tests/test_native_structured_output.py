@@ -10,7 +10,7 @@ from typing import Any, Callable, cast, Literal
 from unittest.mock import AsyncMock, Mock
 
 import pytest
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 from pydantic_ai import ModelRetry
 
 from nexus.agents.logon.apex_schema import (
@@ -37,7 +37,9 @@ from nexus.api.native_structured_output import (
     build_native_structured_provider,
     de_null_schema,
     openai_response_text_format,
+    retry_prompt,
     strict_json_schema,
+    structured_output_error_text,
 )
 from nexus.config import resolve_model_ref
 from scripts import api_openai
@@ -60,34 +62,38 @@ def _wire_response() -> SkaldTurnWire:
     )
 
 
-def _writer_response() -> SkaldWriterWire:
-    return SkaldWriterWire(
-        narrative="[TEST MODE] Writer structured output.",
-        choices=["Continue", "Wait"],
-        letter="Keep the next beat private.",
-    )
-
-
 def _gaia_response() -> SkaldGaiaWire:
     return SkaldGaiaWire(letter="I will make room for it.")
 
 
 def _reject_first_structured_output(
-    rejection_kind: Literal["model_retry", "validation_error"],
+    rejection_kind: Literal[
+        "model_retry",
+        "validation_error",
+        "value_error",
+        "json_decode_error",
+    ],
 ) -> tuple[
     Callable[[Any, SkaldWriterWire], SkaldWriterWire],
+    SkaldWriterWire,
+    str,
     str,
     str,
     str,
 ]:
-    """Build a one-shot validator rejection, including a private-input error."""
+    """Build a one-shot rejection for every provider repair-loop branch."""
 
-    sentinel = "PRIVATE-LETTER-637"
+    sentinel = "PRIV637"
+    expected = SkaldWriterWire(
+        narrative=f"{sentinel} narrative",
+        choices=[f"{sentinel} choice one", f"{sentinel} choice two"],
+        letter=f"{sentinel} letter",
+    )
     try:
         SkaldWriterWire.model_validate(
             {
-                "narrative": "N",
-                "letter": sentinel,
+                "narrative": f"{sentinel} narrative",
+                "letter": f"{sentinel} letter",
             }
         )
     except ValidationError as exc:
@@ -97,22 +103,158 @@ def _reject_first_structured_output(
 
     assert sentinel in str(validation_error)
     model_retry_message = "writer registry validator rejected the response"
+    value_error_message = "writer semantic validator rejected the response"
+    json_error_message = "writer response was not valid JSON"
+
+    if rejection_kind == "model_retry":
+        rejection: BaseException = ModelRetry(model_retry_message)
+        error_text = model_retry_message
+    elif rejection_kind == "validation_error":
+        rejection = validation_error
+        error_text = "choices: Field required (missing)"
+    elif rejection_kind == "value_error":
+        rejection = ValueError(value_error_message)
+        error_text = value_error_message
+    else:
+        rejection = json.JSONDecodeError(json_error_message, sentinel, 0)
+        error_text = f"{json_error_message}: line 1 column 1 (char 0)"
 
     def validator(ctx: Any, output: SkaldWriterWire) -> SkaldWriterWire:
         if ctx.retry == 0:
-            if rejection_kind == "model_retry":
-                raise ModelRetry(model_retry_message)
-            raise validation_error
+            raise rejection
         return output
 
-    if rejection_kind == "model_retry":
-        return validator, sentinel, "ModelRetry", model_retry_message
+    retry_error_text = (
+        rejection.message if isinstance(rejection, ModelRetry) else str(rejection)
+    )
     return (
         validator,
+        expected,
         sentinel,
-        "ValidationError",
-        "choices: Field required (missing)",
+        type(rejection).__name__,
+        error_text,
+        retry_error_text,
     )
+
+
+_WIRE_PROSE_SENTINEL = "PROSE637"
+
+
+def _wire_prose_payload(wire_model: type[BaseModel]) -> dict[str, Any]:
+    """Return a minimal wire payload with the sentinel in every prose field."""
+
+    if wire_model is SkaldGaiaWire:
+        return {"letter": f"{_WIRE_PROSE_SENTINEL} letter"}
+    return {
+        "narrative": f"{_WIRE_PROSE_SENTINEL} narrative",
+        "choices": [
+            f"{_WIRE_PROSE_SENTINEL} choice one",
+            f"{_WIRE_PROSE_SENTINEL} choice two",
+        ],
+        "letter": f"{_WIRE_PROSE_SENTINEL} letter",
+    }
+
+
+def _identity_only_updates(namespace: str) -> dict[str, list[dict[str, str]]]:
+    """Build one invalid substantive-update arm carrying the sentinel."""
+
+    updates: dict[str, list[dict[str, str]]] = {
+        "characters": [],
+        "places": [],
+        "factions": [],
+        "relationships": [],
+    }
+    if namespace == "relationships":
+        updates[namespace] = [
+            {
+                "name": _WIRE_PROSE_SENTINEL,
+                "other_name": _WIRE_PROSE_SENTINEL,
+            }
+        ]
+    else:
+        updates[namespace] = [{"name": _WIRE_PROSE_SENTINEL}]
+    return updates
+
+
+def _wire_validator_sentinel_cases() -> (
+    list[tuple[type[BaseModel], str, dict[str, Any]]]
+):
+    """Cover every prose-adjacent wire validator family."""
+
+    cases: list[tuple[type[BaseModel], str, dict[str, Any]]] = []
+
+    for presence_wire_model in (SkaldWriterWire, SkaldTurnWire):
+        presence = _wire_prose_payload(presence_wire_model)
+        presence["presence"] = {
+            "enter": [{"kind": "place", "name": _WIRE_PROSE_SENTINEL}]
+        }
+        cases.append((presence_wire_model, "presence_ontology", presence))
+
+        scene = _wire_prose_payload(presence_wire_model)
+        scene["presence"] = {
+            "scene_reset": {
+                "place": {"kind": "character", "name": _WIRE_PROSE_SENTINEL},
+            }
+        }
+        cases.append((presence_wire_model, "scene_ontology", scene))
+
+    for letter_wire_model in (SkaldWriterWire, SkaldTurnWire):
+        letter_null = _wire_prose_payload(letter_wire_model)
+        letter_null["letter"] = None
+        cases.append((letter_wire_model, "letter_null", letter_null))
+
+    gaia_letter_null = _wire_prose_payload(SkaldGaiaWire)
+    gaia_letter_null["letter"] = None
+    # Gaia has no narrative or choices, so retain prose in a nested summary
+    # while the required null letter triggers the model-level validator.
+    gaia_letter_null["new_entities"] = [
+        {
+            "kind": "character",
+            "name": _WIRE_PROSE_SENTINEL,
+            "summary": _WIRE_PROSE_SENTINEL,
+        }
+    ]
+    cases.append((SkaldGaiaWire, "letter_null", gaia_letter_null))
+
+    for update_wire_model in (SkaldGaiaWire, SkaldTurnWire):
+        for namespace in ("characters", "places", "factions", "relationships"):
+            substantive = _wire_prose_payload(update_wire_model)
+            substantive["updates"] = _identity_only_updates(namespace)
+            cases.append(
+                (
+                    update_wire_model,
+                    f"{namespace}_substantive_field",
+                    substantive,
+                )
+            )
+
+    for choice_wire_model in (SkaldWriterWire, SkaldTurnWire):
+        choices = _wire_prose_payload(choice_wire_model)
+        choices["choices"] = [f"{_WIRE_PROSE_SENTINEL} only choice"]
+        cases.append((choice_wire_model, "choices", choices))
+
+    return cases
+
+
+@pytest.mark.parametrize(
+    ("wire_model", "validator_family", "payload"),
+    _wire_validator_sentinel_cases(),
+    ids=lambda value: value if isinstance(value, str) else None,
+)
+def test_structured_output_error_text_omits_wire_payload_prose(
+    wire_model: type[BaseModel],
+    validator_family: str,
+    payload: dict[str, Any],
+) -> None:
+    """Wire validation diagnostics never render private prose input values."""
+
+    with pytest.raises(ValidationError) as exc_info:
+        wire_model.model_validate(payload)
+
+    assert _WIRE_PROSE_SENTINEL in str(exc_info.value), validator_family
+    assert _WIRE_PROSE_SENTINEL not in structured_output_error_text(
+        exc_info.value
+    ), validator_family
 
 
 def _contains_key(value: object, key: str) -> bool:
@@ -737,19 +879,37 @@ def test_openai_provider_uses_responses_parse_text_format() -> None:
 @pytest.mark.asyncio
 @pytest.mark.parametrize("transport", ["responses", "chat_completions"])
 @pytest.mark.parametrize("call_style", ["sync", "async"])
-@pytest.mark.parametrize("rejection_kind", ["model_retry", "validation_error"])
+@pytest.mark.parametrize(
+    "rejection_kind",
+    [
+        "model_retry",
+        "validation_error",
+        "value_error",
+        "json_decode_error",
+    ],
+)
 async def test_openai_rejection_logs_cover_every_transport_branch_without_input_leaks(
     caplog: pytest.LogCaptureFixture,
     transport: Literal["responses", "chat_completions"],
     call_style: Literal["sync", "async"],
-    rejection_kind: Literal["model_retry", "validation_error"],
+    rejection_kind: Literal[
+        "model_retry",
+        "validation_error",
+        "value_error",
+        "json_decode_error",
+    ],
 ) -> None:
     """OpenAI sync/async transports log every rejected branch without letters."""
 
-    expected = _writer_response()
-    validator, sentinel, exception_name, error_text = _reject_first_structured_output(
-        rejection_kind
-    )
+    (
+        validator,
+        expected,
+        sentinel,
+        exception_name,
+        error_text,
+        retry_error_text,
+    ) = _reject_first_structured_output(rejection_kind)
+    prompt = "Write the next beat."
     prompts: list[str] = []
 
     class FakeResponses:
@@ -798,17 +958,17 @@ async def test_openai_rejection_logs_cover_every_transport_branch_without_input_
         if call_style == "sync":
             parsed, _llm_response = await asyncio.to_thread(
                 provider.get_structured_completion,
-                "Write the next beat.",
+                prompt,
                 SkaldWriterWire,
             )
         else:
             parsed, _llm_response = await provider.get_structured_completion_async(
-                "Write the next beat.",
+                prompt,
                 SkaldWriterWire,
             )
 
     assert parsed == expected
-    assert len(prompts) == 2
+    assert prompts == [prompt, retry_prompt(prompt, retry_error_text)]
     rejection_logs = [
         record.getMessage()
         for record in caplog.records
@@ -827,10 +987,86 @@ async def test_openai_rejection_logs_cover_every_transport_branch_without_input_
         record.getMessage().startswith("structured-output retries exhausted")
         for record in caplog.records
     )
-    if rejection_kind == "validation_error":
-        assert sentinel in prompts[1]
-    else:
-        assert error_text in prompts[1]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("call_style", ["sync", "async"])
+async def test_logon_terminal_validation_propagation_logs_no_payload_prose(
+    caplog: pytest.LogCaptureFixture,
+    call_style: Literal["sync", "async"],
+) -> None:
+    """Exhausted wire validation remains private through LOGON's caller catch."""
+
+    sentinel = "TERM637"
+    invalid_output = {
+        "narrative": f"{sentinel} narrative",
+        "choices": [f"{sentinel} only choice"],
+        "letter": f"{sentinel} letter",
+    }
+    prompts: list[str] = []
+
+    class FakeResponses:
+        def parse(self, **kwargs: Any) -> Any:
+            prompts.append(kwargs["input"][-1]["content"])
+            return SimpleNamespace(
+                output_parsed=None,
+                output_text=json.dumps(invalid_output),
+                usage=SimpleNamespace(input_tokens=11, output_tokens=22),
+            )
+
+    provider = OpenAIProvider(
+        model="terminal-propagation-test-model",
+        api_key="test-key",
+        structured_output_retries=1,
+        usage_seat="skald_single_pass",
+    )
+    provider.client = cast(Any, SimpleNamespace(responses=FakeResponses()))
+    utility = LogonUtility(
+        {"API Settings": {"apex": {"turn_pipeline": "single_pass"}}},
+        model_override=provider.model,
+    )
+    utility.provider = provider
+    utility._provider_bootstrap_mode = False
+    utility._provider_wire_type = "openai"
+    utility._provider_type_name = "openai"
+    utility._system_prompt = "System prompt"
+    context = {
+        "user_input": "Continue.",
+        "warm_slice": {"chunks": []},
+        "entity_data": {},
+        "retrieved_passages": {"results": []},
+    }
+
+    caplog.clear()
+    with caplog.at_level(logging.DEBUG):
+        with pytest.raises(ValidationError) as exc_info:
+            if call_style == "sync":
+                await asyncio.to_thread(
+                    utility.generate_narrative,
+                    context,
+                    effective_context_window=75_000,
+                )
+            else:
+                await utility.generate_narrative_async(
+                    context,
+                    effective_context_window=75_000,
+                )
+
+    assert len(prompts) == 2
+    assert sentinel in str(exc_info.value)
+    assert sentinel not in caplog.text
+    caller_logs = [
+        record
+        for record in caplog.records
+        if record.getMessage().startswith("Failed to get structured response")
+    ]
+    assert len(caller_logs) == 1
+    assert "exception=ValidationError" in caller_logs[0].getMessage()
+    assert (
+        "error=choices: List should have at least 2 items"
+        in caller_logs[0].getMessage()
+    )
+    assert caller_logs[0].exc_info is None
 
 
 def test_openai_provider_accepts_native_text_format_override() -> None:
@@ -1040,19 +1276,37 @@ def test_anthropic_provider_uses_native_output_format() -> None:
 @pytest.mark.asyncio
 @pytest.mark.parametrize("transport", ["native", "prompted", "tool_envelope"])
 @pytest.mark.parametrize("call_style", ["sync", "async"])
-@pytest.mark.parametrize("rejection_kind", ["model_retry", "validation_error"])
+@pytest.mark.parametrize(
+    "rejection_kind",
+    [
+        "model_retry",
+        "validation_error",
+        "value_error",
+        "json_decode_error",
+    ],
+)
 async def test_anthropic_rejection_logs_cover_every_transport_branch_without_input_leaks(
     caplog: pytest.LogCaptureFixture,
     transport: Literal["native", "prompted", "tool_envelope"],
     call_style: Literal["sync", "async"],
-    rejection_kind: Literal["model_retry", "validation_error"],
+    rejection_kind: Literal[
+        "model_retry",
+        "validation_error",
+        "value_error",
+        "json_decode_error",
+    ],
 ) -> None:
     """Anthropic sync/async transports log rejected branches without letters."""
 
-    expected = _writer_response()
-    validator, sentinel, exception_name, error_text = _reject_first_structured_output(
-        rejection_kind
-    )
+    (
+        validator,
+        expected,
+        sentinel,
+        exception_name,
+        error_text,
+        retry_error_text,
+    ) = _reject_first_structured_output(rejection_kind)
+    prompt = "Write the next beat."
     prompts: list[str] = []
 
     class FakeMessages:
@@ -1094,17 +1348,17 @@ async def test_anthropic_rejection_logs_cover_every_transport_branch_without_inp
         if call_style == "sync":
             parsed, _llm_response = await asyncio.to_thread(
                 provider.get_structured_completion,
-                "Write the next beat.",
+                prompt,
                 SkaldWriterWire,
             )
         else:
             parsed, _llm_response = await provider.get_structured_completion_async(
-                "Write the next beat.",
+                prompt,
                 SkaldWriterWire,
             )
 
     assert parsed == expected
-    assert len(prompts) == 2
+    assert prompts == [prompt, retry_prompt(prompt, retry_error_text)]
     rejection_logs = [
         record.getMessage()
         for record in caplog.records
@@ -1123,10 +1377,6 @@ async def test_anthropic_rejection_logs_cover_every_transport_branch_without_inp
         record.getMessage().startswith("structured-output retries exhausted")
         for record in caplog.records
     )
-    if rejection_kind == "validation_error":
-        assert sentinel in prompts[1]
-    else:
-        assert error_text in prompts[1]
 
 
 def test_anthropic_provider_rejects_unknown_structured_transport() -> None:

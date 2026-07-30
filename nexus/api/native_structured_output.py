@@ -281,6 +281,9 @@ def retry_prompt(prompt: str, message: str) -> str:
 def structured_output_error_text(exc: BaseException) -> str:
     """Render a complete structured-output error without Pydantic input values."""
 
+    # Privacy contract: validator-authored messages must never interpolate
+    # payload prose. The wire and LOGON sentinel-sweep tests enforce this for
+    # both Pydantic error messages and ModelRetry output-validator guidance.
     if not isinstance(exc, ValidationError):
         message = getattr(exc, "message", None)
         return message if isinstance(message, str) else str(exc)

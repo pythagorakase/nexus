@@ -26,6 +26,7 @@ from nexus.agents.logon.orrery_tag_validation import (
 from nexus.agents.logon.skald_wire import SkaldTurnWire
 from nexus.agents.orrery.tag_library import TagLibraryEntry
 from nexus.agents.orrery.tag_schemas import OrreryTagBestowal
+from nexus.api.native_structured_output import structured_output_error_text
 from scripts.api_anthropic import AnthropicProvider
 from scripts.api_openai import OpenAIProvider
 
@@ -817,6 +818,43 @@ async def test_storyteller_validator_attributes_declaration_failure_to_model_ret
     formatted_issues = exc_info.value.message.rsplit(":\n", maxsplit=1)[1]
     assert "requesting model retry:\n- new_entities[0].tag_hints:" in validation_log
     assert validation_log.endswith(formatted_issues)
+
+
+@pytest.mark.asyncio
+async def test_storyteller_validator_model_retry_text_omits_wire_payload_prose(
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """LOGON registry retry guidance never copies narrative correspondence."""
+
+    from nexus.api import db_pool
+
+    sentinel = "RETRY637"
+    monkeypatch.setattr(
+        db_pool,
+        "get_connection",
+        lambda _dbname: FakeRegistryConnection(FakeRegistryCursor()),
+    )
+    validator = build_storyteller_tag_validator("test_slot")
+    assert validator is not None
+    response = _storyteller_response(tag_hints=["invented:tag"]).model_copy(
+        update={
+            "narrative": f"{sentinel} narrative",
+            "choices": [
+                f"{sentinel} choice one",
+                f"{sentinel} choice two",
+            ],
+            "letter": f"{sentinel} letter",
+        }
+    )
+
+    caplog.clear()
+    with caplog.at_level(logging.INFO):
+        with pytest.raises(ModelRetry) as exc_info:
+            await validator(SimpleNamespace(retry=0), response)
+
+    assert sentinel not in structured_output_error_text(exc_info.value)
+    assert sentinel not in caplog.text
 
 
 @pytest.mark.asyncio
