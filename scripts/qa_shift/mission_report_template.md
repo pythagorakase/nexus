@@ -22,7 +22,7 @@ Summarize both failures and negative results from `probe_ledger.md`.
 ## Preserved evidence
 
 - `gateway-8012.log`:
-- `save_03_before.dump`:
+- `save_04_before.dump`:
 - Additional payloads/traces:
 
 ## Usage
