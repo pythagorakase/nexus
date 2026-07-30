@@ -89,7 +89,7 @@ the new day’s cumulative total with the old baseline.
 
 ## Safety boundary
 
-The configured lane is disposable slot 3 on port 8012. The mission prompt
+The configured lane is disposable slot 4 on port 8012. The mission prompt
 forbids touching the normal port-8002 runtime, changing tracked source, or
 filing anything weaker than a reproduced and deduplicated issue. A pre-shift
 database dump is retained because the final QA state is intentionally left

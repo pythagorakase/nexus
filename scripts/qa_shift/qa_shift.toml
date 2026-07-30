@@ -1,7 +1,7 @@
 [shift]
-# Slot 3 and port 8012 are the disposable QA lane. Never point this utility at
+# Slot 4 and port 8012 are the disposable QA lane. Never point this utility at
 # the normal port-8002 runtime.
-slot = 3
+slot = 4
 gateway_port = 8012
 target_model = "gpt-5.6-terra" # pin: complimentary QA model group
 
