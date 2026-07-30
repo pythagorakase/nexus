@@ -625,7 +625,7 @@ def _abandon_generation_owner(
         conn.close()
 
 
-def _resolve_and_approve_pending(
+async def _resolve_and_approve_pending(
     *,
     slot: Optional[int],
     session_id: str,
@@ -635,7 +635,7 @@ def _resolve_and_approve_pending(
     accept_fate: bool,
     background_tasks: BackgroundTasks,
 ) -> tuple[str, int]:
-    """Resolve the pending choice and approve it in one transaction."""
+    """Resolve a pending choice and approve it off the event-loop thread."""
     from nexus.api.commit_handler_sync import commit_incubator_to_database_sync
 
     conn = get_db_connection(slot)
@@ -650,7 +650,12 @@ def _resolve_and_approve_pending(
             connection=conn,
             incubator_session_id=session_id,
         )
-        approved_chunk_id = commit_incubator_to_database_sync(conn, session_id, slot)
+        approved_chunk_id = await asyncio.to_thread(
+            commit_incubator_to_database_sync,
+            conn,
+            session_id,
+            slot,
+        )
         background_tasks.add_task(_run_post_commit_orrery_work, slot)
         return resolved_user_text, approved_chunk_id
     except HTTPException:
@@ -762,7 +767,7 @@ async def continue_narrative(
                         request.slot,
                     )
                     resolved_user_text, approved_chunk_id = (
-                        _resolve_and_approve_pending(
+                        await _resolve_and_approve_pending(
                             slot=request.slot,
                             session_id=narrative_state.session_id,
                             chunk_id=narrative_state.current_chunk_id,
@@ -1178,7 +1183,12 @@ async def _approve_narrative_impl(
 
             try:
                 # Commit to database
-                chunk_id = commit_incubator_to_database_sync(conn, session_id, slot)
+                chunk_id = await asyncio.to_thread(
+                    commit_incubator_to_database_sync,
+                    conn,
+                    session_id,
+                    slot,
+                )
                 if background_tasks is not None:
                     background_tasks.add_task(_run_post_commit_orrery_work, slot)
 

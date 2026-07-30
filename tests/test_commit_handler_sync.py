@@ -385,6 +385,45 @@ def test_sync_commit_aborts_on_unresolvable_state_update_name(monkeypatch):
     )
 
 
+def test_post_commit_compaction_failure_preserves_success_and_retries(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Derived compaction cannot turn a durable acceptance into a false 500."""
+
+    attempts = []
+
+    def flaky_compaction(_conn, *, accepting_chunk_id):
+        attempts.append(accepting_chunk_id)
+        if len(attempts) == 1:
+            raise RuntimeError("provider unavailable")
+        return True
+
+    monkeypatch.setattr(
+        commit_handler_sync,
+        "compact_accepted_correspondence_sync",
+        flaky_compaction,
+    )
+    connection = object()
+
+    assert (
+        commit_handler_sync._compact_accepted_correspondence_best_effort(
+            connection,
+            accepting_chunk_id=11,
+        )
+        is False
+    )
+    assert (
+        commit_handler_sync._compact_accepted_correspondence_best_effort(
+            connection,
+            accepting_chunk_id=12,
+        )
+        is True
+    )
+    assert attempts == [11, 12]
+    assert "leaving the uncompacted journal intact for retry" in caplog.text
+
+
 def test_bootstrap_commit_seeds_setting_for_next_presence_baseline(
     monkeypatch,
 ) -> None:

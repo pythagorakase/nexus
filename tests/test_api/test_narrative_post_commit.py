@@ -9,8 +9,14 @@ multi-minute frontier calls, so it must detach from that chain
 
 from __future__ import annotations
 
+import asyncio
+import threading
 from typing import Any
 
+import pytest
+from fastapi import BackgroundTasks
+
+from nexus.api import commit_handler_sync
 from nexus.api import narrative
 
 
@@ -62,3 +68,123 @@ def test_post_commit_orrery_work_detaches_maturation(monkeypatch) -> None:
     assert started["target"] is fake_drain
     assert started["args"] == (2,)
     assert started["daemon"] is True
+
+
+@pytest.mark.asyncio
+async def test_auto_approval_runs_commit_and_compaction_off_event_loop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The continue route's approval seam isolates the synchronous provider."""
+
+    event_loop_thread = threading.get_ident()
+    connection = type(
+        "Connection",
+        (),
+        {
+            "rollback": lambda self: None,
+            "close": lambda self: setattr(self, "closed", True),
+        },
+    )()
+    commit_threads: list[int] = []
+
+    def commit_in_worker(_conn: Any, session_id: str, slot: int | None) -> int:
+        assert session_id == "pending-session"
+        assert slot == 4
+        with pytest.raises(RuntimeError):
+            asyncio.get_running_loop()
+        commit_threads.append(threading.get_ident())
+        return 42
+
+    monkeypatch.setattr(narrative, "get_db_connection", lambda _slot: connection)
+    monkeypatch.setattr(
+        narrative,
+        "_record_player_response_for_chunk",
+        lambda **_kwargs: "resolved player response",
+    )
+    monkeypatch.setattr(
+        commit_handler_sync,
+        "commit_incubator_to_database_sync",
+        commit_in_worker,
+    )
+    background_tasks = BackgroundTasks()
+
+    result = await narrative._resolve_and_approve_pending(
+        slot=4,
+        session_id="pending-session",
+        chunk_id=41,
+        user_text="Take the left stair.",
+        choice=1,
+        accept_fate=False,
+        background_tasks=background_tasks,
+    )
+
+    assert result == ("resolved player response", 42)
+    assert commit_threads and commit_threads[0] != event_loop_thread
+    assert connection.closed is True
+    assert len(background_tasks.tasks) == 1
+
+
+class _PendingCursor:
+    """Serve one pending row to the explicit approval endpoint."""
+
+    def __enter__(self) -> "_PendingCursor":
+        return self
+
+    def __exit__(self, *_args: Any) -> None:
+        return None
+
+    def execute(self, _query: str, _params: Any) -> None:
+        return None
+
+    def fetchone(self) -> dict[str, int]:
+        return {"chunk_id": 41}
+
+
+class _PendingConnection:
+    """Small approval-route connection double."""
+
+    closed = False
+
+    def cursor(self, **_kwargs: Any) -> _PendingCursor:
+        return _PendingCursor()
+
+    def close(self) -> None:
+        self.closed = True
+
+
+@pytest.mark.asyncio
+async def test_explicit_approval_runs_commit_and_compaction_off_event_loop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The standalone approval route uses the same worker boundary."""
+
+    event_loop_thread = threading.get_ident()
+    connection = _PendingConnection()
+    commit_threads: list[int] = []
+
+    def commit_in_worker(_conn: Any, _session_id: str, _slot: int | None) -> int:
+        with pytest.raises(RuntimeError):
+            asyncio.get_running_loop()
+        commit_threads.append(threading.get_ident())
+        return 42
+
+    monkeypatch.setattr(narrative, "get_db_connection", lambda _slot: connection)
+    monkeypatch.setattr(
+        commit_handler_sync,
+        "commit_incubator_to_database_sync",
+        commit_in_worker,
+    )
+
+    result = await narrative._approve_narrative_impl(
+        "pending-session",
+        True,
+        4,
+    )
+
+    assert result == {
+        "status": "committed",
+        "message": "Narrative committed as chunk 42",
+        "chunk_id": 42,
+    }
+    assert commit_threads and commit_threads[0] != event_loop_thread
+    assert connection.closed is True
