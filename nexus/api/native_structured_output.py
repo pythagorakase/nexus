@@ -11,7 +11,7 @@ import inspect
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Optional, Type, cast
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from pydantic_ai import JsonSchemaTransformer
 
 
@@ -276,6 +276,20 @@ def retry_prompt(prompt: str, message: str) -> str:
         "empty arrays for absent optional values instead of omitting required "
         "strict-schema keys."
     )
+
+
+def structured_output_error_text(exc: BaseException) -> str:
+    """Render a complete structured-output error without Pydantic input values."""
+
+    if not isinstance(exc, ValidationError):
+        message = getattr(exc, "message", None)
+        return message if isinstance(message, str) else str(exc)
+
+    formatted_errors = []
+    for error in exc.errors(include_input=False, include_url=False):
+        location = ".".join(str(part) for part in error["loc"]) or "<root>"
+        formatted_errors.append(f"{location}: {error['msg']} ({error['type']})")
+    return "; ".join(formatted_errors)
 
 
 async def run_output_validator(

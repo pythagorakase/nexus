@@ -87,6 +87,7 @@ from nexus.api.native_structured_output import (
     openai_response_text_format,
     retry_prompt,
     run_output_validator,
+    structured_output_error_text,
 )
 from nexus.telemetry.usage import (
     provider_name_from_base_url,
@@ -498,6 +499,40 @@ class OpenAIProvider(LLMProvider):
             f"event loop; use OpenAIProvider.{async_method_name}() instead."
         )
 
+    def _log_structured_output_rejection(
+        self,
+        *,
+        transport: Literal["responses", "chat_completions"],
+        attempt: int,
+        exc: BaseException,
+    ) -> None:
+        """Log one validation rejection and any terminal retry exhaustion."""
+
+        attempt_number = attempt + 1
+        error_text = structured_output_error_text(exc)
+        exception_name = type(exc).__name__
+        logger.warning(
+            "structured-output rejected transport=%s model=%s seat=%s "
+            "attempt=%d exception=%s error=%s",
+            transport,
+            self.model,
+            self.usage_seat,
+            attempt_number,
+            exception_name,
+            error_text,
+        )
+        if attempt >= self.structured_output_retries:
+            logger.warning(
+                "structured-output retries exhausted transport=%s model=%s "
+                "seat=%s attempt=%d exception=%s error=%s action=propagate",
+                transport,
+                self.model,
+                self.usage_seat,
+                attempt_number,
+                exception_name,
+                error_text,
+            )
+
     def _get_structured_completion_native_sync(
         self,
         prompt: str,
@@ -553,12 +588,22 @@ class OpenAIProvider(LLMProvider):
             except ModelRetry as exc:
                 last_error = exc
                 usage_outcome = "rejected_validation"
+                self._log_structured_output_rejection(
+                    transport="responses",
+                    attempt=attempt,
+                    exc=exc,
+                )
                 if attempt >= self.structured_output_retries:
                     raise
                 active_prompt = retry_prompt(prompt, exc.message)
             except (ValidationError, json.JSONDecodeError, ValueError) as exc:
                 last_error = exc
                 usage_outcome = "rejected_validation"
+                self._log_structured_output_rejection(
+                    transport="responses",
+                    attempt=attempt,
+                    exc=exc,
+                )
                 if attempt >= self.structured_output_retries:
                     raise
                 active_prompt = retry_prompt(prompt, str(exc))
@@ -654,12 +699,22 @@ class OpenAIProvider(LLMProvider):
             except ModelRetry as exc:
                 last_error = exc
                 usage_outcome = "rejected_validation"
+                self._log_structured_output_rejection(
+                    transport="chat_completions",
+                    attempt=attempt,
+                    exc=exc,
+                )
                 if attempt >= self.structured_output_retries:
                     raise
                 active_prompt = retry_prompt(prompt, exc.message)
             except (ValidationError, json.JSONDecodeError, ValueError) as exc:
                 last_error = exc
                 usage_outcome = "rejected_validation"
+                self._log_structured_output_rejection(
+                    transport="chat_completions",
+                    attempt=attempt,
+                    exc=exc,
+                )
                 if attempt >= self.structured_output_retries:
                     raise
                 active_prompt = retry_prompt(prompt, str(exc))

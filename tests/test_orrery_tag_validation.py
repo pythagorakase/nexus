@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast, List, Literal, Optional, Tuple
@@ -768,6 +769,7 @@ def test_declaration_schema_describes_generation_and_commit_validation() -> None
 
 @pytest.mark.asyncio
 async def test_storyteller_validator_attributes_declaration_failure_to_model_retry(
+    caplog: pytest.LogCaptureFixture,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from nexus.api import db_pool
@@ -781,26 +783,40 @@ async def test_storyteller_validator_attributes_declaration_failure_to_model_ret
     validator = build_storyteller_tag_validator("test_slot")
     assert validator is not None
 
-    with pytest.raises(ModelRetry) as exc_info:
-        await validator(
-            SimpleNamespace(retry=0),
-            _storyteller_response(
-                tag_hints=["invented:tag"],
-                pair_tag_hints=[
-                    {
-                        "tag": "contact:social",
-                        "other_entity_name": "Brena Tideloft",
-                        "declared_entity_role": "subject",
-                    }
-                ],
-            ),
-        )
+    with caplog.at_level(
+        logging.INFO,
+        logger="nexus.logon.orrery_tag_validation",
+    ):
+        with pytest.raises(ModelRetry) as exc_info:
+            await validator(
+                SimpleNamespace(retry=0),
+                _storyteller_response(
+                    tag_hints=["invented:tag"],
+                    pair_tag_hints=[
+                        {
+                            "tag": "contact:social",
+                            "other_entity_name": "Brena Tideloft",
+                            "declared_entity_role": "subject",
+                        }
+                    ],
+                ),
+            )
 
     assert "new_entities[0].tag_hints" in exc_info.value.message
     assert "For tags_add, tags_clear, and tag_hints" in exc_info.value.message
     assert "pair tags may contain colons" in exc_info.value.message
     assert "'contact:social'" in exc_info.value.message
     assert "resubmit the complete response" in exc_info.value.message
+    validation_log = next(
+        record.getMessage()
+        for record in caplog.records
+        if record.getMessage().startswith(
+            "Storyteller output failed registry validation"
+        )
+    )
+    formatted_issues = exc_info.value.message.rsplit(":\n", maxsplit=1)[1]
+    assert "requesting model retry:\n- new_entities[0].tag_hints:" in validation_log
+    assert validation_log.endswith(formatted_issues)
 
 
 @pytest.mark.asyncio

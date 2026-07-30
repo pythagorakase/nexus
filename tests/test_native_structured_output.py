@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 from types import SimpleNamespace
+from typing import Any, Callable, cast, Literal
 from unittest.mock import AsyncMock, Mock
 
 import pytest
 from pydantic import ValidationError
+from pydantic_ai import ModelRetry
 
 from nexus.agents.logon.apex_schema import (
     StorytellerResponseBootstrap,
@@ -56,8 +60,59 @@ def _wire_response() -> SkaldTurnWire:
     )
 
 
+def _writer_response() -> SkaldWriterWire:
+    return SkaldWriterWire(
+        narrative="[TEST MODE] Writer structured output.",
+        choices=["Continue", "Wait"],
+        letter="Keep the next beat private.",
+    )
+
+
 def _gaia_response() -> SkaldGaiaWire:
     return SkaldGaiaWire(letter="I will make room for it.")
+
+
+def _reject_first_structured_output(
+    rejection_kind: Literal["model_retry", "validation_error"],
+) -> tuple[
+    Callable[[Any, SkaldWriterWire], SkaldWriterWire],
+    str,
+    str,
+    str,
+]:
+    """Build a one-shot validator rejection, including a private-input error."""
+
+    sentinel = "PRIVATE-LETTER-637"
+    try:
+        SkaldWriterWire.model_validate(
+            {
+                "narrative": "N",
+                "letter": sentinel,
+            }
+        )
+    except ValidationError as exc:
+        validation_error = exc
+    else:
+        raise AssertionError("The deliberately incomplete writer payload was valid")
+
+    assert sentinel in str(validation_error)
+    model_retry_message = "writer registry validator rejected the response"
+
+    def validator(ctx: Any, output: SkaldWriterWire) -> SkaldWriterWire:
+        if ctx.retry == 0:
+            if rejection_kind == "model_retry":
+                raise ModelRetry(model_retry_message)
+            raise validation_error
+        return output
+
+    if rejection_kind == "model_retry":
+        return validator, sentinel, "ModelRetry", model_retry_message
+    return (
+        validator,
+        sentinel,
+        "ValidationError",
+        "choices: Field required (missing)",
+    )
 
 
 def _contains_key(value: object, key: str) -> bool:
@@ -679,6 +734,105 @@ def test_openai_provider_uses_responses_parse_text_format() -> None:
     assert captured["max_output_tokens"] == 1234
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("transport", ["responses", "chat_completions"])
+@pytest.mark.parametrize("call_style", ["sync", "async"])
+@pytest.mark.parametrize("rejection_kind", ["model_retry", "validation_error"])
+async def test_openai_rejection_logs_cover_every_transport_branch_without_input_leaks(
+    caplog: pytest.LogCaptureFixture,
+    transport: Literal["responses", "chat_completions"],
+    call_style: Literal["sync", "async"],
+    rejection_kind: Literal["model_retry", "validation_error"],
+) -> None:
+    """OpenAI sync/async transports log every rejected branch without letters."""
+
+    expected = _writer_response()
+    validator, sentinel, exception_name, error_text = _reject_first_structured_output(
+        rejection_kind
+    )
+    prompts: list[str] = []
+
+    class FakeResponses:
+        def parse(self, **kwargs: Any) -> Any:
+            prompts.append(kwargs["input"][-1]["content"])
+            return SimpleNamespace(
+                output_parsed=expected,
+                output_text=expected.model_dump_json(),
+                usage=SimpleNamespace(input_tokens=11, output_tokens=22),
+            )
+
+    class FakeChatCompletions:
+        def create(self, **kwargs: Any) -> Any:
+            prompts.append(kwargs["messages"][-1]["content"])
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(content=expected.model_dump_json())
+                    )
+                ],
+                usage=SimpleNamespace(prompt_tokens=11, completion_tokens=22),
+            )
+
+    provider = OpenAIProvider(
+        model="openai-log-test-model",
+        api_key="test-key",
+        base_url=(
+            "https://structured-output.invalid/v1"
+            if transport == "chat_completions"
+            else None
+        ),
+        structured_transport=transport,
+        structured_output_retries=1,
+        output_validator=validator,
+        usage_seat="writer",
+    )
+    provider.client = cast(
+        Any,
+        SimpleNamespace(
+            responses=FakeResponses(),
+            chat=SimpleNamespace(completions=FakeChatCompletions()),
+        ),
+    )
+
+    with caplog.at_level(logging.WARNING, logger="nexus.metadata"):
+        if call_style == "sync":
+            parsed, _llm_response = await asyncio.to_thread(
+                provider.get_structured_completion,
+                "Write the next beat.",
+                SkaldWriterWire,
+            )
+        else:
+            parsed, _llm_response = await provider.get_structured_completion_async(
+                "Write the next beat.",
+                SkaldWriterWire,
+            )
+
+    assert parsed == expected
+    assert len(prompts) == 2
+    rejection_logs = [
+        record.getMessage()
+        for record in caplog.records
+        if record.getMessage().startswith("structured-output rejected")
+    ]
+    assert len(rejection_logs) == 1
+    rejection_log = rejection_logs[0]
+    assert f"transport={transport}" in rejection_log
+    assert "model=openai-log-test-model" in rejection_log
+    assert "seat=writer" in rejection_log
+    assert "attempt=1" in rejection_log
+    assert f"exception={exception_name}" in rejection_log
+    assert f"error={error_text}" in rejection_log
+    assert sentinel not in caplog.text
+    assert not any(
+        record.getMessage().startswith("structured-output retries exhausted")
+        for record in caplog.records
+    )
+    if rejection_kind == "validation_error":
+        assert sentinel in prompts[1]
+    else:
+        assert error_text in prompts[1]
+
+
 def test_openai_provider_accepts_native_text_format_override() -> None:
     """Runtime-mutated schemas ride text.format and still parse to Pydantic."""
 
@@ -881,6 +1035,98 @@ def test_anthropic_provider_uses_native_output_format() -> None:
     assert "tools" not in captured
     assert captured["system"] == "System prompt"
     assert captured["max_tokens"] == 5678
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("transport", ["native", "prompted", "tool_envelope"])
+@pytest.mark.parametrize("call_style", ["sync", "async"])
+@pytest.mark.parametrize("rejection_kind", ["model_retry", "validation_error"])
+async def test_anthropic_rejection_logs_cover_every_transport_branch_without_input_leaks(
+    caplog: pytest.LogCaptureFixture,
+    transport: Literal["native", "prompted", "tool_envelope"],
+    call_style: Literal["sync", "async"],
+    rejection_kind: Literal["model_retry", "validation_error"],
+) -> None:
+    """Anthropic sync/async transports log rejected branches without letters."""
+
+    expected = _writer_response()
+    validator, sentinel, exception_name, error_text = _reject_first_structured_output(
+        rejection_kind
+    )
+    prompts: list[str] = []
+
+    class FakeMessages:
+        def create(self, **kwargs: Any) -> Any:
+            prompts.append(kwargs["messages"][-1]["content"])
+            if transport == "tool_envelope":
+                content = [
+                    SimpleNamespace(
+                        type="tool_use",
+                        name="submit_structured_response",
+                        input=expected.model_dump(mode="json"),
+                    )
+                ]
+            else:
+                content = [
+                    SimpleNamespace(type="text", text=expected.model_dump_json())
+                ]
+            return SimpleNamespace(
+                content=content,
+                usage=SimpleNamespace(input_tokens=33, output_tokens=44),
+            )
+
+    provider = AnthropicProvider(
+        model="anthropic-log-test-model",
+        api_key="test-key",
+        structured_transport=transport,
+        structured_output_retries=1,
+        output_validator=validator,
+        usage_seat="writer",
+    )
+    provider.client = cast(
+        Any,
+        SimpleNamespace(
+            beta=SimpleNamespace(messages=FakeMessages()),
+        ),
+    )
+
+    with caplog.at_level(logging.WARNING, logger="nexus.metadata"):
+        if call_style == "sync":
+            parsed, _llm_response = await asyncio.to_thread(
+                provider.get_structured_completion,
+                "Write the next beat.",
+                SkaldWriterWire,
+            )
+        else:
+            parsed, _llm_response = await provider.get_structured_completion_async(
+                "Write the next beat.",
+                SkaldWriterWire,
+            )
+
+    assert parsed == expected
+    assert len(prompts) == 2
+    rejection_logs = [
+        record.getMessage()
+        for record in caplog.records
+        if record.getMessage().startswith("structured-output rejected")
+    ]
+    assert len(rejection_logs) == 1
+    rejection_log = rejection_logs[0]
+    assert f"transport={transport}" in rejection_log
+    assert "model=anthropic-log-test-model" in rejection_log
+    assert "seat=writer" in rejection_log
+    assert "attempt=1" in rejection_log
+    assert f"exception={exception_name}" in rejection_log
+    assert f"error={error_text}" in rejection_log
+    assert sentinel not in caplog.text
+    assert not any(
+        record.getMessage().startswith("structured-output retries exhausted")
+        for record in caplog.records
+    )
+    if rejection_kind == "validation_error":
+        assert sentinel in prompts[1]
+    else:
+        assert error_text in prompts[1]
 
 
 def test_anthropic_provider_rejects_unknown_structured_transport() -> None:
@@ -1192,7 +1438,9 @@ async def test_anthropic_prompted_transport_async_parses_bare_fence() -> None:
     assert "output_format" not in calls[0]
 
 
-def test_anthropic_prompted_transport_repairs_then_raises_on_garbage() -> None:
+def test_anthropic_prompted_transport_repairs_then_raises_on_garbage(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     calls = []
 
     class FakeMessages:
@@ -1208,16 +1456,39 @@ def test_anthropic_prompted_transport_repairs_then_raises_on_garbage() -> None:
         api_key="test-key",
         structured_transport="prompted",
         structured_output_retries=1,
+        usage_seat="storyteller",
     )
     provider.client = SimpleNamespace(beta=SimpleNamespace(messages=FakeMessages()))
 
-    with pytest.raises(ValidationError, match="Invalid JSON"):
-        provider.get_structured_completion("Prompt", StorytellerResponseBootstrap)
+    with caplog.at_level(logging.WARNING, logger="nexus.metadata"):
+        with pytest.raises(ValidationError, match="Invalid JSON"):
+            provider.get_structured_completion("Prompt", StorytellerResponseBootstrap)
 
     assert len(calls) == 2
     assert calls[0]["messages"][0]["content"] == "Prompt"
     assert "=== STRUCTURED OUTPUT RETRY ===" in calls[1]["messages"][0]["content"]
     assert all("output_config" not in request for request in calls)
+    rejection_logs = [
+        record.getMessage()
+        for record in caplog.records
+        if record.getMessage().startswith("structured-output rejected")
+    ]
+    assert len(rejection_logs) == 2
+    assert "attempt=1" in rejection_logs[0]
+    assert "attempt=2" in rejection_logs[1]
+    exhaustion_logs = [
+        record.getMessage()
+        for record in caplog.records
+        if record.getMessage().startswith("structured-output retries exhausted")
+    ]
+    assert len(exhaustion_logs) == 1
+    assert "transport=prompted" in exhaustion_logs[0]
+    assert "model=claude-sonnet-4-5" in exhaustion_logs[0]
+    assert "seat=storyteller" in exhaustion_logs[0]
+    assert "attempt=2" in exhaustion_logs[0]
+    assert "exception=ValidationError" in exhaustion_logs[0]
+    assert "action=propagate" in exhaustion_logs[0]
+    assert "persistent garbage" not in caplog.text
 
 
 @pytest.mark.asyncio

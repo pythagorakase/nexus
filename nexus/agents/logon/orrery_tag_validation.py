@@ -500,8 +500,9 @@ def build_storyteller_tag_validator(
             )
             logger.info(
                 "Storyteller output failed registry validation "
-                "(%s issues); requesting model retry",
+                "(%s issues); requesting model retry:\n%s",
                 len(issues),
+                formatted,
             )
             raise ModelRetry(
                 "Your Orrery tags, new-entity declaration hints, replacement "
