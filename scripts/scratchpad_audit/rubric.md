@@ -2,7 +2,7 @@
 
 Scores each accepted exchange (one Skald letter + one Gaia reply) on six dimensions, 0–4. Anchors quote the 2026-07-30 Vesper Station corpus (`temp/scratchpad_audit_2026-07-30_044920Z/`, exchanges cited by chunk id).
 
-Scale lineage, for cross-run comparison: v1 (0–2) saturated — 4 of 6 dimensions ceilinged at 100%. v2 (0–3) fixed the ceiling but pinned 71–88% of exchanges at exactly 2. v2.1 splits that catch-all: **v2's 2 becomes v2.1's 2 (competent) or 3 (rich); v2's 3 becomes v2.1's 4 (exceptional).** A v1 mean of 2.0 ≈ a v2.1 mean between 2 and 3.
+Scale lineage, for cross-run comparison: v1 (0–2) saturated — 4 of 6 dimensions ceilinged at 100%. v2 (0–3) fixed the ceiling but pinned 71–88% of exchanges at exactly 2. v2.1 splits that catch-all: **v2's 2 becomes v2.1's 2 (competent) or 3 (rich); v2's 3 becomes v2.1's 4 (exceptional).** Compare across versions at the rung level, not by means — no distributional mapping between versions is defined.
 
 ## Scoring Rules
 
@@ -31,11 +31,11 @@ What Gaia's reply *does* with Skald's intent.
 
 - **0 — Ignored.** Neither acknowledges nor uses the intent. *(Hypothetical.)*
 - **1 — Echo.** Formulaic acceptance restating the intent without position, reasons, or modification. *Anchor (chunk 4): the reply mirrors five of Skald's six items one-for-one and adds only the clock Skald requested.*
-- **2 — Conditioned uptake.** Accepts or declines with reasons; attaches conditions to the existing plan. Doing Gaia's core job — costing what Skald proposed.
+- **2 — Conditioned uptake.** Accepts with reasons; attaches conditions to the existing plan. Doing Gaia's core job — costing what Skald proposed. A decline that offers nothing in place of what it refuses also sits here.
 - **3 — Reshaping uptake.** The reasons and conditions materially reshape *how* the plan will execute — Gaia's reply changes what Skald must write next without opening a new front. *Anchor (chunk 6): the confession kept "from redeeming him" while the ledger is independently given a second evidentiary edge.*
-- **4 — Counter-move.** A new front, a traded aim, or a refused element — the plan that comes back is not the plan that was sent. *Anchor (chunk 27, "Bent:"): while the lane decision runs, Gaia independently starts a quiet isolation attempt on the hall's second front. Anchor (chunk 13): an internal fault line substituted for the expected official arrival.*
+- **4 — Counter-move.** A new front, a traded aim, or a refused element replaced with something else — the plan that comes back is not the plan that was sent. *Anchor (chunk 13, "Bent:"): an internal fault line substituted for the expected official arrival.*
 
-**Boundary rule (2 vs 3 vs 4):** conditions on the existing plan = 2; conditions that reshape execution = 3; a new front, traded aim, or refusal = 4.
+**Boundary rule (2 vs 3 vs 4):** conditions on the existing plan, or a bare decline = 2; conditions that reshape execution = 3; a new front, a traded aim, or a refusal with a substitute = 4.
 
 ## Dimension 3: World Promise (Gaia)
 
@@ -62,26 +62,26 @@ Honoring the correspondence's own past. (First exchange: N/A per Rule 5.)
 Revision over drag when play deviates. (On-path cap per Rule 4.)
 
 - **0 — Rails.** The abandoned plan pushed back onto the table. *(Hypothetical.)*
-- **1 — Passive drift.** Deviation absorbed but spent plans linger unretired.
-- **2 — Clean retirement.** Deviated or spent plans explicitly revised or retired; losses named.
+- **1 — Passive drift.** A deviation or spent plan exists and lingers unretired.
+- **2 — Steady state.** Nothing stale lingers: either there was no deviation and no spent plan to handle, or what was spent is cleanly retired with its losses named. The default for a clean on-path exchange.
 - **3 — Rich retirement.** Retirement that seeds the next pressure — what replaces the spent plan is already loaded. On-path exchanges cap here.
-- **4 — Conversion.** A genuine deviation or loss converted into new architecture — the loss itself becomes the next pressure. *Anchor (chunk 24): the refused corridor hook genuinely loses the transfer destination AND converts the problem "into a physical threshold." Anchor (chunk 8): clean escape retired for "distributed memory as delayed social consequence."*
+- **4 — Conversion.** A genuine deviation or loss converted into new architecture — the loss itself becomes the next pressure. *Anchor (chunk 24): the refused corridor hook genuinely loses the transfer destination AND converts the problem "into a physical threshold." Anchor (chunk 8): the clean gate escape retired in favor of public witness, its loss converted into delayed social consequence.*
 
 ## Dimension 6: Creative Chemistry
 
 Two distinct collaborators vs. one bookkeeper with two signatures. Observable proxies: **asymmetry** (different jobs, no mirroring), **surprise-with-consent** (an unrequested addition the partner can use), **register** (voice distinct from procedural accounting).
 
 - **0 — Duplication.** The letters restate each other; either could be deleted. *(Hypothetical.)*
-- **1 — Bookkeeping.** Accurate, asymmetric, useful — wholly procedural; no play, no surprise. *Anchor (chunks 10, 18): status ledgers executing earlier declarations; "intentionally procedural rather than exuberant."*
+- **1 — Bookkeeping.** Accurate, asymmetric, useful — wholly procedural; no play, no surprise. *Anchor (chunk 18): a status ledger — precise cost accounting that executes earlier declarations without adding anything unrequested, procedural in register throughout.*
 - **2 — Distinct voices.** The asymmetry is alive — Skald frames meaning, Gaia moves the world — with evident relish beyond the minimum in at least one seat.
-- **3 — A gift offered.** One genuine surprise — an unrequested complication, gift, or reversal — whether or not its payoff has landed yet. *(Credit deferred uptake per Rule 6.)*
-- **4 — A gift taken up.** The surprise is visibly used by the partner or the story. *Anchor (chunk 22): Ora's unplanned receipt-split, immediately load-bearing. Anchor (chunk 7): the claimant-not-weapon seed, later becoming Vela.*
+- **3 — A gift offered, uncashed.** One genuine surprise — an unrequested complication, gift, or reversal — that the partner has not taken up anywhere in the scored corpus. Once uptake lands, even exchanges later, score the giving exchange 4 instead (Rule 6). *(No corpus anchor: the reference corpus cashes all its major gifts.)*
+- **4 — A gift taken up.** The surprise is visibly used by the partner or the story, whether immediately or later — credited at the giving exchange per Rule 6. *Anchor (chunk 7): the claimant-not-weapon seed, taken up exchanges later when the claimant becomes Vela.*
 
 ## Appendix: Digest Fidelity (Compaction-Era Corpora Only)
 
 Grade each compaction event separately from per-exchange scores:
 
-- **Preserved** — promises, costs, epistemic boundaries, and open threads from compacted-away letters survive into the digest, and a live probe (steering play at a digest-only fact) is honored in subsequent prose/letters.
+- **Preserved** — promises, costs, epistemic boundaries, and open threads from compacted-away letters survive into the digest, and — where subsequent play exists — a live probe (steering play at a digest-only fact) is honored in subsequent prose/letters. A compaction with no subsequent play to probe (e.g. the last before a run ends) is graded on content review alone and marked **(unprobed)**.
 - **Weakened** — facts kept but binding force dropped (a named thread flattened to a generic constraint; a promise become a summary), or the live probe honored only partially. *Anchor (2026-07-30 compaction audit, digest #1): the altered childhood recording — "a public wound rather than a private clue" — retained only as "keep legal and evidentiary claims qualified," its named emotional role no longer independently recoverable.*
 - **Lost** — a compacted-away commitment contradicted or vanished from play after compaction.
 
@@ -89,4 +89,4 @@ Every grade requires quoting the digest against the original letters.
 
 ## Validation Criteria (for Any Rubric Revision)
 
-A revision is accepted only if a blind re-score of a reference corpus shows: (1) no dimension with more than ~60% of exchanges at any single value; (2) known-weak exchanges of the reference corpus rank at or near the bottom; (3) every 4 cites a quote and every 0/1 names its gap; (4) scoring required no rule the rubric does not state — any judgment call the scorer had to invent is a defect in this document and goes back into it.
+A revision is accepted only if a blind re-score of a designated reference corpus shows all of: (1) no dimension places more than 60% of scored exchanges at any single value; (2) the designated weak set — the bottom 20% of exchanges by total in the most recent accepted scoring of that corpus — lands entirely in the bottom third of the new ranking; (3) every 4 cites a quote and every 0/1 names its gap; (4) the scorer reports zero judgment calls that required conventions this document does not state — each such call is a defect and goes back into this document before the revision is accepted.
