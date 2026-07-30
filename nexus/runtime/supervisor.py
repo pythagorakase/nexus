@@ -197,7 +197,14 @@ class Supervisor:
 
     @classmethod
     def from_config(cls, config_path: Optional[Path] = None) -> "Supervisor":
-        path = Path(config_path) if config_path else repo_root() / "nexus.toml"
+        """Build a supervisor from an explicit, runtime, or repository config."""
+        runtime_config = os.environ.get(RUNTIME_CONFIG_ENV)
+        if config_path is not None:
+            path = Path(config_path)
+        elif runtime_config:
+            path = Path(runtime_config)
+        else:
+            path = repo_root() / "nexus.toml"
         return cls(load_settings(path), path)
 
     # ------------------------------------------------------------------
