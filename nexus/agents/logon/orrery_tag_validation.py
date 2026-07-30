@@ -18,7 +18,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from difflib import get_close_matches
 import logging
-from typing import Any, FrozenSet, List, Mapping, Optional, Tuple
+from typing import Any, Callable, FrozenSet, List, Mapping, Optional, Tuple
 
 from nexus.agents.orrery.declaration_validation import (
     collect_new_entity_declaration_vocabulary_issues,
@@ -32,6 +32,16 @@ from nexus.agents.orrery.tag_schemas import OrreryTagBestowal
 from nexus.agents.orrery.tag_writer import validate_tag_bestowal
 
 logger = logging.getLogger("nexus.logon.orrery_tag_validation")
+
+_REPLACEMENT_ACTOR_TAG_FIELDS = (
+    ("entity_tags_add", "applied_tags"),
+    ("entity_tags_remove", "tags_to_clear"),
+)
+_REPLACEMENT_TARGET_TAG_FIELDS = (
+    ("entity_tags_target_add", "applied_tags"),
+    ("entity_tags_target_remove", "tags_to_clear"),
+)
+_REPLACEMENT_PAIR_TAG_FIELD = "entity_pair_tags_target_clear_inbound"
 
 
 @dataclass(frozen=True)
@@ -78,7 +88,13 @@ def read_storyteller_vocabulary(dbname: str) -> StorytellerVocabulary:
     )
 
 
-def _bestowal_sites(response: Any) -> List[Tuple[str, str, OrreryTagBestowal]]:
+def _bestowal_sites(
+    response: Any,
+    *,
+    replacement_entity_kinds: Optional[
+        Mapping[int, Tuple[Optional[str], Optional[str]]]
+    ] = None,
+) -> List[Tuple[str, str, OrreryTagBestowal]]:
     """Yield (path, entity_kind, bestowal) triples from a parsed response."""
 
     sites: List[Tuple[str, str, OrreryTagBestowal]] = []
@@ -119,7 +135,192 @@ def _bestowal_sites(response: Any) -> List[Tuple[str, str, OrreryTagBestowal]]:
             if bestowal is not None:
                 sites.append((f"state_updates.factions[{index}]", "faction", bestowal))
 
+    for index, adjudication in enumerate(
+        getattr(response, "orrery_adjudications", None) or []
+    ):
+        delta = getattr(adjudication, "replacement_state_delta", None)
+        if delta is None:
+            continue
+        actor_kind, target_kind = (replacement_entity_kinds or {}).get(
+            index, (None, None)
+        )
+        for field_name, bestowal_field in _REPLACEMENT_ACTOR_TAG_FIELDS:
+            values = list(getattr(delta, field_name, None) or [])
+            if values and actor_kind is not None:
+                sites.append(
+                    (
+                        "orrery_adjudications"
+                        f"[{index}].replacement_state_delta.{field_name}",
+                        actor_kind,
+                        OrreryTagBestowal(
+                            applied_tags=(
+                                values if bestowal_field == "applied_tags" else []
+                            ),
+                            tags_to_clear=(
+                                values if bestowal_field == "tags_to_clear" else []
+                            ),
+                        ),
+                    )
+                )
+        for field_name, bestowal_field in _REPLACEMENT_TARGET_TAG_FIELDS:
+            values = list(getattr(delta, field_name, None) or [])
+            if values and target_kind is not None:
+                sites.append(
+                    (
+                        "orrery_adjudications"
+                        f"[{index}].replacement_state_delta.{field_name}",
+                        target_kind,
+                        OrreryTagBestowal(
+                            applied_tags=(
+                                values if bestowal_field == "applied_tags" else []
+                            ),
+                            tags_to_clear=(
+                                values if bestowal_field == "tags_to_clear" else []
+                            ),
+                        ),
+                    )
+                )
+
     return sites
+
+
+def _replacement_entity_kinds(
+    response: Any,
+    cur: Any,
+    *,
+    proposal_bindings: Optional[Mapping[str, Mapping[str, Any]]],
+) -> Tuple[
+    Mapping[int, Tuple[Optional[str], Optional[str]]],
+    List[str],
+]:
+    """Resolve actor/target kinds for replacement single-entity tag fields."""
+
+    requirements: List[Tuple[int, str, str, str]] = []
+    for index, adjudication in enumerate(
+        getattr(response, "orrery_adjudications", None) or []
+    ):
+        delta = getattr(adjudication, "replacement_state_delta", None)
+        if delta is None:
+            continue
+        proposal_id = str(getattr(adjudication, "proposal_id", "") or "")
+        for field_name, _bestowal_field in _REPLACEMENT_ACTOR_TAG_FIELDS:
+            if getattr(delta, field_name, None):
+                requirements.append((index, proposal_id, "actor", field_name))
+        for field_name, _bestowal_field in _REPLACEMENT_TARGET_TAG_FIELDS:
+            if getattr(delta, field_name, None):
+                requirements.append((index, proposal_id, "target", field_name))
+    if not requirements:
+        return {}, []
+
+    entity_ids: dict[Tuple[int, str], int] = {}
+    issues: List[str] = []
+    for index, proposal_id, endpoint, field_name in requirements:
+        path = f"orrery_adjudications[{index}].replacement_state_delta.{field_name}"
+        bindings = (
+            proposal_bindings.get(proposal_id)
+            if proposal_bindings is not None
+            else None
+        )
+        if bindings is None:
+            issues.append(
+                f"{path}: Cannot validate registry tags because current proposal "
+                f"bindings are unavailable for {proposal_id!r}"
+            )
+            continue
+        entity_id = bindings.get(endpoint)
+        if isinstance(entity_id, bool) or not isinstance(entity_id, int):
+            issues.append(
+                f"{path}: Cannot validate registry tags because proposal "
+                f"{proposal_id!r} has no scalar {endpoint} entity binding"
+            )
+            continue
+        entity_ids[(index, endpoint)] = entity_id
+
+    kind_by_id: dict[int, str] = {}
+    unique_ids = sorted(set(entity_ids.values()))
+    if unique_ids:
+        cur.execute(
+            """
+            SELECT id, kind::text
+            FROM entities
+            WHERE id = ANY(%s::bigint[])
+            ORDER BY id
+            """,
+            (unique_ids,),
+        )
+        kind_by_id = {
+            int(_row_value(row, "id", 0)): str(_row_value(row, "kind", 1))
+            for row in cur.fetchall()
+        }
+
+    resolved: dict[int, Tuple[Optional[str], Optional[str]]] = {}
+    for index, proposal_id, endpoint, field_name in requirements:
+        entity_id = entity_ids.get((index, endpoint))
+        if entity_id is None:
+            continue
+        entity_kind = kind_by_id.get(entity_id)
+        path = f"orrery_adjudications[{index}].replacement_state_delta.{field_name}"
+        if entity_kind not in {"character", "place", "faction"}:
+            issues.append(
+                f"{path}: Cannot validate registry tags because {endpoint} "
+                f"entity {entity_id!r} for proposal {proposal_id!r} has no "
+                "registered entity kind"
+            )
+            continue
+        actor_kind, target_kind = resolved.get(index, (None, None))
+        if endpoint == "actor":
+            actor_kind = entity_kind
+        else:
+            target_kind = entity_kind
+        resolved[index] = (actor_kind, target_kind)
+    return resolved, issues
+
+
+def _replacement_pair_tag_issues(
+    response: Any,
+    cur: Any,
+    *,
+    vocabulary: Optional[StorytellerVocabulary],
+    suggestion_limit: int,
+) -> List[str]:
+    """Validate replacement inbound-clear names against the pair-tag registry."""
+
+    issues: List[str] = []
+    for index, adjudication in enumerate(
+        getattr(response, "orrery_adjudications", None) or []
+    ):
+        delta = getattr(adjudication, "replacement_state_delta", None)
+        if delta is None:
+            continue
+        path = (
+            f"orrery_adjudications[{index}].replacement_state_delta."
+            f"{_REPLACEMENT_PAIR_TAG_FIELD}"
+        )
+        for tag_name in getattr(delta, _REPLACEMENT_PAIR_TAG_FIELD, None) or []:
+            if vocabulary is None:
+                cur.execute(
+                    """
+                    SELECT id
+                    FROM pair_tags
+                    WHERE tag = %s AND NOT deprecated
+                    """,
+                    (tag_name,),
+                )
+                registered = cur.fetchone() is not None
+            else:
+                registered = tag_name in vocabulary.pair_tag_names
+            if registered:
+                continue
+            issue = f"{path}: Unknown or deprecated pair_tag {tag_name!r}"
+            if vocabulary is not None:
+                issue = _with_near_misses(
+                    issue,
+                    value=tag_name,
+                    candidates=vocabulary.pair_tag_names,
+                    suggestion_limit=suggestion_limit,
+                )
+            issues.append(issue)
+    return issues
 
 
 def _faction_update_sites(
@@ -383,11 +584,19 @@ def collect_orrery_tag_issues(
     *,
     vocabulary: Optional[StorytellerVocabulary] = None,
     suggestion_limit: int = 3,
+    proposal_bindings: Optional[Mapping[str, Mapping[str, Any]]] = None,
 ) -> List[str]:
     """Validate every bestowal and declaration against the live registry."""
 
-    issues: List[str] = []
-    for path, entity_kind, bestowal in _bestowal_sites(response):
+    replacement_kinds, issues = _replacement_entity_kinds(
+        response,
+        cur,
+        proposal_bindings=proposal_bindings,
+    )
+    for path, entity_kind, bestowal in _bestowal_sites(
+        response,
+        replacement_entity_kinds=replacement_kinds,
+    ):
         if vocabulary is None:
             bestowal_issues = validate_tag_bestowal(
                 cur,
@@ -403,6 +612,14 @@ def collect_orrery_tag_issues(
             )
         for issue in bestowal_issues:
             issues.append(f"{path}: {issue}")
+    issues.extend(
+        _replacement_pair_tag_issues(
+            response,
+            cur,
+            vocabulary=vocabulary,
+            suggestion_limit=suggestion_limit,
+        )
+    )
     declarations = getattr(response, "new_entities", None) or []
     declaration_issues = collect_new_entity_declaration_vocabulary_issues(
         cur,
@@ -450,6 +667,9 @@ def build_storyteller_tag_validator(
     *,
     suggestion_limit: int = 3,
     allow_same_turn_faction_declarations: bool = False,
+    proposal_bindings_provider: Optional[
+        Callable[[], Mapping[str, Mapping[str, Any]]]
+    ] = None,
 ) -> Optional[Any]:
     """Return an async registry output validator bound to ``dbname``.
 
@@ -469,6 +689,13 @@ def build_storyteller_tag_validator(
 
         from nexus.api.db_pool import get_connection
 
+        proposal_bindings = (
+            proposal_bindings_provider()
+            if proposal_bindings_provider is not None
+            else None
+        )
+        if proposal_bindings is not None and not isinstance(proposal_bindings, Mapping):
+            raise TypeError("proposal_bindings_provider must return a mapping")
         vocabulary = read_storyteller_vocabulary(dbname)
         with get_connection(dbname) as conn:
             with conn.cursor() as cur:
@@ -477,6 +704,7 @@ def build_storyteller_tag_validator(
                     cur,
                     vocabulary=vocabulary,
                     suggestion_limit=suggestion_limit,
+                    proposal_bindings=proposal_bindings,
                 )
                 issues.extend(
                     collect_faction_identity_issues(
@@ -516,9 +744,12 @@ def build_storyteller_tag_validator(
                 "composites. For pair_tag_hints, use the exact registered pair-tag "
                 "name; pair tags may contain colons (e.g. 'contact:social'). For "
                 "replacement_event_type, use an exact registered event type. Drop "
-                "any value with no registered equivalent. A tags_add issue that "
-                "requires duration_override is not expressible on the storyteller "
-                "wire; omit that tag. Fix every listed "
+                "any value with no registered equivalent. Replacement-state "
+                "entity tag lists follow the actor or target entity kind; "
+                "entity_pair_tags_target_clear_inbound uses exact registered "
+                "pair-tag names. A tags_add issue that requires duration_override "
+                "is not expressible on the storyteller wire; omit that tag. Fix "
+                "every listed "
                 f"path and resubmit the complete response:\n{formatted}"
             )
         return output

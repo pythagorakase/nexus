@@ -24,6 +24,12 @@ from nexus.agents.logon.apex_schema import (  # noqa: E402
     StoryTurnResponse,
     StorytellerResponseBootstrap,
 )
+from nexus.agents.logon.gaia_registry_schema import (  # noqa: E402
+    GaiaRegistryReadError,
+    coerce_gaia_registry_wire,
+    gaia_wire_registry_digest,
+    load_gaia_registry_wire_spec,
+)
 from nexus.agents.logon.skald_wire import (  # noqa: E402
     PresenceBaseline,
     PresenceRef,
@@ -55,6 +61,7 @@ from nexus.api.native_structured_output import (  # noqa: E402
 )
 from nexus.config.loader import get_provider_for_model, resolve_model_ref  # noqa: E402
 from nexus.config.settings_models import (  # noqa: E402
+    APEXTagLibrarySettings,
     OrreryRetrogradeMaturationSettings,
 )
 from nexus.memory.context_state import is_retrograde_summary  # noqa: E402
@@ -125,6 +132,32 @@ def proposal_tag_names_from_payload(context_payload: Mapping[str, Any]) -> set[s
             if mood is not None and str(mood).strip():
                 tag_names.add(str(mood).strip())
     return tag_names
+
+
+def _proposal_bindings_from_payload(
+    context_payload: Mapping[str, Any],
+) -> Dict[str, Mapping[str, Any]]:
+    """Index current Orrery bindings by the proposal id exposed to Gaia."""
+
+    indexed: Dict[str, Mapping[str, Any]] = {}
+    for proposal in context_payload.get("orrery_imminent_activity") or []:
+        if not isinstance(proposal, Mapping):
+            continue
+        proposal_id = proposal.get("proposal_id")
+        bindings = proposal.get("bindings")
+        if not isinstance(proposal_id, str) or not proposal_id:
+            continue
+        if not isinstance(bindings, Mapping):
+            bindings = {}
+        normalized = {
+            str(getattr(key, "value", key)): value for key, value in bindings.items()
+        }
+        if proposal_id in indexed:
+            raise ValueError(
+                f"Duplicate Orrery proposal_id in generation context: {proposal_id!r}"
+            )
+        indexed[proposal_id] = normalized
+    return indexed
 
 
 def read_presence_baseline(
@@ -327,6 +360,9 @@ class LogonUtility:
         # (schema type, wire class) tuples for two-pass entries, because the
         # pinned gaia seat can run a different wire class than the writer.
         self._schema_format_cache: Dict[Any, Dict[str, Any]] = {}
+        # Current prompt proposal bindings are read by the generation-time
+        # replacement-delta validator. They are replaced atomically per turn.
+        self._active_orrery_proposal_bindings: Dict[str, Mapping[str, Any]] = {}
         # One setting snapshot per utility instance: both seats of a
         # two-pass turn must compose against the same SettingCard.
         self._setting_context: Optional[str] = None
@@ -345,6 +381,15 @@ class LogonUtility:
                 "API Settings.apex.turn_pipeline must be 'single_pass' or 'two_pass'"
             )
         return cast(Literal["single_pass", "two_pass"], turn_pipeline)
+
+    def _tag_library_settings(self) -> APEXTagLibrarySettings:
+        """Return validated prompt and strict-schema vocabulary controls."""
+
+        apex_settings = self.settings.get("API Settings", {}).get("apex")
+        if not isinstance(apex_settings, Mapping):
+            apex_settings = self.settings.get("apex") or {}
+        raw_settings = apex_settings.get("tag_library") or {}
+        return APEXTagLibrarySettings.model_validate(raw_settings)
 
     def _load_system_prompt(self, is_bootstrap: Optional[bool] = None) -> str:
         """Load and combine storyteller instructions with live slot context."""
@@ -675,6 +720,7 @@ class LogonUtility:
             validation_dbname,
             suggestion_limit=int(tag_library_settings.get("suggestion_limit", 3)),
             allow_same_turn_faction_declarations=maturation_settings.enabled,
+            proposal_bindings_provider=(lambda: self._active_orrery_proposal_bindings),
         )
         output_validator = tag_output_validator
         if not provider_bootstrap_mode:
@@ -824,6 +870,9 @@ class LogonUtility:
     ) -> StoryTurnResponse:
         """Generate narrative from context payload with structured output."""
         self._generated_correspondence = None
+        self._active_orrery_proposal_bindings = _proposal_bindings_from_payload(
+            context_payload
+        )
         self._ensure_provider(
             context_payload,
             expected_model=expected_model,
@@ -896,6 +945,9 @@ class LogonUtility:
     ) -> StoryTurnResponse:
         """Generate narrative from context payload without blocking the event loop."""
         self._generated_correspondence = None
+        self._active_orrery_proposal_bindings = _proposal_bindings_from_payload(
+            context_payload
+        )
         self._ensure_provider(
             context_payload,
             expected_model=expected_model,
@@ -1317,6 +1369,8 @@ class LogonUtility:
         gaia_wire = (
             gaia_route[3] if gaia_route is not None else self._provider_wire_type
         )
+        if gaia_wire is None:
+            raise RuntimeError("Two-pass Gaia generation requires a provider wire")
         anthropic_gaia_transport = self._resolve_anthropic_two_pass_gaia_transport(
             gaia_wire
         )
@@ -1365,13 +1419,18 @@ class LogonUtility:
                 usage_seat="gaia",
                 anthropic_transport=anthropic_gaia_transport,
             )
+        gaia_schema_model = self._gaia_schema_model(gaia_wire)
         gaia, _gaia_response = gaia_provider.get_structured_completion(
             gaia_prompt,
-            SkaldGaiaWire,
-            **self._two_pass_schema_format_kwargs(SkaldGaiaWire, wire_type=gaia_wire),
+            gaia_schema_model,
+            **self._two_pass_schema_format_kwargs(
+                gaia_schema_model,
+                wire_type=gaia_wire,
+            ),
         )
         if not isinstance(gaia, SkaldGaiaWire):
             raise TypeError("LOGON gaia pass returned a non-SkaldGaiaWire response")
+        gaia = coerce_gaia_registry_wire(gaia)
         if writer.letter is None or gaia.letter is None:
             raise ValueError("Two-pass storyteller exchange omitted a private letter")
         self._generated_correspondence = GeneratedCorrespondence(
@@ -1400,6 +1459,8 @@ class LogonUtility:
         gaia_wire = (
             gaia_route[3] if gaia_route is not None else self._provider_wire_type
         )
+        if gaia_wire is None:
+            raise RuntimeError("Two-pass Gaia generation requires a provider wire")
         anthropic_gaia_transport = self._resolve_anthropic_two_pass_gaia_transport(
             gaia_wire
         )
@@ -1450,13 +1511,18 @@ class LogonUtility:
                 usage_seat="gaia",
                 anthropic_transport=anthropic_gaia_transport,
             )
+        gaia_schema_model = self._gaia_schema_model(gaia_wire)
         gaia, _gaia_response = await gaia_provider.get_structured_completion_async(
             gaia_prompt,
-            SkaldGaiaWire,
-            **self._two_pass_schema_format_kwargs(SkaldGaiaWire, wire_type=gaia_wire),
+            gaia_schema_model,
+            **self._two_pass_schema_format_kwargs(
+                gaia_schema_model,
+                wire_type=gaia_wire,
+            ),
         )
         if not isinstance(gaia, SkaldGaiaWire):
             raise TypeError("LOGON gaia pass returned a non-SkaldGaiaWire response")
+        gaia = coerce_gaia_registry_wire(gaia)
         if writer.letter is None or gaia.letter is None:
             raise ValueError("Two-pass storyteller exchange omitted a private letter")
         self._generated_correspondence = GeneratedCorrespondence(
@@ -1665,6 +1731,21 @@ class LogonUtility:
         self._schema_format_cache[schema_model] = kwargs
         return kwargs
 
+    def _gaia_schema_model(
+        self,
+        wire_type: Literal["openai", "anthropic", "local"],
+    ) -> type[SkaldGaiaWire]:
+        """Return the static or registry-specialized model for one Gaia call."""
+
+        if wire_type != "openai" or not self._tag_library_settings().schema_enums:
+            return SkaldGaiaWire
+        if self._validation_dbname is None:
+            raise GaiaRegistryReadError(
+                "OpenAI Gaia registry enum schema requires an initialized "
+                "slot validation database"
+            )
+        return load_gaia_registry_wire_spec(self._validation_dbname).model
+
     def _two_pass_schema_format_kwargs(
         self,
         schema_model: type,
@@ -1677,8 +1758,13 @@ class LogonUtility:
         the pinned gaia seat may run a different class than the writer.
         """
 
-        if schema_model not in {SkaldWriterWire, SkaldGaiaWire}:
+        if not isinstance(schema_model, type):
             raise TypeError("Two-pass schema formatting requires writer or gaia wire")
+        is_writer = schema_model is SkaldWriterWire
+        is_gaia = issubclass(schema_model, SkaldGaiaWire)
+        if not is_writer and not is_gaia:
+            raise TypeError("Two-pass schema formatting requires writer or gaia wire")
+        gaia_schema_model = cast(type[SkaldGaiaWire], schema_model)
         effective_wire = (
             wire_type if wire_type is not None else self._provider_wire_type
         )
@@ -1686,7 +1772,16 @@ class LogonUtility:
             raise RuntimeError(
                 "Two-pass schema formatting requires an active provider wire class"
             )
-        cache_key = (schema_model, effective_wire)
+        cache_key: tuple[Any, ...]
+        if is_gaia:
+            cache_key = (
+                SkaldGaiaWire,
+                effective_wire,
+                gaia_wire_registry_digest(gaia_schema_model),
+                schema_model,
+            )
+        else:
+            cache_key = (SkaldWriterWire, effective_wire)
         if cache_key in self._schema_format_cache:
             return self._schema_format_cache[cache_key]
 
@@ -1700,24 +1795,24 @@ class LogonUtility:
             kwargs = {
                 "text_format": (
                     skald_writer_strict_text_format()
-                    if schema_model is SkaldWriterWire
-                    else skald_gaia_strict_text_format()
+                    if is_writer
+                    else skald_gaia_strict_text_format(gaia_schema_model)
                 )
             }
         elif effective_wire == "local":
             lenient_schema = (
                 skald_writer_lenient_schema()
-                if schema_model is SkaldWriterWire
+                if is_writer
                 else skald_gaia_lenient_schema()
             )
             kwargs = {
                 "text_format": openai_response_text_format(
-                    schema_model,
+                    SkaldWriterWire if is_writer else SkaldGaiaWire,
                     schema=lenient_schema,
                 )
             }
         elif effective_wire == "anthropic":
-            if schema_model is SkaldWriterWire:
+            if is_writer:
                 kwargs = {
                     "output_config": anthropic_output_config(
                         SkaldWriterWire,
@@ -2152,15 +2247,7 @@ class LogonUtility:
         if self._is_bootstrap_context(context):
             return format_tag_library_for_prompt(self.dbname)
 
-        from nexus.config.settings_models import APEXTagLibrarySettings
-
-        defaults = APEXTagLibrarySettings()
-        apex_settings = self.settings.get("API Settings", {}).get("apex")
-        if not isinstance(apex_settings, Mapping):
-            apex_settings = self.settings.get("apex") or {}
-        raw_settings = apex_settings.get("tag_library") or {}
-        contextual = bool(raw_settings.get("contextual", defaults.contextual))
-        if not contextual:
+        if not self._tag_library_settings().contextual:
             return format_tag_library_for_prompt(self.dbname)
 
         baseline = presence_baseline

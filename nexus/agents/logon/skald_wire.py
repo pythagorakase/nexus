@@ -801,11 +801,13 @@ def skald_writer_strict_text_format() -> Dict[str, Any]:
     return openai_response_text_format(SkaldWriterWire, schema=schema)
 
 
-def skald_gaia_strict_text_format() -> Dict[str, Any]:
-    """Build the strict OpenAI Responses text format for gaia passes."""
+def skald_gaia_strict_text_format(
+    schema_model: type[SkaldGaiaWire] = SkaldGaiaWire,
+) -> Dict[str, Any]:
+    """Build the strict OpenAI Responses text format for a gaia wire."""
 
-    schema = strict_json_schema(SkaldGaiaWire)
-    return openai_response_text_format(SkaldGaiaWire, schema=schema)
+    schema = strict_json_schema(schema_model)
+    return openai_response_text_format(schema_model, schema=schema)
 
 
 def skald_wire_lenient_schema() -> Dict[str, Any]:

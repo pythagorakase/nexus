@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
@@ -12,6 +14,10 @@ from pydantic_ai import ModelRetry
 from nexus.agents.logon.apex_schema import (
     StorytellerResponseBootstrap,
     StorytellerResponseExtended,
+)
+from nexus.agents.logon.gaia_registry_schema import (
+    GaiaRegistryVocabulary,
+    gaia_registry_wire_model,
 )
 from nexus.agents.logon.orrery_tag_validation import (
     StorytellerVocabulary,
@@ -313,6 +319,7 @@ def _utility(
             "apex": {
                 "turn_pipeline": "two_pass",
                 "anthropic_storyteller_transport": (anthropic_transport or "prompted"),
+                "tag_library": {"schema_enums": False},
             }
         },
         "storyteller": {
@@ -621,6 +628,50 @@ def test_two_pass_hydration_matches_independent_single_pass_parse(
     )
 
     _assert_matches_independently_parsed_single_pass(actual)
+
+
+def test_openai_two_pass_injects_registry_model_and_coerces_at_boundary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    utility, provider = _utility(
+        "openai",
+        [WRITER_PAYLOAD, GAIA_PAYLOAD],
+    )
+    utility.settings["API Settings"]["apex"]["tag_library"]["schema_enums"] = True
+    utility._validation_dbname = "qa638_fixture"
+    schema_model = gaia_registry_wire_model(
+        registry_digest="qa638-fixture",
+        vocabulary=GaiaRegistryVocabulary(
+            character_tags=("alert", "human"),
+            place_tags=("haven", "threshold"),
+            faction_tags=("loyalist", "secretive"),
+            pair_tags=("contact:social", "protects"),
+            event_types=("slept", "woke"),
+        ),
+    )
+    monkeypatch.setattr(
+        logon_utility,
+        "load_gaia_registry_wire_spec",
+        lambda _dbname: SimpleNamespace(model=schema_model),
+    )
+    monkeypatch.setattr(
+        utility,
+        "_read_presence_baseline_for_context",
+        lambda _context_payload, _schema_model: BASELINE,
+    )
+
+    response = utility.generate_narrative(
+        _context(),
+        effective_context_window=75_000,
+    )
+
+    assert provider.calls[1]["schema_model"] is schema_model
+    assert provider.calls[1]["kwargs"] == {
+        "text_format": skald_gaia_strict_text_format(schema_model)
+    }
+    assert (
+        response.new_entities == SkaldGaiaWire.model_validate(GAIA_PAYLOAD).new_entities
+    )
 
 
 def test_real_vocabulary_validator_belongs_to_gaia_and_consumes_repair(
@@ -1085,3 +1136,59 @@ def test_two_pass_schema_kwargs_cache_is_wire_keyed() -> None:
     )
     assert anthropic_kwargs == {}
     assert openai_kwargs == {"text_format": skald_gaia_strict_text_format()}
+
+
+def test_two_pass_gaia_schema_cache_is_registry_digest_keyed() -> None:
+    utility, _provider = _utility("openai", [])
+    first_model = gaia_registry_wire_model(
+        registry_digest="digest-one",
+        vocabulary=GaiaRegistryVocabulary(
+            character_tags=("alert", "human"),
+            place_tags=("haven", "threshold"),
+            faction_tags=("loyalist", "secretive"),
+            pair_tags=("contact:social", "protects"),
+            event_types=("slept", "woke"),
+        ),
+    )
+    second_model = gaia_registry_wire_model(
+        registry_digest="digest-two",
+        vocabulary=GaiaRegistryVocabulary(
+            character_tags=("alert", "human", "wounded"),
+            place_tags=("haven", "threshold"),
+            faction_tags=("loyalist", "secretive"),
+            pair_tags=("contact:social", "protects"),
+            event_types=("slept", "woke"),
+        ),
+    )
+
+    first = utility._two_pass_schema_format_kwargs(first_model)
+    cached = utility._two_pass_schema_format_kwargs(first_model)
+    second = utility._two_pass_schema_format_kwargs(second_model)
+
+    assert cached is first
+    assert first["text_format"]["schema"] != second["text_format"]["schema"]
+    assert len(utility._schema_format_cache) == 2
+
+
+def test_gaia_schema_enum_gate_off_is_byte_identical_to_static_schema() -> None:
+    """The rollback lever preserves the pre-#638 OpenAI request exactly."""
+
+    utility, _provider = _utility("openai", [])
+    schema_model = utility._gaia_schema_model("openai")
+    actual = utility._two_pass_schema_format_kwargs(schema_model)["text_format"]
+    expected = skald_gaia_strict_text_format()
+
+    assert schema_model is SkaldGaiaWire
+    assert json.dumps(
+        actual,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8") == json.dumps(
+        expected,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode(
+        "utf-8"
+    )

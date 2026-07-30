@@ -2745,6 +2745,7 @@ class APEXTagLibrarySettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     contextual: bool = True
+    schema_enums: bool = True
     suggestion_limit: int = Field(default=3, ge=0)
 
 
