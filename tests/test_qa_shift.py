@@ -123,8 +123,8 @@ def test_begin_creates_archive_and_pins_every_openai_role(
     assert state["baseline_total"] == 123
     assert state["status"] == "active"
     assert model["default_slot_model"] == "gpt-5.6-terra"
-    assert roles["default"] == "gpt-5.6-terra"
-    assert roles["gaia"] == "gpt-5.6-terra"
+    assert set(roles) >= {"default", "gaia"}
+    assert all(value == "gpt-5.6-terra" for value in roles.values())
     assert document["wizard"]["fallback_model"] == "@openai.default"
     assert document["orrery"]["narration"]["provider"] == "openai"
     assert document["orrery"]["narration"]["model_ref"] == "@openai.default"
@@ -166,6 +166,7 @@ MODEL_ROUTE_KEYS = {
     "default_slot_model",
     "fallback_model",
     "gaia_model",
+    "model",
     "model_ref",
     "target_model",
 }
@@ -213,6 +214,7 @@ def test_every_tracked_model_route_is_pinned_or_role_indirect() -> None:
         f"Routes {sorted(missing)} vanished from nexus.toml; update the pin "
         "roster and _write_runtime_config together"
     )
+    openai_roles = document["global"]["model"]["api_models"]["openai"]["roles"]
     for path, value in routes.items():
         if path in DIRECTLY_PINNED_ROUTES | NON_REMOTE_ROUTES:
             continue
@@ -220,6 +222,12 @@ def test_every_tracked_model_route_is_pinned_or_role_indirect() -> None:
             f"{path} = {value!r} is not covered by the QA lane's openai role "
             "pins; pin it in _write_runtime_config and add it to "
             "DIRECTLY_PINNED_ROUTES"
+        )
+        role = value.removeprefix("@openai.")
+        assert role in openai_roles, (
+            f"{path} = {value!r} references openai role {role!r}, which is "
+            "absent from the roles table _write_runtime_config rewrites; the "
+            "lane would leave it unpinned"
         )
 
 

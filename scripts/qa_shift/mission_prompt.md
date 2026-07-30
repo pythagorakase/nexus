@@ -75,7 +75,13 @@ issue, dry-well, wall-clock, and token settings.
      instead of a bare reset: drop and recreate only the configured slot
      database, restore with `pg_restore --no-owner`, then apply pending
      migrations with `scripts/migrate.py --slot N`. Record the seed path and
-     its sha256.
+     its sha256. Then align the restored state with this lane before starting
+     the gateway: set `global_variables.model` and
+     `global_variables.slot_number` to the configured target model and slot,
+     and delete queued job rows carried in from the source lane
+     (`orrery_narration_jobs`, `orrery_maturation_jobs`). Setup-phase SQL is
+     acceptable for this alignment; record the statements and affected row
+     counts.
    - Otherwise reset only the configured slot through
      `scripts/new_story_setup.py --force`.
 

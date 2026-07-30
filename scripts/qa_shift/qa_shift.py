@@ -250,8 +250,8 @@ def _write_runtime_config(
             )
 
         model["default_slot_model"] = config.target_model
-        openai["roles"]["default"] = config.target_model
-        openai["roles"]["gaia"] = config.target_model
+        for role in openai["roles"]:
+            openai["roles"][role] = config.target_model
         # Remote routes not expressed as @openai.<role> refs escape the role
         # pins above and need direct pins; tests/test_qa_shift.py enforces the
         # full route roster against drift.
