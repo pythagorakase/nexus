@@ -40,7 +40,7 @@ def _connect(dbname: str) -> Any:
 def disposable_cursor() -> Iterator[Any]:
     """Yield a cursor on a temporary template clone, then drop the clone."""
 
-    dbname = f"nexus_test_retrograde_storage_{uuid.uuid4().hex[:12]}"
+    dbname = f"qa640_retrieval_{uuid.uuid4().hex[:12]}"
     admin = None
     conn = None
     try:
@@ -149,6 +149,16 @@ def test_entity_stub_inserts_match_disposable_schema(disposable_cursor: Any) -> 
     """Stub INSERT column lists stay aligned with the migrated template."""
 
     cur = disposable_cursor
+    # Fixture invariant: production always persists the canonical clock before
+    # any character INSERT can fire the need-state initializer.
+    cur.execute(
+        """
+        INSERT INTO global_variables (id, new_story, base_timestamp)
+        VALUES (true, true, '2026-05-14T10:48:00+00:00'::timestamptz)
+        ON CONFLICT (id) DO UPDATE
+        SET base_timestamp = EXCLUDED.base_timestamp
+        """
+    )
     cur.execute("INSERT INTO layers DEFAULT VALUES RETURNING id")
     layer_id = cur.fetchone()["id"]
     cur.execute(

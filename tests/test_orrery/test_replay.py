@@ -53,6 +53,7 @@ from nexus.agents.orrery.retrograde_persistence import (
     _record_entity_activity_projection,
 )
 from nexus.agents.orrery.substrate import ProjectPolicy
+from nexus.agents.orrery.tag_writer import _insert_entity_tag
 from nexus.api.commit_handler_sync import apply_state_updates_sync
 
 pytestmark = pytest.mark.requires_postgres
@@ -61,9 +62,11 @@ WRITE_SLOT = 5
 
 
 def _connect() -> Any:
+    database = os.environ.get("NEXUS_REPLAY_TEST_DB", f"save_{WRITE_SLOT:02d}")
+    assert database == f"save_{WRITE_SLOT:02d}" or database.startswith("qa640_")
     conn = psycopg2.connect(
         host=os.environ.get("PGHOST", "localhost"),
-        database=f"save_{WRITE_SLOT:02d}",
+        database=database,
         user=os.environ.get("PGUSER", "pythagor"),
         port=os.environ.get("PGPORT", "5432"),
     )
@@ -140,6 +143,30 @@ def _probe_character(cur: Any) -> tuple[int, int, str, Optional[int]]:
         """
     )
     return cur.fetchone()
+
+
+def _project_probe_character(cur: Any) -> tuple[int, int, str, int]:
+    """Return a located character with no open project in the source save."""
+
+    cur.execute(
+        """
+        SELECT c.id, c.entity_id, c.current_activity, c.current_location
+        FROM characters AS c
+        WHERE c.entity_id IS NOT NULL
+          AND c.current_location IS NOT NULL
+          AND NOT EXISTS (
+                SELECT 1
+                FROM character_project_states AS cps
+                WHERE cps.character_entity_id = c.entity_id
+                  AND cps.status IN ('active', 'paused', 'stalled')
+          )
+        ORDER BY c.id
+        LIMIT 1
+        """
+    )
+    row = cur.fetchone()
+    assert row is not None, "replay project tests need one located uncommitted actor"
+    return row
 
 
 def _section_row(rows: list[dict[str, Any]], **match: Any) -> Optional[dict]:
@@ -357,6 +384,130 @@ def test_tag_bestowal_and_clearance_replay_at_exact_chunks() -> None:
             probe_pair = [v for v in verdicts if v.target_chunk_id == clear_chunk]
             assert len(probe_pair) == 1
             assert probe_pair[0].drifts == []
+    finally:
+        conn.rollback()
+        conn.close()
+
+
+def test_post_target_replace_reapplication_is_presence_remainder() -> None:
+    """A later replace must not turn destroyed provenance into false drift."""
+
+    conn = _connect()
+    try:
+        with conn.cursor() as cur:
+            head = _head_chunk(cur)
+            _, char_entity, _, _ = _probe_character(cur)
+            cur.execute(
+                """
+                SELECT t.id
+                FROM tags AS t
+                JOIN tag_category_registry AS registry
+                  ON registry.category = t.category
+                 AND registry.entity_kind = 'character'
+                WHERE t.reapplication_policy = 'replace'
+                  AND NOT t.deprecated
+                  AND t.synonym_for IS NULL
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM entity_tags AS et
+                      WHERE et.entity_id = %s
+                        AND et.tag_id = t.id
+                        AND et.cleared_at IS NULL
+                  )
+                ORDER BY t.id
+                LIMIT 1
+                """,
+                (char_entity,),
+            )
+            replace_tag_id = cur.fetchone()[0]
+            base_id = capture_state_checkpoint_sync(
+                cur,
+                chunk_id=head,
+                label="manual",
+            )
+            assert base_id is not None
+
+            target_world_time = _next_world_time(cur)
+            target_chunk = _fabricate_chunk(cur, target_world_time)
+            assert _insert_entity_tag(
+                cur,
+                entity_id=char_entity,
+                tag_id=replace_tag_id,
+                source_kind="template",
+                world_time=target_world_time,
+                duration_override=None,
+                reapplication_policy="replace",
+                source_chunk_id=target_chunk,
+            )
+            cur.execute(
+                """
+                SELECT id
+                FROM entity_tags
+                WHERE entity_id = %s AND tag_id = %s AND cleared_at IS NULL
+                """,
+                (char_entity, replace_tag_id),
+            )
+            tag_row_id = cur.fetchone()[0]
+            target_id = capture_state_checkpoint_sync(
+                cur,
+                chunk_id=target_chunk,
+                label="manual",
+            )
+            assert target_id is not None
+
+            later_world_time = target_world_time + timedelta(hours=1)
+            later_chunk = _fabricate_chunk(cur, later_world_time)
+            assert _insert_entity_tag(
+                cur,
+                entity_id=char_entity,
+                tag_id=replace_tag_id,
+                source_kind="template",
+                world_time=later_world_time,
+                duration_override=None,
+                reapplication_policy="replace",
+                source_chunk_id=later_chunk,
+            )
+            cur.execute(
+                """
+                SELECT et.source_chunk_id, t.reapplication_policy::text,
+                       et.cleared_at
+                FROM entity_tags AS et
+                JOIN tags AS t ON t.id = et.tag_id
+                WHERE et.id = %s
+                """,
+                (tag_row_id,),
+            )
+            assert cur.fetchone() == (later_chunk, "replace", None)
+            cur.execute(
+                "SELECT state -> 'entity_tags' FROM state_checkpoints WHERE id = %s",
+                (target_id,),
+            )
+            target_tags = cur.fetchone()[0]
+            assert [row for row in target_tags if int(row["id"]) == int(tag_row_id)]
+
+            replayed = reconstruct_state_at_sync(
+                cur,
+                target_chunk,
+                base_checkpoint_id=base_id,
+                target_checkpoint_id=target_id,
+            )
+            assert (
+                "entity_tags",
+                str(tag_row_id),
+            ) in replayed.uncertain_rows, replayed.notes
+            assert (
+                _section_row(
+                    replayed.state["entity_tags"],
+                    id=tag_row_id,
+                )
+                is None
+            )
+
+            verdicts = verify_checkpoints_sync(cur)
+            probe_pair = [v for v in verdicts if v.target_chunk_id == target_chunk]
+            assert len(probe_pair) == 1
+            assert probe_pair[0].drifts == []
+            assert probe_pair[0].skipped_unreproducible >= 1
     finally:
         conn.rollback()
         conn.close()
@@ -996,6 +1147,19 @@ def test_reconstruction_refuses_pre_instrumentation_chunks() -> None:
                 "SELECT max(id) FROM narrative_chunks WHERE id < %s", (earliest,)
             )
             ancient = cur.fetchone()[0]
+            if ancient is None:
+                cur.execute(
+                    """
+                    INSERT INTO narrative_chunks (id, raw_text, created_at)
+                    SELECT %s, 'pre-instrumentation replay probe',
+                           created_at - interval '1 second'
+                    FROM narrative_chunks
+                    WHERE id = %s
+                    RETURNING id
+                    """,
+                    (earliest - 1, earliest),
+                )
+                ancient = cur.fetchone()[0]
             with pytest.raises(ValueError, match="instrumentation era"):
                 reconstruct_state_at_sync(cur, ancient)
     finally:
@@ -1142,11 +1306,14 @@ def test_applicability_toggle_resets_need_row_to_fresh_shape() -> None:
             assert row is not None, "hunger must be applicable again at clear_chunk"
             assert row["debt_score"] == 0.0
             assert row["metadata"] == {"synced_by": "need_applicability"}
+            cur.execute("SELECT max(world_time) FROM chunk_metadata")
+            primary_clock = cur.fetchone()[0]
+            assert datetime.fromisoformat(row["last_evaluated_at"]) == primary_clock
             assert (
                 "character_need_states",
                 f"{char_entity}:hunger",
                 "last_evaluated_at",
-            ) in at_clear.unreproducible
+            ) not in at_clear.unreproducible
 
             verdicts = verify_checkpoints_sync(cur)
             probe_pair = [v for v in verdicts if v.target_chunk_id == clear_chunk]
@@ -1355,10 +1522,8 @@ def test_unresolved_arrival_marks_location_unreproducible() -> None:
         conn.close()
 
 
-def test_null_world_time_marks_need_timestamps_unreproducible() -> None:
-    """A tick without world_time makes production stamp wall-clock now();
-    replay must flag those columns instead of guessing — and verify must
-    skip them, not drift."""
+def test_post_fix_null_world_time_uses_primary_clock_exactly() -> None:
+    """Post-100 NULL-layer clocks are exact; audited debt stays opaque."""
 
     conn = _connect()
     try:
@@ -1367,6 +1532,8 @@ def test_null_world_time_marks_need_timestamps_unreproducible() -> None:
             _, char_entity, _, _ = _probe_character(cur)
             base_id = capture_state_checkpoint_sync(cur, chunk_id=head, label="manual")
             probe_chunk = _fabricate_chunk(cur, None)  # world_time NULL
+            cur.execute("SELECT max(world_time) FROM chunk_metadata")
+            primary_clock = cur.fetchone()[0]
 
             _apply_need_fulfillment_sync(
                 cur,
@@ -1388,21 +1555,30 @@ def test_null_world_time_marks_need_timestamps_unreproducible() -> None:
                 cur, probe_chunk, base_checkpoint_id=base_id
             )
             row_key = f"{char_entity}:thirst"
-            for column in ("last_evaluated_at", "last_fulfilled_at", "debt_score"):
+            row = _section_row(
+                at_probe.state["character_need_states"],
+                character_entity_id=char_entity,
+                need_type="thirst",
+            )
+            assert row is not None
+            assert datetime.fromisoformat(row["last_evaluated_at"]) == primary_clock
+            assert datetime.fromisoformat(row["last_fulfilled_at"]) == primary_clock
+            for column in ("last_evaluated_at", "last_fulfilled_at"):
                 assert (
                     "character_need_states",
                     row_key,
                     column,
-                ) in at_probe.unreproducible, (
-                    f"{column} depends on the wall-clock fallback and must be "
-                    "flagged"
-                )
+                ) not in at_probe.unreproducible
+            assert (
+                "character_need_states",
+                row_key,
+                "debt_score",
+            ) in at_probe.unreproducible
 
             verdicts = verify_checkpoints_sync(cur)
             probe_pair = [v for v in verdicts if v.target_chunk_id == probe_chunk]
             assert len(probe_pair) == 1
             assert probe_pair[0].drifts == []
-            assert probe_pair[0].skipped_unreproducible >= 3
     finally:
         conn.rollback()
         conn.close()
@@ -1471,16 +1647,7 @@ def test_project_transition_window_replays_with_zero_checkpoint_drift() -> None:
     try:
         with conn.cursor() as cur:
             _apply_migration_074(cur)
-            cur.execute(
-                """
-                SELECT c.entity_id, c.current_location
-                FROM characters c
-                WHERE c.entity_id IS NOT NULL
-                  AND c.current_location IS NOT NULL
-                ORDER BY c.id LIMIT 1
-                """
-            )
-            actor_entity, origin = cur.fetchone()
+            _, actor_entity, _, origin = _project_probe_character(cur)
             cur.execute(
                 "SELECT id FROM places WHERE id <> %s ORDER BY id LIMIT 1", (origin,)
             )
@@ -1696,16 +1863,7 @@ def test_project_complete_hands_off_and_real_travel_applier_relocates() -> None:
     try:
         with conn.cursor() as cur:
             _apply_migration_074(cur)
-            cur.execute(
-                """
-                SELECT c.entity_id, c.current_location
-                FROM characters c
-                WHERE c.entity_id IS NOT NULL
-                  AND c.current_location IS NOT NULL
-                ORDER BY c.id LIMIT 1
-                """
-            )
-            actor_entity, origin = cur.fetchone()
+            _, actor_entity, _, origin = _project_probe_character(cur)
             cur.execute(
                 "SELECT id FROM places WHERE id <> %s ORDER BY id LIMIT 1", (origin,)
             )
@@ -1789,7 +1947,7 @@ def test_project_applied_ledger_survives_replay_policy_retuning(monkeypatch) -> 
     conn = _connect()
     try:
         with conn.cursor() as cur:
-            _char_id, actor_entity, _activity, _location = _probe_character(cur)
+            _char_id, actor_entity, _activity, _location = _project_probe_character(cur)
             base_time = _next_world_time(cur)
             base_chunk = _fabricate_chunk(cur, base_time)
             base_id = capture_state_checkpoint_sync(

@@ -547,10 +547,10 @@ class NewStoryDatabaseMapper:
         1. Validates transition data completeness
         2. Saves setting to global_variables
         3. Saves story seed to global_variables
-        4. Creates protagonist character
-        5. Creates complete location hierarchy (layer -> zone -> place)
-        6. Applies typed trait compilation and persists the audit result
-        7. Sets base timestamp
+        4. Sets base timestamp
+        5. Creates protagonist character
+        6. Creates complete location hierarchy (layer -> zone -> place)
+        7. Applies typed trait compilation and persists the audit result
         8. Runs the optional in_transaction hook on the same cursor (used by
            Retrograde wizard-time persistence so generated history commits
            atomically with the world; a raise rolls back everything)
@@ -654,6 +654,18 @@ class NewStoryDatabaseMapper:
                     self.save_story_seed(transition_data.seed, cursor=cur)
                     logger.debug("Saved story seed to global_variables")
 
+                    # The world clock must exist before any character row because
+                    # the need-state trigger anchors need clocks to it (two-clocks
+                    # doctrine).
+                    cur.execute(
+                        """
+                        UPDATE global_variables
+                        SET base_timestamp = %s
+                        WHERE id = true
+                        """,
+                        (transition_data.base_timestamp,),
+                    )
+
                     # Derive character's initial state from seed context
                     # - current_activity: What they're trying to do (immediate goal)
                     # - emotional_state: How they feel given the stakes/tension
@@ -707,12 +719,6 @@ class NewStoryDatabaseMapper:
                         "Trait compilation for %s: %s",
                         transition_data.character.name,
                         trait_compile_result.counters.model_dump(),
-                    )
-
-                    # Set base timestamp (already a datetime from TransitionData)
-                    cur.execute(
-                        "UPDATE global_variables SET base_timestamp = %s WHERE id = true",
-                        (transition_data.base_timestamp,),
                     )
 
                     if in_transaction is not None:

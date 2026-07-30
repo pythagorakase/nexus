@@ -8,8 +8,9 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
-from hashlib import sha256
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from hashlib import sha256
 import json
 from typing import Any, Mapping, Optional
 
@@ -104,6 +105,8 @@ SUPPORTED_STATE_DELTA_KEYS = frozenset(
 )
 ADJUDICATION_ACTIONS = frozenset({"defer", "replace", "void"})
 ADJUDICATION_SOURCES = frozenset({"explicit", "structured_state_update"})
+NEED_DEBT_SCORE_ABSOLUTE_LIMIT = Decimal("1000000")
+NEED_DEBT_SCORE_QUANTUM = Decimal("0.01")
 REPLACEMENT_STATE_DELTA_ALIASES = {
     "character_current_activity": "character.current_activity",
     "entity_tags_add": "entity_tags.add",
@@ -117,6 +120,14 @@ REPLACEMENT_STATE_DELTA_ALIASES = {
     "mood_set": "mood.set",
     "status_bestow": "status.bestow",
 }
+
+
+class NeedDebtScoreDomainError(ValueError):
+    """A fulfilled need debt cannot be stored in numeric(8,2)."""
+
+
+class OrreryWorldClockUnavailableError(RuntimeError):
+    """No canonical primary-world clock is available for a diegetic write."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -2614,6 +2625,38 @@ def _coerce_need_fulfillment(raw: Any) -> dict[str, Any]:
     return payload
 
 
+def _validate_need_debt_score_domain(
+    *,
+    actor_entity_id: int,
+    need_type: str,
+    debt_score: float,
+) -> None:
+    """Raise a named diagnostic before PostgreSQL rejects numeric(8,2)."""
+
+    try:
+        decimal_value = Decimal(str(debt_score))
+        if (
+            not decimal_value.is_finite()
+            or abs(decimal_value) >= NEED_DEBT_SCORE_ABSOLUTE_LIMIT
+        ):
+            raise InvalidOperation
+        stored_value = decimal_value.quantize(
+            NEED_DEBT_SCORE_QUANTUM,
+            rounding=ROUND_HALF_UP,
+        )
+    except InvalidOperation as exc:
+        raise NeedDebtScoreDomainError(
+            "need debt score outside numeric(8,2) domain: "
+            f"character={actor_entity_id}, need={need_type}, value={debt_score!r}"
+        ) from exc
+
+    if abs(stored_value) >= NEED_DEBT_SCORE_ABSOLUTE_LIMIT:
+        raise NeedDebtScoreDomainError(
+            "need debt score outside numeric(8,2) domain: "
+            f"character={actor_entity_id}, need={need_type}, value={debt_score!r}"
+        )
+
+
 def _apply_need_fulfillment_sync(
     cur: Any,
     *,
@@ -2631,7 +2674,7 @@ def _apply_need_fulfillment_sync(
     payload = _coerce_need_fulfillment(fulfillment)
     need_type = payload["type"]
     world_time = _tick_world_time_sync(cur, source_chunk_id)
-    current_debt = _load_or_create_need_debt_sync(
+    current_debt = _load_need_debt_sync(
         cur,
         actor_entity_id=actor_entity_id,
         need_type=need_type,
@@ -2639,6 +2682,17 @@ def _apply_need_fulfillment_sync(
         need_tuning=need_tuning,
     )
     new_debt = max(0.0, current_debt - float(payload["discharge_debt"]))
+    _validate_need_debt_score_domain(
+        actor_entity_id=actor_entity_id,
+        need_type=need_type,
+        debt_score=new_debt,
+    )
+    _ensure_need_debt_state_sync(
+        cur,
+        actor_entity_id=actor_entity_id,
+        need_type=need_type,
+        world_time=world_time,
+    )
     cur.execute(
         """
         UPDATE character_need_states
@@ -2689,7 +2743,7 @@ async def _apply_need_fulfillment_async(
     payload = _coerce_need_fulfillment(fulfillment)
     need_type = payload["type"]
     world_time = await _tick_world_time_async(conn, source_chunk_id)
-    current_debt = await _load_or_create_need_debt_async(
+    current_debt = await _load_need_debt_async(
         conn,
         actor_entity_id=actor_entity_id,
         need_type=need_type,
@@ -2697,6 +2751,17 @@ async def _apply_need_fulfillment_async(
         need_tuning=need_tuning,
     )
     new_debt = max(0.0, current_debt - float(payload["discharge_debt"]))
+    _validate_need_debt_score_domain(
+        actor_entity_id=actor_entity_id,
+        need_type=need_type,
+        debt_score=new_debt,
+    )
+    await _ensure_need_debt_state_async(
+        conn,
+        actor_entity_id=actor_entity_id,
+        need_type=need_type,
+        world_time=world_time,
+    )
     await conn.execute(
         """
         UPDATE character_need_states
@@ -5043,8 +5108,28 @@ def _tick_world_time_sync(cur: Any, source_chunk_id: int) -> Any:
     row = cur.fetchone()
     if row and _row_get(row, "world_time", 0) is not None:
         return _row_get(row, "world_time", 0)
-    cur.execute("SELECT now() AS world_time")
-    return _row_get(cur.fetchone(), "world_time", 0)
+    # Need pressure and every other tick-derived world-time write use the
+    # primary-layer clock even while narration is in a flashback or another
+    # non-primary layer whose source chunk legitimately has no world_time.
+    cur.execute(
+        """
+        SELECT COALESCE(
+            (SELECT MAX(world_time) FROM chunk_metadata),
+            (
+                SELECT base_timestamp
+                FROM global_variables
+                WHERE id = true
+            )
+        ) AS world_time
+        """
+    )
+    canonical_row = cur.fetchone()
+    canonical_time = _row_get(canonical_row, "world_time", 0) if canonical_row else None
+    if canonical_time is None:
+        raise OrreryWorldClockUnavailableError(
+            "Orrery world clock unavailable: no primary world_time or " "base_timestamp"
+        )
+    return canonical_time
 
 
 async def _tick_world_time_async(conn: Any, source_chunk_id: int) -> Any:
@@ -5054,10 +5139,29 @@ async def _tick_world_time_async(conn: Any, source_chunk_id: int) -> Any:
     )
     if world_time is not None:
         return world_time
-    return await conn.fetchval("SELECT now()")
+    # Need pressure and every other tick-derived world-time write use the
+    # primary-layer clock even while narration is in a flashback or another
+    # non-primary layer whose source chunk legitimately has no world_time.
+    canonical_time = await conn.fetchval(
+        """
+        SELECT COALESCE(
+            (SELECT MAX(world_time) FROM chunk_metadata),
+            (
+                SELECT base_timestamp
+                FROM global_variables
+                WHERE id = true
+            )
+        )
+        """
+    )
+    if canonical_time is None:
+        raise OrreryWorldClockUnavailableError(
+            "Orrery world clock unavailable: no primary world_time or " "base_timestamp"
+        )
+    return canonical_time
 
 
-def _load_or_create_need_debt_sync(
+def _load_need_debt_sync(
     cur: Any,
     *,
     actor_entity_id: int,
@@ -5077,17 +5181,6 @@ def _load_or_create_need_debt_sync(
 
     cur.execute(
         """
-        INSERT INTO character_need_states (
-            character_entity_id, need_type, debt_score, last_evaluated_at
-        ) VALUES (
-            %s, %s::character_need_type, 0, %s
-        )
-        ON CONFLICT (character_entity_id, need_type) DO NOTHING
-        """,
-        (actor_entity_id, need_type, world_time),
-    )
-    cur.execute(
-        """
         SELECT debt_score, last_evaluated_at
         FROM character_need_states
         WHERE character_entity_id = %s
@@ -5097,9 +5190,7 @@ def _load_or_create_need_debt_sync(
     )
     row = cur.fetchone()
     if row is None:
-        raise ValueError(
-            f"Orrery need state missing for actor {actor_entity_id} {need_type}"
-        )
+        return 0.0
     # Route through the same world-time accrual authority the resolver reads
     # with before discharging the fulfillment.
     return effective_debt_score(
@@ -5111,7 +5202,29 @@ def _load_or_create_need_debt_sync(
     )
 
 
-async def _load_or_create_need_debt_async(
+def _ensure_need_debt_state_sync(
+    cur: Any,
+    *,
+    actor_entity_id: int,
+    need_type: str,
+    world_time: Any,
+) -> None:
+    """Create a missing need row after all fallible domain validation."""
+
+    cur.execute(
+        """
+        INSERT INTO character_need_states (
+            character_entity_id, need_type, debt_score, last_evaluated_at
+        ) VALUES (
+            %s, %s::character_need_type, 0, %s
+        )
+        ON CONFLICT (character_entity_id, need_type) DO NOTHING
+        """,
+        (actor_entity_id, need_type, world_time),
+    )
+
+
+async def _load_need_debt_async(
     conn: Any,
     *,
     actor_entity_id: int,
@@ -5129,6 +5242,36 @@ async def _load_or_create_need_debt_async(
             f"Orrery need {need_type!r} does not apply to actor {actor_entity_id}"
         )
 
+    row = await conn.fetchrow(
+        """
+        SELECT debt_score, last_evaluated_at
+        FROM character_need_states
+        WHERE character_entity_id = $1
+          AND need_type = $2::character_need_type
+        """,
+        actor_entity_id,
+        need_type,
+    )
+    if row is None:
+        return 0.0
+    return effective_debt_score(
+        need_type,
+        float(_row_get(row, "debt_score", 0) or 0.0),
+        last_evaluated_at=_row_get(row, "last_evaluated_at", 1),
+        current_world_time=world_time,
+        tuning=need_tuning,
+    )
+
+
+async def _ensure_need_debt_state_async(
+    conn: Any,
+    *,
+    actor_entity_id: int,
+    need_type: str,
+    world_time: Any,
+) -> None:
+    """Create a missing need row after all fallible domain validation."""
+
     await conn.execute(
         """
         INSERT INTO character_need_states (
@@ -5141,27 +5284,6 @@ async def _load_or_create_need_debt_async(
         actor_entity_id,
         need_type,
         world_time,
-    )
-    row = await conn.fetchrow(
-        """
-        SELECT debt_score, last_evaluated_at
-        FROM character_need_states
-        WHERE character_entity_id = $1
-          AND need_type = $2::character_need_type
-        """,
-        actor_entity_id,
-        need_type,
-    )
-    if row is None:
-        raise ValueError(
-            f"Orrery need state missing for actor {actor_entity_id} {need_type}"
-        )
-    return effective_debt_score(
-        need_type,
-        float(_row_get(row, "debt_score", 0) or 0.0),
-        last_evaluated_at=_row_get(row, "last_evaluated_at", 1),
-        current_world_time=world_time,
-        tuning=need_tuning,
     )
 
 
