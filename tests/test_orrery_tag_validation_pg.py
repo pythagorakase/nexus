@@ -11,15 +11,27 @@ import uuid
 
 import psycopg2
 from psycopg2 import sql
+from pydantic import ValidationError
 import pytest
 
+from nexus.agents.logon.gaia_registry_schema import (
+    coerce_gaia_registry_wire,
+    load_gaia_registry_wire_spec,
+)
 from nexus.agents.logon.orrery_tag_validation import (
+    _has_substantive_update,
     build_storyteller_tag_validator,
     collect_orrery_tag_issues,
     normalize_extend_expiry_reasserts,
     read_storyteller_vocabulary,
 )
-from nexus.agents.logon.skald_wire import SkaldTurnWire
+from nexus.agents.logon.skald_wire import (
+    CharacterUpdateDelta,
+    FactionUpdateDelta,
+    PlaceUpdateDelta,
+    SkaldGaiaWire,
+    SkaldTurnWire,
+)
 from nexus.api.db_pool import close_all_pools
 from nexus.api.slot_utils import VALID_DBNAMES
 
@@ -222,6 +234,38 @@ def _response(
     return SkaldTurnWire.model_validate(payload)
 
 
+def _gaia_registry_response(
+    database: _Qa649Database,
+    *,
+    characters: Optional[List[dict[str, Any]]] = None,
+) -> SkaldGaiaWire:
+    schema_model = load_gaia_registry_wire_spec(database.dbname).model
+    return schema_model.model_validate(
+        {
+            "letter": "Preserve the deterministic boundary behavior.",
+            "new_entities": [],
+            "orrery_adjudications": [],
+            "updates": {
+                "characters": characters or [],
+                "places": [],
+                "factions": [],
+                "relationships": [],
+            },
+        }
+    )
+
+
+def _normalize(response: Any, database: _Qa649Database) -> int:
+    vocabulary = read_storyteller_vocabulary(database.dbname)
+    with _connect(database.dbname) as conn:
+        with conn.cursor() as cur:
+            return normalize_extend_expiry_reasserts(
+                response,
+                cur,
+                vocabulary=vocabulary,
+            )
+
+
 def _normalize_and_collect(
     response: SkaldTurnWire,
     database: _Qa649Database,
@@ -245,8 +289,115 @@ def _normalize_and_collect(
     return normalized, issues
 
 
+def test_identity_only_active_character_update_is_removed_before_registry_coercion(
+    qa649_db: _Qa649Database,
+) -> None:
+    response = _gaia_registry_response(
+        qa649_db,
+        characters=[
+            {
+                "name": qa649_db.active_character.name,
+                "tags_add": [CHARACTER_TAG],
+            }
+        ],
+    )
+    assert response.__class__ is not SkaldGaiaWire
+    assert response.updates is not None
+    original_updates = response.updates.characters
+
+    normalized = _normalize(response, qa649_db)
+    coerced = coerce_gaia_registry_wire(response)
+
+    assert normalized == 1
+    assert response.updates.characters is original_updates
+    assert original_updates == []
+    assert coerced.updates is not None
+    assert coerced.updates.characters == []
+
+
+def test_active_character_update_with_activity_survives_registry_coercion(
+    qa649_db: _Qa649Database,
+) -> None:
+    response = _gaia_registry_response(
+        qa649_db,
+        characters=[
+            {
+                "name": qa649_db.active_character.name,
+                "activity": "Keeps watch over the QA boundary.",
+                "tags_add": [CHARACTER_TAG],
+            }
+        ],
+    )
+
+    normalized = _normalize(response, qa649_db)
+    coerced = coerce_gaia_registry_wire(response)
+
+    assert normalized == 1
+    assert response.updates is not None
+    assert len(response.updates.characters) == 1
+    assert response.updates.characters[0].tags_add is None
+    assert coerced.updates is not None
+    assert coerced.updates.characters[0].activity == "Keeps watch over the QA boundary."
+    assert coerced.updates.characters[0].tags_add is None
+
+
+def test_active_character_update_with_tags_clear_survives_registry_coercion(
+    qa649_db: _Qa649Database,
+) -> None:
+    response = _gaia_registry_response(
+        qa649_db,
+        characters=[
+            {
+                "name": qa649_db.active_character.name,
+                "tags_add": [CHARACTER_TAG],
+                "tags_clear": [CHARACTER_TAG],
+            }
+        ],
+    )
+
+    normalized = _normalize(response, qa649_db)
+    coerced = coerce_gaia_registry_wire(response)
+
+    assert normalized == 1
+    assert response.updates is not None
+    assert len(response.updates.characters) == 1
+    assert response.updates.characters[0].tags_add is None
+    assert response.updates.characters[0].tags_clear == [CHARACTER_TAG]
+    assert coerced.updates is not None
+    assert coerced.updates.characters[0].tags_add is None
+    assert coerced.updates.characters[0].tags_clear == [CHARACTER_TAG]
+
+
+@pytest.mark.parametrize(
+    ("entity_kind", "model", "error"),
+    [
+        (
+            "character",
+            CharacterUpdateDelta,
+            "character update requires a substantive field",
+        ),
+        ("place", PlaceUpdateDelta, "place update requires a substantive field"),
+        (
+            "faction",
+            FactionUpdateDelta,
+            "faction update requires a substantive field",
+        ),
+    ],
+)
+def test_normalization_predicate_matches_identity_only_wire_rejection(
+    entity_kind: str,
+    model: Any,
+    error: str,
+) -> None:
+    identity_only = model.model_construct(name=f"QA649 {entity_kind}")
+
+    assert not _has_substantive_update(entity_kind, identity_only)
+    with pytest.raises(ValidationError, match=error):
+        model.model_validate(identity_only.model_dump(mode="python"))
+
+
 @pytest.mark.asyncio
-async def test_active_character_reassert_is_removed_from_original_wire(
+async def test_active_character_identity_only_reassert_arm_is_removed(
     qa649_db: _Qa649Database,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
@@ -274,6 +425,7 @@ async def test_active_character_reassert_is_removed_from_original_wire(
     assert validated is response
     assert original_tags_add == []
     assert update.tags_add is None
+    assert response.updates.characters == []
     assert [
         record.getMessage()
         for record in caplog.records
@@ -281,6 +433,14 @@ async def test_active_character_reassert_is_removed_from_original_wire(
     ] == [
         "extend-expiry re-assert normalized entity_kind=character "
         f"entity={qa649_db.active_character.name} tag={CHARACTER_TAG}"
+    ]
+    assert [
+        record.getMessage()
+        for record in caplog.records
+        if record.getMessage().startswith("extend-expiry no-op update removed")
+    ] == [
+        "extend-expiry no-op update removed entity_kind=character "
+        f"entity={qa649_db.active_character.name}"
     ]
     vocabulary = read_storyteller_vocabulary(qa649_db.dbname)
     with _connect(qa649_db.dbname) as conn:
@@ -397,7 +557,7 @@ def test_unknown_name_preserves_extend_expiry_rejection(
         ("factions", "faction", FACTION_TAG),
     ],
 )
-def test_active_place_and_faction_reasserts_are_normalized_by_id(
+def test_active_place_and_faction_identity_only_reassert_arms_are_removed_by_id(
     qa649_db: _Qa649Database,
     array_name: str,
     entity_attribute: str,
@@ -420,5 +580,5 @@ def test_active_place_and_faction_reasserts_are_normalized_by_id(
 
     assert normalized == 1
     assert response.updates is not None
-    assert getattr(response.updates, array_name)[0].tags_add is None
+    assert getattr(response.updates, array_name) == []
     assert issues == []

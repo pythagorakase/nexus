@@ -544,6 +544,42 @@ class _ExtendExpiryCandidate:
     tag: str
 
 
+_SUBSTANTIVE_UPDATE_PREDICATES: Mapping[str, Callable[[Any], bool]] = {
+    "character": lambda update: any(
+        (
+            update.activity,
+            update.location is not None,
+            update.emotional_state,
+            update.observations,
+            update.tags_add,
+            update.tags_clear,
+        )
+    ),
+    "place": lambda update: any(
+        (
+            update.condition,
+            update.notable_change,
+            update.tags_add,
+            update.tags_clear,
+        )
+    ),
+    "faction": lambda update: any(
+        (
+            update.action,
+            update.stance_toward and update.stance,
+            update.tags_add,
+            update.tags_clear,
+        )
+    ),
+}
+
+
+def _has_substantive_update(entity_kind: str, update: Any) -> bool:
+    """Mirror the per-kind wire validator's substantive-update predicate."""
+
+    return _SUBSTANTIVE_UPDATE_PREDICATES[entity_kind](update)
+
+
 def normalize_extend_expiry_reasserts(
     response: Any,
     cur: Any,
@@ -557,13 +593,18 @@ def normalize_extend_expiry_reasserts(
         return 0
 
     candidates: List[_ExtendExpiryCandidate] = []
+    update_lists_by_kind: dict[str, List[Any]] = {}
     for array_name, entity_kind in (
         ("characters", "character"),
         ("places", "place"),
         ("factions", "faction"),
     ):
+        update_list = getattr(updates, array_name, None)
+        if update_list is None:
+            continue
+        update_lists_by_kind[entity_kind] = update_list
         policies = vocabulary.tag_reapplication_policies_by_kind.get(entity_kind, {})
-        for update in getattr(updates, array_name, []) or []:
+        for update in update_list:
             tags_add = getattr(update, "tags_add", None)
             if not tags_add:
                 continue
@@ -663,7 +704,10 @@ def normalize_extend_expiry_reasserts(
             )
         )
 
-    removals_by_update: dict[int, Tuple[Any, List[str], set[int]]] = {}
+    removals_by_update: dict[
+        int,
+        Tuple[str, Any, List[str], set[int], str],
+    ] = {}
     normalized = 0
     for candidate in candidates:
         matches = matches_by_ordinal.get(candidate.ordinal, [])
@@ -673,11 +717,13 @@ def normalize_extend_expiry_reasserts(
         update_key = id(candidate.update)
         if update_key not in removals_by_update:
             removals_by_update[update_key] = (
+                candidate.entity_kind,
                 candidate.update,
                 candidate.tags_add,
                 set(),
+                canonical_name,
             )
-        removals_by_update[update_key][2].add(candidate.tag_index)
+        removals_by_update[update_key][3].add(candidate.tag_index)
         logger.warning(
             "extend-expiry re-assert normalized " "entity_kind=%s entity=%s tag=%s",
             candidate.entity_kind,
@@ -686,12 +732,34 @@ def normalize_extend_expiry_reasserts(
         )
         normalized += 1
 
-    for update, tags_add, removal_indexes in removals_by_update.values():
+    removed_update_ids_by_kind: dict[str, set[int]] = {}
+    for (
+        entity_kind,
+        update,
+        tags_add,
+        removal_indexes,
+        canonical_name,
+    ) in removals_by_update.values():
         tags_add[:] = [
             tag for index, tag in enumerate(tags_add) if index not in removal_indexes
         ]
         if not tags_add:
             update.tags_add = None
+            if not _has_substantive_update(entity_kind, update):
+                removed_update_ids_by_kind.setdefault(entity_kind, set()).add(
+                    id(update)
+                )
+                logger.warning(
+                    "extend-expiry no-op update removed entity_kind=%s entity=%s",
+                    entity_kind,
+                    canonical_name,
+                )
+
+    for entity_kind, removed_update_ids in removed_update_ids_by_kind.items():
+        update_list = update_lists_by_kind[entity_kind]
+        update_list[:] = [
+            update for update in update_list if id(update) not in removed_update_ids
+        ]
 
     return normalized
 
