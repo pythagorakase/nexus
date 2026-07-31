@@ -530,6 +530,235 @@ def _row_value(row: Any, key: str, index: int) -> Any:
     return row[index]
 
 
+@dataclass(frozen=True)
+class _ExtendExpiryCandidate:
+    """One wire-list entry eligible for active-state normalization."""
+
+    ordinal: int
+    entity_kind: str
+    update: Any
+    tags_add: List[str]
+    tag_index: int
+    wire_id: Optional[int]
+    wire_name: str
+    tag: str
+
+
+_SUBSTANTIVE_UPDATE_PREDICATES: Mapping[str, Mapping[str, Callable[[Any], bool]]] = {
+    "character": {
+        "activity": lambda update: bool(update.activity),
+        "location": lambda update: update.location is not None,
+        "emotional_state": lambda update: bool(update.emotional_state),
+        "observations": lambda update: bool(update.observations),
+        "tags_clear": lambda update: bool(update.tags_clear),
+    },
+    "place": {
+        "condition": lambda update: bool(update.condition),
+        "notable_change": lambda update: bool(update.notable_change),
+        "tags_clear": lambda update: bool(update.tags_clear),
+    },
+    "faction": {
+        "action": lambda update: bool(update.action),
+        "stance_toward": lambda update: bool(update.stance_toward and update.stance),
+        "stance": lambda update: bool(update.stance_toward and update.stance),
+        "tags_clear": lambda update: bool(update.tags_clear),
+    },
+}
+
+
+def _has_substantive_update(entity_kind: str, update: Any) -> bool:
+    """Mirror the wire predicate after normalization strips ``tags_add``."""
+
+    return any(
+        predicate(update)
+        for predicate in _SUBSTANTIVE_UPDATE_PREDICATES[entity_kind].values()
+    )
+
+
+def normalize_extend_expiry_reasserts(
+    response: Any,
+    cur: Any,
+    *,
+    vocabulary: StorytellerVocabulary,
+) -> int:
+    """Remove already-active ``extend_expiry`` tags from wire update deltas."""
+
+    updates = getattr(response, "updates", None)
+    if updates is None:
+        return 0
+
+    candidates: List[_ExtendExpiryCandidate] = []
+    update_lists_by_kind: dict[str, List[Any]] = {}
+    for array_name, entity_kind in (
+        ("characters", "character"),
+        ("places", "place"),
+        ("factions", "faction"),
+    ):
+        update_list = getattr(updates, array_name, None)
+        if update_list is None:
+            continue
+        update_lists_by_kind[entity_kind] = update_list
+        policies = vocabulary.tag_reapplication_policies_by_kind.get(entity_kind, {})
+        for update in update_list:
+            tags_add = getattr(update, "tags_add", None)
+            if not tags_add:
+                continue
+            for tag_index, tag in enumerate(tags_add):
+                if policies.get(tag) != "extend_expiry":
+                    continue
+                candidates.append(
+                    _ExtendExpiryCandidate(
+                        ordinal=len(candidates),
+                        entity_kind=entity_kind,
+                        update=update,
+                        tags_add=tags_add,
+                        tag_index=tag_index,
+                        wire_id=getattr(update, "id", None),
+                        wire_name=str(getattr(update, "name", "")),
+                        tag=tag,
+                    )
+                )
+
+    if not candidates:
+        return 0
+
+    cur.execute(
+        """
+        WITH candidates AS (
+            SELECT *
+            FROM UNNEST(
+                %s::integer[],
+                %s::text[],
+                %s::bigint[],
+                %s::text[],
+                %s::text[]
+            ) AS candidate(ordinal, entity_kind, wire_id, wire_name, tag)
+        ),
+        canonical_entities AS (
+            SELECT
+                'character'::text AS entity_kind,
+                id AS wire_id,
+                entity_id,
+                name::text AS canonical_name
+            FROM characters
+            UNION ALL
+            SELECT
+                'place'::text AS entity_kind,
+                id AS wire_id,
+                entity_id,
+                name::text AS canonical_name
+            FROM places
+            UNION ALL
+            SELECT
+                'faction'::text AS entity_kind,
+                id AS wire_id,
+                entity_id,
+                name::text AS canonical_name
+            FROM factions
+        )
+        SELECT
+            candidate.ordinal,
+            canonical.canonical_name,
+            (current_tag.entity_id IS NOT NULL) AS is_active
+        FROM candidates candidate
+        JOIN canonical_entities canonical
+          ON canonical.entity_kind = candidate.entity_kind
+         AND (
+             (
+                 candidate.wire_id IS NOT NULL
+                 AND canonical.wire_id = candidate.wire_id
+             )
+             OR (
+                 candidate.wire_id IS NULL
+                 AND canonical.canonical_name = candidate.wire_name
+             )
+         )
+        JOIN entities entity
+          ON entity.id = canonical.entity_id
+         AND entity.kind::text = candidate.entity_kind
+        LEFT JOIN entity_tags_current current_tag
+          ON current_tag.entity_id = entity.id
+         AND current_tag.tag = candidate.tag
+        ORDER BY candidate.ordinal
+        """,
+        (
+            [candidate.ordinal for candidate in candidates],
+            [candidate.entity_kind for candidate in candidates],
+            [candidate.wire_id for candidate in candidates],
+            [candidate.wire_name for candidate in candidates],
+            [candidate.tag for candidate in candidates],
+        ),
+    )
+    matches_by_ordinal: dict[int, List[Tuple[str, bool]]] = {}
+    for row in cur.fetchall():
+        ordinal = int(_row_value(row, "ordinal", 0))
+        matches_by_ordinal.setdefault(ordinal, []).append(
+            (
+                str(_row_value(row, "canonical_name", 1)),
+                bool(_row_value(row, "is_active", 2)),
+            )
+        )
+
+    removals_by_update: dict[
+        int,
+        Tuple[str, Any, List[str], set[int], str],
+    ] = {}
+    normalized = 0
+    for candidate in candidates:
+        matches = matches_by_ordinal.get(candidate.ordinal, [])
+        if len(matches) != 1 or not matches[0][1]:
+            continue
+        canonical_name = matches[0][0]
+        update_key = id(candidate.update)
+        if update_key not in removals_by_update:
+            removals_by_update[update_key] = (
+                candidate.entity_kind,
+                candidate.update,
+                candidate.tags_add,
+                set(),
+                canonical_name,
+            )
+        removals_by_update[update_key][3].add(candidate.tag_index)
+        logger.warning(
+            "extend-expiry re-assert normalized " "entity_kind=%s entity=%s tag=%s",
+            candidate.entity_kind,
+            canonical_name,
+            candidate.tag,
+        )
+        normalized += 1
+
+    removed_update_ids_by_kind: dict[str, set[int]] = {}
+    for (
+        entity_kind,
+        update,
+        tags_add,
+        removal_indexes,
+        canonical_name,
+    ) in removals_by_update.values():
+        tags_add[:] = [
+            tag for index, tag in enumerate(tags_add) if index not in removal_indexes
+        ]
+        if not tags_add:
+            update.tags_add = None
+            if not _has_substantive_update(entity_kind, update):
+                removed_update_ids_by_kind.setdefault(entity_kind, set()).add(
+                    id(update)
+                )
+                logger.warning(
+                    "extend-expiry no-op update removed entity_kind=%s entity=%s",
+                    entity_kind,
+                    canonical_name,
+                )
+
+    for entity_kind, removed_update_ids in removed_update_ids_by_kind.items():
+        update_list = update_lists_by_kind[entity_kind]
+        update_list[:] = [
+            update for update in update_list if id(update) not in removed_update_ids
+        ]
+
+    return normalized
+
+
 def _annotate_declaration_issues(
     issues: List[str],
     declarations: Any,
@@ -723,6 +952,11 @@ def build_storyteller_tag_validator(
         vocabulary = read_storyteller_vocabulary(dbname)
         with get_connection(dbname) as conn:
             with conn.cursor() as cur:
+                normalize_extend_expiry_reasserts(
+                    output,
+                    cur,
+                    vocabulary=vocabulary,
+                )
                 issues = collect_orrery_tag_issues(
                     output,
                     cur,
