@@ -39,7 +39,10 @@ Defaults in `qa_shift.toml` deliberately combine independent bounds:
 
 The issue count is a cap, not a quota. The dry-well rule lets a healthy build
 finish without manufacturing bugs, while the token and time fences remain
-backstops.
+backstops. A seeded run also owes an observed roster transition, one bounded
+concurrency family, novelty against up to two completed prior runs when that
+history exists, and classification of every current-run structured-output
+rejection before it may end dry.
 
 The 10M figure is operational configuration, not a billing entitlement
 discovery mechanism. Reconfirm the organization’s current complimentary-token
@@ -52,10 +55,24 @@ Shallow single-request probes stop finding bugs once the early-game surface
 hardens; state-threshold defects (compaction, alias accumulation) only appear
 deep into a campaign. Drop a checksummed mid-campaign `pg_dump -Fc` dump into
 `temp/qa_seeds/` (ignored, conventionally preserved) and the shift seeds the
-disposable slot from the newest one instead of a bare reset, then owes at
-least two deep-state probe families per `mission_prompt.md`. Prune stale
-seeds whenever the schema or campaign shape they capture stops being
-representative.
+disposable slot from the newest one instead of a bare reset, then owes the
+deep-state and coverage gates in `mission_prompt.md`.
+
+A dry final state is only a seed candidate. Promotion requires a trustworthy
+usage ledger, no unresolved anomaly, current migrations, zero active generation
+leases, empty Orrery job queues, coherent measured counts, a final public load,
+and a checksummed dump that restores successfully into a disposable verification
+database. Write the `.partial`, promoted `.dump`, checksum, and adjacent manifest
+under `temp/qa_seeds/`. The manifest records the source archive, commit,
+schema/model metadata, exact chunk/exchange/digest counts, known-issue hotspots,
+and sha256. Retain the previous seed; do not silently replace the only known-good
+depth checkpoint. Prune stale seeds only when the schema or campaign shape they
+capture stops being representative.
+
+For novelty preflight, a prior archive counts as completed only when its
+`shift_state.json` says `status: "finished"`. Read the newest two qualifying
+archives, or every qualifying archive when fewer than two exist. Zero prior
+archives is valid and contributes an empty coverage history.
 
 ## Usage guard
 
@@ -97,6 +114,25 @@ a trustworthy reading, which is also a stop. Checks are appended to
 `usage_end.json` provide the end-to-end tally. If UTC midnight interrupts a
 shift, `finish` explicitly re-reads the archived quota day rather than mixing
 the new day’s cumulative total with the old baseline.
+
+Normal model-generating probes run one public command between checks. A bounded
+concurrency probe may launch at most two public requests from one recorded shell
+invocation, wait for both, and reconcile their complete request-group delta in
+one post-check. Detached requests and process termination with an unaccounted
+provider response remain outside the safe boundary.
+
+The usage delta is also the authoritative rejection ledger. `finish` writes
+`rejection_ledger.json` with every current-run QA-slot
+`rejected_validation` attempt, exact rejected tokens, repair-tax percentage,
+seat subtotals, and the `skald_writer` tripwire. Teardown enriches it with
+validation classes from only the current gateway process's log slice. A
+recovered retry still represents real cost and latency; a novel class must still
+meet the normal repeatability standard before publication.
+
+The repair-tax percentage is unavailable when final OpenAI usage is unknown or
+a rejection came from an unexpected provider, because those events do not share
+a trustworthy OpenAI denominator. Preserve the attempts and token evidence, and
+report the helper's explicit unavailability reasons instead of estimating.
 
 ## Safety boundary
 

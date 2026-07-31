@@ -185,6 +185,135 @@ def _usage_snapshot(payload: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _rejection_ledger(
+    *,
+    state: Mapping[str, Any],
+    usage: Mapping[str, Any],
+    shift_openai_total: int,
+) -> dict[str, Any]:
+    """Summarize current-run rejected attempts from the exact usage delta."""
+
+    baseline_event_count = int(state["baseline_event_count"])
+    events = usage["events"]
+    if len(events) < baseline_event_count:
+        raise ShiftError(
+            "Final usage event count is smaller than the shift baseline; "
+            "the rejection ledger cannot be trusted."
+        )
+
+    current_events = [
+        event for event in events[baseline_event_count:] if isinstance(event, dict)
+    ]
+    slot = int(state["config"]["slot"])
+    qa_events = [event for event in current_events if event.get("slot") == slot]
+    rejected_events = [
+        event for event in qa_events if event.get("outcome") == "rejected_validation"
+    ]
+
+    rejection_rows: list[dict[str, Any]] = []
+    by_seat: dict[str, dict[str, Any]] = {}
+    rejected_tokens = 0
+    unknown_token_events = 0
+    for event in rejected_events:
+        raw_tokens = event.get("total_tokens")
+        tokens = (
+            raw_tokens
+            if isinstance(raw_tokens, int) and not isinstance(raw_tokens, bool)
+            else None
+        )
+        if tokens is None:
+            unknown_token_events += 1
+        else:
+            rejected_tokens += tokens
+
+        seat = str(event.get("seat") or "unknown")
+        seat_summary = by_seat.setdefault(
+            seat,
+            {"attempts": 0, "tokens": 0, "unknown_token_events": 0},
+        )
+        seat_summary["attempts"] += 1
+        if tokens is None:
+            seat_summary["unknown_token_events"] += 1
+        else:
+            seat_summary["tokens"] += tokens
+
+        rejection_rows.append(
+            {
+                key: event.get(key)
+                for key in (
+                    "ts",
+                    "request_id",
+                    "run_id",
+                    "seat",
+                    "provider",
+                    "model",
+                    "attempt",
+                    "total_tokens",
+                )
+            }
+        )
+
+    exact_rejected_tokens: int | None = (
+        rejected_tokens if unknown_token_events == 0 else None
+    )
+    unexpected_rejection_providers = sorted(
+        {
+            str(event.get("provider") or "unknown")
+            for event in rejected_events
+            if event.get("provider") != "openai"
+        }
+    )
+    percent_unavailable_reasons: list[str] = []
+    if exact_rejected_tokens is None:
+        percent_unavailable_reasons.append("unknown_rejected_attempt_tokens")
+    if int(usage["unknown"]) > 0:
+        percent_unavailable_reasons.append("unknown_openai_usage")
+    if unexpected_rejection_providers:
+        percent_unavailable_reasons.append("unexpected_rejection_provider")
+    if (
+        exact_rejected_tokens is not None
+        and exact_rejected_tokens > 0
+        and shift_openai_total == 0
+    ):
+        percent_unavailable_reasons.append("zero_openai_denominator")
+
+    repair_tax_percent: float | None
+    if percent_unavailable_reasons:
+        repair_tax_percent = None
+    elif exact_rejected_tokens is None:
+        raise AssertionError("exact token total missing without an unavailable reason")
+    elif shift_openai_total == 0:
+        repair_tax_percent = 0.0
+    else:
+        repair_tax_percent = round(
+            exact_rejected_tokens * 100 / shift_openai_total,
+            4,
+        )
+
+    return {
+        "quota_day": usage["day"],
+        "baseline_event_count": baseline_event_count,
+        "final_event_count": len(events),
+        "current_run_events": len(current_events),
+        "qa_slot": slot,
+        "qa_events": len(qa_events),
+        "rejected_attempts": len(rejected_events),
+        "rejected_tokens": exact_rejected_tokens,
+        "unknown_rejected_token_events": unknown_token_events,
+        "repair_tax_percent_of_shift": repair_tax_percent,
+        "repair_tax_percent_unavailable_reasons": percent_unavailable_reasons,
+        "unexpected_rejection_providers": unexpected_rejection_providers,
+        "shift_openai_total": shift_openai_total,
+        "by_seat": [
+            {"seat": seat, **summary} for seat, summary in sorted(by_seat.items())
+        ],
+        "skald_writer_tripwire": any(
+            event.get("seat") == "skald_writer" for event in rejected_events
+        ),
+        "rejections": rejection_rows,
+    }
+
+
 def _utc_text(value: datetime) -> str:
     return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -586,6 +715,13 @@ def finish_shift(
     _atomic_write_json(archive / "usage_end.json", usage_payload)
 
     final_delta = max(0, usage["total"] - int(state["last_total"]))
+    shift_openai_total = max(0, usage["total"] - int(state["baseline_total"]))
+    rejection_ledger = _rejection_ledger(
+        state=state,
+        usage=usage,
+        shift_openai_total=shift_openai_total,
+    )
+    _atomic_write_json(archive / "rejection_ledger.json", rejection_ledger)
     final_state = dict(state)
     final_state.update(
         {
@@ -598,8 +734,15 @@ def finish_shift(
             "finished_after_quota_rollover": (
                 current_time.astimezone(timezone.utc).date().isoformat() != quota_day
             ),
-            "shift_openai_total": max(0, usage["total"] - int(state["baseline_total"])),
+            "shift_openai_total": shift_openai_total,
             "max_command_delta": max(int(state["max_command_delta"]), final_delta),
+            "rejected_attempts": rejection_ledger["rejected_attempts"],
+            "repair_tax_tokens": rejection_ledger["rejected_tokens"],
+            "repair_tax_percent": rejection_ledger["repair_tax_percent_of_shift"],
+            "repair_tax_percent_unavailable_reasons": rejection_ledger[
+                "repair_tax_percent_unavailable_reasons"
+            ],
+            "skald_writer_tripwire": rejection_ledger["skald_writer_tripwire"],
         }
     )
     _atomic_write_json(archive / STATE_FILE, final_state)
@@ -611,6 +754,14 @@ def finish_shift(
         "shift_openai_total": final_state["shift_openai_total"],
         "max_command_delta": final_state["max_command_delta"],
         "unknown_usage_events": usage["unknown"],
+        "rejected_attempts": rejection_ledger["rejected_attempts"],
+        "repair_tax_tokens": rejection_ledger["rejected_tokens"],
+        "repair_tax_percent": rejection_ledger["repair_tax_percent_of_shift"],
+        "repair_tax_percent_unavailable_reasons": rejection_ledger[
+            "repair_tax_percent_unavailable_reasons"
+        ],
+        "skald_writer_tripwire": rejection_ledger["skald_writer_tripwire"],
+        "rejection_ledger": str(archive / "rejection_ledger.json"),
         "archive": str(archive),
     }
     _append_jsonl(
