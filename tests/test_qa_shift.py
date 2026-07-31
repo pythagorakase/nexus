@@ -134,6 +134,14 @@ def test_begin_creates_archive_and_pins_every_openai_role(
     assert (archive / "runtime_env.sh").exists()
     assert (archive / "probe_ledger.md").exists()
     assert (archive / "mission_report.md").exists()
+    ledger = (archive / "probe_ledger.md").read_text()
+    report = (archive / "mission_report.md").read_text()
+    assert "## Recent coverage" in ledger
+    assert "## Structured-output rejection ledger" in ledger
+    assert "Repair tax" in ledger
+    assert "## Structured-output rejections" in report
+    assert "Repair tax" in report
+    assert "Seed-promotion disposition" in report
 
 
 def test_generated_runtime_environment_selects_qa_config(
@@ -409,10 +417,85 @@ def test_check_and_finish_persist_end_to_end_tally(tmp_path: Path) -> None:
     assert state["status"] == "finished"
     assert state["exit_condition"] == "dry_well"
     assert (archive / "usage_end.json").exists()
+    assert (archive / "rejection_ledger.json").exists()
+    assert finish["rejected_attempts"] == 0
+    assert finish["repair_tax_tokens"] == 0
+    assert finish["repair_tax_percent"] == 0.0
+    assert finish["skald_writer_tripwire"] is False
     assert [entry["kind"] for entry in checks] == [
         "begin",
         "post_call",
         "finish",
+    ]
+
+
+def test_finish_persists_exact_repair_tax_and_writer_tripwire(
+    tmp_path: Path,
+) -> None:
+    config = replace(qa_shift.load_shift_config(), archive_root=tmp_path)
+    historical_rejection = {
+        **_event(total=999),
+        "seat": "gaia",
+        "outcome": "rejected_validation",
+        "request_id": "resp-before-shift",
+    }
+    begin = qa_shift.begin_shift(
+        config=config,
+        usage_reader=lambda _root, _day: _usage(
+            total=100,
+            events=[historical_rejection],
+        ),
+        now=NOW,
+    )
+    archive = Path(begin["archive"])
+    writer_rejection = {
+        **_event(total=75),
+        "seat": "skald_writer",
+        "outcome": "rejected_validation",
+        "request_id": "resp-rejected",
+    }
+    accepted_retry = {
+        **_event(total=225),
+        "seat": "skald_writer",
+        "attempt": 2,
+        "request_id": "resp-accepted",
+    }
+
+    finish = qa_shift.finish_shift(
+        archive=archive,
+        exit_condition="dry_well",
+        usage_reader=lambda _root, _day: _usage(
+            total=400,
+            events=[historical_rejection, writer_rejection, accepted_retry],
+        ),
+        now=NOW + timedelta(minutes=2),
+    )
+    ledger = json.loads((archive / "rejection_ledger.json").read_text())
+
+    assert finish["shift_openai_total"] == 300
+    assert finish["rejected_attempts"] == 1
+    assert finish["repair_tax_tokens"] == 75
+    assert finish["repair_tax_percent"] == 25.0
+    assert finish["skald_writer_tripwire"] is True
+    assert ledger["by_seat"] == [
+        {
+            "attempts": 1,
+            "seat": "skald_writer",
+            "tokens": 75,
+            "unknown_token_events": 0,
+        }
+    ]
+    assert ledger["rejections"] == [
+        {
+            "attempt": 1,
+            "model": "gpt-5.6-terra",
+            "provider": "openai",
+            "request_id": "resp-rejected",
+            "run_id": "run-one",
+            "seat": "skald_writer",
+            "total_tokens": 75,
+            "ts": "2026-07-30T04:31:00Z",
+        }
     ]
 
 
