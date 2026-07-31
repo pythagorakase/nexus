@@ -526,8 +526,12 @@ def test_writer_schema_encodes_presence_kind_partitions() -> None:
     assert presence["transit"]["items"]["$ref"] == "#/$defs/PlaceRef"
 
     reset = definitions["SceneReset"]["properties"]
-    assert reset["place"]["properties"]["kind"]["const"] == "place"
+    assert reset["place"] == {"$ref": "#/$defs/PlaceRef"}
     assert reset["present"]["items"]["$ref"] == "#/$defs/CharacterRef"
+
+    baseline_setting = PresenceBaseline.model_json_schema()["properties"]["setting"]
+    assert baseline_setting["anyOf"][0]["$ref"] == "#/$defs/PlaceRef"
+    assert "description" not in baseline_setting
 
 
 def _assert_canonical_fields_equal(
@@ -894,12 +898,27 @@ def test_presence_without_baseline_raises_loudly() -> None:
     "presence",
     [
         {"enter": [{"kind": "place", "name": "Archive"}]},
+        {"enter": [{"kind": "faction", "name": "Guild"}]},
         {"exit": [{"kind": "place", "name": "Archive"}]},
+        {"exit": [{"kind": "faction", "name": "Guild"}]},
         {"transit": [{"kind": "character", "name": "Brena"}]},
+        {"transit": [{"kind": "faction", "name": "Guild"}]},
         {
             "scene_reset": {
                 "place": {"kind": "character", "name": "Brena"},
                 "present": [],
+            }
+        },
+        {
+            "scene_reset": {
+                "place": {"kind": "faction", "name": "Guild"},
+                "present": [],
+            }
+        },
+        {
+            "scene_reset": {
+                "place": {"kind": "place", "name": "Archive"},
+                "present": [{"kind": "place", "name": "Annex"}],
             }
         },
         {
@@ -920,7 +939,9 @@ def test_presence_kind_partitions_reject_invalid_json(
 @pytest.mark.parametrize(
     "baseline",
     [
+        {"present": [{"kind": "place", "name": "Archive"}]},
         {"present": [{"kind": "faction", "name": "Guild"}]},
+        {"setting": {"kind": "character", "name": "Brena"}},
         {"setting": {"kind": "faction", "name": "Guild"}},
     ],
 )
@@ -1383,6 +1404,17 @@ def test_skald_wire_prompt_guide_preserves_enum_values_verbatim() -> None:
         'declared_entity_role?:string|enum=["subject","object"]|'
         '"Whether the declared entity is subject or object of the pair tag."' in guide
     )
+
+
+def test_skald_wire_prompt_guide_pins_presence_ref_kinds() -> None:
+    guide = skald_wire_prompt_guide()
+
+    for ref_name, kind in (("CharacterRef", "character"), ("PlaceRef", "place")):
+        block = guide.split(f"{ref_name}{{\n", 1)[1].split("\n}", 1)[0]
+        assert (
+            f'kind!:string|enum=["{kind}"]|"Referenced entity kind."'
+            in block.splitlines()
+        )
 
 
 def test_skald_wire_prompt_guide_stays_within_token_budget() -> None:

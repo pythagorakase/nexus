@@ -96,7 +96,7 @@ class PlaceRef(PresenceRef):
 class SceneReset(BaseModel):
     """Fresh character roster and setting after a scene cut."""
 
-    place: PlaceRef = Field(description="New setting place.")
+    place: PlaceRef
     present: List[CharacterRef] = Field(
         default_factory=list,
         description="Complete present-character roster.",
@@ -155,10 +155,7 @@ class PresenceBaseline(BaseModel):
         default_factory=list,
         description="Parent present-character roster.",
     )
-    setting: Optional[PlaceRef] = Field(
-        default=None,
-        description="Parent setting place.",
-    )
+    setting: Optional[PlaceRef] = None
 
     model_config = ConfigDict(extra="forbid")
 
@@ -880,6 +877,8 @@ def _prompt_guide_enum(
         if not isinstance(enum_values, list):
             raise ValueError("Skald wire enum schema must contain a list")
         return enum_values
+    if "const" in schema_node:
+        return [schema_node["const"]]
     items = schema_node.get("items")
     if isinstance(items, dict):
         return _prompt_guide_enum(items, definitions)
