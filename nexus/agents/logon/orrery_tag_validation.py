@@ -544,40 +544,35 @@ class _ExtendExpiryCandidate:
     tag: str
 
 
-_SUBSTANTIVE_UPDATE_PREDICATES: Mapping[str, Callable[[Any], bool]] = {
-    "character": lambda update: any(
-        (
-            update.activity,
-            update.location is not None,
-            update.emotional_state,
-            update.observations,
-            update.tags_add,
-            update.tags_clear,
-        )
-    ),
-    "place": lambda update: any(
-        (
-            update.condition,
-            update.notable_change,
-            update.tags_add,
-            update.tags_clear,
-        )
-    ),
-    "faction": lambda update: any(
-        (
-            update.action,
-            update.stance_toward and update.stance,
-            update.tags_add,
-            update.tags_clear,
-        )
-    ),
+_SUBSTANTIVE_UPDATE_PREDICATES: Mapping[str, Mapping[str, Callable[[Any], bool]]] = {
+    "character": {
+        "activity": lambda update: bool(update.activity),
+        "location": lambda update: update.location is not None,
+        "emotional_state": lambda update: bool(update.emotional_state),
+        "observations": lambda update: bool(update.observations),
+        "tags_clear": lambda update: bool(update.tags_clear),
+    },
+    "place": {
+        "condition": lambda update: bool(update.condition),
+        "notable_change": lambda update: bool(update.notable_change),
+        "tags_clear": lambda update: bool(update.tags_clear),
+    },
+    "faction": {
+        "action": lambda update: bool(update.action),
+        "stance_toward": lambda update: bool(update.stance_toward and update.stance),
+        "stance": lambda update: bool(update.stance_toward and update.stance),
+        "tags_clear": lambda update: bool(update.tags_clear),
+    },
 }
 
 
 def _has_substantive_update(entity_kind: str, update: Any) -> bool:
-    """Mirror the per-kind wire validator's substantive-update predicate."""
+    """Mirror the wire predicate after normalization strips ``tags_add``."""
 
-    return _SUBSTANTIVE_UPDATE_PREDICATES[entity_kind](update)
+    return any(
+        predicate(update)
+        for predicate in _SUBSTANTIVE_UPDATE_PREDICATES[entity_kind].values()
+    )
 
 
 def normalize_extend_expiry_reasserts(

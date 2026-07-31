@@ -19,6 +19,7 @@ from nexus.agents.logon.gaia_registry_schema import (
     load_gaia_registry_wire_spec,
 )
 from nexus.agents.logon.orrery_tag_validation import (
+    _SUBSTANTIVE_UPDATE_PREDICATES,
     _has_substantive_update,
     build_storyteller_tag_validator,
     collect_orrery_tag_issues,
@@ -394,6 +395,23 @@ def test_normalization_predicate_matches_identity_only_wire_rejection(
     assert not _has_substantive_update(entity_kind, identity_only)
     with pytest.raises(ValidationError, match=error):
         model.model_validate(identity_only.model_dump(mode="python"))
+
+
+@pytest.mark.parametrize(
+    ("entity_kind", "model"),
+    [
+        ("character", CharacterUpdateDelta),
+        ("place", PlaceUpdateDelta),
+        ("faction", FactionUpdateDelta),
+    ],
+)
+def test_normalization_predicate_fields_match_wire_model(
+    entity_kind: str,
+    model: Any,
+) -> None:
+    assert set(_SUBSTANTIVE_UPDATE_PREDICATES[entity_kind]) == set(
+        model.model_fields
+    ) - {"name", "id", "tags_add"}
 
 
 @pytest.mark.asyncio
