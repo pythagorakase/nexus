@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import Counter
 import json
 import os
+import tomllib
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast, get_args
@@ -49,6 +50,8 @@ from nexus.agents.logon.gaia_registry_schema import (
     load_gaia_registry_wire_spec,
 )
 from nexus.agents.logon.skald_wire import (
+    CharacterRef,
+    PlaceRef,
     PresenceBaseline,
     PresenceRef,
     SkaldGaiaWire,
@@ -70,13 +73,19 @@ from nexus.agents.lore import logon_utility
 from nexus.agents.lore.logon_utility import LogonUtility, read_presence_baseline
 from nexus.agents.orrery.tag_schemas import OrreryTagBestowal
 from nexus.api.native_structured_output import anthropic_output_config
+from nexus.config import resolve_model_ref
 from scripts.api_openai import OpenAIProvider
 
 
 # Filled from the deterministic compact serializations, with modest drift room.
-SKALD_WIRE_STRICT_MAX_BYTES = 19_600
+SKALD_WIRE_STRICT_MAX_BYTES = 21_000
 SKALD_WIRE_LENIENT_MAX_BYTES = 18_950
 SKALD_WIRE_DESCRIPTION_MAX_CHARS = 70
+SKALD_WIRE_PROMPT_MAX_TOKENS = 1_500
+# #639 measurement: 5,583 bytes / 1,248 o200k tokens before the split;
+# 6,533 bytes / 1,458 o200k tokens after it. These ceilings retain ~10% headroom.
+SKALD_WRITER_STRICT_MAX_BYTES = 7_200
+SKALD_WRITER_STRICT_MAX_TOKENS = 1_610
 
 # Post-#577 unification: the replacement vocabulary's guidance lives in the
 # contextual tag library (Event-Type Names) and the imminent-activity prompt
@@ -103,10 +112,10 @@ SPARSE_WIRE_PAYLOAD = {
 
 BASELINE = PresenceBaseline(
     present=[
-        PresenceRef(kind="character", name="Brena Tideloft", id=7),
-        PresenceRef(kind="character", name="Odile", id=8),
+        CharacterRef(kind="character", name="Brena Tideloft", id=7),
+        CharacterRef(kind="character", name="Odile", id=8),
     ],
-    setting=PresenceRef(kind="place", name="The Lower Sluice", id=41),
+    setting=PlaceRef(kind="place", name="The Lower Sluice", id=41),
 )
 
 
@@ -497,6 +506,34 @@ def test_two_pass_strict_and_lenient_schema_shapes() -> None:
     assert "anyOf" not in gaia_lenient["properties"]["updates"]
 
 
+def test_writer_schema_encodes_presence_kind_partitions() -> None:
+    schema = skald_writer_strict_text_format()["schema"]
+    definitions = schema["$defs"]
+
+    assert issubclass(CharacterRef, PresenceRef)
+    assert issubclass(PlaceRef, PresenceRef)
+    assert CharacterRef.model_fields["kind"].is_required()
+    assert PlaceRef.model_fields["kind"].is_required()
+    assert definitions["CharacterRef"]["properties"]["kind"]["const"] == "character"
+    assert definitions["PlaceRef"]["properties"]["kind"]["const"] == "place"
+    assert definitions["CharacterRef"]["required"] == ["kind", "name", "id"]
+    assert definitions["PlaceRef"]["required"] == ["kind", "name", "id"]
+
+    presence = definitions["PresenceDelta"]["properties"]
+    assert presence["enter"]["items"]["$ref"] == "#/$defs/CharacterRef"
+    assert presence["exit"]["items"]["$ref"] == "#/$defs/CharacterRef"
+    assert presence["mentions"]["items"]["$ref"] == "#/$defs/PresenceRef"
+    assert presence["transit"]["items"]["$ref"] == "#/$defs/PlaceRef"
+
+    reset = definitions["SceneReset"]["properties"]
+    assert reset["place"] == {"$ref": "#/$defs/PlaceRef"}
+    assert reset["present"]["items"]["$ref"] == "#/$defs/CharacterRef"
+
+    baseline_setting = PresenceBaseline.model_json_schema()["properties"]["setting"]
+    assert baseline_setting["anyOf"][0]["$ref"] == "#/$defs/PlaceRef"
+    assert "description" not in baseline_setting
+
+
 def _assert_canonical_fields_equal(
     actual: StorytellerResponseExtended,
     expected: StorytellerResponseExtended,
@@ -858,30 +895,130 @@ def test_presence_without_baseline_raises_loudly() -> None:
 
 
 @pytest.mark.parametrize(
-    "presence",
+    ("presence", "expected_loc"),
     [
-        {"enter": [{"kind": "faction", "name": "Guild"}]},
-        {"exit": [{"kind": "faction", "name": "Guild"}]},
-        {"transit": [{"kind": "character", "name": "Brena"}]},
-        {
-            "scene_reset": {
-                "place": {"kind": "character", "name": "Brena"},
-                "present": [],
-            }
-        },
-        {
-            "scene_reset": {
-                "place": {"kind": "place", "name": "Archive"},
-                "present": [{"kind": "faction", "name": "Guild"}],
-            }
-        },
+        (
+            {"enter": [{"kind": "place", "name": "Archive"}]},
+            ("presence", "enter", 0, "kind"),
+        ),
+        (
+            {"enter": [{"kind": "faction", "name": "Guild"}]},
+            ("presence", "enter", 0, "kind"),
+        ),
+        (
+            {"exit": [{"kind": "place", "name": "Archive"}]},
+            ("presence", "exit", 0, "kind"),
+        ),
+        (
+            {"exit": [{"kind": "faction", "name": "Guild"}]},
+            ("presence", "exit", 0, "kind"),
+        ),
+        (
+            {"transit": [{"kind": "character", "name": "Brena"}]},
+            ("presence", "transit", 0, "kind"),
+        ),
+        (
+            {"transit": [{"kind": "faction", "name": "Guild"}]},
+            ("presence", "transit", 0, "kind"),
+        ),
+        (
+            {
+                "scene_reset": {
+                    "place": {"kind": "character", "name": "Brena"},
+                    "present": [],
+                }
+            },
+            ("presence", "scene_reset", "place", "kind"),
+        ),
+        (
+            {
+                "scene_reset": {
+                    "place": {"kind": "faction", "name": "Guild"},
+                    "present": [],
+                }
+            },
+            ("presence", "scene_reset", "place", "kind"),
+        ),
+        (
+            {
+                "scene_reset": {
+                    "place": {"kind": "place", "name": "Archive"},
+                    "present": [{"kind": "place", "name": "Annex"}],
+                }
+            },
+            ("presence", "scene_reset", "present", 0, "kind"),
+        ),
+        (
+            {
+                "scene_reset": {
+                    "place": {"kind": "place", "name": "Archive"},
+                    "present": [{"kind": "faction", "name": "Guild"}],
+                }
+            },
+            ("presence", "scene_reset", "present", 0, "kind"),
+        ),
     ],
 )
-def test_presence_rejects_ontology_invalid_kinds(
+def test_presence_kind_partitions_reject_invalid_json(
     presence: dict[str, Any],
+    expected_loc: tuple[str | int, ...],
 ) -> None:
-    with pytest.raises(ValidationError):
-        SkaldTurnWire.model_validate({**SPARSE_WIRE_PAYLOAD, "presence": presence})
+    with pytest.raises(ValidationError) as exc_info:
+        SkaldWriterWire.model_validate({**SPARSE_WIRE_PAYLOAD, "presence": presence})
+    error_pairs = {
+        (error["type"], error["loc"][-len(expected_loc) :])
+        for error in exc_info.value.errors()
+    }
+    assert ("literal_error", expected_loc) in error_pairs
+
+
+@pytest.mark.parametrize(
+    ("baseline", "expected_loc"),
+    [
+        (
+            {"present": [{"kind": "place", "name": "Archive"}]},
+            ("present", 0, "kind"),
+        ),
+        (
+            {"present": [{"kind": "faction", "name": "Guild"}]},
+            ("present", 0, "kind"),
+        ),
+        (
+            {"setting": {"kind": "character", "name": "Brena"}},
+            ("setting", "kind"),
+        ),
+        (
+            {"setting": {"kind": "faction", "name": "Guild"}},
+            ("setting", "kind"),
+        ),
+    ],
+)
+def test_presence_baseline_kind_partitions_reject_invalid_json(
+    baseline: dict[str, Any],
+    expected_loc: tuple[str | int, ...],
+) -> None:
+    with pytest.raises(ValidationError) as exc_info:
+        PresenceBaseline.model_validate(baseline)
+    error_pairs = {
+        (error["type"], error["loc"][-len(expected_loc) :])
+        for error in exc_info.value.errors()
+    }
+    assert ("literal_error", expected_loc) in error_pairs
+
+
+def test_faction_mention_remains_valid() -> None:
+    writer = SkaldWriterWire.model_validate(
+        {
+            **SPARSE_WIRE_PAYLOAD,
+            "presence": {"mentions": [{"kind": "faction", "name": "The Sluice Guild"}]},
+        }
+    )
+
+    assert writer.presence is not None
+    assert len(writer.presence.mentions) == 1
+    mention = writer.presence.mentions[0]
+    assert type(mention) is PresenceRef
+    assert mention.kind == "faction"
 
 
 @pytest.mark.parametrize("roster_operation", ["enter", "exit"])
@@ -1323,11 +1460,24 @@ def test_skald_wire_prompt_guide_preserves_enum_values_verbatim() -> None:
     )
 
 
+def test_skald_wire_prompt_guide_pins_presence_ref_kinds() -> None:
+    guide = skald_wire_prompt_guide()
+
+    for ref_name, kind in (("CharacterRef", "character"), ("PlaceRef", "place")):
+        block = guide.split(f"{ref_name}{{\n", 1)[1].split("\n}", 1)[0]
+        assert (
+            f'kind!:string|enum=["{kind}"]|"Referenced entity kind."'
+            in block.splitlines()
+        )
+
+
 def test_skald_wire_prompt_guide_stays_within_token_budget() -> None:
     tiktoken = pytest.importorskip("tiktoken")
     encoding = tiktoken.get_encoding("o200k_base")
 
-    assert len(encoding.encode(skald_wire_prompt_guide())) <= 1_400
+    assert (
+        len(encoding.encode(skald_wire_prompt_guide())) <= SKALD_WIRE_PROMPT_MAX_TOKENS
+    )
 
 
 def test_skald_gaia_prompt_guide_stays_within_token_budget() -> None:
@@ -1722,7 +1872,9 @@ def test_presence_baseline_reads_real_slot_parent_rows() -> None:
         pytest.skip("Slot has no parent chunk with presence junction rows")
     baseline = read_presence_baseline(dbname, parent_chunk_id)
     assert baseline.present or baseline.setting is not None
+    assert all(isinstance(reference, CharacterRef) for reference in baseline.present)
     assert all(reference.kind == "character" for reference in baseline.present)
+    assert baseline.setting is None or isinstance(baseline.setting, PlaceRef)
     assert baseline.setting is None or baseline.setting.kind == "place"
 
 
@@ -1733,6 +1885,75 @@ def test_schema_token_measurement_uses_o200k() -> None:
     lenient_wire = _compact_schema_json(skald_wire_lenient_schema())
     assert len(encoding.encode(strict_wire)) > 0
     assert len(encoding.encode(lenient_wire)) > 0
+
+
+def test_writer_schema_size_stays_within_measured_budget() -> None:
+    tiktoken = pytest.importorskip("tiktoken")
+    encoding = tiktoken.get_encoding("o200k_base")
+    writer_wire = _compact_schema_json(skald_writer_strict_text_format()["schema"])
+    writer_bytes = len(writer_wire.encode("utf-8"))
+    writer_tokens = len(encoding.encode(writer_wire))
+
+    print(
+        "Skald writer strict schema measurement: "
+        f"{writer_bytes} bytes/{writer_tokens} tokens"
+    )
+    assert writer_bytes <= SKALD_WRITER_STRICT_MAX_BYTES
+    assert writer_tokens <= SKALD_WRITER_STRICT_MAX_TOKENS
+
+
+@pytest.mark.live
+@pytest.mark.live_llm
+@pytest.mark.skipif(
+    os.environ.get("NEXUS_639_PRESENCE_E2E") != "1",
+    reason="Set NEXUS_639_PRESENCE_E2E=1 for the live writer presence gate.",
+)
+def test_live_openai_decodes_writer_presence_kind_partitions() -> None:
+    config_path = Path(__file__).parents[1] / "nexus.toml"
+    with config_path.open("rb") as config_file:
+        model_ref = tomllib.load(config_file)["apex"]["model"]
+    if not isinstance(model_ref, str) or not model_ref.startswith("@openai."):
+        pytest.fail("The configured writer model must be an @openai.<role> reference")
+    model = resolve_model_ref(model_ref, config_path)
+
+    provider = OpenAIProvider(
+        model=model,
+        max_output_tokens=1_000,
+        reasoning_effort="low",
+        structured_output_retries=0,
+        usage_seat="writer_presence_schema_e2e",
+    )
+    parsed, _response = provider.get_structured_completion(
+        (
+            "Write one concise story beat in which Arin Vale and Bela Sorn enter "
+            "the Copper Observatory at a hard scene cut to that new place. This "
+            "beat combines character arrivals with a setting transition, so encode "
+            "presence using scene_reset only: scene_reset.place is the exact place "
+            "'Copper Observatory', and scene_reset.present is the complete roster "
+            "with exactly the characters 'Arin Vale' and 'Bela Sorn'. Do not use "
+            "presence.enter or presence.exit alongside the reset. Use no mentions "
+            "or transit places, provide exactly two short choices, no operation, "
+            "and a short non-null private letter."
+        ),
+        SkaldWriterWire,
+        text_format=skald_writer_strict_text_format(),
+    )
+
+    assert isinstance(parsed, SkaldWriterWire)
+    assert parsed.presence is not None
+    assert parsed.presence.enter == []
+    assert parsed.presence.exit == []
+    reset = parsed.presence.scene_reset
+    assert reset is not None
+    assert isinstance(reset.place, PlaceRef)
+    assert reset.place.kind == "place"
+    assert reset.place.name == "Copper Observatory"
+    assert {reference.name for reference in reset.present} == {
+        "Arin Vale",
+        "Bela Sorn",
+    }
+    assert all(isinstance(reference, CharacterRef) for reference in reset.present)
+    assert all(reference.kind == "character" for reference in reset.present)
 
 
 def test_replacement_event_type_requires_replacement_delta() -> None:

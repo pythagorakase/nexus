@@ -6,7 +6,7 @@ from typing import Any, Literal
 import pytest
 
 from nexus.agents.lore.logon_utility import LogonUtility
-from nexus.agents.logon.skald_wire import PresenceBaseline, PresenceRef
+from nexus.agents.logon.skald_wire import CharacterRef, PlaceRef, PresenceBaseline
 
 
 PROMPTS_DIR = Path(__file__).parents[2] / "prompts"
@@ -461,8 +461,8 @@ def test_context_prompt_includes_contextual_tag_library(monkeypatch) -> None:
         lambda _dbname: 99,
     )
     baseline = PresenceBaseline(
-        present=[PresenceRef(kind="character", id=7, name="Mara")],
-        setting=PresenceRef(kind="place", id=12, name="The Sluice"),
+        present=[CharacterRef(kind="character", id=7, name="Mara")],
+        setting=PlaceRef(kind="place", id=12, name="The Sluice"),
     )
 
     prompt = LogonUtility({}, dbname="save_05")._format_context_prompt(

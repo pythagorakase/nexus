@@ -24,8 +24,9 @@ from nexus.agents.logon.orrery_tag_validation import (
     build_storyteller_tag_validator,
 )
 from nexus.agents.logon.skald_wire import (
+    CharacterRef,
+    PlaceRef,
     PresenceBaseline,
-    PresenceRef,
     SkaldGaiaWire,
     SkaldTurnWire,
     SkaldWriterWire,
@@ -141,8 +142,8 @@ SINGLE_PASS_PAYLOAD: dict[str, Any] = {
     "letter": "Keep the bell's ringer unresolved while the Choir advances.",
 }
 BASELINE = PresenceBaseline(
-    present=[PresenceRef(kind="character", name="Iona Vale", id=4)],
-    setting=PresenceRef(kind="place", name="The Lower Sluice", id=9),
+    present=[CharacterRef(kind="character", name="Iona Vale", id=4)],
+    setting=PlaceRef(kind="place", name="The Lower Sluice", id=9),
 )
 
 

@@ -179,7 +179,7 @@ def _identity_only_updates(namespace: str) -> dict[str, list[dict[str, str]]]:
 def _wire_validator_sentinel_cases() -> (
     list[tuple[type[BaseModel], str, dict[str, Any]]]
 ):
-    """Cover every prose-adjacent wire validator family."""
+    """Cover every prose-adjacent wire validation-error family."""
 
     cases: list[tuple[type[BaseModel], str, dict[str, Any]]] = []
 
@@ -251,7 +251,15 @@ def test_structured_output_error_text_omits_wire_payload_prose(
     with pytest.raises(ValidationError) as exc_info:
         wire_model.model_validate(payload)
 
-    assert _WIRE_PROSE_SENTINEL in str(exc_info.value), validator_family
+    raw_error = str(exc_info.value)
+    if validator_family in {"presence_ontology", "scene_ontology"}:
+        # #639 moves kind enforcement from model-level validators to Literal
+        # fields. Pydantic now reports only the bad kind at its exact path, so
+        # unrelated prose is absent even before diagnostic sanitization.
+        assert _WIRE_PROSE_SENTINEL not in raw_error, validator_family
+        assert ".kind" in raw_error, validator_family
+    else:
+        assert _WIRE_PROSE_SENTINEL in raw_error, validator_family
     assert _WIRE_PROSE_SENTINEL not in structured_output_error_text(
         exc_info.value
     ), validator_family
@@ -1285,7 +1293,7 @@ def test_anthropic_provider_uses_native_output_format() -> None:
         "json_decode_error",
     ],
 )
-async def test_anthropic_rejection_logs_cover_every_transport_branch_without_input_leaks(
+async def test_anthropic_rejection_logs_cover_branches_without_input_leaks(
     caplog: pytest.LogCaptureFixture,
     transport: Literal["native", "prompted", "tool_envelope"],
     call_style: Literal["sync", "async"],
