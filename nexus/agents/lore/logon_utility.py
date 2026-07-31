@@ -31,8 +31,9 @@ from nexus.agents.logon.gaia_registry_schema import (  # noqa: E402
     load_gaia_registry_wire_spec,
 )
 from nexus.agents.logon.skald_wire import (  # noqa: E402
+    CharacterRef,
+    PlaceRef,
     PresenceBaseline,
-    PresenceRef,
     SkaldGaiaWire,
     SkaldTurnWire,
     SkaldWriterWire,
@@ -187,7 +188,7 @@ def read_presence_baseline(
                 (parent_chunk_id,),
             )
             present = [
-                PresenceRef(kind="character", id=row[0], name=row[1])
+                CharacterRef(kind="character", id=row[0], name=row[1])
                 for row in cur.fetchall()
             ]
             cur.execute(
@@ -208,7 +209,7 @@ def read_presence_baseline(
     if len(setting_rows) > 1:
         raise ValueError(f"Parent chunk {parent_chunk_id} has multiple setting places")
     setting = (
-        PresenceRef(
+        PlaceRef(
             kind="place",
             id=setting_rows[0][0],
             name=setting_rows[0][1],

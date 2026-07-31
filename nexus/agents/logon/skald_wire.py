@@ -7,7 +7,7 @@ per-chunk mentions, never members of the carried scene roster.
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional, Sequence, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -81,24 +81,26 @@ class PresenceRef(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
 
+class CharacterRef(PresenceRef):
+    """Character-only provider-facing entity reference."""
+
+    kind: Literal["character"] = Field(description="Referenced entity kind.")
+
+
+class PlaceRef(PresenceRef):
+    """Place-only provider-facing entity reference."""
+
+    kind: Literal["place"] = Field(description="Referenced entity kind.")
+
+
 class SceneReset(BaseModel):
     """Fresh character roster and setting after a scene cut."""
 
-    place: PresenceRef = Field(description="New setting place.")
-    present: List[PresenceRef] = Field(
+    place: PlaceRef = Field(description="New setting place.")
+    present: List[CharacterRef] = Field(
         default_factory=list,
         description="Complete present-character roster.",
     )
-
-    @model_validator(mode="after")
-    def validate_presence_kinds(self) -> "SceneReset":
-        """Reject ontology-invalid reset references."""
-
-        if self.place.kind != "place":
-            raise ValueError("scene_reset.place must be a place")
-        if any(reference.kind != "character" for reference in self.present):
-            raise ValueError("scene_reset.present accepts characters only")
-        return self
 
     model_config = ConfigDict(extra="forbid")
 
@@ -106,11 +108,11 @@ class SceneReset(BaseModel):
 class PresenceDelta(BaseModel):
     """Sparse changes to scene presence and references."""
 
-    enter: List[PresenceRef] = Field(
+    enter: List[CharacterRef] = Field(
         default_factory=list,
         description="Characters entering the scene.",
     )
-    exit: List[PresenceRef] = Field(
+    exit: List[CharacterRef] = Field(
         default_factory=list,
         description="Characters leaving the scene.",
     )
@@ -118,7 +120,7 @@ class PresenceDelta(BaseModel):
         default_factory=list,
         description="Absent entities referenced this chunk.",
     )
-    transit: List[PresenceRef] = Field(
+    transit: List[PlaceRef] = Field(
         default_factory=list,
         description="Places passed through this chunk.",
     )
@@ -128,15 +130,9 @@ class PresenceDelta(BaseModel):
     )
 
     @model_validator(mode="after")
-    def validate_presence_kinds(self) -> "PresenceDelta":
-        """Reject ontology-invalid presence references."""
+    def validate_presence_consistency(self) -> "PresenceDelta":
+        """Reject contradictory roster changes."""
 
-        if any(reference.kind != "character" for reference in self.enter):
-            raise ValueError("presence.enter accepts characters only")
-        if any(reference.kind != "character" for reference in self.exit):
-            raise ValueError("presence.exit accepts characters only")
-        if any(reference.kind != "place" for reference in self.transit):
-            raise ValueError("presence.transit accepts places only")
         if self.scene_reset is not None and (self.enter or self.exit):
             raise ValueError("scene_reset cannot be combined with enter or exit")
         enter_names = {reference.name.casefold() for reference in self.enter}
@@ -155,24 +151,14 @@ class PresenceDelta(BaseModel):
 class PresenceBaseline(BaseModel):
     """Parent chunk's present characters and setting place."""
 
-    present: List[PresenceRef] = Field(
+    present: List[CharacterRef] = Field(
         default_factory=list,
         description="Parent present-character roster.",
     )
-    setting: Optional[PresenceRef] = Field(
+    setting: Optional[PlaceRef] = Field(
         default=None,
         description="Parent setting place.",
     )
-
-    @model_validator(mode="after")
-    def validate_presence_kinds(self) -> "PresenceBaseline":
-        """Reject ontology-invalid baseline references."""
-
-        if any(reference.kind != "character" for reference in self.present):
-            raise ValueError("presence baseline accepts characters only")
-        if self.setting is not None and self.setting.kind != "place":
-            raise ValueError("presence baseline setting must be a place")
-        return self
 
     model_config = ConfigDict(extra="forbid")
 
@@ -547,13 +533,16 @@ def _presence_key(reference: PresenceRef) -> tuple[str, str]:
     return reference.kind, reference.name.casefold()
 
 
+PresenceRefT = TypeVar("PresenceRefT", bound=PresenceRef)
+
+
 def _deduplicate_presence(
-    references: List[PresenceRef],
-) -> List[PresenceRef]:
+    references: Sequence[PresenceRefT],
+) -> List[PresenceRefT]:
     """Keep the first occurrence of each semantic entity reference."""
 
     seen: set[tuple[str, str]] = set()
-    result: List[PresenceRef] = []
+    result: List[PresenceRefT] = []
     for reference in references:
         key = _presence_key(reference)
         if key not in seen:
@@ -574,7 +563,7 @@ def _hydrate_references(
         return ReferencedEntities()
 
     assert baseline is not None
-    setting: Optional[PresenceRef]
+    setting: Optional[PlaceRef]
     if presence is not None and presence.scene_reset is not None:
         roster = _deduplicate_presence(presence.scene_reset.present)
         setting = presence.scene_reset.place
