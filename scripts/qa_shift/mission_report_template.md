@@ -1,6 +1,6 @@
 # NEXUS Night QA — mission report
 
-Status: in progress.
+Status: in progress. Replace with `completed — EXIT_CONDITION` during teardown.
 
 ## Baseline
 
@@ -47,6 +47,7 @@ Summarize both failures and negative results from `probe_ledger.md`.
 - Shift delta:
 - Largest model-generating command delta:
 - Repair tax (rejected-attempt tokens and percentage):
+- Repair-tax percentage unavailability reasons:
 - Repair tax by seat/class:
 - Unknown-usage events:
 

@@ -421,6 +421,7 @@ def test_check_and_finish_persist_end_to_end_tally(tmp_path: Path) -> None:
     assert finish["rejected_attempts"] == 0
     assert finish["repair_tax_tokens"] == 0
     assert finish["repair_tax_percent"] == 0.0
+    assert finish["repair_tax_percent_unavailable_reasons"] == []
     assert finish["skald_writer_tripwire"] is False
     assert [entry["kind"] for entry in checks] == [
         "begin",
@@ -476,6 +477,7 @@ def test_finish_persists_exact_repair_tax_and_writer_tripwire(
     assert finish["rejected_attempts"] == 1
     assert finish["repair_tax_tokens"] == 75
     assert finish["repair_tax_percent"] == 25.0
+    assert finish["repair_tax_percent_unavailable_reasons"] == []
     assert finish["skald_writer_tripwire"] is True
     assert ledger["by_seat"] == [
         {
@@ -497,6 +499,50 @@ def test_finish_persists_exact_repair_tax_and_writer_tripwire(
             "ts": "2026-07-30T04:31:00Z",
         }
     ]
+
+
+@pytest.mark.parametrize(
+    ("provider", "unknown_usage", "reason"),
+    (
+        ("anthropic", 0, "unexpected_rejection_provider"),
+        ("openai", 1, "unknown_openai_usage"),
+    ),
+)
+def test_finish_withholds_repair_tax_percent_for_untrusted_denominator(
+    tmp_path: Path,
+    provider: str,
+    unknown_usage: int,
+    reason: str,
+) -> None:
+    config = replace(qa_shift.load_shift_config(), archive_root=tmp_path)
+    begin = qa_shift.begin_shift(
+        config=config,
+        usage_reader=lambda _root, _day: _usage(total=100),
+        now=NOW,
+    )
+    archive = Path(begin["archive"])
+    rejection = {
+        **_event(total=50, provider=provider),
+        "outcome": "rejected_validation",
+    }
+
+    finish = qa_shift.finish_shift(
+        archive=archive,
+        exit_condition="blocked",
+        usage_reader=lambda _root, _day: _usage(
+            total=150,
+            unknown=unknown_usage,
+            events=[rejection],
+        ),
+        now=NOW + timedelta(minutes=2),
+    )
+    ledger = json.loads((archive / "rejection_ledger.json").read_text())
+
+    assert finish["repair_tax_tokens"] == 50
+    assert finish["repair_tax_percent"] is None
+    assert finish["repair_tax_percent_unavailable_reasons"] == [reason]
+    assert ledger["repair_tax_percent_of_shift"] is None
+    assert ledger["repair_tax_percent_unavailable_reasons"] == [reason]
 
 
 def test_finish_reads_original_quota_day_after_rollover(tmp_path: Path) -> None:

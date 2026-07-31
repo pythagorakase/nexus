@@ -57,12 +57,16 @@ issue, dry-well, wall-clock, and token settings.
    is unavailable or invalid, use the connected GitHub app for those reads and
    for issue publication instead. A working connected app satisfies this
    preflight requirement.
-4. Read `probe_ledger.md` and `mission_report.md` from the two most recent
-   completed `temp/qa_night_*` archives. Add their family coverage to the new
-   run's coverage matrix, including public surface, state transition, seed
-   depth, and outcome. A previously dry family may count again only for a new
-   surface, state transition, or deeper campaign boundary, or as an explicit
-   regression tied to code that changed since that run.
+4. Read `probe_ledger.md` and `mission_report.md` from up to the two most recent
+   completed `temp/qa_night_*` archives. An archive is completed only when its
+   `shift_state.json` has `status: "finished"`; directory timestamps or report
+   prose are not completion evidence. Use every qualifying archive available,
+   including zero or one without treating the missing history as a blocker, and
+   record `none` when there is no prior coverage. Add the available family
+   coverage to the new run's coverage matrix, including public surface, state
+   transition, seed depth, and outcome. A previously dry family may count again
+   only for a new surface, state transition, or deeper campaign boundary, or as
+   an explicit regression tied to code that changed since that run.
 5. Run:
 
    ```text
@@ -230,8 +234,11 @@ Always complete teardown, including early exits:
    seat, attempt, token cost, validation class, matching issue, and disposition
    in `probe_ledger.md`. Never count older lines copied into the persistent log.
 5. Report total rejected-attempt tokens and percentage as the shift's repair
-   tax, with subtotals by seat and class. Compare known-class rates only with a
-   stable denominator, such as rejected attempts per seat attempt and affected
+   tax, with subtotals by seat and class. `finish` leaves the percentage null
+   when the OpenAI denominator has unknown usage or any rejection came from an
+   unexpected provider; report the listed unavailability reasons rather than
+   deriving a percentage. Compare known-class rates only with a stable
+   denominator, such as rejected attempts per seat attempt and affected
    model-generating commands per eligible command. Any current-run
    `seat=skald_writer` rejection is the #639 tripwire: verify and publish the
    recurrence on that issue, reopening it when permitted, with the required
@@ -243,20 +250,23 @@ Always complete teardown, including early exits:
    incubator state, active generation leases, and Orrery queue counts. Require
    current migrations, zero active leases, empty narration/maturation queues,
    coherent foreign keys/invariants, and a successful final public load.
-7. Dump a qualifying database first to a `.partial` path, checksum it, inspect
-   it with `pg_restore --list`, restore it into a uniquely named disposable
-   verification database, and repeat the invariant/count checks there. Drop
-   only that verification database. Then atomically promote the file to
-   `.dump`, write an adjacent manifest containing the measured counts, source
-   archive/commit, migration, model, known-issue hotspots, and sha256, and retain
-   the prior seed. Use unambiguous filename fields such as `42chunks_40ex`; do
-   not infer exchange count from chunk count. If any qualification fails, do
-   not promote the seed—preserve the slot and report why.
+7. Dump a qualifying database first to a `.partial` path under
+   `temp/qa_seeds/`, checksum it, inspect it with `pg_restore --list`, restore
+   it into a uniquely named disposable verification database, and repeat the
+   invariant/count checks there. Drop only that verification database. Then
+   atomically promote the file to a `.dump` in `temp/qa_seeds/`, write an
+   adjacent manifest containing the measured counts, source archive/commit,
+   migration, model, known-issue hotspots, and sha256, and retain the prior
+   seed. Use unambiguous filename fields such as `42chunks_40ex`; do not infer
+   exchange count from chunk count. If any qualification fails, do not promote
+   the seed—preserve the slot and report why.
 8. Complete `mission_report.md` with checkout and suite baseline, slot
    initialization (seed dump path and sha256, or fresh reset), issue links,
    probe-family negative results and coverage gates, rejection classification,
    evidence inventory, start/end/delta/max usage and repair tax, seed-promotion
-   disposition, exit condition, and final lane/slot disposition.
+   disposition, exit condition, and final lane/slot disposition. Replace the
+   report's `Status: in progress` line with `Status: completed — CONDITION`,
+   using the same truthful exit condition supplied to `finish`.
 9. Return a concise scheduled-task result with the report path and issue links.
 
 The report is mandatory even if zero issues are published.

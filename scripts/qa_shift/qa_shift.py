@@ -256,9 +256,32 @@ def _rejection_ledger(
     exact_rejected_tokens: int | None = (
         rejected_tokens if unknown_token_events == 0 else None
     )
-    repair_tax_percent: float | None
+    unexpected_rejection_providers = sorted(
+        {
+            str(event.get("provider") or "unknown")
+            for event in rejected_events
+            if event.get("provider") != "openai"
+        }
+    )
+    percent_unavailable_reasons: list[str] = []
     if exact_rejected_tokens is None:
+        percent_unavailable_reasons.append("unknown_rejected_attempt_tokens")
+    if int(usage["unknown"]) > 0:
+        percent_unavailable_reasons.append("unknown_openai_usage")
+    if unexpected_rejection_providers:
+        percent_unavailable_reasons.append("unexpected_rejection_provider")
+    if (
+        exact_rejected_tokens is not None
+        and exact_rejected_tokens > 0
+        and shift_openai_total == 0
+    ):
+        percent_unavailable_reasons.append("zero_openai_denominator")
+
+    repair_tax_percent: float | None
+    if percent_unavailable_reasons:
         repair_tax_percent = None
+    elif exact_rejected_tokens is None:
+        raise AssertionError("exact token total missing without an unavailable reason")
     elif shift_openai_total == 0:
         repair_tax_percent = 0.0
     else:
@@ -278,6 +301,8 @@ def _rejection_ledger(
         "rejected_tokens": exact_rejected_tokens,
         "unknown_rejected_token_events": unknown_token_events,
         "repair_tax_percent_of_shift": repair_tax_percent,
+        "repair_tax_percent_unavailable_reasons": percent_unavailable_reasons,
+        "unexpected_rejection_providers": unexpected_rejection_providers,
         "shift_openai_total": shift_openai_total,
         "by_seat": [
             {"seat": seat, **summary} for seat, summary in sorted(by_seat.items())
@@ -714,6 +739,9 @@ def finish_shift(
             "rejected_attempts": rejection_ledger["rejected_attempts"],
             "repair_tax_tokens": rejection_ledger["rejected_tokens"],
             "repair_tax_percent": rejection_ledger["repair_tax_percent_of_shift"],
+            "repair_tax_percent_unavailable_reasons": rejection_ledger[
+                "repair_tax_percent_unavailable_reasons"
+            ],
             "skald_writer_tripwire": rejection_ledger["skald_writer_tripwire"],
         }
     )
@@ -729,6 +757,9 @@ def finish_shift(
         "rejected_attempts": rejection_ledger["rejected_attempts"],
         "repair_tax_tokens": rejection_ledger["rejected_tokens"],
         "repair_tax_percent": rejection_ledger["repair_tax_percent_of_shift"],
+        "repair_tax_percent_unavailable_reasons": rejection_ledger[
+            "repair_tax_percent_unavailable_reasons"
+        ],
         "skald_writer_tripwire": rejection_ledger["skald_writer_tripwire"],
         "rejection_ledger": str(archive / "rejection_ledger.json"),
         "archive": str(archive),
