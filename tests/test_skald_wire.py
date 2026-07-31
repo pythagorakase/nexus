@@ -895,61 +895,115 @@ def test_presence_without_baseline_raises_loudly() -> None:
 
 
 @pytest.mark.parametrize(
-    "presence",
+    ("presence", "expected_loc"),
     [
-        {"enter": [{"kind": "place", "name": "Archive"}]},
-        {"enter": [{"kind": "faction", "name": "Guild"}]},
-        {"exit": [{"kind": "place", "name": "Archive"}]},
-        {"exit": [{"kind": "faction", "name": "Guild"}]},
-        {"transit": [{"kind": "character", "name": "Brena"}]},
-        {"transit": [{"kind": "faction", "name": "Guild"}]},
-        {
-            "scene_reset": {
-                "place": {"kind": "character", "name": "Brena"},
-                "present": [],
-            }
-        },
-        {
-            "scene_reset": {
-                "place": {"kind": "faction", "name": "Guild"},
-                "present": [],
-            }
-        },
-        {
-            "scene_reset": {
-                "place": {"kind": "place", "name": "Archive"},
-                "present": [{"kind": "place", "name": "Annex"}],
-            }
-        },
-        {
-            "scene_reset": {
-                "place": {"kind": "place", "name": "Archive"},
-                "present": [{"kind": "faction", "name": "Guild"}],
-            }
-        },
+        (
+            {"enter": [{"kind": "place", "name": "Archive"}]},
+            ("presence", "enter", 0, "kind"),
+        ),
+        (
+            {"enter": [{"kind": "faction", "name": "Guild"}]},
+            ("presence", "enter", 0, "kind"),
+        ),
+        (
+            {"exit": [{"kind": "place", "name": "Archive"}]},
+            ("presence", "exit", 0, "kind"),
+        ),
+        (
+            {"exit": [{"kind": "faction", "name": "Guild"}]},
+            ("presence", "exit", 0, "kind"),
+        ),
+        (
+            {"transit": [{"kind": "character", "name": "Brena"}]},
+            ("presence", "transit", 0, "kind"),
+        ),
+        (
+            {"transit": [{"kind": "faction", "name": "Guild"}]},
+            ("presence", "transit", 0, "kind"),
+        ),
+        (
+            {
+                "scene_reset": {
+                    "place": {"kind": "character", "name": "Brena"},
+                    "present": [],
+                }
+            },
+            ("presence", "scene_reset", "place", "kind"),
+        ),
+        (
+            {
+                "scene_reset": {
+                    "place": {"kind": "faction", "name": "Guild"},
+                    "present": [],
+                }
+            },
+            ("presence", "scene_reset", "place", "kind"),
+        ),
+        (
+            {
+                "scene_reset": {
+                    "place": {"kind": "place", "name": "Archive"},
+                    "present": [{"kind": "place", "name": "Annex"}],
+                }
+            },
+            ("presence", "scene_reset", "present", 0, "kind"),
+        ),
+        (
+            {
+                "scene_reset": {
+                    "place": {"kind": "place", "name": "Archive"},
+                    "present": [{"kind": "faction", "name": "Guild"}],
+                }
+            },
+            ("presence", "scene_reset", "present", 0, "kind"),
+        ),
     ],
 )
 def test_presence_kind_partitions_reject_invalid_json(
     presence: dict[str, Any],
+    expected_loc: tuple[str | int, ...],
 ) -> None:
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValidationError) as exc_info:
         SkaldWriterWire.model_validate({**SPARSE_WIRE_PAYLOAD, "presence": presence})
+    error_pairs = {
+        (error["type"], error["loc"][-len(expected_loc) :])
+        for error in exc_info.value.errors()
+    }
+    assert ("literal_error", expected_loc) in error_pairs
 
 
 @pytest.mark.parametrize(
-    "baseline",
+    ("baseline", "expected_loc"),
     [
-        {"present": [{"kind": "place", "name": "Archive"}]},
-        {"present": [{"kind": "faction", "name": "Guild"}]},
-        {"setting": {"kind": "character", "name": "Brena"}},
-        {"setting": {"kind": "faction", "name": "Guild"}},
+        (
+            {"present": [{"kind": "place", "name": "Archive"}]},
+            ("present", 0, "kind"),
+        ),
+        (
+            {"present": [{"kind": "faction", "name": "Guild"}]},
+            ("present", 0, "kind"),
+        ),
+        (
+            {"setting": {"kind": "character", "name": "Brena"}},
+            ("setting", "kind"),
+        ),
+        (
+            {"setting": {"kind": "faction", "name": "Guild"}},
+            ("setting", "kind"),
+        ),
     ],
 )
 def test_presence_baseline_kind_partitions_reject_invalid_json(
     baseline: dict[str, Any],
+    expected_loc: tuple[str | int, ...],
 ) -> None:
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValidationError) as exc_info:
         PresenceBaseline.model_validate(baseline)
+    error_pairs = {
+        (error["type"], error["loc"][-len(expected_loc) :])
+        for error in exc_info.value.errors()
+    }
+    assert ("literal_error", expected_loc) in error_pairs
 
 
 def test_faction_mention_remains_valid() -> None:
