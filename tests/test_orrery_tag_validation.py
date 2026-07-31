@@ -101,7 +101,10 @@ class FakeRegistryCursor:
         return False
 
     def execute(self, sql: str, params: Tuple[Any, ...] = ()) -> None:
-        if "FROM entities" in sql and "kind::text" in sql:
+        if "WITH candidates AS" in sql and "entity_tags_current" in sql:
+            self._result = []
+            self._one = None
+        elif "FROM entities" in sql and "kind::text" in sql:
             entity_ids = params[0]
             self._result = [
                 (entity_id, self.entity_kinds_by_id[entity_id])

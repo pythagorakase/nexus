@@ -530,6 +530,172 @@ def _row_value(row: Any, key: str, index: int) -> Any:
     return row[index]
 
 
+@dataclass(frozen=True)
+class _ExtendExpiryCandidate:
+    """One wire-list entry eligible for active-state normalization."""
+
+    ordinal: int
+    entity_kind: str
+    update: Any
+    tags_add: List[str]
+    tag_index: int
+    wire_id: Optional[int]
+    wire_name: str
+    tag: str
+
+
+def normalize_extend_expiry_reasserts(
+    response: Any,
+    cur: Any,
+    *,
+    vocabulary: StorytellerVocabulary,
+) -> int:
+    """Remove already-active ``extend_expiry`` tags from wire update deltas."""
+
+    updates = getattr(response, "updates", None)
+    if updates is None:
+        return 0
+
+    candidates: List[_ExtendExpiryCandidate] = []
+    for array_name, entity_kind in (
+        ("characters", "character"),
+        ("places", "place"),
+        ("factions", "faction"),
+    ):
+        policies = vocabulary.tag_reapplication_policies_by_kind.get(entity_kind, {})
+        for update in getattr(updates, array_name, []) or []:
+            tags_add = getattr(update, "tags_add", None)
+            if not tags_add:
+                continue
+            for tag_index, tag in enumerate(tags_add):
+                if policies.get(tag) != "extend_expiry":
+                    continue
+                candidates.append(
+                    _ExtendExpiryCandidate(
+                        ordinal=len(candidates),
+                        entity_kind=entity_kind,
+                        update=update,
+                        tags_add=tags_add,
+                        tag_index=tag_index,
+                        wire_id=getattr(update, "id", None),
+                        wire_name=str(getattr(update, "name", "")),
+                        tag=tag,
+                    )
+                )
+
+    if not candidates:
+        return 0
+
+    cur.execute(
+        """
+        WITH candidates AS (
+            SELECT *
+            FROM UNNEST(
+                %s::integer[],
+                %s::text[],
+                %s::bigint[],
+                %s::text[],
+                %s::text[]
+            ) AS candidate(ordinal, entity_kind, wire_id, wire_name, tag)
+        ),
+        canonical_entities AS (
+            SELECT
+                'character'::text AS entity_kind,
+                id AS wire_id,
+                entity_id,
+                name::text AS canonical_name
+            FROM characters
+            UNION ALL
+            SELECT
+                'place'::text AS entity_kind,
+                id AS wire_id,
+                entity_id,
+                name::text AS canonical_name
+            FROM places
+            UNION ALL
+            SELECT
+                'faction'::text AS entity_kind,
+                id AS wire_id,
+                entity_id,
+                name::text AS canonical_name
+            FROM factions
+        )
+        SELECT
+            candidate.ordinal,
+            canonical.canonical_name,
+            (current_tag.entity_id IS NOT NULL) AS is_active
+        FROM candidates candidate
+        JOIN canonical_entities canonical
+          ON canonical.entity_kind = candidate.entity_kind
+         AND (
+             (
+                 candidate.wire_id IS NOT NULL
+                 AND canonical.wire_id = candidate.wire_id
+             )
+             OR (
+                 candidate.wire_id IS NULL
+                 AND canonical.canonical_name = candidate.wire_name
+             )
+         )
+        JOIN entities entity
+          ON entity.id = canonical.entity_id
+         AND entity.kind::text = candidate.entity_kind
+        LEFT JOIN entity_tags_current current_tag
+          ON current_tag.entity_id = entity.id
+         AND current_tag.tag = candidate.tag
+        ORDER BY candidate.ordinal
+        """,
+        (
+            [candidate.ordinal for candidate in candidates],
+            [candidate.entity_kind for candidate in candidates],
+            [candidate.wire_id for candidate in candidates],
+            [candidate.wire_name for candidate in candidates],
+            [candidate.tag for candidate in candidates],
+        ),
+    )
+    matches_by_ordinal: dict[int, List[Tuple[str, bool]]] = {}
+    for row in cur.fetchall():
+        ordinal = int(_row_value(row, "ordinal", 0))
+        matches_by_ordinal.setdefault(ordinal, []).append(
+            (
+                str(_row_value(row, "canonical_name", 1)),
+                bool(_row_value(row, "is_active", 2)),
+            )
+        )
+
+    removals_by_update: dict[int, Tuple[Any, List[str], set[int]]] = {}
+    normalized = 0
+    for candidate in candidates:
+        matches = matches_by_ordinal.get(candidate.ordinal, [])
+        if len(matches) != 1 or not matches[0][1]:
+            continue
+        canonical_name = matches[0][0]
+        update_key = id(candidate.update)
+        if update_key not in removals_by_update:
+            removals_by_update[update_key] = (
+                candidate.update,
+                candidate.tags_add,
+                set(),
+            )
+        removals_by_update[update_key][2].add(candidate.tag_index)
+        logger.warning(
+            "extend-expiry re-assert normalized " "entity_kind=%s entity=%s tag=%s",
+            candidate.entity_kind,
+            canonical_name,
+            candidate.tag,
+        )
+        normalized += 1
+
+    for update, tags_add, removal_indexes in removals_by_update.values():
+        tags_add[:] = [
+            tag for index, tag in enumerate(tags_add) if index not in removal_indexes
+        ]
+        if not tags_add:
+            update.tags_add = None
+
+    return normalized
+
+
 def _annotate_declaration_issues(
     issues: List[str],
     declarations: Any,
@@ -723,6 +889,11 @@ def build_storyteller_tag_validator(
         vocabulary = read_storyteller_vocabulary(dbname)
         with get_connection(dbname) as conn:
             with conn.cursor() as cur:
+                normalize_extend_expiry_reasserts(
+                    output,
+                    cur,
+                    vocabulary=vocabulary,
+                )
                 issues = collect_orrery_tag_issues(
                     output,
                     cur,
