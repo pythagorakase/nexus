@@ -1,6 +1,7 @@
 {
   "name": "nexus-ui",
   "version": "1.0.0",
+  "types": ".design-sync/.cache/lib-dist/index.d.ts",
   "type": "module",
   "license": "MIT",
   "scripts": {
