@@ -47,10 +47,22 @@ function Rows({ expand }: { expand: boolean }) {
     };
   }, [expand]);
 
+  // The `nexus-shell` ancestor is required, not decoration: alongside its own
+  // unscoped `.lm-*` rules the component emits `.caption`, `.btn-soft`, and
+  // `.btn-primary`, and nexus-layout.css defines all three ONLY under
+  // `.nexus-shell`. A bare <ul> renders the quant labels and the EJECT / APPLY
+  // buttons as browser defaults. Same trap the SettingsPane preview documents.
+  // The shell's 100vh height and 52px TopBar grid row are overridden locally so
+  // the lone list fills the cell.
   return (
-    <ul className="model-list" ref={ref} style={{ width: 440 }}>
-      <LocalModelRows selected onPickLocal={() => {}} knobs={STILL_KNOBS} />
-    </ul>
+    <div
+      className="nexus-shell"
+      style={{ width: 480, height: "auto", gridTemplateRows: "auto", padding: 16 }}
+    >
+      <ul className="model-list" ref={ref}>
+        <LocalModelRows selected onPickLocal={() => {}} knobs={STILL_KNOBS} />
+      </ul>
+    </div>
   );
 }
 

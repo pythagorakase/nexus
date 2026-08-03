@@ -191,9 +191,15 @@ state diversity into one rich stub scenario instead.
   `[aria-expanded="false"]` so it is idempotent and never toggles an open family shut.
   Same principle as the ContextMenu preview: drive the real trigger, never hand-write
   the open state.
-- It renders bare `<li>`s — wrap in `<ul className="model-list">`, as `SettingsPane` does.
-  `.lm-*` and `.intertitle` rules are unscoped, so no `.nexus-shell` wrapper is needed
-  (unlike `SettingsPane`'s footer buttons).
+- It renders bare `<li>`s — wrap in `<ul className="model-list">` inside a
+  **`.nexus-shell` ancestor**, as `SettingsPane` does. Checking that the `.lm-*` rules
+  are unscoped is NOT sufficient: the component also emits `.caption`, `.btn-soft`, and
+  `.btn-primary`, and nexus-layout.css defines all three ONLY under `.nexus-shell`, so a
+  bare `<ul>` renders the quant labels and the EJECT / APPLY buttons as browser defaults
+  (caught in Codex review of PR #656). Override the shell's `100vh` and its `52px 1fr`
+  row grid locally. **When auditing a preview's wrapper, grep every class the component
+  emits — not just its own namespace.** `Intertitle` was checked the same way and is
+  genuinely clean (only unscoped `.intertitle*` rules).
 
 ## Component-type recipes (folded from wave-2 authoring)
 
