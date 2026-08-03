@@ -91,11 +91,17 @@ def _jobs(
     *,
     state: str | None = None,
     attempts: int = 1,
+    failed_jobs: int = 0,
 ) -> dict[str, object]:
-    counts = {"queued": 0, "leased": 0, "succeeded": 0, "failed": 0}
+    counts = {
+        "queued": 0,
+        "leased": 0,
+        "succeeded": 0,
+        "failed": failed_jobs,
+    }
     non_terminal_jobs: list[dict[str, object]] = []
     if state is not None:
-        counts[state] = 1
+        counts[state] += 1
         if state in ("queued", "leased"):
             non_terminal_jobs.append(_job(state, attempts=attempts))
     return {
@@ -121,6 +127,7 @@ def _state(config: qa_shift.ShiftConfig) -> dict[str, object]:
         "baseline_event_count": 0,
         "last_event_count": 0,
         "last_unknown_usage_events": 0,
+        "baseline_failed_jobs": 0,
         "checks": 0,
         "max_command_delta": 0,
         "config": qa_shift._config_payload(config),
@@ -494,6 +501,66 @@ def test_pending_post_check_retains_late_usage_in_causal_command_delta(
     assert checks[2]["non_terminal_jobs"] == [_job("leased")]
 
 
+def test_failure_during_pending_stops_after_settlement_with_full_delta(
+    tmp_path: Path,
+) -> None:
+    config = replace(qa_shift.load_shift_config(), archive_root=tmp_path)
+    begin = qa_shift.begin_shift(
+        config=config,
+        usage_reader=lambda _root, _day: _usage(total=100),
+        jobs_reader=_settled_jobs_reader,
+        now=NOW,
+    )
+    archive = Path(begin["archive"])
+    synchronous_event = {
+        **_event(total=200),
+        "seat": "skald_writer",
+        "request_id": "writer-before-failure",
+    }
+    late_event = {
+        **_event(total=50),
+        "seat": "retrograde_expansion",
+        "request_id": "late-before-failure",
+    }
+
+    pending = qa_shift.check_shift(
+        archive=archive,
+        expect_call=True,
+        usage_reader=lambda _root, _day: _usage(
+            total=300,
+            events=[synchronous_event],
+        ),
+        jobs_reader=lambda _root, _slot: _jobs(
+            state="leased",
+            failed_jobs=1,
+        ),
+        now=NOW + timedelta(seconds=2),
+    )
+    pending_state = json.loads((archive / "shift_state.json").read_text())
+    settled = qa_shift.check_shift(
+        archive=archive,
+        expect_call=True,
+        usage_reader=lambda _root, _day: _usage(
+            total=350,
+            events=[synchronous_event, late_event],
+        ),
+        jobs_reader=lambda _root, _slot: _jobs(failed_jobs=1),
+        now=NOW + timedelta(seconds=12),
+    )
+
+    assert pending["status"] == "pending"
+    assert pending["reasons"] == []
+    assert pending["current_failed_jobs"] == 1
+    assert pending_state["last_total"] == 100
+    assert pending_state["last_event_count"] == 0
+    assert pending_state["max_command_delta"] == 0
+    assert settled["status"] == "stop"
+    assert "maturation_job_failed" in settled["reasons"]
+    assert settled["openai_delta_since_last_check"] == 250
+    assert settled["new_usage_events"] == 2
+    assert settled["max_command_delta"] == 250
+
+
 def test_check_reads_queue_before_usage_to_close_settlement_race(
     tmp_path: Path,
 ) -> None:
@@ -541,8 +608,11 @@ def test_only_non_terminal_maturation_states_block_checks(
     attempts: int,
     expected_status: str,
 ) -> None:
+    shift_state = _state(qa_shift.load_shift_config())
+    if state == "failed":
+        shift_state["baseline_failed_jobs"] = 1
     result, _ = qa_shift.evaluate_check(
-        state=_state(qa_shift.load_shift_config()),
+        state=shift_state,
         usage_payload=_usage(total=100),
         jobs_payload=_jobs(state=state, attempts=attempts),
         expect_call=False,
@@ -550,6 +620,47 @@ def test_only_non_terminal_maturation_states_block_checks(
     )
 
     assert result["status"] == expected_status
+
+
+def test_new_terminal_maturation_failure_stops_settled_check() -> None:
+    result, _ = qa_shift.evaluate_check(
+        state=_state(qa_shift.load_shift_config()),
+        usage_payload=_usage(total=100),
+        jobs_payload=_jobs(failed_jobs=1),
+        expect_call=False,
+        now=NOW + timedelta(minutes=1),
+    )
+
+    assert result["status"] == "stop"
+    assert "maturation_job_failed" in result["reasons"]
+    assert result["baseline_failed_jobs"] == 0
+    assert result["current_failed_jobs"] == 1
+
+
+def test_preexisting_failed_jobs_become_shift_baseline(tmp_path: Path) -> None:
+    config = replace(qa_shift.load_shift_config(), archive_root=tmp_path)
+    begin = qa_shift.begin_shift(
+        config=config,
+        usage_reader=lambda _root, _day: _usage(total=100),
+        jobs_reader=lambda _root, _slot: _jobs(failed_jobs=2),
+        now=NOW,
+    )
+    archive = Path(begin["archive"])
+    state = json.loads((archive / "shift_state.json").read_text())
+
+    check = qa_shift.check_shift(
+        archive=archive,
+        expect_call=False,
+        usage_reader=lambda _root, _day: _usage(total=100),
+        jobs_reader=lambda _root, _slot: _jobs(failed_jobs=2),
+        now=NOW + timedelta(minutes=1),
+    )
+
+    assert state["baseline_failed_jobs"] == 2
+    assert check["status"] == "continue"
+    assert "maturation_job_failed" not in check["reasons"]
+    assert check["baseline_failed_jobs"] == 2
+    assert check["current_failed_jobs"] == 2
 
 
 def test_begin_refuses_dirty_maturation_queue(tmp_path: Path) -> None:
@@ -865,6 +976,30 @@ def test_finish_reports_maturation_settlement_without_refusal(
         [] if job_state is None else [_job("leased")]
     )
     assert final_state["usage_settled"] is usage_settled
+
+
+def test_finish_marks_new_maturation_failure_unsettled(tmp_path: Path) -> None:
+    config = replace(qa_shift.load_shift_config(), archive_root=tmp_path)
+    begin = qa_shift.begin_shift(
+        config=config,
+        usage_reader=lambda _root, _day: _usage(total=100),
+        jobs_reader=lambda _root, _slot: _jobs(failed_jobs=1),
+        now=NOW,
+    )
+    archive = Path(begin["archive"])
+
+    finish = qa_shift.finish_shift(
+        archive=archive,
+        exit_condition="blocked",
+        usage_reader=lambda _root, _day: _usage(total=125),
+        jobs_reader=lambda _root, _slot: _jobs(failed_jobs=2),
+        now=NOW + timedelta(minutes=1),
+    )
+
+    assert finish["status"] == "finished"
+    assert finish["usage_settled"] is False
+    assert finish["baseline_failed_jobs"] == 1
+    assert finish["current_failed_jobs"] == 2
 
 
 def test_pending_check_exit_code_contract(

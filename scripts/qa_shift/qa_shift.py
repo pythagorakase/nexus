@@ -579,6 +579,7 @@ def begin_shift(
         "baseline_event_count": len(usage["events"]),
         "last_event_count": len(usage["events"]),
         "last_unknown_usage_events": usage["unknown"],
+        "baseline_failed_jobs": jobs["counts"]["failed"],
         "checks": 0,
         "max_command_delta": 0,
         "config": _config_payload(config),
@@ -681,6 +682,8 @@ def evaluate_check(
     started_at = _parse_utc(str(state["started_at"]))
     elapsed_minutes = (now.astimezone(timezone.utc) - started_at).total_seconds() / 60
     jobs = _jobs_snapshot(jobs_payload, slot=slot)
+    baseline_failed_jobs = int(state["baseline_failed_jobs"])
+    current_failed_jobs = int(jobs["counts"]["failed"])
     if jobs["non_terminal_jobs"]:
         return (
             {
@@ -716,6 +719,8 @@ def evaluate_check(
                 "expect_call": expect_call,
                 "jobs": jobs,
                 "non_terminal_jobs": jobs["non_terminal_jobs"],
+                "baseline_failed_jobs": baseline_failed_jobs,
+                "current_failed_jobs": current_failed_jobs,
             },
             dict(state),
         )
@@ -727,6 +732,8 @@ def evaluate_check(
         reasons.append("daily_total_decreased")
     if same_quota_day and len(usage["events"]) < previous_events:
         reasons.append("event_count_decreased")
+    if current_failed_jobs > baseline_failed_jobs:
+        reasons.append("maturation_job_failed")
     if unexpected_routes:
         reasons.append("unexpected_qa_model_route")
     if expect_call and not expected_events:
@@ -795,6 +802,8 @@ def evaluate_check(
         "expect_call": expect_call,
         "jobs": jobs,
         "non_terminal_jobs": jobs["non_terminal_jobs"],
+        "baseline_failed_jobs": baseline_failed_jobs,
+        "current_failed_jobs": current_failed_jobs,
     }
     return result, updated
 
@@ -851,7 +860,11 @@ def finish_shift(
     quota_day = str(state["quota_day"])
     slot = int(state["config"]["slot"])
     jobs = _jobs_snapshot(jobs_reader(repo_root, slot), slot=slot)
-    usage_settled = not jobs["non_terminal_jobs"]
+    baseline_failed_jobs = int(state["baseline_failed_jobs"])
+    current_failed_jobs = int(jobs["counts"]["failed"])
+    usage_settled = (
+        not jobs["non_terminal_jobs"] and current_failed_jobs <= baseline_failed_jobs
+    )
     usage_payload = usage_reader(repo_root, quota_day)
     usage = _usage_snapshot(usage_payload)
     if usage["day"] != quota_day:
@@ -892,6 +905,8 @@ def finish_shift(
             "skald_writer_tripwire": rejection_ledger["skald_writer_tripwire"],
             "jobs": jobs,
             "usage_settled": usage_settled,
+            "baseline_failed_jobs": baseline_failed_jobs,
+            "current_failed_jobs": current_failed_jobs,
         }
     )
     _atomic_write_json(archive / STATE_FILE, final_state)
@@ -914,6 +929,8 @@ def finish_shift(
         "archive": str(archive),
         "jobs": jobs,
         "usage_settled": usage_settled,
+        "baseline_failed_jobs": baseline_failed_jobs,
+        "current_failed_jobs": current_failed_jobs,
     }
     _append_jsonl(
         archive / CHECKS_FILE,

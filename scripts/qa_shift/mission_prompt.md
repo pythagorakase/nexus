@@ -145,6 +145,10 @@ maturation usage then lands in the same command delta as the command that
 caused it. If pending persists for more than twenty minutes with no state
 change in the reported jobs, stop probing, run the finish step, and record the
 stalled job ids in the mission report.
+A check instead returns stop with reason `maturation_job_failed` when any
+maturation job newly reaches the failed state during the shift: usage
+accounting can no longer be proven complete, so end the shift and record the
+job's last_error from the archive in the mission report.
 
 Never detach a request or restart/kill the gateway while a provider response is
 unaccounted for. Gateway-restart interruption probes may run only between
