@@ -27,6 +27,7 @@ DEFAULT_CONFIG_PATH = Path(__file__).with_name("qa_shift.toml")
 STATE_FILE = "shift_state.json"
 CHECKS_FILE = "usage_checks.jsonl"
 STOP_EXIT_CODE = 2
+PENDING_EXIT_CODE = 3
 
 
 class ShiftError(RuntimeError):
@@ -56,6 +57,7 @@ class ShiftConfig:
 
 
 UsageReader = Callable[[Path, str | None], dict[str, Any]]
+JobsReader = Callable[[Path, int], dict[str, Any]]
 
 
 def _required_int(table: Mapping[str, Any], key: str) -> int:
@@ -157,6 +159,39 @@ def _read_usage(repo_root: Path, day: str | None = None) -> dict[str, Any]:
     return payload
 
 
+def _read_jobs(repo_root: Path, slot: int) -> dict[str, Any]:
+    """Read durable maturation jobs through the public NEXUS CLI."""
+
+    command = ["nexus", "jobs", "--slot", str(slot), "--json"]
+    try:
+        completed = subprocess.run(
+            command,
+            cwd=repo_root,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError as exc:
+        raise ShiftError(
+            "The nexus executable is unavailable; run this utility with "
+            "`poetry run python`."
+        ) from exc
+    if completed.returncode != 0:
+        detail = completed.stderr.strip() or completed.stdout.strip()
+        raise ShiftError(f"`nexus jobs --slot {slot} --json` failed: {detail}")
+    try:
+        payload = json.loads(completed.stdout)
+    except json.JSONDecodeError as exc:
+        raise ShiftError(
+            f"`nexus jobs --slot {slot} --json` returned invalid JSON"
+        ) from exc
+    if payload.get("success") is not True:
+        raise ShiftError(
+            f"`nexus jobs --slot {slot} --json` reported failure: {payload}"
+        )
+    return payload
+
+
 def _usage_snapshot(payload: Mapping[str, Any]) -> dict[str, Any]:
     usage = payload.get("usage")
     if not isinstance(usage, dict):
@@ -183,6 +218,59 @@ def _usage_snapshot(payload: Mapping[str, Any]) -> dict[str, Any]:
         "unknown": unknown,
         "events": events,
     }
+
+
+def _jobs_snapshot(payload: Mapping[str, Any], *, slot: int) -> dict[str, Any]:
+    """Validate one public maturation-jobs payload for the configured slot."""
+
+    payload_slot = payload.get("slot")
+    if isinstance(payload_slot, bool) or not isinstance(payload_slot, int):
+        raise ShiftError("Jobs payload has no integer at .slot")
+    if payload_slot != slot:
+        raise ShiftError(
+            f"Jobs payload returned the wrong slot ({payload_slot} != {slot})"
+        )
+    raw_counts = payload.get("counts")
+    raw_jobs = payload.get("non_terminal_jobs")
+    if not isinstance(raw_counts, dict):
+        raise ShiftError("Jobs payload has no object at .counts")
+    if not isinstance(raw_jobs, list):
+        raise ShiftError("Jobs payload has no list at .non_terminal_jobs")
+
+    counts: dict[str, int] = {}
+    for state in ("queued", "leased", "succeeded", "failed"):
+        value = raw_counts.get(state)
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise ShiftError(f"Jobs payload count for {state!r} is invalid")
+        counts[state] = value
+
+    jobs: list[dict[str, Any]] = []
+    required_fields = (
+        "id",
+        "state",
+        "entity_kind",
+        "entity_name",
+        "requesting_chunk_id",
+        "attempts",
+        "available_at",
+        "lease_until",
+    )
+    for index, raw_job in enumerate(raw_jobs):
+        if not isinstance(raw_job, dict):
+            raise ShiftError(f"Jobs payload row {index} is not an object")
+        missing = [field for field in required_fields if field not in raw_job]
+        if missing:
+            raise ShiftError(f"Jobs payload row {index} is missing fields: {missing}")
+        if raw_job["state"] not in ("queued", "leased"):
+            raise ShiftError(
+                f"Jobs payload row {index} has terminal state " f"{raw_job['state']!r}"
+            )
+        jobs.append({field: raw_job[field] for field in required_fields})
+    if counts["queued"] + counts["leased"] != len(jobs):
+        raise ShiftError(
+            "Jobs payload non-terminal counts do not match its diagnostic list"
+        )
+    return {"slot": slot, "counts": counts, "non_terminal_jobs": jobs}
 
 
 def _rejection_ledger(
@@ -431,11 +519,18 @@ def begin_shift(
     config: ShiftConfig,
     repo_root: Path = REPO_ROOT,
     usage_reader: UsageReader = _read_usage,
+    jobs_reader: JobsReader = _read_jobs,
     now: datetime | None = None,
 ) -> dict[str, Any]:
     """Create a shift archive, isolated config, and usage baseline."""
 
     current_time = now or datetime.now(timezone.utc)
+    jobs = _jobs_snapshot(jobs_reader(repo_root, config.slot), slot=config.slot)
+    if jobs["non_terminal_jobs"]:
+        raise ShiftError(
+            "QA shift cannot begin with non-terminal maturation jobs: "
+            + json.dumps(jobs["non_terminal_jobs"], sort_keys=True)
+        )
     usage_payload = usage_reader(repo_root, None)
     usage = _usage_snapshot(usage_payload)
     if usage["unknown"]:
@@ -484,6 +579,7 @@ def begin_shift(
         "baseline_event_count": len(usage["events"]),
         "last_event_count": len(usage["events"]),
         "last_unknown_usage_events": usage["unknown"],
+        "baseline_failed_jobs": jobs["counts"]["failed"],
         "checks": 0,
         "max_command_delta": 0,
         "config": _config_payload(config),
@@ -498,6 +594,7 @@ def begin_shift(
         "daily_limit": config.daily_token_limit,
         "token_fence": config.token_fence,
         "tokens_before_fence": config.token_fence - usage["total"],
+        "jobs": jobs,
     }
     _append_jsonl(
         archive / CHECKS_FILE,
@@ -523,6 +620,7 @@ def evaluate_check(
     *,
     state: Mapping[str, Any],
     usage_payload: Mapping[str, Any],
+    jobs_payload: Mapping[str, Any],
     expect_call: bool,
     now: datetime,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -530,19 +628,13 @@ def evaluate_check(
 
     usage = _usage_snapshot(usage_payload)
     config = state["config"]
-    reasons: list[str] = []
     previous_total = int(state["last_total"])
     previous_events = int(state["last_event_count"])
     same_quota_day = usage["day"] == state["quota_day"]
     raw_delta = usage["total"] - previous_total if same_quota_day else None
     delta = max(0, raw_delta) if raw_delta is not None else None
 
-    if not same_quota_day:
-        reasons.append("quota_day_changed")
-    if raw_delta is not None and raw_delta < 0:
-        reasons.append("daily_total_decreased")
     if same_quota_day and len(usage["events"]) < previous_events:
-        reasons.append("event_count_decreased")
         new_events: list[Any] = []
     elif same_quota_day:
         new_events = usage["events"][previous_events:]
@@ -586,6 +678,62 @@ def evaluate_check(
             if event.get("provider") != "openai" or event.get("model") != target_model
         }
     )
+    token_fence = int(config["token_fence"])
+    started_at = _parse_utc(str(state["started_at"]))
+    elapsed_minutes = (now.astimezone(timezone.utc) - started_at).total_seconds() / 60
+    jobs = _jobs_snapshot(jobs_payload, slot=slot)
+    baseline_failed_jobs = int(state["baseline_failed_jobs"])
+    current_failed_jobs = int(jobs["counts"]["failed"])
+    if jobs["non_terminal_jobs"]:
+        return (
+            {
+                "status": "pending",
+                "reasons": [],
+                "quota_day": usage["day"],
+                "daily_total": usage["total"],
+                "daily_limit": int(config["daily_token_limit"]),
+                "daily_headroom": max(
+                    0, int(config["daily_token_limit"]) - usage["total"]
+                ),
+                "token_fence": token_fence,
+                "tokens_before_fence": max(0, token_fence - usage["total"]),
+                "openai_delta_since_last_check": delta,
+                "shift_openai_total": (
+                    max(0, usage["total"] - int(state["baseline_total"]))
+                    if same_quota_day
+                    else None
+                ),
+                "max_command_delta": int(state["max_command_delta"]),
+                "elapsed_minutes": round(elapsed_minutes, 2),
+                "new_usage_events": len(new_events),
+                "qa_usage_events": len(qa_events),
+                "qa_api_calls": qa_api_calls,
+                "qa_models_seen": sorted(
+                    {
+                        str(event.get("model"))
+                        for event in qa_events
+                        if event.get("model") is not None
+                    }
+                ),
+                "unexpected_routes": unexpected_routes,
+                "expect_call": expect_call,
+                "jobs": jobs,
+                "non_terminal_jobs": jobs["non_terminal_jobs"],
+                "baseline_failed_jobs": baseline_failed_jobs,
+                "current_failed_jobs": current_failed_jobs,
+            },
+            dict(state),
+        )
+
+    reasons: list[str] = []
+    if not same_quota_day:
+        reasons.append("quota_day_changed")
+    if raw_delta is not None and raw_delta < 0:
+        reasons.append("daily_total_decreased")
+    if same_quota_day and len(usage["events"]) < previous_events:
+        reasons.append("event_count_decreased")
+    if current_failed_jobs > baseline_failed_jobs:
+        reasons.append("maturation_job_failed")
     if unexpected_routes:
         reasons.append("unexpected_qa_model_route")
     if expect_call and not expected_events:
@@ -593,12 +741,9 @@ def evaluate_check(
     if usage["unknown"] > 0:
         reasons.append("unknown_openai_usage")
 
-    token_fence = int(config["token_fence"])
     if usage["total"] >= token_fence:
         reasons.append("token_fence_reached")
 
-    started_at = _parse_utc(str(state["started_at"]))
-    elapsed_minutes = (now.astimezone(timezone.utc) - started_at).total_seconds() / 60
     if elapsed_minutes >= int(config["wall_clock_minutes"]):
         reasons.append("wall_clock_reached")
 
@@ -655,6 +800,10 @@ def evaluate_check(
         ),
         "unexpected_routes": unexpected_routes,
         "expect_call": expect_call,
+        "jobs": jobs,
+        "non_terminal_jobs": jobs["non_terminal_jobs"],
+        "baseline_failed_jobs": baseline_failed_jobs,
+        "current_failed_jobs": current_failed_jobs,
     }
     return result, updated
 
@@ -665,6 +814,7 @@ def check_shift(
     expect_call: bool,
     repo_root: Path = REPO_ROOT,
     usage_reader: UsageReader = _read_usage,
+    jobs_reader: JobsReader = _read_jobs,
     now: datetime | None = None,
 ) -> dict[str, Any]:
     """Run and persist one fail-closed usage check."""
@@ -672,10 +822,12 @@ def check_shift(
     archive = archive.resolve()
     state = _load_state(archive)
     current_time = now or datetime.now(timezone.utc)
+    jobs_payload = jobs_reader(repo_root, int(state["config"]["slot"]))
     usage_payload = usage_reader(repo_root, None)
     result, updated = evaluate_check(
         state=state,
         usage_payload=usage_payload,
+        jobs_payload=jobs_payload,
         expect_call=expect_call,
         now=current_time,
     )
@@ -697,6 +849,7 @@ def finish_shift(
     exit_condition: str,
     repo_root: Path = REPO_ROOT,
     usage_reader: UsageReader = _read_usage,
+    jobs_reader: JobsReader = _read_jobs,
     now: datetime | None = None,
 ) -> dict[str, Any]:
     """Capture final usage and close the shift state."""
@@ -705,6 +858,13 @@ def finish_shift(
     state = _load_state(archive)
     current_time = now or datetime.now(timezone.utc)
     quota_day = str(state["quota_day"])
+    slot = int(state["config"]["slot"])
+    jobs = _jobs_snapshot(jobs_reader(repo_root, slot), slot=slot)
+    baseline_failed_jobs = int(state["baseline_failed_jobs"])
+    current_failed_jobs = int(jobs["counts"]["failed"])
+    usage_settled = (
+        not jobs["non_terminal_jobs"] and current_failed_jobs <= baseline_failed_jobs
+    )
     usage_payload = usage_reader(repo_root, quota_day)
     usage = _usage_snapshot(usage_payload)
     if usage["day"] != quota_day:
@@ -743,6 +903,10 @@ def finish_shift(
                 "repair_tax_percent_unavailable_reasons"
             ],
             "skald_writer_tripwire": rejection_ledger["skald_writer_tripwire"],
+            "jobs": jobs,
+            "usage_settled": usage_settled,
+            "baseline_failed_jobs": baseline_failed_jobs,
+            "current_failed_jobs": current_failed_jobs,
         }
     )
     _atomic_write_json(archive / STATE_FILE, final_state)
@@ -763,6 +927,10 @@ def finish_shift(
         "skald_writer_tripwire": rejection_ledger["skald_writer_tripwire"],
         "rejection_ledger": str(archive / "rejection_ledger.json"),
         "archive": str(archive),
+        "jobs": jobs,
+        "usage_settled": usage_settled,
+        "baseline_failed_jobs": baseline_failed_jobs,
+        "current_failed_jobs": current_failed_jobs,
     }
     _append_jsonl(
         archive / CHECKS_FILE,
@@ -846,6 +1014,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(json.dumps(result, indent=2, sort_keys=True))
     if args.command == "check" and result["status"] == "stop":
         return STOP_EXIT_CODE
+    if args.command == "check" and result["status"] == "pending":
+        return PENDING_EXIT_CODE
     return 0
 
 

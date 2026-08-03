@@ -43,7 +43,17 @@ class WorkerCursor:
         self._fetchall = []
         self._fetchone = None
         normalized = " ".join(str(sql).split())
-        if "SELECT count(*) AS count" in normalized:
+        if "AS non_terminal_jobs" in normalized:
+            self._fetchone = {
+                "counts": {
+                    "queued": 0,
+                    "leased": 0,
+                    "succeeded": 0,
+                    "failed": 0,
+                },
+                "non_terminal_jobs": [],
+            }
+        elif "SELECT count(*) AS count" in normalized:
             self._fetchone = {"count": self.count_rows.pop(0)}
         elif "FROM orrery_resolutions r" in normalized:
             self._fetchall = self.promotion_rows
@@ -480,6 +490,10 @@ def test_load_orrery_status_sync_counts_background_work() -> None:
 
     status = load_orrery_status_sync(conn=WorkerConn(cursor))
 
+    assert status.queued_maturation_jobs == 0
+    assert status.leased_maturation_jobs == 0
+    assert status.succeeded_maturation_jobs == 0
+    assert status.failed_maturation_jobs == 0
     assert status.pending_promotions == 1
     assert status.queued_narration_jobs == 2
     assert status.leased_narration_jobs == 3
