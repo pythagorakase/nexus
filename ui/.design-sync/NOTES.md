@@ -73,9 +73,9 @@ The converter resolves real props for **97/97** configured components instead of
 back to `interface <Name>Props { [key: string]: unknown }` for all of them.
 
 Two details are load-bearing:
-- The converter's package-wide glob ignores hidden directories. The top-level
-  `index.d.ts` makes `lib-dist/` the declaration root; emitting only the nested tsc
-  output would still report `[DTS] parsed 0 .d.ts files`.
+- Without the top-level barrel, the converter parses the 126 nested declaration files
+  but finds zero exported entry symbols. The curated `index.d.ts` supplies those entry
+  symbols from the package root.
 - The runtime entry intentionally exports hundreds of compound pieces. The declaration
   barrel exports only the 97 committed `componentSrcMap` roots so declaration discovery
   does not turn every `DialogTrigger`/`TableRow`-style subpart into a new card.

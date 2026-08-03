@@ -10,6 +10,8 @@
 // re-merge it (see .design-sync/NOTES.md).
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
+import ts from "typescript";
 
 const run = (cmd, args) => execFileSync(cmd, args, { stdio: "inherit" });
 
@@ -21,6 +23,28 @@ const CSS = ".design-sync/.cache/lib-dist/style.css";
 const CONFIG = ".design-sync/config.json";
 const DTS_DIR = ".design-sync/.cache/lib-dist";
 const DTS_ENTRY = ".design-sync/.cache/lib-dist/index.d.ts";
+
+export function resolveComponentExport(
+  checker,
+  sourceFile,
+  name,
+  declaration,
+) {
+  const moduleSymbol = checker.getSymbolAtLocation(sourceFile);
+  const exportedNames = new Set(
+    moduleSymbol
+      ? checker.getExportsOfModule(moduleSymbol).map((symbol) => symbol.getName())
+      : [],
+  );
+  if (exportedNames.has(name)) {
+    return name;
+  }
+  if (exportedNames.has("default")) {
+    return `default as ${name}`;
+  }
+  throw new Error(`[build] missing export for ${name}: ${declaration}`);
+}
+
 if (!existsSync(CSS)) {
   throw new Error(
     `[build] expected Vite stylesheet at ${CSS} but it's missing — did the lib build emit CSS? ` +
@@ -32,21 +56,34 @@ if (!existsSync(CSS)) {
 // the curated componentSrcMap surface: the runtime barrel intentionally has
 // hundreds of compound exports, while the design system has 97 root cards.
 const { componentSrcMap } = JSON.parse(readFileSync(CONFIG, "utf8"));
-const dtsExports = Object.entries(componentSrcMap)
+const dtsComponents = Object.entries(componentSrcMap)
   .filter(([, source]) => source !== null)
   .map(([name, source]) => {
     const declaration = `${DTS_DIR}/${source.replace(/\.(tsx|jsx)$/, ".d.ts")}`;
     if (!existsSync(declaration)) {
       throw new Error(`[build] missing declaration for ${name}: ${declaration}`);
     }
-    const modulePath = `./${source.replace(/\.(tsx|jsx)$/, "")}`;
-    const exportName = /\bexport\s+default\b/.test(
-      readFileSync(declaration, "utf8"),
-    )
-      ? `default as ${name}`
-      : name;
-    return `export { ${exportName} } from ${JSON.stringify(modulePath)};`;
+    return { declaration, name, source };
   });
+const dtsProgram = ts.createProgram({
+  rootNames: dtsComponents.map(({ declaration }) => resolve(declaration)),
+  options: { noEmit: true, skipLibCheck: true },
+});
+const dtsChecker = dtsProgram.getTypeChecker();
+const dtsExports = dtsComponents.map(({ declaration, name, source }) => {
+  const sourceFile = dtsProgram.getSourceFile(resolve(declaration));
+  if (!sourceFile) {
+    throw new Error(`[build] missing declaration for ${name}: ${declaration}`);
+  }
+  const modulePath = `./${source.replace(/\.(tsx|jsx)$/, "")}`;
+  const exportName = resolveComponentExport(
+    dtsChecker,
+    sourceFile,
+    name,
+    declaration,
+  );
+  return `export { ${exportName} } from ${JSON.stringify(modulePath)};`;
+});
 writeFileSync(DTS_ENTRY, `${dtsExports.join("\n")}\n`);
 
 let css = readFileSync(CSS, "utf8");
