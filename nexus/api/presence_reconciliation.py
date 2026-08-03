@@ -21,6 +21,7 @@ from nexus.agents.logon.skald_wire import (
     _presence_key,
 )
 from nexus.api.presence_audit import _character_only_detector
+from nexus.memory.entity_detector import HighSpecificityEntityDetector
 
 
 logger = logging.getLogger("nexus.api.presence_reconciliation")
@@ -73,7 +74,48 @@ def _matches_character(character: Any, reference: PresenceRef) -> bool:
     character_id = character["id"]
     if character_id is not None and reference.id is not None:
         return character_id == reference.id
-    return str(character["name"]).casefold() == reference.name.casefold()
+    return str(character["name"]) == reference.name
+
+
+def _ambiguous_character_keys(
+    roster_rows: CharacterRosterRows,
+) -> dict[str, set[int]]:
+    """Return casefolded lookup keys that identify multiple characters."""
+
+    candidate_ids: dict[str, set[int]] = {}
+    known_character_ids: set[int] = set()
+    for character in roster_rows.characters:
+        character_id = int(character["id"])
+        known_character_ids.add(character_id)
+        key = str(character["name"]).casefold()
+        candidate_ids.setdefault(key, set()).add(character_id)
+    for alias in roster_rows.aliases:
+        character_id = int(alias["character_id"])
+        if character_id not in known_character_ids:
+            continue
+        key = str(alias["alias"]).casefold()
+        candidate_ids.setdefault(key, set()).add(character_id)
+    return {key: ids for key, ids in candidate_ids.items() if len(ids) > 1}
+
+
+def _reconciliation_detector(
+    roster_rows: CharacterRosterRows,
+) -> HighSpecificityEntityDetector:
+    """Build the shared detector with ambiguous character keys excluded."""
+
+    ambiguous = _ambiguous_character_keys(roster_rows)
+    for key in sorted(ambiguous):
+        logger.warning(
+            "presence prose mention ambiguous: %s candidate_ids=%s",
+            key,
+            sorted(ambiguous[key]),
+        )
+
+    detector = _character_only_detector(roster_rows.characters, roster_rows.aliases)
+    for lookup_key in list(detector.character_lookup):
+        if lookup_key.casefold() in ambiguous:
+            del detector.character_lookup[lookup_key]
+    return detector
 
 
 def _end_of_turn_roster(
@@ -122,8 +164,9 @@ def reconcile_prose_mentions(
     baseline by design and therefore require their own child mention.
     """
 
-    detector = _character_only_detector(roster_rows.characters, roster_rows.aliases)
-    detected = detector.detect_entities(wire.narrative).characters
+    detector = _reconciliation_detector(roster_rows)
+    public_text = "\n".join([wire.narrative, *wire.choices])
+    detected = detector.detect_entities(public_text).characters
     presence = wire.presence
     end_roster = _end_of_turn_roster(presence, presence_baseline)
     mentions = presence.mentions if presence is not None else []

@@ -20,6 +20,7 @@ from nexus.agents.logon.skald_wire import (
     SkaldTurnWire,
     hydrate_skald_turn,
 )
+from nexus.api.lore_adapter import compute_raw_text
 from nexus.api.presence_reconciliation import (
     CharacterRosterRows,
     read_character_roster,
@@ -39,15 +40,17 @@ EMPTY_BASELINE = PresenceBaseline()
 def _wire(
     narrative: str,
     *,
+    choices: list[str] | None = None,
+    letter: str = "Keep the river crossing unresolved.",
     presence: PresenceDelta | None = None,
 ) -> SkaldTurnWire:
     """Build a minimal valid extended wire response."""
 
     return SkaldTurnWire(
         narrative=narrative,
-        choices=["Wait.", "Proceed."],
+        choices=choices or ["Wait.", "Proceed."],
         presence=presence,
-        letter="Keep the river crossing unresolved.",
+        letter=letter,
     )
 
 
@@ -73,6 +76,47 @@ def test_canonical_name_and_alias_resolve_to_canonical_identity(prose: str) -> N
     ]
 
 
+def test_choice_only_name_reconciles_for_every_possible_enacted_choice() -> None:
+    """Offered-choice scanning is a safe superset of committed raw_text."""
+
+    choices = ["Ask Kosi Adebayo about the launch.", "Wait by the river."]
+    wire = reconcile_prose_mentions(
+        _wire("The launch rocks against its mooring.", choices=choices),
+        presence_baseline=EMPTY_BASELINE,
+        roster_rows=ROSTER_ROWS,
+    )
+    enacted_raw_text = compute_raw_text(
+        wire.narrative,
+        {"presented": choices, "selected": 1},
+        choices[0],
+    )
+
+    assert enacted_raw_text == (
+        "The launch rocks against its mooring.\n\n" "Ask Kosi Adebayo about the launch."
+    )
+    assert wire.presence is not None
+    assert wire.presence.mentions == [
+        PresenceRef(kind="character", name="Kosi Adebayo", id=7)
+    ]
+
+
+def test_private_letter_is_not_scanned_for_presence_mentions() -> None:
+    """Private correspondence never enters public detection or raw_text."""
+
+    wire = _wire(
+        "The launch rocks against its mooring.",
+        letter="Have Kosi Adebayo arrive after the next crossing.",
+    )
+
+    reconcile_prose_mentions(
+        wire,
+        presence_baseline=EMPTY_BASELINE,
+        roster_rows=ROSTER_ROWS,
+    )
+
+    assert wire.presence is None
+
+
 def test_end_of_turn_roster_accounts_for_detected_character() -> None:
     """A character entering this turn needs no additional mention."""
 
@@ -80,6 +124,47 @@ def test_end_of_turn_roster_accounts_for_detected_character() -> None:
         "Kosi Adebayo takes the wheel.",
         presence=PresenceDelta(
             enter=[CharacterRef(kind="character", name="Kosi Adebayo", id=7)]
+        ),
+    )
+
+    reconcile_prose_mentions(
+        wire,
+        presence_baseline=EMPTY_BASELINE,
+        roster_rows=ROSTER_ROWS,
+    )
+
+    assert wire.presence is not None
+    assert wire.presence.mentions == []
+
+
+@pytest.mark.parametrize("wire_name", ["kosi adebayo", "the Boatman"])
+def test_idless_noncanonical_roster_ref_does_not_account(wire_name: str) -> None:
+    """Sloppy-cased and alias names cannot suppress a resolvable mention."""
+
+    wire = _wire(
+        "Kosi Adebayo takes the wheel.",
+        presence=PresenceDelta(enter=[CharacterRef(kind="character", name=wire_name)]),
+    )
+
+    reconcile_prose_mentions(
+        wire,
+        presence_baseline=EMPTY_BASELINE,
+        roster_rows=ROSTER_ROWS,
+    )
+
+    assert wire.presence is not None
+    assert wire.presence.mentions == [
+        PresenceRef(kind="character", name="Kosi Adebayo", id=7)
+    ]
+
+
+def test_exact_canonical_idless_roster_ref_accounts() -> None:
+    """An exact canonical name remains resolvable by commit-time SQL."""
+
+    wire = _wire(
+        "Kosi Adebayo takes the wheel.",
+        presence=PresenceDelta(
+            enter=[CharacterRef(kind="character", name="Kosi Adebayo")]
         ),
     )
 
@@ -247,6 +332,77 @@ def test_warning_marker_emits_once_per_character_and_is_silent_when_clean(
         "presence prose mention normalized: Kosi Adebayo",
         "presence prose mention normalized: Nneka Daramola",
     ]
+
+
+def test_ambiguous_identity_is_not_reconciled_but_clean_identity_is(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Casefold collisions warn and fail open without choosing the wrong id."""
+
+    roster = CharacterRosterRows(
+        characters=[
+            {"id": 21, "name": "Mara", "summary": None},
+            {"id": 22, "name": "MARA", "summary": None},
+            {"id": 23, "name": "Nneka Daramola", "summary": None},
+        ],
+        aliases=[],
+    )
+    wire = _wire("Mara speaks with Nneka Daramola beside the river.")
+
+    with caplog.at_level(
+        logging.WARNING,
+        logger="nexus.api.presence_reconciliation",
+    ):
+        reconcile_prose_mentions(
+            wire,
+            presence_baseline=EMPTY_BASELINE,
+            roster_rows=roster,
+        )
+
+    assert wire.presence is not None
+    assert wire.presence.mentions == [
+        PresenceRef(kind="character", name="Nneka Daramola", id=23)
+    ]
+    ambiguous_messages = [
+        record.getMessage()
+        for record in caplog.records
+        if "presence prose mention ambiguous:" in record.getMessage()
+    ]
+    assert ambiguous_messages == [
+        "presence prose mention ambiguous: mara candidate_ids=[21, 22]"
+    ]
+
+
+def test_alias_collision_participates_in_ambiguity_filter(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Aliases and canonical names share one collision namespace."""
+
+    roster = CharacterRosterRows(
+        characters=[
+            {"id": 31, "name": "Kosi Adebayo", "summary": None},
+            {"id": 32, "name": "Harbor Master", "summary": None},
+        ],
+        aliases=[{"character_id": 31, "alias": "harbor master"}],
+    )
+    wire = _wire("The Harbor Master waits beside the launch.")
+
+    with caplog.at_level(
+        logging.WARNING,
+        logger="nexus.api.presence_reconciliation",
+    ):
+        reconcile_prose_mentions(
+            wire,
+            presence_baseline=EMPTY_BASELINE,
+            roster_rows=roster,
+        )
+
+    assert wire.presence is None
+    assert [
+        record.getMessage()
+        for record in caplog.records
+        if "presence prose mention ambiguous:" in record.getMessage()
+    ] == ["presence prose mention ambiguous: harbor master candidate_ids=[31, 32]"]
 
 
 def test_chunk_46_shape_adds_three_mentions_and_hydrates_reference_rows() -> None:
