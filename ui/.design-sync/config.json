@@ -11,6 +11,21 @@
     "component": "DesignThemeRoot"
   },
   "readmeHeader": ".design-sync/conventions.md",
+  "dtsPropsFor": {
+    "NewStoryWizard": "  [key: string]: never;",
+    "ThemeMenu": "  [key: string]: never;",
+    "NexusLayout": "  [key: string]: never;",
+    "SettingsPane": "  [key: string]: never;",
+    "Toaster": "  [key: string]: never;",
+    "DevMarkdownPreview": "  [key: string]: never;",
+    "NewStoryPage": "  [key: string]: never;",
+    "SplashPage": "  [key: string]: never;",
+    "NotFound": "  [key: string]: never;",
+    "GildedSplash": "  [key: string]: never;",
+    "VectorSplash": "  [key: string]: never;",
+    "VeilSplash": "  [key: string]: never;",
+    "SplashThemeMenu": "  [key: string]: never;"
+  },
   "overrides": {
     "Accordion": {
       "cardMode": "column"

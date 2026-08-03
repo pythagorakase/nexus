@@ -10,23 +10,27 @@ converter expects an installed library with a `dist/` + `.d.ts` tree, so we rout
 around it:
 
 1. **`cfg.buildCmd` = `node .design-sync/build.mjs`** which: (a) runs
-   `gen-entry.mjs` to regenerate `.cache/lib-entry.tsx` (`export *` of all 95
+   `gen-entry.mjs` to regenerate `.cache/lib-entry.tsx` (`export *` of all 102
    component modules + the default re-exports + `DesignThemeRoot`) and
    `.cache/componentSrcMap.json`; (b) runs a **Vite library build**
    (`vite.lib.config.mts`) → clean ESM `.cache/lib-dist/index.js` + extracted
-   `style.css` (React externalized); (c) rewrites the brand `@font-face`
-   `/fonts/` urls so the converter can copy the TTFs.
+   `style.css` (React externalized); (c) runs the dedicated declaration-only
+   `tsconfig.lib.json` → a real `.cache/lib-dist/**/*.d.ts` tree plus a curated
+   top-level `index.d.ts`; (d) rewrites the brand `@font-face` `/fonts/` urls so
+   the converter can copy the TTFs.
 2. **Converter is run with a phantom `--entry`:**
    `node .ds-sync/package-build.mjs --config .design-sync/config.json --node-modules ./node_modules --entry ./.design-sync/.cache/lib-dist/index.js --out ./ds-bundle`
    The `--entry` points at the Vite dist (real → bundles the clean, pre-resolved
    JS, no app-isms). Vite absorbs the `@/` barrels, CSS side-effects, and font
    assets that esbuild (the converter's bundler) chokes on.
-3. **Discovery is via `componentSrcMap`** (95 entries) because there's no `.d.ts`
-   tree. This is a deliberate full enumeration (the skill's usual "sparse only"
-   rule doesn't apply — discovery depends on it). `gen-entry.mjs` regenerates
-   `componentSrcMap.json`; **on a component add/remove, re-merge it into
-   `config.json`** (it's static there). The `general` group = the shadcn `ui/`
-   primitives (the converter treats `ui` as a generic container → `general`).
+3. **Discovery is curated by `componentSrcMap`** (97 entries). This is a deliberate
+   full enumeration (the skill's usual "sparse only" rule doesn't apply):
+   `build.mjs` generates the declaration `index.d.ts` from this exact surface so
+   the hundreds of runtime compound exports do not become standalone cards.
+   `gen-entry.mjs` regenerates `componentSrcMap.json`; **on a component add/remove,
+   re-merge it into `config.json`** (it's static there). The `general` group = the
+   shadcn `ui/` primitives (the converter treats `ui` as a generic container →
+   `general`).
 
 ## Provider / theme
 
@@ -61,29 +65,26 @@ around it:
 - Review sheet renders each cell as a populated top band + an empty band below —
   the empty band is sheet layout, NOT a missing render.
 
-## OPEN GAP: every `.d.ts` is a permissive stub
+## FIXED (#657): real `.d.ts` prop contracts
 
-**All 97 components ship `interface <Name>Props { [key: string]: unknown }`** — no real
-prop contract. The `.d.ts` is what the claude.ai/design agent codes against, so today it
-learns each component's API only from the `.prompt.md` and the preview card, never from
-types. Pre-existing (it predates the 2026-07-30 sync; not a regression).
+The lib build now emits **129 declaration files** under `.cache/lib-dist/`, and
+`package.json#types` points the converter at the curated top-level declaration barrel.
+The converter resolves real props for **97/97** configured components instead of falling
+back to `interface <Name>Props { [key: string]: unknown }` for all of them.
 
-Cause: the driver logs **`[DTS] parsed 0 .d.ts files`**. The phantom `--entry` points at
-the Vite lib build, which emits only `index.js` + `style.css` — there is no declaration
-tree for ts-morph to read, so extraction falls back to the permissive stub. `@types/react`
-IS installed, so this is not the `[DTS_REACT]` case.
+Two details are load-bearing:
+- Without the top-level barrel, the converter parses the 126 nested declaration files
+  but finds zero exported entry symbols. The curated `index.d.ts` supplies those entry
+  symbols from the package root.
+- The runtime entry intentionally exports hundreds of compound pieces. The declaration
+  barrel exports only the 97 committed `componentSrcMap` roots so declaration discovery
+  does not turn every `DialogTrigger`/`TableRow`-style subpart into a new card.
 
-Candidate fixes, cheapest first:
-1. Emit declarations from the lib build — add `vite-plugin-dts` to
-   `vite.lib.config.mts`, or a `tsc --emitDeclarationOnly --outDir .cache/lib-dist`
-   pass in `build.mjs` after the Vite step. Then the converter parses a real tree and
-   all 97 contracts improve at once. Expect to spend time on `tsc` config: the app has
-   never been type-built as a library.
-2. Per-component `cfg.dtsPropsFor.<Name>` with a hand-written props body. Exact, but 97
-   entries that rot as the app evolves — reserve for stragglers after (1).
-
-The props interfaces themselves are well-formed in source (e.g. `IntertitleProps`,
-`LocalModelRowsProps`), so (1) should be mostly mechanical once the build emits.
+Thirteen root components genuinely accept no props. Their `cfg.dtsPropsFor` entries use
+`[key: string]: never` so the generated contracts say exactly that instead of falling
+back to the permissive unknown stub. The one remaining literal
+`[key: string]: unknown` in the emitted tree belongs to `NarrativeProgress.data`, an
+open-ended server payload — it is not a component prop contract.
 
 ## Known render warns
 

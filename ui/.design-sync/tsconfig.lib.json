@@ -1,0 +1,15 @@
+{
+  "extends": "../tsconfig.json",
+  "include": [".cache/lib-entry.tsx"],
+  "exclude": [],
+  "compilerOptions": {
+    "noEmit": false,
+    "emitDeclarationOnly": true,
+    "declaration": true,
+    "declarationMap": false,
+    "noEmitOnError": true,
+    "incremental": false,
+    "rootDir": "..",
+    "outDir": ".cache/lib-dist"
+  }
+}
