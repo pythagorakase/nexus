@@ -60,6 +60,12 @@ from nexus.agents.orrery.tag_library import (  # noqa: E402
 from nexus.api.native_structured_output import (  # noqa: E402
     structured_output_error_text,
 )
+from nexus.api.presence_reconciliation import (  # noqa: E402
+    CharacterRosterRows,
+    read_character_roster,
+    read_character_roster_async,
+    reconcile_prose_mentions,
+)
 from nexus.config.loader import get_provider_for_model, resolve_model_ref  # noqa: E402
 from nexus.config.settings_models import (  # noqa: E402
     APEXTagLibrarySettings,
@@ -885,6 +891,7 @@ class LogonUtility:
             context_payload,
             schema_model,
         )
+        character_roster = self._read_character_roster_for_schema(schema_model)
         # Format the context into a prompt
         prompt = self._format_context_prompt(
             context_payload,
@@ -902,6 +909,7 @@ class LogonUtility:
                 response = self._generate_narrative_two_pass(
                     prompt,
                     presence_baseline=presence_baseline,
+                    character_roster=character_roster,
                     effective_context_window=effective_context_window,
                 )
             else:
@@ -921,6 +929,7 @@ class LogonUtility:
                     parsed_response,
                     schema_model,
                     presence_baseline=presence_baseline,
+                    character_roster=character_roster,
                 )
             logger.debug(
                 "Received structured response with narrative length: %s",
@@ -960,6 +969,9 @@ class LogonUtility:
             context_payload,
             schema_model,
         )
+        character_roster = await self._read_character_roster_for_schema_async(
+            schema_model
+        )
         prompt = self._format_context_prompt(
             context_payload,
             presence_baseline=presence_baseline,
@@ -974,6 +986,7 @@ class LogonUtility:
                 response = await self._generate_narrative_two_pass_async(
                     prompt,
                     presence_baseline=presence_baseline,
+                    character_roster=character_roster,
                     effective_context_window=effective_context_window,
                 )
             else:
@@ -993,6 +1006,7 @@ class LogonUtility:
                     parsed_response,
                     schema_model,
                     presence_baseline=presence_baseline,
+                    character_roster=character_roster,
                 )
             logger.debug(
                 "Received structured response with narrative length: %s",
@@ -1360,6 +1374,7 @@ class LogonUtility:
         turn_prompt: str,
         *,
         presence_baseline: Optional[PresenceBaseline],
+        character_roster: Optional[CharacterRosterRows],
         effective_context_window: Optional[int],
     ) -> StoryTurnResponse:
         """Run synchronous writer and gaia calls, then hydrate once."""
@@ -1443,6 +1458,7 @@ class LogonUtility:
             combine_two_pass(writer, gaia),
             SkaldTurnWire,
             presence_baseline=presence_baseline,
+            character_roster=character_roster,
         )
 
     async def _generate_narrative_two_pass_async(
@@ -1450,6 +1466,7 @@ class LogonUtility:
         turn_prompt: str,
         *,
         presence_baseline: Optional[PresenceBaseline],
+        character_roster: Optional[CharacterRosterRows],
         effective_context_window: Optional[int],
     ) -> StoryTurnResponse:
         """Run asynchronous writer and gaia calls, then hydrate once."""
@@ -1535,6 +1552,7 @@ class LogonUtility:
             combine_two_pass(writer, gaia),
             SkaldTurnWire,
             presence_baseline=presence_baseline,
+            character_roster=character_roster,
         )
 
     def _enforce_final_prompt_window(
@@ -1650,12 +1668,33 @@ class LogonUtility:
             )
         return await read_presence_baseline_async(self.dbname, parent_chunk_id)
 
+    def _read_character_roster_for_schema(
+        self,
+        schema_model: type[StorytellerResponseBootstrap] | type[SkaldTurnWire],
+    ) -> Optional[CharacterRosterRows]:
+        """Read known characters for a synchronous extended turn."""
+
+        if schema_model is not SkaldTurnWire or self.dbname is None:
+            return None
+        return read_character_roster(self.dbname)
+
+    async def _read_character_roster_for_schema_async(
+        self,
+        schema_model: type[StorytellerResponseBootstrap] | type[SkaldTurnWire],
+    ) -> Optional[CharacterRosterRows]:
+        """Read known characters for an asynchronous extended turn."""
+
+        if schema_model is not SkaldTurnWire or self.dbname is None:
+            return None
+        return await read_character_roster_async(self.dbname)
+
     @staticmethod
     def _hydrate_provider_response(
         parsed_response: Any,
         schema_model: type[StorytellerResponseBootstrap] | type[SkaldTurnWire],
         *,
         presence_baseline: Optional[PresenceBaseline] = None,
+        character_roster: Optional[CharacterRosterRows] = None,
     ) -> StoryTurnResponse:
         """Hydrate extended wire output while leaving bootstrap output unchanged."""
 
@@ -1663,6 +1702,12 @@ class LogonUtility:
             if not isinstance(parsed_response, SkaldTurnWire):
                 raise TypeError(
                     "Extended LOGON provider returned a non-SkaldTurnWire response"
+                )
+            if character_roster is not None:
+                reconcile_prose_mentions(
+                    parsed_response,
+                    presence_baseline=presence_baseline,
+                    roster_rows=character_roster,
                 )
             return hydrate_skald_turn(
                 parsed_response,

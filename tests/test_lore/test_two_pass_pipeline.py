@@ -11,6 +11,7 @@ from typing import Any, cast
 import pytest
 from pydantic_ai import ModelRetry
 
+from nexus.agents.logon.apex_enums import ReferenceType
 from nexus.agents.logon.apex_schema import (
     StorytellerResponseBootstrap,
     StorytellerResponseExtended,
@@ -46,6 +47,7 @@ from nexus.api.native_structured_output import (
     retry_prompt,
     run_output_validator,
 )
+from nexus.api.presence_reconciliation import CharacterRosterRows
 
 
 @pytest.fixture(autouse=True)
@@ -542,6 +544,88 @@ async def test_async_two_pass_pipeline_uses_provider_specific_transports(
     _assert_two_pass_calls(provider, provider_type, anthropic_transport)
     assert response.narrative == WRITER_PAYLOAD["narrative"]
     assert response.generation_model == provider.model
+
+
+def test_sync_two_pass_reconciles_writer_prose_before_hydration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The combined writer wire receives the prefetched roster exactly once."""
+
+    writer_payload = {
+        **WRITER_PAYLOAD,
+        "narrative": "Ressa Morn waits beyond the archive door.",
+    }
+    utility, _provider = _utility("openai", [writer_payload, GAIA_PAYLOAD])
+    monkeypatch.setattr(
+        utility,
+        "_read_presence_baseline_for_context",
+        lambda _context_payload, _schema_model: BASELINE,
+    )
+    roster = CharacterRosterRows(
+        characters=[{"id": 101, "name": "Ressa Morn", "summary": None}],
+        aliases=[],
+    )
+    monkeypatch.setattr(
+        utility,
+        "_read_character_roster_for_schema",
+        lambda _schema_model: roster,
+    )
+
+    response = utility.generate_narrative(
+        _context(),
+        effective_context_window=75_000,
+    )
+
+    assert [
+        (reference.character_id, reference.reference_type)
+        for reference in response.referenced_entities.characters
+    ][-1] == (101, ReferenceType.MENTIONED)
+
+
+@pytest.mark.asyncio
+async def test_async_two_pass_reconciles_writer_prose_before_hydration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The async combined writer wire receives the prefetched roster once."""
+
+    writer_payload = {
+        **WRITER_PAYLOAD,
+        "narrative": "Ressa Morn waits beyond the archive door.",
+    }
+    utility, _provider = _utility("openai", [writer_payload, GAIA_PAYLOAD])
+
+    async def read_baseline(
+        _context_payload: dict[str, Any],
+        _schema_model: type,
+    ) -> PresenceBaseline:
+        return BASELINE
+
+    async def read_roster(_schema_model: type) -> CharacterRosterRows:
+        return CharacterRosterRows(
+            characters=[{"id": 101, "name": "Ressa Morn", "summary": None}],
+            aliases=[],
+        )
+
+    monkeypatch.setattr(
+        utility,
+        "_read_presence_baseline_for_context_async",
+        read_baseline,
+    )
+    monkeypatch.setattr(
+        utility,
+        "_read_character_roster_for_schema_async",
+        read_roster,
+    )
+
+    response = await utility.generate_narrative_async(
+        _context(),
+        effective_context_window=75_000,
+    )
+
+    assert [
+        (reference.character_id, reference.reference_type)
+        for reference in response.referenced_entities.characters
+    ][-1] == (101, ReferenceType.MENTIONED)
 
 
 def test_sync_anthropic_two_pass_rejects_native_before_provider_call(

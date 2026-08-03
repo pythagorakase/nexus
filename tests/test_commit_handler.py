@@ -5,12 +5,16 @@ from types import SimpleNamespace
 import pytest
 
 from nexus.agents.logon.apex_schema import FactionStateUpdate, StateUpdates
+from nexus.agents.logon.skald_wire import PresenceBaseline, SkaldTurnWire
+from nexus.agents.lore.logon_utility import LogonUtility
 from nexus.api.commit_handler import (
     apply_state_updates,
     commit_incubator_to_database,
     insert_chunk_metadata,
 )
 import nexus.api.commit_handler as commit_handler
+from nexus.api.lore_adapter import response_to_incubator
+from nexus.api.presence_reconciliation import CharacterRosterRows
 
 
 class RecordingAsyncConnection:
@@ -217,6 +221,79 @@ async def test_async_commit_links_same_turn_character_declaration(monkeypatch):
 
     assert chunk_id == conn.chunk_id
     assert conn.character_junctions == [(conn.chunk_id, 72, "present")]
+
+
+@pytest.mark.asyncio
+async def test_async_reconciled_mentions_flow_through_adapter_and_commit(monkeypatch):
+    """The validated wire boundary feeds normalized mentions to the real commit."""
+
+    conn = AsyncCommitConnection()
+    conn.characters.update({"Ressa Morn": 101, "Niko Rell": 102, "Ora Pell": 103})
+    wire = SkaldTurnWire(
+        narrative=(
+            "Ressa Morn remains due before dawn. "
+            "Niko Rell and Ora Pell have made no contact."
+        ),
+        choices=["Wait.", "Proceed."],
+        letter="Keep the three debts unresolved.",
+    )
+    response = LogonUtility._hydrate_provider_response(
+        wire,
+        SkaldTurnWire,
+        presence_baseline=PresenceBaseline(),
+        character_roster=CharacterRosterRows(
+            characters=[
+                {"id": 101, "name": "Ressa Morn", "summary": None},
+                {"id": 102, "name": "Niko Rell", "summary": None},
+                {"id": 103, "name": "Ora Pell", "summary": None},
+            ],
+            aliases=[],
+        ),
+    )
+    conn.incubator = response_to_incubator(
+        response,
+        parent_chunk_id=88,
+        user_text="Continue.",
+        session_id="async-655",
+    )
+
+    async def no_op(*_args, **_kwargs):
+        return None
+
+    async def empty_orrery_tick(*_args, **_kwargs):
+        return _empty_orrery_result()
+
+    monkeypatch.setattr(commit_handler, "set_commit_chunk_attribution_async", no_op)
+    monkeypatch.setattr(commit_handler, "commit_orrery_tick_async", empty_orrery_tick)
+    monkeypatch.setattr(
+        commit_handler, "_orrery_checkpoint_interval", lambda _settings: 0
+    )
+
+    assert conn.incubator["reference_updates"]["characters"] == [
+        {
+            "character_id": 101,
+            "character_name": "Ressa Morn",
+            "reference_type": "mentioned",
+        },
+        {
+            "character_id": 102,
+            "character_name": "Niko Rell",
+            "reference_type": "mentioned",
+        },
+        {
+            "character_id": 103,
+            "character_name": "Ora Pell",
+            "reference_type": "mentioned",
+        },
+    ]
+
+    chunk_id = await commit_incubator_to_database(conn, "async-655", slot=5)
+
+    assert conn.character_junctions == [
+        (chunk_id, 101, "mentioned"),
+        (chunk_id, 102, "mentioned"),
+        (chunk_id, 103, "mentioned"),
+    ]
 
 
 @pytest.mark.asyncio
