@@ -61,11 +61,41 @@ around it:
 - Review sheet renders each cell as a populated top band + an empty band below —
   the empty band is sheet layout, NOT a missing render.
 
+## OPEN GAP: every `.d.ts` is a permissive stub
+
+**All 97 components ship `interface <Name>Props { [key: string]: unknown }`** — no real
+prop contract. The `.d.ts` is what the claude.ai/design agent codes against, so today it
+learns each component's API only from the `.prompt.md` and the preview card, never from
+types. Pre-existing (it predates the 2026-07-30 sync; not a regression).
+
+Cause: the driver logs **`[DTS] parsed 0 .d.ts files`**. The phantom `--entry` points at
+the Vite lib build, which emits only `index.js` + `style.css` — there is no declaration
+tree for ts-morph to read, so extraction falls back to the permissive stub. `@types/react`
+IS installed, so this is not the `[DTS_REACT]` case.
+
+Candidate fixes, cheapest first:
+1. Emit declarations from the lib build — add `vite-plugin-dts` to
+   `vite.lib.config.mts`, or a `tsc --emitDeclarationOnly --outDir .cache/lib-dist`
+   pass in `build.mjs` after the Vite step. Then the converter parses a real tree and
+   all 97 contracts improve at once. Expect to spend time on `tsc` config: the app has
+   never been type-built as a library.
+2. Per-component `cfg.dtsPropsFor.<Name>` with a hand-written props body. Exact, but 97
+   entries that rot as the app evolves — reserve for stragglers after (1).
+
+The props interfaces themselves are well-formed in source (e.g. `IntertitleProps`,
+`LocalModelRowsProps`), so (1) should be mostly mechanical once the build emits.
+
+## Known render warns
+
+**As of 2026-07-30 the final driver run emits ZERO warn lines** — no `[GRID_OVERFLOW]`,
+no `[RENDER_*]`, no `[FONT_*]`, no `[DOCS_*]`. Treat any warn on a future run as new:
+look at it, then fix it or record it here.
+
 ## Known cosmetic issues (polish before final upload)
 
-- 51 shadcn primitives land in group `general` (the converter skips `ui` as a
-  generic container). Acceptable, but a tidier grouping (e.g. "Components") would
-  improve the pane. Regroup via docsMap category stubs if desired.
+- The shadcn primitives land in group `general` (the converter treats `ui` as a generic
+  container). Acceptable, but a tidier grouping (e.g. "Components") would improve the
+  pane. Regroup via docsMap category stubs if desired.
 - Each card cell reserves a tall viewport (content top, empty below). Cosmetic.
 
 ## Re-sync risks (watch-list)
@@ -76,14 +106,94 @@ around it:
   null for a nonexistent path — verify if the converter is upgraded.
 - `build.mjs`'s font-url rewrite (`/fonts/` → `../../../client/public/fonts/`) is
   path-depth-specific to `.cache/lib-dist/`.
-- Playwright/Chromium installed under `.ds-sync/node_modules` + `~/.cache/ms-playwright`.
+- Playwright lives in `.ds-sync/node_modules` (1.61.0, which pins chromium rev 1228).
+  The browser cache on macOS is **`~/Library/Caches/ms-playwright`** — not
+  `~/.cache/ms-playwright`, which is the Linux path this file used to name.
 - **`pages/dev-orrery/` is excluded from the bundle** (`gen-entry.mjs` `find` filter).
   It's the internal `/dev/orrery` audit dashboard (#430, a separate "design-package
   port"), not IRIS's customer design system — its viz deps must not bloat the synced
-  bundle. If a genuinely new IRIS component appears (e.g. `Intertitle`, #456), it rides
-  the bundle uncarded until deliberately added to `config.json`'s `componentSrcMap` with
-  an authored preview. Never blind-merge `.cache/componentSrcMap.json`: discovery drifts
-  (it renamed the `Form` card's primary export to `FormItem`).
+  bundle. A genuinely new IRIS component rides the bundle uncarded until deliberately
+  added to `config.json`'s `componentSrcMap` with an authored preview — `Intertitle`
+  (#456) and `LocalModelRows` (#465 Phase 1b) were both carded on 2026-07-30, so the
+  standing deferral list is currently empty. Never blind-merge
+  `.cache/componentSrcMap.json`: discovery drifts (it still renames the `Form` card's
+  primary export to `FormItem` — keep the committed `Form` pin, drop `FormItem`).
+- **The cached anchor is always one generation stale.** `.design-sync/.cache/remote-sync.json`
+  is fetched at the START of a run, and that run then uploads a NEW `_ds_sync.json`. So
+  the file left on disk describes the run *before* last. Re-fetch it from the project, or
+  `cp ds-bundle/_ds_sync.json .design-sync/.cache/remote-sync.json` after confirming that
+  file's `auxSha`/`bundleSha12` match the live project's.
+
+## Running the sync from a git worktree
+
+The owner often has backend work in the main checkout, so this sync is normally run
+from a `git worktree` to keep the durable-set edits (`config.json`, `ds-provider.tsx`,
+`previews/*.tsx`) out of their `git status`. Everything the sync needs that is
+gitignored must be re-provisioned there:
+
+- **`ui/node_modules` — hardlink-copy it, NEVER symlink it.** `cp -Rl ../../../ui/node_modules
+  ./node_modules` (~14 s, near-zero disk, shared inodes). esbuild inlines each resolved
+  module's path as a comment inside `_preview/<Name>.js`, and a symlinked `node_modules`
+  resolves to its realpath — emitting `../../../../ui/node_modules/lucide-react/…`
+  instead of `node_modules/lucide-react/…`. That silently churns `renderHashes` for
+  every component whose preview imports a **bundled** dep (lucide-react, recharts,
+  cmdk): 10 components, phantom `changed` entries, a spurious `[SPOT_CHECK]` canary, and
+  an upload set of 12 instead of 2. Previews importing only the externalized `nexus-ui`
+  (Button, Badge, Card, Input, Dialog) are unaffected, which is the tell-tale signature.
+  Uploaded bytes must not depend on which directory the sync ran from.
+- `.ds-sync/`: `cp -r` the scripts from the skill dir, copy `package.json` +
+  `package-lock.json`, then symlinking `.ds-sync/node_modules` at the main checkout IS
+  safe — converter deps never reach the emitted artifacts.
+- `.design-sync/.cache/remote-sync.json` (the anchor) and, optionally,
+  `.design-sync/.cache/review/` to carry grade state. Neither is in git.
+- `.design-sync/previews/` needs nothing — it is tracked, so it arrives with the worktree.
+
+## Card layout: `cfg.overrides` cardMode (triaged 2026-07-30)
+
+Validate's `[GRID_OVERFLOW]` check flags stories that crop or escape their cell in the
+product's grid view. 65 of 97 components were flagged and had been shipping untriaged
+since the first sync (`config.json` had no `overrides` key at all). All 65 now carry an
+override: **51 `{"cardMode":"column"}"`** (wide — keeps every story, one per full-width
+row) and **14 `{"cardMode":"single", "primaryStory": …}`** for the portal/fixed-position
+overlays, where a single open overlay is the honest card anyway. Primary picks favour the
+open state showing real content over a trivial one (`Select`→`ModelPicker` not `Closed`,
+`WaitScreen`→`Generating`, `AlertDialog`→`WipeSlot`, `HoverCard`→`CharacterCard`).
+
+- **These overrides do NOT invalidate grades.** `configSlicesFor` deliberately strips
+  `cardMode`/`primaryStory` from the graded component slice ("they arrange the default
+  card view, not any solo-captured story"), so a layout flip carries grades forward. It
+  does change each `.html`, so the 65 land in `upload.components` and trigger a
+  `render_churn` `[SPOT_CHECK]` canary — that canary is expected, not a defect.
+- Review sheets capture each story **solo** (`?story=`), so they show every export
+  regardless of `cardMode`. To eyeball the actual card arrangement use `.review.html`.
+- Judge grid overflow from `.render-check.json`'s `gridOverflow` field, never from a
+  contact sheet — the sheet tiles full-card screenshots at fixed width, so it clips
+  cards (e.g. `Intertitle`) that the product's grid presents fine.
+
+## Data-bound cards share ONE query cache
+
+A card renders all of its cells in a single page load against the one `queryClient`
+singleton, so every cell necessarily sees the same payload — **per-cell mock scenarios
+are impossible**. Vary cells by real props and by driving real interactions; put the
+state diversity into one rich stub scenario instead.
+
+- **`LocalModelRows`** (`/api/local-models/status` + `/download` in `ds-provider.tsx`).
+  The stub is required, not a nicety: the component does
+  `if (statusQuery.error && !status) throw statusQuery.error`, so an unmocked status
+  endpoint throws and blanks every pane mounting it — `SettingsPane` embeds it since
+  #482. The single scenario is tuned so one render shows the maximum number of row
+  states (`system_ram_gb: 48` puts two 70B quants over the memory ceiling; one quant
+  serving, one on disk, one downloadable, one mid-download). Catalog mirrors
+  `nexus.toml [local_models]` so the cards name the real Hermes families.
+- Its accordion `open` map is internal `useState` with no prop to seed it, and the
+  families do not exist in the DOM until the query resolves. The `Quantizations` cell
+  therefore polls briefly and clicks the component's own chevron, selecting on
+  `[aria-expanded="false"]` so it is idempotent and never toggles an open family shut.
+  Same principle as the ContextMenu preview: drive the real trigger, never hand-write
+  the open state.
+- It renders bare `<li>`s — wrap in `<ul className="model-list">`, as `SettingsPane` does.
+  `.lm-*` and `.intertitle` rules are unscoped, so no `.nexus-shell` wrapper is needed
+  (unlike `SettingsPane`'s footer buttons).
 
 ## Component-type recipes (folded from wave-2 authoring)
 
