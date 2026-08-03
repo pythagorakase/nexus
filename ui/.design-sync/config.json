@@ -7,8 +7,221 @@
   "srcDir": "client/src",
   "cssEntry": ".design-sync/.cache/lib-dist/style.css",
   "buildCmd": "node .design-sync/build.mjs",
-  "provider": { "component": "DesignThemeRoot" },
+  "provider": {
+    "component": "DesignThemeRoot"
+  },
   "readmeHeader": ".design-sync/conventions.md",
+  "overrides": {
+    "Accordion": {
+      "cardMode": "column"
+    },
+    "Alert": {
+      "cardMode": "column"
+    },
+    "AlertDialog": {
+      "cardMode": "single",
+      "primaryStory": "WipeSlot"
+    },
+    "AnimatedBeam": {
+      "cardMode": "column"
+    },
+    "ArtifactSidePanel": {
+      "cardMode": "column"
+    },
+    "AspectRatio": {
+      "cardMode": "column"
+    },
+    "Button": {
+      "cardMode": "column"
+    },
+    "CharacterPhase": {
+      "cardMode": "column"
+    },
+    "CharactersPane": {
+      "cardMode": "column"
+    },
+    "ChartContainer": {
+      "cardMode": "column"
+    },
+    "Checkbox": {
+      "cardMode": "column"
+    },
+    "Collapsible": {
+      "cardMode": "column"
+    },
+    "ContextMenu": {
+      "cardMode": "single",
+      "primaryStory": "ChapterActions"
+    },
+    "Conversation": {
+      "cardMode": "column"
+    },
+    "DecoRays": {
+      "cardMode": "column"
+    },
+    "DevMarkdownPreview": {
+      "cardMode": "column"
+    },
+    "DropdownMenu": {
+      "cardMode": "single",
+      "primaryStory": "SlotActions"
+    },
+    "GildedSplash": {
+      "cardMode": "column"
+    },
+    "HoverCard": {
+      "cardMode": "single",
+      "primaryStory": "CharacterCard"
+    },
+    "InteractiveWizard": {
+      "cardMode": "column"
+    },
+    "LocalModelRows": {
+      "cardMode": "column"
+    },
+    "LocationPhase": {
+      "cardMode": "column"
+    },
+    "MapPane": {
+      "cardMode": "column"
+    },
+    "MapPlaceDialog": {
+      "cardMode": "single",
+      "primaryStory": "Open"
+    },
+    "Menubar": {
+      "cardMode": "single",
+      "primaryStory": "StoryMenu"
+    },
+    "Message": {
+      "cardMode": "column"
+    },
+    "ModeSelector": {
+      "cardMode": "column"
+    },
+    "NarrativePane": {
+      "cardMode": "column"
+    },
+    "NewStoryPage": {
+      "cardMode": "column"
+    },
+    "NewStoryWizard": {
+      "cardMode": "column"
+    },
+    "NexusLayout": {
+      "cardMode": "column"
+    },
+    "NotFound": {
+      "cardMode": "column"
+    },
+    "Pagination": {
+      "cardMode": "column"
+    },
+    "Popover": {
+      "cardMode": "single",
+      "primaryStory": "ContextSettings"
+    },
+    "PromptInput": {
+      "cardMode": "single",
+      "primaryStory": "Ready"
+    },
+    "ResizablePanelGroup": {
+      "cardMode": "column"
+    },
+    "Response": {
+      "cardMode": "column"
+    },
+    "RightLedger": {
+      "cardMode": "column"
+    },
+    "ScrollArea": {
+      "cardMode": "column"
+    },
+    "SeedPhase": {
+      "cardMode": "column"
+    },
+    "Select": {
+      "cardMode": "single",
+      "primaryStory": "ModelPicker"
+    },
+    "Separator": {
+      "cardMode": "column"
+    },
+    "SettingPhase": {
+      "cardMode": "column"
+    },
+    "SettingsPane": {
+      "cardMode": "column"
+    },
+    "Skeleton": {
+      "cardMode": "column"
+    },
+    "Slider": {
+      "cardMode": "column"
+    },
+    "SlotSelector": {
+      "cardMode": "column"
+    },
+    "SplashPage": {
+      "cardMode": "column"
+    },
+    "SplashThemeMenu": {
+      "cardMode": "column"
+    },
+    "StoryChoices": {
+      "cardMode": "column"
+    },
+    "Switch": {
+      "cardMode": "column"
+    },
+    "Table": {
+      "cardMode": "column"
+    },
+    "Tabs": {
+      "cardMode": "column"
+    },
+    "Textarea": {
+      "cardMode": "column"
+    },
+    "ThemeMenu": {
+      "cardMode": "single",
+      "primaryStory": "Open"
+    },
+    "Toast": {
+      "cardMode": "single",
+      "primaryStory": "ChapterSaved"
+    },
+    "Toaster": {
+      "cardMode": "single",
+      "primaryStory": "NotificationStack"
+    },
+    "Tooltip": {
+      "cardMode": "single",
+      "primaryStory": "IronmanHint"
+    },
+    "TopBar": {
+      "cardMode": "column"
+    },
+    "TraitSelector": {
+      "cardMode": "column"
+    },
+    "TraitSelectorGrid": {
+      "cardMode": "column"
+    },
+    "VectorSplash": {
+      "cardMode": "column"
+    },
+    "VeilSplash": {
+      "cardMode": "column"
+    },
+    "WaitScreen": {
+      "cardMode": "single",
+      "primaryStory": "Generating"
+    },
+    "WizardChoices": {
+      "cardMode": "column"
+    }
+  },
   "componentSrcMap": {
     "ErrorBoundary": "client/src/components/ErrorBoundary.tsx",
     "ArtifactSidePanel": "client/src/components/NewStoryWizard/ArtifactSidePanel.tsx",
@@ -36,7 +249,9 @@
     "DecoFrame": "client/src/components/deco/DecoFrame.tsx",
     "DecoSunburst": "client/src/components/deco/DecoSunburst.tsx",
     "CharactersPane": "client/src/components/nexus/CharactersPane.tsx",
+    "Intertitle": "client/src/components/nexus/Intertitle.tsx",
     "LeftRail": "client/src/components/nexus/LeftRail.tsx",
+    "LocalModelRows": "client/src/components/nexus/LocalModelRows.tsx",
     "MapPane": "client/src/components/nexus/MapPane.tsx",
     "MapPlaceDialog": "client/src/components/nexus/MapPlaceDialog.tsx",
     "NarrativePane": "client/src/components/nexus/NarrativePane.tsx",

@@ -69,6 +69,54 @@ if (typeof window !== "undefined" && !(window as any).__dsFetchStubbed) {
       typewriter: { min: 0, max: 60 },
     },
   });
+  // Local-model manager (/api/local-models). LocalModelRows does
+  // `if (statusQuery.error && !status) throw statusQuery.error`, so an unmocked
+  // status endpoint doesn't degrade the card — it throws and blanks every pane
+  // that mounts it (SettingsPane embeds it). The catalog mirrors nexus.toml's
+  // [local_models] so the cards show the real Hermes families.
+  //
+  // ONE scenario, deliberately: a card renders all its cells in a single page
+  // load sharing one React Query cache, so every cell necessarily sees the same
+  // payload — per-cell scenarios are impossible. This one is therefore tuned to
+  // exercise the maximum number of row states at once. With system_ram_gb = 48:
+  //   36b q4_k_m  installed + verified + active  -> active dot, EJECT row
+  //   36b q6_k    installed + verified           -> ready, armed-delete trash
+  //   36b q8_0    absent (min_ram 48, fits)      -> download arrow
+  //   70b q4_k_m  download in flight             -> 37% + progress bar + cancel
+  //   70b q6_k    min_ram 64 > 48                -> exceeds (RAM-ceiling tooltip)
+  //   70b q8_0    min_ram 96 > 48                -> exceeds
+  const LM_DIR = "~/.lmstudio/models/lmstudio-community";
+  const LM_36B = `${LM_DIR}/Hermes-4.3-36B-GGUF`;
+  const LM_70B = `${LM_DIR}/Hermes-4-70B-GGUF`;
+  const LOCAL_STATUS = {
+    models_dir: LM_DIR,
+    system_ram_gb: 48,
+    catalog: [
+      { family: "hermes-4-70b", label: "Hermes 4 70B Q4_K_M", hf_repo: "lmstudio-community/Hermes-4-70B-GGUF", subdir: "Hermes-4-70B-GGUF", filename: "Hermes-4-70B-Q4_K_M.gguf", quant: "Q4_K_M", size_gb: 42.5, min_ram_gb: 48 },
+      { family: "hermes-4-70b", label: "Hermes 4 70B Q6_K", hf_repo: "lmstudio-community/Hermes-4-70B-GGUF", subdir: "Hermes-4-70B-GGUF", filename: "Hermes-4-70B-Q6_K-00001-of-00002.gguf", quant: "Q6_K", size_gb: 57.9, min_ram_gb: 64 },
+      { family: "hermes-4-70b", label: "Hermes 4 70B Q8_0", hf_repo: "lmstudio-community/Hermes-4-70B-GGUF", subdir: "Hermes-4-70B-GGUF", filename: "Hermes-4-70B-Q8_0-00001-of-00002.gguf", quant: "Q8_0", size_gb: 75.0, min_ram_gb: 96 },
+      { family: "hermes-4.3-36b", label: "Hermes 4.3 36B Q4_K_M", hf_repo: "bartowski/NousResearch_Hermes-4.3-36B-GGUF", subdir: "Hermes-4.3-36B-GGUF", filename: "NousResearch_Hermes-4.3-36B-Q4_K_M.gguf", quant: "Q4_K_M", size_gb: 21.8, min_ram_gb: 32 },
+      { family: "hermes-4.3-36b", label: "Hermes 4.3 36B Q6_K", hf_repo: "bartowski/NousResearch_Hermes-4.3-36B-GGUF", subdir: "Hermes-4.3-36B-GGUF", filename: "NousResearch_Hermes-4.3-36B-Q6_K.gguf", quant: "Q6_K", size_gb: 29.7, min_ram_gb: 40 },
+      { family: "hermes-4.3-36b", label: "Hermes 4.3 36B Q8_0", hf_repo: "bartowski/NousResearch_Hermes-4.3-36B-GGUF", subdir: "Hermes-4.3-36B-GGUF", filename: "NousResearch_Hermes-4.3-36B-Q8_0.gguf", quant: "Q8_0", size_gb: 38.4, min_ram_gb: 48 },
+    ],
+    // Installed iff models_dir/subdir/filename matches a row's path exactly;
+    // `ready` is verified, not merely present.
+    installed: [
+      { path: `${LM_36B}/NousResearch_Hermes-4.3-36B-Q4_K_M.gguf`, filename: "NousResearch_Hermes-4.3-36B-Q4_K_M.gguf", arch: "seed_oss", quant: "Q4_K_M", size_bytes: 21_800_000_000, verified: true, active: true },
+      { path: `${LM_36B}/NousResearch_Hermes-4.3-36B-Q6_K.gguf`, filename: "NousResearch_Hermes-4.3-36B-Q6_K.gguf", arch: "seed_oss", quant: "Q6_K", size_bytes: 29_700_000_000, verified: true, active: false },
+    ],
+    active: { gguf_path: `${LM_36B}/NousResearch_Hermes-4.3-36B-Q4_K_M.gguf`, ready: true, failed: false },
+  };
+  const LOCAL_DOWNLOAD = {
+    state: "downloading",
+    family: "hermes-4-70b",
+    quant: "Q4_K_M",
+    downloaded_bytes: 15_725_000_000,
+    total_bytes: 42_500_000_000,
+    progress: 0.37,
+    files: ["Hermes-4-70B-Q4_K_M.gguf"],
+    local_dir: LM_70B,
+  };
   // GET-only: mutations (POST/PATCH/DELETE) fall through to the real fetch so a
   // preview that wires an interactive write fails visibly instead of silently
   // succeeding with mock data (Claude review).
@@ -81,6 +129,8 @@ if (typeof window !== "undefined" && !(window as any).__dsFetchStubbed) {
         const theme = window.localStorage.getItem("nexus-theme") || "veil";
         return Promise.resolve(json(SETTINGS(theme)));
       }
+      if (url.includes("/api/local-models/download")) return Promise.resolve(json(LOCAL_DOWNLOAD));
+      if (url.includes("/api/local-models/status")) return Promise.resolve(json(LOCAL_STATUS));
       if (url.includes("/api/story/new/slots")) return Promise.resolve(json(SLOTS));
       if (/\/api\/characters\/[^/]+\/images(\?|$)/.test(url)) return Promise.resolve(json([]));
       if (url.includes("/api/characters")) return Promise.resolve(json(CAST));
