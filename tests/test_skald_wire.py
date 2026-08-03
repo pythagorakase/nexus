@@ -34,6 +34,7 @@ from nexus.agents.logon.apex_schema import (
     NamedObservation,
     NewEntityPairTagHint,
     OrreryAdjudication,
+    OrreryReplacementStateDelta,
     PlaceReference,
     ReferencedEntities,
     RelationshipUpdate,
@@ -53,6 +54,7 @@ from nexus.agents.logon.skald_wire import (
     CharacterRef,
     PlaceRef,
     PresenceBaseline,
+    PresenceDelta,
     PresenceRef,
     SkaldGaiaWire,
     SkaldTurnWire,
@@ -1041,20 +1043,148 @@ def test_scene_reset_rejects_roster_operations(roster_operation: str) -> None:
         )
 
 
-def test_presence_rejects_same_name_in_enter_and_exit_casefolded() -> None:
-    with pytest.raises(
-        ValidationError,
-        match="presence cannot enter and exit the same character",
-    ):
-        SkaldTurnWire.model_validate(
-            {
-                **SPARSE_WIRE_PAYLOAD,
-                "presence": {
-                    "enter": [{"kind": "character", "name": "Brena Tideloft"}],
-                    "exit": [{"kind": "character", "name": "BRENA TIDELOFT"}],
-                },
-            }
+def test_presence_normalizes_same_name_in_enter_and_exit_casefolded(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    presence = PresenceDelta(
+        enter=[CharacterRef(kind="character", name="nika rel")],
+        exit=[CharacterRef(kind="character", name="Nika Rel", id=31)],
+    )
+
+    assert presence.enter == []
+    assert presence.exit == []
+    assert presence.mentions == [PresenceRef(kind="character", name="nika rel", id=31)]
+    assert [
+        record.getMessage()
+        for record in caplog.records
+        if "presence out-and-back normalized to mention:" in record.getMessage()
+    ] == ["presence out-and-back normalized to mention: nika rel"]
+
+
+def test_presence_out_and_back_normalization_is_idempotent(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    normalized = PresenceDelta.model_validate(
+        {
+            "enter": [{"kind": "character", "name": "Nika Rel", "id": 31}],
+            "exit": [{"kind": "character", "name": "nika rel"}],
+        }
+    )
+
+    caplog.clear()
+    revalidated = PresenceDelta.model_validate(normalized.model_dump())
+
+    assert revalidated == normalized
+    assert len(revalidated.mentions) == 1
+    assert "presence out-and-back normalized to mention:" not in caplog.text
+
+
+def test_presence_out_and_back_deduplicates_existing_character_mention() -> None:
+    existing_mention = PresenceRef(kind="character", name="NIKA REL", id=31)
+
+    presence = PresenceDelta(
+        enter=[CharacterRef(kind="character", name="Nika Rel")],
+        exit=[CharacterRef(kind="character", name="nika rel", id=32)],
+        mentions=[existing_mention],
+    )
+
+    assert presence.enter == []
+    assert presence.exit == []
+    assert presence.mentions == [existing_mention]
+
+
+def test_non_overlapping_presence_payload_passes_through_byte_identical(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    payload = {
+        "enter": [{"kind": "character", "name": "Nika Rel", "id": 31}],
+        "exit": [{"kind": "character", "name": "Brena Tideloft", "id": 7}],
+        "mentions": [{"kind": "faction", "name": "Sluice Guild", "id": 12}],
+        "transit": [{"kind": "place", "name": "East Lock", "id": 43}],
+        "scene_reset": None,
+    }
+    expected = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+
+    presence = PresenceDelta.model_validate(payload)
+    actual = json.dumps(
+        presence.model_dump(mode="json"),
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+    assert actual == expected
+    assert "presence out-and-back normalized to mention:" not in caplog.text
+
+
+def test_writer_raw_json_presence_out_and_back_decodes_normalized() -> None:
+    writer = SkaldWriterWire.model_validate(
+        {
+            **SPARSE_WIRE_PAYLOAD,
+            "presence": {
+                "enter": [{"kind": "character", "name": "nika rel"}],
+                "exit": [{"kind": "character", "name": "Nika Rel", "id": 31}],
+            },
+        }
+    )
+
+    assert writer.presence is not None
+    assert writer.presence.enter == []
+    assert writer.presence.exit == []
+    assert writer.presence.mentions == [
+        PresenceRef(kind="character", name="nika rel", id=31)
+    ]
+
+
+def test_hydration_out_and_back_absent_from_baseline_is_mentioned() -> None:
+    wire = SkaldTurnWire.model_validate(
+        {
+            **SPARSE_WIRE_PAYLOAD,
+            "presence": {
+                "enter": [{"kind": "character", "name": "Nika Rel", "id": 31}],
+                "exit": [{"kind": "character", "name": "nika rel"}],
+            },
+        }
+    )
+
+    hydrated = hydrate_skald_turn(wire, presence_baseline=PresenceBaseline())
+
+    assert hydrated.referenced_entities.characters == [
+        CharacterReference(
+            character_id=31,
+            character_name="Nika Rel",
+            reference_type=ReferenceType.MENTIONED,
         )
+    ]
+
+
+def test_hydration_out_and_back_prior_present_yields_both_references() -> None:
+    wire = SkaldTurnWire.model_validate(
+        {
+            **SPARSE_WIRE_PAYLOAD,
+            "presence": {
+                "enter": [{"kind": "character", "name": "Nika Rel", "id": 31}],
+                "exit": [{"kind": "character", "name": "nika rel"}],
+            },
+        }
+    )
+    baseline = PresenceBaseline(
+        present=[CharacterRef(kind="character", name="Nika Rel", id=31)]
+    )
+
+    hydrated = hydrate_skald_turn(wire, presence_baseline=baseline)
+
+    assert hydrated.referenced_entities.characters == [
+        CharacterReference(
+            character_id=31,
+            character_name="Nika Rel",
+            reference_type=ReferenceType.PRESENT,
+        ),
+        CharacterReference(
+            character_id=31,
+            character_name="Nika Rel",
+            reference_type=ReferenceType.MENTIONED,
+        ),
+    ]
 
 
 @pytest.mark.parametrize(
@@ -1970,7 +2100,9 @@ def test_replacement_event_type_requires_replacement_delta() -> None:
     adjudication = OrreryAdjudication(
         proposal_id="drink:aaa",
         action="replace",
-        replacement_state_delta={"character_current_activity": "resting"},
+        replacement_state_delta=OrreryReplacementStateDelta(
+            character_current_activity="resting"
+        ),
         replacement_event_type="mock_replacement",
     )
     assert adjudication.replacement_event_type == "mock_replacement"
