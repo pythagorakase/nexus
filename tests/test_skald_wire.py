@@ -1061,6 +1061,75 @@ def test_presence_normalizes_same_name_in_enter_and_exit_casefolded(
     ] == ["presence out-and-back normalized to mention: nika rel"]
 
 
+def test_presence_rejects_casefold_name_with_conflicting_ids(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    baseline = PresenceBaseline(
+        present=[CharacterRef(kind="character", name="NIKA REL", id=32)]
+    )
+    presence_payload = {
+        "enter": [{"kind": "character", "name": "Nika Rel", "id": 31}],
+        "exit": [{"kind": "character", "name": "NIKA REL", "id": 32}],
+    }
+    payload_before_validation = json.dumps(presence_payload, sort_keys=True)
+
+    with pytest.raises(ValidationError) as exc_info:
+        wire = SkaldTurnWire.model_validate(
+            {**SPARSE_WIRE_PAYLOAD, "presence": presence_payload}
+        )
+        hydrate_skald_turn(wire, presence_baseline=baseline)
+
+    assert (
+        "presence cannot enter and exit the same character: "
+        "nika rel (enter id=31, exit id=32)" in str(exc_info.value)
+    )
+    assert json.dumps(presence_payload, sort_keys=True) == payload_before_validation
+    assert "presence out-and-back normalized to mention:" not in caplog.text
+
+
+def test_presence_normalizes_casefold_name_with_same_id() -> None:
+    presence = PresenceDelta.model_validate(
+        {
+            "enter": [{"kind": "character", "name": "Nika Rel", "id": 31}],
+            "exit": [{"kind": "character", "name": "NIKA REL", "id": 31}],
+        }
+    )
+
+    assert presence.enter == []
+    assert presence.exit == []
+    assert presence.mentions == [PresenceRef(kind="character", name="Nika Rel", id=31)]
+
+
+def test_presence_mixed_compatible_and_conflicting_names_rejects_conflict(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    presence_payload = {
+        "enter": [
+            {"kind": "character", "name": "Nika Rel", "id": 31},
+            {"kind": "character", "name": "Mara Venn", "id": 41},
+        ],
+        "exit": [
+            {"kind": "character", "name": "NIKA REL", "id": 31},
+            {"kind": "character", "name": "MARA VENN", "id": 42},
+        ],
+    }
+
+    with pytest.raises(ValidationError) as exc_info:
+        PresenceDelta.model_validate(presence_payload)
+
+    error_message = exc_info.value.errors()[0]["msg"]
+    assert (
+        "presence cannot enter and exit the same character: "
+        "mara venn (enter id=41, exit id=42)" in error_message
+    )
+    assert "nika rel" not in error_message
+    assert [
+        record.getMessage()
+        for record in caplog.records
+        if "presence out-and-back normalized to mention:" in record.getMessage()
+    ] == ["presence out-and-back normalized to mention: Nika Rel"]
+
+
 def test_presence_out_and_back_normalization_is_idempotent(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

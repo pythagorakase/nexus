@@ -167,28 +167,41 @@ class PresenceDelta(BaseModel):
         if not overlap:
             return data
 
+        removed = [*enter, *exit_references]
+        matching_by_name = {
+            name_key: [
+                reference
+                for reference in removed
+                if reference.name.casefold() == name_key
+            ]
+            for name_key in overlap
+        }
+        normalizable_overlap = {
+            name_key
+            for name_key, matching in matching_by_name.items()
+            if len({reference.id for reference in matching if reference.id is not None})
+            <= 1
+        }
+        if not normalizable_overlap:
+            return data
+
         normalized = dict(data)
         normalized["enter"] = [
             reference
             for reference, parsed in zip(enter_data, enter)
-            if parsed.name.casefold() not in overlap
+            if parsed.name.casefold() not in normalizable_overlap
         ]
         normalized["exit"] = [
             reference
             for reference, parsed in zip(exit_data, exit_references)
-            if parsed.name.casefold() not in overlap
+            if parsed.name.casefold() not in normalizable_overlap
         ]
         normalized_mentions = list(mentions_data)
         mention_keys = {
             (reference.kind, reference.name.casefold()) for reference in mentions
         }
-        removed = [*enter, *exit_references]
-        for name_key in sorted(overlap):
-            matching = [
-                reference
-                for reference in removed
-                if reference.name.casefold() == name_key
-            ]
+        for name_key in sorted(normalizable_overlap):
+            matching = matching_by_name[name_key]
             name = matching[0].name
             reference_id = next(
                 (reference.id for reference in matching if reference.id is not None),
@@ -220,6 +233,45 @@ class PresenceDelta(BaseModel):
         exit_names = {reference.name.casefold() for reference in self.exit}
         overlap = enter_names & exit_names
         if overlap:
+            conflicts: List[str] = []
+            for name in sorted(overlap):
+                enter_ids = sorted(
+                    {
+                        reference.id
+                        for reference in self.enter
+                        if reference.name.casefold() == name
+                        and reference.id is not None
+                    }
+                )
+                exit_ids = sorted(
+                    {
+                        reference.id
+                        for reference in self.exit
+                        if reference.name.casefold() == name
+                        and reference.id is not None
+                    }
+                )
+                if len(set(enter_ids) | set(exit_ids)) < 2:
+                    continue
+                id_details: List[str] = []
+                if enter_ids:
+                    enter_label = "id" if len(enter_ids) == 1 else "ids"
+                    id_details.append(
+                        f"enter {enter_label}="
+                        + ", ".join(str(reference_id) for reference_id in enter_ids)
+                    )
+                if exit_ids:
+                    exit_label = "id" if len(exit_ids) == 1 else "ids"
+                    id_details.append(
+                        f"exit {exit_label}="
+                        + ", ".join(str(reference_id) for reference_id in exit_ids)
+                    )
+                conflicts.append(f"{name} ({', '.join(id_details)})")
+            if conflicts:
+                raise ValueError(
+                    "presence cannot enter and exit the same character: "
+                    + "; ".join(conflicts)
+                )
             raise ValueError(
                 "presence cannot enter and exit the same character: "
                 + ", ".join(sorted(overlap))
