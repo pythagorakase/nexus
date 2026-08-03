@@ -7,9 +7,10 @@ per-chunk mentions, never members of the carried scene roster.
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any, Dict, List, Literal, Optional, Sequence, TypeVar
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from nexus.agents.logon.apex_enums import (
     EmotionalValence,
@@ -43,6 +44,9 @@ from nexus.api.native_structured_output import (
     openai_response_text_format,
     strict_json_schema,
 )
+
+
+logger = logging.getLogger("nexus.logon.skald_wire")
 
 
 class SceneDelta(BaseModel):
@@ -129,6 +133,96 @@ class PresenceDelta(BaseModel):
         description="Fresh roster and setting after relocation.",
     )
 
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_out_and_back(cls, data: Any) -> Any:
+        """Collapse same-turn character crossings to one mention."""
+
+        if not isinstance(data, dict) or data.get("scene_reset") is not None:
+            return data
+
+        enter_data = data.get("enter", [])
+        exit_data = data.get("exit", [])
+        mentions_data = data.get("mentions", [])
+        if not all(
+            isinstance(references, list)
+            for references in (enter_data, exit_data, mentions_data)
+        ):
+            return data
+
+        try:
+            enter = [CharacterRef.model_validate(reference) for reference in enter_data]
+            exit_references = [
+                CharacterRef.model_validate(reference) for reference in exit_data
+            ]
+            mentions = [
+                PresenceRef.model_validate(reference) for reference in mentions_data
+            ]
+        except ValidationError:
+            return data
+
+        overlap = {reference.name.casefold() for reference in enter} & {
+            reference.name.casefold() for reference in exit_references
+        }
+        if not overlap:
+            return data
+
+        removed = [*enter, *exit_references]
+        matching_by_name = {
+            name_key: [
+                reference
+                for reference in removed
+                if reference.name.casefold() == name_key
+            ]
+            for name_key in overlap
+        }
+        normalizable_overlap = {
+            name_key
+            for name_key, matching in matching_by_name.items()
+            if len({reference.id for reference in matching if reference.id is not None})
+            <= 1
+        }
+        if not normalizable_overlap:
+            return data
+
+        normalized = dict(data)
+        normalized["enter"] = [
+            reference
+            for reference, parsed in zip(enter_data, enter)
+            if parsed.name.casefold() not in normalizable_overlap
+        ]
+        normalized["exit"] = [
+            reference
+            for reference, parsed in zip(exit_data, exit_references)
+            if parsed.name.casefold() not in normalizable_overlap
+        ]
+        normalized_mentions = list(mentions_data)
+        mention_keys = {
+            (reference.kind, reference.name.casefold()) for reference in mentions
+        }
+        for name_key in sorted(normalizable_overlap):
+            matching = matching_by_name[name_key]
+            name = matching[0].name
+            reference_id = next(
+                (reference.id for reference in matching if reference.id is not None),
+                None,
+            )
+            mention_key: tuple[Literal["character", "place", "faction"], str] = (
+                "character",
+                name_key,
+            )
+            if mention_key not in mention_keys:
+                normalized_mentions.append(
+                    {"kind": "character", "name": name, "id": reference_id}
+                )
+                mention_keys.add(mention_key)
+            logger.warning(
+                "presence out-and-back normalized to mention: %s",
+                name,
+            )
+        normalized["mentions"] = normalized_mentions
+        return normalized
+
     @model_validator(mode="after")
     def validate_presence_consistency(self) -> "PresenceDelta":
         """Reject contradictory roster changes."""
@@ -139,6 +233,45 @@ class PresenceDelta(BaseModel):
         exit_names = {reference.name.casefold() for reference in self.exit}
         overlap = enter_names & exit_names
         if overlap:
+            conflicts: List[str] = []
+            for name in sorted(overlap):
+                enter_ids = sorted(
+                    {
+                        reference.id
+                        for reference in self.enter
+                        if reference.name.casefold() == name
+                        and reference.id is not None
+                    }
+                )
+                exit_ids = sorted(
+                    {
+                        reference.id
+                        for reference in self.exit
+                        if reference.name.casefold() == name
+                        and reference.id is not None
+                    }
+                )
+                if len(set(enter_ids) | set(exit_ids)) < 2:
+                    continue
+                id_details: List[str] = []
+                if enter_ids:
+                    enter_label = "id" if len(enter_ids) == 1 else "ids"
+                    id_details.append(
+                        f"enter {enter_label}="
+                        + ", ".join(str(reference_id) for reference_id in enter_ids)
+                    )
+                if exit_ids:
+                    exit_label = "id" if len(exit_ids) == 1 else "ids"
+                    id_details.append(
+                        f"exit {exit_label}="
+                        + ", ".join(str(reference_id) for reference_id in exit_ids)
+                    )
+                conflicts.append(f"{name} ({', '.join(id_details)})")
+            if conflicts:
+                raise ValueError(
+                    "presence cannot enter and exit the same character: "
+                    + "; ".join(conflicts)
+                )
             raise ValueError(
                 "presence cannot enter and exit the same character: "
                 + ", ".join(sorted(overlap))
