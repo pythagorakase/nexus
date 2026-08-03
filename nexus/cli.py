@@ -7,6 +7,7 @@ Commands:
     nexus undo --slot N         Revert the last action
     nexus regenerate --slot N   Regenerate the last storyteller turn
     nexus model --slot N        Get or set the model for a slot
+    nexus jobs --slot N         Show durable Retrograde maturation jobs
     nexus trait-audit --slot N  Dry-run new-story trait compiler audit
     nexus retrograde-packet --slot N  Build dry-run Retrograde seed packet
     nexus retrograde-seed-candidates  Call Skald for non-mutating seed candidates
@@ -41,7 +42,7 @@ import time
 from typing import Any, Callable, Dict, List, Mapping, Optional
 import uuid
 
-import requests
+import requests  # type: ignore[import-untyped]
 
 from nexus.config import load_settings
 from nexus.config.settings_models import Settings
@@ -1601,6 +1602,11 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                 no_session_result["retrograde"] = retrograde_info
             return no_session_result
 
+        return {
+            "success": False,
+            "error": "Slot state was neither wizard nor narrative mode",
+        }
+
     except requests.exceptions.ConnectionError:
         return {
             "success": False,
@@ -3031,6 +3037,20 @@ def run_usage(args: argparse.Namespace) -> Dict[str, Any]:
     }
 
 
+def run_jobs(args: argparse.Namespace) -> Dict[str, Any]:
+    """Return the durable Retrograde maturation queue for one slot."""
+
+    from nexus.agents.orrery.retrograde_maturation import (
+        load_maturation_status_for_slot_sync,
+    )
+
+    return {
+        "success": True,
+        "slot": args.slot,
+        **load_maturation_status_for_slot_sync(args.slot),
+    }
+
+
 def _run_with_cli_usage(
     args: argparse.Namespace,
     command: Callable[[argparse.Namespace], Dict[str, Any]],
@@ -3110,6 +3130,7 @@ Examples:
   nexus up --foreground         Stay attached; Ctrl+C tears down
   nexus status                  Runtime health, processes, slot, version
   nexus usage --day 2026-07-29 Show exact API-reported UTC-day token usage
+  nexus jobs --slot 4           Show durable Retrograde maturation jobs
   nexus logs gateway -f         Follow the gateway log
   nexus down                    Stop the runtime
   nexus load --slot 5           Show current state of slot 5
@@ -3230,6 +3251,26 @@ Examples:
         help="UTC quota day in YYYY-MM-DD format (default: current UTC day)",
     )
     usage_parser.add_argument("--run", help="Filter events by correlation run id")
+
+    jobs_parser = subparsers.add_parser(
+        "jobs",
+        help="Show durable Retrograde maturation job state for one slot",
+    )
+    jobs_parser.add_argument(
+        "--json",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Emit JSON output",
+    )
+    jobs_parser.add_argument(
+        "--truncate",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Truncate long text fields (accepted for global CLI consistency)",
+    )
+    jobs_parser.add_argument(
+        "--slot", type=int, required=True, help="Slot number (1-5)"
+    )
 
     # load command
     load_parser = subparsers.add_parser("load", help="Display current slot state")
@@ -3777,6 +3818,7 @@ def main() -> int:
         "place-manifest",
         "place-apply",
         "backfill-review-packet",
+        "jobs",
         "lock",
         "unlock",
     ):
@@ -3815,6 +3857,8 @@ def main() -> int:
         result = run_logs(args)
     elif args.command == "usage":
         result = run_usage(args)
+    elif args.command == "jobs":
+        result = run_jobs(args)
     elif args.command == "load":
         result = run_load(args)
     elif args.command == "continue":

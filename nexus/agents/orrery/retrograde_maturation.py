@@ -1142,20 +1142,60 @@ def namespace_expansion_event_refs(
     return payload
 
 
-def load_maturation_status_sync(cur: Any) -> dict[str, int]:
-    """Return compact maturation queue counts for status snapshots."""
+def load_maturation_status_sync(cur: Any) -> dict[str, Any]:
+    """Return maturation queue counts and diagnosable non-terminal jobs."""
 
     cur.execute(
         """
-        SELECT state::text AS state, count(*) AS count
+        SELECT
+            jsonb_build_object(
+                'queued', count(*) FILTER (WHERE state = 'queued'),
+                'leased', count(*) FILTER (WHERE state = 'leased'),
+                'succeeded', count(*) FILTER (WHERE state = 'succeeded'),
+                'failed', count(*) FILTER (WHERE state = 'failed')
+            ) AS counts,
+            COALESCE(
+                jsonb_agg(
+                    jsonb_build_object(
+                        'id', id,
+                        'state', state::text,
+                        'entity_kind', entity_kind,
+                        'entity_name', entity_name,
+                        'requesting_chunk_id', requesting_chunk_id,
+                        'attempts', attempts,
+                        'available_at', available_at,
+                        'lease_until', lease_until
+                    ) ORDER BY id
+                ) FILTER (WHERE state IN ('queued', 'leased')),
+                '[]'::jsonb
+            ) AS non_terminal_jobs
         FROM orrery_maturation_jobs
-        GROUP BY state
         """
     )
-    counts = {"queued": 0, "leased": 0, "succeeded": 0, "failed": 0}
-    for row in cur.fetchall():
-        counts[str(_row_value(row, "state", 0))] = int(_row_value(row, "count", 1))
-    return counts
+    row = cur.fetchone()
+    if row is None:
+        raise RuntimeError("Maturation status query returned no row")
+    raw_counts = _row_value(row, "counts", 0)
+    raw_jobs = _row_value(row, "non_terminal_jobs", 1)
+    if not isinstance(raw_counts, Mapping) or not isinstance(raw_jobs, list):
+        raise RuntimeError("Maturation status query returned an invalid shape")
+    counts = {
+        state: int(raw_counts.get(state, 0))
+        for state in ("queued", "leased", "succeeded", "failed")
+    }
+    return {"counts": counts, "non_terminal_jobs": raw_jobs}
+
+
+def load_maturation_status_for_slot_sync(slot: int) -> dict[str, Any]:
+    """Return the durable maturation queue snapshot for one save slot."""
+
+    conn = _connect_for_slot(slot)
+    try:
+        with conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                return load_maturation_status_sync(cur)
+    finally:
+        conn.close()
 
 
 # ============================================================================

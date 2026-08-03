@@ -135,6 +135,17 @@ not an organization-wide Platform meter. Count any known non-NEXUS API usage
 against the configured limit before starting. Read-only commands that cannot
 call a model do not need an `--expect-call` check.
 
+A check may also return `status=pending` (exit code 3). This means the QA slot
+still has non-terminal Retrograde maturation jobs (queued or leased), so
+provider-capable work caused by an earlier command has not settled. A pending
+check does not advance the usage watermark and does not authorize any remote
+request. When you see pending: wait roughly ten seconds, then re-run the same
+check with the same flags. Repeat until it returns continue or stop. The late
+maturation usage then lands in the same command delta as the command that
+caused it. If pending persists for more than twenty minutes with no state
+change in the reported jobs, stop probing, run the finish step, and record the
+stalled job ids in the mission report.
+
 Never detach a request or restart/kill the gateway while a provider response is
 unaccounted for. Gateway-restart interruption probes may run only between
 settled operations until the provider ledger can prove usage across process

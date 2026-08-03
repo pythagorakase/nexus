@@ -326,10 +326,10 @@ def load_orrery_status_sync(
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 maturation_counts = load_maturation_status_sync(cur)
                 return OrreryStatus(
-                    queued_maturation_jobs=maturation_counts["queued"],
-                    leased_maturation_jobs=maturation_counts["leased"],
-                    succeeded_maturation_jobs=maturation_counts["succeeded"],
-                    failed_maturation_jobs=maturation_counts["failed"],
+                    queued_maturation_jobs=maturation_counts["counts"]["queued"],
+                    leased_maturation_jobs=maturation_counts["counts"]["leased"],
+                    succeeded_maturation_jobs=maturation_counts["counts"]["succeeded"],
+                    failed_maturation_jobs=maturation_counts["counts"]["failed"],
                     pending_promotions=_count_sync(
                         cur,
                         """
@@ -614,7 +614,8 @@ def _generate_narration(provider: Any, row: Mapping[str, Any]) -> str:
         f"Template: {row['template_id']}\n"
         f"Actor: {row.get('actor_name') or row.get('actor_entity_id')}\n"
         f"Brief: {row.get('brief')}\n"
-        f"Promotion verdict: {json.dumps(row.get('promotion_verdict') or {}, sort_keys=True)}\n"
+        "Promotion verdict: "
+        f"{json.dumps(row.get('promotion_verdict') or {}, sort_keys=True)}\n"
         f"State delta: {json.dumps(row.get('state_delta') or {}, sort_keys=True)}\n\n"
         "Length: 80-180 words. Do not address the player."
     )
