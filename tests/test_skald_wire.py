@@ -75,6 +75,7 @@ from nexus.agents.lore import logon_utility
 from nexus.agents.lore.logon_utility import LogonUtility, read_presence_baseline
 from nexus.agents.orrery.tag_schemas import OrreryTagBestowal
 from nexus.api.native_structured_output import anthropic_output_config
+from nexus.api.presence_reconciliation import CharacterRosterRows
 from nexus.config import resolve_model_ref
 from scripts.api_openai import OpenAIProvider
 
@@ -1940,15 +1941,33 @@ def test_sync_logon_reads_and_supplies_parent_baseline(
             _schema_model: type,
             **_kwargs: Any,
         ) -> tuple[SkaldTurnWire, object]:
-            return SkaldTurnWire.model_validate(SPARSE_WIRE_PAYLOAD), object()
+            return (
+                SkaldTurnWire.model_validate(
+                    {
+                        **SPARSE_WIRE_PAYLOAD,
+                        "narrative": "Ressa Morn waits beyond the archive door.",
+                    }
+                ),
+                object(),
+            )
 
     calls: list[tuple[str, int]] = []
+    roster_calls: list[str] = []
 
     def fake_read(dbname: str, parent_chunk_id: int) -> PresenceBaseline:
         calls.append((dbname, parent_chunk_id))
         return BASELINE
 
     monkeypatch.setattr(logon_utility, "read_presence_baseline", fake_read)
+
+    def fake_read_roster(dbname: str) -> CharacterRosterRows:
+        roster_calls.append(dbname)
+        return CharacterRosterRows(
+            characters=[{"id": 101, "name": "Ressa Morn", "summary": None}],
+            aliases=[],
+        )
+
+    monkeypatch.setattr(logon_utility, "read_character_roster", fake_read_roster)
     monkeypatch.setattr(logon_utility, "read_user_character_id", lambda _dbname: 1)
     monkeypatch.setattr(
         logon_utility,
@@ -1975,8 +1994,16 @@ def test_sync_logon_reads_and_supplies_parent_baseline(
         effective_context_window=75_000,
     )
     assert calls == [("save_05", 77)]
+    assert roster_calls == ["save_05"]
     assert isinstance(response, StorytellerResponseExtended)
-    assert len(response.referenced_entities.characters) == 2
+    assert [
+        (reference.character_id, reference.reference_type)
+        for reference in response.referenced_entities.characters
+    ] == [
+        (7, ReferenceType.PRESENT),
+        (8, ReferenceType.PRESENT),
+        (101, ReferenceType.MENTIONED),
+    ]
     assert response.generation_model == "wire-test-model"
 
 
@@ -1993,15 +2020,37 @@ async def test_async_logon_reads_and_supplies_parent_baseline(
             _schema_model: type,
             **_kwargs: Any,
         ) -> tuple[SkaldTurnWire, object]:
-            return SkaldTurnWire.model_validate(SPARSE_WIRE_PAYLOAD), object()
+            return (
+                SkaldTurnWire.model_validate(
+                    {
+                        **SPARSE_WIRE_PAYLOAD,
+                        "narrative": "Ressa Morn waits beyond the archive door.",
+                    }
+                ),
+                object(),
+            )
 
     calls: list[tuple[str, int]] = []
+    roster_calls: list[str] = []
 
     async def fake_read(dbname: str, parent_chunk_id: int) -> PresenceBaseline:
         calls.append((dbname, parent_chunk_id))
         return BASELINE
 
     monkeypatch.setattr(logon_utility, "read_presence_baseline_async", fake_read)
+
+    async def fake_read_roster(dbname: str) -> CharacterRosterRows:
+        roster_calls.append(dbname)
+        return CharacterRosterRows(
+            characters=[{"id": 101, "name": "Ressa Morn", "summary": None}],
+            aliases=[],
+        )
+
+    monkeypatch.setattr(
+        logon_utility,
+        "read_character_roster_async",
+        fake_read_roster,
+    )
     monkeypatch.setattr(logon_utility, "read_user_character_id", lambda _dbname: 1)
     monkeypatch.setattr(
         logon_utility,
@@ -2028,8 +2077,16 @@ async def test_async_logon_reads_and_supplies_parent_baseline(
         effective_context_window=75_000,
     )
     assert calls == [("save_05", 77)]
+    assert roster_calls == ["save_05"]
     assert isinstance(response, StorytellerResponseExtended)
-    assert len(response.referenced_entities.characters) == 2
+    assert [
+        (reference.character_id, reference.reference_type)
+        for reference in response.referenced_entities.characters
+    ] == [
+        (7, ReferenceType.PRESENT),
+        (8, ReferenceType.PRESENT),
+        (101, ReferenceType.MENTIONED),
+    ]
     assert response.generation_model == "wire-test-model"
 
 
