@@ -1,9 +1,11 @@
 """Tests for Orrery dry-run resolver integration."""
 
 from datetime import datetime, timezone
+from typing import Any
 
 import pytest
 
+import nexus.agents.orrery.resolver as resolver_module
 from nexus.agents.orrery.audit import explain_dry_run
 from nexus.agents.lore.utils.turn_context import TurnContext
 from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
@@ -47,6 +49,57 @@ from nexus.config.settings_models import OrreryWeatherSettings
 
 
 _DEFAULT_WORLD_TIME = object()
+
+
+def test_resolve_dry_run_with_supplied_epistemics_skips_config_load(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A caller-supplied epistemics policy avoids application config I/O."""
+
+    load_count = 0
+    original_loader = resolver_module.load_epistemics_policy
+
+    def counted_loader() -> Any:
+        nonlocal load_count
+        load_count += 1
+        return original_loader()
+
+    monkeypatch.setattr(resolver_module, "load_epistemics_policy", counted_loader)
+
+    resolve_dry_run(
+        FakeSession(),
+        [],
+        anchor_chunk_id=100,
+        window_chunks=30,
+        epistemics_settings={},
+    )
+
+    assert load_count == 0
+
+
+def test_resolve_dry_run_fallback_loads_config_at_most_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The standalone resolver fallback reads application config only once."""
+
+    load_count = 0
+    original_loader = resolver_module.load_epistemics_policy
+
+    def counted_loader() -> Any:
+        nonlocal load_count
+        load_count += 1
+        return original_loader()
+
+    monkeypatch.setattr(resolver_module, "load_epistemics_policy", counted_loader)
+
+    resolve_dry_run(
+        FakeSession(),
+        [],
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert load_count <= 1
 
 
 class FakeResult:
@@ -3531,15 +3584,15 @@ def test_habituation_dampens_repeat_winner_and_respects_exemptions() -> None:
     bindings = {Slot.ACTOR: 1}
 
     fresh = WorldState()
-    assert evaluate_stack((low, high), fresh, bindings, None, policy).template_id == (
-        "surveil"
-    )
+    fresh_winner = evaluate_stack((low, high), fresh, bindings, None, policy)
+    assert fresh_winner is not None
+    assert fresh_winner.template_id == "surveil"
 
     # Three committed wins drop surveil's effective priority to 39 < 40.
     worn = WorldState(win_history={(1, "surveil"): 3})
-    assert evaluate_stack((low, high), worn, bindings, None, policy).template_id == (
-        "reach_out"
-    )
+    worn_winner = evaluate_stack((low, high), worn, bindings, None, policy)
+    assert worn_winner is not None
+    assert worn_winner.template_id == "reach_out"
     # The cap bounds the debit: ten wins is still only -10.
     capped = WorldState(win_history={(1, "surveil"): 10})
     ordered = stack_order((low, high), capped, bindings, policy)
@@ -3551,9 +3604,9 @@ def test_habituation_dampens_repeat_winner_and_respects_exemptions() -> None:
     assert [t.id for t in ordered] == ["evade_pursuers", "reach_out"]
 
     # Disabled policy is inert.
-    assert evaluate_stack((low, high), worn, bindings, None, None).template_id == (
-        "surveil"
-    )
+    disabled_winner = evaluate_stack((low, high), worn, bindings, None, None)
+    assert disabled_winner is not None
+    assert disabled_winner.template_id == "surveil"
 
 
 def test_explain_stack_orders_like_evaluate_under_habituation() -> None:
