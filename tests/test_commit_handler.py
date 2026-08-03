@@ -209,7 +209,9 @@ async def test_async_commit_links_same_turn_character_declaration(monkeypatch):
         commit_handler, "set_commit_chunk_attribution_async", no_op_attribution
     )
     monkeypatch.setattr(commit_handler, "commit_orrery_tick_async", empty_orrery_tick)
-    monkeypatch.setattr(commit_handler, "_orrery_checkpoint_interval", lambda: 0)
+    monkeypatch.setattr(
+        commit_handler, "_orrery_checkpoint_interval", lambda _settings: 0
+    )
 
     chunk_id = await commit_incubator_to_database(conn, "session-2", slot=5)
 
@@ -279,7 +281,9 @@ async def test_async_commit_resolves_all_name_addressed_state_updates(monkeypatc
     monkeypatch.setattr(commit_handler, "log_state_delta_async", no_op)
     monkeypatch.setattr(commit_handler, "apply_tag_bestowal_async", record_tag_write)
     monkeypatch.setattr(commit_handler, "commit_orrery_tick_async", empty_orrery_tick)
-    monkeypatch.setattr(commit_handler, "_orrery_checkpoint_interval", lambda: 0)
+    monkeypatch.setattr(
+        commit_handler, "_orrery_checkpoint_interval", lambda _settings: 0
+    )
 
     await commit_incubator_to_database(conn, "state-session", slot=5)
 

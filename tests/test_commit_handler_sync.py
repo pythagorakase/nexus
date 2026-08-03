@@ -250,7 +250,9 @@ def test_sync_commit_links_same_turn_character_declaration(monkeypatch):
     monkeypatch.setattr(
         commit_handler_sync, "set_commit_chunk_attribution_sync", lambda *_args: None
     )
-    monkeypatch.setattr(commit_handler_sync, "_orrery_checkpoint_interval", lambda: 0)
+    monkeypatch.setattr(
+        commit_handler_sync, "_orrery_checkpoint_interval", lambda _settings: 0
+    )
 
     chunk_id = commit_incubator_to_database_sync(conn, "session-1", slot=5)
 
@@ -288,7 +290,9 @@ def _patch_sync_commit_runtime(monkeypatch) -> None:
     monkeypatch.setattr(
         commit_handler_sync, "log_state_delta_sync", lambda *_a, **_k: None
     )
-    monkeypatch.setattr(commit_handler_sync, "_orrery_checkpoint_interval", lambda: 0)
+    monkeypatch.setattr(
+        commit_handler_sync, "_orrery_checkpoint_interval", lambda _settings: 0
+    )
 
 
 def test_sync_commit_resolves_all_name_addressed_state_updates(monkeypatch):

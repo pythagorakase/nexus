@@ -132,7 +132,7 @@ def test_parallel_approvals_claim_incubator_row_once(
     monkeypatch.setattr(
         commit_handler_sync,
         "_orrery_checkpoint_interval",
-        lambda: 0,
+        lambda _settings: 0,
     )
     monkeypatch.setattr(
         "nexus.api.presence_audit.presence_audit_enabled",
@@ -262,7 +262,7 @@ def test_accept_reject_hysteresis_and_digest_undo(
     monkeypatch.setattr(
         commit_handler_sync,
         "_orrery_checkpoint_interval",
-        lambda: 0,
+        lambda _settings: 0,
     )
     compaction_calls: list[dict[str, Any]] = []
 

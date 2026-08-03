@@ -9,7 +9,7 @@ with the existing narrative API.
 import json
 import logging
 from datetime import datetime
-from typing import Optional, Any, Dict, List
+from typing import Any, Dict, List, Mapping, Optional, cast
 from psycopg2.extras import RealDictCursor
 
 from nexus.agents.logon.apex_schema import (
@@ -573,6 +573,7 @@ def commit_incubator_to_database_sync(
                 apply_state_updates_sync(conn, state_updates, source_chunk_id=chunk_id)
 
             # Step 9.5: Commit Orrery proposal inside the accepted-chunk transaction
+            orrery_settings = _load_orrery_settings()
             orrery_result = commit_orrery_tick_sync(
                 conn,
                 incubator.get("orrery_proposal"),
@@ -581,19 +582,19 @@ def commit_incubator_to_database_sync(
                 world_layer=world_layer,
                 adjudications=incubator.get("orrery_adjudications"),
                 storyteller_state_updates=incubator.get("entity_updates"),
-                prompt_settings=_orrery_prompt_settings(),
-                ecology_settings=_orrery_ecology_settings(),
-                project_settings=_orrery_project_settings(),
-                mood_settings=_orrery_mood_settings(),
+                prompt_settings=orrery_settings.get("prompt"),
+                ecology_settings=orrery_settings.get("ecology"),
+                project_settings=orrery_settings.get("projects"),
+                mood_settings=orrery_settings.get("mood"),
                 epistemics_settings=(
-                    _orrery_epistemics_settings()
+                    orrery_settings.get("epistemics")
                     if incubator.get("orrery_proposal") is None
                     else None
                 ),
-                contagion_settings=_orrery_contagion_settings(),
-                distortion_settings=_orrery_distortion_settings(),
-                drift_settings=_orrery_drift_settings(),
-                reveal_settings=_orrery_reveal_settings(),
+                contagion_settings=orrery_settings.get("contagion"),
+                distortion_settings=orrery_settings.get("distortion"),
+                drift_settings=orrery_settings.get("drift"),
+                reveal_settings=orrery_settings.get("reveal"),
             )
             if (
                 orrery_result.resolution_count
@@ -630,7 +631,7 @@ def commit_incubator_to_database_sync(
             # Step 9.55: interval state checkpoint (reconstruction bar 7c).
             # Fresh cursor: the earlier `with conn.cursor()` blocks have
             # closed theirs by this point (review finding on #428).
-            checkpoint_interval = _orrery_checkpoint_interval()
+            checkpoint_interval = _orrery_checkpoint_interval(orrery_settings)
             if checkpoint_interval:
                 with conn.cursor() as checkpoint_cur:
                     playable_ordinal = playable_narrative_ordinal_sync(checkpoint_cur)
@@ -988,84 +989,16 @@ def _apply_state_tags(
         logger.info(f"Tag bestowal {kind}/{subtype_id}: {counters}")
 
 
-def _orrery_ecology_settings() -> Any:
-    """[orrery.ecology] signal-detection policy for branch signal emissions."""
+def _load_orrery_settings() -> Mapping[str, Any]:
+    """Load the Orrery configuration once for one accepted-chunk operation."""
 
     from nexus.config import load_settings_as_dict
 
-    return (load_settings_as_dict().get("orrery") or {}).get("ecology")
+    return cast(Mapping[str, Any], load_settings_as_dict().get("orrery") or {})
 
 
-def _orrery_prompt_settings() -> Any:
-    """[orrery.prompt] render caps, so the prompt-exposure log matches what
-    logon_utility actually rendered for this tick."""
-
-    from nexus.config import load_settings_as_dict
-
-    return (load_settings_as_dict().get("orrery") or {}).get("prompt")
-
-
-def _orrery_project_settings() -> Any:
-    """[orrery.projects] cadence and abandonment policy."""
-
-    from nexus.config import load_settings_as_dict
-
-    return (load_settings_as_dict().get("orrery") or {}).get("projects")
-
-
-def _orrery_mood_settings() -> Any:
-    """[orrery.mood] mechanical affect write policy."""
-
-    from nexus.config import load_settings_as_dict
-
-    return (load_settings_as_dict().get("orrery") or {}).get("mood")
-
-
-def _orrery_contagion_settings() -> Any:
-    """[orrery.contagion] frontier and communication policy."""
-
-    from nexus.config import load_settings_as_dict
-
-    return (load_settings_as_dict().get("orrery") or {}).get("contagion")
-
-
-def _orrery_distortion_settings() -> Any:
-    """[orrery.distortion] authored hop-depth account selection policy."""
-
-    from nexus.config import load_settings_as_dict
-
-    return (load_settings_as_dict().get("orrery") or {}).get("distortion")
-
-
-def _orrery_epistemics_settings() -> Any:
-    """[orrery.epistemics] claim-minting and awareness policy."""
-
-    from nexus.config import load_settings_as_dict
-
-    return (load_settings_as_dict().get("orrery") or {}).get("epistemics")
-
-
-def _orrery_drift_settings() -> Any:
-    """[orrery.drift] continuous relationship-valence policy."""
-
-    from nexus.config import load_settings_as_dict
-
-    return (load_settings_as_dict().get("orrery") or {}).get("drift")
-
-
-def _orrery_reveal_settings() -> Any:
-    """[orrery.reveal] template-authored backstory reveal policy."""
-
-    from nexus.config import load_settings_as_dict
-
-    return (load_settings_as_dict().get("orrery") or {}).get("reveal")
-
-
-def _orrery_checkpoint_interval() -> int:
+def _orrery_checkpoint_interval(orrery_settings: Mapping[str, Any]) -> int:
     """[orrery.reconstruction] checkpoint cadence; 0 disables."""
 
-    from nexus.config import load_settings_as_dict
-
-    orrery = load_settings_as_dict().get("orrery") or {}
-    reconstruction = orrery.get("reconstruction") or {}
+    reconstruction = orrery_settings.get("reconstruction") or {}
     return int(reconstruction.get("checkpoint_interval_chunks", 0))
