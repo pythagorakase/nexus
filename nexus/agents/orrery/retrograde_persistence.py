@@ -524,6 +524,7 @@ def _build_plan(
         "summaries_would_insert",
         "summaries_inserted",
         "summaries_already_present",
+        "summaries_stamped_missing_vectors",
         "summaries_blocked",
     ):
         counters.setdefault(key, 0)
@@ -1851,6 +1852,7 @@ def plan_retrograde_summaries(
         event_sources = _load_persisted_retrograde_event_sources(cur)
 
     rows: list[dict[str, Any]] = []
+    active_embedding_model_dimensions: Optional[dict[str, int]] = None
     for source in event_sources:
         source_status = str(source.get("source_status") or "persisted")
         world_event_id = _optional_int(source.get("world_event_id"))
@@ -1938,12 +1940,33 @@ def plan_retrograde_summaries(
                     f"Retrograde world event {world_event_id} already has "
                     "divergent summary fields: " + ", ".join(divergent_fields)
                 )
+            if active_embedding_model_dimensions is None:
+                from nexus.agents.orrery.retrograde_embedding import (
+                    active_memnon_embedding_model_dimensions,
+                )
+
+                active_embedding_model_dimensions = (
+                    active_memnon_embedding_model_dimensions()
+                )
+            missing_embedding_models = _missing_retrograde_summary_embedding_models(
+                cur,
+                summary_id=existing["summary_id"],
+                model_dimensions=active_embedding_model_dimensions,
+            )
+            embedding_stamp_present = existing["embedding_generated_at"] is not None
             rows.append(
                 {
                     **base,
-                    "status": "already_present",
+                    "status": (
+                        "stamped_missing_vectors"
+                        if embedding_stamp_present and missing_embedding_models
+                        else "already_present"
+                    ),
                     "summary_id": existing["summary_id"],
-                    "embedding_pending": existing["embedding_generated_at"] is None,
+                    "embedding_pending": (
+                        not embedding_stamp_present or bool(missing_embedding_models)
+                    ),
+                    "missing_embedding_models": missing_embedding_models,
                 }
             )
             continue
@@ -1983,6 +2006,64 @@ def plan_retrograde_summaries(
             }
         )
     return rows
+
+
+def _missing_retrograde_summary_embedding_models(
+    cur: Any,
+    *,
+    summary_id: int,
+    model_dimensions: Mapping[str, int],
+) -> list[dict[str, Any]]:
+    """Describe active MEMNON vectors absent for one persisted summary."""
+    from nexus.agents.memnon.utils.embedding_tables import (
+        retrograde_summary_table_name_for_dimensions,
+    )
+
+    models_by_table: dict[str, list[tuple[str, int]]] = {}
+    for model, dimensions in model_dimensions.items():
+        table_name = retrograde_summary_table_name_for_dimensions(dimensions)
+        models_by_table.setdefault(table_name, []).append((model, dimensions))
+
+    missing: list[dict[str, Any]] = []
+    for table_name, configured_models in models_by_table.items():
+        cur.execute(
+            """
+            /* orrery:retrograde:summary_embedding_table */
+            SELECT to_regclass(%s) AS table_name
+            """,
+            (f"public.{table_name}",),
+        )
+        table_row = cur.fetchone()
+        table_exists = (
+            table_row is not None and _row_value(table_row, "table_name", 0) is not None
+        )
+        present_models: set[str] = set()
+        if table_exists:
+            model_names = [model for model, _dimensions in configured_models]
+            cur.execute(
+                f"""
+                /* orrery:retrograde:summary_embedding_models */
+                SELECT model
+                FROM {table_name}
+                WHERE summary_id = %s
+                  AND model = ANY(%s)
+                """,
+                (summary_id, model_names),
+            )
+            present_models = {
+                str(_row_value(row, "model", 0)) for row in cur.fetchall()
+            }
+
+        missing.extend(
+            {
+                "model": model,
+                "dimensions": dimensions,
+                "table": table_name,
+            }
+            for model, dimensions in configured_models
+            if model not in present_models
+        )
+    return missing
 
 
 def _load_canonical_retrograde_event_source(

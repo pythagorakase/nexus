@@ -33,6 +33,19 @@ def _load_memnon_settings() -> dict[str, Any]:
     return settings
 
 
+def active_memnon_embedding_model_dimensions() -> dict[str, int]:
+    """Return configured active MEMNON model names and vector dimensions."""
+    configured_models = _load_memnon_settings().get("models", {})
+    active_models = {
+        str(name): int(config["dimensions"])
+        for name, config in configured_models.items()
+        if config.get("is_active", True)
+    }
+    if not active_models:
+        raise RuntimeError("No active MEMNON embedding models are configured")
+    return active_models
+
+
 def embed_retrograde_summaries(
     dbname: str,
     summary_ids: Sequence[int],
@@ -86,14 +99,7 @@ def embed_retrograde_summaries(
         raise RuntimeError(f"Retrograde summaries not found in {dbname}: {missing_ids}")
 
     memnon_settings = _load_memnon_settings()
-    configured_models = memnon_settings.get("models", {})
-    configured_active_models = [
-        name
-        for name, config in configured_models.items()
-        if config.get("is_active", True)
-    ]
-    if not configured_active_models:
-        raise RuntimeError("No active MEMNON embedding models are configured")
+    configured_active_models = list(active_memnon_embedding_model_dimensions())
 
     embedding_manager = EmbeddingManager(settings=memnon_settings)
     model_names = embedding_manager.get_available_models()
@@ -123,7 +129,7 @@ def embed_retrograde_summaries(
     with get_connection(dbname, dict_cursor=True) as conn:
         with conn.cursor() as cursor:
             ensured_tables: dict[int, str] = {}
-            for model_embeddings in generated.values():
+            for summary_id, model_embeddings in generated.items():
                 for model_name, embedding in model_embeddings:
                     dimensions = len(embedding)
                     table_name = ensured_tables.get(dimensions)

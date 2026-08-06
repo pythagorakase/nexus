@@ -703,6 +703,7 @@ class FakeRetrogradePersistenceCursor:
         persisted_retrograde_events: Optional[list[dict[str, Any]]] = None,
         canonical_world_events: Optional[list[dict[str, Any]]] = None,
         inactive_entity_ids: Optional[set[int]] = None,
+        missing_summary_embedding_models: Optional[set[str]] = None,
     ) -> None:
         self.vocabulary = vocabulary
         self.omit_place = omit_place
@@ -737,6 +738,9 @@ class FakeRetrogradePersistenceCursor:
             int(row["world_event_id"]): dict(row) for row in canonical_rows
         }
         self.inactive_entity_ids = set(inactive_entity_ids or set())
+        self.missing_summary_embedding_models = set(
+            missing_summary_embedding_models or set()
+        )
         self.deactivated_entity_ids: list[int] = []
         self.entity_activity_projections: list[dict[str, int]] = []
         self.inserted_character_stubs: list[str] = []
@@ -876,6 +880,16 @@ class FakeRetrogradePersistenceCursor:
             self._result = [row] if row is not None else []
         elif "orrery:retrograde:summary_lookup" in sql:
             self._result = list(self.existing_summaries)
+        elif "orrery:retrograde:summary_embedding_table" in sql:
+            assert params is not None
+            self._result = [{"table_name": str(params[0])}]
+        elif "orrery:retrograde:summary_embedding_models" in sql:
+            assert params is not None
+            self._result = [
+                {"model": model}
+                for model in params[1]
+                if model not in self.missing_summary_embedding_models
+            ]
         elif "orrery:retrograde:insert_summary" in sql:
             self._summary_seq += 1
             self._result = [{"id": self._summary_seq}]
