@@ -302,9 +302,14 @@ def validate_usage_day(day: str) -> None:
     """Validate that a usage day is a real calendar date in YYYY-MM-DD form."""
 
     try:
-        datetime.strptime(day, "%Y-%m-%d")
+        parsed = datetime.strptime(day, "%Y-%m-%d")
     except ValueError as exc:
         raise ValueError(f"Usage day must be YYYY-MM-DD, got {day!r}") from exc
+    # strptime tolerates non-zero-padded fields, but ledger filenames are
+    # keyed by date.isoformat() — a variant spelling would silently read a
+    # file that never exists.
+    if parsed.date().isoformat() != day:
+        raise ValueError(f"Usage day must be YYYY-MM-DD, got {day!r}")
 
 
 def summarize_usage(

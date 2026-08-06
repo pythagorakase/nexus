@@ -48,7 +48,7 @@ def test_terminal_generation_statuses_include_api_and_incubator_values() -> None
     assert not _is_terminal_generation_status("error")
 
 
-@pytest.mark.parametrize("day", ["02-30-2026", "2026-02-30"])
+@pytest.mark.parametrize("day", ["02-30-2026", "2026-02-30", "2026-2-3"])
 @pytest.mark.parametrize("as_json", [False, True])
 def test_usage_invalid_day_exits_with_one_concise_error(
     monkeypatch: pytest.MonkeyPatch,
