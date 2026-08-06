@@ -104,7 +104,8 @@ def test_private_letter_prompts_keep_token_budget_as_a_placeholder() -> None:
         prompt = (PROMPTS_DIR / prompt_name).read_text()
 
         assert "{{MAX_LETTER_TOKENS}}" in prompt
-        assert re.search(r"\b\d[\d_,]*\s+tokens?\b", prompt) is None
+        assert re.search(r"\b\d[\d_,]*[\s-]tokens?\b", prompt) is None
+        assert re.search(r"\btokens?\b[^.\n]{0,24}\b\d[\d_,]*\b", prompt) is None
 
 
 def test_private_letter_prompt_loaders_render_configured_budget() -> None:
