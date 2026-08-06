@@ -1,15 +1,37 @@
 """Tests for the NEXUS CLI helpers."""
 
 import json
+from pathlib import Path
 import sys
 from argparse import Namespace
-from typing import Any
+from typing import Any, cast
 
 import pytest
 import requests
+import tomlkit
 
 from nexus import cli
 from nexus.cli import _is_terminal_generation_status
+
+
+REPO_CONFIG = Path(__file__).resolve().parents[1] / "nexus.toml"
+LOG_LINE_COUNT_ERROR = "Log line count must be a positive integer"
+
+
+def _write_runtime_log_config(tmp_path: Path, lines: list[str]) -> Path:
+    """Write an isolated runtime config and its captured gateway log."""
+    state_dir = tmp_path / "state"
+    state_dir.mkdir()
+    (state_dir / "gateway.log").write_text(
+        "".join(f"{line}\n" for line in lines), encoding="utf-8"
+    )
+
+    document = tomlkit.parse(REPO_CONFIG.read_text(encoding="utf-8"))
+    runtime = cast(Any, document["runtime"])
+    runtime["state_dir"] = str(state_dir)
+    config_path = tmp_path / "nexus.toml"
+    config_path.write_text(tomlkit.dumps(document), encoding="utf-8")
+    return config_path
 
 
 class DummyResponse:
@@ -136,6 +158,78 @@ def test_generation_poll_window_covers_live_reasoning_models() -> None:
     """The configured elapsed-time budget covers slow reasoning models."""
 
     assert cli._generation_timeout_seconds() >= 180
+
+
+@pytest.mark.parametrize("count", (-2, -1, 0))
+@pytest.mark.parametrize("as_json", (False, True), ids=("human", "json"))
+def test_logs_rejects_non_positive_line_counts_before_reading_logs(
+    count: int,
+    as_json: bool,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Invalid public counts fail before supervisor construction or log reads."""
+    config_path = _write_runtime_log_config(tmp_path, ["must-not-be-emitted"])
+    argv = ["nexus"]
+    if as_json:
+        argv.append("--json")
+    argv.extend(
+        ["logs", "gateway", "--config", str(config_path), "--lines", str(count)]
+    )
+    monkeypatch.setattr(sys, "argv", argv)
+    monkeypatch.setattr(
+        cli,
+        "_runtime_supervisor",
+        lambda _args: pytest.fail("invalid count constructed the supervisor"),
+    )
+
+    assert cli.main() == 1
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "must-not-be-emitted" not in captured.err
+    if as_json:
+        assert json.loads(captured.err) == {"error": LOG_LINE_COUNT_ERROR}
+    else:
+        assert captured.err == f"Error: {LOG_LINE_COUNT_ERROR}\n"
+
+
+@pytest.mark.parametrize("as_json", (False, True), ids=("human", "json"))
+@pytest.mark.parametrize(
+    "count,expected_count",
+    ((1, 1), (None, 100), (5_000, 4_096)),
+    ids=("one", "default", "larger-than-window"),
+)
+def test_logs_returns_requested_lines_within_retained_read_bound(
+    count: int | None,
+    expected_count: int,
+    as_json: bool,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Valid public counts retain exact tail and 256 KiB read-bound behavior."""
+    log_lines = [f"log-{index:04d}".ljust(63, ".") for index in range(5_000)]
+    config_path = _write_runtime_log_config(tmp_path, log_lines)
+    argv = ["nexus"]
+    if as_json:
+        argv.append("--json")
+    argv.extend(["logs", "gateway", "--config", str(config_path)])
+    if count is not None:
+        argv.extend(["--lines", str(count)])
+    monkeypatch.setattr(sys, "argv", argv)
+    monkeypatch.delenv("NEXUS_GATEWAY_PORT", raising=False)
+
+    assert cli.main() == 0
+
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    if as_json:
+        output_lines = json.loads(captured.out)["lines"]
+    else:
+        output_lines = captured.out.splitlines()
+    assert output_lines == log_lines[-expected_count:]
 
 
 def test_continue_posts_choice_to_backend_without_preapproving(

@@ -12,10 +12,12 @@ import tomlkit
 
 from nexus import cli
 from nexus.runtime import RUNTIME_CONFIG_ENV, Supervisor
+from nexus.runtime.supervisor import _tail_lines
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 REPO_CONFIG = REPO_ROOT / "nexus.toml"
+LOG_LINE_COUNT_ERROR = "Log line count must be a positive integer"
 
 
 def _write_config(tmp_path: Path, name: str = "runtime.toml") -> Path:
@@ -26,6 +28,34 @@ def _write_config(tmp_path: Path, name: str = "runtime.toml") -> Path:
     path = tmp_path / name
     path.write_text(tomlkit.dumps(document), encoding="utf-8")
     return path
+
+
+@pytest.mark.parametrize("count", (-2, -1, 0))
+def test_tail_lines_rejects_non_positive_counts(tmp_path: Path, count: int) -> None:
+    """The low-level tail helper loudly rejects invalid counts."""
+    with pytest.raises(ValueError, match=f"^{LOG_LINE_COUNT_ERROR}$"):
+        _tail_lines(tmp_path / "missing.log", count)
+
+
+@pytest.mark.parametrize(
+    "count,expected",
+    (
+        (1, ["line-119"]),
+        (100, [f"line-{index}" for index in range(20, 120)]),
+        (500, [f"line-{index}" for index in range(120)]),
+    ),
+    ids=("one", "default-sized", "larger-than-window"),
+)
+def test_tail_lines_returns_requested_slice(
+    tmp_path: Path, count: int, expected: list[str]
+) -> None:
+    """Positive tail counts preserve normal slicing behavior."""
+    log_path = tmp_path / "gateway.log"
+    log_path.write_text(
+        "".join(f"line-{index}\n" for index in range(120)), encoding="utf-8"
+    )
+
+    assert _tail_lines(log_path, count) == expected
 
 
 def test_from_config_explicit_path_beats_runtime_environment(
