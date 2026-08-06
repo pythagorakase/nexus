@@ -1448,6 +1448,32 @@ def test_retrograde_embed_history_dry_run_skips_embedding(monkeypatch) -> None:
     assert sync["embedding_results"] == []
 
 
+def test_retrograde_embed_history_reports_planner_runtime_error(monkeypatch) -> None:
+    """Planner RuntimeErrors surface as structured results, not tracebacks."""
+
+    from nexus.agents.orrery import retrograde_persistence
+    from nexus.api import db_pool
+
+    def fail_plan(cur: Any, *, dry_run: bool) -> Any:
+        raise RuntimeError("No active MEMNON embedding models are configured")
+
+    monkeypatch.setattr(
+        db_pool, "get_connection", lambda *args, **kwargs: FakeApplyConnection()
+    )
+    monkeypatch.setattr(
+        retrograde_persistence,
+        "plan_retrograde_summaries",
+        fail_plan,
+    )
+
+    result = cli.run_retrograde_embed_history(Namespace(slot=5, execute=False))
+
+    assert result == {
+        "success": False,
+        "error": "No active MEMNON embedding models are configured",
+    }
+
+
 def test_retrograde_persistence_formatter_uses_summary_identity(capsys) -> None:
     """The persistence formatter renders dedicated summary identities."""
 

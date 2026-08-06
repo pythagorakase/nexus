@@ -465,6 +465,7 @@ def _print_retrograde_persistence(payload: Dict[str, Any]) -> None:
         "summaries_would_insert",
         "summaries_inserted",
         "summaries_already_present",
+        "summaries_stamped_missing_vectors",
         "summaries_blocked",
     ):
         print(f"  {key}: {counters.get(key, 0)}")
@@ -2156,7 +2157,7 @@ def run_retrograde_embed_history(args: argparse.Namespace) -> Dict[str, Any]:
                     cur,
                     dry_run=dry_run,
                 )
-    except ValueError as exc:
+    except (ValueError, RuntimeError) as exc:
         return {"success": False, "error": str(exc)}
 
     pending_summary_ids = [
@@ -2165,7 +2166,7 @@ def run_retrograde_embed_history(args: argparse.Namespace) -> Dict[str, Any]:
         if row["embedding_pending"] and row["summary_id"] is not None
     ]
     embedding_results: List[Dict[str, Any]] = []
-    if not dry_run and retrieval_settings.embed_after_apply and pending_summary_ids:
+    if not dry_run and pending_summary_ids:
         try:
             embedding_results = embed_retrograde_summaries(dbname, pending_summary_ids)
         except RuntimeError as exc:
