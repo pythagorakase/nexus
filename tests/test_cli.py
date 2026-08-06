@@ -48,6 +48,90 @@ def test_terminal_generation_statuses_include_api_and_incubator_values() -> None
     assert not _is_terminal_generation_status("error")
 
 
+@pytest.mark.parametrize("day", ["02-30-2026", "2026-02-30", "2026-2-3"])
+@pytest.mark.parametrize("as_json", [False, True])
+def test_usage_invalid_day_exits_with_one_concise_error(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    day: str,
+    as_json: bool,
+) -> None:
+    """Invalid usage days must not leak a traceback through the public CLI."""
+
+    argv = ["nexus"]
+    if as_json:
+        argv.append("--json")
+    argv.extend(["usage", "--day", day])
+    monkeypatch.setattr(sys, "argv", argv)
+
+    assert cli.main() == 1
+
+    captured = capsys.readouterr()
+    message = f"Usage day must be YYYY-MM-DD, got {day!r}"
+    assert captured.out == ""
+    if as_json:
+        assert captured.err == json.dumps({"error": message}) + "\n"
+    else:
+        assert captured.err == f"Error: {message}\n"
+    assert "Traceback" not in captured.out + captured.err
+
+
+@pytest.mark.parametrize("as_json", [False, True])
+@pytest.mark.parametrize("run_args", [[], ["--run", "isolated-run"]])
+def test_usage_valid_empty_day_keeps_success_output(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    as_json: bool,
+    run_args: list[str],
+) -> None:
+    """Valid usage queries read only the test-isolated empty ledger."""
+
+    argv = ["nexus"]
+    if as_json:
+        argv.append("--json")
+    argv.extend(["usage", "--day", "2026-02-28", *run_args])
+    monkeypatch.setattr(sys, "argv", argv)
+
+    assert cli.main() == 0
+
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    if as_json:
+        assert json.loads(captured.out) == {
+            "success": True,
+            "usage": {
+                "allowance": {
+                    "openai": {
+                        "allowance": 2_500_000,
+                        "remaining": 2_500_000,
+                        "unknown_usage_events": 0,
+                        "used": 0,
+                    }
+                },
+                "day": "2026-02-28",
+                "events": [],
+                "openai_day_total": {
+                    "total_tokens": 0,
+                    "unknown_usage_events": 0,
+                },
+                "providers": {},
+                "seats": {},
+            },
+        }
+    else:
+        assert captured.out == (
+            "OpenAI API-reported tokens (UTC day 2026-02-28): 0\n"
+            "openai allowance: 0 / 2,500,000 (remaining 2,500,000; "
+            "unknown events 0)\n"
+            "\n"
+            "Providers:\n"
+            "  (none)\n"
+            "\n"
+            "Seats:\n"
+            "  (none)\n"
+        )
+
+
 def test_generation_poll_window_covers_live_reasoning_models() -> None:
     """The configured elapsed-time budget covers slow reasoning models."""
 

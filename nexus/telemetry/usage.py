@@ -298,6 +298,20 @@ def _add_event(totals: Dict[str, int], event: UsageEvent) -> None:
             totals[output_key] += value
 
 
+def validate_usage_day(day: str) -> None:
+    """Validate that a usage day is a real calendar date in YYYY-MM-DD form."""
+
+    try:
+        parsed = datetime.strptime(day, "%Y-%m-%d")
+    except ValueError as exc:
+        raise ValueError(f"Usage day must be YYYY-MM-DD, got {day!r}") from exc
+    # strptime tolerates non-zero-padded fields, but ledger filenames are
+    # keyed by date.isoformat() — a variant spelling would silently read a
+    # file that never exists.
+    if parsed.date().isoformat() != day:
+        raise ValueError(f"Usage day must be YYYY-MM-DD, got {day!r}")
+
+
 def summarize_usage(
     day: Optional[str] = None,
     run_id: Optional[str] = None,
@@ -306,10 +320,7 @@ def summarize_usage(
     """Read one UTC day exactly and aggregate provider and seat totals."""
 
     selected_day = day or datetime.now(timezone.utc).date().isoformat()
-    try:
-        datetime.strptime(selected_day, "%Y-%m-%d")
-    except ValueError as exc:
-        raise ValueError(f"Usage day must be YYYY-MM-DD, got {selected_day!r}") from exc
+    validate_usage_day(selected_day)
 
     config = _get_recorder_config()
     directory = Path(usage_dir) if usage_dir is not None else config.usage_dir

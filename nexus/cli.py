@@ -3844,6 +3844,15 @@ def main() -> int:
             emit_error("Slot must be between 1 and 5", args.json)
             return 1
 
+    if args.command == "usage" and args.day is not None:
+        from nexus.telemetry.usage import validate_usage_day
+
+        try:
+            validate_usage_day(args.day)
+        except ValueError as exc:
+            emit_error(str(exc), args.json)
+            return 1
+
     # Execute command
     if args.command == "up":
         result = run_up(args)
