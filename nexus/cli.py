@@ -2157,7 +2157,7 @@ def run_retrograde_embed_history(args: argparse.Namespace) -> Dict[str, Any]:
                     cur,
                     dry_run=dry_run,
                 )
-    except ValueError as exc:
+    except (ValueError, RuntimeError) as exc:
         return {"success": False, "error": str(exc)}
 
     pending_summary_ids = [
