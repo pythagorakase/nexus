@@ -138,6 +138,8 @@ def _describe_port_occupant(port: int) -> Optional[str]:
 
 
 def _tail_lines(path: Path, count: int) -> List[str]:
+    if count < 1:
+        raise ValueError("Log line count must be a positive integer")
     if not path.exists():
         return []
     with open(path, "rb") as handle:

@@ -3853,6 +3853,10 @@ def main() -> int:
             emit_error(str(exc), args.json)
             return 1
 
+    if args.command == "logs" and args.lines is not None and args.lines < 1:
+        emit_error("Log line count must be a positive integer", args.json)
+        return 1
+
     # Execute command
     if args.command == "up":
         result = run_up(args)
