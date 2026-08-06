@@ -96,6 +96,23 @@ StorytellerRoute = tuple[
     Literal["openai", "anthropic", "local"],
 ]
 
+
+def _render_letter_budget(
+    text: str,
+    *,
+    max_letter_tokens: int,
+    source: str,
+) -> str:
+    """Render the configured private-letter budget into a prompt."""
+
+    placeholder = "{{MAX_LETTER_TOKENS}}"
+    if placeholder not in text:
+        raise ValueError(
+            f"Letter token budget placeholder {placeholder} is missing from {source}"
+        )
+    return text.replace(placeholder, str(int(max_letter_tokens)))
+
+
 _PROPOSAL_TAG_DELTA_KEYS = frozenset(
     {
         "entity_tags.add",
@@ -501,7 +518,7 @@ class LogonUtility:
                 conn.close()
 
     @staticmethod
-    def _load_gaia_system_prompt() -> str:
+    def _load_gaia_system_prompt(max_letter_tokens: int) -> str:
         """Load the dedicated gaia instructions without per-turn material."""
 
         prompts_dir = Path(__file__).parent.parent.parent.parent / "prompts"
@@ -509,11 +526,16 @@ class LogonUtility:
         gaia_prompt = gaia_prompt_path.read_text()
         if not gaia_prompt.strip():
             raise ValueError(f"Gaia prompt is empty: {gaia_prompt_path}")
+        gaia_prompt = _render_letter_budget(
+            gaia_prompt,
+            max_letter_tokens=max_letter_tokens,
+            source=str(gaia_prompt_path),
+        )
         logger.info("Loaded storyteller Gaia prompt (%s chars)", len(gaia_prompt))
         return gaia_prompt
 
     @staticmethod
-    def _load_writer_pass_note() -> str:
+    def _load_writer_pass_note(max_letter_tokens: int) -> str:
         """Load the writer-pass scope note appended in two-pass mode."""
 
         prompts_dir = Path(__file__).parent.parent.parent.parent / "prompts"
@@ -521,6 +543,11 @@ class LogonUtility:
         note = note_path.read_text()
         if not note.strip():
             raise ValueError(f"Writer pass note is empty: {note_path}")
+        note = _render_letter_budget(
+            note,
+            max_letter_tokens=max_letter_tokens,
+            source=str(note_path),
+        )
         return note
 
     @staticmethod
@@ -1146,7 +1173,10 @@ class LogonUtility:
             system_prompt = getattr(self.provider, "system_prompt", None)
         if system_prompt is not None and not isinstance(system_prompt, str):
             raise TypeError("Writer system prompt must be a string")
-        note = self._load_writer_pass_note()
+        config = correspondence_settings(self.settings)
+        note = self._load_writer_pass_note(
+            max_letter_tokens=int(config["max_letter_tokens"])
+        )
         if system_prompt is None:
             return note
         return f"{system_prompt}\n\n{note}"
@@ -1311,7 +1341,10 @@ class LogonUtility:
         effective_wire = (
             wire_type if wire_type is not None else self._provider_wire_type
         )
-        system_prompt = self._load_gaia_system_prompt()
+        config = correspondence_settings(self.settings)
+        system_prompt = self._load_gaia_system_prompt(
+            max_letter_tokens=int(config["max_letter_tokens"])
+        )
         # Gaia authors canon-adjacent text (update notes, entity summaries)
         # and needs the same setting idiom the writer works in.
         setting_content = self._load_setting_context()

@@ -1,12 +1,16 @@
 """Tests for LOGON prompt formatting."""
 
 from pathlib import Path
-from typing import Any, Literal
+import re
+from typing import Any, Literal, cast
 
 import pytest
 
-from nexus.agents.lore.logon_utility import LogonUtility
+from nexus.agents.lore import logon_utility
+from nexus.agents.lore.logon_utility import LogonUtility, _render_letter_budget
 from nexus.agents.logon.skald_wire import CharacterRef, PlaceRef, PresenceBaseline
+from nexus.config.loader import load_settings_as_dict
+from nexus.memory.correspondence import correspondence_settings
 
 
 PROMPTS_DIR = Path(__file__).parents[2] / "prompts"
@@ -78,6 +82,101 @@ def _setting_card() -> dict[str, Any]:
     }
 
 
+def _with_letter_budget(
+    settings: dict[str, Any],
+    *,
+    max_letter_tokens: int = 12345,
+) -> dict[str, Any]:
+    """Add the correspondence subset required by two-pass prompt rendering."""
+
+    return {
+        **settings,
+        "storyteller": {
+            "correspondence": {"max_letter_tokens": max_letter_tokens},
+        },
+    }
+
+
+def test_private_letter_prompts_keep_token_budget_as_a_placeholder() -> None:
+    """Prompt sources carry the token slot, never a copied numeric budget."""
+
+    for prompt_name in ("storyteller_writer_pass.md", "storyteller_gaia.md"):
+        prompt = (PROMPTS_DIR / prompt_name).read_text()
+
+        assert "{{MAX_LETTER_TOKENS}}" in prompt
+        assert re.search(r"\b\d[\d_,]*\s+tokens?\b", prompt) is None
+
+
+def test_private_letter_prompt_loaders_render_configured_budget() -> None:
+    """Both real loaders replace their token-budget placeholder."""
+
+    rendered_prompts = (
+        LogonUtility._load_writer_pass_note(max_letter_tokens=12345),
+        LogonUtility._load_gaia_system_prompt(max_letter_tokens=12345),
+    )
+
+    for prompt in rendered_prompts:
+        assert "12345 tokens" in prompt
+        assert "{{MAX_LETTER_TOKENS}}" not in prompt
+
+
+@pytest.mark.parametrize(
+    "source",
+    ("storyteller_writer_pass.md", "storyteller_gaia.md"),
+)
+def test_private_letter_budget_render_fails_when_placeholder_is_missing(
+    source: str,
+) -> None:
+    """Removing a prompt's budget slot fails loudly with its source name."""
+
+    with pytest.raises(ValueError, match=re.escape(source)):
+        _render_letter_budget(
+            "The private letter has no configured bound.",
+            max_letter_tokens=12345,
+            source=source,
+        )
+
+
+def test_two_pass_prompts_and_validator_share_real_letter_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Real settings bind the same letter budget to prompts and validator."""
+
+    settings = load_settings_as_dict(PROMPTS_DIR.parent / "nexus.toml")
+    configured = correspondence_settings(settings)
+    expected = int(configured["max_letter_tokens"])
+    captured: dict[str, int] = {}
+    validator = object()
+
+    def capture_validator(
+        *,
+        max_letter_tokens: int,
+        delegate: Any = None,
+    ) -> object:
+        captured["max_letter_tokens"] = max_letter_tokens
+        return validator
+
+    monkeypatch.setattr(
+        logon_utility,
+        "build_letter_length_validator",
+        capture_validator,
+    )
+    utility = LogonUtility(settings)
+    utility.provider = cast(Any, object())
+    utility._system_prompt = "CORE"
+    monkeypatch.setattr(utility, "_load_setting_context", lambda: None)
+
+    writer_prompt = utility._writer_system_prompt()
+    gaia_prompt = utility._gaia_system_prompt(wire_type="openai")
+    bound_validator = utility._build_letter_output_validator()
+
+    for prompt in (writer_prompt, gaia_prompt):
+        assert prompt.count(str(expected)) == 1
+        assert "{{MAX_LETTER_TOKENS}}" not in prompt
+    assert bound_validator is validator
+    assert captured == {"max_letter_tokens": expected}
+
+
 def test_load_system_prompt_renders_setting_card_fields(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -141,7 +240,10 @@ def test_gaia_system_prompt_includes_setting_card(
 
     _patch_setting_row(monkeypatch, (_setting_card(),))
 
-    prompt = LogonUtility({}, dbname="save_05")._gaia_system_prompt(wire_type="openai")
+    settings = _with_letter_budget({})
+    prompt = LogonUtility(settings, dbname="save_05")._gaia_system_prompt(
+        wire_type="openai"
+    )
 
     assert "## Gaia" in prompt
     assert "## Setting Context: Veyra" in prompt
@@ -172,7 +274,9 @@ def test_setting_snapshot_is_shared_across_seats(
         counting_connect,
     )
 
-    two_pass = {"API Settings": {"apex": {"turn_pipeline": "two_pass"}}}
+    two_pass = _with_letter_budget(
+        {"API Settings": {"apex": {"turn_pipeline": "two_pass"}}}
+    )
     utility = LogonUtility(two_pass, dbname="save_05")
     writer = utility._load_system_prompt()
     gaia = utility._gaia_system_prompt(wire_type="openai")
