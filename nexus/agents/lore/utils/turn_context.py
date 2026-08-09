@@ -37,6 +37,7 @@ class TurnContext:
     phase_states: Dict[str, Any] = field(default_factory=dict)
     warm_slice: List[Dict] = field(default_factory=list)
     entity_data: Dict[str, Any] = field(default_factory=dict)
+    present_character_ids: List[int] = field(default_factory=list)
     retrieved_passages: List[Dict] = field(default_factory=list)
     context_payload: Dict[str, Any] = field(default_factory=dict)
     apex_response: Optional[str] = None

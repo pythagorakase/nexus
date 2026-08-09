@@ -804,6 +804,46 @@ def test_deep_queries_use_raw_chunk_only(turn_manager: TurnCycleManager) -> None
     }
 
 
+def test_deep_queries_thread_present_character_roster(
+    turn_manager: TurnCycleManager,
+) -> None:
+    """The turn-cycle retrieval boundary passes its exact parent roster."""
+
+    class DummyMemnon:
+        def __init__(self) -> None:
+            self.present_character_ids: list[int] = []
+
+        def query_memory(
+            self,
+            query: str,
+            k: int,
+            use_hybrid: bool,
+            present_character_ids: list[int],
+        ) -> Dict[str, list[Dict[str, Any]]]:
+            self.present_character_ids = list(present_character_ids)
+            return {"results": []}
+
+    memnon = DummyMemnon()
+    turn_manager.lore.memnon = memnon
+    ctx = TurnContext(
+        turn_id="turn_presence_retrieval",
+        user_input="Continue.",
+        start_time=time.time(),
+        present_character_ids=[3, 9],
+        warm_slice=[
+            {
+                "id": 42,
+                "is_target": True,
+                "full_text": "Who is standing beside the protagonist?",
+            }
+        ],
+    )
+
+    asyncio.run(turn_manager.execute_deep_queries(ctx))
+
+    assert memnon.present_character_ids == [3, 9]
+
+
 def test_deep_queries_can_skip_without_raw_text(
     turn_manager: TurnCycleManager,
     caplog: pytest.LogCaptureFixture,

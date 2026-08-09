@@ -25,6 +25,26 @@ FACTION_TAG_CONTEXT_CATEGORY_SQL = ", ".join(
 )
 
 
+def fetch_present_character_ids(session: Session, chunk_id: int) -> List[int]:
+    """Return the exact present-character roster recorded for one chunk."""
+
+    if chunk_id <= 0:
+        raise ValueError("chunk_id must be positive")
+    rows = session.execute(
+        text(
+            """
+            SELECT character_id
+            FROM chunk_character_references
+            WHERE chunk_id = :chunk_id
+              AND reference::text = 'present'
+            ORDER BY character_id
+            """
+        ),
+        {"chunk_id": chunk_id},
+    ).fetchall()
+    return sorted({int(row.character_id) for row in rows})
+
+
 def fetch_all_characters_with_references(
     session: Session,
     featured_chunk_ids: List[int],

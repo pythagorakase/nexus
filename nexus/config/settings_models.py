@@ -2572,10 +2572,46 @@ class HybridSearchConfig(BaseModel):
     text_weight_default: float = Field(..., ge=0.0, le=1.0)
     weights_by_query_type: Dict[str, QueryTypeWeights]
     temporal_boost_factors: Dict[str, float]
+    presence_boost_enabled: bool = False
+    presence_boost_factor: float = Field(0.15, ge=0.0, le=1.0)
+    presence_boost_factors: Dict[str, float]
     use_query_type_weights: bool
     use_query_type_temporal_factors: bool
     target_model: str
     temporal_boost_factor: float = Field(..., ge=0.0)
+
+    @field_validator("presence_boost_factors")
+    @classmethod
+    def _validate_presence_boost_factors(
+        cls, factors: Dict[str, float]
+    ) -> Dict[str, float]:
+        """Require every configured presence factor to be a bounded fraction."""
+
+        invalid = {
+            query_type: factor
+            for query_type, factor in factors.items()
+            if factor < 0.0 or factor > 1.0
+        }
+        if invalid:
+            raise ValueError(
+                f"presence boost factors must be between 0.0 and 1.0: {invalid}"
+            )
+        return factors
+
+    @model_validator(mode="after")
+    def _validate_presence_factor_shape(self) -> "HybridSearchConfig":
+        """Keep presence factors aligned with the configured query-type table."""
+
+        temporal_types = set(self.temporal_boost_factors)
+        presence_types = set(self.presence_boost_factors)
+        if presence_types != temporal_types:
+            missing = sorted(temporal_types - presence_types)
+            extra = sorted(presence_types - temporal_types)
+            raise ValueError(
+                "presence boost factor query types must match temporal boost "
+                f"factor query types; missing={missing}, extra={extra}"
+            )
+        return self
 
 
 class RerankerCandidate(BaseModel):

@@ -24,6 +24,7 @@ try:
         fetch_all_factions_with_references,
         fetch_all_places_with_references,
         fetch_place_ids_by_names,
+        fetch_present_character_ids,
     )
     from nexus.agents.logon.apex_schema import (
         StoryTurnResponse,
@@ -57,6 +58,7 @@ except ImportError:
         fetch_all_factions_with_references,
         fetch_all_places_with_references,
         fetch_place_ids_by_names,
+        fetch_present_character_ids,
     )
     from nexus.agents.logon.apex_schema import (
         StoryTurnResponse,
@@ -496,6 +498,13 @@ class TurnCycleManager:
             logger.warning("No chunk IDs in warm slice for entity queries")
             warm_chunk_ids = []
 
+        if turn_context.target_chunk_id is not None:
+            with self.lore.memnon.Session() as session:
+                turn_context.present_character_ids = fetch_present_character_ids(
+                    session,
+                    turn_context.target_chunk_id,
+                )
+
         # Query characters with baseline + featured structure
         characters_data: Dict[str, List[Dict[str, Any]]] = {
             "baseline": [],
@@ -755,11 +764,16 @@ class TurnCycleManager:
             try:
                 # MEMNON's SearchManager uses the query type internally
                 # to adjust vector/text weights for optimal results
-                results = self.lore.memnon.query_memory(
-                    query=query_obj["text"],
-                    k=15,  # Get more results since we'll deduplicate
-                    use_hybrid=True,
-                )
+                search_kwargs: Dict[str, Any] = {
+                    "query": query_obj["text"],
+                    "k": 15,  # Get more results since we'll deduplicate
+                    "use_hybrid": True,
+                }
+                if turn_context.present_character_ids:
+                    search_kwargs["present_character_ids"] = (
+                        turn_context.present_character_ids
+                    )
+                results = self.lore.memnon.query_memory(**search_kwargs)
 
                 # Track query types for logging
                 query_type = query_obj["type"]

@@ -7,7 +7,7 @@ and hybrid search capabilities with PostgreSQL.
 
 import logging
 import psycopg2
-from typing import Dict, List, Tuple, Optional, Union, Any
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 from urllib.parse import urlparse
 
 from nexus.agents.orrery.reconstruction import playable_narrative_predicate
@@ -43,6 +43,52 @@ def _retrograde_summaries_allowed(filters: Optional[Dict[str, Any]]) -> bool:
     """
     narrative_filter_keys = {"season", "episode", "world_layer"}
     return not any(key in narrative_filter_keys for key in (filters or {}))
+
+
+def _presence_boosts_for_narrative_results(
+    cursor: Any,
+    results: Dict[str, Dict[str, Any]],
+    present_character_ids: Sequence[int],
+    presence_boost_factor: float,
+) -> Dict[str, float]:
+    """Return SQL-computed presence bonuses for narrative candidates only."""
+
+    narrative_chunk_ids = [
+        int(result["chunk_id"])
+        for result in results.values()
+        if result.get("content_type") == "narrative"
+    ]
+    if not narrative_chunk_ids or not present_character_ids:
+        return {}
+
+    cursor.execute(
+        """
+        SELECT
+            nc.id,
+            CASE
+                WHEN present_reference.chunk_id IS NOT NULL THEN %s
+                ELSE 0.0
+            END AS presence_boost
+        FROM narrative_chunks AS nc
+        LEFT JOIN (
+            SELECT DISTINCT chunk_id
+            FROM chunk_character_references
+            WHERE character_id = ANY(%s)
+              AND reference::text = 'present'
+        ) AS present_reference ON present_reference.chunk_id = nc.id
+        WHERE nc.id = ANY(%s)
+        """,
+        (
+            presence_boost_factor,
+            list(present_character_ids),
+            narrative_chunk_ids,
+        ),
+    )
+    return {
+        str(chunk_id): float(boost)
+        for chunk_id, boost in cursor.fetchall()
+        if float(boost) > 0.0
+    }
 
 
 def _retrograde_summary_result(
@@ -447,6 +493,8 @@ def execute_hybrid_search(
     filters: Optional[Dict[str, Any]] = None,
     top_k: int = 10,
     idf_dict=None,
+    present_character_ids: Optional[Sequence[int]] = None,
+    presence_boost_factor: float = 0.0,
 ) -> List[Dict[str, Any]]:
     """Search narrative and Retrograde summary corpora with one model.
 
@@ -464,6 +512,8 @@ def execute_hybrid_search(
         filters=filters,
         top_k=top_k,
         idf_dict=idf_dict,
+        present_character_ids=present_character_ids,
+        presence_boost_factor=presence_boost_factor,
     )
     for result in results:
         result["source"] = "hybrid_search"
@@ -635,6 +685,8 @@ def execute_multi_model_hybrid_search(
     filters: Optional[Dict[str, Any]] = None,
     top_k: int = 10,
     idf_dict=None,
+    present_character_ids: Optional[Sequence[int]] = None,
+    presence_boost_factor: float = 0.0,
 ) -> List[Dict[str, Any]]:
     """
     Execute a hybrid search using multiple embedding models simultaneously.
@@ -649,10 +701,18 @@ def execute_multi_model_hybrid_search(
         filters: Optional metadata filters
         top_k: Maximum number of results to return
         idf_dict: Optional IDF dictionary for term weighting
+        present_character_ids: Character IDs present in the retrieval anchor
+        presence_boost_factor: Additive score boost for co-present narrative chunks
 
     Returns:
         List of matching chunks with scores and metadata
     """
+    if presence_boost_factor < 0.0:
+        raise ValueError("presence_boost_factor must be non-negative")
+    normalized_present_ids = tuple(
+        sorted({int(character_id) for character_id in present_character_ids or ()})
+    )
+
     try:
         # Parse database URL
         parsed_url = urlparse(db_url)
@@ -692,6 +752,7 @@ def execute_multi_model_hybrid_search(
             password=password,
             database=database,
         )
+        conn.set_session(readonly=True)
 
         results = {}  # Will hold all results by chunk_id
 
@@ -1234,6 +1295,15 @@ def execute_multi_model_hybrid_search(
                                     "vector_score": 0.0,  # Will be calculated next
                                 }
 
+                presence_boosts: Dict[str, float] = {}
+                if normalized_present_ids and presence_boost_factor > 0.0:
+                    presence_boosts = _presence_boosts_for_narrative_results(
+                        cursor,
+                        results,
+                        normalized_present_ids,
+                        presence_boost_factor,
+                    )
+
                 # Calculate weighted average vector score using model weights
                 logger.debug(
                     f"Calculating weighted average vector scores with weights: {model_weights}"
@@ -1261,6 +1331,9 @@ def execute_multi_model_hybrid_search(
                     result["score"] = (result["vector_score"] * vector_weight) + (
                         result["text_score"] * text_weight
                     )
+                    if chunk_id in presence_boosts:
+                        result["presence_boost"] = presence_boosts[chunk_id]
+                        result["score"] += presence_boosts[chunk_id]
                     result["source"] = "multi_model_hybrid_search"
 
                 # Create a list from the results dictionary and sort by score
