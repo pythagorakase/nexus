@@ -14,6 +14,7 @@ from hashlib import sha256
 import json
 from typing import Any, Mapping, Optional
 
+from nexus.agents.orrery.ambient import AMBIENT_EXPOSURE_TEMPLATE_ID
 from nexus.agents.orrery.db_rows import row_get as _row_get
 from nexus.agents.orrery.drift import (
     drain_relationship_drift_async,
@@ -1499,7 +1500,7 @@ def _prompt_exposure_rows(
     """(kind, template_id, binding_hash, position) for the rendered slice.
 
     Mirrors the render slices in logon_utility's storyteller prompt: the
-    first N proposals and first N pressures in proposal order.
+    first N proposals and pressures, plus every already-bounded ambient seed.
     """
 
     rows: list[tuple[str, str, str, int]] = []
@@ -1508,6 +1509,15 @@ def _prompt_exposure_rows(
     for position, pressure in enumerate(proposal.scene_pressures[:max_pressures]):
         rows.append(
             ("scene_pressure", pressure.template_id, pressure.binding_hash, position)
+        )
+    for position, seed in enumerate(proposal.ambient_scene_seeds):
+        rows.append(
+            (
+                "scene_pressure",
+                AMBIENT_EXPOSURE_TEMPLATE_ID,
+                seed.dedup_key,
+                position,
+            )
         )
     return rows
 

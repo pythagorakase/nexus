@@ -13,7 +13,7 @@ from typing import Any, Iterable, Mapping, Optional, Tuple
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 
-from nexus.agents.orrery.substrate import seeded_stochastic_rng
+from nexus.agents.orrery.ambient import shared_ambient_pacing_allows
 
 logger = logging.getLogger("nexus.orrery.bleed")
 
@@ -222,19 +222,20 @@ def load_bleed_candidates(
     anchor_chunk_id: int,
     density: float,
     limit: Optional[int],
+    pacing_allowed: Optional[bool] = None,
 ) -> list[BleedCandidate]:
     """Load narrated Orrery candidates that are eligible before the anchor."""
 
     if limit is not None and limit <= 0:
         return []
-    if not 0.0 <= density <= 1.0:
+    if pacing_allowed is not None and not isinstance(pacing_allowed, bool):
+        raise TypeError("pacing_allowed must be a bool when supplied")
+    if pacing_allowed is None:
+        pacing_allowed = shared_ambient_pacing_allows(anchor_chunk_id, density)
+    elif not 0.0 <= density <= 1.0:
         raise ValueError(f"Bleed density must be between 0.0 and 1.0, got {density}")
-    if density == 0.0:
+    if not pacing_allowed:
         return []
-    if density < 1.0:
-        rng = seeded_stochastic_rng("bleed", anchor_chunk_id, "density")
-        if rng.random() >= density:
-            return []
 
     limit_clause = "LIMIT :limit" if limit is not None else ""
     rows = session.execute(
@@ -308,6 +309,7 @@ def select_bleed_menu(
     near_distance_max: int,
     reserved_remote_slots: int,
     scan_limit: int,
+    pacing_allowed: Optional[bool] = None,
 ) -> BleedSelectorResult:
     """Select a proximity-balanced ambient menu from eligible candidates."""
 
@@ -324,6 +326,7 @@ def select_bleed_menu(
         # The empty-anchor fallback needs only the top of the pure ordering;
         # the proximity path partitions a bounded scan window (scan_limit).
         limit=max_candidates if not anchors else scan_limit,
+        pacing_allowed=pacing_allowed,
     )
     if not candidate_pool:
         return BleedSelectorResult()

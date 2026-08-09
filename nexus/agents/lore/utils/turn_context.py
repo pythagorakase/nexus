@@ -52,6 +52,7 @@ class TurnContext:
     # Soft author's note / suggestion for the storyteller.
     note: Optional[str] = None
     orrery_proposal: Optional["OrreryTickProposal"] = None
+    ambient_pacing_allowed: Optional[bool] = None
     bleed_menu: List[Any] = field(default_factory=list)
     # Headline state at the anchor chunk (world time, time of day, season/
     # episode/scene, world layer, protagonist location) — the runtime

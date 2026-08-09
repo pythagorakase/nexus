@@ -1354,6 +1354,38 @@ class OrreryBleedSettings(BaseModel):
         return self
 
 
+class OrreryAmbientSettings(BaseModel):
+    """Bounds for current-turn typed ambient-scene seeds."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    max_seeds: int = Field(
+        default=2,
+        ge=0,
+        description="Maximum ambient-scene seeds offered in one turn.",
+    )
+    per_dyad_cooldown_turns: int = Field(
+        default=3,
+        ge=0,
+        description="Accepted turns suppressing a previously offered NPC dyad.",
+    )
+    expiry_turns: int = Field(
+        default=1,
+        ge=1,
+        description="Maximum age in accepted turns of a seed-triggering signal.",
+    )
+    line_budget: int = Field(
+        default=4,
+        ge=1,
+        description="Maximum visible dialogue lines an ambient seed may suggest.",
+    )
+    turn_budget: int = Field(
+        default=2,
+        ge=1,
+        description="Maximum speaker turns an ambient seed may suggest.",
+    )
+
+
 class OrreryPromoteSettings(BaseModel):
     """Deterministic promotion discriminator settings for Orrery resolutions."""
 
@@ -2439,6 +2471,7 @@ class OrrerySettings(BaseModel):
     )
     narration: OrreryNarrationSettings
     bleed: OrreryBleedSettings = Field(default_factory=OrreryBleedSettings)
+    ambient: OrreryAmbientSettings = Field(default_factory=OrreryAmbientSettings)
     promote: OrreryPromoteSettings = Field(default_factory=OrreryPromoteSettings)
     sunhelm: OrrerySunhelmSettings = Field(default_factory=OrrerySunhelmSettings)
     selection: OrrerySelectionSettings = Field(default_factory=OrrerySelectionSettings)
