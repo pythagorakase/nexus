@@ -18,6 +18,7 @@ from nexus.agents.orrery.resolver import (
 )
 from nexus.agents.logon.apex_schema import OrreryAdjudication
 from nexus.api.lore_adapter import response_to_incubator
+from nexus.memory.manager import empty_pass2_baseline
 
 
 def test_template_outbound_pair_writer_rejects_status_ladder() -> None:
@@ -669,6 +670,7 @@ def test_response_to_incubator_serializes_orrery_proposal() -> None:
         parent_chunk_id=99,
         user_text="Continue.",
         session_id="session-1",
+        lore_pass_baseline=empty_pass2_baseline({}),
         orrery_proposal=_proposal(),
     )
 
@@ -696,6 +698,7 @@ def test_response_to_incubator_serializes_orrery_adjudications() -> None:
         parent_chunk_id=99,
         user_text="Continue.",
         session_id="session-1",
+        lore_pass_baseline=empty_pass2_baseline({}),
         orrery_proposal=_proposal(),
     )
 

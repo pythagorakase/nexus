@@ -1,5 +1,6 @@
 """Unit tests for synchronous narrative commit helpers."""
 
+import json
 import logging
 from types import SimpleNamespace
 
@@ -22,6 +23,11 @@ from nexus.api.commit_handler_sync import (
 import nexus.api.commit_handler_sync as commit_handler_sync
 from nexus.api.lore_adapter import response_to_incubator
 from nexus.api.presence_reconciliation import CharacterRosterRows
+from nexus.memory.manager import empty_pass2_baseline
+
+
+TEST_BASELINE = empty_pass2_baseline({})
+TEST_BASELINE_PAYLOAD = TEST_BASELINE.model_dump(mode="json")
 
 
 class MissingLookupCursor:
@@ -200,6 +206,7 @@ class CommitConnection:
             },
             "llm_response_id": "response-1",
             "generation_model": "test-model",
+            "lore_pass_baseline": TEST_BASELINE_PAYLOAD,
             "status": "provisional",
         }
 
@@ -285,6 +292,13 @@ def test_sync_commit_links_same_turn_character_declaration(monkeypatch):
 
     assert chunk_id == conn.chunk_id
     assert conn.character_junctions == [(conn.chunk_id, 71, "present")]
+    baseline_writes = [
+        params
+        for sql, params in conn.statements
+        if sql.startswith("INSERT INTO lore_pass_baselines")
+    ]
+    assert baseline_writes[0][:2] == (conn.chunk_id, 1)
+    assert json.loads(baseline_writes[0][2])["parent_chunk_id"] == conn.chunk_id
     assert any(
         "FROM incubator" in sql and "FOR UPDATE" in sql
         for sql, _params in conn.statements
@@ -453,6 +467,7 @@ def test_sync_reconciled_mentions_flow_through_adapter_and_commit(monkeypatch):
         parent_chunk_id=44,
         user_text="Continue.",
         session_id="sync-655",
+        lore_pass_baseline=TEST_BASELINE,
     )
     _patch_sync_commit_runtime(monkeypatch)
 

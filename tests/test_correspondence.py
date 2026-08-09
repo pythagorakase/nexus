@@ -42,6 +42,7 @@ from nexus.memory.correspondence import (
     load_compaction_system_prompt,
     plan_correspondence_compaction,
 )
+from nexus.memory.manager import empty_pass2_baseline
 
 
 PROMPTS_DIR = Path(__file__).parents[1] / "prompts"
@@ -188,6 +189,7 @@ def test_private_artifacts_never_enter_public_response_or_raw_text() -> None:
         parent_chunk_id=4,
         user_text="Inspect the room.",
         session_id="private-test",
+        lore_pass_baseline=empty_pass2_baseline({}),
         correspondence=secrets,
     )
     raw_text = compute_raw_text(

@@ -1602,50 +1602,48 @@ class TurnCycleManager:
             ] = structured_response.model_dump()
 
         if getattr(self.lore, "memory_manager", None):
-            try:
-                warm_section = turn_context.context_payload.get("warm_slice")
-                retrieved_section = turn_context.context_payload.get(
-                    "retrieved_passages"
+            warm_section = turn_context.context_payload.get("warm_slice")
+            retrieved_section = turn_context.context_payload.get("retrieved_passages")
+            if not isinstance(warm_section, dict) or not isinstance(
+                warm_section.get("chunks"), list
+            ):
+                raise RuntimeError(
+                    "Integrated storyteller payload is missing warm_slice.chunks"
                 )
-                if not isinstance(warm_section, dict) or not isinstance(
-                    warm_section.get("chunks"), list
-                ):
-                    raise RuntimeError(
-                        "Integrated storyteller payload is missing warm_slice.chunks"
-                    )
-                if not isinstance(retrieved_section, dict) or not isinstance(
-                    retrieved_section.get("results"), list
-                ):
-                    raise RuntimeError(
-                        "Integrated storyteller payload is missing "
-                        "retrieved_passages.results"
-                    )
-                baseline = self.lore.memory_manager.handle_storyteller_response(
-                    narrative=narrative_text,
-                    warm_slice=warm_section["chunks"],
-                    retrieved_passages=retrieved_section["results"],
-                    token_usage=turn_context.token_counts,
-                    assembled_context=turn_context.context_payload,
+            if not isinstance(retrieved_section, dict) or not isinstance(
+                retrieved_section.get("results"), list
+            ):
+                raise RuntimeError(
+                    "Integrated storyteller payload is missing "
+                    "retrieved_passages.results"
                 )
-                transition = self.lore.memory_manager.context_state.transition
-                baseline_snapshot = {
-                    "baseline_chunks": _sorted_chunk_ids(baseline.baseline_chunks),
-                    "baseline_themes": baseline.baseline_themes,
-                    "expected_user_themes": (
-                        transition.expected_user_themes if transition else []
-                    ),
-                    "remaining_budget": (
-                        self.lore.memory_manager.context_state.get_remaining_budget()
-                    ),
-                    "structured_passages": baseline.structured_passages,
-                }
-                turn_context.memory_state["pass1"] = baseline_snapshot
-                turn_context.phase_states["integration"][
-                    "memory_baseline"
-                ] = baseline_snapshot
-            except Exception as exc:  # pragma: no cover - defensive logging
-                logger.error("Pass 1 baseline storage failed: %s", exc)
-                turn_context.memory_state.setdefault("errors", []).append(str(exc))
+            baseline = self.lore.memory_manager.handle_storyteller_response(
+                narrative=narrative_text,
+                warm_slice=warm_section["chunks"],
+                retrieved_passages=retrieved_section["results"],
+                token_usage=turn_context.token_counts,
+                assembled_context=turn_context.context_payload,
+            )
+            staged_baseline = self.lore.memory_manager.export_pass2_baseline()
+            transition = self.lore.memory_manager.context_state.transition
+            baseline_snapshot = {
+                "baseline_chunks": _sorted_chunk_ids(baseline.baseline_chunks),
+                "baseline_themes": baseline.baseline_themes,
+                "expected_user_themes": (
+                    transition.expected_user_themes if transition else []
+                ),
+                "remaining_budget": (
+                    self.lore.memory_manager.context_state.get_remaining_budget()
+                ),
+                "structured_passages": baseline.structured_passages,
+            }
+            turn_context.memory_state["pass1"] = baseline_snapshot
+            turn_context.memory_state["lore_pass_baseline"] = (
+                staged_baseline.model_dump(mode="json")
+            )
+            turn_context.phase_states["integration"][
+                "memory_baseline"
+            ] = baseline_snapshot
 
         # Store narrative chunk if MEMNON available
         if self.lore.memnon and narrative_text:

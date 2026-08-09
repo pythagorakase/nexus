@@ -21,6 +21,7 @@ from nexus.api.narrative_schemas import (
     RegenerateNarrativeRequest,
 )
 from nexus.memory.correspondence import GeneratedCorrespondence
+from nexus.memory.manager import empty_pass2_baseline
 
 
 @pytest.fixture(autouse=True)
@@ -160,6 +161,11 @@ async def test_continuation_threads_logon_model_into_incubator(
                 error_log=[],
                 orrery_proposal=None,
                 bleed_menu=[SimpleNamespace(resolution_id=501)],
+                memory_state={
+                    "lore_pass_baseline": empty_pass2_baseline({}).model_dump(
+                        mode="json"
+                    )
+                },
                 private_correspondence=GeneratedCorrespondence(
                     writer_letter=self.secret,
                     gaia_letter="PRIVATE-GAIA-PROGRESS-SENTINEL",
@@ -316,6 +322,8 @@ async def test_bootstrap_threads_logon_model_into_incubator_payload(
     )
 
     assert payload["generation_model"] == "resolved-bootstrap-model"
+    assert payload["lore_pass_baseline"]["memory_identities"] == []
+    assert payload["lore_pass_baseline"]["parent_chunk_id"] is None
     assert payload["reference_updates"]["places"] == [
         {
             "place_id": 27,

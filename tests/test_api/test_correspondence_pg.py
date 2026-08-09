@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import threading
 import time
@@ -24,10 +25,13 @@ from nexus.memory.correspondence import (
     plan_correspondence_compaction,
     read_accepted_correspondence,
 )
+from nexus.memory.manager import empty_pass2_baseline
 from scripts.replay_state import _verify_correspondence_provenance
 
 
 pytestmark = pytest.mark.requires_postgres
+
+TEST_BASELINE_PAYLOAD = empty_pass2_baseline({}).model_dump(mode="json")
 
 
 def _connect(dbname: str, *, dict_cursor: bool = False) -> Any:
@@ -65,6 +69,7 @@ def disposable_correspondence_db() -> Iterator[str]:
                 ).read_text()
                 cur.execute(migration)
                 cur.execute(migration)
+                cur.execute(Path("migrations/107_lore_pass_baselines.sql").read_text())
         yield dbname
     finally:
         with admin.cursor() as cur:
@@ -156,15 +161,20 @@ def test_parallel_approvals_claim_incubator_row_once(
                     id, chunk_id, parent_chunk_id, user_text, storyteller_text,
                     generation_model, metadata_updates, entity_updates,
                     reference_updates, orrery_adjudications, new_entities,
-                    session_id, llm_response_id, status
+                    lore_pass_baseline, session_id, llm_response_id, status
                 ) VALUES (
                     TRUE, 2, %s, 'continue', %s, 'TEST',
                     '{}'::jsonb, '{}'::jsonb, '{}'::jsonb,
-                    '[]'::jsonb, '[]'::jsonb, %s, 'parallel-approval',
+                    '[]'::jsonb, '[]'::jsonb, %s::jsonb, %s, 'parallel-approval',
                     'provisional'
                 )
                 """,
-                (parent_chunk_id, storyteller_text, session_id),
+                (
+                    parent_chunk_id,
+                    storyteller_text,
+                    json.dumps(TEST_BASELINE_PAYLOAD),
+                    session_id,
+                ),
             )
 
     first_conn = _connect(dbname)
@@ -349,6 +359,7 @@ def test_accept_reject_hysteresis_and_digest_undo(
                         "new_entities": [],
                         "correspondence_writer_letter": "rejected writer secret",
                         "correspondence_gaia_letter": "rejected gaia secret",
+                        "lore_pass_baseline": TEST_BASELINE_PAYLOAD,
                         "session_id": session_id,
                         "llm_response_id": "response-617",
                         "status": "provisional",
@@ -414,6 +425,7 @@ def test_accept_reject_hysteresis_and_digest_undo(
                     "new_entities": [],
                     "correspondence_writer_letter": "writer secret 11",
                     "correspondence_gaia_letter": "gaia secret 11",
+                    "lore_pass_baseline": TEST_BASELINE_PAYLOAD,
                     "session_id": session_id,
                     "llm_response_id": "response-accepted-617",
                     "status": "provisional",
