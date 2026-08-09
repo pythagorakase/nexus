@@ -1967,6 +1967,23 @@ def test_chat_request_params_ride_extra_body() -> None:
     assert provider.request_params == {"reasoning": {"effort": "low"}}
 
 
+def test_native_structured_request_forwards_prompt_cache_key() -> None:
+    """OpenAI Responses receives the slot-qualified storyteller seat key."""
+
+    provider = OpenAIProvider(
+        model="gpt-5.6",
+        api_key="test-key",
+    )
+
+    params = provider._build_native_structured_request_params(
+        "Prompt",
+        StorytellerResponseBootstrap,
+        prompt_cache_key="nexus:save_03:skald_writer",
+    )
+
+    assert params["prompt_cache_key"] == "nexus:save_03:skald_writer"
+
+
 def test_chat_request_without_request_params_omits_extra_body() -> None:
     """Models without registry params keep the pre-#580 request shape."""
 

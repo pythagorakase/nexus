@@ -48,6 +48,7 @@ from nexus.api.native_structured_output import (
     run_output_validator,
 )
 from nexus.api.presence_reconciliation import CharacterRosterRows
+from nexus.api.slot_utils import require_slot_dbname
 
 
 @pytest.fixture(autouse=True)
@@ -360,9 +361,16 @@ def _expected_schema_kwargs(
     anthropic_transport: str | None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     if provider_type == "openai":
+        slot_dbname = require_slot_dbname()
         return (
-            {"text_format": skald_writer_strict_text_format()},
-            {"text_format": skald_gaia_strict_text_format()},
+            {
+                "text_format": skald_writer_strict_text_format(),
+                "prompt_cache_key": f"nexus:{slot_dbname}:skald_writer",
+            },
+            {
+                "text_format": skald_gaia_strict_text_format(),
+                "prompt_cache_key": f"nexus:{slot_dbname}:gaia",
+            },
         )
     if provider_type == "local":
         return (
@@ -501,6 +509,58 @@ def test_sync_two_pass_pipeline_uses_provider_specific_transports(
     _assert_two_pass_calls(provider, provider_type, anthropic_transport)
     assert response.narrative == WRITER_PAYLOAD["narrative"]
     assert response.generation_model == provider.model
+
+
+def test_two_pass_system_messages_are_stable_across_consecutive_turns(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Full Writer and Gaia builders keep volatile state out of system messages."""
+
+    monkeypatch.setenv("NEXUS_SLOT", "3")
+    utility, provider = _utility(
+        "openai",
+        [WRITER_PAYLOAD, GAIA_PAYLOAD, WRITER_PAYLOAD, GAIA_PAYLOAD],
+    )
+    utility._system_prompt = utility._load_system_prompt()
+    provider.system_prompt = utility._system_prompt
+    monkeypatch.setattr(
+        utility,
+        "_read_presence_baseline_for_context",
+        lambda _context_payload, _schema_model: BASELINE,
+    )
+    first_context = {
+        **_context(),
+        "warm_slice": {"chunks": [{"text": "The first turn's warm slice."}]},
+        "user_input": "Open the archive.",
+    }
+    second_context = {
+        **_context(),
+        "warm_slice": {
+            "chunks": [
+                {"text": "The first turn's warm slice."},
+                {"text": "The second turn changes the volatile suffix."},
+            ]
+        },
+        "user_input": "Follow the drowned bell.",
+    }
+
+    utility.generate_narrative(first_context, effective_context_window=75_000)
+    utility.generate_narrative(second_context, effective_context_window=75_000)
+
+    assert len(provider.calls) == 4
+    first_writer, first_gaia, second_writer, second_gaia = provider.calls
+    assert first_writer["usage_seat"] == second_writer["usage_seat"] == "skald_writer"
+    assert first_gaia["usage_seat"] == second_gaia["usage_seat"] == "gaia"
+    assert first_writer["system_prompt"].encode("utf-8") == second_writer[
+        "system_prompt"
+    ].encode("utf-8")
+    assert first_gaia["system_prompt"].encode("utf-8") == second_gaia[
+        "system_prompt"
+    ].encode("utf-8")
+    assert first_writer["prompt"] != second_writer["prompt"]
+    assert first_gaia["prompt"] != second_gaia["prompt"]
+    assert first_writer["kwargs"]["prompt_cache_key"] == ("nexus:save_03:skald_writer")
+    assert first_gaia["kwargs"]["prompt_cache_key"] == "nexus:save_03:gaia"
 
 
 @pytest.mark.asyncio
@@ -752,7 +812,8 @@ def test_openai_two_pass_injects_registry_model_and_coerces_at_boundary(
 
     assert provider.calls[1]["schema_model"] is schema_model
     assert provider.calls[1]["kwargs"] == {
-        "text_format": skald_gaia_strict_text_format(schema_model)
+        "text_format": skald_gaia_strict_text_format(schema_model),
+        "prompt_cache_key": f"nexus:{require_slot_dbname()}:gaia",
     }
     assert (
         response.new_entities == SkaldGaiaWire.model_validate(GAIA_PAYLOAD).new_entities
@@ -1126,7 +1187,10 @@ def test_sync_pinned_gaia_runs_fresh_openai_seat(
     assert provider.calls[0]["usage_seat"] == "skald_writer"
     assert gaia_call["usage_seat"] == "gaia"
     # Heterogeneous kwargs: strict OpenAI gaia schema under this writer wire.
-    assert gaia_call["kwargs"] == {"text_format": skald_gaia_strict_text_format()}
+    assert gaia_call["kwargs"] == {
+        "text_format": skald_gaia_strict_text_format(),
+        "prompt_cache_key": f"nexus:{require_slot_dbname()}:gaia",
+    }
     assert captured["route"][0] == "pinned-gaia-model"
     assert captured["route"][3] == "openai"
     assert captured["anthropic_transport"] is None
@@ -1166,7 +1230,8 @@ async def test_async_pinned_gaia_runs_fresh_openai_seat(
     assert len(provider.calls) == 1
     assert len(gaia_recorder.calls) == 1
     assert gaia_recorder.calls[0]["kwargs"] == {
-        "text_format": skald_gaia_strict_text_format()
+        "text_format": skald_gaia_strict_text_format(),
+        "prompt_cache_key": f"nexus:{require_slot_dbname()}:gaia",
     }
     assert captured["route"][3] == "openai"
     assert windows[-1] == 75_000
@@ -1220,7 +1285,28 @@ def test_two_pass_schema_kwargs_cache_is_wire_keyed() -> None:
         SkaldGaiaWire, wire_type="openai"
     )
     assert anthropic_kwargs == {}
-    assert openai_kwargs == {"text_format": skald_gaia_strict_text_format()}
+    assert openai_kwargs == {
+        "text_format": skald_gaia_strict_text_format(),
+        "prompt_cache_key": f"nexus:{require_slot_dbname()}:gaia",
+    }
+
+
+def test_two_pass_prompt_cache_keys_are_slot_and_seat_scoped() -> None:
+    """Changing slots cannot reuse either storyteller seat's cache affinity."""
+
+    utility, _provider = _utility("openai", [])
+    utility.dbname = "save_02"
+    first_writer = utility._two_pass_schema_format_kwargs(SkaldWriterWire)
+    first_gaia = utility._two_pass_schema_format_kwargs(SkaldGaiaWire)
+
+    utility.dbname = "save_04"
+    second_writer = utility._two_pass_schema_format_kwargs(SkaldWriterWire)
+    second_gaia = utility._two_pass_schema_format_kwargs(SkaldGaiaWire)
+
+    assert first_writer["prompt_cache_key"] == "nexus:save_02:skald_writer"
+    assert first_gaia["prompt_cache_key"] == "nexus:save_02:gaia"
+    assert second_writer["prompt_cache_key"] == "nexus:save_04:skald_writer"
+    assert second_gaia["prompt_cache_key"] == "nexus:save_04:gaia"
 
 
 def test_two_pass_gaia_schema_cache_is_registry_digest_keyed() -> None:
