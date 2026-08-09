@@ -51,8 +51,10 @@ try:
     from nexus.config.settings_models import (
         LORERetrievalSettings,
         OrreryBleedSettings,
+        OrreryDisclosureSettings,
         OrreryKnowledgeSettings,
         OrreryPromptSettings,
+        OrreryRecallSettings,
     )
 except ImportError:
     # If relative import fails, try absolute
@@ -89,8 +91,10 @@ except ImportError:
     from nexus.config.settings_models import (
         LORERetrievalSettings,
         OrreryBleedSettings,
+        OrreryDisclosureSettings,
         OrreryKnowledgeSettings,
         OrreryPromptSettings,
+        OrreryRecallSettings,
     )
 
 try:
@@ -1362,6 +1366,12 @@ class TurnCycleManager:
         knowledge_settings = OrreryKnowledgeSettings.model_validate(
             orrery_settings.get("knowledge", {})
         )
+        recall_settings = OrreryRecallSettings.model_validate(
+            orrery_settings.get("recall", {})
+        )
+        disclosure_settings = OrreryDisclosureSettings.model_validate(
+            orrery_settings.get("disclosure", {})
+        )
         if not orrery_settings.get("enabled", False) or not knowledge_settings.enabled:
             turn_context.phase_states["world_knowledge"] = {
                 "enabled": False,
@@ -1393,7 +1403,12 @@ class TurnCycleManager:
                 present_entity_ids=present_entity_ids,
                 anchor_chunk_id=anchor_chunk_id,
                 settings=knowledge_settings,
+                recall_settings=recall_settings,
+                disclosure_settings=disclosure_settings,
+                turn_id=turn_context.turn_id,
+                current_turn_chunk_id=(turn_context.target_chunk_id or anchor_chunk_id),
             )
+            session.commit()
 
         turn_context.phase_states["world_knowledge"] = {
             "enabled": True,

@@ -2297,6 +2297,9 @@ class LogonUtility:
                 qualifiers = [str(acquisition_kind)]
                 if item.get("freshly_revealed"):
                     qualifiers.append("freshly revealed")
+                source = item.get("source") or {}
+                if source.get("kind") == "experience":
+                    qualifiers.append(f"Character experience {source.get('id')}")
                 character_name = item.get("character_name") or (
                     f"entity {item.get('character_entity_id')}"
                 )

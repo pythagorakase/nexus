@@ -577,6 +577,29 @@ def test_context_prompt_renders_world_knowledge_without_answer_keys(
     assert prompt.count("(older knowledge omitted)") == int(truncated)
 
 
+def test_context_prompt_source_labels_character_experiences() -> None:
+    """Subjective recollections carry their corpus identity into the block."""
+
+    prompt = LogonUtility({})._format_context_prompt(
+        {
+            "user_input": "Continue.",
+            "world_knowledge": [
+                {
+                    "character_entity_id": 7,
+                    "character_name": "Mara",
+                    "experience_id": 44,
+                    "summary": "I still hear the river gate closing.",
+                    "acquisition": {"kind": "firsthand"},
+                    "source": {"kind": "experience", "id": 44},
+                }
+            ],
+        }
+    )
+
+    assert "Mara [firsthand; Character experience 44]" in prompt
+    assert "I still hear the river gate closing." in prompt
+
+
 def test_system_prompt_excludes_runtime_tag_library(monkeypatch) -> None:
     """The provider-cacheable system prompt no longer carries turn vocabulary."""
 

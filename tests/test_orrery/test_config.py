@@ -16,6 +16,7 @@ from nexus.config.settings_models import (
     OrreryContagionSettings,
     OrreryCompositionSettings,
     OrreryDashboardSettings,
+    OrreryDisclosureSettings,
     OrreryDistortionSettings,
     OrreryDriftSettings,
     OrreryEpistemicsSettings,
@@ -23,6 +24,7 @@ from nexus.config.settings_models import (
     OrreryMoodSettings,
     OrreryPromoteSettings,
     OrreryRevealSettings,
+    OrreryRecallSettings,
     OrrerySettings,
     OrreryRetrogradeMaturationSettings,
     OrreryRetrogradeProjectSettings,
@@ -311,6 +313,28 @@ def test_knowledge_defaults_off_and_requires_positive_windows() -> None:
         OrreryKnowledgeSettings(max_entries=0)
     with pytest.raises(ValidationError, match="greater than or equal to 1"):
         OrreryKnowledgeSettings(recent_reveal_window_chunks=0)
+
+
+def test_recall_and_disclosure_settings_validate_policy_bounds() -> None:
+    """Recall maps are complete and audience thresholds reject bad values."""
+
+    recall = OrreryRecallSettings()
+    assert recall.per_character_max_entries == 4
+    assert recall.mandatory_reserved_entries == 2
+    assert OrreryDisclosureSettings().private_claim_minimum_score == 0.20
+    with pytest.raises(ValidationError, match="at least one recall component"):
+        OrreryRecallSettings(
+            semantic_fit_weight=0,
+            event_severity_weight=0,
+            actor_involvement_weight=0,
+            emotional_salience_weight=0,
+            recency_weight=0,
+            place_match_weight=0,
+        )
+    with pytest.raises(ValidationError, match="severity_scores must contain exactly"):
+        OrreryRecallSettings(severity_scores={"critical": 1.0})
+    with pytest.raises(ValidationError, match="less than 1"):
+        OrreryDisclosureSettings(missing_relationship_valence=1.0)
 
 
 def test_distortion_defaults_off_when_block_is_absent() -> None:
