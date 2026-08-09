@@ -53,6 +53,7 @@ import { Switch } from "@/components/ui/switch";
 import {
   OrreryApiError,
   fetchCatalog,
+  fetchCognitionTrace,
   fetchCoverage,
   fetchEntityContext,
   fetchResolve,
@@ -63,6 +64,7 @@ import {
   BAND_ORDER,
   NEEDS,
   bandColor,
+  buildCognitionTrace,
   buildEntityAudit,
   buildGroups,
   buildInspector,
@@ -73,6 +75,7 @@ import type { GroupBuildCtx } from "./vm";
 import type {
   ActorGroupVM,
   CatalogPayload,
+  CognitionTracePayload,
   ContextEntity,
   ContextPayload,
   CoveragePayload,
@@ -92,6 +95,7 @@ import HoverAudit from "./HoverAudit";
 import InteractionGraph from "./InteractionGraph";
 import ResolutionCard from "./ResolutionCard";
 import WhatIfDrawer from "./WhatIfDrawer";
+import CognitionTrace from "./CognitionTrace";
 
 // ---------------------------------------------------------------------------
 // Constants (the prototype's density/magnitudeStyle editor props, frozen)
@@ -1038,6 +1042,10 @@ export default function DevOrreryPage() {
   const [healthOpen, setHealthOpen] = useState(false);
   const [whatifOpen, setWhatifOpen] = useState(false);
   const [hoverEnt, setHoverEnt] = useState<number | null>(null);
+  const [cognitionEnt, setCognitionEnt] = useState<{
+    id: number;
+    name: string;
+  } | null>(null);
   const [hoverPos, setHoverPos] = useState({ x: 0, y: 0 });
   const hoverTimer = useRef<number | null>(null);
   const closeTimer = useRef<number | null>(null);
@@ -1088,6 +1096,21 @@ export default function DevOrreryPage() {
   const payload = resolveQ.data;
   const catalog = catalogQ.data;
   const coverage = coverageQ.data;
+  const cognitionAnchor = payload?.anchor_chunk_id ?? null;
+  const cognitionQ = useQuery<CognitionTracePayload, Error>({
+    queryKey: ["orrery", "cognition", slot, cognitionAnchor, cognitionEnt?.id],
+    queryFn: () =>
+      fetchCognitionTrace({
+        slot,
+        entityId: cognitionEnt?.id as number,
+        anchorChunkId: cognitionAnchor as number,
+      }),
+    enabled: cognitionEnt != null && cognitionAnchor != null,
+  });
+  const cognitionVM = useMemo(
+    () => (cognitionQ.data ? buildCognitionTrace(cognitionQ.data) : null),
+    [cognitionQ.data],
+  );
 
   // Head anchor: the first at-head resolve fixes the stepper's upper bound.
   useEffect(() => {
@@ -1423,6 +1446,10 @@ export default function DevOrreryPage() {
     return buildEntityAudit(ent, !offScreen, {
       onTagEnter: (tag) => setHoverTag(tag),
       onTagLeave: () => setHoverTag(null),
+      onOpenCognition: () => {
+        setCognitionEnt({ id: ent.entity_id, name: ent.name });
+        setHoverEnt(null);
+      },
     });
   }, [hoverEnt, payload, hoverCtxQ.data]);
 
@@ -1436,6 +1463,7 @@ export default function DevOrreryPage() {
     setGroupOpen({});
     setShadowOpen({});
     setHoverEnt(null);
+    setCognitionEnt(null);
     setMode("current");
   };
   const stepTo = (next: number) => {
@@ -2471,6 +2499,14 @@ export default function DevOrreryPage() {
         y={hoverPos.y}
         onEnter={hoverPanelEnter}
         onLeave={hoverOut}
+      />
+
+      <CognitionTrace
+        open={cognitionEnt != null}
+        onOpenChange={(open) => !open && setCognitionEnt(null)}
+        vm={cognitionVM}
+        loading={cognitionQ.isFetching}
+        error={cognitionQ.error?.message ?? null}
       />
 
       {/* ═══════════════ WHAT-IF DRAWER ═══════════════ */}

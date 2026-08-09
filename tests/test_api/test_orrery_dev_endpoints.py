@@ -729,6 +729,7 @@ def test_dashboard_flag_gates_router_registration(tmp_path: Path) -> None:
     }
     assert registered == {
         "/api/dev/orrery/catalog",
+        "/api/dev/orrery/cognition/trace",
         "/api/dev/orrery/resolve",
         "/api/dev/orrery/context/entities",
         "/api/dev/orrery/coverage",

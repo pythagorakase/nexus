@@ -13,6 +13,9 @@ import type {
   ActorGroupVM,
   ContextEntity,
   EntityAuditVM,
+  CognitionSourceNodeVM,
+  CognitionTracePayload,
+  CognitionTraceVM,
   EvaluatedGateNode,
   GhostRowVM,
   InspectorVM,
@@ -777,6 +780,7 @@ export function buildEntityAudit(
   hover: {
     onTagEnter: (tag: string) => void;
     onTagLeave: () => void;
+    onOpenCognition: () => void;
   },
 ): EntityAuditVM {
   const needByType = new Map(ent.needs.map((n) => [n.need_type, n]));
@@ -859,6 +863,7 @@ export function buildEntityAudit(
   }));
 
   return {
+    entityId: ent.entity_id,
     name: ent.name,
     place: ent.place?.name ?? "—",
     classes: ent.place?.classes.join(" · ") ?? "",
@@ -873,6 +878,159 @@ export function buildEntityAudit(
     hasKnowledge: knowledge.length > 0,
     events,
     hasEvents: events.length > 0,
+    onOpenCognition: hover.onOpenCognition,
+  };
+}
+
+function sourceChain(nodes: { kind: string; entity_id: number; name: string }[]): CognitionSourceNodeVM[] {
+  let children: CognitionSourceNodeVM[] = [];
+  for (const node of [...nodes].reverse()) {
+    children = [
+      {
+        key: `${node.kind}:${node.entity_id}`,
+        kind: node.kind,
+        label: `${node.name} · #${node.entity_id}`,
+        children,
+      },
+    ];
+  }
+  return children;
+}
+
+function componentRows(value: Record<string, unknown>): { label: string; value: string; pct: string }[] {
+  return Object.entries(value)
+    .filter(([, item]) => typeof item === "number")
+    .map(([label, item]) => {
+      const numeric = Number(item);
+      return {
+        label,
+        value: numeric.toFixed(3),
+        pct: `${Math.max(0, Math.min(100, Math.round(numeric * 100)))}%`,
+      };
+    });
+}
+
+function configValue(value: unknown): string {
+  return Array.isArray(value) ? value.join(", ") : String(value ?? "—");
+}
+
+/** Adapt the durable cognition payload into presentation-only trace rows. */
+export function buildCognitionTrace(payload: CognitionTracePayload): CognitionTraceVM {
+  const actor = payload.actor_facing;
+  const accounts = actor.possessed_accounts.map((row) => ({
+    key: `claim:${row.awareness_id}`,
+    sourceKey: `claim:${row.awareness_id}`,
+    claim: `claim #${row.claim_id}`,
+    meta: [row.scope, row.account_label, row.possession.source_tier, row.possession.channel]
+      .filter(Boolean)
+      .join(" · "),
+    summary: row.summary,
+    sourceChunk: `chunk ${row.source_event.tick_chunk_id}`,
+    sourcePreview: `${row.source_event.event_type} · ${row.source_event.world_time ?? "world time unstamped"}`,
+    chain: sourceChain(row.possession.source_chain),
+    payload: JSON.stringify(row.account_payload, null, 2),
+  }));
+  const experiences = actor.experiences.map((row) => ({
+    key: `experience:${row.experience_id}`,
+    sourceKey: `experience:${row.experience_id}`,
+    id: `experience #${row.experience_id}`,
+    meta: `${row.basis} · chunk ${row.anchor_chunk_id}`,
+    summary: row.experience_text ?? row.seed_summary,
+    sourcePreview: row.source_events
+      .map((event) => `${event.event_type} #${event.event_id}`)
+      .join("\n"),
+    renderStatus: row.render_status,
+    salience: row.salience.toFixed(3),
+  }));
+  const recalls = actor.recall_candidates.map((row) => {
+    const recallComponents = Object.fromEntries(
+      Object.entries(row.score_components).filter(([key]) => key !== "disclosure"),
+    );
+    return {
+      key: `trace:${row.trace_id}`,
+      sourceKey: `${row.candidate_kind}:${row.candidate_id}`,
+      sourceLabel: `${row.candidate_kind} #${row.candidate_id}`,
+      summary: row.summary ?? "—",
+      decision: row.decision,
+      reason: row.reason,
+      score: row.score.toFixed(3),
+      threshold: row.threshold == null ? "—" : row.threshold.toFixed(3),
+      mandatory: row.mandatory,
+      truncated: row.truncated,
+      components: componentRows(recallComponents),
+    };
+  });
+  const disclosures = actor.disclosure_results.map((row) => ({
+    key: `disclosure:${row.trace_id}`,
+    sourceKey: `${row.candidate_kind}:${row.candidate_id}`,
+    sourceLabel: `${row.candidate_kind} #${row.candidate_id}`,
+    allowed: row.allowed,
+    reason: row.reason,
+    reasons: row.blocking_reasons,
+    components: JSON.stringify(row.components, null, 2),
+  }));
+  const proposalExposures = actor.prompt_exposure.orrery_proposals.map((row) => ({
+    key: `proposal:${row.exposure_id}`,
+    kind: row.kind,
+    label: row.template_id,
+    meta: `position ${row.position} · ${row.binding_hash}`,
+    preview: row.kind === "resolution" ? "brief · state delta" : "prompt · bindings",
+    payload: JSON.stringify(row.payload, null, 2),
+  }));
+  const knowledgeExposures = actor.prompt_exposure.knowledge_surfacing.map((row) => ({
+    key: `knowledge:${row.trace_id}`,
+    kind: row.kind,
+    label: `${row.candidate_kind} #${row.candidate_id}`,
+    meta: `position ${row.position} · ${row.turn_id}`,
+    preview: row.summary ?? "—",
+    payload: JSON.stringify(row, null, 2),
+  }));
+  const generationIds = actor.generation_identity.render_generation_ids.join(", ") || "—";
+  const jobs = actor.experience_jobs.map((row) => ({
+    key: `job:${row.job_id}`,
+    id: `job #${row.job_id}`,
+    state: row.state,
+    attempts: String(row.attempts),
+    lease: row.lease_until ?? "—",
+    error: row.last_error,
+    timeline: Object.entries(row.timeline_identity)
+      .map(([key, value]) => `${key}=${value}`)
+      .join(" · "),
+    generations: generationIds,
+  }));
+  const config = Object.entries(payload.effective_config).map(([section, values]) => ({
+    section,
+    values: Object.entries(values).map(([key, value]) => ({
+      key,
+      value: configValue(value),
+    })),
+  }));
+  return {
+    title: `${payload.entity.name} · #${payload.entity.entity_id}`,
+    anchor: `chunk ${payload.anchor.chunk_id}`,
+    timeline: `${payload.anchor.world_layer} · S${payload.anchor.season} E${payload.anchor.episode} SC${payload.anchor.scene}`,
+    accounts,
+    experiences,
+    recalls,
+    truncated: actor.recall_truncated,
+    disclosures,
+    exposures: [...proposalExposures, ...knowledgeExposures],
+    jobs,
+    config,
+    canonical: {
+      siblings: payload.canonical_truth.unpossessed_sibling_accounts.map((row) => ({
+        key: `sibling:${row.claim_id}`,
+        label: `${row.account_label} · claim #${row.claim_id}`,
+        summary: row.summary,
+        payload: JSON.stringify(row.account_payload, null, 2),
+      })),
+      secrets: payload.canonical_truth.latent_secrets.map((row) => ({
+        key: `secret:${row.secret_id}`,
+        label: `${row.gate_template_id} · claim #${row.claim_id}`,
+        summary: row.summary,
+        payload: JSON.stringify(row.account_payload, null, 2),
+      })),
+    },
   };
 }
 
