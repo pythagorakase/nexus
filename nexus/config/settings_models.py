@@ -1283,6 +1283,57 @@ class OrreryNarrationSettings(BaseModel):
     )
 
 
+class OrreryExperienceSettings(BaseModel):
+    """Actor-owned experiential memory settings for ``[orrery.experiences]``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    model: str = Field(..., description="Model ID or @provider.role reference")
+    dossier_fields: List[Literal["summary", "background", "personality"]] = Field(
+        default_factory=lambda: ["summary", "background", "personality"],
+        min_length=1,
+        description="Character dossier fields counted by the eligibility gate",
+    )
+    minimum_dossier_fields: int = Field(
+        default=2,
+        ge=1,
+        le=3,
+        description="Non-empty configured dossier fields required for eligibility",
+    )
+    magnitude_weight: float = Field(default=0.60, ge=0.0, le=1.0)
+    valence_delta_weight: float = Field(default=0.25, ge=0.0, le=1.0)
+    presence_duration_weight: float = Field(default=0.15, ge=0.0, le=1.0)
+    presence_duration_cap_chunks: int = Field(default=8, ge=1)
+    max_output_tokens: int = Field(default=2400, ge=1)
+    max_attempts: int = Field(default=3, ge=1)
+    retry_delay_seconds: int = Field(default=300, ge=0)
+    lease_duration_seconds: int = Field(default=300, ge=1)
+    max_jobs_per_drain: int = Field(default=2, ge=1)
+    max_seeds_per_render: int = Field(
+        default=12,
+        ge=1,
+        description="Maximum experience seeds included in one provider call",
+    )
+
+    @model_validator(mode="after")
+    def _validate_eligibility_and_salience(self) -> "OrreryExperienceSettings":
+        if self.minimum_dossier_fields > len(self.dossier_fields):
+            raise ValueError(
+                "minimum_dossier_fields cannot exceed configured dossier_fields"
+            )
+        if len(set(self.dossier_fields)) != len(self.dossier_fields):
+            raise ValueError("dossier_fields must be unique")
+        total = (
+            self.magnitude_weight
+            + self.valence_delta_weight
+            + self.presence_duration_weight
+        )
+        if abs(total - 1.0) > 1e-9:
+            raise ValueError("experience salience weights must sum to 1.0")
+        return self
+
+
 class OrreryBleedSettings(BaseModel):
     """Bleed selector settings for storyteller-time ambient candidates."""
 
@@ -2470,6 +2521,7 @@ class OrrerySettings(BaseModel):
         default_factory=OrreryRouteGraphSettings
     )
     narration: OrreryNarrationSettings
+    experiences: OrreryExperienceSettings
     bleed: OrreryBleedSettings = Field(default_factory=OrreryBleedSettings)
     ambient: OrreryAmbientSettings = Field(default_factory=OrreryAmbientSettings)
     promote: OrreryPromoteSettings = Field(default_factory=OrreryPromoteSettings)
@@ -3402,6 +3454,7 @@ class Settings(BaseModel):
         ]
         if self.orrery is not None:
             targets.append((self.orrery.narration, "model_ref", False))
+            targets.append((self.orrery.experiences, "model", False))
             targets.append((self.orrery.retrograde.maturation, "model_ref", True))
         if self.ir_eval is not None and self.ir_eval.judgment is not None:
             targets.append((self.ir_eval.judgment, "model", False))

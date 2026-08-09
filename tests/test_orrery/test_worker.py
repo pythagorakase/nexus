@@ -500,6 +500,15 @@ def test_process_orrery_outbox_includes_semantic_clearance(monkeypatch) -> None:
         fake_maturation,
     )
 
+    def fake_experiences(*_args, **kwargs):
+        calls.append(("experiences", kwargs["limit"]))
+        return (8, 9)
+
+    monkeypatch.setattr(
+        "nexus.agents.orrery.worker.drain_experience_outbox_sync",
+        fake_experiences,
+    )
+
     result = process_orrery_outbox_sync(
         slot=5,
         promotion_limit=6,
@@ -518,11 +527,14 @@ def test_process_orrery_outbox_includes_semantic_clearance(monkeypatch) -> None:
     assert result.semantically_cleared == 5
     assert result.matured == 6
     assert result.maturation_failed == 7
+    assert result.experiences_rendered == 8
+    assert result.experience_render_failed == 9
     assert calls == [
         ("promote", 6),
         ("drain", 7),
         ("clear", 8, 9, 10, 11),
         ("mature", 12),
+        ("experiences", None),
     ]
 
 

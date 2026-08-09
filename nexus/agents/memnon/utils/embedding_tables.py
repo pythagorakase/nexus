@@ -12,6 +12,9 @@ EMBEDDING_TABLE_PATTERN = re.compile(r"^chunk_embeddings_(?P<dimensions>\d+)d$")
 RETROGRADE_SUMMARY_EMBEDDING_TABLE_PATTERN = re.compile(
     r"^retrograde_summary_embeddings_(?P<dimensions>\d+)d$"
 )
+CHARACTER_EXPERIENCE_EMBEDDING_TABLE_PATTERN = re.compile(
+    r"^character_experience_embeddings_(?P<dimensions>\d+)d$"
+)
 
 # pgvector 0.8.x caps HNSW/IVFFlat indexes at 2000 dimensions in this local
 # deployment. Higher-dimensional tables still support exact vector search.
@@ -60,6 +63,13 @@ def retrograde_summary_table_name_for_dimensions(dimensions: int) -> str:
     return f"retrograde_summary_embeddings_{dimensions:04d}d"
 
 
+def character_experience_table_name_for_dimensions(dimensions: int) -> str:
+    """Return the dedicated character-experience table for ``dimensions``."""
+    if dimensions <= 0:
+        raise ValueError(f"Embedding dimensions must be positive, got {dimensions}")
+    return f"character_experience_embeddings_{dimensions:04d}d"
+
+
 def parse_embedding_table_dimensions(table_name: str) -> Optional[int]:
     """Return dimensions encoded in an embedding table name, if it matches."""
     match = EMBEDDING_TABLE_PATTERN.match(table_name)
@@ -73,6 +83,16 @@ def parse_retrograde_summary_embedding_table_dimensions(
 ) -> Optional[int]:
     """Return dimensions encoded in a Retrograde summary embedding table."""
     match = RETROGRADE_SUMMARY_EMBEDDING_TABLE_PATTERN.match(table_name)
+    if not match:
+        return None
+    return int(match.group("dimensions"))
+
+
+def parse_character_experience_embedding_table_dimensions(
+    table_name: str,
+) -> Optional[int]:
+    """Return dimensions encoded in a character-experience embedding table."""
+    match = CHARACTER_EXPERIENCE_EMBEDDING_TABLE_PATTERN.match(table_name)
     if not match:
         return None
     return int(match.group("dimensions"))
@@ -181,5 +201,53 @@ def ensure_retrograde_summary_embedding_table(
         CREATE INDEX IF NOT EXISTS {table_name}_model_idx
         ON {table_name} (model)
         """,
+    )
+    return table_name
+
+
+def ensure_character_experience_embedding_table(
+    connection: _DDLExecutor, dimensions: int
+) -> str:
+    """Ensure a dedicated actor-experience vector table exists lazily."""
+    table_name = character_experience_table_name_for_dimensions(dimensions)
+    _execute_ddl(
+        connection,
+        f"""
+        CREATE TABLE IF NOT EXISTS {table_name} (
+            experience_id BIGINT NOT NULL
+                REFERENCES character_experiences(id) ON DELETE CASCADE,
+            model TEXT NOT NULL,
+            embedding vector({dimensions}) NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (experience_id, model)
+        )
+        """,
+    )
+    _execute_ddl(
+        connection,
+        f"""
+        CREATE INDEX IF NOT EXISTS {table_name}_model_idx
+        ON {table_name} (model)
+        """,
+    )
+    _execute_ddl(
+        connection,
+        f"COMMENT ON COLUMN {table_name}.experience_id IS "
+        "'Actor-owned character_experiences.id bound to this vector row.'",
+    )
+    _execute_ddl(
+        connection,
+        f"COMMENT ON COLUMN {table_name}.model IS "
+        "'Active MEMNON embedding model that produced this vector.'",
+    )
+    _execute_ddl(
+        connection,
+        f"COMMENT ON COLUMN {table_name}.embedding IS "
+        f"'Exact {dimensions}-dimension embedding of experience_text.'",
+    )
+    _execute_ddl(
+        connection,
+        f"COMMENT ON COLUMN {table_name}.created_at IS "
+        "'Database time of the most recent successful vector upsert.'",
     )
     return table_name

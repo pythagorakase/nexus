@@ -23,6 +23,10 @@ from nexus.agents.logon.apex_schema import (
 )
 from nexus.agents.orrery.bleed import record_bleed_uptake_sync
 from nexus.agents.orrery.events import commit_orrery_tick_sync
+from nexus.agents.orrery.experiences import (
+    enqueue_scene_experience_job_sync,
+    seed_character_experiences_sync,
+)
 from nexus.agents.orrery.retrograde_maturation import (
     enqueue_declared_entity_maturations,
 )
@@ -664,6 +668,36 @@ def commit_incubator_to_database_sync(
                     orrery_result.propagation_count,
                     orrery_result.reveal_count,
                 )
+
+            # Step 9.52: deterministic actor-owned experience formation. The
+            # provider is deliberately absent from this accepted transaction;
+            # a scene reset only enqueues the prior scene's immutable seed set.
+            experience_count = seed_character_experiences_sync(
+                conn,
+                anchor_chunk_id=chunk_id,
+                settings=orrery_settings,
+            )
+            if experience_count:
+                logger.info(
+                    "Inserted %s character experience seeds for chunk %s",
+                    experience_count,
+                    chunk_id,
+                )
+            if metadata_update.scene_boundary and not is_bootstrap:
+                enqueued_jobs = enqueue_scene_experience_job_sync(
+                    conn,
+                    boundary_chunk_id=chunk_id,
+                    scene_end_chunk_id=int(incubator["parent_chunk_id"]),
+                    world_layer=world_layer,
+                    slot=slot,
+                    settings=orrery_settings,
+                )
+                if enqueued_jobs:
+                    logger.info(
+                        "Enqueued %s character experience scene batches at chunk %s",
+                        enqueued_jobs,
+                        chunk_id,
+                    )
 
             # Step 9.55: interval state checkpoint (reconstruction bar 7c).
             # Fresh cursor: the earlier `with conn.cursor()` blocks have

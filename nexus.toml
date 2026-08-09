@@ -378,6 +378,22 @@ clear = "temperate"
 enabled = true
 duration_hours = 12
 
+[orrery.experiences]
+enabled = true
+model = "@openai.gaia"
+dossier_fields = ["summary", "background", "personality"]
+minimum_dossier_fields = 2
+magnitude_weight = 0.60
+valence_delta_weight = 0.25
+presence_duration_weight = 0.15
+presence_duration_cap_chunks = 8
+max_output_tokens = 2400
+max_attempts = 3
+retry_delay_seconds = 300
+lease_duration_seconds = 300
+max_jobs_per_drain = 2
+max_seeds_per_render = 12
+
 [orrery.selection]
 # Branch selection inside a fired package: "stochastic" softmax-samples all
 # passing branches by magnitude (PRNG seeded on per-resolution persisted

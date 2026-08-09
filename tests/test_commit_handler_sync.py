@@ -287,6 +287,16 @@ def test_sync_commit_links_same_turn_character_declaration(monkeypatch):
     monkeypatch.setattr(
         commit_handler_sync, "_orrery_checkpoint_interval", lambda _settings: 0
     )
+    monkeypatch.setattr(
+        commit_handler_sync,
+        "seed_character_experiences_sync",
+        lambda *_args, **_kwargs: 0,
+    )
+    monkeypatch.setattr(
+        commit_handler_sync,
+        "enqueue_scene_experience_job_sync",
+        lambda *_args, **_kwargs: False,
+    )
 
     chunk_id = commit_incubator_to_database_sync(conn, "session-1", slot=5)
 
@@ -526,6 +536,16 @@ def _patch_sync_commit_runtime(monkeypatch) -> None:
     )
     monkeypatch.setattr(
         commit_handler_sync, "_orrery_checkpoint_interval", lambda _settings: 0
+    )
+    monkeypatch.setattr(
+        commit_handler_sync,
+        "seed_character_experiences_sync",
+        lambda *_args, **_kwargs: 0,
+    )
+    monkeypatch.setattr(
+        commit_handler_sync,
+        "enqueue_scene_experience_job_sync",
+        lambda *_args, **_kwargs: False,
     )
 
 
