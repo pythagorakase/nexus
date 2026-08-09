@@ -844,14 +844,20 @@ def test_detected_signal_event_mints_and_ledgers_claim_sync(monkeypatch: Any) ->
     """Primary and signal claims share one ordered, lossless applied ledger."""
 
     cursor = SignalEventCursor()
-    mint_calls: list[tuple[int, str]] = []
+    mint_calls: list[tuple[int, str, frozenset[str]]] = []
     ledgered: list[tuple[int, dict[str, Any]]] = []
 
     def mint_claim(_cur: Any, **kwargs: Any) -> Any:
-        mint_calls.append((kwargs["event_id"], kwargs["event_type"]))
+        mint_calls.append(
+            (
+                kwargs["world_event_id"],
+                kwargs["event_type"],
+                kwargs["settings"].aware_roles,
+            )
+        )
         if kwargs["event_type"] == "threat_issued":
             return orrery_events.MintResult(91, (101, 102))
-        return orrery_events.MintResult(90, (99, 100))
+        return orrery_events.MintResult(90, (99,))
 
     def ledger_claim(_cur: Any, **kwargs: Any) -> None:
         ledgered.append(
@@ -861,7 +867,7 @@ def test_detected_signal_event_mints_and_ledgers_claim_sync(monkeypatch: Any) ->
             )
         )
 
-    monkeypatch.setattr(orrery_events, "_mint_live_event_claim_sync", mint_claim)
+    monkeypatch.setattr(orrery_events, "mint_claim_for_event", mint_claim)
     monkeypatch.setattr(
         orrery_events, "_update_resolution_epistemics_applied_sync", ledger_claim
     )
@@ -886,21 +892,28 @@ def test_detected_signal_event_mints_and_ledgers_claim_sync(monkeypatch: Any) ->
         target_entity_id=2,
         world_layer="primary",
         signal_detection=orrery_events.SignalDetection(),
-        epistemics_settings={"enabled": True},
+        epistemics_settings={
+            "enabled": True,
+            "claim_event_types": ["retaliation_attempted", "threat_issued"],
+            "aware_roles": ["actor", "target", "observer", "witness"],
+        },
         entity_names={1: "Mara", 2: "Vale"},
         entity_kinds={1: "character", 2: "character"},
     )
 
     assert event_id == 20
-    assert mint_calls == [(20, "retaliation_attempted"), (21, "threat_issued")]
+    assert mint_calls == [
+        (20, "retaliation_attempted", frozenset({"actor"})),
+        (21, "threat_issued", frozenset({"actor", "target"})),
+    ]
     assert ledgered == [
         (
             10,
             {
                 "claim_id": 90,
-                "claim_awareness_ids": [99, 100],
+                "claim_awareness_ids": [99],
                 "claims": [
-                    {"claim_id": 90, "claim_awareness_ids": [99, 100]},
+                    {"claim_id": 90, "claim_awareness_ids": [99]},
                     {"claim_id": 91, "claim_awareness_ids": [101, 102]},
                 ],
             },
@@ -920,14 +933,20 @@ def test_detected_signal_event_mints_and_ledgers_claim_async(
     import asyncio
 
     conn = AsyncSignalEventConn()
-    mint_calls: list[tuple[int, str]] = []
+    mint_calls: list[tuple[int, str, frozenset[str]]] = []
     ledgered: list[tuple[int, dict[str, Any]]] = []
 
     async def mint_claim(_conn: Any, **kwargs: Any) -> Any:
-        mint_calls.append((kwargs["event_id"], kwargs["event_type"]))
+        mint_calls.append(
+            (
+                kwargs["world_event_id"],
+                kwargs["event_type"],
+                kwargs["settings"].aware_roles,
+            )
+        )
         if kwargs["event_type"] == "threat_issued":
             return orrery_events.MintResult(92, (103, 104))
-        return orrery_events.MintResult(91, (101, 102))
+        return orrery_events.MintResult(91, (101,))
 
     async def ledger_claim(_conn: Any, **kwargs: Any) -> None:
         ledgered.append(
@@ -937,7 +956,7 @@ def test_detected_signal_event_mints_and_ledgers_claim_async(
             )
         )
 
-    monkeypatch.setattr(orrery_events, "_mint_live_event_claim_async", mint_claim)
+    monkeypatch.setattr(orrery_events, "mint_claim_for_event_async", mint_claim)
     monkeypatch.setattr(
         orrery_events, "_update_resolution_epistemics_applied_async", ledger_claim
     )
@@ -963,21 +982,28 @@ def test_detected_signal_event_mints_and_ledgers_claim_async(
             target_entity_id=2,
             world_layer="primary",
             signal_detection=orrery_events.SignalDetection(),
-            epistemics_settings={"enabled": True},
+            epistemics_settings={
+                "enabled": True,
+                "claim_event_types": ["retaliation_attempted", "threat_issued"],
+                "aware_roles": ["actor", "target", "observer", "witness"],
+            },
             entity_names={1: "Mara", 2: "Vale"},
             entity_kinds={1: "character", 2: "character"},
         )
 
     assert asyncio.run(run()) == 20
-    assert mint_calls == [(20, "retaliation_attempted"), (21, "threat_issued")]
+    assert mint_calls == [
+        (20, "retaliation_attempted", frozenset({"actor"})),
+        (21, "threat_issued", frozenset({"actor", "target"})),
+    ]
     assert ledgered == [
         (
             10,
             {
                 "claim_id": 91,
-                "claim_awareness_ids": [101, 102],
+                "claim_awareness_ids": [101],
                 "claims": [
-                    {"claim_id": 91, "claim_awareness_ids": [101, 102]},
+                    {"claim_id": 91, "claim_awareness_ids": [101]},
                     {"claim_id": 92, "claim_awareness_ids": [103, 104]},
                 ],
             },

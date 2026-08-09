@@ -322,9 +322,7 @@ def test_commit_drift_updates_versions_projects_literal_and_mints_claim(
             """,
             (milestone["id"],),
         )
-        assert [row["knower_entity_id"] for row in cur.fetchall()] == sorted(
-            [actor_id, target_id]
-        )
+        assert [row["knower_entity_id"] for row in cur.fetchall()] == [actor_id]
 
         cur.execute(
             """
