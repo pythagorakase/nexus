@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import copy
 from pathlib import Path
+import re
 import tomllib
 from typing import Any
 
@@ -26,6 +27,7 @@ from nexus.agents.logon.skald_wire import (
 )
 from nexus.agents.lore.logon_utility import LogonUtility
 from nexus.api.lore_adapter import compute_raw_text, response_to_incubator
+from nexus.config.loader import load_settings_as_dict
 from nexus.config.settings_models import Settings, StorytellerCorrespondenceSettings
 from nexus.memory import correspondence
 from nexus.memory.correspondence import (
@@ -33,10 +35,16 @@ from nexus.memory.correspondence import (
     CorrespondenceDigestWire,
     CorrespondenceExchange,
     GeneratedCorrespondence,
+    _render_digest_budget,
     build_digest_length_validator,
     build_letter_length_validator,
+    correspondence_settings,
+    load_compaction_system_prompt,
     plan_correspondence_compaction,
 )
+
+
+PROMPTS_DIR = Path(__file__).parents[1] / "prompts"
 
 
 def _exchange(chunk_id: int) -> CorrespondenceExchange:
@@ -47,6 +55,60 @@ def _exchange(chunk_id: int) -> CorrespondenceExchange:
             ("gaia", f"gaia reply {chunk_id}"),
         ),
     )
+
+
+def test_compaction_prompt_keeps_digest_budget_as_a_placeholder() -> None:
+    """The prompt source carries the token slot, never a copied numeric budget."""
+
+    prompt = (PROMPTS_DIR / "correspondence_compaction.md").read_text()
+
+    assert prompt.count("{{MAX_DIGEST_TOKENS}}") == 1
+    assert re.search(r"\b\d[\d_,]*[\s-]tokens?\b", prompt) is None
+    assert re.search(r"\btokens?\b[^.\n]{0,24}\b\d[\d_,]*\b", prompt) is None
+
+
+def test_compaction_prompt_loader_renders_configured_budget() -> None:
+    """The real loader replaces the digest token-budget placeholder."""
+
+    prompt = load_compaction_system_prompt(max_digest_tokens=12345)
+
+    assert "12345 tokens" in prompt
+    assert "{{MAX_DIGEST_TOKENS}}" not in prompt
+
+
+def test_digest_budget_render_fails_when_placeholder_is_missing() -> None:
+    """Removing the digest budget slot fails loudly with its source name."""
+
+    source = "correspondence_compaction.md"
+    with pytest.raises(ValueError, match=re.escape(source)):
+        _render_digest_budget(
+            "The complete digest has no configured bound.",
+            max_digest_tokens=12345,
+            source=source,
+        )
+
+
+def test_compaction_prompt_and_validator_share_real_digest_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Real settings bind the same digest budget to prompt and validator."""
+
+    settings = load_settings_as_dict(PROMPTS_DIR.parent / "nexus.toml")
+    configured = correspondence_settings(settings)
+    expected = int(configured["max_digest_tokens"])
+    prompt = load_compaction_system_prompt(max_digest_tokens=expected)
+    validator = build_digest_length_validator(max_digest_tokens=expected)
+    output = CorrespondenceDigestWire(digest="Complete digest.")
+    monkeypatch.setattr(
+        correspondence,
+        "calculate_chunk_tokens",
+        lambda _text: expected + 1,
+    )
+
+    assert prompt.count(str(expected)) == 1
+    assert "{{MAX_DIGEST_TOKENS}}" not in prompt
+    with pytest.raises(ModelRetry, match=rf"limit {expected}\)"):
+        asyncio.run(validator(None, output))
 
 
 @pytest.mark.parametrize(

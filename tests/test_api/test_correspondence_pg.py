@@ -444,6 +444,11 @@ def test_accept_reject_hysteresis_and_digest_undo(
         assert compaction_calls[0]["thread"] != event_loop_thread
         assert "writer secret 5" in compaction_calls[0]["user_prompt"]
         assert "writer secret 11" in compaction_calls[0]["user_prompt"]
+        assert (
+            f'{compaction_calls[0]["max_digest_tokens"]} tokens'
+            in compaction_calls[0]["system_prompt"]
+        )
+        assert "{{MAX_DIGEST_TOKENS}}" not in compaction_calls[0]["system_prompt"]
 
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(

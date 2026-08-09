@@ -19,3 +19,5 @@ The digest records authorial intent, never world canon: it asserts nothing about
 Nothing is invented: a plan absent from the letters and the old digest does not exist.
 
 The output is the complete new digest and nothing else, compact enough to be read every turn without regret.
+
+The complete digest must fit within {{MAX_DIGEST_TOKENS}} tokens.
