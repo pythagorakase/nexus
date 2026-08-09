@@ -31,6 +31,8 @@ class WorkerCursor:
         self.executed = []
         self._fetchall = []
         self._fetchone = None
+        self.rowcount = 0
+        self.current_lease = None
 
     def __enter__(self):
         return self
@@ -42,6 +44,7 @@ class WorkerCursor:
         self.executed.append((sql, params))
         self._fetchall = []
         self._fetchone = None
+        self.rowcount = 0
         normalized = " ".join(str(sql).split())
         if "AS non_terminal_jobs" in normalized:
             self._fetchone = {
@@ -59,8 +62,33 @@ class WorkerCursor:
             self._fetchall = self.promotion_rows
         elif "FROM orrery_narration_jobs j" in normalized:
             self._fetchall = self.job_rows
+        elif "SET state = 'leased'" in normalized:
+            self.current_lease = {
+                "locked_by": params[1],
+                "lease_nonce": params[2],
+            }
+            self.rowcount = 1
+        elif "/* orrery:narration:complete_fence */" in normalized:
+            job = self.job_rows[0]
+            self._fetchone = {
+                "state": "leased",
+                "locked_by": self.current_lease["locked_by"],
+                "lease_nonce": self.current_lease["lease_nonce"],
+                "lease_is_current": True,
+                "anchor_tick_chunk_id": job["anchor_tick_chunk_id"],
+                "anchor_world_layer": job["anchor_world_layer"],
+                "current_tick_chunk_id": job["anchor_tick_chunk_id"],
+                "current_world_layer": job["anchor_world_layer"],
+                "anchor_exists": True,
+            }
         elif "INSERT INTO offscreen_narrations" in normalized:
             self._fetchone = {"id": 501}
+            self.rowcount = 1
+        elif "RETURNING id" in normalized:
+            self._fetchone = {"id": self.job_rows[0]["job_id"]}
+            self.rowcount = 1
+        elif "UPDATE orrery_narration_jobs" in normalized:
+            self.rowcount = 1
 
     def fetchall(self):
         return self._fetchall
@@ -165,6 +193,8 @@ def _job_row():
         "event_ids": [20],
         "attempts": 0,
         "world_layer": "primary",
+        "anchor_tick_chunk_id": 100,
+        "anchor_world_layer": "primary",
     }
 
 
@@ -347,9 +377,12 @@ def test_drain_narration_outbox_does_not_lease_before_provider_ready() -> None:
             conn=WorkerConn(cursor),
         )
 
-    statements = "\n".join(sql for sql, _params in cursor.executed)
-
-    assert "state = 'leased'" not in statements
+    lease_updates = [
+        sql
+        for sql, _params in cursor.executed
+        if "UPDATE orrery_narration_jobs" in sql and "SET state = 'leased'" in sql
+    ]
+    assert lease_updates == []
 
 
 def test_drain_narration_outbox_requeues_transient_failures() -> None:
@@ -486,7 +519,7 @@ def test_process_orrery_outbox_includes_semantic_clearance(monkeypatch) -> None:
 def test_load_orrery_status_sync_counts_background_work() -> None:
     """Status snapshots expose the background-work backlog."""
 
-    cursor = WorkerCursor(count_rows=[1, 2, 3, 4, 5, 6, 7, 8, 9])
+    cursor = WorkerCursor(count_rows=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
 
     status = load_orrery_status_sync(conn=WorkerConn(cursor))
 
@@ -498,8 +531,9 @@ def test_load_orrery_status_sync_counts_background_work() -> None:
     assert status.queued_narration_jobs == 2
     assert status.leased_narration_jobs == 3
     assert status.failed_narration_jobs == 4
-    assert status.pending_offscreen_embeddings == 5
-    assert status.failed_offscreen_embeddings == 6
-    assert status.active_semantic_tags == 7
-    assert status.recent_resolutions == 8
-    assert status.recent_narrations == 9
+    assert status.stale_rejected_narration_jobs == 5
+    assert status.pending_offscreen_embeddings == 6
+    assert status.failed_offscreen_embeddings == 7
+    assert status.active_semantic_tags == 8
+    assert status.recent_resolutions == 9
+    assert status.recent_narrations == 10

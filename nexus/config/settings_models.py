@@ -1269,6 +1269,18 @@ class OrreryNarrationSettings(BaseModel):
     retry_delay_seconds: int = Field(
         default=300, ge=0, description="Delay before a failed narration job retries"
     )
+    lease_duration_seconds: int = Field(
+        default=300,
+        ge=1,
+        description="Duration of one owner-fenced narration job lease",
+    )
+    max_jobs_per_drain: int = Field(
+        default=5,
+        ge=1,
+        description=(
+            "Maximum queued or expired narration jobs reclaimed per worker drain"
+        ),
+    )
 
 
 class OrreryBleedSettings(BaseModel):
