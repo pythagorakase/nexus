@@ -1720,7 +1720,7 @@ class OrreryEpistemicsSettings(BaseModel):
     @field_validator("claim_event_types")
     @classmethod
     def _validate_claim_event_types(cls, values: List[str]) -> List[str]:
-        """Reject blank or duplicate event-type policy entries."""
+        """Reject invalid event types and entries without a birth-role policy."""
 
         normalized = [value.strip() for value in values]
         if any(not value for value in normalized):
@@ -1731,6 +1731,20 @@ class OrreryEpistemicsSettings(BaseModel):
             raise ValueError(
                 "claim_propagated cannot appear in claim_event_types; "
                 "propagation ledger events never mint claims"
+            )
+        from nexus.agents.orrery.epistemics import CLAIM_BIRTH_ROLE_POLICY
+        from nexus.agents.orrery.event_vocabulary import known_event_types
+
+        unknown = sorted(set(normalized) - known_event_types())
+        if unknown:
+            raise ValueError(
+                f"claim_event_types contains unknown event types: {unknown}"
+            )
+        missing_policy = sorted(set(normalized) - set(CLAIM_BIRTH_ROLE_POLICY))
+        if missing_policy:
+            raise ValueError(
+                "claim_event_types contains event types without birth-role "
+                f"policies: {missing_policy}"
             )
         return normalized
 

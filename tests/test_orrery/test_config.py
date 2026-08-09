@@ -114,9 +114,26 @@ def test_orrery_settings_resolve_model_reference() -> None:
     assert settings.orrery.knowledge.enabled is True
     assert settings.orrery.knowledge.max_entries == 12
     assert settings.orrery.knowledge.recent_reveal_window_chunks == 5
-    assert "relationship_drift_milestone" in (
-        settings.orrery.epistemics.claim_event_types
-    )
+    assert settings.orrery.epistemics.claim_event_types == [
+        "compliance_alert",
+        "encoded_message",
+        "hunt_called_off",
+        "hunt_declared",
+        "informant_contact",
+        "intel_acquired",
+        "intel_acted_on",
+        "protective_intervention",
+        "pursue_romance_completed",
+        "recruit_ally_completed",
+        "relationship_drift_milestone",
+        "retaliation_attempted",
+        "retaliation_executed",
+        "rival_consulted",
+        "seek_redemption_completed",
+        "surveillance_performed",
+        "threat_issued",
+        "warning_delivered",
+    ]
     # The ship-off invariant applies to the COMMITTED config: flipping the
     # dashboard on locally is a documented workflow (nexus.toml comment,
     # issue #415), and asserting the working tree here trains developers to
@@ -180,6 +197,36 @@ def test_epistemics_rejects_claim_propagated_as_claim_producer() -> None:
 
     with pytest.raises(ValidationError, match="claim_propagated cannot appear"):
         OrreryEpistemicsSettings(claim_event_types=["claim_propagated"])
+
+
+def test_epistemics_rejects_unknown_claim_event_type() -> None:
+    """Unknown vocabulary entries fail while configuration is loading."""
+
+    with pytest.raises(ValidationError, match="unknown event types.*not_registered"):
+        OrreryEpistemicsSettings(claim_event_types=["not_registered"])
+
+
+def test_epistemics_rejects_event_type_without_birth_role_policy() -> None:
+    """Known vocabulary cannot opt into claims without an audience policy."""
+
+    with pytest.raises(
+        ValidationError,
+        match="without birth-role policies.*ate",
+    ):
+        OrreryEpistemicsSettings(claim_event_types=["ate"])
+
+
+def test_epistemics_accepts_exact_birth_role_policy_registry() -> None:
+    """Every approved event type is valid as one load-time configuration."""
+
+    from nexus.agents.orrery.epistemics import CLAIM_BIRTH_ROLE_POLICY
+    from nexus.agents.orrery.event_vocabulary import known_event_types
+
+    configured = list(CLAIM_BIRTH_ROLE_POLICY)
+    settings = OrreryEpistemicsSettings(claim_event_types=configured)
+    assert len(known_event_types()) == 109
+    assert set(configured) <= known_event_types()
+    assert settings.claim_event_types == configured
 
 
 def test_drift_rejects_nonnegative_hostile_delta() -> None:

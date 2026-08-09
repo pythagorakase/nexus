@@ -848,7 +848,7 @@ def test_detected_signal_event_mints_and_ledgers_claim_sync(monkeypatch: Any) ->
     ledgered: list[tuple[int, dict[str, Any]]] = []
 
     def mint_claim(_cur: Any, **kwargs: Any) -> Any:
-        mint_calls.append((kwargs["event_id"], kwargs["event_type"]))
+        mint_calls.append((kwargs["world_event_id"], kwargs["event_type"]))
         if kwargs["event_type"] == "threat_issued":
             return orrery_events.MintResult(91, (101, 102))
         return orrery_events.MintResult(90, (99, 100))
@@ -861,7 +861,7 @@ def test_detected_signal_event_mints_and_ledgers_claim_sync(monkeypatch: Any) ->
             )
         )
 
-    monkeypatch.setattr(orrery_events, "_mint_live_event_claim_sync", mint_claim)
+    monkeypatch.setattr(orrery_events, "mint_claim_for_event", mint_claim)
     monkeypatch.setattr(
         orrery_events, "_update_resolution_epistemics_applied_sync", ledger_claim
     )
@@ -886,7 +886,11 @@ def test_detected_signal_event_mints_and_ledgers_claim_sync(monkeypatch: Any) ->
         target_entity_id=2,
         world_layer="primary",
         signal_detection=orrery_events.SignalDetection(),
-        epistemics_settings={"enabled": True},
+        epistemics_settings={
+            "enabled": True,
+            "claim_event_types": ["retaliation_attempted", "threat_issued"],
+            "aware_roles": ["actor", "target", "observer", "witness"],
+        },
         entity_names={1: "Mara", 2: "Vale"},
         entity_kinds={1: "character", 2: "character"},
     )
@@ -924,7 +928,7 @@ def test_detected_signal_event_mints_and_ledgers_claim_async(
     ledgered: list[tuple[int, dict[str, Any]]] = []
 
     async def mint_claim(_conn: Any, **kwargs: Any) -> Any:
-        mint_calls.append((kwargs["event_id"], kwargs["event_type"]))
+        mint_calls.append((kwargs["world_event_id"], kwargs["event_type"]))
         if kwargs["event_type"] == "threat_issued":
             return orrery_events.MintResult(92, (103, 104))
         return orrery_events.MintResult(91, (101, 102))
@@ -937,7 +941,7 @@ def test_detected_signal_event_mints_and_ledgers_claim_async(
             )
         )
 
-    monkeypatch.setattr(orrery_events, "_mint_live_event_claim_async", mint_claim)
+    monkeypatch.setattr(orrery_events, "mint_claim_for_event_async", mint_claim)
     monkeypatch.setattr(
         orrery_events, "_update_resolution_epistemics_applied_async", ledger_claim
     )
@@ -963,7 +967,11 @@ def test_detected_signal_event_mints_and_ledgers_claim_async(
             target_entity_id=2,
             world_layer="primary",
             signal_detection=orrery_events.SignalDetection(),
-            epistemics_settings={"enabled": True},
+            epistemics_settings={
+                "enabled": True,
+                "claim_event_types": ["retaliation_attempted", "threat_issued"],
+                "aware_roles": ["actor", "target", "observer", "witness"],
+            },
             entity_names={1: "Mara", 2: "Vale"},
             entity_kinds={1: "character", 2: "character"},
         )
