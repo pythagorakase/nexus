@@ -684,7 +684,7 @@ def commit_incubator_to_database_sync(
                     chunk_id,
                 )
             if metadata_update.scene_boundary and not is_bootstrap:
-                enqueued = enqueue_scene_experience_job_sync(
+                enqueued_jobs = enqueue_scene_experience_job_sync(
                     conn,
                     boundary_chunk_id=chunk_id,
                     scene_end_chunk_id=int(incubator["parent_chunk_id"]),
@@ -692,9 +692,10 @@ def commit_incubator_to_database_sync(
                     slot=slot,
                     settings=orrery_settings,
                 )
-                if enqueued:
+                if enqueued_jobs:
                     logger.info(
-                        "Enqueued character experience scene batch at chunk %s",
+                        "Enqueued %s character experience scene batches at chunk %s",
+                        enqueued_jobs,
                         chunk_id,
                     )
 

@@ -14,6 +14,8 @@ A recollection may carry emotion and judgment; it may not introduce people, plac
 
 A participant describes events from within; a witness describes them from the outside.
 
+An acquisition seed records being told an account; its recollection describes hearing the account, in the teller's framing, and never describes witnessing the underlying events.
+
 Divergence between characters' recollections of the same scene is expected and desirable.
 
 People and places are named exactly as the seed names them.

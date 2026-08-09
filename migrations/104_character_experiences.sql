@@ -98,13 +98,13 @@ COMMENT ON COLUMN character_experiences.claim_id IS
 COMMENT ON COLUMN character_experiences.claim_awareness_id IS
     'Durable told or granted awareness row whose insertion caused an acquisition experience.';
 COMMENT ON COLUMN character_experiences.basis IS
-    'Participant, verified present witness, or acquisition by being told or granted an account.';
+    'Canonical event-role participant, policy-authorized witness, or acquisition by being told or granted an account.';
 COMMENT ON COLUMN character_experiences.location_id IS
     'Canonical scene or source-event place when one is durably known.';
 COMMENT ON COLUMN character_experiences.world_time IS
     'In-world formation time under the two-clocks doctrine.';
 COMMENT ON COLUMN character_experiences.seed_summary IS
-    'Deterministic factual seed text assembled only from accepted event, roster, and account data.';
+    'Deterministic factual seed text assembled only from accepted event-role receipts and delivered-account data.';
 COMMENT ON COLUMN character_experiences.experience_text IS
     'Subjective first-person rendering; NULL preserves an unrendered or failed seed for retry.';
 COMMENT ON COLUMN character_experiences.emotion IS
@@ -135,6 +135,13 @@ CREATE TABLE IF NOT EXISTS character_experience_jobs (
     boundary_chunk_id   bigint NOT NULL REFERENCES narrative_chunks(id),
     scene_end_chunk_id  bigint NOT NULL REFERENCES narrative_chunks(id),
     world_layer         world_layer_type NOT NULL,
+    boundary_season     integer NOT NULL,
+    boundary_episode    integer NOT NULL,
+    boundary_scene      integer NOT NULL,
+    scene_end_season    integer NOT NULL,
+    scene_end_episode   integer NOT NULL,
+    scene_end_scene     integer NOT NULL,
+    batch_ordinal       integer NOT NULL CHECK (batch_ordinal >= 0),
     experience_ids      bigint[] NOT NULL,
     slot                text NOT NULL,
     state               orrery_job_state NOT NULL DEFAULT 'queued',
@@ -144,7 +151,7 @@ CREATE TABLE IF NOT EXISTS character_experience_jobs (
     locked_by           text,
     lease_nonce         uuid,
     last_error          text,
-    model               text NOT NULL,
+    requested_model     text NOT NULL,
     source_digest       text NOT NULL,
     created_at          timestamptz NOT NULL DEFAULT now(),
     updated_at          timestamptz NOT NULL DEFAULT now(),
@@ -152,7 +159,9 @@ CREATE TABLE IF NOT EXISTS character_experience_jobs (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS ux_character_experience_jobs_boundary
-    ON character_experience_jobs (boundary_chunk_id, world_layer);
+    ON character_experience_jobs (
+        boundary_chunk_id, world_layer, batch_ordinal
+    );
 CREATE INDEX IF NOT EXISTS ix_character_experience_jobs_available
     ON character_experience_jobs (state, available_at);
 
@@ -165,9 +174,23 @@ COMMENT ON COLUMN character_experience_jobs.boundary_chunk_id IS
 COMMENT ON COLUMN character_experience_jobs.scene_end_chunk_id IS
     'Last accepted chunk included in the scene batch.';
 COMMENT ON COLUMN character_experience_jobs.world_layer IS
-    'Timeline layer fenced at enqueue and completion.';
+    'Timeline layer shared by the frozen boundary and scene-end anchor and revalidated at completion.';
+COMMENT ON COLUMN character_experience_jobs.boundary_season IS
+    'Season identity copied from the boundary chunk and revalidated under a shared lock at completion.';
+COMMENT ON COLUMN character_experience_jobs.boundary_episode IS
+    'Episode identity copied from the boundary chunk and revalidated under a shared lock at completion.';
+COMMENT ON COLUMN character_experience_jobs.boundary_scene IS
+    'Scene identity copied from the boundary chunk and revalidated under a shared lock at completion.';
+COMMENT ON COLUMN character_experience_jobs.scene_end_season IS
+    'Season identity copied from the prior-scene anchor and revalidated under a shared lock at completion.';
+COMMENT ON COLUMN character_experience_jobs.scene_end_episode IS
+    'Episode identity copied from the prior-scene anchor and revalidated under a shared lock at completion.';
+COMMENT ON COLUMN character_experience_jobs.scene_end_scene IS
+    'Scene identity copied from the prior-scene anchor and revalidated under a shared lock at completion.';
+COMMENT ON COLUMN character_experience_jobs.batch_ordinal IS
+    'Zero-based immutable batch number used to split one boundary roster within the configured seed budget.';
 COMMENT ON COLUMN character_experience_jobs.experience_ids IS
-    'Immutable complete set of unrendered seed ids selected for this scene boundary.';
+    'Immutable bounded partition of unrendered seed ids selected for this scene boundary.';
 COMMENT ON COLUMN character_experience_jobs.slot IS
     'Save-slot label owning the job.';
 COMMENT ON COLUMN character_experience_jobs.state IS
@@ -184,8 +207,8 @@ COMMENT ON COLUMN character_experience_jobs.lease_nonce IS
     'Fresh UUID stamped at each lease acquisition to reject stale workers.';
 COMMENT ON COLUMN character_experience_jobs.last_error IS
     'Most recent rendering or validation failure retained for operational diagnosis.';
-COMMENT ON COLUMN character_experience_jobs.model IS
-    'Resolved registry model id frozen when the scene job is enqueued.';
+COMMENT ON COLUMN character_experience_jobs.requested_model IS
+    'Resolved registry model id requested when the scene job was enqueued; successful experiences stamp the model resolved at call time.';
 COMMENT ON COLUMN character_experience_jobs.source_digest IS
     'SHA-256 digest of the ordered experience id and seed-digest batch.';
 COMMENT ON COLUMN character_experience_jobs.created_at IS

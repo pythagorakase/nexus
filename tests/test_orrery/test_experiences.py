@@ -61,6 +61,7 @@ def test_experience_config_resolves_model_and_eligibility() -> None:
         settings.global_.model.api_models["openai"].roles["gaia"]
     )
     assert settings.orrery.experiences.minimum_dossier_fields == 2
+    assert settings.orrery.experiences.max_seeds_per_render == 12
     assert sum(
         (
             settings.orrery.experiences.magnitude_weight,
@@ -75,6 +76,7 @@ def _seed_row() -> dict[str, Any]:
         "id": 41,
         "character_entity_id": 7,
         "world_event_ids": [12],
+        "basis": "witness",
         "location_id": 9,
         "seed_summary": ("Mara witnessed Orrin open the Copper Observatory door."),
     }
@@ -99,6 +101,78 @@ def test_renderer_validator_rejects_entity_invention() -> None:
             batch,
             names_by_experience={41: ({"Mara", "Orrin", "Selene"}, {"Mara", "Orrin"})},
         )
+
+
+def test_renderer_validator_rejects_sentence_initial_novel_name() -> None:
+    """Sentence-initial proper nouns are validated instead of skipped."""
+    batch = ExperienceRenderBatch(
+        recollections=[
+            ExperienceRecollection(
+                experience_id=41,
+                experience_text=(
+                    "Zorblax warned me to leave. I remembered Orrin at the door."
+                ),
+            )
+        ]
+    )
+
+    with pytest.raises(ValueError, match="absent from its source scene.*Zorblax"):
+        validate_render_batch(
+            [_seed_row()],
+            batch,
+            names_by_experience={41: ({"Mara", "Orrin"}, {"Mara", "Orrin"})},
+        )
+
+
+def test_acquisition_validator_requires_telling_perspective() -> None:
+    """Acquisitions remember receiving an account, never seeing its incident."""
+    row = {**_seed_row(), "basis": "acquisition"}
+    witnessing = ExperienceRenderBatch(
+        recollections=[
+            ExperienceRecollection(
+                experience_id=41,
+                experience_text=(
+                    "I witnessed Orrin open the door. I learned why it mattered."
+                ),
+            )
+        ]
+    )
+    no_receipt = ExperienceRenderBatch(
+        recollections=[
+            ExperienceRecollection(
+                experience_id=41,
+                experience_text=(
+                    "I considered Orrin's choice. I distrusted the conclusion."
+                ),
+            )
+        ]
+    )
+
+    with pytest.raises(ValueError, match="must not describe witnessing"):
+        validate_render_batch([row], witnessing)
+    with pytest.raises(ValueError, match="receiving or learning"):
+        validate_render_batch([row], no_receipt)
+
+
+def test_acquisition_validator_accepts_delivered_account_perspective() -> None:
+    """A first-person memory of hearing the delivered account is valid."""
+    row = {**_seed_row(), "basis": "acquisition"}
+    batch = ExperienceRenderBatch(
+        recollections=[
+            ExperienceRecollection(
+                experience_id=41,
+                experience_text=(
+                    "I heard Orrin tell me about the door. I doubted his account."
+                ),
+            )
+        ]
+    )
+
+    assert validate_render_batch(
+        [row],
+        batch,
+        names_by_experience={41: ({"Mara", "Orrin"}, {"Mara", "Orrin"})},
+    ) == {41: "I heard Orrin tell me about the door. I doubted his account."}
 
 
 def test_renderer_validator_accepts_complete_first_person_batch() -> None:

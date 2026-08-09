@@ -1310,6 +1310,11 @@ class OrreryExperienceSettings(BaseModel):
     retry_delay_seconds: int = Field(default=300, ge=0)
     lease_duration_seconds: int = Field(default=300, ge=1)
     max_jobs_per_drain: int = Field(default=2, ge=1)
+    max_seeds_per_render: int = Field(
+        default=12,
+        ge=1,
+        description="Maximum experience seeds included in one provider call",
+    )
 
     @model_validator(mode="after")
     def _validate_eligibility_and_salience(self) -> "OrreryExperienceSettings":

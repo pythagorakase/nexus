@@ -13,6 +13,11 @@ from uuid import uuid4
 from psycopg2.extras import RealDictCursor
 from pydantic import BaseModel, ConfigDict, Field
 
+from nexus.agents.orrery.epistemics import (
+    CLAIM_BIRTH_ROLE_POLICY,
+    PARTICIPANT_ROLES,
+    WITNESS_ROLES,
+)
 from nexus.config.settings_models import OrreryExperienceSettings
 from nexus.telemetry.usage import usage_context
 
@@ -23,12 +28,54 @@ RENDERER_VERSION = "experience-renderer-v1"
 _PROMPT_PATH = (
     Path(__file__).resolve().parents[3] / "prompts" / "experience_renderer.md"
 )
-_PARTICIPANT_ROLES = frozenset({"actor", "target", "beneficiary"})
-_CAPITALIZED_NAME = re.compile(
-    r"(?<![.!?]\s)(?<!^)\b[A-Z][a-z]+(?:[ '-][A-Z][a-z]+)*\b"
+_CAPITALIZED_SEQUENCE = re.compile(r"\b[A-Z][A-Za-z0-9]*(?:[ '-][A-Z][A-Za-z0-9]*)*\b")
+_SENTENCE_INITIAL_ALLOWLIST = frozenset(
+    {
+        "a",
+        "after",
+        "an",
+        "and",
+        "as",
+        "at",
+        "before",
+        "but",
+        "by",
+        "for",
+        "from",
+        "he",
+        "i",
+        "in",
+        "it",
+        "my",
+        "once",
+        "our",
+        "she",
+        "so",
+        "that",
+        "the",
+        "then",
+        "they",
+        "this",
+        "through",
+        "to",
+        "until",
+        "we",
+        "when",
+        "while",
+        "with",
+        "without",
+    }
 )
 _FIRST_PERSON = re.compile(r"\b(?:I|me|my|mine|we|us|our|ours)\b", re.IGNORECASE)
 _SENTENCE = re.compile(r"(?<=[.!?])(?:[\"']?\s+|$)")
+_ACQUISITION_RECEIPT = re.compile(
+    r"\b(?:told|heard|learned|informed|received|read|listened|account|message|report)\b",
+    re.IGNORECASE,
+)
+_ACQUISITION_WITNESS = re.compile(
+    r"\b(?:saw|watched|witnessed|observed|looked on|was there)\b",
+    re.IGNORECASE,
+)
 
 
 class ExperienceRecollection(BaseModel):
@@ -217,6 +264,48 @@ def _event_fact(row: Mapping[str, Any]) -> str:
     return fact + "."
 
 
+def _public_audience_entity_ids(row: Mapping[str, Any]) -> frozenset[int]:
+    """Return an emitter-declared audience only for explicitly public events."""
+
+    payload = _json_mapping(row.get("payload"))
+    if payload.get("on_screen_public") is not True:
+        return frozenset()
+    raw_audience = payload.get("audience_entity_ids")
+    if not isinstance(raw_audience, list):
+        raise ValueError(
+            f"Public event {row['id']} must declare audience_entity_ids as a list"
+        )
+    audience: set[int] = set()
+    for raw_id in raw_audience:
+        if isinstance(raw_id, bool):
+            raise ValueError(f"Public event {row['id']} has an invalid audience id")
+        entity_id = int(raw_id)
+        if entity_id <= 0:
+            raise ValueError(f"Public event {row['id']} has an invalid audience id")
+        audience.add(entity_id)
+    return frozenset(audience)
+
+
+def _event_receipts(row: Mapping[str, Any]) -> dict[int, str]:
+    """Derive actor-owned receipt bases from canonical event roles and policy."""
+
+    event_type = str(row["event_type"])
+    birth_roles = CLAIM_BIRTH_ROLE_POLICY.get(event_type)
+    receipts: dict[int, str] = {}
+    for participant in row.get("participants") or []:
+        if not isinstance(participant, Mapping):
+            raise ValueError(f"Event {row['id']} has a malformed participant receipt")
+        entity_id = int(participant["entity_id"])
+        role = str(participant["role"])
+        if role in PARTICIPANT_ROLES and (birth_roles is None or role in birth_roles):
+            receipts[entity_id] = "participant"
+        elif role in WITNESS_ROLES and birth_roles is not None and role in birth_roles:
+            receipts.setdefault(entity_id, "witness")
+    for entity_id in _public_audience_entity_ids(row):
+        receipts.setdefault(entity_id, "witness")
+    return receipts
+
+
 def _insert_experience(
     cur: Any,
     *,
@@ -322,28 +411,20 @@ def seed_character_experiences_sync(
 
         cur.execute(
             """
-            SELECT c.entity_id, c.name, c.summary, c.background, c.personality
-            FROM chunk_character_references ccr
-            JOIN characters c ON c.id = ccr.character_id
-            WHERE ccr.chunk_id = %s
-              AND ccr.reference::text = 'present'
-              AND c.entity_id IS NOT NULL
-            ORDER BY c.entity_id
-            """,
-            (anchor_chunk_id,),
-        )
-        present = [dict(row) for row in cur.fetchall()]
-        eligible = [row for row in present if _eligible_character(row, cfg)]
-
-        cur.execute(
-            """
             SELECT e.id, e.event_type, e.actor_entity_id, e.target_entity_id,
                    e.location_id, e.magnitude, e.payload,
                    actor.name AS actor_name, target.name AS target_name,
                    place.name AS location_name, r.state_delta,
-                   COALESCE(array_agg(wee.entity_id) FILTER (
-                       WHERE wee.role::text IN ('actor', 'target', 'beneficiary')
-                   ), '{}') AS participant_entity_ids
+                   COALESCE(
+                       jsonb_agg(
+                           jsonb_build_object(
+                               'entity_id', wee.entity_id,
+                               'role', wee.role::text
+                           )
+                           ORDER BY wee.entity_id, wee.role::text
+                       ) FILTER (WHERE wee.entity_id IS NOT NULL),
+                       '[]'::jsonb
+                   ) AS participants
             FROM world_events e
             LEFT JOIN entity_names_v actor ON actor.id = e.actor_entity_id
             LEFT JOIN entity_names_v target ON target.id = e.target_entity_id
@@ -358,17 +439,31 @@ def seed_character_experiences_sync(
             (anchor_chunk_id,),
         )
         events = [dict(row) for row in cur.fetchall()]
-        event_ids = [int(row["id"]) for row in events]
-        facts = " ".join(_event_fact(row) for row in events)
-        for character in eligible:
-            if not events:
-                break
-            character_id = int(character["entity_id"])
-            participant = any(
-                character_id in set(row["participant_entity_ids"] or [])
-                for row in events
+        receipts: dict[tuple[int, str], list[dict[str, Any]]] = {}
+        for event in events:
+            for entity_id, basis in _event_receipts(event).items():
+                receipts.setdefault((entity_id, basis), []).append(event)
+        receipt_entity_ids = sorted({entity_id for entity_id, _basis in receipts})
+        eligible_by_id: dict[int, dict[str, Any]] = {}
+        if receipt_entity_ids:
+            cur.execute(
+                """
+                SELECT entity_id, name, summary, background, personality
+                FROM characters
+                WHERE entity_id = ANY(%s)
+                ORDER BY entity_id
+                """,
+                (receipt_entity_ids,),
             )
-            basis = "participant" if participant else "witness"
+            eligible_by_id = {
+                int(row["entity_id"]): dict(row)
+                for row in cur.fetchall()
+                if _eligible_character(row, cfg)
+            }
+        for (character_id, basis), owned_events in sorted(receipts.items()):
+            character = eligible_by_id.get(character_id)
+            if character is None:
+                continue
             duration = _presence_duration(
                 cur,
                 character_entity_id=character_id,
@@ -377,10 +472,15 @@ def seed_character_experiences_sync(
                 cap=cfg.presence_duration_cap_chunks,
             )
             location_id = next(
-                (int(row["location_id"]) for row in events if row.get("location_id")),
+                (
+                    int(row["location_id"])
+                    for row in owned_events
+                    if row.get("location_id")
+                ),
                 metadata.get("setting_place_id"),
             )
-            basis_phrase = "participated in" if participant else "witnessed"
+            basis_phrase = "participated in" if basis == "participant" else "witnessed"
+            facts = " ".join(_event_fact(row) for row in owned_events)
             seed_summary = (
                 f"{character['name']} {basis_phrase} the accepted scene at "
                 f"{world_time.isoformat() if world_time else 'an unknown world time'}. "
@@ -391,7 +491,7 @@ def seed_character_experiences_sync(
                     cur,
                     character_entity_id=character_id,
                     anchor_chunk_id=anchor_chunk_id,
-                    world_event_ids=event_ids,
+                    world_event_ids=[int(row["id"]) for row in owned_events],
                     claim_id=None,
                     claim_awareness_id=None,
                     basis=basis,
@@ -400,7 +500,7 @@ def seed_character_experiences_sync(
                     seed_summary=seed_summary,
                     emotion=_active_mood(cur, character_id),
                     salience=_salience(
-                        events=events,
+                        events=owned_events,
                         presence_duration=duration,
                         cfg=cfg,
                     ),
@@ -484,13 +584,56 @@ def enqueue_scene_experience_job_sync(
     world_layer: str,
     slot: Optional[int],
     settings: Mapping[str, Any],
-) -> bool:
-    """Enqueue one immutable prior-scene seed batch at a scene reset."""
+) -> int:
+    """Enqueue bounded immutable prior-scene seed batches at a scene reset."""
 
     cfg = experience_settings(settings)
     if not cfg.enabled or scene_end_chunk_id <= 0:
-        return False
+        return 0
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            SELECT boundary.season AS boundary_season,
+                   boundary.episode AS boundary_episode,
+                   boundary.scene AS boundary_scene,
+                   boundary.world_layer::text AS boundary_world_layer,
+                   scene_end.season AS scene_end_season,
+                   scene_end.episode AS scene_end_episode,
+                   scene_end.scene AS scene_end_scene,
+                   scene_end.world_layer::text AS scene_end_world_layer
+            FROM chunk_metadata boundary
+            JOIN chunk_metadata scene_end ON scene_end.chunk_id = %s
+            WHERE boundary.chunk_id = %s
+            FOR SHARE OF boundary, scene_end
+            """,
+            (scene_end_chunk_id, boundary_chunk_id),
+        )
+        timeline = cur.fetchone()
+        if timeline is None:
+            raise RuntimeError(
+                "Experience boundary or scene-end anchor lacks timeline metadata"
+            )
+        if (
+            timeline["boundary_world_layer"] != world_layer
+            or timeline["scene_end_world_layer"] != world_layer
+        ):
+            raise ValueError(
+                "Experience boundary and scene-end anchor must match the requested "
+                f"world layer {world_layer!r}"
+            )
+        cur.execute(
+            """
+            SELECT EXISTS (
+                SELECT 1
+                FROM character_experience_jobs
+                WHERE boundary_chunk_id = %s
+                  AND world_layer::text = %s
+            ) AS already_enqueued
+            """,
+            (boundary_chunk_id, world_layer),
+        )
+        if bool(cur.fetchone()["already_enqueued"]):
+            return 0
         cur.execute(
             """
             SELECT max(boundary_chunk_id) AS previous_boundary
@@ -517,27 +660,48 @@ def enqueue_scene_experience_job_sync(
         )
         rows = [dict(row) for row in cur.fetchall()]
         if not rows:
-            return False
-        cur.execute(
-            """
-            INSERT INTO character_experience_jobs (
-                boundary_chunk_id, scene_end_chunk_id, world_layer,
-                experience_ids, slot, model, source_digest
-            ) VALUES (%s, %s, %s::world_layer_type, %s, %s, %s, %s)
-            ON CONFLICT (boundary_chunk_id, world_layer) DO NOTHING
-            RETURNING id
-            """,
-            (
-                boundary_chunk_id,
-                scene_end_chunk_id,
-                world_layer,
-                [int(row["id"]) for row in rows],
-                str(slot) if slot is not None else "default",
-                cfg.model,
-                _batch_digest(rows),
-            ),
-        )
-        return cur.fetchone() is not None
+            return 0
+        inserted = 0
+        for batch_ordinal, start in enumerate(
+            range(0, len(rows), cfg.max_seeds_per_render)
+        ):
+            batch_rows = rows[start : start + cfg.max_seeds_per_render]
+            cur.execute(
+                """
+                INSERT INTO character_experience_jobs (
+                    boundary_chunk_id, scene_end_chunk_id, world_layer,
+                    boundary_season, boundary_episode, boundary_scene,
+                    scene_end_season, scene_end_episode, scene_end_scene,
+                    batch_ordinal, experience_ids, slot, requested_model,
+                    source_digest
+                ) VALUES (
+                    %s, %s, %s::world_layer_type, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s, %s, %s
+                )
+                ON CONFLICT (
+                    boundary_chunk_id, world_layer, batch_ordinal
+                ) DO NOTHING
+                RETURNING id
+                """,
+                (
+                    boundary_chunk_id,
+                    scene_end_chunk_id,
+                    world_layer,
+                    timeline["boundary_season"],
+                    timeline["boundary_episode"],
+                    timeline["boundary_scene"],
+                    timeline["scene_end_season"],
+                    timeline["scene_end_episode"],
+                    timeline["scene_end_scene"],
+                    batch_ordinal,
+                    [int(row["id"]) for row in batch_rows],
+                    str(slot) if slot is not None else "default",
+                    cfg.model,
+                    _batch_digest(batch_rows),
+                ),
+            )
+            inserted += int(cur.fetchone() is not None)
+        return inserted
 
 
 def _known_and_allowed_names(
@@ -545,6 +709,55 @@ def _known_and_allowed_names(
 ) -> tuple[set[str], set[str]]:
     cur.execute("SELECT name FROM entity_names_v WHERE name IS NOT NULL")
     known = {str(item["name"]) for item in cur.fetchall() if str(item["name"]).strip()}
+    if row["basis"] == "acquisition":
+        cur.execute(
+            """
+            SELECT claim.summary, claim.account_payload, claim.account_label,
+                   owner.name AS owner_name,
+                   immediate.name AS immediate_source_name,
+                   root.name AS root_source_name
+            FROM claims claim
+            JOIN claim_awareness awareness ON awareness.id = %s
+            JOIN entity_names_v owner ON owner.id = %s
+            LEFT JOIN entity_names_v immediate
+              ON immediate.id = awareness.immediate_source_entity_id
+            LEFT JOIN entity_names_v root
+              ON root.id = awareness.root_source_entity_id
+            WHERE claim.id = %s
+            """,
+            (
+                row["claim_awareness_id"],
+                row["character_entity_id"],
+                row["claim_id"],
+            ),
+        )
+        account = cur.fetchone()
+        if account is None:
+            raise ExperienceSourceStaleError(
+                f"Acquisition experience {row['id']} lost its delivered account"
+            )
+        scope = " ".join(
+            (
+                str(account.get("summary") or ""),
+                json.dumps(account.get("account_payload"), default=str),
+                str(account.get("account_label") or ""),
+            )
+        )
+        allowed = {
+            str(name)
+            for name in (
+                account.get("owner_name"),
+                account.get("immediate_source_name"),
+                account.get("root_source_name"),
+            )
+            if name
+        }
+        allowed.update(
+            name
+            for name in known
+            if re.search(rf"\b{re.escape(name)}\b", scope, re.IGNORECASE)
+        )
+        return known, allowed
     cur.execute(
         """
         SELECT DISTINCT names.name
@@ -586,6 +799,22 @@ def _known_and_allowed_names(
     return known, allowed
 
 
+def _proper_noun_candidates(text: str) -> set[str]:
+    candidates: set[str] = set()
+    for match in _CAPITALIZED_SEQUENCE.finditer(text):
+        candidate = match.group(0).strip()
+        while candidate:
+            first = re.match(r"^[A-Za-z0-9]+", candidate)
+            if first is None or first.group(0).casefold() not in (
+                _SENTENCE_INITIAL_ALLOWLIST
+            ):
+                break
+            candidate = candidate[first.end() :].lstrip(" '-")
+        if candidate:
+            candidates.add(candidate)
+    return candidates
+
+
 def validate_render_batch(
     rows: Sequence[Mapping[str, Any]],
     batch: ExperienceRenderBatch,
@@ -615,6 +844,20 @@ def validate_render_batch(
             raise ValueError(
                 f"Experience {recollection.experience_id} is not first person"
             )
+        source_row = next(
+            row for row in rows if int(row["id"]) == recollection.experience_id
+        )
+        if source_row.get("basis") == "acquisition":
+            if _ACQUISITION_RECEIPT.search(text) is None:
+                raise ValueError(
+                    f"Acquisition experience {recollection.experience_id} must "
+                    "describe receiving or learning the account"
+                )
+            if _ACQUISITION_WITNESS.search(text) is not None:
+                raise ValueError(
+                    f"Acquisition experience {recollection.experience_id} "
+                    "must not describe witnessing the underlying event"
+                )
         known, allowed = (
             names_by_experience.get(recollection.experience_id, (set(), set()))
             if names_by_experience is not None
@@ -623,17 +866,12 @@ def validate_render_batch(
         disallowed_known = sorted(
             name
             for name in known - allowed
-            if re.search(rf"\b{re.escape(name)}\b", text)
+            if re.search(rf"\b{re.escape(name)}\b", text, re.IGNORECASE)
         )
-        capitalized = {
-            match.group(0)
-            for match in _CAPITALIZED_NAME.finditer(text)
-            if match.group(0) not in {"I"}
-        }
+        allowed_casefold = {name.casefold() for name in allowed}
+        capitalized = _proper_noun_candidates(text)
         invented = sorted(
-            name
-            for name in capitalized
-            if not any(name in allowed_name for allowed_name in allowed)
+            name for name in capitalized if name.casefold() not in allowed_casefold
         )
         if disallowed_known or invented:
             offenders = sorted(set(disallowed_known + invented))
@@ -697,12 +935,17 @@ def _complete_render(
     job: Mapping[str, Any],
     rows: Sequence[Mapping[str, Any]],
     rendered: Mapping[int, str],
+    render_model: str,
 ) -> None:
     cur.execute(
         """
         SELECT state::text AS state, locked_by, lease_nonce,
                lease_until >= clock_timestamp() AS lease_live,
-               source_digest, world_layer::text AS world_layer
+               source_digest, world_layer::text AS world_layer,
+               boundary_chunk_id, scene_end_chunk_id,
+               boundary_season, boundary_episode, boundary_scene,
+               scene_end_season, scene_end_episode, scene_end_scene,
+               requested_model
         FROM character_experience_jobs
         WHERE id = %s
         FOR UPDATE
@@ -717,6 +960,55 @@ def _complete_render(
     if current["source_digest"] != job["source_digest"]:
         raise ExperienceSourceStaleError(
             f"Experience job {job['job_id']} source digest changed"
+        )
+    frozen_fields = (
+        "world_layer",
+        "boundary_chunk_id",
+        "scene_end_chunk_id",
+        "boundary_season",
+        "boundary_episode",
+        "boundary_scene",
+        "scene_end_season",
+        "scene_end_episode",
+        "scene_end_scene",
+        "requested_model",
+    )
+    if any(current[field] != job[field] for field in frozen_fields):
+        raise ExperienceSourceStaleError(
+            f"Experience job {job['job_id']} frozen timeline identity changed"
+        )
+    cur.execute(
+        """
+        SELECT boundary.season AS boundary_season,
+               boundary.episode AS boundary_episode,
+               boundary.scene AS boundary_scene,
+               boundary.world_layer::text AS boundary_world_layer,
+               scene_end.season AS scene_end_season,
+               scene_end.episode AS scene_end_episode,
+               scene_end.scene AS scene_end_scene,
+               scene_end.world_layer::text AS scene_end_world_layer
+        FROM chunk_metadata boundary
+        JOIN chunk_metadata scene_end ON scene_end.chunk_id = %s
+        WHERE boundary.chunk_id = %s
+        FOR SHARE OF boundary, scene_end
+        """,
+        (job["scene_end_chunk_id"], job["boundary_chunk_id"]),
+    )
+    timeline = cur.fetchone()
+    if timeline is None or any(
+        (
+            timeline.get("boundary_world_layer") != job["world_layer"],
+            timeline.get("scene_end_world_layer") != job["world_layer"],
+            timeline.get("boundary_season") != job["boundary_season"],
+            timeline.get("boundary_episode") != job["boundary_episode"],
+            timeline.get("boundary_scene") != job["boundary_scene"],
+            timeline.get("scene_end_season") != job["scene_end_season"],
+            timeline.get("scene_end_episode") != job["scene_end_episode"],
+            timeline.get("scene_end_scene") != job["scene_end_scene"],
+        )
+    ):
+        raise ExperienceSourceStaleError(
+            f"Experience job {job['job_id']} boundary timeline is stale"
         )
     cur.execute(
         """
@@ -758,7 +1050,7 @@ def _complete_render(
             """,
             (
                 rendered[experience_id],
-                job["model"],
+                render_model,
                 RENDERER_VERSION,
                 generation_id,
                 experience_id,
@@ -869,8 +1161,11 @@ def drain_experience_render_jobs_sync(
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
                 """
-                SELECT id AS job_id, experience_ids, attempts, model,
-                       source_digest, world_layer::text AS world_layer, slot
+                SELECT id AS job_id, experience_ids, attempts, requested_model,
+                       source_digest, world_layer::text AS world_layer, slot,
+                       boundary_chunk_id, scene_end_chunk_id,
+                       boundary_season, boundary_episode, boundary_scene,
+                       scene_end_season, scene_end_episode, scene_end_scene
                 FROM character_experience_jobs
                 WHERE (
                     (state = 'queued' AND available_at <= clock_timestamp())
@@ -913,27 +1208,33 @@ def drain_experience_render_jobs_sync(
     failed_count = 0
     for job in jobs:
         try:
-            with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute(
-                    """
-                    SELECT experience.id, experience.character_entity_id,
-                           experience.world_event_ids, experience.basis::text AS basis,
-                           experience.location_id, experience.world_time,
-                           experience.seed_summary, experience.source_digest,
-                           character.name AS character_name, place.name AS location_name
-                    FROM character_experiences experience
-                    JOIN characters character
-                      ON character.entity_id = experience.character_entity_id
-                    LEFT JOIN places place ON place.id = experience.location_id
-                    WHERE experience.id = ANY(%s)
-                    ORDER BY experience.id
-                    """,
-                    (job["experience_ids"],),
-                )
-                rows = [dict(row) for row in cur.fetchall()]
-                names = {
-                    int(row["id"]): _known_and_allowed_names(cur, row) for row in rows
-                }
+            with conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute(
+                        """
+                        SELECT experience.id, experience.character_entity_id,
+                               experience.world_event_ids,
+                               experience.claim_id,
+                               experience.claim_awareness_id,
+                               experience.basis::text AS basis,
+                               experience.location_id, experience.world_time,
+                               experience.seed_summary, experience.source_digest,
+                               character.name AS character_name,
+                               place.name AS location_name
+                        FROM character_experiences experience
+                        JOIN characters character
+                          ON character.entity_id = experience.character_entity_id
+                        LEFT JOIN places place ON place.id = experience.location_id
+                        WHERE experience.id = ANY(%s)
+                        ORDER BY experience.id
+                        """,
+                        (job["experience_ids"],),
+                    )
+                    rows = [dict(row) for row in cur.fetchall()]
+                    names = {
+                        int(row["id"]): _known_and_allowed_names(cur, row)
+                        for row in rows
+                    }
             prompt = _render_prompt(rows)
             with usage_context(
                 seat="experience_renderer",
@@ -949,7 +1250,13 @@ def drain_experience_render_jobs_sync(
             validated = validate_render_batch(rows, batch, names_by_experience=names)
             with conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                    _complete_render(cur, job=job, rows=rows, rendered=validated)
+                    _complete_render(
+                        cur,
+                        job=job,
+                        rows=rows,
+                        rendered=validated,
+                        render_model=cfg.model,
+                    )
             rendered_count += len(rows)
         except ExperienceLeaseLostError:
             failed_count += 1

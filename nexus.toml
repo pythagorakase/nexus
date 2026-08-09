@@ -392,6 +392,7 @@ max_attempts = 3
 retry_delay_seconds = 300
 lease_duration_seconds = 300
 max_jobs_per_drain = 2
+max_seeds_per_render = 12
 
 [orrery.selection]
 # Branch selection inside a fired package: "stochastic" softmax-samples all
