@@ -2272,6 +2272,14 @@ class OrreryPromptSettings(BaseModel):
             "renders (ratify-by-omission applies only to rendered rows)."
         ),
     )
+    max_rendered_recent_rulings: int = Field(
+        default=5,
+        ge=1,
+        description=(
+            "How many recent Orrery adjudication outcomes the storyteller "
+            "prompt renders."
+        ),
+    )
     max_rendered_pressures: int = Field(
         default=5,
         ge=1,

@@ -751,6 +751,9 @@ def _load_win_history(
     if win_history_window <= 0 or anchor_chunk_id is None:
         return {}
     cutoff = anchor_chunk_id - win_history_window
+    # Habituation debits only committed wins. Ratified proposals reach
+    # orrery_resolutions and debit; voided proposals never reached the page,
+    # remain only in orrery_adjudication_log, and must never debit.
     rows = session.execute(
         text(
             """
