@@ -2572,8 +2572,8 @@ class HybridSearchConfig(BaseModel):
     text_weight_default: float = Field(..., ge=0.0, le=1.0)
     weights_by_query_type: Dict[str, QueryTypeWeights]
     temporal_boost_factors: Dict[str, float]
-    presence_boost_enabled: bool = False
-    presence_boost_factor: float = Field(0.15, ge=0.0, le=1.0)
+    presence_boost_enabled: bool
+    presence_boost_factor: float = Field(..., ge=0.0, le=1.0)
     presence_boost_factors: Dict[str, float]
     use_query_type_weights: bool
     use_query_type_temporal_factors: bool

@@ -67,6 +67,12 @@ class CachingEmbeddingManager:
 class ReadOnlyIDFDictionary(IDFDictionary):
     """Build production query weights without reading or writing a cache file."""
 
+    def __init__(self, db_url: str) -> None:
+        self.db_url = db_url
+        self.idf_dict: Dict[str, float] = {}
+        self.total_docs = 0
+        self.last_updated = 0
+
     def _load_from_cache(self) -> bool:
         return False
 

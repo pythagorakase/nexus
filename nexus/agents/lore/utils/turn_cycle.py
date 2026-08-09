@@ -254,6 +254,16 @@ class TurnCycleManager:
                 f"Invalid LORE retrieval max_deep_queries setting: {budget!r}"
             ) from exc
 
+    def _presence_boost_enabled(self) -> bool:
+        """Return the required MEMNON presence-boost feature flag."""
+
+        enabled = self.settings["Agent Settings"]["MEMNON"]["retrieval"][
+            "hybrid_search"
+        ]["presence_boost_enabled"]
+        if not isinstance(enabled, bool):
+            raise TypeError("presence_boost_enabled must be a boolean")
+        return enabled
+
     def _raw_chunk_retrieval_query(self, turn_context: TurnContext) -> Optional[str]:
         """Resolve the current/parent chunk text to use as a baseline query."""
 
@@ -498,7 +508,7 @@ class TurnCycleManager:
             logger.warning("No chunk IDs in warm slice for entity queries")
             warm_chunk_ids = []
 
-        if turn_context.target_chunk_id is not None:
+        if self._presence_boost_enabled() and turn_context.target_chunk_id is not None:
             with self.lore.memnon.Session() as session:
                 turn_context.present_character_ids = fetch_present_character_ids(
                     session,
@@ -769,7 +779,10 @@ class TurnCycleManager:
                     "k": 15,  # Get more results since we'll deduplicate
                     "use_hybrid": True,
                 }
-                if turn_context.present_character_ids:
+                if (
+                    self._presence_boost_enabled()
+                    and turn_context.present_character_ids
+                ):
                     search_kwargs["present_character_ids"] = (
                         turn_context.present_character_ids
                     )

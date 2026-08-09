@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import psycopg2
 
 from nexus.agents.memnon.utils import continuous_temporal_search
 from nexus.agents.memnon.utils import db_access
+from scripts.measure_presence_boost import ReadOnlyIDFDictionary
 
 
 class _Cursor:
@@ -36,6 +38,51 @@ class _Connection:
 
     def close(self) -> None:
         self.closed = True
+
+
+class _IDFCursor:
+    def __init__(self) -> None:
+        self.statement = ""
+
+    def __enter__(self) -> "_IDFCursor":
+        return self
+
+    def __exit__(self, *_args: Any) -> None:
+        return None
+
+    def execute(self, statement: str) -> None:
+        self.statement = statement
+
+    def fetchone(self) -> tuple[int]:
+        return (1,)
+
+    def fetchall(self) -> list[tuple[str, int]]:
+        return [("fixture", 0)]
+
+
+class _IDFConnection:
+    def __enter__(self) -> "_IDFConnection":
+        return self
+
+    def __exit__(self, *_args: Any) -> None:
+        return None
+
+    def cursor(self) -> _IDFCursor:
+        return _IDFCursor()
+
+
+def test_measurement_idf_does_not_create_home_cache(
+    monkeypatch: Any,
+    tmp_path: Path,
+) -> None:
+    """Harness IDF construction and build leave an empty HOME untouched."""
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(psycopg2, "connect", lambda *_args, **_kwargs: _IDFConnection())
+
+    dictionary = ReadOnlyIDFDictionary("postgresql://test@localhost/disposable")
+    assert dictionary.build_dictionary(force_rebuild=True) == {"fixture": 0.0}
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_time_aware_search_forwards_presence_boost(
