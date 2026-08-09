@@ -6,6 +6,7 @@ Handles the execution of individual turn cycle phases.
 
 import json
 import logging
+from dataclasses import replace
 from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional, Union
 
@@ -33,7 +34,10 @@ try:
         StorytellerResponseStandard,
         extract_narrative_text,
     )
-    from nexus.agents.orrery.ambient import shared_ambient_pacing_allows
+    from nexus.agents.orrery.ambient import (
+        arbitrate_background_texture_channel,
+        shared_ambient_pacing_allows,
+    )
     from nexus.agents.orrery.bleed import (
         load_bleed_anchor_entity_ids,
         record_bleed_offers,
@@ -68,7 +72,10 @@ except ImportError:
         StorytellerResponseStandard,
         extract_narrative_text,
     )
-    from nexus.agents.orrery.ambient import shared_ambient_pacing_allows
+    from nexus.agents.orrery.ambient import (
+        arbitrate_background_texture_channel,
+        shared_ambient_pacing_allows,
+    )
     from nexus.agents.orrery.bleed import (
         load_bleed_anchor_entity_ids,
         record_bleed_offers,
@@ -1024,6 +1031,7 @@ class TurnCycleManager:
         logger.debug("Assembling context payload...")
 
         await self.select_orrery_bleed(turn_context)
+        self._arbitrate_background_texture(turn_context)
         world_knowledge = self._build_world_knowledge(turn_context)
         recent_rulings_section = self._build_recent_orrery_rulings_section(turn_context)
 
@@ -1460,6 +1468,40 @@ class TurnCycleManager:
             "near_count": result.near_count,
             "remote_count": result.remote_count,
             "offers_recorded": 0,
+        }
+
+    @staticmethod
+    def _arbitrate_background_texture(turn_context: TurnContext) -> None:
+        """Retain at most one paced background-texture channel for this turn."""
+
+        proposal = turn_context.orrery_proposal
+        ambient_seeds = tuple(getattr(proposal, "ambient_scene_seeds", ()))
+        bleed_candidates = list(turn_context.bleed_menu)
+        anchor_chunk_id = getattr(proposal, "anchor_chunk_id", None)
+        selected_channel = arbitrate_background_texture_channel(
+            anchor_chunk_id,
+            ambient_eligible=bool(ambient_seeds),
+            bleed_eligible=bool(bleed_candidates),
+        )
+
+        if selected_channel == "bleed" and ambient_seeds:
+            if proposal is None:
+                raise RuntimeError(
+                    "Ambient arbitration found seeds without an Orrery proposal"
+                )
+            turn_context.orrery_proposal = replace(
+                proposal,
+                ambient_scene_seeds=(),
+            )
+        elif selected_channel == "ambient_scene" and bleed_candidates:
+            turn_context.bleed_menu = []
+
+        turn_context.phase_states["orrery_background_texture"] = {
+            "anchor_chunk_id": anchor_chunk_id,
+            "pacing_allowed": bool(turn_context.ambient_pacing_allowed),
+            "ambient_candidate_count": len(ambient_seeds),
+            "bleed_candidate_count": len(bleed_candidates),
+            "selected_channel": selected_channel,
         }
 
     def record_orrery_bleed_offers(self, turn_context: TurnContext) -> None:

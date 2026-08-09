@@ -2,21 +2,30 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 import pytest
 
 import nexus.agents.orrery.events as orrery_events
 from nexus.agents.lore.logon_utility import LogonUtility
+from nexus.agents.lore.utils.turn_context import TurnContext
+from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
 from nexus.agents.orrery.ambient import (
     AMBIENT_EXPOSURE_TEMPLATE_ID,
     AmbientSceneSeed,
+    shared_ambient_pacing_allows,
 )
 from nexus.agents.orrery.events import commit_orrery_tick_sync
 from nexus.agents.orrery.propagation import PropagationDrainResult
 from nexus.agents.orrery.resolver import OrreryTickProposal, resolve_dry_run
 from nexus.agents.orrery.reveal import RevealDrainResult
 from nexus.config.settings_models import OrreryAmbientSettings
+from test_orrery.test_bleed import (
+    FakeLore as BleedFakeLore,
+    FakeSession as BleedFakeSession,
+    _candidate_row as bleed_candidate_row,
+    _settings as bleed_settings,
+)
 from test_orrery.test_resolver import FakeResult, FakeSession
 
 
@@ -86,7 +95,16 @@ class AmbientFakeSession(FakeSession):
             return FakeResult(self.exposure_rows)
         if "/* orrery:ambient_possessed_claims */" in sql:
             self.executed_sql.append(sql)
-            return FakeResult(self.possessed_claim_rows)
+            assert "ca.source_chunk_id <= :anchor_chunk_id" in sql
+            assert "ca.created_at <= (SELECT created_at FROM anchor)" in sql
+            anchor_chunk_id = int(params["anchor_chunk_id"])
+            visible_rows = [
+                row
+                for row in self.possessed_claim_rows
+                if row.get("source_chunk_id") is None
+                or int(row["source_chunk_id"]) <= anchor_chunk_id
+            ]
+            return FakeResult(visible_rows)
         return super().execute(statement, params)
 
 
@@ -130,6 +148,7 @@ def _resolve(
     *,
     anchor_chunk_id: int = 100,
     settings: dict[str, int] | None = None,
+    pacing_allowed: bool = True,
 ) -> OrreryTickProposal:
     return resolve_dry_run(
         session,
@@ -137,7 +156,7 @@ def _resolve(
         anchor_chunk_id=anchor_chunk_id,
         window_chunks=30,
         ambient_settings=settings or AMBIENT_SETTINGS,
-        ambient_pacing_allowed=True,
+        ambient_pacing_allowed=pacing_allowed,
     )
 
 
@@ -244,6 +263,177 @@ def test_entitlements_include_only_each_participant_possessed_claim_ids() -> Non
     }
 
 
+def test_entitlement_hydration_is_anchor_bounded_and_replay_identical() -> None:
+    """A claim acquired after the seed anchor cannot alter replayed seed bytes."""
+
+    at_anchor = [
+        {"knower_entity_id": 1, "claim_id": 10, "source_chunk_id": 100},
+        {"knower_entity_id": 2, "claim_id": 20, "source_chunk_id": 99},
+    ]
+    before_acquisition = _resolve(
+        AmbientFakeSession(
+            relationship_rows=_relationship_rows()[:2],
+            possessed_claim_rows=at_anchor,
+        ),
+        anchor_chunk_id=100,
+    ).ambient_scene_seeds[0]
+    after_acquisition = _resolve(
+        AmbientFakeSession(
+            relationship_rows=_relationship_rows()[:2],
+            possessed_claim_rows=[
+                *at_anchor,
+                {"knower_entity_id": 1, "claim_id": 99, "source_chunk_id": 105},
+            ],
+        ),
+        anchor_chunk_id=100,
+    ).ambient_scene_seeds[0]
+
+    assert all(
+        99 not in entitlement.claim_ids
+        for entitlement in after_acquisition.entitlements
+    )
+    assert after_acquisition.model_dump_json() == before_acquisition.model_dump_json()
+
+
+async def _assemble_background_payload(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    ambient: bool,
+    bleed: bool,
+    pacing_allowed: bool = True,
+    density: float = 1.0,
+    anchor_chunk_id: int = 100,
+) -> TurnContext:
+    proposal = _resolve(
+        AmbientFakeSession(
+            relationship_rows=_relationship_rows()[:2] if ambient else [],
+        ),
+        anchor_chunk_id=anchor_chunk_id,
+        pacing_allowed=pacing_allowed,
+    )
+    settings = bleed_settings()
+    settings["orrery"]["bleed"]["density"] = density
+    manager = TurnCycleManager(
+        BleedFakeLore(
+            settings,
+            BleedFakeSession(
+                candidate_rows=[bleed_candidate_row()] if bleed else [],
+            ),
+        )
+    )
+    monkeypatch.setattr(
+        manager,
+        "_build_recent_orrery_rulings_section",
+        lambda _context: [],
+    )
+    context = TurnContext(
+        turn_id="ambient-arbitration", user_input="Continue.", start_time=0
+    )
+    context.orrery_proposal = proposal
+    context.ambient_pacing_allowed = pacing_allowed
+    context.token_counts = {"total_available": 75_000}
+    await manager.assemble_context_payload(context)
+    return context
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("anchor_chunk_id", "expected_channel"),
+    [(100, "ambient_scene"), (101, "bleed")],
+)
+async def test_both_eligible_renders_exactly_one_background_channel(
+    monkeypatch: pytest.MonkeyPatch,
+    anchor_chunk_id: int,
+    expected_channel: str,
+) -> None:
+    """Real selection and rendering expose one replay-stable arbitration winner."""
+
+    context = await _assemble_background_payload(
+        monkeypatch,
+        ambient=True,
+        bleed=True,
+        anchor_chunk_id=anchor_chunk_id,
+    )
+    replay = await _assemble_background_payload(
+        monkeypatch,
+        ambient=True,
+        bleed=True,
+        anchor_chunk_id=anchor_chunk_id,
+    )
+
+    has_ambient = "orrery_ambient_scene_seeds" in context.context_payload
+    has_bleed = "orrery_bleed_menu" in context.context_payload
+    writer_prompt = LogonUtility({})._format_context_prompt(context.context_payload)
+    assert has_ambient ^ has_bleed
+    assert context.phase_states["orrery_background_texture"]["selected_channel"] == (
+        replay.phase_states["orrery_background_texture"]["selected_channel"]
+    )
+    assert (
+        context.phase_states["orrery_background_texture"]["selected_channel"]
+        == expected_channel
+    )
+    assert context.orrery_proposal is not None
+    assert bool(context.orrery_proposal.ambient_scene_seeds) is (
+        expected_channel == "ambient_scene"
+    )
+    assert bool(context.bleed_menu) is (expected_channel == "bleed")
+    assert set(context.context_payload).intersection(
+        {"orrery_ambient_scene_seeds", "orrery_bleed_menu"}
+    ) == set(replay.context_payload).intersection(
+        {"orrery_ambient_scene_seeds", "orrery_bleed_menu"}
+    )
+    assert ("=== ORRERY AMBIENT SCENE SEEDS ===" in writer_prompt) is has_ambient
+    assert ("=== ORRERY AMBIENT PERIPHERALS ===" in writer_prompt) is has_bleed
+
+
+@pytest.mark.parametrize(
+    ("ambient", "bleed", "expected_channel"),
+    [(True, False, "ambient_scene"), (False, True, "bleed")],
+)
+@pytest.mark.asyncio
+async def test_background_texture_single_eligible_channel_is_unaffected(
+    monkeypatch: pytest.MonkeyPatch,
+    ambient: bool,
+    bleed: bool,
+    expected_channel: str,
+) -> None:
+    """Real selection and rendering preserve the sole eligible channel."""
+
+    context = await _assemble_background_payload(
+        monkeypatch,
+        ambient=ambient,
+        bleed=bleed,
+    )
+
+    assert context.phase_states["orrery_background_texture"]["selected_channel"] == (
+        expected_channel
+    )
+    assert ("orrery_ambient_scene_seeds" in context.context_payload) is ambient
+    assert ("orrery_bleed_menu" in context.context_payload) is bleed
+
+
+@pytest.mark.asyncio
+async def test_failed_shared_density_draw_renders_neither_background_channel(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The production payload path renders neither channel after a failed draw."""
+
+    assert shared_ambient_pacing_allows(100, 0.0) is False
+    context = await _assemble_background_payload(
+        monkeypatch,
+        ambient=True,
+        bleed=True,
+        pacing_allowed=False,
+        density=0.0,
+    )
+
+    writer_prompt = LogonUtility({})._format_context_prompt(context.context_payload)
+    assert "orrery_ambient_scene_seeds" not in context.context_payload
+    assert "orrery_bleed_menu" not in context.context_payload
+    assert "=== ORRERY AMBIENT SCENE SEEDS ===" not in writer_prompt
+    assert "=== ORRERY AMBIENT PERIPHERALS ===" not in writer_prompt
+
+
 def test_writer_render_is_compact_optional_and_absent_from_gaia_context() -> None:
     """Ambient seeds render one line for the writer and never enter pass two."""
 
@@ -281,7 +471,7 @@ class _ExposureCursor:
     def __enter__(self) -> "_ExposureCursor":
         return self
 
-    def __exit__(self, _exc_type: Any, _exc: Any, _tb: Any) -> bool:
+    def __exit__(self, _exc_type: Any, _exc: Any, _tb: Any) -> Literal[False]:
         return False
 
     def execute(self, sql: str, params: Any = None) -> None:

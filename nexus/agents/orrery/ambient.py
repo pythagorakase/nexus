@@ -15,6 +15,7 @@ from nexus.config.settings_models import OrreryAmbientSettings
 
 
 AMBIENT_EXPOSURE_TEMPLATE_ID = "ambient_scene_seed"
+BackgroundTextureChannel = Literal["ambient_scene", "bleed"]
 
 
 class AmbientParticipant(BaseModel):
@@ -124,6 +125,28 @@ def shared_ambient_pacing_allows(anchor_chunk_id: int, density: float) -> bool:
     return rng.random() < density
 
 
+def arbitrate_background_texture_channel(
+    anchor_chunk_id: Optional[int],
+    *,
+    ambient_eligible: bool,
+    bleed_eligible: bool,
+) -> Optional[BackgroundTextureChannel]:
+    """Choose the sole offered background-texture channel for one anchor."""
+
+    if not ambient_eligible and not bleed_eligible:
+        return None
+    if ambient_eligible and not bleed_eligible:
+        return "ambient_scene"
+    if bleed_eligible and not ambient_eligible:
+        return "bleed"
+    if anchor_chunk_id is None:
+        raise ValueError(
+            "Background-texture channel arbitration requires an anchor chunk"
+        )
+    rng = seeded_stochastic_rng("bleed", anchor_chunk_id, "channel_arbitration")
+    return ("ambient_scene", "bleed")[rng.randrange(2)]
+
+
 def build_ambient_scene_seeds(
     session: Any,
     *,
@@ -219,7 +242,11 @@ def build_ambient_scene_seeds(
     participant_ids = sorted(
         {entity_id for item in selected for entity_id in item.participant_ids}
     )
-    possessed_claims = _load_possessed_claim_ids(session, participant_ids)
+    possessed_claims = _load_possessed_claim_ids(
+        session,
+        participant_ids,
+        anchor_chunk_id=anchor_chunk_id,
+    )
     return tuple(
         _seed_from_candidate(
             candidate,
@@ -464,7 +491,10 @@ def _load_suppressed_dedup_keys(
 
 
 def _load_possessed_claim_ids(
-    session: Any, participant_ids: Sequence[int]
+    session: Any,
+    participant_ids: Sequence[int],
+    *,
+    anchor_chunk_id: int,
 ) -> dict[int, Tuple[int, ...]]:
     if not participant_ids:
         return {}
@@ -472,13 +502,28 @@ def _load_possessed_claim_ids(
         text(
             """
             /* orrery:ambient_possessed_claims */
-            SELECT knower_entity_id, claim_id
-            FROM claim_awareness
-            WHERE knower_entity_id = ANY(:participant_ids)
-            ORDER BY knower_entity_id, claim_id
+            WITH anchor AS (
+                SELECT created_at
+                FROM narrative_chunks
+                WHERE id = :anchor_chunk_id
+            )
+            SELECT ca.knower_entity_id, ca.claim_id
+            FROM claim_awareness ca
+            WHERE ca.knower_entity_id = ANY(:participant_ids)
+              -- Mirror replay.py's claim-awareness readmission visibility.
+              AND (
+                  (ca.source_chunk_id IS NOT NULL
+                   AND ca.source_chunk_id <= :anchor_chunk_id)
+                  OR (ca.source_chunk_id IS NULL
+                      AND ca.created_at <= (SELECT created_at FROM anchor))
+              )
+            ORDER BY ca.knower_entity_id, ca.claim_id
             """
         ),
-        {"participant_ids": list(participant_ids)},
+        {
+            "participant_ids": list(participant_ids),
+            "anchor_chunk_id": anchor_chunk_id,
+        },
     ).mappings()
     claims: dict[int, list[int]] = {}
     for row in rows:
