@@ -549,7 +549,6 @@ _SUBSTANTIVE_UPDATE_PREDICATES: Mapping[str, Mapping[str, Callable[[Any], bool]]
         "activity": lambda update: bool(update.activity),
         "location": lambda update: update.location is not None,
         "emotional_state": lambda update: bool(update.emotional_state),
-        "observations": lambda update: bool(update.observations),
         "tags_clear": lambda update: bool(update.tags_clear),
     },
     "place": {

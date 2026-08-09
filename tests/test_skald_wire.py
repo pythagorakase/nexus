@@ -31,7 +31,6 @@ from nexus.agents.logon.apex_schema import (
     FactionStanceChange,
     FactionStateUpdate,
     LocationStateUpdate,
-    NamedObservation,
     NewEntityPairTagHint,
     OrreryAdjudication,
     OrreryReplacementStateDelta,
@@ -170,7 +169,6 @@ RICH_WIRE_PAYLOAD: dict[str, Any] = {
                 "activity": "tracking the drowned gaia",
                 "location": 41,
                 "emotional_state": "alert but composed",
-                "observations": [{"key": "clue", "value": "heard the drowned bell"}],
                 "tags_add": ["perceptive", "alert"],
                 "tags_clear": ["resting"],
             }
@@ -615,12 +613,6 @@ def _rich_canonical_expectation(wire: SkaldTurnWire) -> StorytellerResponseExten
                     current_location=41,
                     current_activity="tracking the drowned gaia",
                     emotional_state="alert but composed",
-                    extra_observations=[
-                        NamedObservation(
-                            key="clue",
-                            value="heard the drowned bell",
-                        )
-                    ],
                     orrery_tags=OrreryTagBestowal(
                         applied_tags=["perceptive", "alert"],
                         tags_to_clear=["resting"],
@@ -1423,6 +1415,47 @@ def test_openai_strict_wire_keeps_required_nullable_spelling() -> None:
         "factions",
         "relationships",
     ]
+
+
+def test_retired_observations_arm_is_absent_and_rejected() -> None:
+    """The dropped character-observations arm cannot re-enter either schema."""
+
+    schema = skald_wire_lenient_schema()
+    assert "observations" not in schema["$defs"]["CharacterUpdateDelta"]["properties"]
+    assert "NamedObservation" not in schema["$defs"]
+    assert (
+        "extra_observations"
+        not in CharacterStateUpdate.model_json_schema()["properties"]
+    )
+
+    with pytest.raises(ValidationError, match="observations"):
+        SkaldTurnWire.model_validate(
+            {
+                **SPARSE_WIRE_PAYLOAD,
+                "updates": _updates_payload(
+                    characters=[
+                        {
+                            "name": "Brena Tideloft",
+                            "activity": "keeping watch",
+                            "observations": [
+                                {"key": "clue", "value": "heard the drowned bell"}
+                            ],
+                        }
+                    ]
+                ),
+            }
+        )
+
+    with pytest.raises(ValidationError, match="extra_observations"):
+        CharacterStateUpdate.model_validate(
+            {
+                "character_name": "Brena Tideloft",
+                "current_activity": "keeping watch",
+                "extra_observations": [
+                    {"key": "clue", "value": "heard the drowned bell"}
+                ],
+            }
+        )
 
 
 def _compact_schema_json(schema: dict[str, Any]) -> str:

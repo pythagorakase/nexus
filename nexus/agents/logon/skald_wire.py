@@ -28,7 +28,6 @@ from nexus.agents.logon.apex_schema import (
     FactionStanceChange,
     FactionStateUpdate,
     LocationStateUpdate,
-    NamedObservation,
     NewEntityDeclaration,
     Operations,
     OrreryAdjudication,
@@ -304,10 +303,6 @@ class CharacterUpdateDelta(BaseModel):
         default=None,
         description="Current emotional state.",
     )
-    observations: Optional[List[NamedObservation]] = Field(
-        default=None,
-        description="New named observations.",
-    )
     tags_add: Optional[List[str]] = Field(
         default=None,
         description="Registered tags to add.",
@@ -326,7 +321,6 @@ class CharacterUpdateDelta(BaseModel):
                 self.activity,
                 self.location is not None,
                 self.emotional_state,
-                self.observations,
                 self.tags_add,
                 self.tags_clear,
             )
@@ -806,7 +800,6 @@ def _hydrate_updates(updates: Optional[UpdatesBlock]) -> StateUpdates:
                 current_location=character_update.location,
                 current_activity=character_update.activity,
                 emotional_state=character_update.emotional_state,
-                extra_observations=character_update.observations or [],
                 orrery_tags=_hydrate_tags(
                     character_update.tags_add,
                     character_update.tags_clear,
