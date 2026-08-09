@@ -1,11 +1,12 @@
 """Transactional lifecycle API for durable interaction threads.
 
-Trust and composition boundary
-------------------------------
-The sole trusted-handler capability is minted during service construction and
-delivered to the composition root through a constructor callback. The service
-has no post-construction capability factory. Pydantic wire or model output
-cannot represent the service-local nonce, create a grant, or satisfy one.
+Trust boundary: the handler capability is a composition discipline, not an
+in-process security seal. Any Python code with database credentials can construct
+a service and mint grants; that caller class is trusted by definition. The
+enforced invariant is that no structured-output, wire, or model-derived value can
+reach grant creation: grant APIs accept only trusted-handler calls made by
+application composition code, and no adapter translates model output into
+authorization.
 
 The composition root must also provide an expected-identity resolver and an
 executor vocabulary registry. The resolver receives only the stored expected
@@ -88,6 +89,10 @@ class CommandIdConflict(InteractionError):
     """Raised when a caller reuses a command UUID with different content."""
 
 
+class _CreationCommandAlreadyRecorded(RuntimeError):
+    """Roll back a losing creation attempt before reading the winning outcome."""
+
+
 class UnknownExecutorTransition(InteractionAuthorizationDenied):
     """Typed denial for a transition outside its namespace vocabulary."""
 
@@ -121,12 +126,11 @@ class NamedRecoveryCleanupHook:
 
 SessionFactory = Callable[[], Session]
 ExpectedIdentityResolver = Callable[[TimelineAnchor], TimelineAnchor]
-EvaluationTimeProvider = Callable[[Session], datetime]
 CapabilityReceiver = Callable[[TrustedHandler], None]
 
 
 def _database_time(session: Session) -> datetime:
-    value = session.execute(text("SELECT CURRENT_TIMESTAMP")).scalar_one()
+    value = session.execute(text("SELECT clock_timestamp()")).scalar_one()
     if not isinstance(value, datetime) or value.tzinfo is None:
         raise RuntimeError("database returned an invalid interaction evaluation time")
     return value
@@ -153,7 +157,6 @@ class InteractionService:
         capability_receiver: CapabilityReceiver,
         expected_identity_resolver: ExpectedIdentityResolver,
         executor_registry: Mapping[str, Sequence[str]],
-        evaluation_time_provider: EvaluationTimeProvider = _database_time,
     ) -> None:
         identity = trusted_handler_identity.strip()
         if not identity:
@@ -169,7 +172,6 @@ class InteractionService:
             for namespace, transitions in self._executor_registry.items()
         ):
             raise ValueError("executor registry requires non-empty vocabularies")
-        self._evaluation_time_provider = evaluation_time_provider
         self._handler_nonce = object()
         capability_receiver(TrustedHandler(identity, self._handler_nonce))
 
@@ -185,91 +187,104 @@ class InteractionService:
         fingerprint = self._fingerprint(
             "propose", {"proposal": proposal.model_dump(mode="json")}
         )
-        with self._session_factory() as session, session.begin():
-            recorded = self._recorded_command(
-                session, command_id=command_id, fingerprint=fingerprint
-            )
-            if recorded is not None:
-                return InteractionSnapshot.model_validate(
-                    recorded["outcome"]["snapshot"]
-                )
-            interaction_id = uuid4()
-            now = self._evaluation_time(session)
-            session.execute(
-                text(
-                    """
-                    INSERT INTO interactions (
-                        id, kind, executor_namespace, status, policy,
-                        continuation_id, revision, anchor_chunk_id, timeline_id,
-                        created_at, updated_at
-                    ) VALUES (
-                        :id, :kind, :executor_namespace, 'proposed',
-                        CAST(:policy AS JSONB), :continuation_id, 1,
-                        :anchor_chunk_id, :timeline_id, :now, :now
-                    )
-                    """
-                ),
-                {
-                    "id": interaction_id,
-                    "kind": proposal.kind,
-                    "executor_namespace": proposal.executor_namespace,
-                    "policy": proposal.policy.model_dump_json(),
-                    "continuation_id": proposal.continuation_id,
-                    "anchor_chunk_id": proposal.anchor.anchor_chunk_id,
-                    "timeline_id": proposal.anchor.timeline_id,
-                    "now": now,
-                },
-            )
-            memberships: list[dict[str, Any]] = []
-            for participant_id in proposal.participant_entity_ids:
-                membership_id = int(
+        with self._session_factory() as session:
+            try:
+                with session.begin():
+                    interaction_id = uuid4()
+                    now = self._evaluation_time(session)
                     session.execute(
                         text(
                             """
-                            INSERT INTO interaction_participants (
-                                interaction_id, participant_entity_id,
-                                joined_at, joined_revision
-                            ) VALUES (:interaction_id, :participant_id, :now, 1)
-                            RETURNING id
+                            INSERT INTO interactions (
+                                id, kind, executor_namespace, status, policy,
+                                continuation_id, revision, anchor_chunk_id,
+                                timeline_id, created_at, updated_at
+                            ) VALUES (
+                                :id, :kind, :executor_namespace, 'proposed',
+                                CAST(:policy AS JSONB), :continuation_id, 1,
+                                :anchor_chunk_id, :timeline_id, :now, :now
+                            )
                             """
                         ),
                         {
-                            "interaction_id": interaction_id,
-                            "participant_id": participant_id,
+                            "id": interaction_id,
+                            "kind": proposal.kind,
+                            "executor_namespace": proposal.executor_namespace,
+                            "policy": proposal.policy.model_dump_json(),
+                            "continuation_id": proposal.continuation_id,
+                            "anchor_chunk_id": proposal.anchor.anchor_chunk_id,
+                            "timeline_id": proposal.anchor.timeline_id,
                             "now": now,
                         },
-                    ).scalar_one()
-                )
-                memberships.append(
-                    {
-                        "membership_id": membership_id,
-                        "participant_entity_id": participant_id,
-                        "joined_at": now.isoformat(),
-                        "joined_revision": 1,
-                    }
-                )
-            snapshot = self._snapshot(session, interaction_id)
-            self._append_event(
-                session,
-                interaction_id=interaction_id,
-                event_type=InteractionEventType.PROPOSED,
-                revision=1,
-                occurred_at=now,
-                actor_handler=handler.identity,
-                command_id=command_id,
-                command_step="command",
-                fingerprint=fingerprint,
-                payload={
-                    "kind": proposal.kind,
-                    "executor_namespace": proposal.executor_namespace,
-                    "policy": proposal.policy.model_dump(mode="json"),
-                    "continuation_id": str(proposal.continuation_id),
-                    "anchor": proposal.anchor.model_dump(mode="json"),
-                    "memberships": memberships,
-                },
-                outcome={"snapshot": snapshot.model_dump(mode="json")},
-            )
-            return snapshot
+                    )
+                    memberships: list[dict[str, Any]] = []
+                    for participant_id in proposal.participant_entity_ids:
+                        membership_id = int(
+                            session.execute(
+                                text(
+                                    """
+                                    INSERT INTO interaction_participants (
+                                        interaction_id, participant_entity_id,
+                                        joined_at, joined_revision
+                                    ) VALUES (
+                                        :interaction_id, :participant_id, :now, 1
+                                    )
+                                    RETURNING id
+                                    """
+                                ),
+                                {
+                                    "interaction_id": interaction_id,
+                                    "participant_id": participant_id,
+                                    "now": now,
+                                },
+                            ).scalar_one()
+                        )
+                        memberships.append(
+                            {
+                                "membership_id": membership_id,
+                                "participant_entity_id": participant_id,
+                                "joined_at": now.isoformat(),
+                                "joined_revision": 1,
+                            }
+                        )
+                    snapshot = self._snapshot(session, interaction_id)
+                    inserted = self._append_event(
+                        session,
+                        interaction_id=interaction_id,
+                        event_type=InteractionEventType.PROPOSED,
+                        revision=1,
+                        occurred_at=now,
+                        actor_handler=handler.identity,
+                        command_id=command_id,
+                        command_step="command",
+                        fingerprint=fingerprint,
+                        payload={
+                            "kind": proposal.kind,
+                            "executor_namespace": proposal.executor_namespace,
+                            "policy": proposal.policy.model_dump(mode="json"),
+                            "continuation_id": str(proposal.continuation_id),
+                            "anchor": proposal.anchor.model_dump(mode="json"),
+                            "memberships": memberships,
+                        },
+                        outcome={"snapshot": snapshot.model_dump(mode="json")},
+                        on_conflict_do_nothing=True,
+                    )
+                    if not inserted:
+                        raise _CreationCommandAlreadyRecorded
+                    return snapshot
+            except _CreationCommandAlreadyRecorded:
+                session.rollback()
+                with session.begin():
+                    recorded = self._recorded_command(
+                        session, command_id=command_id, fingerprint=fingerprint
+                    )
+                    if recorded is None:
+                        raise RuntimeError(
+                            "conflicting proposal command has no recorded outcome"
+                        )
+                    return InteractionSnapshot.model_validate(
+                        recorded["outcome"]["snapshot"]
+                    )
 
     def grant(
         self,
@@ -494,9 +509,11 @@ class InteractionService:
         caller: TrustedHandler,
         *,
         interaction_id: UUID,
+        lease_until: datetime,
         command_id: UUID,
     ) -> InteractionSnapshot:
         """Start after exact-envelope authorization and locked freshness checks."""
+        self._require_aware(lease_until, "interaction lease")
         return self._execute_status_change(
             caller,
             interaction_id=interaction_id,
@@ -505,8 +522,9 @@ class InteractionService:
             envelope=self._lifecycle_envelope("start"),
             event_type=InteractionEventType.STARTED,
             target_status=InteractionStatus.IN_PROGRESS,
-            payload={},
+            payload={"lease_until": lease_until.isoformat()},
             terminal=False,
+            lease_until=lease_until,
         )
 
     def transition(
@@ -532,6 +550,7 @@ class InteractionService:
                 "payload": transition.payload,
             },
             terminal=False,
+            lease_until=None,
         )
 
     def complete(
@@ -552,6 +571,7 @@ class InteractionService:
             target_status=InteractionStatus.COMPLETED,
             payload={},
             terminal=True,
+            lease_until=None,
         )
 
     def stop(
@@ -852,6 +872,7 @@ class InteractionService:
             raise ValueError("recovery cleanup hook names must be unique")
         fingerprint = self._fingerprint("recover", {"hook_names": hook_names})
         recovered: list[UUID] = []
+        claimed_candidates: list[UUID] = []
         with self._session_factory() as session, session.begin():
             command_rows = self._validate_command_reuse(
                 session, command_id, fingerprint
@@ -872,7 +893,6 @@ class InteractionService:
                     {"command_id": command_id},
                 ).scalars()
             )
-            now = self._evaluation_time(session)
             if command_rows:
                 candidates = tuple(
                     dict.fromkeys(row["interaction_id"] for row in command_rows)
@@ -886,12 +906,12 @@ class InteractionService:
                             FROM interactions
                             WHERE status = 'in_progress'
                               AND lease_until IS NOT NULL
-                              AND lease_until <= :now
+                              AND lease_until <= clock_timestamp()
+                              AND recovery_command_id IS NULL
                             ORDER BY lease_until, id
                             FOR UPDATE SKIP LOCKED
                             """
-                        ),
-                        {"now": now},
+                        )
                     ).scalars()
                 )
             for interaction_id in candidates:
@@ -913,18 +933,38 @@ class InteractionService:
                     },
                 ).scalar_one_or_none()
                 if claimed is not None:
+                    owner = session.execute(
+                        text(
+                            """
+                            SELECT recovery_command_id
+                            FROM interactions
+                            WHERE id = :interaction_id
+                            """
+                        ),
+                        {"interaction_id": interaction_id},
+                    ).scalar_one_or_none()
+                    if owner == command_id:
+                        claimed_candidates.append(interaction_id)
                     continue
-                session.execute(
+                claimed_interaction_id = session.execute(
                     text(
                         """
                         UPDATE interactions
                         SET recovery_command_id = :command_id
                         WHERE id = :interaction_id
+                          AND status = 'in_progress'
+                          AND lease_until IS NOT NULL
+                          AND lease_until <= clock_timestamp()
+                          AND recovery_command_id IS NULL
+                        RETURNING id
                         """
                     ),
                     {"command_id": command_id, "interaction_id": interaction_id},
-                )
+                ).scalar_one_or_none()
+                if claimed_interaction_id is None:
+                    continue
                 interaction = self._locked_row(session, interaction_id)
+                now = self._evaluation_time(session)
                 self._append_event(
                     session,
                     interaction_id=interaction_id,
@@ -938,7 +978,8 @@ class InteractionService:
                     payload={"lease_until": interaction["lease_until"].isoformat()},
                     outcome={"claimed": True},
                 )
-        for interaction_id in candidates:
+                claimed_candidates.append(interaction_id)
+        for interaction_id in claimed_candidates:
             if interaction_id in recovered:
                 continue
             if not self._run_cleanup_hooks(
@@ -956,6 +997,7 @@ class InteractionService:
                     interaction["status"] != InteractionStatus.IN_PROGRESS.value
                     or interaction["lease_until"] is None
                     or interaction["lease_until"] > now
+                    or interaction["recovery_command_id"] != command_id
                 ):
                     continue
                 recorded = self._recorded_command(
@@ -1111,6 +1153,7 @@ class InteractionService:
                 lease_until = datetime.fromisoformat(payload["lease_until"])
             elif event.event_type is InteractionEventType.STARTED:
                 status = InteractionStatus.IN_PROGRESS
+                lease_until = datetime.fromisoformat(payload["lease_until"])
             elif event.event_type is InteractionEventType.TRANSITIONED:
                 status = InteractionStatus.IN_PROGRESS
                 transitions.append(str(payload["transition_type"]))
@@ -1160,6 +1203,7 @@ class InteractionService:
         target_status: InteractionStatus,
         payload: dict[str, Any],
         terminal: bool,
+        lease_until: datetime | None,
     ) -> InteractionSnapshot:
         handler = self._require_handler(caller)
         fingerprint = self._fingerprint(
@@ -1191,6 +1235,8 @@ class InteractionService:
                 raise InteractionAuthorizationDenied(decision)
             self._require_fresh_anchor_under_lock(session, interaction)
             now = self._evaluation_time(session)
+            if lease_until is not None and lease_until <= now:
+                raise ValueError("interaction lease must expire in the future")
             revision = int(interaction["revision"]) + 1
             closed = (
                 self._close_memberships(session, interaction_id, now, revision)
@@ -1204,6 +1250,7 @@ class InteractionService:
                 revision=revision,
                 updated_at=now,
                 clear_lease=terminal,
+                lease_until=lease_until,
             )
             snapshot = self._snapshot(session, interaction_id)
             event_payload = dict(payload)
@@ -1339,6 +1386,7 @@ class InteractionService:
                     interaction["status"] != InteractionStatus.IN_PROGRESS.value
                     or interaction["lease_until"] is None
                     or interaction["lease_until"] > now
+                    or interaction["recovery_command_id"] != command_id
                 ):
                     return False
                 completed = session.execute(
@@ -1591,7 +1639,7 @@ class InteractionService:
             )
 
     def _evaluation_time(self, session: Session) -> datetime:
-        value = self._evaluation_time_provider(session)
+        value = _database_time(session)
         self._require_aware(value, "interaction evaluation time")
         return value.astimezone(timezone.utc)
 
@@ -1635,6 +1683,7 @@ class InteractionService:
         revision: int,
         updated_at: datetime,
         clear_lease: bool,
+        lease_until: datetime | None = None,
     ) -> None:
         session.execute(
             text(
@@ -1642,7 +1691,9 @@ class InteractionService:
                 UPDATE interactions
                 SET status = :status, revision = :revision,
                     lease_until = CASE
-                        WHEN :clear_lease THEN NULL ELSE lease_until
+                        WHEN :clear_lease THEN NULL
+                        WHEN :lease_until IS NOT NULL THEN :lease_until
+                        ELSE lease_until
                     END,
                     recovery_command_id = CASE
                         WHEN :clear_lease THEN NULL ELSE recovery_command_id
@@ -1656,6 +1707,7 @@ class InteractionService:
                 "revision": revision,
                 "updated_at": updated_at,
                 "clear_lease": clear_lease,
+                "lease_until": lease_until,
                 "interaction_id": interaction_id,
             },
         )
@@ -1708,10 +1760,12 @@ class InteractionService:
         outcome: dict[str, Any],
         actor_participant_entity_id: int | None = None,
         actor_handler: str | None = None,
-    ) -> None:
-        session.execute(
+        on_conflict_do_nothing: bool = False,
+    ) -> bool:
+        conflict_clause = "ON CONFLICT DO NOTHING" if on_conflict_do_nothing else ""
+        inserted = session.execute(
             text(
-                """
+                f"""
                 INSERT INTO interaction_events (
                     interaction_id, event_type, interaction_revision,
                     actor_participant_entity_id, actor_handler,
@@ -1723,6 +1777,8 @@ class InteractionService:
                     :command_id, :command_step, :fingerprint,
                     CAST(:payload AS JSONB), CAST(:outcome AS JSONB), :occurred_at
                 )
+                {conflict_clause}
+                RETURNING id
                 """
             ),
             {
@@ -1738,7 +1794,8 @@ class InteractionService:
                 "outcome": json.dumps(outcome),
                 "occurred_at": occurred_at,
             },
-        )
+        ).scalar_one_or_none()
+        return inserted is not None
 
     @staticmethod
     def _membership_states(

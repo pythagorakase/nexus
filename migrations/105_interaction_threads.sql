@@ -18,7 +18,8 @@ CREATE TABLE IF NOT EXISTS interactions (
     lease_until TIMESTAMPTZ,
     recovery_command_id UUID,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CHECK (status <> 'in_progress' OR lease_until IS NOT NULL)
 );
 
 COMMENT ON TABLE interactions IS
@@ -42,7 +43,7 @@ COMMENT ON COLUMN interactions.anchor_chunk_id IS
 COMMENT ON COLUMN interactions.timeline_id IS
     'Expected canonical world-layer timeline identity rechecked under row lock at execution.';
 COMMENT ON COLUMN interactions.lease_until IS
-    'Explicit handler lease deadline; only expired non-NULL leases are recovery candidates.';
+    'Required handler lease deadline while in progress; start stamps it and only expired leases are recovery candidates.';
 COMMENT ON COLUMN interactions.recovery_command_id IS
     'Recovery command currently claiming an expired interaction while cleanup hooks complete.';
 COMMENT ON COLUMN interactions.created_at IS
@@ -209,6 +210,9 @@ COMMENT ON COLUMN interaction_events.occurred_at IS
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_interaction_events_command_step
     ON interaction_events (interaction_id, command_id, command_step);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_interaction_events_creation_command
+    ON interaction_events (command_id)
+    WHERE event_type = 'proposed' AND command_step = 'command';
 CREATE INDEX IF NOT EXISTS idx_interaction_events_command_lookup
     ON interaction_events (command_id, command_step, id);
 CREATE INDEX IF NOT EXISTS idx_interaction_events_replay
