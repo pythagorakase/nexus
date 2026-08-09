@@ -380,9 +380,9 @@ class LogonUtility:
         )
         self._provider_type_name: Optional[str] = None
         self._validation_dbname: Optional[str] = None
-        # Keyed by schema type for single-pass entries and by
-        # (schema type, wire class) tuples for two-pass entries, because the
-        # pinned gaia seat can run a different wire class than the writer.
+        # Keyed by schema type for single-pass entries and by schema, wire, and
+        # slot-qualified cache affinity for two-pass entries, because gaia can
+        # run a different wire and cache affinity must never cross save slots.
         self._schema_format_cache: Dict[Any, Dict[str, Any]] = {}
         # Current prompt proposal bindings are read by the generation-time
         # replacement-delta validator. They are replaced atomically per turn.
@@ -1831,7 +1831,7 @@ class LogonUtility:
         *,
         wire_type: Optional[Literal["openai", "anthropic", "local"]] = None,
     ) -> Dict[str, Any]:
-        """Return the frozen transport schema arguments for one pass.
+        """Return the frozen transport request arguments for one pass.
 
         ``wire_type`` is the wire class of the provider EXECUTING the pass —
         the pinned gaia seat may run a different class than the writer.
@@ -1851,16 +1851,24 @@ class LogonUtility:
             raise RuntimeError(
                 "Two-pass schema formatting requires an active provider wire class"
             )
+        prompt_cache_key: Optional[str] = None
+        if effective_wire == "openai":
+            from nexus.api.slot_utils import require_slot_dbname
+
+            slot_dbname = require_slot_dbname(dbname=self.dbname)
+            usage_seat = "skald_writer" if is_writer else "gaia"
+            prompt_cache_key = f"nexus:{slot_dbname}:{usage_seat}"
         cache_key: tuple[Any, ...]
         if is_gaia:
             cache_key = (
                 SkaldGaiaWire,
                 effective_wire,
+                prompt_cache_key,
                 gaia_wire_registry_digest(gaia_schema_model),
                 schema_model,
             )
         else:
-            cache_key = (SkaldWriterWire, effective_wire)
+            cache_key = (SkaldWriterWire, effective_wire, prompt_cache_key)
         if cache_key in self._schema_format_cache:
             return self._schema_format_cache[cache_key]
 
@@ -1876,7 +1884,8 @@ class LogonUtility:
                     skald_writer_strict_text_format()
                     if is_writer
                     else skald_gaia_strict_text_format(gaia_schema_model)
-                )
+                ),
+                "prompt_cache_key": prompt_cache_key,
             }
         elif effective_wire == "local":
             lenient_schema = (

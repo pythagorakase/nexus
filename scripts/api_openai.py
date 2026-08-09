@@ -436,6 +436,7 @@ class OpenAIProvider(LLMProvider):
         schema_model: Type,
         *,
         text_format: Optional[Dict[str, Any]] = None,
+        prompt_cache_key: Optional[str] = None,
     ) -> Tuple[Any, LLMResponse]:
         """
         Get a structured completion using OpenAI native strict schema output.
@@ -443,6 +444,7 @@ class OpenAIProvider(LLMProvider):
         Args:
             prompt: The input prompt
             schema_model: A Pydantic BaseModel class defining the output schema
+            prompt_cache_key: Optional stable routing key for OpenAI prompt caching
 
         Returns:
             A tuple of (parsed_object, LLMResponse)
@@ -472,7 +474,10 @@ class OpenAIProvider(LLMProvider):
             "get_structured_completion_async",
         )
         return self._get_structured_completion_native_sync(
-            prompt, schema_model, text_format=text_format
+            prompt,
+            schema_model,
+            text_format=text_format,
+            prompt_cache_key=prompt_cache_key,
         )
 
     async def get_structured_completion_async(
@@ -481,10 +486,14 @@ class OpenAIProvider(LLMProvider):
         schema_model: Type,
         *,
         text_format: Optional[Dict[str, Any]] = None,
+        prompt_cache_key: Optional[str] = None,
     ) -> Tuple[Any, LLMResponse]:
         """Get a structured completion without blocking an existing event loop."""
         return await self._get_structured_completion_native_async(
-            prompt, schema_model, text_format=text_format
+            prompt,
+            schema_model,
+            text_format=text_format,
+            prompt_cache_key=prompt_cache_key,
         )
 
     def _raise_if_running_loop(self, method_name: str, async_method_name: str) -> None:
@@ -539,6 +548,7 @@ class OpenAIProvider(LLMProvider):
         schema_model: Type,
         *,
         text_format: Optional[Dict[str, Any]] = None,
+        prompt_cache_key: Optional[str] = None,
     ) -> Tuple[Any, LLMResponse]:
         """Run a native strict-schema Responses request with bounded repair."""
 
@@ -558,7 +568,10 @@ class OpenAIProvider(LLMProvider):
                 try:
                     response = self.client.responses.parse(
                         **self._build_native_structured_request_params(
-                            active_prompt, schema_model, text_format=text_format
+                            active_prompt,
+                            schema_model,
+                            text_format=text_format,
+                            prompt_cache_key=prompt_cache_key,
                         )
                     )
                 except Exception as exc:
@@ -627,6 +640,7 @@ class OpenAIProvider(LLMProvider):
         schema_model: Type,
         *,
         text_format: Optional[Dict[str, Any]] = None,
+        prompt_cache_key: Optional[str] = None,
     ) -> Tuple[Any, LLMResponse]:
         """Dispatch structured output without blocking an existing event loop."""
 
@@ -639,6 +653,7 @@ class OpenAIProvider(LLMProvider):
             prompt,
             schema_model,
             text_format=text_format,
+            prompt_cache_key=prompt_cache_key,
         )
 
     def _should_fallback_to_chat_completions(self, exc: BaseException) -> bool:
@@ -754,6 +769,7 @@ class OpenAIProvider(LLMProvider):
         schema_model: Type,
         *,
         text_format: Optional[Dict[str, Any]] = None,
+        prompt_cache_key: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Build OpenAI Responses params for native strict structured output."""
 
@@ -774,6 +790,8 @@ class OpenAIProvider(LLMProvider):
             request_params["temperature"] = self.temperature
         if self.reasoning_effort:
             request_params["reasoning"] = {"effort": self.reasoning_effort}
+        if prompt_cache_key:
+            request_params["prompt_cache_key"] = prompt_cache_key
         return request_params
 
     def _build_chat_structured_request_params(
