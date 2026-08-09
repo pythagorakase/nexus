@@ -883,10 +883,14 @@ def hydrate_skald_turn(
     raises instead of inventing an empty prior scene.
     """
 
+    metadata = _hydrate_scene(wire.scene)
+    metadata.scene_boundary = bool(
+        wire.presence is not None and wire.presence.scene_reset is not None
+    )
     return StorytellerResponseExtended(
         narrative=wire.narrative,
         choices=wire.choices,
-        chunk_metadata=_hydrate_scene(wire.scene),
+        chunk_metadata=metadata,
         referenced_entities=_hydrate_references(
             wire.presence,
             presence_baseline,

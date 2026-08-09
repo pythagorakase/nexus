@@ -321,6 +321,9 @@ def extract_metadata_updates(response: StoryTurnResponse) -> Dict[str, Any]:
         if scene_weather is not None:
             metadata_updates["scene_weather"] = scene_weather
 
+        if bool(getattr(metadata, "scene_boundary", False)):
+            metadata_updates["scene_boundary"] = True
+
     return metadata_updates
 
 

@@ -17,6 +17,7 @@ from nexus.agents.orrery.retrograde_maturation import (
     drain_maturation_jobs_sync,
     load_maturation_status_sync,
 )
+from nexus.agents.orrery.experiences import drain_experience_render_jobs_sync
 from nexus.config import load_settings_as_dict
 from nexus.config.settings_models import OrreryNarrationSettings, OrreryPromoteSettings
 from nexus.telemetry.usage import usage_context
@@ -61,6 +62,8 @@ class OrreryWorkerResult(BaseModel):
     semantically_cleared: int = 0
     matured: int = 0
     maturation_failed: int = 0
+    experiences_rendered: int = 0
+    experience_render_failed: int = 0
 
 
 class NarrationCompletionRejectedError(RuntimeError):
@@ -110,6 +113,8 @@ def process_orrery_outbox_sync(
     settings: Optional[Mapping[str, Any]] = None,
     narration_provider: Optional[Any] = None,
     maturation_limit: Optional[int] = None,
+    experience_limit: Optional[int] = None,
+    experience_provider: Optional[Any] = None,
 ) -> OrreryWorkerResult:
     """Drain pending Orrery background work."""
 
@@ -137,6 +142,12 @@ def process_orrery_outbox_sync(
         limit=maturation_limit,
         settings=settings,
     )
+    experiences_rendered, experience_render_failed = drain_experience_outbox_sync(
+        slot=slot,
+        settings=settings,
+        provider=experience_provider,
+        limit=experience_limit,
+    )
     return OrreryWorkerResult(
         promoted=promoted,
         skipped=skipped,
@@ -145,7 +156,33 @@ def process_orrery_outbox_sync(
         semantically_cleared=semantically_cleared,
         matured=matured,
         maturation_failed=maturation_failed,
+        experiences_rendered=experiences_rendered,
+        experience_render_failed=experience_render_failed,
     )
+
+
+def drain_experience_outbox_sync(
+    slot: Optional[int] = None,
+    *,
+    settings: Optional[Mapping[str, Any]] = None,
+    provider: Optional[Any] = None,
+    limit: Optional[int] = None,
+    conn: Optional[Any] = None,
+) -> tuple[int, int]:
+    """Drain actor-experience scene jobs with the worker's slot connection."""
+    owns_conn = conn is None
+    connection = conn or _connect_for_slot(slot)
+    try:
+        return drain_experience_render_jobs_sync(
+            slot=slot,
+            settings=dict(settings or load_settings_as_dict()),
+            conn=connection,
+            provider=provider,
+            limit=limit,
+        )
+    finally:
+        if owns_conn:
+            connection.close()
 
 
 def promote_pending_resolutions_sync(

@@ -358,6 +358,13 @@ class ChunkMetadataUpdate(BaseModel):
         default=None,
         description="Optional anchor-scene weather override.",
     )
+    scene_boundary: bool = Field(
+        default=False,
+        description=(
+            "Internal scene-reset marker carried through incubator staging; "
+            "never authored as a SkaldGaiaWire arm."
+        ),
+    )
 
     model_config = ConfigDict(extra="forbid")
 
