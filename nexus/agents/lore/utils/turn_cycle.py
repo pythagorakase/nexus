@@ -51,8 +51,10 @@ try:
     from nexus.config.settings_models import (
         LORERetrievalSettings,
         OrreryBleedSettings,
+        OrreryDisclosureSettings,
         OrreryKnowledgeSettings,
         OrreryPromptSettings,
+        OrreryRecallSettings,
     )
 except ImportError:
     # If relative import fails, try absolute
@@ -89,8 +91,10 @@ except ImportError:
     from nexus.config.settings_models import (
         LORERetrievalSettings,
         OrreryBleedSettings,
+        OrreryDisclosureSettings,
         OrreryKnowledgeSettings,
         OrreryPromptSettings,
+        OrreryRecallSettings,
     )
 
 try:
@@ -274,13 +278,16 @@ class TurnCycleManager:
         return enabled
 
     def _raw_chunk_retrieval_query(self, turn_context: TurnContext) -> Optional[str]:
-        """Resolve the current/parent chunk text to use as a baseline query."""
+        """Build one raw scene-and-input representation for retrieval."""
 
         for chunk in turn_context.warm_slice:
             if chunk.get("is_target"):
-                text = _chunk_text(chunk)
-                if text:
-                    return text
+                scene_text = _chunk_text(chunk)
+                if scene_text:
+                    user_input = turn_context.user_input.strip()
+                    if user_input and user_input != scene_text:
+                        return f"{scene_text}\n\nCURRENT TURN INPUT:\n{user_input}"
+                    return scene_text
         return None
 
     def _classify_query_type(self, query_text: str) -> str:
@@ -734,10 +741,12 @@ class TurnCycleManager:
         """
         Phase 4: Execute deep memory queries.
 
-        Retrieval uses the full current/parent chunk as the baseline query.
-        MEMNON's QueryAnalyzer classifies raw chunk text for optimal search.
+        Retrieval uses one raw representation containing the full current/parent
+        chunk and the current user input. MEMNON's QueryAnalyzer classifies that
+        exact representation for optimal search.
         """
         logger.debug("Executing deep queries...")
+        turn_context.recall_query_embeddings = None
 
         if not self.lore.memnon:
             logger.warning("MEMNON not available for deep queries")
@@ -746,7 +755,7 @@ class TurnCycleManager:
         if getattr(self.lore, "memory_manager", None):
             self.lore.memory_manager.reset_pass1_queries()
 
-        # Full chunk text is the retrieval baseline.
+        # The full scene plus raw current input is the retrieval baseline.
         queries = []
         raw_chunk_query = self._raw_chunk_retrieval_query(turn_context)
         if raw_chunk_query:
@@ -788,6 +797,13 @@ class TurnCycleManager:
                     "k": 15,  # Get more results since we'll deduplicate
                     "use_hybrid": True,
                 }
+                query_embeddings: Dict[str, List[float]] | None = None
+                orrery_settings = self.settings.get("orrery", {})
+                if orrery_settings.get("enabled", False) and orrery_settings.get(
+                    "knowledge", {}
+                ).get("enabled", False):
+                    query_embeddings = {}
+                    search_kwargs["query_embeddings"] = query_embeddings
                 if (
                     self._presence_boost_enabled()
                     and turn_context.present_character_ids
@@ -796,6 +812,8 @@ class TurnCycleManager:
                         turn_context.present_character_ids
                     )
                 results = self.lore.memnon.query_memory(**search_kwargs)
+                if query_embeddings:
+                    turn_context.recall_query_embeddings = query_embeddings
 
                 # Track query types for logging
                 query_type = query_obj["type"]
@@ -1362,6 +1380,12 @@ class TurnCycleManager:
         knowledge_settings = OrreryKnowledgeSettings.model_validate(
             orrery_settings.get("knowledge", {})
         )
+        recall_settings = OrreryRecallSettings.model_validate(
+            orrery_settings.get("recall", {})
+        )
+        disclosure_settings = OrreryDisclosureSettings.model_validate(
+            orrery_settings.get("disclosure", {})
+        )
         if not orrery_settings.get("enabled", False) or not knowledge_settings.enabled:
             turn_context.phase_states["world_knowledge"] = {
                 "enabled": False,
@@ -1393,7 +1417,12 @@ class TurnCycleManager:
                 present_entity_ids=present_entity_ids,
                 anchor_chunk_id=anchor_chunk_id,
                 settings=knowledge_settings,
+                recall_settings=recall_settings,
+                disclosure_settings=disclosure_settings,
+                turn_id=turn_context.turn_id,
+                query_embeddings=turn_context.recall_query_embeddings,
             )
+            session.commit()
 
         turn_context.phase_states["world_knowledge"] = {
             "enabled": True,

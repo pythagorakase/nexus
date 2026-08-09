@@ -39,6 +39,7 @@ class TurnContext:
     entity_data: Dict[str, Any] = field(default_factory=dict)
     present_character_ids: List[int] = field(default_factory=list)
     retrieved_passages: List[Dict] = field(default_factory=list)
+    recall_query_embeddings: Optional[Dict[str, List[float]]] = None
     context_payload: Dict[str, Any] = field(default_factory=dict)
     apex_response: Optional[str] = None
     private_correspondence: Optional["GeneratedCorrespondence"] = None

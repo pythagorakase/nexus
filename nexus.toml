@@ -452,6 +452,43 @@ enabled = true
 max_entries = 12
 recent_reveal_window_chunks = 5
 
+[orrery.recall]
+# Weighted deterministic ranking over actor-owned eligible material only.
+# Semantic fit applies only to character experiences and their own vectors.
+# Claim-text embeddings are future work if semantic claim recall is wanted.
+semantic_fit_weight = 0.35
+event_severity_weight = 0.15
+actor_involvement_weight = 0.15
+emotional_salience_weight = 0.10
+recency_weight = 0.15
+place_match_weight = 0.10
+decay_half_life_hours = 720.0
+recency_horizon_hours = 2160.0
+missing_embedding_score = 0.0
+per_character_max_entries = 4
+mandatory_reserved_entries = 2
+trace_rows_per_character = 500
+
+[orrery.recall.severity_scores]
+minor = 0.25
+moderate = 0.50
+major = 0.75
+critical = 1.0
+
+[orrery.recall.involvement_scores]
+participant = 1.0
+witness = 0.67
+acquisition = 0.33
+
+[orrery.disclosure]
+minimum_score = 0.0
+private_claim_minimum_score = 0.20
+secrecy_penalty = 0.40
+relationship_valence_weight = 0.50
+shared_status_bonus = 0.20
+role_obligation_penalty = 0.50
+missing_relationship_valence = 0.0
+
 [orrery.epistemics]
 enabled = true
 # Event types that mint a bounded claim at birth. Types absent from this list

@@ -1863,6 +1863,91 @@ class OrreryKnowledgeSettings(BaseModel):
     recent_reveal_window_chunks: int = Field(default=5, ge=1)
 
 
+class OrreryRecallSettings(BaseModel):
+    """Deterministic actor-owned recall policy for ``[orrery.recall]``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    semantic_fit_weight: float = Field(
+        default=0.35,
+        ge=0.0,
+        description="Semantic-fit weight for character experiences only.",
+    )
+    event_severity_weight: float = Field(default=0.15, ge=0.0)
+    actor_involvement_weight: float = Field(default=0.15, ge=0.0)
+    emotional_salience_weight: float = Field(default=0.10, ge=0.0)
+    recency_weight: float = Field(default=0.15, ge=0.0)
+    place_match_weight: float = Field(default=0.10, ge=0.0)
+    decay_half_life_hours: float = Field(default=720.0, gt=0.0)
+    recency_horizon_hours: float = Field(default=2160.0, gt=0.0)
+    missing_embedding_score: float = Field(default=0.0, ge=-1.0, le=1.0)
+    per_character_max_entries: int = Field(default=4, ge=1)
+    mandatory_reserved_entries: int = Field(default=2, ge=0)
+    trace_rows_per_character: int = Field(default=500, ge=1)
+    severity_scores: Dict[str, float] = Field(
+        default_factory=lambda: {
+            "minor": 0.25,
+            "moderate": 0.50,
+            "major": 0.75,
+            "critical": 1.0,
+        }
+    )
+    involvement_scores: Dict[str, float] = Field(
+        default_factory=lambda: {
+            "participant": 1.0,
+            "witness": 0.67,
+            "acquisition": 0.33,
+        }
+    )
+
+    @model_validator(mode="after")
+    def _validate_recall_policy(self) -> "OrreryRecallSettings":
+        """Require complete bounded component maps and a nonzero weight sum."""
+
+        expected_severities = {"minor", "moderate", "major", "critical"}
+        if set(self.severity_scores) != expected_severities:
+            raise ValueError(
+                f"severity_scores must contain exactly {sorted(expected_severities)}"
+            )
+        expected_involvement = {"participant", "witness", "acquisition"}
+        if set(self.involvement_scores) != expected_involvement:
+            raise ValueError(
+                "involvement_scores must contain exactly "
+                f"{sorted(expected_involvement)}"
+            )
+        bounded = {**self.severity_scores, **self.involvement_scores}
+        invalid = {
+            name: value for name, value in bounded.items() if not 0 <= value <= 1
+        }
+        if invalid:
+            raise ValueError(f"recall component scores must be in [0, 1]: {invalid}")
+        weights = (
+            self.semantic_fit_weight,
+            self.event_severity_weight,
+            self.actor_involvement_weight,
+            self.emotional_salience_weight,
+            self.recency_weight,
+            self.place_match_weight,
+        )
+        if sum(weights) <= 0:
+            raise ValueError("at least one recall component weight must be positive")
+        return self
+
+
+class OrreryDisclosureSettings(BaseModel):
+    """Audience-conditioned disclosure policy for ``[orrery.disclosure]``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    minimum_score: float = 0.0
+    private_claim_minimum_score: float = 0.20
+    secrecy_penalty: float = Field(default=0.40, ge=0.0)
+    relationship_valence_weight: float = Field(default=0.50, ge=0.0)
+    shared_status_bonus: float = Field(default=0.20, ge=0.0)
+    role_obligation_penalty: float = Field(default=0.50, ge=0.0)
+    missing_relationship_valence: float = Field(default=0.0, gt=-1.0, lt=1.0)
+
+
 class OrreryReconstructionSettings(BaseModel):
     """Reconstruction-sufficiency knobs (issue #426)."""
 
@@ -2534,6 +2619,10 @@ class OrrerySettings(BaseModel):
     drift: OrreryDriftSettings = Field(default_factory=OrreryDriftSettings)
     reveal: OrreryRevealSettings = Field(default_factory=OrreryRevealSettings)
     knowledge: OrreryKnowledgeSettings = Field(default_factory=OrreryKnowledgeSettings)
+    recall: OrreryRecallSettings = Field(default_factory=OrreryRecallSettings)
+    disclosure: OrreryDisclosureSettings = Field(
+        default_factory=OrreryDisclosureSettings
+    )
     epistemics: OrreryEpistemicsSettings = Field(
         default_factory=OrreryEpistemicsSettings
     )
