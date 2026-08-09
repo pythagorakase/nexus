@@ -351,7 +351,28 @@ def insert_digest_version(
     )
 
 
-def load_compaction_system_prompt() -> str:
+def _render_digest_budget(
+    text: str,
+    *,
+    max_digest_tokens: int,
+    source: str,
+) -> str:
+    """Render the configured correspondence-digest budget into a prompt."""
+
+    placeholder = "{{MAX_DIGEST_TOKENS}}"
+    if placeholder not in text:
+        raise ValueError(
+            f"Digest token budget placeholder {placeholder} is missing from {source}"
+        )
+    rendered = text.replace(placeholder, str(int(max_digest_tokens)))
+    if placeholder in rendered:
+        raise ValueError(
+            f"Digest token budget placeholder {placeholder} remains in {source}"
+        )
+    return rendered
+
+
+def load_compaction_system_prompt(*, max_digest_tokens: int) -> str:
     """Load the frozen compaction instructions without fallback prose."""
 
     path = (
@@ -360,7 +381,11 @@ def load_compaction_system_prompt() -> str:
     prompt = path.read_text()
     if not prompt.strip():
         raise ValueError(f"Correspondence compaction prompt is empty: {path}")
-    return prompt
+    return _render_digest_budget(
+        prompt,
+        max_digest_tokens=max_digest_tokens,
+        source=str(path),
+    )
 
 
 def _normalized_letter(value: Optional[str], seat: str) -> Optional[str]:
