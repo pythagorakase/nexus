@@ -127,7 +127,7 @@ class CommitCursor:
             self.rows = [
                 offer
                 for offer in self.connection.bleed_offers
-                if offer["last_offered_chunk_id"] == params[0]
+                if offer["id"] in params[0]
             ]
             self.result = None
         elif "/* orrery:stamp_bleed_uptake */" in normalized:
@@ -312,6 +312,7 @@ def test_sync_commit_measures_seeded_bleed_offer_uptake(
         if name_present
         else "The courier slips through the rain-dark station."
     )
+    conn.incubator["orrery_proposal"] = {"_bleed_offer_resolution_ids": [501]}
     conn.bleed_offers = [
         {
             "id": 501,
@@ -339,6 +340,86 @@ def test_sync_commit_measures_seeded_bleed_offer_uptake(
         assert uptake_record.four_gram_overlap_ratio == 1.0
     else:
         assert 0.0 < uptake_record.four_gram_overlap_ratio < 1.0
+
+
+def test_sync_commit_does_not_stamp_offer_from_regenerated_away_draft(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Accepting draft B cannot consume resolution R offered only to draft A."""
+
+    conn = CommitConnection()
+    conn.incubator["new_entities"] = []
+    conn.incubator["reference_updates"] = {
+        "characters": [],
+        "places": [],
+        "factions": [],
+    }
+    conn.bleed_offers = [
+        {
+            "id": 501,
+            "actor_name": "Iria Vale",
+            "stub_text": "Iria Vale slips through the station.",
+            "last_offered_chunk_id": conn.incubator["parent_chunk_id"],
+            "used_chunk_id": None,
+            "use_count": 0,
+        }
+    ]
+    draft_a_staging = {"_bleed_offer_resolution_ids": [501]}
+    conn.incubator["orrery_proposal"] = draft_a_staging
+
+    conn.incubator["session_id"] = "draft-b"
+    conn.incubator["storyteller_text"] = "Iria Vale slips through the station."
+    conn.incubator["orrery_proposal"] = {"_bleed_offer_resolution_ids": []}
+    _patch_sync_commit_runtime(monkeypatch)
+
+    commit_incubator_to_database_sync(conn, "draft-b", slot=5)
+
+    assert draft_a_staging == {"_bleed_offer_resolution_ids": [501]}
+    assert conn.bleed_offers[0]["used_chunk_id"] is None
+    assert conn.bleed_offers[0]["use_count"] == 0
+    assert not any(
+        "orrery:bleed_uptake_candidates" in sql for sql, _params in conn.statements
+    )
+
+
+@pytest.mark.parametrize(
+    ("storyteller_text", "expected_use_count"),
+    (("Anna waits by the gate.", 0), ("Ann's coat is wet.", 1)),
+)
+def test_sync_commit_matches_actor_name_on_word_boundaries(
+    monkeypatch: pytest.MonkeyPatch,
+    storyteller_text: str,
+    expected_use_count: int,
+) -> None:
+    """Ann does not match Anna but does match before a possessive apostrophe."""
+
+    conn = CommitConnection()
+    conn.incubator["new_entities"] = []
+    conn.incubator["reference_updates"] = {
+        "characters": [],
+        "places": [],
+        "factions": [],
+    }
+    conn.incubator["storyteller_text"] = storyteller_text
+    conn.incubator["orrery_proposal"] = {"_bleed_offer_resolution_ids": [503]}
+    conn.bleed_offers = [
+        {
+            "id": 503,
+            "actor_name": "Ann",
+            "stub_text": "Ann waits by the gate.",
+            "last_offered_chunk_id": conn.incubator["parent_chunk_id"],
+            "used_chunk_id": None,
+            "use_count": 0,
+        }
+    ]
+    _patch_sync_commit_runtime(monkeypatch)
+
+    chunk_id = commit_incubator_to_database_sync(conn, "boundary", slot=5)
+
+    assert conn.bleed_offers[0]["use_count"] == expected_use_count
+    assert conn.bleed_offers[0]["used_chunk_id"] == (
+        chunk_id if expected_use_count else None
+    )
 
 
 def test_sync_reconciled_mentions_flow_through_adapter_and_commit(monkeypatch):

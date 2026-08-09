@@ -507,8 +507,54 @@ def test_select_bleed_menu_is_deterministic_with_tie_order() -> None:
     candidate_sql = next(
         sql for sql, _ in session.executed if "orrery:bleed_candidates" in sql
     )
-    assert "r.offer_count >= 2 AND r.use_count = 0" in candidate_sql
+    assert "r.offer_count >= 2 AND r.use_count = 0" not in candidate_sql
     assert "r.id DESC" in candidate_sql
+
+
+def test_bounded_scan_of_only_deprioritized_candidates_remains_reachable() -> None:
+    """Sort-back happens inside the fetched window and cannot starve that window."""
+
+    rows = [_candidate_row_with_id(value) for value in (30, 20, 10)]
+    for row in rows:
+        row["offer_count"] = 2
+        row["use_count"] = 0
+    session = FakeSession(
+        candidate_rows=rows,
+        graph_nodes=[{"entity_id": 1}],
+        graph_edges=[],
+    )
+
+    result = _select(
+        session,
+        anchor_entity_ids=(1,),
+        max_candidates=2,
+        scan_limit=2,
+    )
+
+    assert result.candidates_considered == 2
+    assert [candidate.resolution_id for candidate in result.selected] == [30, 20]
+    candidate_params = next(
+        params for sql, params in session.executed if "orrery:bleed_candidates" in sql
+    )
+    assert candidate_params["limit"] == 2
+
+
+def test_deprioritization_sorts_to_back_only_within_fetched_window() -> None:
+    """Fresh candidates lead while repeatedly unused rows remain eligible."""
+
+    rows = [_candidate_row_with_id(value) for value in (30, 20, 10)]
+    rows[0].update({"offer_count": 2, "use_count": 0})
+    rows[1].update({"offer_count": 1, "use_count": 0})
+    rows[2].update({"offer_count": 2, "use_count": 0})
+
+    candidates = load_bleed_candidates(
+        FakeSession(candidate_rows=rows),
+        anchor_chunk_id=100,
+        density=1.0,
+        limit=3,
+    )
+
+    assert [candidate.resolution_id for candidate in candidates] == [20, 30, 10]
 
 
 @pytest.mark.asyncio

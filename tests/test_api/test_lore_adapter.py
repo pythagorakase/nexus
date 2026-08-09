@@ -5,7 +5,7 @@ from nexus.agents.logon.apex_schema import (
     StateUpdates,
     StorytellerResponseExtended,
 )
-from nexus.api.lore_adapter import response_to_incubator
+from nexus.api.lore_adapter import response_to_incubator, split_staged_orrery_payload
 
 
 def test_response_to_incubator_serializes_current_reference_schema() -> None:
@@ -93,6 +93,47 @@ def test_response_to_incubator_serializes_current_reference_schema() -> None:
     # The commit path reparses this JSONB payload into the current schema.
     reparsed = ReferencedEntities(**reference_updates)
     assert reparsed.characters[1].character_name == "Jonas Vale"
+
+
+def test_response_to_incubator_stages_exact_draft_bleed_manifest() -> None:
+    """Regenerated staging replaces draft A's offers with draft B's manifest."""
+
+    response = StorytellerResponseExtended.model_validate(
+        {
+            "generation_model": "gpt-5.6-storyteller",
+            "narrative": "Ann waits beneath the pharmacy sign.",
+            "choices": ["Follow Ann.", "Answer the phone."],
+            "chunk_metadata": {
+                "chronology": {"episode_transition": "continue"},
+                "world_layer": "primary",
+            },
+            "referenced_entities": {"characters": [], "places": [], "factions": []},
+            "state_updates": {
+                "characters": [],
+                "relationships": [],
+                "locations": [],
+                "factions": [],
+            },
+        }
+    )
+
+    draft_a = response_to_incubator(
+        response=response,
+        parent_chunk_id=1,
+        user_text="Continue.",
+        session_id="draft-a",
+        bleed_offer_resolution_ids=[501],
+    )
+    draft_b = response_to_incubator(
+        response=response,
+        parent_chunk_id=1,
+        user_text="Continue.",
+        session_id="draft-b",
+        bleed_offer_resolution_ids=[],
+    )
+
+    assert split_staged_orrery_payload(draft_a["orrery_proposal"]) == (None, (501,))
+    assert split_staged_orrery_payload(draft_b["orrery_proposal"]) == (None, ())
 
 
 def test_response_to_incubator_threads_generation_model_verbatim() -> None:

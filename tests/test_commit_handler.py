@@ -105,11 +105,7 @@ class AsyncCommitConnection:
     async def fetch(self, sql, *args):
         normalized = " ".join(sql.split())
         if "/* orrery:bleed_uptake_candidates */" in normalized:
-            return [
-                offer
-                for offer in self.bleed_offers
-                if offer["last_offered_chunk_id"] == args[0]
-            ]
+            return [offer for offer in self.bleed_offers if offer["id"] in args[0]]
         if "SELECT id FROM characters WHERE name" in normalized:
             entity_id = self.characters.get(args[0])
             return [{"id": entity_id}] if entity_id is not None else []
@@ -257,6 +253,7 @@ async def test_async_commit_measures_seeded_bleed_offer_uptake(
         if name_present
         else "The gatekeeper opens the rain-dark gate."
     )
+    conn.incubator["orrery_proposal"] = {"_bleed_offer_resolution_ids": [502]}
     conn.bleed_offers = [
         {
             "id": 502,

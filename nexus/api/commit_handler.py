@@ -48,7 +48,7 @@ from nexus.api.choice_handling import (
     normalize_choice_object,
     selected_text_from_choice_object,
 )
-from nexus.api.lore_adapter import compute_raw_text
+from nexus.api.lore_adapter import compute_raw_text, split_staged_orrery_payload
 
 logger = logging.getLogger("nexus.api.commit_handler")
 
@@ -707,9 +707,12 @@ async def commit_incubator_to_database(
 
             # Step 9.5: Commit Orrery proposal inside the accepted-chunk transaction
             orrery_settings = _load_orrery_settings()
+            staged_orrery_proposal, bleed_offer_resolution_ids = (
+                split_staged_orrery_payload(incubator.get("orrery_proposal"))
+            )
             orrery_result = await commit_orrery_tick_async(
                 conn,
-                incubator.get("orrery_proposal"),
+                staged_orrery_proposal,
                 tick_chunk_id=chunk_id,
                 slot=slot,
                 world_layer=world_layer,
@@ -721,7 +724,7 @@ async def commit_incubator_to_database(
                 mood_settings=orrery_settings.get("mood"),
                 epistemics_settings=(
                     orrery_settings.get("epistemics")
-                    if incubator.get("orrery_proposal") is None
+                    if staged_orrery_proposal is None
                     else None
                 ),
                 contagion_settings=orrery_settings.get("contagion"),
@@ -731,7 +734,7 @@ async def commit_incubator_to_database(
             )
             bleed_used_count = await record_bleed_uptake_async(
                 conn,
-                offered_anchor_chunk_id=incubator["parent_chunk_id"],
+                resolution_ids=bleed_offer_resolution_ids,
                 accepted_chunk_id=chunk_id,
                 accepted_text=storyteller_text,
             )
