@@ -34,6 +34,10 @@ from nexus.agents.orrery.reconstruction import (
     set_commit_chunk_attribution_sync,
 )
 from nexus.agents.orrery.tag_writer import _row_value, apply_tag_bestowal
+from nexus.api.choice_handling import (
+    normalize_choice_object,
+    selected_text_from_choice_object,
+)
 from nexus.api.db_converters import chronology_to_db_values
 from nexus.api.summary_triggers import (
     SummaryTask,
@@ -48,9 +52,9 @@ from nexus.memory.correspondence import (
     persist_staged_correspondence,
     plan_correspondence_compaction,
 )
-from nexus.api.choice_handling import (
-    normalize_choice_object,
-    selected_text_from_choice_object,
+from nexus.memory.context_state import (
+    bind_pass2_baseline,
+    validate_staged_pass2_baseline,
 )
 
 logger = logging.getLogger("nexus.api.commit_handler_sync")
@@ -323,6 +327,7 @@ def commit_incubator_to_database_sync(
                            COALESCE(new_entities, '[]'::jsonb) AS new_entities,
                            correspondence_writer_letter,
                            correspondence_gaia_letter,
+                           lore_pass_baseline,
                            metadata_updates, entity_updates, reference_updates,
                            llm_response_id, generation_model, status
                     FROM incubator
@@ -337,6 +342,7 @@ def commit_incubator_to_database_sync(
                     raise ValueError(
                         f"No incubator data found for session {session_id}"
                     )
+                validate_staged_pass2_baseline(incubator["lore_pass_baseline"])
 
                 logger.info("Processing incubator session %s", session_id)
 
@@ -433,6 +439,21 @@ def commit_incubator_to_database_sync(
                 if chunk_id is None:
                     raise ValueError("Failed to obtain chunk_id after insert")
                 logger.info("Created narrative chunk %s", chunk_id)
+                bound_baseline = bind_pass2_baseline(
+                    incubator["lore_pass_baseline"], chunk_id
+                )
+                cur.execute(
+                    """
+                    INSERT INTO lore_pass_baselines (
+                        chunk_id, schema_version, payload
+                    ) VALUES (%s, %s, %s::jsonb)
+                    """,
+                    (
+                        chunk_id,
+                        bound_baseline.schema_version,
+                        json.dumps(bound_baseline.model_dump(mode="json")),
+                    ),
+                )
                 # Attribute trigger-versioned writes in this transaction
                 # (relationship_versions) to the committing chunk.
                 set_commit_chunk_attribution_sync(cur, chunk_id)

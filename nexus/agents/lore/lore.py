@@ -403,6 +403,13 @@ class LORE:
         )
 
         try:
+            if parent_chunk_id is not None:
+                if self.memory_manager is None:
+                    raise RuntimeError(
+                        "Pass-2 baseline hydration requires the memory manager"
+                    )
+                self.memory_manager.restore_pass2_baseline(parent_chunk_id)
+
             # Phase 1: User Input Processing
             self.current_phase = TurnPhase.USER_INPUT
             await self.turn_manager.process_user_input(self.turn_context)

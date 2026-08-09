@@ -23,6 +23,8 @@ from nexus.api.lore_adapter import (
     validate_incubator_data,
 )
 from nexus.api.narrative_lease import finish_generation
+from nexus.memory.context_state import validate_staged_pass2_baseline
+from nexus.memory.manager import empty_pass2_baseline
 from nexus.telemetry.usage import usage_context
 
 logger = logging.getLogger("nexus.api.narrative_generation")
@@ -244,6 +246,9 @@ async def generate_narrative_async(
                     parent_chunk_id=parent_chunk_id,
                     user_text=user_text,
                     session_id=session_id,
+                    lore_pass_baseline=validate_staged_pass2_baseline(
+                        lore.turn_context.memory_state["lore_pass_baseline"]
+                    ),
                     orrery_proposal=(
                         lore.turn_context.orrery_proposal if lore.turn_context else None
                     ),
@@ -377,6 +382,7 @@ async def write_to_incubator(
     generation_model = data["generation_model"]
     if not isinstance(generation_model, str) or not generation_model.strip():
         raise ValueError("Generated incubator payload is missing its model id")
+    lore_pass_baseline = validate_staged_pass2_baseline(data["lore_pass_baseline"])
 
     values = (
         data["chunk_id"],
@@ -398,6 +404,7 @@ async def write_to_incubator(
         json.dumps(data.get("new_entities", [])),
         data.get("correspondence_writer_letter"),
         data.get("correspondence_gaia_letter"),
+        json.dumps(lore_pass_baseline.model_dump(mode="json")),
         data["session_id"],
         data["llm_response_id"],
         data["status"],
@@ -447,11 +454,11 @@ async def write_to_incubator(
                         metadata_updates, entity_updates, reference_updates,
                         orrery_proposal, orrery_adjudications,
                         new_entities, correspondence_writer_letter,
-                        correspondence_gaia_letter, session_id, llm_response_id,
-                        status
+                        correspondence_gaia_letter, lore_pass_baseline, session_id,
+                        llm_response_id, status
                     ) VALUES (
                         TRUE, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                        %s, %s, %s, %s, %s, %s, %s
+                        %s, %s, %s, %s, %s, %s, %s, %s
                     )
                     """,
                     values,
@@ -485,6 +492,7 @@ async def write_to_incubator(
                         new_entities = %s,
                         correspondence_writer_letter = %s,
                         correspondence_gaia_letter = %s,
+                        lore_pass_baseline = %s,
                         session_id = %s,
                         llm_response_id = %s,
                         status = %s,
@@ -710,6 +718,7 @@ async def generate_bootstrap_narrative(
             "factions": [],
         },
         "orrery_adjudications": [],
+        "lore_pass_baseline": empty_pass2_baseline(settings).model_dump(mode="json"),
         "session_id": session_id,
         "llm_response_id": f"bootstrap_{uuid.uuid4().hex[:8]}",
         "status": "provisional",

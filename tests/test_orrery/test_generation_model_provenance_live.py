@@ -17,6 +17,7 @@ from nexus.api.narrative_lease import (
     bind_generation_parent,
 )
 from nexus.api.slot_utils import get_slot_db_url
+from nexus.memory.manager import empty_pass2_baseline
 from tests.test_orrery.claim_accounts_test_support import (
     install_claim_accounts_shadow_sync,
 )
@@ -25,6 +26,7 @@ from tests.test_orrery.claim_accounts_test_support import (
 pytestmark = pytest.mark.requires_postgres
 
 LIVE_SLOT = 5
+TEST_BASELINE_PAYLOAD = empty_pass2_baseline({}).model_dump(mode="json")
 
 
 class _NonCommittingConnection:
@@ -63,10 +65,14 @@ def provenance_db() -> Iterator[dict[str, Any]]:
     lease_migration_sql = (
         Path(__file__).parents[2] / "migrations" / "098_narrative_generation_lease.sql"
     ).read_text()
+    baseline_migration_sql = (
+        Path(__file__).parents[2] / "migrations" / "107_lore_pass_baselines.sql"
+    ).read_text()
     try:
         with raw_connection.cursor() as cur:
             cur.execute(migration_sql)
             cur.execute(lease_migration_sql)
+            cur.execute(baseline_migration_sql)
             schema = f"provenance_reveal_{uuid4().hex[:12]}"
             cur.execute(f'CREATE SCHEMA "{schema}"')
             cur.execute(f'SET LOCAL search_path = "{schema}", public')
@@ -141,6 +147,7 @@ def _incubator_payload(
         "orrery_proposal": None,
         "orrery_adjudications": [],
         "new_entities": [],
+        "lore_pass_baseline": TEST_BASELINE_PAYLOAD,
         "session_id": session_id,
         "llm_response_id": f"rollback-{uuid4().hex[:12]}",
         "status": "provisional",
@@ -251,10 +258,11 @@ def test_sync_accept_allows_historical_null_generation_model(
                 id, chunk_id, parent_chunk_id, user_text, storyteller_text,
                 choice_object, choice_text, metadata_updates, entity_updates,
                 reference_updates, orrery_proposal, orrery_adjudications,
-                new_entities, session_id, llm_response_id, status
+                new_entities, lore_pass_baseline, session_id, llm_response_id,
+                status
             ) VALUES (
                 TRUE, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                %s, %s, %s
+                %s, %s, %s, %s
             )
             """,
             (
@@ -270,6 +278,7 @@ def test_sync_accept_allows_historical_null_generation_model(
                 None,
                 Json([]),
                 Json([]),
+                Json(TEST_BASELINE_PAYLOAD),
                 payload["session_id"],
                 payload["llm_response_id"],
                 payload["status"],

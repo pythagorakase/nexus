@@ -6,6 +6,10 @@ from nexus.agents.logon.apex_schema import (
     StorytellerResponseExtended,
 )
 from nexus.api.lore_adapter import response_to_incubator, split_staged_orrery_payload
+from nexus.memory.manager import empty_pass2_baseline
+
+
+TEST_BASELINE = empty_pass2_baseline({})
 
 
 def test_response_to_incubator_serializes_current_reference_schema() -> None:
@@ -72,6 +76,7 @@ def test_response_to_incubator_serializes_current_reference_schema() -> None:
         parent_chunk_id=1,
         user_text="I cross the street.",
         session_id="session-1",
+        lore_pass_baseline=TEST_BASELINE,
     )
 
     assert incubator["metadata_updates"]["chronology"]["time_delta_minutes"] == 1
@@ -123,6 +128,7 @@ def test_response_to_incubator_stages_exact_draft_bleed_manifest() -> None:
         user_text="Continue.",
         session_id="draft-a",
         bleed_offer_resolution_ids=[501],
+        lore_pass_baseline=TEST_BASELINE,
     )
     draft_b = response_to_incubator(
         response=response,
@@ -130,6 +136,7 @@ def test_response_to_incubator_stages_exact_draft_bleed_manifest() -> None:
         user_text="Continue.",
         session_id="draft-b",
         bleed_offer_resolution_ids=[],
+        lore_pass_baseline=TEST_BASELINE,
     )
 
     assert split_staged_orrery_payload(draft_a["orrery_proposal"]) == (None, (501,))
@@ -174,6 +181,7 @@ def test_response_to_incubator_threads_generation_model_verbatim() -> None:
         parent_chunk_id=1,
         user_text="Continue.",
         session_id="session-missing-model",
+        lore_pass_baseline=TEST_BASELINE,
     )
     assert unstamped["generation_model"] is None
 
@@ -183,6 +191,7 @@ def test_response_to_incubator_threads_generation_model_verbatim() -> None:
         parent_chunk_id=1,
         user_text="Continue.",
         session_id="session-stamped-model",
+        lore_pass_baseline=TEST_BASELINE,
     )
     assert stamped["generation_model"] == "gpt-5.6-terra"
 
@@ -259,6 +268,7 @@ def test_response_to_incubator_preserves_full_canonical_state_updates() -> None:
         parent_chunk_id=9,
         user_text="Follow the sound.",
         session_id="rich-state-roundtrip",
+        lore_pass_baseline=TEST_BASELINE,
     )
     payload = incubator["entity_updates"]
 

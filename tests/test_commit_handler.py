@@ -1,5 +1,6 @@
 """Unit tests for asynchronous narrative commit helpers."""
 
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -15,6 +16,11 @@ from nexus.api.commit_handler import (
 import nexus.api.commit_handler as commit_handler
 from nexus.api.lore_adapter import response_to_incubator
 from nexus.api.presence_reconciliation import CharacterRosterRows
+from nexus.memory.manager import empty_pass2_baseline
+
+
+TEST_BASELINE = empty_pass2_baseline({})
+TEST_BASELINE_PAYLOAD = TEST_BASELINE.model_dump(mode="json")
 
 
 class RecordingAsyncConnection:
@@ -86,6 +92,7 @@ class AsyncCommitConnection:
             },
             "llm_response_id": "response-2",
             "generation_model": "test-model",
+            "lore_pass_baseline": TEST_BASELINE_PAYLOAD,
             "status": "provisional",
         }
 
@@ -231,6 +238,13 @@ async def test_async_commit_links_same_turn_character_declaration(monkeypatch):
 
     assert chunk_id == conn.chunk_id
     assert conn.character_junctions == [(conn.chunk_id, 72, "present")]
+    baseline_writes = [
+        args
+        for sql, args in conn.statements
+        if sql.startswith("INSERT INTO lore_pass_baselines")
+    ]
+    assert baseline_writes[0][:2] == (conn.chunk_id, 1)
+    assert json.loads(baseline_writes[0][2])["parent_chunk_id"] == conn.chunk_id
 
 
 @pytest.mark.asyncio
@@ -316,6 +330,7 @@ async def test_async_reconciled_mentions_flow_through_adapter_and_commit(monkeyp
         parent_chunk_id=88,
         user_text="Continue.",
         session_id="async-655",
+        lore_pass_baseline=TEST_BASELINE,
     )
 
     async def no_op(*_args, **_kwargs):

@@ -49,6 +49,10 @@ from nexus.api.choice_handling import (
     selected_text_from_choice_object,
 )
 from nexus.api.lore_adapter import compute_raw_text, split_staged_orrery_payload
+from nexus.memory.context_state import (
+    bind_pass2_baseline,
+    validate_staged_pass2_baseline,
+)
 
 logger = logging.getLogger("nexus.api.commit_handler")
 
@@ -70,6 +74,7 @@ async def fetch_incubator_data(
                choice_object, choice_text, orrery_proposal,
                COALESCE(orrery_adjudications, '[]'::jsonb) AS orrery_adjudications,
                COALESCE(new_entities, '[]'::jsonb) AS new_entities,
+               lore_pass_baseline,
                metadata_updates, entity_updates, reference_updates,
                llm_response_id, generation_model, status
         FROM incubator
@@ -612,6 +617,7 @@ async def commit_incubator_to_database(
         try:
             # Step 1: Get incubator data
             incubator = await fetch_incubator_data(conn, session_id)
+            validate_staged_pass2_baseline(incubator["lore_pass_baseline"])
             logger.info("Processing incubator session %s", session_id)
 
             # Step 2: Get parent context
@@ -664,6 +670,18 @@ async def commit_incubator_to_database(
             )
             if chunk_id is None:
                 raise ValueError("Failed to obtain chunk_id after insert")
+            bound_baseline = bind_pass2_baseline(
+                incubator["lore_pass_baseline"], chunk_id
+            )
+            await conn.execute(
+                """
+                INSERT INTO lore_pass_baselines (chunk_id, schema_version, payload)
+                VALUES ($1, $2, $3::text::jsonb)
+                """,
+                chunk_id,
+                bound_baseline.schema_version,
+                json.dumps(bound_baseline.model_dump(mode="json")),
+            )
 
             # Step 5: Create declaration stubs before name-reference resolution.
             await create_declared_entity_stubs(

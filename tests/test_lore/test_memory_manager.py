@@ -7,8 +7,10 @@ import logging
 from typing import Dict, List
 
 import pytest
+from pydantic import ValidationError
 
 from nexus.memory import ContextMemoryManager
+from nexus.memory.context_state import Pass2BaselineV1
 from nexus.memory.divergence import DivergenceResult
 from nexus.memory.entity_detector import HighSpecificityEntityDetector
 
@@ -193,7 +195,10 @@ def test_pass1_baseline_tracks_chunks_and_budget(
         narrative=baseline_inputs["narrative"],
         warm_slice=baseline_inputs["warm_slice"],
         retrieved_passages=baseline_inputs["retrieved"],
-        token_usage=baseline_inputs["token_usage"],
+        token_usage={
+            **baseline_inputs["token_usage"],
+            "using_reasoning_model": False,
+        },
     )
 
     # Baseline chunk ids combine warm slice and retrieved passages
@@ -209,6 +214,49 @@ def test_pass1_baseline_tracks_chunks_and_budget(
     # Expected themes populated from narrative analysis
     assert "Alex" in transition.expected_user_themes
     assert "Emilia" in package.baseline_entities.get("characters", [])
+
+    exported = manager.export_pass2_baseline()
+    assert exported.parent_chunk_id is None
+    assert exported.memory_identities == [101, 102, 201]
+    assert exported.prior_token_accounting == {
+        name: value
+        for name, value in package.token_usage.items()
+        if name != "using_reasoning_model"
+    }
+    assert exported.remaining_budget == transition.remaining_budget
+    dumped = exported.model_dump(mode="json")
+    assert "storyteller_output" not in dumped
+    assert "assembled_context" not in dumped
+    assert "baseline_entities" not in dumped
+
+
+@pytest.mark.parametrize(
+    ("update", "message"),
+    [
+        ({"schema_version": 2}, "Input should be 1"),
+        ({"memory_identities": [True]}, "valid integer"),
+        ({"memory_identities": [0]}, "must be positive"),
+        ({"prior_token_accounting": {"warm_slice": -1}}, "greater than or equal"),
+        ({"remaining_budget": -1}, "greater than or equal"),
+    ],
+)
+def test_pass2_baseline_rejects_unsupported_or_invalid_state(
+    update: Dict[str, object], message: str
+) -> None:
+    """The durable wire fails closed on versions, identities, and budgets."""
+
+    payload: Dict[str, object] = {
+        "schema_version": 1,
+        "producer": "nexus.memory.context_memory_manager",
+        "config_fingerprint": "0" * 64,
+        "parent_chunk_id": None,
+        "memory_identities": [1, "retrograde_summary:2"],
+        "prior_token_accounting": {"warm_slice": 1},
+        "remaining_budget": 10,
+    }
+    payload.update(update)
+    with pytest.raises(ValidationError, match=message):
+        Pass2BaselineV1.model_validate(payload)
 
 
 def test_pass1_records_reserve_shortfall(

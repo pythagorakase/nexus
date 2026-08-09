@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import re
 from collections import Counter
@@ -14,6 +16,9 @@ from .context_state import (
     ContextPackage,
     ContextStateManager,
     MemoryIdentity,
+    PASS2_BASELINE_PRODUCER,
+    RETROGRADE_SUMMARY_ID_PREFIX,
+    Pass2BaselineV1,
     PassTransition,
     is_retrograde_summary,
     memory_identity,
@@ -38,6 +43,53 @@ except ImportError:  # pragma: no cover - fallback if module unavailable
 logger = logging.getLogger(__name__)
 
 _STORYTELLER_WIRE_CLASSES = frozenset({"openai", "anthropic", "local"})
+
+
+class MissingPass2BaselineError(RuntimeError):
+    """An accepted parent chunk has no durable Pass-2 baseline."""
+
+
+def pass2_baseline_config_fingerprint(settings: Mapping[str, Any]) -> str:
+    """Fingerprint configuration that determines two-pass memory behavior."""
+
+    legacy_agent_settings = settings.get("Agent Settings")
+    legacy_lore_settings = (
+        legacy_agent_settings.get("LORE")
+        if isinstance(legacy_agent_settings, Mapping)
+        else None
+    )
+    lore_settings = (
+        legacy_lore_settings
+        if isinstance(legacy_lore_settings, Mapping)
+        else settings.get("lore", {})
+    )
+    payload = {
+        "memory": settings.get("memory", {}),
+        "lore_token_budget": (
+            lore_settings.get("token_budget", {})
+            if isinstance(lore_settings, Mapping)
+            else {}
+        ),
+    }
+    serialized = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    )
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def empty_pass2_baseline(settings: Mapping[str, Any]) -> Pass2BaselineV1:
+    """Build the explicit empty baseline staged by bootstrap/admin boundary tools."""
+
+    return Pass2BaselineV1(
+        producer=PASS2_BASELINE_PRODUCER,
+        config_fingerprint=pass2_baseline_config_fingerprint(settings),
+        memory_identities=[],
+        prior_token_accounting={},
+        remaining_budget=0,
+    )
 
 
 def _storyteller_token_budget(settings: Mapping[str, Any]) -> Mapping[str, Any]:
@@ -433,6 +485,149 @@ class ContextMemoryManager:
             dbname,
             max_tokens=max_tokens,
         )
+
+    def export_pass2_baseline(self) -> Pass2BaselineV1:
+        """Export the current post-trimming Pass-1 state for incubator staging."""
+
+        package = self.context_state.context
+        transition = self.context_state.transition
+        if package is None or transition is None:
+            raise RuntimeError(
+                "Cannot export a Pass-2 baseline before Pass 1 completes"
+            )
+
+        normalized_identities: Set[MemoryIdentity] = set()
+        for identity in package.baseline_chunks:
+            if isinstance(identity, str) and not identity.startswith(
+                RETROGRADE_SUMMARY_ID_PREFIX
+            ):
+                try:
+                    identity = int(identity)
+                except ValueError as exc:
+                    raise ValueError(
+                        f"Unsupported Pass-2 baseline memory identity {identity!r}"
+                    ) from exc
+            normalized_identities.add(identity)
+
+        identities = sorted(
+            normalized_identities,
+            key=lambda identity: (
+                0 if isinstance(identity, int) else 1,
+                identity if isinstance(identity, int) else str(identity),
+            ),
+        )
+        prior_token_accounting: Dict[str, int] = {}
+        for name, value in package.token_usage.items():
+            if name == "using_reasoning_model" and isinstance(value, bool):
+                continue
+            if not isinstance(value, int) or value < 0:
+                raise ValueError(
+                    "Pass-2 baseline token accounting values must be "
+                    f"nonnegative integers: {name}={value!r}"
+                )
+            prior_token_accounting[name] = value
+        return Pass2BaselineV1(
+            producer=PASS2_BASELINE_PRODUCER,
+            config_fingerprint=pass2_baseline_config_fingerprint(self.settings),
+            memory_identities=identities,
+            prior_token_accounting=prior_token_accounting,
+            remaining_budget=transition.remaining_budget,
+        )
+
+    def restore_pass2_baseline(self, parent_chunk_id: int) -> Pass2BaselineV1:
+        """Hydrate Pass-2 state from one accepted parent chunk or fail loudly."""
+
+        if (
+            isinstance(parent_chunk_id, bool)
+            or not isinstance(parent_chunk_id, int)
+            or parent_chunk_id <= 0
+        ):
+            raise ValueError("Pass-2 baseline parent_chunk_id must be positive")
+        engine = getattr(getattr(self.memnon, "db_manager", None), "engine", None)
+        if engine is None:
+            raise RuntimeError(
+                "Pass-2 baseline restoration requires MEMNON database access"
+            )
+
+        with engine.connect() as conn:
+            row = (
+                conn.execute(
+                    text(
+                        """
+                    SELECT b.schema_version, b.payload, n.storyteller_text
+                    FROM lore_pass_baselines AS b
+                    JOIN narrative_chunks AS n ON n.id = b.chunk_id
+                    WHERE b.chunk_id = :chunk_id
+                    """
+                    ),
+                    {"chunk_id": parent_chunk_id},
+                )
+                .mappings()
+                .one_or_none()
+            )
+            if row is None:
+                parent_exists = conn.execute(
+                    text(
+                        "SELECT EXISTS (SELECT 1 FROM narrative_chunks WHERE id = :id)"
+                    ),
+                    {"id": parent_chunk_id},
+                ).scalar_one()
+                if not parent_exists:
+                    raise ValueError(
+                        f"Cannot restore Pass-2 baseline: parent chunk "
+                        f"{parent_chunk_id} does not exist"
+                    )
+                raise MissingPass2BaselineError(
+                    "Accepted parent chunk "
+                    f"{parent_chunk_id} has no lore_pass_baselines row. Stamp the "
+                    "slot's current migration boundary with "
+                    "scripts/stamp_lore_pass_baseline.py --slot <1-5>, then retry."
+                )
+
+        baseline = Pass2BaselineV1.model_validate(row["payload"])
+        if row["schema_version"] != baseline.schema_version:
+            raise RuntimeError(
+                "Pass-2 baseline schema columns disagree for parent chunk "
+                f"{parent_chunk_id}: column={row['schema_version']}, "
+                f"payload={baseline.schema_version}"
+            )
+        if baseline.parent_chunk_id != parent_chunk_id:
+            raise RuntimeError(
+                "Pass-2 baseline parent identity mismatch: requested "
+                f"{parent_chunk_id}, payload={baseline.parent_chunk_id}"
+            )
+        expected_fingerprint = pass2_baseline_config_fingerprint(self.settings)
+        if baseline.config_fingerprint != expected_fingerprint:
+            raise RuntimeError(
+                "Pass-2 baseline config fingerprint is incompatible for parent "
+                f"chunk {parent_chunk_id}: stored={baseline.config_fingerprint}, "
+                f"current={expected_fingerprint}"
+            )
+
+        storyteller_output = row["storyteller_text"]
+        if not isinstance(storyteller_output, str) or not storyteller_output:
+            raise RuntimeError(
+                f"Accepted parent chunk {parent_chunk_id} has no storyteller output"
+            )
+        analysis = self._analyze_storyteller_output(storyteller_output)
+        package = ContextPackage(
+            baseline_chunks=set(baseline.memory_identities),
+            baseline_entities={
+                "characters": analysis.get("characters", []),
+                "locations": analysis.get("locations", []),
+                "keywords": analysis.get("keywords", []),
+            },
+            baseline_themes=analysis.get("themes", []),
+            token_usage=dict(baseline.prior_token_accounting),
+        )
+        transition = PassTransition(
+            storyteller_output=storyteller_output,
+            expected_user_themes=analysis.get("expected", []),
+            remaining_budget=baseline.remaining_budget,
+        )
+        self.context_state.store_baseline(package, transition)
+        self.query_memory.reset_pass("pass2")
+        return baseline
 
     def handle_storyteller_response(
         self,

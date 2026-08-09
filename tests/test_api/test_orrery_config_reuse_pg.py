@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import uuid
+from pathlib import Path
 from typing import Any, Iterator
 
 import asyncpg  # type: ignore[import-untyped]
@@ -14,9 +15,12 @@ from psycopg2 import sql
 
 import nexus.config as config_module
 from nexus.api import commit_handler, commit_handler_sync
+from nexus.memory.manager import empty_pass2_baseline
 
 
 pytestmark = pytest.mark.requires_postgres
+
+TEST_BASELINE_PAYLOAD = empty_pass2_baseline({}).model_dump(mode="json")
 
 
 def _connect(dbname: str) -> Any:
@@ -45,6 +49,9 @@ def qa654_db() -> Iterator[str]:
                     sql.Identifier("NEXUS_template"),
                 )
             )
+        with _connect(dbname) as conn:
+            with conn.cursor() as cur:
+                cur.execute(Path("migrations/107_lore_pass_baselines.sql").read_text())
         yield dbname
     finally:
         with admin.cursor() as cur:
@@ -87,14 +94,15 @@ def _seed_commit(dbname: str, session_id: str) -> int:
                     id, chunk_id, parent_chunk_id, user_text, storyteller_text,
                     generation_model, metadata_updates, entity_updates,
                     reference_updates, orrery_proposal, orrery_adjudications,
-                    new_entities, session_id, llm_response_id, status
+                    new_entities, lore_pass_baseline, session_id,
+                    llm_response_id, status
                 ) VALUES (
                     TRUE, 2, %s, 'continue', 'Accepted scene.', 'TEST',
                     '{}'::jsonb, NULL, '{}'::jsonb, NULL, '[]'::jsonb,
-                    '[]'::jsonb, %s, 'qa654-response', 'provisional'
+                    '[]'::jsonb, %s::jsonb, %s, 'qa654-response', 'provisional'
                 )
                 """,
-                (parent_chunk_id, session_id),
+                (parent_chunk_id, json.dumps(TEST_BASELINE_PAYLOAD), session_id),
             )
     return parent_chunk_id
 

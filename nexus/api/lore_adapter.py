@@ -16,6 +16,7 @@ from nexus.api.choice_handling import (
     selected_text_from_choice_object,
 )
 from nexus.memory.correspondence import GeneratedCorrespondence
+from nexus.memory.context_state import Pass2BaselineV1, validate_staged_pass2_baseline
 
 logger = logging.getLogger("nexus.api.lore_adapter")
 
@@ -128,6 +129,7 @@ def response_to_incubator(
     parent_chunk_id: int,
     user_text: str,
     session_id: str,
+    lore_pass_baseline: Pass2BaselineV1,
     orrery_proposal: Optional[Any] = None,
     bleed_offer_resolution_ids: Iterable[int] = (),
     correspondence: Optional[GeneratedCorrespondence] = None,
@@ -140,6 +142,7 @@ def response_to_incubator(
         parent_chunk_id: The parent chunk being continued from
         user_text: The user's input text
         session_id: Session ID for tracking
+        lore_pass_baseline: Unbound durable Pass-1 state for the generated prose
         orrery_proposal: Optional no-write Orrery proposal from TurnContext
         bleed_offer_resolution_ids: Resolutions offered to this exact draft
 
@@ -153,6 +156,7 @@ def response_to_incubator(
         raise ValueError("No narrative text in LORE response")
 
     generation_model = getattr(response, "generation_model", None)
+    staged_baseline = validate_staged_pass2_baseline(lore_pass_baseline)
 
     # Extract choice object (presented choices, no selection yet)
     choice_obj = extract_choice_object(response)
@@ -185,6 +189,7 @@ def response_to_incubator(
         "correspondence_gaia_letter": (
             correspondence.gaia_letter if correspondence is not None else None
         ),
+        "lore_pass_baseline": staged_baseline.model_dump(mode="json"),
         "session_id": session_id,
         "llm_response_id": getattr(response, "response_id", None),
         "status": "provisional",
@@ -381,6 +386,7 @@ def validate_incubator_data(incubator_data: Dict[str, Any]) -> bool:
         "metadata_updates",
         "entity_updates",
         "reference_updates",
+        "lore_pass_baseline",
         "session_id",
         "status",
     ]
@@ -391,6 +397,8 @@ def validate_incubator_data(incubator_data: Dict[str, Any]) -> bool:
 
     if not incubator_data["storyteller_text"]:
         raise ValueError("Storyteller text cannot be empty")
+
+    validate_staged_pass2_baseline(incubator_data["lore_pass_baseline"])
 
     if incubator_data["chunk_id"] <= incubator_data["parent_chunk_id"]:
         raise ValueError("Chunk ID must be greater than parent chunk ID")

@@ -4,7 +4,28 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Set, Union
+from typing import (
+    Annotated,
+    Any,
+    Dict,
+    Iterable,
+    List,
+    Literal,
+    Mapping,
+    Optional,
+    Set,
+    Union,
+)
+
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    NonNegativeInt,
+    PositiveInt,
+    StrictInt,
+    model_validator,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -12,6 +33,58 @@ logger = logging.getLogger(__name__)
 MemoryIdentity = Union[int, str]
 RETROGRADE_SUMMARY_CONTENT_TYPE = "retrograde_summary"
 RETROGRADE_SUMMARY_ID_PREFIX = "retrograde_summary:"
+PASS2_BASELINE_SCHEMA_VERSION = 1
+PASS2_BASELINE_PRODUCER = "nexus.memory.context_memory_manager"
+
+PersistedRetrogradeIdentity = Annotated[
+    str,
+    Field(pattern=r"^retrograde_summary:[1-9][0-9]*$"),
+]
+PersistedMemoryIdentity = Union[StrictInt, PersistedRetrogradeIdentity]
+
+
+class Pass2BaselineV1(BaseModel):
+    """Durable Pass-1 state required to run Pass 2 on the next turn."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    schema_version: Literal[1] = PASS2_BASELINE_SCHEMA_VERSION
+    producer: Literal["nexus.memory.context_memory_manager"] = PASS2_BASELINE_PRODUCER
+    config_fingerprint: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+    parent_chunk_id: Optional[PositiveInt] = None
+    memory_identities: List[PersistedMemoryIdentity]
+    prior_token_accounting: Dict[str, NonNegativeInt]
+    remaining_budget: NonNegativeInt
+
+    @model_validator(mode="after")
+    def validate_memory_identities(self) -> "Pass2BaselineV1":
+        """Reject booleans, non-positive chunk ids, and duplicate identities."""
+
+        identities: List[MemoryIdentity] = list(self.memory_identities)
+        for identity in identities:
+            if isinstance(identity, int) and identity <= 0:
+                raise ValueError("narrative memory identities must be positive")
+        if len(set(identities)) != len(identities):
+            raise ValueError("memory identities must be unique")
+        return self
+
+
+def validate_staged_pass2_baseline(payload: Any) -> Pass2BaselineV1:
+    """Validate an incubator baseline and require it to remain ID-unbound."""
+
+    baseline = Pass2BaselineV1.model_validate(payload)
+    if baseline.parent_chunk_id is not None:
+        raise ValueError("Staged Pass-2 baseline must not predict an accepted chunk id")
+    return baseline
+
+
+def bind_pass2_baseline(payload: Any, chunk_id: int) -> Pass2BaselineV1:
+    """Bind a validated staged baseline to the actual accepted chunk id."""
+
+    if isinstance(chunk_id, bool) or not isinstance(chunk_id, int) or chunk_id <= 0:
+        raise ValueError("Accepted Pass-2 baseline chunk id must be positive")
+    staged = validate_staged_pass2_baseline(payload)
+    return staged.model_copy(update={"parent_chunk_id": chunk_id})
 
 
 def is_retrograde_summary(memory: Dict[str, Any]) -> bool:
