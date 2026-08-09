@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 import json
+from types import MappingProxyType
 from typing import Any, Iterable, Mapping, Optional, Sequence
 
 from sqlalchemy import text
@@ -16,6 +17,28 @@ EVENT_ROLES = frozenset({"actor", "target", "observer", "witness", "beneficiary"
 PARTICIPANT_ROLES = frozenset({"actor", "target", "beneficiary"})
 WITNESS_ROLES = frozenset({"observer", "witness"})
 SOURCE_TIERS = frozenset({"participant", "witness", "told", "granted"})
+CLAIM_BIRTH_ROLE_POLICY: Mapping[str, frozenset[str]] = MappingProxyType(
+    {
+        "compliance_alert": frozenset({"actor", "target"}),
+        "encoded_message": frozenset({"actor", "target"}),
+        "hunt_called_off": frozenset({"actor"}),
+        "hunt_declared": frozenset({"actor"}),
+        "informant_contact": frozenset({"actor", "target"}),
+        "intel_acquired": frozenset({"actor", "target"}),
+        "intel_acted_on": frozenset({"actor"}),
+        "protective_intervention": frozenset({"actor"}),
+        "pursue_romance_completed": frozenset({"actor", "target"}),
+        "recruit_ally_completed": frozenset({"actor", "target"}),
+        "relationship_drift_milestone": frozenset({"actor"}),
+        "retaliation_attempted": frozenset({"actor"}),
+        "retaliation_executed": frozenset({"actor", "target"}),
+        "rival_consulted": frozenset({"actor", "target"}),
+        "seek_redemption_completed": frozenset({"actor", "target"}),
+        "surveillance_performed": frozenset({"actor"}),
+        "threat_issued": frozenset({"actor", "target"}),
+        "warning_delivered": frozenset({"actor", "target"}),
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -123,6 +146,18 @@ def load_epistemics_policy() -> EpistemicsPolicy:
     return coerce_epistemics_policy(settings.orrery.epistemics)
 
 
+def apply_claim_birth_role_policy(
+    event_type: str,
+    policy: EpistemicsPolicy,
+) -> EpistemicsPolicy:
+    """Restrict awareness to the authoritative birth roles for an event type."""
+
+    birth_roles = CLAIM_BIRTH_ROLE_POLICY.get(event_type)
+    if birth_roles is None:
+        raise ValueError(f"Claim event type {event_type!r} has no birth-role policy")
+    return replace(policy, aware_roles=policy.aware_roles & birth_roles)
+
+
 def mechanical_claim_summary(
     event_type: str, participants: Iterable[ClaimParticipant | Mapping[str, Any]]
 ) -> str:
@@ -158,6 +193,7 @@ def mint_claim_for_event(
     policy = coerce_epistemics_policy(settings)
     if not policy.enabled or event_type not in policy.claim_event_types:
         return None
+    policy = apply_claim_birth_role_policy(event_type, policy)
     normalized = _normalize_participants(participants)
     clean_summary = summary.strip()
     if not clean_summary:
@@ -215,6 +251,7 @@ async def mint_claim_for_event_async(
     policy = coerce_epistemics_policy(settings)
     if not policy.enabled or event_type not in policy.claim_event_types:
         return None
+    policy = apply_claim_birth_role_policy(event_type, policy)
     normalized = _normalize_participants(participants)
     clean_summary = summary.strip()
     if not clean_summary:

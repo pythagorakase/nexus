@@ -16,14 +16,23 @@ from psycopg2.extras import RealDictCursor  # type: ignore[import-untyped]
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from nexus.agents.orrery.epistemics import mint_account_variant_sync
-from nexus.agents.orrery.events import (
-    LIVE_EVENT_BIRTH_ROLES,
-    commit_orrery_tick_sync,
+from nexus.agents.orrery.epistemics import (
+    CLAIM_BIRTH_ROLE_POLICY,
+    mint_account_variant_sync,
 )
+from nexus.agents.orrery.events import commit_orrery_tick_sync
 from nexus.agents.orrery.reconstruction import capture_state_checkpoint_sync
 from nexus.agents.orrery.replay import canonicalize, reconstruct_state_at_sync
 from nexus.agents.orrery.resolver import resolve_dry_run
+from nexus.agents.orrery.retrograde_expansion import (
+    RetrogradeExpansionEventPlan,
+    RetrogradeExpansionParticipant,
+)
+from nexus.agents.orrery.retrograde_persistence import (
+    _EntityRecord,
+    _plan_event_row,
+)
+from nexus.agents.orrery.retrograde_vocabulary import normalize_entity_ref
 from nexus.agents.orrery.substrate import (
     ALWAYS,
     Branch,
@@ -305,6 +314,58 @@ def _target_draft(proposal: Any, actor: int, target: int) -> Any:
     return matches[0]
 
 
+def _retrograde_private_event(
+    cur: Any,
+    *,
+    state: Mapping[str, Any],
+    event: RetrogradeExpansionEventPlan,
+    epistemics_settings: Mapping[str, Any],
+) -> dict[str, Any]:
+    records = (
+        _EntityRecord(
+            entity_id=int(state[role]),
+            entity_kind="character",
+            name=str(state[f"{role}_name"]),
+            character_id=int(state[f"{role}_character"]),
+            faction_id=None,
+            place_id=None,
+        )
+        for role in ("actor", "target")
+    )
+    entity_index = {
+        ("character", normalize_entity_ref(record.name)): [record] for record in records
+    }
+    return _plan_event_row(
+        cur,
+        event,
+        dry_run=False,
+        prologue_chunk_id=int(state["base_chunk"]),
+        entity_index=entity_index,
+        event_types={event.event_type},
+        event_source_available=True,
+        creatable_refs=frozenset(),
+        epistemics_settings=epistemics_settings,
+    )
+
+
+def _private_retrograde_plan(state: Mapping[str, Any]) -> RetrogradeExpansionEventPlan:
+    return RetrogradeExpansionEventPlan(
+        event_ref=f"qa679_private_retrograde_{uuid4().hex}",
+        seed_ids=["qa679_private_retrograde"],
+        event_type="surveillance_performed",
+        summary="Ephemeral private retrograde surveillance.",
+        chronology="recent_past",
+        participants=[
+            RetrogradeExpansionParticipant(
+                entity_ref=str(state[f"{role}_name"]),
+                entity_kind="character",
+                role=role,
+            )
+            for role in ("actor", "target")
+        ],
+    )
+
+
 def _commit_proposal(
     dbname: str,
     *,
@@ -466,6 +527,60 @@ def test_detected_signal_receipt_is_separate_from_private_deed(
             state["target"]: "participant",
         }
         assert state["nearby"] not in _awareness(cur, int(signal["claim_id"]))
+
+
+def test_retrograde_private_event_mints_actor_awareness_only(
+    claim_birth_db: str,
+) -> None:
+    """Retrograde insertion uses the same actor-private receipt policy as live."""
+
+    state = _seed_world(claim_birth_db)
+    event = _private_retrograde_plan(state)
+    with _connect(claim_birth_db) as conn, conn.cursor() as cur:
+        inserted = _retrograde_private_event(
+            cur,
+            state=state,
+            event=event,
+            epistemics_settings=EPISTEMICS,
+        )
+        assert inserted["status"] == "inserted"
+        assert _awareness(cur, int(inserted["claim_id"])) == {
+            state["actor"]: "participant"
+        }
+
+
+def test_retrograde_private_reprocess_backfills_no_target_awareness(
+    claim_birth_db: str,
+) -> None:
+    """An already-present event backfills only its authoritative actor receipt."""
+
+    state = _seed_world(claim_birth_db)
+    event = _private_retrograde_plan(state)
+    with _connect(claim_birth_db) as conn, conn.cursor() as cur:
+        inserted = _retrograde_private_event(
+            cur,
+            state=state,
+            event=event,
+            epistemics_settings={**EPISTEMICS, "enabled": False},
+        )
+        assert inserted["status"] == "inserted"
+        assert inserted["claim_id"] is None
+    with _connect(claim_birth_db) as conn, conn.cursor() as cur:
+        reprocessed = _retrograde_private_event(
+            cur,
+            state=state,
+            event=event,
+            epistemics_settings=EPISTEMICS,
+        )
+        assert reprocessed["status"] == "already_present"
+        assert _awareness(cur, int(reprocessed["claim_id"])) == {
+            state["actor"]: "participant"
+        }
+        cur.execute(
+            "SELECT count(*) AS count FROM claims WHERE world_event_id = %s",
+            (reprocessed["world_event_id"],),
+        )
+        assert int(cur.fetchone()["count"]) == 1
 
 
 def _canonical_rows(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
@@ -680,6 +795,4 @@ def test_matrix_partitions_the_exact_approved_set() -> None:
         *SIGNAL_EVENT_TYPES,
         "relationship_drift_milestone",
     }
-    assert set(LIVE_EVENT_BIRTH_ROLES) | {"relationship_drift_milestone"} == set(
-        APPROVED_EVENT_TYPES
-    )
+    assert set(CLAIM_BIRTH_ROLE_POLICY) == set(APPROVED_EVENT_TYPES)

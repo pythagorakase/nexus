@@ -78,25 +78,6 @@ from nexus.agents.orrery.tag_writer import (
 
 
 ENTITY_BINDING_SLOTS = frozenset({"actor", "target", "targets", "faction"})
-LIVE_EVENT_BIRTH_ROLES: Mapping[str, frozenset[str]] = {
-    "compliance_alert": frozenset({"actor", "target"}),
-    "encoded_message": frozenset({"actor", "target"}),
-    "hunt_called_off": frozenset({"actor"}),
-    "hunt_declared": frozenset({"actor"}),
-    "informant_contact": frozenset({"actor", "target"}),
-    "intel_acquired": frozenset({"actor", "target"}),
-    "intel_acted_on": frozenset({"actor"}),
-    "protective_intervention": frozenset({"actor"}),
-    "pursue_romance_completed": frozenset({"actor", "target"}),
-    "recruit_ally_completed": frozenset({"actor", "target"}),
-    "retaliation_attempted": frozenset({"actor"}),
-    "retaliation_executed": frozenset({"actor", "target"}),
-    "rival_consulted": frozenset({"actor", "target"}),
-    "seek_redemption_completed": frozenset({"actor", "target"}),
-    "surveillance_performed": frozenset({"actor"}),
-    "threat_issued": frozenset({"actor", "target"}),
-    "warning_delivered": frozenset({"actor", "target"}),
-}
 SUPPORTED_STATE_DELTA_KEYS = frozenset(
     {
         "character.current_activity",
@@ -6051,11 +6032,6 @@ def _mint_live_event_claim_sync(
     policy = coerce_epistemics_policy(epistemics_settings)
     if not policy.enabled or event_type not in policy.claim_event_types:
         return None
-    birth_roles = LIVE_EVENT_BIRTH_ROLES.get(event_type)
-    if birth_roles is None:
-        raise ValueError(
-            f"Live claim event type {event_type!r} has no birth-role policy"
-        )
     participants = _live_event_claim_participants(
         actor_entity_id=actor_entity_id,
         target_entity_id=target_entity_id,
@@ -6070,10 +6046,7 @@ def _mint_live_event_claim_sync(
         participants=participants,
         source_chunk_id=source_chunk_id,
         source_resolution_id=source_resolution_id,
-        settings=replace(
-            policy,
-            aware_roles=policy.aware_roles & birth_roles,
-        ),
+        settings=policy,
     )
 
 
@@ -6093,11 +6066,6 @@ async def _mint_live_event_claim_async(
     policy = coerce_epistemics_policy(epistemics_settings)
     if not policy.enabled or event_type not in policy.claim_event_types:
         return None
-    birth_roles = LIVE_EVENT_BIRTH_ROLES.get(event_type)
-    if birth_roles is None:
-        raise ValueError(
-            f"Live claim event type {event_type!r} has no birth-role policy"
-        )
     participants = _live_event_claim_participants(
         actor_entity_id=actor_entity_id,
         target_entity_id=target_entity_id,
@@ -6112,10 +6080,7 @@ async def _mint_live_event_claim_async(
         participants=participants,
         source_chunk_id=source_chunk_id,
         source_resolution_id=source_resolution_id,
-        settings=replace(
-            policy,
-            aware_roles=policy.aware_roles & birth_roles,
-        ),
+        settings=policy,
     )
 
 

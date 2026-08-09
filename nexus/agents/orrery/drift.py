@@ -14,7 +14,7 @@ large world-time jumps.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP, localcontext
 import json
@@ -23,7 +23,6 @@ from typing import Any, Mapping, Optional, Sequence
 from nexus.agents.orrery.db_rows import row_get as _row_get
 from nexus.agents.orrery.epistemics import (
     ClaimParticipant,
-    coerce_epistemics_policy,
     mechanical_claim_summary,
     mint_claim_for_event,
     mint_claim_for_event_async,
@@ -936,7 +935,6 @@ def _emit_milestone_sync(
     event_id = int(_row_get(cur.fetchone(), "id", 0))
     _insert_event_entities_sync(cur, event_id=event_id, edge=edge)
     participants = _claim_participants_sync(cur, edge)
-    policy = coerce_epistemics_policy(epistemics_settings)
     mint_result = mint_claim_for_event(
         cur,
         world_event_id=event_id,
@@ -945,10 +943,7 @@ def _emit_milestone_sync(
         participants=participants,
         source_chunk_id=tick_chunk_id,
         source_resolution_id=None,
-        settings=replace(
-            policy,
-            aware_roles=policy.aware_roles & frozenset({"actor"}),
-        ),
+        settings=epistemics_settings,
     )
     return event_id, mint_result.claim_id if mint_result is not None else None
 
@@ -989,7 +984,6 @@ async def _emit_milestone_async(
     )
     await _insert_event_entities_async(conn, event_id=int(event_id), edge=edge)
     participants = await _claim_participants_async(conn, edge)
-    policy = coerce_epistemics_policy(epistemics_settings)
     mint_result = await mint_claim_for_event_async(
         conn,
         world_event_id=int(event_id),
@@ -998,10 +992,7 @@ async def _emit_milestone_async(
         participants=participants,
         source_chunk_id=tick_chunk_id,
         source_resolution_id=None,
-        settings=replace(
-            policy,
-            aware_roles=policy.aware_roles & frozenset({"actor"}),
-        ),
+        settings=epistemics_settings,
     )
     return int(event_id), mint_result.claim_id if mint_result is not None else None
 

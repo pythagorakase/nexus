@@ -199,6 +199,36 @@ def test_epistemics_rejects_claim_propagated_as_claim_producer() -> None:
         OrreryEpistemicsSettings(claim_event_types=["claim_propagated"])
 
 
+def test_epistemics_rejects_unknown_claim_event_type() -> None:
+    """Unknown vocabulary entries fail while configuration is loading."""
+
+    with pytest.raises(ValidationError, match="unknown event types.*not_registered"):
+        OrreryEpistemicsSettings(claim_event_types=["not_registered"])
+
+
+def test_epistemics_rejects_event_type_without_birth_role_policy() -> None:
+    """Known vocabulary cannot opt into claims without an audience policy."""
+
+    with pytest.raises(
+        ValidationError,
+        match="without birth-role policies.*ate",
+    ):
+        OrreryEpistemicsSettings(claim_event_types=["ate"])
+
+
+def test_epistemics_accepts_exact_birth_role_policy_registry() -> None:
+    """Every approved event type is valid as one load-time configuration."""
+
+    from nexus.agents.orrery.epistemics import CLAIM_BIRTH_ROLE_POLICY
+    from nexus.agents.orrery.event_vocabulary import known_event_types
+
+    configured = list(CLAIM_BIRTH_ROLE_POLICY)
+    settings = OrreryEpistemicsSettings(claim_event_types=configured)
+    assert len(known_event_types()) == 109
+    assert set(configured) <= known_event_types()
+    assert settings.claim_event_types == configured
+
+
 def test_drift_rejects_nonnegative_hostile_delta() -> None:
     """Hostile classification mistakes fail during config validation."""
 

@@ -29,6 +29,10 @@ Issue #679 producer audit and shipped tracked-at-birth policy.
   and `witness` only for an explicit `observer`/`witness` row. `told` and
   `granted` are later revelation/manual-acquisition tiers, not live-event birth
   tiers. No generic resolver event currently has an admissible witness roster.
+- `nexus.agents.orrery.epistemics.CLAIM_BIRTH_ROLE_POLICY` is the single
+  enforcement registry for live, drift, Retrograde, and already-present
+  reprocessing mints. Configuration loading requires every opted-in type to be
+  both known vocabulary and present in that registry.
 
 ## Live tracking allowlist
 

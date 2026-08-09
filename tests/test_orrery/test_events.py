@@ -844,20 +844,14 @@ def test_detected_signal_event_mints_and_ledgers_claim_sync(monkeypatch: Any) ->
     """Primary and signal claims share one ordered, lossless applied ledger."""
 
     cursor = SignalEventCursor()
-    mint_calls: list[tuple[int, str, frozenset[str]]] = []
+    mint_calls: list[tuple[int, str]] = []
     ledgered: list[tuple[int, dict[str, Any]]] = []
 
     def mint_claim(_cur: Any, **kwargs: Any) -> Any:
-        mint_calls.append(
-            (
-                kwargs["world_event_id"],
-                kwargs["event_type"],
-                kwargs["settings"].aware_roles,
-            )
-        )
+        mint_calls.append((kwargs["world_event_id"], kwargs["event_type"]))
         if kwargs["event_type"] == "threat_issued":
             return orrery_events.MintResult(91, (101, 102))
-        return orrery_events.MintResult(90, (99,))
+        return orrery_events.MintResult(90, (99, 100))
 
     def ledger_claim(_cur: Any, **kwargs: Any) -> None:
         ledgered.append(
@@ -902,18 +896,15 @@ def test_detected_signal_event_mints_and_ledgers_claim_sync(monkeypatch: Any) ->
     )
 
     assert event_id == 20
-    assert mint_calls == [
-        (20, "retaliation_attempted", frozenset({"actor"})),
-        (21, "threat_issued", frozenset({"actor", "target"})),
-    ]
+    assert mint_calls == [(20, "retaliation_attempted"), (21, "threat_issued")]
     assert ledgered == [
         (
             10,
             {
                 "claim_id": 90,
-                "claim_awareness_ids": [99],
+                "claim_awareness_ids": [99, 100],
                 "claims": [
-                    {"claim_id": 90, "claim_awareness_ids": [99]},
+                    {"claim_id": 90, "claim_awareness_ids": [99, 100]},
                     {"claim_id": 91, "claim_awareness_ids": [101, 102]},
                 ],
             },
@@ -933,20 +924,14 @@ def test_detected_signal_event_mints_and_ledgers_claim_async(
     import asyncio
 
     conn = AsyncSignalEventConn()
-    mint_calls: list[tuple[int, str, frozenset[str]]] = []
+    mint_calls: list[tuple[int, str]] = []
     ledgered: list[tuple[int, dict[str, Any]]] = []
 
     async def mint_claim(_conn: Any, **kwargs: Any) -> Any:
-        mint_calls.append(
-            (
-                kwargs["world_event_id"],
-                kwargs["event_type"],
-                kwargs["settings"].aware_roles,
-            )
-        )
+        mint_calls.append((kwargs["world_event_id"], kwargs["event_type"]))
         if kwargs["event_type"] == "threat_issued":
             return orrery_events.MintResult(92, (103, 104))
-        return orrery_events.MintResult(91, (101,))
+        return orrery_events.MintResult(91, (101, 102))
 
     async def ledger_claim(_conn: Any, **kwargs: Any) -> None:
         ledgered.append(
@@ -992,18 +977,15 @@ def test_detected_signal_event_mints_and_ledgers_claim_async(
         )
 
     assert asyncio.run(run()) == 20
-    assert mint_calls == [
-        (20, "retaliation_attempted", frozenset({"actor"})),
-        (21, "threat_issued", frozenset({"actor", "target"})),
-    ]
+    assert mint_calls == [(20, "retaliation_attempted"), (21, "threat_issued")]
     assert ledgered == [
         (
             10,
             {
                 "claim_id": 91,
-                "claim_awareness_ids": [101],
+                "claim_awareness_ids": [101, 102],
                 "claims": [
-                    {"claim_id": 91, "claim_awareness_ids": [101]},
+                    {"claim_id": 91, "claim_awareness_ids": [101, 102]},
                     {"claim_id": 92, "claim_awareness_ids": [103, 104]},
                 ],
             },
