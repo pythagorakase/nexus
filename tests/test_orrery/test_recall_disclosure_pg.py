@@ -9,7 +9,7 @@ import json
 import os
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Iterator, cast
+from typing import Any, Iterator, Mapping, cast
 from uuid import uuid4
 
 import psycopg2
@@ -28,8 +28,13 @@ from nexus.agents.memnon.utils.embedding_tables import (
     ensure_character_experience_embedding_table,
     ensure_embedding_table,
 )
+from nexus.agents.orrery.audit import cognition_trace
+from nexus.agents.orrery.events import commit_orrery_tick_sync
 from nexus.agents.orrery.knowledge_surfacing import build_knowledge_digest_sync
+from nexus.agents.orrery.resolver import resolve_dry_run
+from nexus.agents.orrery.substrate import ALWAYS, Branch, DriveBand, Slot, Template
 from nexus.api import orrery_dev_endpoints
+from nexus.config import load_settings_as_dict
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -172,6 +177,27 @@ def _character(session: Session, label: str) -> tuple[int, int]:
         ).scalar_one()
     )
     return entity_id, character_id
+
+
+def _place(session: Session, label: str) -> tuple[int, int]:
+    entity_id = int(
+        session.execute(
+            text(
+                "INSERT INTO entities (kind, is_active) "
+                "VALUES ('place', true) RETURNING id"
+            )
+        ).scalar_one()
+    )
+    place_id = int(
+        session.execute(
+            text(
+                "INSERT INTO places (entity_id, name, type) "
+                "VALUES (:entity_id, :name, 'fixed_location') RETURNING id"
+            ),
+            {"entity_id": entity_id, "name": f"recall-{label}-{uuid4().hex[:6]}"},
+        ).scalar_one()
+    )
+    return entity_id, place_id
 
 
 def _faction(session: Session, label: str) -> int:
@@ -421,7 +447,6 @@ def test_cognition_trace_endpoint_keeps_canonical_truth_guarded(
     )
     alpha = _character(session, "cognition-alpha")
     beta = _character(session, "cognition-beta")
-    _present(session, chunk_id=anchor, characters=[alpha, beta])
 
     possessed_claim, awareness_id = _claim(
         session,
@@ -525,36 +550,51 @@ def test_cognition_trace_endpoint_keeps_canonical_truth_guarded(
         ),
         {"anchor": anchor, "source": source, "experience_id": experience_id},
     )
-    session.execute(
-        text(
-            """
-            INSERT INTO orrery_resolutions (
-                tick_chunk_id, template_id, binding_hash, actor_entity_id,
-                priority, magnitude, state_delta, brief
-            ) VALUES (
-                :anchor, 'qa680_resolution', 'qa680-binding', :actor_id,
-                50, 0.5, '{"character.current_activity": "investigating"}',
-                'A cognition-relevant proposal.'
-            )
-            """
-        ),
-        {"anchor": anchor, "actor_id": alpha[0]},
-    )
-    session.execute(
-        text(
-            """
-            INSERT INTO orrery_prompt_exposures (
-                tick_chunk_id, kind, proposal_id, template_id,
-                binding_hash, position
-            ) VALUES (
-                :anchor, 'resolution', 'qa680-proposal',
-                'qa680_resolution', 'qa680-binding', 0
-            )
-            """
-        ),
-        {"anchor": anchor},
-    )
     session.flush()
+
+    def actor_is_alpha(_state: Any, bindings: Mapping[Slot, Any]) -> bool:
+        return bindings.get(Slot.ACTOR) == alpha[0]
+
+    actor_is_alpha.__name__ = "qa680_actor_is_alpha"
+    template = Template(
+        id="qa680_cognition_probe",
+        priority=50,
+        drive_band=DriveBand.AFFILIATION,
+        blurb="Exercise cognition exposure persistence.",
+        required_slots=(Slot.ACTOR,),
+        package_gate=actor_is_alpha,
+        branches=(
+            Branch(
+                label="Inspect a private account",
+                conditions=ALWAYS,
+                narrative_stub="{actor} reviews what they believe happened.",
+                magnitude=0.5,
+            ),
+        ),
+    )
+    proposal = resolve_dry_run(
+        session,
+        (template,),
+        anchor_chunk_id=anchor,
+        window_chunks=3,
+        epistemics_settings={"enabled": False},
+    )
+    assert len(proposal.resolutions) == 1
+    assert proposal.resolutions[0].bindings == {"actor": alpha[0]}
+    raw_connection = session.connection().connection.driver_connection
+    committed = commit_orrery_tick_sync(
+        raw_connection,
+        proposal,
+        tick_chunk_id=anchor,
+        prompt_settings={
+            "max_rendered_proposals": 1,
+            "max_rendered_pressures": 1,
+        },
+        epistemics_settings={"enabled": False},
+    )
+    assert committed.resolution_count == 1
+    assert committed.prompt_exposure_count == 1
+    session.expire_all()
 
     @contextmanager
     def seeded_session(_slot: int | None) -> Iterator[Session]:
@@ -575,7 +615,7 @@ def test_cognition_trace_endpoint_keeps_canonical_truth_guarded(
         actor["possessed_accounts"][0]["possession"]["source_chain"][-1]["entity_id"]
         == alpha[0]
     )
-    assert actor["experiences"][0]["source_events"][0]["event_id"]
+    assert actor["experiences"][0]["source_event_ids"]
     assert {row["decision"] for row in actor["recall_candidates"]} >= {
         "included",
         "suppressed",
@@ -585,7 +625,7 @@ def test_cognition_trace_endpoint_keeps_canonical_truth_guarded(
         for row in actor["disclosure_results"]
     )
     assert actor["prompt_exposure"]["orrery_proposals"][0]["template_id"] == (
-        "qa680_resolution"
+        "qa680_cognition_probe"
     )
     assert actor["prompt_exposure"]["knowledge_surfacing"]
     assert actor["experience_jobs"][0]["state"] == "stale_rejected"
@@ -603,6 +643,188 @@ def test_cognition_trace_endpoint_keeps_canonical_truth_guarded(
         row["claim_id"] for row in canonical["unpossessed_sibling_accounts"]
     }
     assert latent_claim in {row["claim_id"] for row in canonical["latent_secrets"]}
+
+
+def _nested_keys(value: Any) -> set[str]:
+    if isinstance(value, dict):
+        return set(value) | {
+            key for child in value.values() for key in _nested_keys(child)
+        }
+    if isinstance(value, list):
+        return {key for child in value for key in _nested_keys(child)}
+    return set()
+
+
+def test_distorted_account_never_leaks_canonical_event_adjacency(
+    session: Session,
+) -> None:
+    """Possession exposes account content, while event canon stays guarded."""
+
+    base = datetime(2078, 3, 1, tzinfo=timezone.utc)
+    source = _chunk(session, label="distorted source", world_time=base, scene=1)
+    anchor = _chunk(
+        session,
+        label="distorted anchor",
+        world_time=base + timedelta(hours=1),
+        scene=2,
+    )
+    knower = _character(session, "distorted-knower")
+    canonical_actor = _character(session, "distorted-canonical-actor")
+    canonical_target = _character(session, "distorted-canonical-target")
+    _place_entity_id, canonical_place = _place(session, "distorted-place")
+    claim_id, awareness_id = _claim(
+        session,
+        owner_entity_id=knower[0],
+        chunk_id=source,
+        acquired_at=base,
+        label="distorted account only",
+        scope="private",
+        source_tier="told",
+    )
+    assert awareness_id is not None
+    event_id = int(
+        session.execute(
+            text("SELECT world_event_id FROM claims WHERE id = :claim_id"),
+            {"claim_id": claim_id},
+        ).scalar_one()
+    )
+    session.execute(
+        text(
+            """
+            UPDATE world_events
+            SET actor_entity_id = :actor_id,
+                target_entity_id = :target_id,
+                location_id = :location_id,
+                payload = '{"canonical_detail": "unseen"}'::jsonb
+            WHERE id = :event_id
+            """
+        ),
+        {
+            "actor_id": canonical_actor[0],
+            "target_id": canonical_target[0],
+            "location_id": canonical_place,
+            "event_id": event_id,
+        },
+    )
+    session.execute(
+        text(
+            """
+            UPDATE claims
+            SET summary = 'A masked figure crossed the square.',
+                account_label = 'distorted',
+                account_payload = '{"heard": "a masked figure crossed the square"}'
+            WHERE id = :claim_id
+            """
+        ),
+        {"claim_id": claim_id},
+    )
+    payload = cognition_trace(
+        session,
+        knower[0],
+        anchor_chunk_id=anchor,
+        orrery_settings=load_settings_as_dict()["orrery"],
+    )
+
+    actor_facing = payload["actor_facing"]
+    forbidden = {"actor_entity_id", "target_entity_id", "location_id"}
+    assert not (_nested_keys(actor_facing) & forbidden)
+    assert actor_facing["possessed_accounts"][0]["account_label"] == "distorted"
+    canonical_event = next(
+        row
+        for row in payload["canonical_truth"]["source_events"]
+        if row["event_id"] == event_id
+    )
+    assert canonical_event["actor_entity_id"] == canonical_actor[0]
+    assert canonical_event["target_entity_id"] == canonical_target[0]
+    assert canonical_event["location_id"] == canonical_place
+
+
+def test_cognition_trace_rolls_awareness_and_secret_status_back_to_anchor(
+    session: Session,
+) -> None:
+    """A later reveal and acquisition do not rewrite a pre-reveal trace."""
+
+    base = datetime(2078, 4, 1, tzinfo=timezone.utc)
+    source = _chunk(session, label="rollback source 915", world_time=base, scene=1)
+    pre_reveal = _chunk(
+        session,
+        label="rollback pre-reveal 916",
+        world_time=base + timedelta(hours=1),
+        scene=2,
+    )
+    reveal = _chunk(
+        session,
+        label="rollback reveal 917",
+        world_time=base + timedelta(hours=2),
+        scene=3,
+    )
+    knower = _character(session, "rollback-knower")
+    secret_claim, _ = _claim(
+        session,
+        owner_entity_id=knower[0],
+        chunk_id=source,
+        acquired_at=base,
+        label="later revealed secret",
+        scope="private",
+    )
+    session.execute(
+        text(
+            """
+            INSERT INTO backstory_secrets (
+                claim_id, gate_template_id, holder_entity_id, source_chunk_id,
+                status, revealed_at_world_time, revealed_by_chunk_id
+            ) VALUES (
+                :claim_id, 'qa680_rollback_gate', :holder_id, :source_chunk_id,
+                'revealed', :revealed_at, :revealed_by_chunk_id
+            )
+            """
+        ),
+        {
+            "claim_id": secret_claim,
+            "holder_id": knower[0],
+            "source_chunk_id": source,
+            "revealed_at": base + timedelta(hours=2),
+            "revealed_by_chunk_id": reveal,
+        },
+    )
+    future_claim, _ = _claim(
+        session,
+        owner_entity_id=knower[0],
+        chunk_id=reveal,
+        acquired_at=base + timedelta(hours=2),
+        label="future acquisition",
+        scope="private",
+    )
+    settings = load_settings_as_dict()["orrery"]
+
+    before = cognition_trace(
+        session,
+        knower[0],
+        anchor_chunk_id=pre_reveal,
+        orrery_settings=settings,
+    )
+    before_claims = {
+        row["claim_id"] for row in before["actor_facing"]["possessed_accounts"]
+    }
+    assert secret_claim not in before_claims
+    assert future_claim not in before_claims
+    assert secret_claim in {
+        row["claim_id"] for row in before["canonical_truth"]["latent_secrets"]
+    }
+
+    after = cognition_trace(
+        session,
+        knower[0],
+        anchor_chunk_id=reveal,
+        orrery_settings=settings,
+    )
+    after_claims = {
+        row["claim_id"] for row in after["actor_facing"]["possessed_accounts"]
+    }
+    assert {secret_claim, future_claim} <= after_claims
+    assert secret_claim not in {
+        row["claim_id"] for row in after["canonical_truth"]["latent_secrets"]
+    }
 
 
 def test_ownership_and_anchor_validity_are_hard_boundaries(session: Session) -> None:

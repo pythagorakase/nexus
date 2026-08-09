@@ -1195,38 +1195,79 @@ def _cognition_source_chain(
     return chain
 
 
-def _cognition_effective_config(orrery_settings: Mapping[str, Any]) -> dict[str, Any]:
-    """Project only cognition-relevant, developer-adjustable configuration."""
+def _required_cognition_config_section(
+    orrery_settings: Mapping[str, Any], section: str
+) -> Mapping[str, Any]:
+    """Return one required Orrery config section or fail with its full name."""
 
-    knowledge = dict(orrery_settings.get("knowledge") or {})
-    recall = dict(orrery_settings.get("recall") or {})
-    disclosure = dict(orrery_settings.get("disclosure") or {})
-    experiences = dict(orrery_settings.get("experiences") or {})
-    epistemics = dict(orrery_settings.get("epistemics") or {})
-    prompt = dict(orrery_settings.get("prompt") or {})
+    if section not in orrery_settings:
+        raise KeyError(f"Missing required cognition config section [orrery.{section}]")
+    value = orrery_settings[section]
+    if not isinstance(value, Mapping):
+        raise TypeError(f"Cognition config [orrery.{section}] must be a mapping")
+    return value
+
+
+def _required_cognition_config_value(
+    section: Mapping[str, Any], section_name: str, key: str
+) -> Any:
+    """Return one required reported value without inventing a dashboard default."""
+
+    if key not in section:
+        raise KeyError(
+            f"Missing required cognition config key [orrery.{section_name}].{key}"
+        )
+    return section[key]
+
+
+def _cognition_effective_config(orrery_settings: Mapping[str, Any]) -> dict[str, Any]:
+    """Project only cognition-relevant config, failing on incomplete truth."""
+
+    knowledge = _required_cognition_config_section(orrery_settings, "knowledge")
+    recall = _required_cognition_config_section(orrery_settings, "recall")
+    disclosure = _required_cognition_config_section(orrery_settings, "disclosure")
+    experiences = _required_cognition_config_section(orrery_settings, "experiences")
+    epistemics = _required_cognition_config_section(orrery_settings, "epistemics")
+    prompt = _required_cognition_config_section(orrery_settings, "prompt")
+
+    def required(section: Mapping[str, Any], section_name: str, key: str) -> Any:
+        return _required_cognition_config_value(section, section_name, key)
+
     return {
         "enabled": {
-            "knowledge": bool(knowledge.get("enabled")),
-            "experiences": bool(experiences.get("enabled")),
-            "epistemics": bool(epistemics.get("enabled")),
+            "knowledge": bool(required(knowledge, "knowledge", "enabled")),
+            "experiences": bool(required(experiences, "experiences", "enabled")),
+            "epistemics": bool(required(epistemics, "epistemics", "enabled")),
         },
         "caps": {
-            "knowledge_max_entries": knowledge.get("max_entries"),
-            "recall_per_character_max_entries": recall.get("per_character_max_entries"),
-            "recall_mandatory_reserved_entries": recall.get(
-                "mandatory_reserved_entries"
+            "knowledge_max_entries": required(knowledge, "knowledge", "max_entries"),
+            "recall_per_character_max_entries": required(
+                recall, "recall", "per_character_max_entries"
             ),
-            "recall_trace_rows_per_character": recall.get("trace_rows_per_character"),
-            "experience_max_seeds_per_render": experiences.get("max_seeds_per_render"),
-            "experience_max_jobs_per_drain": experiences.get("max_jobs_per_drain"),
-            "prompt_max_rendered_proposals": prompt.get("max_rendered_proposals"),
-            "prompt_max_rendered_pressures": prompt.get("max_rendered_pressures"),
-            "prompt_max_rendered_recent_rulings": prompt.get(
-                "max_rendered_recent_rulings"
+            "recall_mandatory_reserved_entries": required(
+                recall, "recall", "mandatory_reserved_entries"
+            ),
+            "recall_trace_rows_per_character": required(
+                recall, "recall", "trace_rows_per_character"
+            ),
+            "experience_max_seeds_per_render": required(
+                experiences, "experiences", "max_seeds_per_render"
+            ),
+            "experience_max_jobs_per_drain": required(
+                experiences, "experiences", "max_jobs_per_drain"
+            ),
+            "prompt_max_rendered_proposals": required(
+                prompt, "prompt", "max_rendered_proposals"
+            ),
+            "prompt_max_rendered_pressures": required(
+                prompt, "prompt", "max_rendered_pressures"
+            ),
+            "prompt_max_rendered_recent_rulings": required(
+                prompt, "prompt", "max_rendered_recent_rulings"
             ),
         },
         "weights": {
-            key: recall.get(key)
+            key: required(recall, "recall", key)
             for key in (
                 "semantic_fit_weight",
                 "event_severity_weight",
@@ -1237,16 +1278,24 @@ def _cognition_effective_config(orrery_settings: Mapping[str, Any]) -> dict[str,
             )
         },
         "thresholds": {
-            "disclosure_minimum_score": disclosure.get("minimum_score"),
-            "disclosure_private_claim_minimum_score": disclosure.get(
-                "private_claim_minimum_score"
+            "disclosure_minimum_score": required(
+                disclosure, "disclosure", "minimum_score"
             ),
-            "recall_decay_half_life_hours": recall.get("decay_half_life_hours"),
-            "recall_recency_horizon_hours": recall.get("recency_horizon_hours"),
+            "disclosure_private_claim_minimum_score": required(
+                disclosure, "disclosure", "private_claim_minimum_score"
+            ),
+            "recall_decay_half_life_hours": required(
+                recall, "recall", "decay_half_life_hours"
+            ),
+            "recall_recency_horizon_hours": required(
+                recall, "recall", "recency_horizon_hours"
+            ),
         },
         "producer_coverage": {
-            "claim_event_types": list(epistemics.get("claim_event_types") or []),
-            "aware_roles": list(epistemics.get("aware_roles") or []),
+            "claim_event_types": list(
+                required(epistemics, "epistemics", "claim_event_types")
+            ),
+            "aware_roles": list(required(epistemics, "epistemics", "aware_roles")),
             "experience_basis": ["participant", "witness", "acquisition"],
         },
     }
@@ -1333,15 +1382,10 @@ def cognition_trace(
                        claim.summary, claim.scope, claim.account_label,
                        claim.account_payload, claim.distorted_from_claim_id,
                        claim.distortion_min_depth,
-                       incident.event_type, incident.tick_chunk_id,
-                       incident.actor_entity_id, incident.target_entity_id,
-                       incident.location_id, incident.world_time,
-                       event_type.severity::text AS event_severity,
                        propagated.depth
                 FROM claim_awareness awareness
                 JOIN claims claim ON claim.id = awareness.claim_id
                 JOIN world_events incident ON incident.id = claim.world_event_id
-                JOIN event_types event_type ON event_type.type = incident.event_type
                 JOIN chunk_metadata source_meta ON source_meta.chunk_id =
                     COALESCE(awareness.source_chunk_id, claim.source_chunk_id)
                 CROSS JOIN anchor
@@ -1370,7 +1414,14 @@ def cognition_trace(
                   AND NOT EXISTS (
                       SELECT 1 FROM backstory_secrets secret
                       WHERE secret.claim_id = claim.id
-                        AND secret.status = 'latent'
+                        AND COALESCE(
+                            secret.source_chunk_id, claim.source_chunk_id
+                        ) <= :anchor_chunk_id
+                        AND (
+                            secret.revealed_by_chunk_id IS NULL
+                            OR secret.revealed_by_chunk_id > :anchor_chunk_id
+                        )
+                        AND secret.status <> 'retired'
                   )
                 ORDER BY awareness.id
                 """
@@ -1383,8 +1434,6 @@ def cognition_trace(
         for key in (
             "immediate_source_entity_id",
             "root_source_entity_id",
-            "actor_entity_id",
-            "target_entity_id",
         ):
             if row[key] is not None:
                 referenced_ids.add(int(row[key]))
@@ -1412,13 +1461,6 @@ def cognition_trace(
                 },
                 "source_event": {
                     "event_id": int(row["world_event_id"]),
-                    "event_type": str(row["event_type"]),
-                    "severity": row["event_severity"],
-                    "tick_chunk_id": int(row["tick_chunk_id"]),
-                    "actor_entity_id": row["actor_entity_id"],
-                    "target_entity_id": row["target_entity_id"],
-                    "location_id": row["location_id"],
-                    "world_time": _iso(row["world_time"]),
                 },
             }
         )
@@ -1442,8 +1484,16 @@ def cognition_trace(
                   )
                   AND NOT EXISTS (
                       SELECT 1 FROM backstory_secrets secret
+                      JOIN claims secret_claim ON secret_claim.id = secret.claim_id
                       WHERE secret.claim_id = experience.claim_id
-                        AND secret.status = 'latent'
+                        AND COALESCE(
+                            secret.source_chunk_id, secret_claim.source_chunk_id
+                        ) <= :anchor_chunk_id
+                        AND (
+                            secret.revealed_by_chunk_id IS NULL
+                            OR secret.revealed_by_chunk_id > :anchor_chunk_id
+                        )
+                        AND secret.status <> 'retired'
                   )
                 ORDER BY experience.anchor_chunk_id, experience.id
                 """
@@ -1456,41 +1506,6 @@ def cognition_trace(
             },
         ).mappings()
     )
-    event_ids = sorted(
-        {
-            int(event_id)
-            for row in experience_rows
-            for event_id in row["world_event_ids"]
-        }
-    )
-    events_by_id: dict[int, dict[str, Any]] = {}
-    if event_ids:
-        for row in session.execute(
-            text(
-                """
-                /* orrery_audit:cognition_experience_events */
-                SELECT event.id, event.event_type, event.tick_chunk_id,
-                       event.actor_entity_id, event.target_entity_id,
-                       event.location_id, event.world_time,
-                       event_type.severity::text AS severity
-                FROM world_events event
-                JOIN event_types event_type ON event_type.type = event.event_type
-                WHERE event.id = ANY(:event_ids)
-                ORDER BY event.tick_chunk_id, event.id
-                """
-            ),
-            {"event_ids": event_ids},
-        ).mappings():
-            events_by_id[int(row["id"])] = {
-                "event_id": int(row["id"]),
-                "event_type": str(row["event_type"]),
-                "severity": row["severity"],
-                "tick_chunk_id": int(row["tick_chunk_id"]),
-                "actor_entity_id": row["actor_entity_id"],
-                "target_entity_id": row["target_entity_id"],
-                "location_id": row["location_id"],
-                "world_time": _iso(row["world_time"]),
-            }
     experiences: list[dict[str, Any]] = []
     for row in experience_rows:
         rendered = row["experience_text"] is not None
@@ -1523,8 +1538,8 @@ def cognition_trace(
                 "source_digest": str(row["source_digest"]),
                 "world_layer": str(row["world_layer"]),
                 "invalidated_at": _iso(row["invalidated_at"]),
-                "source_events": [
-                    events_by_id[int(event_id)] for event_id in row["world_event_ids"]
+                "source_event_ids": [
+                    int(event_id) for event_id in row["world_event_ids"]
                 ],
             }
         )
@@ -1536,8 +1551,13 @@ def cognition_trace(
                 /* orrery_audit:cognition_recall_trace */
                 SELECT trace.*,
                        COALESCE(claim.summary, experience.seed_summary) AS summary,
-                       COALESCE(claim.source_chunk_id,
-                                experience.anchor_chunk_id) AS source_chunk_id
+                       CASE
+                           WHEN trace.candidate_kind = 'claim'
+                           THEN COALESCE(
+                               awareness.source_chunk_id, claim.source_chunk_id
+                           )
+                           ELSE experience.anchor_chunk_id
+                       END AS source_chunk_id
                 FROM orrery_recall_trace trace
                 LEFT JOIN claim_awareness awareness
                   ON trace.candidate_kind = 'claim'
@@ -1730,17 +1750,31 @@ def cognition_trace(
             text(
                 """
                 /* orrery_audit:cognition_unpossessed_siblings */
-                WITH possessed_incidents AS (
+                WITH anchor AS (
+                    SELECT cm.world_time, nc.created_at
+                    FROM chunk_metadata cm
+                    JOIN narrative_chunks nc ON nc.id = cm.chunk_id
+                    WHERE cm.chunk_id = :anchor_chunk_id
+                ),
+                possessed_incidents AS (
                     SELECT DISTINCT claim.world_event_id
                     FROM claim_awareness awareness
                     JOIN claims claim ON claim.id = awareness.claim_id
+                    CROSS JOIN anchor
                     WHERE awareness.knower_entity_id = :entity_id
                       AND (
-                          awareness.source_chunk_id <= :anchor_chunk_id
+                          (
+                              awareness.source_chunk_id IS NOT NULL
+                              AND awareness.source_chunk_id <= :anchor_chunk_id
+                          )
                           OR (
                               awareness.source_chunk_id IS NULL
-                              AND claim.source_chunk_id <= :anchor_chunk_id
+                              AND awareness.created_at <= anchor.created_at
                           )
+                      )
+                      AND (
+                          awareness.acquired_at_world_time IS NULL
+                          OR awareness.acquired_at_world_time <= anchor.world_time
                       )
                 )
                 SELECT claim.id AS claim_id, claim.world_event_id,
@@ -1751,11 +1785,26 @@ def cognition_trace(
                 JOIN possessed_incidents incident
                   ON incident.world_event_id = claim.world_event_id
                 JOIN world_events event ON event.id = claim.world_event_id
+                CROSS JOIN anchor
                 WHERE event.tick_chunk_id <= :anchor_chunk_id
                   AND NOT EXISTS (
                       SELECT 1 FROM claim_awareness awareness
                       WHERE awareness.claim_id = claim.id
                         AND awareness.knower_entity_id = :entity_id
+                        AND (
+                            (
+                                awareness.source_chunk_id IS NOT NULL
+                                AND awareness.source_chunk_id <= :anchor_chunk_id
+                            )
+                            OR (
+                                awareness.source_chunk_id IS NULL
+                                AND awareness.created_at <= anchor.created_at
+                            )
+                        )
+                        AND (
+                            awareness.acquired_at_world_time IS NULL
+                            OR awareness.acquired_at_world_time <= anchor.world_time
+                        )
                   )
                 ORDER BY claim.world_event_id, claim.id
                 """
@@ -1767,26 +1816,36 @@ def cognition_trace(
         {
             "secret_id": int(row["secret_id"]),
             "claim_id": int(row["claim_id"]),
+            "world_event_id": int(row["world_event_id"]),
             "summary": str(row["summary"]),
             "account_payload": row["account_payload"],
             "gate_template_id": str(row["gate_template_id"]),
             "holder_entity_id": int(row["holder_entity_id"]),
             "source_chunk_id": row["source_chunk_id"],
-            "status": str(row["status"]),
+            "status": str(row["status_at_anchor"]),
         }
         for row in session.execute(
             text(
                 """
                 /* orrery_audit:cognition_latent_secrets */
                 SELECT secret.id AS secret_id, secret.claim_id,
+                       claim.world_event_id,
                        claim.summary, claim.account_payload,
                        secret.gate_template_id, secret.holder_entity_id,
-                       secret.source_chunk_id, secret.status
+                       secret.source_chunk_id,
+                       'latent'::text AS status_at_anchor
                 FROM backstory_secrets secret
                 JOIN claims claim ON claim.id = secret.claim_id
                 JOIN world_events event ON event.id = claim.world_event_id
                 WHERE secret.holder_entity_id = :entity_id
-                  AND secret.status = 'latent'
+                  AND COALESCE(
+                      secret.source_chunk_id, claim.source_chunk_id
+                  ) <= :anchor_chunk_id
+                  AND (
+                      secret.revealed_by_chunk_id IS NULL
+                      OR secret.revealed_by_chunk_id > :anchor_chunk_id
+                  )
+                  AND secret.status <> 'retired'
                   AND event.tick_chunk_id <= :anchor_chunk_id
                 ORDER BY secret.id
                 """
@@ -1794,6 +1853,46 @@ def cognition_trace(
             {"entity_id": entity_id, "anchor_chunk_id": anchor_chunk_id},
         ).mappings()
     ]
+
+    canonical_event_ids = (
+        {int(row["world_event_id"]) for row in account_rows}
+        | {int(row["world_event_id"]) for row in sibling_accounts}
+        | {int(row["world_event_id"]) for row in latent_secrets}
+    )
+    canonical_event_ids.update(
+        int(event_id) for row in experience_rows for event_id in row["world_event_ids"]
+    )
+    canonical_source_events: list[dict[str, Any]] = []
+    if canonical_event_ids:
+        for row in session.execute(
+            text(
+                """
+                /* orrery_audit:cognition_canonical_source_events */
+                SELECT event.id, event.event_type, event.tick_chunk_id,
+                       event.actor_entity_id, event.target_entity_id,
+                       event.location_id, event.world_time, event.payload,
+                       event_type.severity::text AS severity
+                FROM world_events event
+                JOIN event_types event_type ON event_type.type = event.event_type
+                WHERE event.id = ANY(:event_ids)
+                ORDER BY event.tick_chunk_id, event.id
+                """
+            ),
+            {"event_ids": sorted(canonical_event_ids)},
+        ).mappings():
+            canonical_source_events.append(
+                {
+                    "event_id": int(row["id"]),
+                    "event_type": str(row["event_type"]),
+                    "severity": row["severity"],
+                    "tick_chunk_id": int(row["tick_chunk_id"]),
+                    "actor_entity_id": row["actor_entity_id"],
+                    "target_entity_id": row["target_entity_id"],
+                    "location_id": row["location_id"],
+                    "world_time": _iso(row["world_time"]),
+                    "payload": row["payload"],
+                }
+            )
 
     render_generation_ids = sorted(
         {
@@ -1836,6 +1935,7 @@ def cognition_trace(
         "effective_config": _cognition_effective_config(orrery_settings),
         "canonical_truth": {
             "guarded": True,
+            "source_events": canonical_source_events,
             "unpossessed_sibling_accounts": sibling_accounts,
             "latent_secrets": latent_secrets,
         },

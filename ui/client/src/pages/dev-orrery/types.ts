@@ -334,7 +334,7 @@ export interface CognitionTracePayload {
           name: string;
         }[];
       };
-      source_event: CognitionSourceEvent;
+      source_event: { event_id: number };
     }[];
     experiences: {
       experience_id: number;
@@ -349,7 +349,7 @@ export interface CognitionTracePayload {
       render_model: string | null;
       renderer_version: string | null;
       render_generation_id: string | null;
-      source_events: CognitionSourceEvent[];
+      source_event_ids: number[];
     }[];
     recall_candidates: {
       trace_id: number;
@@ -429,6 +429,7 @@ export interface CognitionTracePayload {
   };
   canonical_truth: {
     guarded: true;
+    source_events: CognitionSourceEvent[];
     unpossessed_sibling_accounts: {
       claim_id: number;
       world_event_id: number;
@@ -670,6 +671,7 @@ export interface CognitionTraceVM {
   }[];
   config: { section: string; values: { key: string; value: string }[] }[];
   canonical: {
+    events: { key: string; label: string; summary: string; payload: string }[];
     siblings: { key: string; label: string; summary: string; payload: string }[];
     secrets: { key: string; label: string; summary: string; payload: string }[];
   };

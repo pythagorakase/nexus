@@ -925,8 +925,11 @@ export function buildCognitionTrace(payload: CognitionTracePayload): CognitionTr
       .filter(Boolean)
       .join(" · "),
     summary: row.summary,
-    sourceChunk: `chunk ${row.source_event.tick_chunk_id}`,
-    sourcePreview: `${row.source_event.event_type} · ${row.source_event.world_time ?? "world time unstamped"}`,
+    sourceChunk:
+      row.possession.acquisition_chunk_id == null
+        ? "acquisition chunk unstamped"
+        : `chunk ${row.possession.acquisition_chunk_id}`,
+    sourcePreview: `source event #${row.source_event.event_id} · ${row.possession.acquired_at_world_time ?? "world time unstamped"}`,
     chain: sourceChain(row.possession.source_chain),
     payload: JSON.stringify(row.account_payload, null, 2),
   }));
@@ -936,8 +939,8 @@ export function buildCognitionTrace(payload: CognitionTracePayload): CognitionTr
     id: `experience #${row.experience_id}`,
     meta: `${row.basis} · chunk ${row.anchor_chunk_id}`,
     summary: row.experience_text ?? row.seed_summary,
-    sourcePreview: row.source_events
-      .map((event) => `${event.event_type} #${event.event_id}`)
+    sourcePreview: row.source_event_ids
+      .map((eventId) => `source event #${eventId}`)
       .join("\n"),
     renderStatus: row.render_status,
     salience: row.salience.toFixed(3),
@@ -1018,6 +1021,12 @@ export function buildCognitionTrace(payload: CognitionTracePayload): CognitionTr
     jobs,
     config,
     canonical: {
+      events: payload.canonical_truth.source_events.map((row) => ({
+        key: `event:${row.event_id}`,
+        label: `${row.event_type} · event #${row.event_id}`,
+        summary: `actor ${row.actor_entity_id ?? "—"} · target ${row.target_entity_id ?? "—"} · location ${row.location_id ?? "—"}`,
+        payload: JSON.stringify(row, null, 2),
+      })),
       siblings: payload.canonical_truth.unpossessed_sibling_accounts.map((row) => ({
         key: `sibling:${row.claim_id}`,
         label: `${row.account_label} · claim #${row.claim_id}`,

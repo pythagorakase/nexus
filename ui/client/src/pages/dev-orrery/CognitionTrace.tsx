@@ -483,7 +483,11 @@ function CanonicalTruth({ vm }: { vm: CognitionTraceVM }) {
         </CardHeader>
         <CollapsibleContent>
           <CardContent style={{ padding: "0 10px 10px", display: "grid", gap: 8 }}>
-            {[...vm.canonical.siblings, ...vm.canonical.secrets].map((row) => (
+            {[
+              ...vm.canonical.events,
+              ...vm.canonical.siblings,
+              ...vm.canonical.secrets,
+            ].map((row) => (
               <div key={row.key} style={{ borderTop: "1px solid hsl(var(--border))", paddingTop: 6 }}>
                 <div className="font-mono" style={{ fontSize: 8.5, color: "hsl(var(--destructive))" }}>
                   {row.label}
@@ -494,7 +498,9 @@ function CanonicalTruth({ vm }: { vm: CognitionTraceVM }) {
                 </pre>
               </div>
             ))}
-            {!vm.canonical.siblings.length && !vm.canonical.secrets.length && <EmptyRow />}
+            {!vm.canonical.events.length &&
+              !vm.canonical.siblings.length &&
+              !vm.canonical.secrets.length && <EmptyRow />}
           </CardContent>
         </CollapsibleContent>
       </Collapsible>
