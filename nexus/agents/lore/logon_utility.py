@@ -113,6 +113,12 @@ def _render_letter_budget(
     return text.replace(placeholder, str(int(max_letter_tokens)))
 
 
+def _prompt_one_line(value: Any) -> str:
+    """Collapse a prompt data value to one whitespace-normalized line."""
+
+    return " ".join(str(value).split())
+
+
 _PROPOSAL_TAG_DELTA_KEYS = frozenset(
     {
         "entity_tags.add",
@@ -551,6 +557,17 @@ class LogonUtility:
         return note
 
     @staticmethod
+    def _load_ambient_scene_instruction() -> str:
+        """Load the coordinator-authored ambient-scene instruction."""
+
+        prompts_dir = Path(__file__).parent.parent.parent.parent / "prompts"
+        instruction_path = prompts_dir / "ambient_scene_seeds.md"
+        instruction = instruction_path.read_text().strip()
+        if not instruction:
+            raise ValueError(f"Ambient-scene instruction is empty: {instruction_path}")
+        return instruction
+
+    @staticmethod
     def _format_setting_context(setting_data: Any) -> str:
         """Render persisted SettingCard JSON into system-prompt context."""
 
@@ -933,8 +950,14 @@ class LogonUtility:
         # This returns a tuple of (parsed_object, llm_response)
         try:
             if self._is_two_pass_turn(schema_model):
+                gaia_turn_prompt = self._format_context_prompt(
+                    context_payload,
+                    presence_baseline=presence_baseline,
+                    include_ambient_scene_seeds=False,
+                )
                 response = self._generate_narrative_two_pass(
                     prompt,
+                    gaia_turn_prompt=gaia_turn_prompt,
                     presence_baseline=presence_baseline,
                     character_roster=character_roster,
                     effective_context_window=effective_context_window,
@@ -1010,8 +1033,14 @@ class LogonUtility:
 
         try:
             if self._is_two_pass_turn(schema_model):
+                gaia_turn_prompt = self._format_context_prompt(
+                    context_payload,
+                    presence_baseline=presence_baseline,
+                    include_ambient_scene_seeds=False,
+                )
                 response = await self._generate_narrative_two_pass_async(
                     prompt,
+                    gaia_turn_prompt=gaia_turn_prompt,
                     presence_baseline=presence_baseline,
                     character_roster=character_roster,
                     effective_context_window=effective_context_window,
@@ -1406,6 +1435,7 @@ class LogonUtility:
         self,
         turn_prompt: str,
         *,
+        gaia_turn_prompt: str,
         presence_baseline: Optional[PresenceBaseline],
         character_roster: Optional[CharacterRosterRows],
         effective_context_window: Optional[int],
@@ -1439,7 +1469,7 @@ class LogonUtility:
         if not isinstance(writer, SkaldWriterWire):
             raise TypeError("LOGON writer pass returned a non-SkaldWriterWire response")
 
-        gaia_prompt = self._format_gaia_user_prompt(turn_prompt, writer)
+        gaia_prompt = self._format_gaia_user_prompt(gaia_turn_prompt, writer)
         gaia_window = (
             self._gaia_effective_window(gaia_route)
             if gaia_route is not None
@@ -1498,6 +1528,7 @@ class LogonUtility:
         self,
         turn_prompt: str,
         *,
+        gaia_turn_prompt: str,
         presence_baseline: Optional[PresenceBaseline],
         character_roster: Optional[CharacterRosterRows],
         effective_context_window: Optional[int],
@@ -1533,7 +1564,7 @@ class LogonUtility:
         if not isinstance(writer, SkaldWriterWire):
             raise TypeError("LOGON writer pass returned a non-SkaldWriterWire response")
 
-        gaia_prompt = self._format_gaia_user_prompt(turn_prompt, writer)
+        gaia_prompt = self._format_gaia_user_prompt(gaia_turn_prompt, writer)
         gaia_window = (
             self._gaia_effective_window(gaia_route)
             if gaia_route is not None
@@ -2033,6 +2064,7 @@ class LogonUtility:
         context: Dict,
         *,
         presence_baseline: Optional[PresenceBaseline] = None,
+        include_ambient_scene_seeds: bool = True,
     ) -> str:
         """Format context payload into a prompt for the Apex AI"""
         sections = []
@@ -2350,6 +2382,44 @@ class LogonUtility:
                 )
                 if prompt_text:
                     sections.append(f"- {label}: {prompt_text}")
+
+        ambient_scene_seeds = context.get("orrery_ambient_scene_seeds") or []
+        if ambient_scene_seeds and include_ambient_scene_seeds:
+            sections.append("\n=== ORRERY AMBIENT SCENE SEEDS ===")
+            sections.append(self._load_ambient_scene_instruction())
+            for seed in ambient_scene_seeds:
+                if not isinstance(seed, dict):
+                    continue
+                participants = seed.get("participants") or []
+                participant_bits = []
+                for item in participants:
+                    if not isinstance(item, dict):
+                        continue
+                    fallback_name = f"entity {item.get('entity_id')}"
+                    name = _prompt_one_line(item.get("name") or fallback_name)
+                    speaking = str(bool(item.get("speaking_eligible"))).lower()
+                    participant_bits.append(
+                        f"{name}#{item.get('entity_id')}[speak={speaking}]"
+                    )
+                participant_summary = ", ".join(participant_bits)
+                entitlement_summary = "; ".join(
+                    f"{item.get('participant_entity_id')}:"
+                    f"claims={item.get('claim_ids') or []},"
+                    f"experiences={item.get('character_experience_ids') or []}"
+                    for item in seed.get("entitlements") or []
+                    if isinstance(item, dict)
+                )
+                location = seed.get("location_constraint") or {}
+                sections.append(
+                    f"- {seed.get('seed_id')} participants={participant_summary}; "
+                    f"topic={_prompt_one_line(seed.get('topic'))}; "
+                    f"tension={_prompt_one_line(seed.get('tension'))}; "
+                    f"why_now={_prompt_one_line(seed.get('why_now'))}; "
+                    f"entitlements={entitlement_summary}; "
+                    f"location={location.get('kind')}:{location.get('place_id')}; "
+                    f"budget={seed.get('turn_budget')} turns/"
+                    f"{seed.get('line_budget')} lines; silence_ok=true"
+                )
 
         joint_beats = context.get("orrery_joint_beats") or []
         if joint_beats:

@@ -547,6 +547,13 @@ reserved_remote_slots = 1
 # Upper bound on eligible candidates fetched per anchored menu selection.
 scan_limit = 24
 
+[orrery.ambient]
+max_seeds = 2
+per_dyad_cooldown_turns = 3
+expiry_turns = 1
+line_budget = 4
+turn_budget = 2
+
 [orrery.promote]
 # Calibrated against the 106-resolution corpus on save_05 (39 ticks, 2026-06).
 # Template priorities seam cleanly: mundane needs band tops out at 26

@@ -11,6 +11,7 @@ from typing import Any, Iterable, Mapping, Optional, Protocol, Sequence, Tuple, 
 
 from sqlalchemy import text
 
+from nexus.agents.orrery.ambient import AmbientSceneSeed, build_ambient_scene_seeds
 from nexus.agents.orrery.communication import (
     CommunicationGraph,
     communication_graph_for_settings,
@@ -217,6 +218,7 @@ class OrreryTickProposal:
     actor_count: int
     resolutions: Tuple[OrreryResolutionDraft, ...]
     scene_pressures: Tuple[OrreryScenePressureDraft, ...] = ()
+    ambient_scene_seeds: Tuple[AmbientSceneSeed, ...] = ()
     joint_beats: Tuple[OrreryJointBeat, ...] = ()
     # Transient read-side projection. Intentionally omitted from to_dict():
     # incubator persistence stores decisions, not a hydration-time graph.
@@ -243,6 +245,12 @@ class OrreryTickProposal:
 
         return len(self.scene_pressures)
 
+    @property
+    def ambient_seed_count(self) -> int:
+        """Return the number of current-turn ambient-scene seeds."""
+
+        return len(self.ambient_scene_seeds)
+
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-serializable representation of this proposal."""
 
@@ -253,6 +261,9 @@ class OrreryTickProposal:
             "resolutions": [draft.to_dict() for draft in self.resolutions],
             "scene_pressures": [
                 pressure.to_dict() for pressure in self.scene_pressures
+            ],
+            "ambient_scene_seeds": [
+                seed.model_dump(mode="json") for seed in self.ambient_scene_seeds
             ],
             "joint_beats": [beat.to_dict() for beat in self.joint_beats],
             "epistemics_settings": dict(self.epistemics_settings),
@@ -274,6 +285,10 @@ class OrreryTickProposal:
             scene_pressures=tuple(
                 OrreryScenePressureDraft.from_dict(item)
                 for item in data.get("scene_pressures", ())
+            ),
+            ambient_scene_seeds=tuple(
+                AmbientSceneSeed.model_validate(item)
+                for item in data.get("ambient_scene_seeds", ())
             ),
             joint_beats=coerce_joint_beats(data.get("joint_beats")),
             epistemics_settings=dict(
@@ -2341,6 +2356,8 @@ def resolve_dry_run(
     weather_settings: Optional[Any] = None,
     mood_settings: Optional[Any] = None,
     composition_settings: Optional[Any] = None,
+    ambient_settings: Optional[Any] = None,
+    ambient_pacing_allowed: Optional[bool] = None,
 ) -> OrreryTickProposal:
     """Hydrate, bind, and evaluate Orrery packages without database writes."""
 
@@ -2600,6 +2617,8 @@ def resolve_dry_run(
         spec["actor_entity_id"] for spec in present_need_pressure_specs
     }
     name_entity_ids = draft_entity_ids | pressure_entity_ids
+    if ambient_settings is not None and ambient_pacing_allowed:
+        name_entity_ids.update(composition_cache.present_actor_ids)
     if state.mood_enabled:
         name_entity_ids.update(composition_cache.present_actor_ids)
     entity_names = _load_entity_names(session, name_entity_ids)
@@ -2661,12 +2680,32 @@ def resolve_dry_run(
         ]
         if moods:
             scene_conditions["moods"] = moods
+    joint_beats = detect_joint_beats(drafts, entity_names)
+    if ambient_settings is not None and ambient_pacing_allowed is None:
+        raise ValueError(
+            "ambient_pacing_allowed is required when ambient_settings are supplied"
+        )
+    ambient_scene_seeds = (
+        build_ambient_scene_seeds(
+            session,
+            anchor_chunk_id=anchor_chunk_id,
+            state=state,
+            present_actor_ids=composition_cache.present_actor_ids,
+            joint_beats=joint_beats,
+            entity_names=entity_names,
+            settings=ambient_settings,
+            pacing_allowed=bool(ambient_pacing_allowed),
+        )
+        if ambient_settings is not None
+        else ()
+    )
     return OrreryTickProposal(
         anchor_chunk_id=anchor_chunk_id,
         actor_count=len(unique_actors),
         resolutions=tuple(drafts),
         scene_pressures=scene_pressures,
-        joint_beats=detect_joint_beats(drafts, entity_names),
+        ambient_scene_seeds=ambient_scene_seeds,
+        joint_beats=joint_beats,
         communication_graph=state.communication_graph,
         epistemics_settings={
             "enabled": epistemics_policy.enabled,

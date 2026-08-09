@@ -6,6 +6,7 @@ Handles the execution of individual turn cycle phases.
 
 import json
 import logging
+from dataclasses import replace
 from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional, Union
 
@@ -33,8 +34,10 @@ try:
         StorytellerResponseStandard,
         extract_narrative_text,
     )
-    from nexus.agents.orrery.resolver import resolve_dry_run
-    from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
+    from nexus.agents.orrery.ambient import (
+        arbitrate_background_texture_channel,
+        shared_ambient_pacing_allows,
+    )
     from nexus.agents.orrery.bleed import (
         load_bleed_anchor_entity_ids,
         record_bleed_offers,
@@ -43,6 +46,8 @@ try:
     from nexus.agents.orrery.knowledge_surfacing import (
         build_knowledge_digest_sync,
     )
+    from nexus.agents.orrery.resolver import resolve_dry_run
+    from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
     from nexus.config.settings_models import (
         LORERetrievalSettings,
         OrreryBleedSettings,
@@ -67,8 +72,10 @@ except ImportError:
         StorytellerResponseStandard,
         extract_narrative_text,
     )
-    from nexus.agents.orrery.resolver import resolve_dry_run
-    from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
+    from nexus.agents.orrery.ambient import (
+        arbitrate_background_texture_channel,
+        shared_ambient_pacing_allows,
+    )
     from nexus.agents.orrery.bleed import (
         load_bleed_anchor_entity_ids,
         record_bleed_offers,
@@ -77,6 +84,8 @@ except ImportError:
     from nexus.agents.orrery.knowledge_surfacing import (
         build_knowledge_digest_sync,
     )
+    from nexus.agents.orrery.resolver import resolve_dry_run
+    from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
     from nexus.config.settings_models import (
         LORERetrievalSettings,
         OrreryBleedSettings,
@@ -847,8 +856,19 @@ class TurnCycleManager:
 
         binding_settings = orrery_settings.get("binding", {})
         window_chunks = int(binding_settings.get("window_chunks", 30))
+        bleed_settings = OrreryBleedSettings.model_validate(
+            orrery_settings.get("bleed", {})
+        )
         with self.lore.memnon.Session() as session:
             anchor_chunk_id = self._orrery_anchor_chunk_id(session, turn_context)
+            turn_context.ambient_pacing_allowed = (
+                shared_ambient_pacing_allows(
+                    anchor_chunk_id,
+                    bleed_settings.density,
+                )
+                if anchor_chunk_id is not None
+                else False
+            )
             proposal = resolve_dry_run(
                 session,
                 BUILTIN_TEMPLATES,
@@ -865,6 +885,8 @@ class TurnCycleManager:
                 weather_settings=orrery_settings.get("weather"),
                 mood_settings=orrery_settings.get("mood"),
                 composition_settings=orrery_settings.get("composition"),
+                ambient_settings=orrery_settings.get("ambient"),
+                ambient_pacing_allowed=turn_context.ambient_pacing_allowed,
             )
 
         turn_context.orrery_proposal = proposal
@@ -874,19 +896,22 @@ class TurnCycleManager:
             "actor_count": proposal.actor_count,
             "resolution_count": proposal.resolution_count,
             "pressure_count": proposal.pressure_count,
+            "ambient_seed_count": proposal.ambient_seed_count,
             "template_ids": [
                 resolution.template_id for resolution in proposal.resolutions
             ],
             "pressure_template_ids": [
                 pressure.template_id for pressure in proposal.scene_pressures
             ],
+            "ambient_seed_ids": [seed.seed_id for seed in proposal.ambient_scene_seeds],
         }
         logger.info(
             "Orrery dry-run resolved %d actors into %d draft resolutions "
-            "and %d scene pressures",
+            "and %d scene pressures and %d ambient seeds",
             proposal.actor_count,
             proposal.resolution_count,
             proposal.pressure_count,
+            proposal.ambient_seed_count,
         )
 
     @staticmethod
@@ -1006,6 +1031,7 @@ class TurnCycleManager:
         logger.debug("Assembling context payload...")
 
         await self.select_orrery_bleed(turn_context)
+        self._arbitrate_background_texture(turn_context)
         world_knowledge = self._build_world_knowledge(turn_context)
         recent_rulings_section = self._build_recent_orrery_rulings_section(turn_context)
 
@@ -1064,6 +1090,11 @@ class TurnCycleManager:
             turn_context.context_payload["orrery_scene_pressures"] = [
                 pressure.to_dict()
                 for pressure in turn_context.orrery_proposal.scene_pressures
+            ]
+
+        if proposal and getattr(proposal, "ambient_scene_seeds", ()):
+            turn_context.context_payload["orrery_ambient_scene_seeds"] = [
+                seed.model_dump(mode="json") for seed in proposal.ambient_scene_seeds
             ]
 
         if proposal and getattr(proposal, "joint_beats", ()):
@@ -1425,6 +1456,7 @@ class TurnCycleManager:
                 near_distance_max=bleed_settings.near_distance_max,
                 reserved_remote_slots=bleed_settings.reserved_remote_slots,
                 scan_limit=bleed_settings.scan_limit,
+                pacing_allowed=turn_context.ambient_pacing_allowed,
             )
 
         turn_context.bleed_menu = result.selected
@@ -1436,6 +1468,40 @@ class TurnCycleManager:
             "near_count": result.near_count,
             "remote_count": result.remote_count,
             "offers_recorded": 0,
+        }
+
+    @staticmethod
+    def _arbitrate_background_texture(turn_context: TurnContext) -> None:
+        """Retain at most one paced background-texture channel for this turn."""
+
+        proposal = turn_context.orrery_proposal
+        ambient_seeds = tuple(getattr(proposal, "ambient_scene_seeds", ()))
+        bleed_candidates = list(turn_context.bleed_menu)
+        anchor_chunk_id = getattr(proposal, "anchor_chunk_id", None)
+        selected_channel = arbitrate_background_texture_channel(
+            anchor_chunk_id,
+            ambient_eligible=bool(ambient_seeds),
+            bleed_eligible=bool(bleed_candidates),
+        )
+
+        if selected_channel == "bleed" and ambient_seeds:
+            if proposal is None:
+                raise RuntimeError(
+                    "Ambient arbitration found seeds without an Orrery proposal"
+                )
+            turn_context.orrery_proposal = replace(
+                proposal,
+                ambient_scene_seeds=(),
+            )
+        elif selected_channel == "ambient_scene" and bleed_candidates:
+            turn_context.bleed_menu = []
+
+        turn_context.phase_states["orrery_background_texture"] = {
+            "anchor_chunk_id": anchor_chunk_id,
+            "pacing_allowed": bool(turn_context.ambient_pacing_allowed),
+            "ambient_candidate_count": len(ambient_seeds),
+            "bleed_candidate_count": len(bleed_candidates),
+            "selected_channel": selected_channel,
         }
 
     def record_orrery_bleed_offers(self, turn_context: TurnContext) -> None:
