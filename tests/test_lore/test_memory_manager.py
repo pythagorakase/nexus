@@ -195,7 +195,10 @@ def test_pass1_baseline_tracks_chunks_and_budget(
         narrative=baseline_inputs["narrative"],
         warm_slice=baseline_inputs["warm_slice"],
         retrieved_passages=baseline_inputs["retrieved"],
-        token_usage=baseline_inputs["token_usage"],
+        token_usage={
+            **baseline_inputs["token_usage"],
+            "using_reasoning_model": False,
+        },
     )
 
     # Baseline chunk ids combine warm slice and retrieved passages
@@ -215,7 +218,11 @@ def test_pass1_baseline_tracks_chunks_and_budget(
     exported = manager.export_pass2_baseline()
     assert exported.parent_chunk_id is None
     assert exported.memory_identities == [101, 102, 201]
-    assert exported.prior_token_accounting == package.token_usage
+    assert exported.prior_token_accounting == {
+        name: value
+        for name, value in package.token_usage.items()
+        if name != "using_reasoning_model"
+    }
     assert exported.remaining_budget == transition.remaining_budget
     dumped = exported.model_dump(mode="json")
     assert "storyteller_output" not in dumped

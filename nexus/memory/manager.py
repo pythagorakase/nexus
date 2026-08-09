@@ -516,11 +516,21 @@ class ContextMemoryManager:
                 identity if isinstance(identity, int) else str(identity),
             ),
         )
+        prior_token_accounting: Dict[str, int] = {}
+        for name, value in package.token_usage.items():
+            if name == "using_reasoning_model" and isinstance(value, bool):
+                continue
+            if not isinstance(value, int) or value < 0:
+                raise ValueError(
+                    "Pass-2 baseline token accounting values must be "
+                    f"nonnegative integers: {name}={value!r}"
+                )
+            prior_token_accounting[name] = value
         return Pass2BaselineV1(
             producer=PASS2_BASELINE_PRODUCER,
             config_fingerprint=pass2_baseline_config_fingerprint(self.settings),
             memory_identities=identities,
-            prior_token_accounting=package.token_usage,
+            prior_token_accounting=prior_token_accounting,
             remaining_budget=transition.remaining_budget,
         )
 
