@@ -3011,10 +3011,10 @@ class PackageSelectionOutcome:
     reason: str = "no_passing_candidate"
 
 
-def _package_selection_rng(digest: str, tick: int) -> random.Random:
-    """PRNG keyed on binding identity, persisted tick, and a distinct salt."""
+def seeded_stochastic_rng(identity: str, tick: int, salt: str) -> random.Random:
+    """Return the shared deterministic PRNG for Orrery stochastic selection."""
 
-    seed_material = f"{digest}:{tick}:package_selection"
+    seed_material = f"{identity}:{tick}:{salt}"
     return random.Random(int(sha256(seed_material.encode("utf-8")).hexdigest(), 16))
 
 
@@ -3121,7 +3121,7 @@ def select_package(
         for _template, _resolution, effective_priority in window
     ]
     digest = binding_hash(bindings)
-    rng = _package_selection_rng(digest, state.current_tick)
+    rng = seeded_stochastic_rng(digest, state.current_tick, "package_selection")
     chosen = rng.choices(window, weights=weights, k=1)[0]
     return PackageSelectionOutcome(
         winner=chosen[1],

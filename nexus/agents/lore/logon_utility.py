@@ -2384,7 +2384,8 @@ class LogonUtility:
                 "These are optional ambient peripherals from off-screen events. "
                 "Ignore freely, render subtly, or use them at any density that "
                 "fits the current scene. If you use one with an actor name, "
-                "include that exact name at least once in the prose. Do not "
+                "include that exact name at least once in the prose — uptake is "
+                "detected by matching that exact name. Do not "
                 "explain Orrery."
             )
             for item in bleed_menu[:5]:

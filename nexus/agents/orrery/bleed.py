@@ -7,12 +7,17 @@ from dataclasses import dataclass
 from decimal import Decimal
 import json
 import logging
+import re
 from typing import Any, Iterable, Mapping, Optional, Tuple
 
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 
+from nexus.agents.orrery.substrate import seeded_stochastic_rng
+
 logger = logging.getLogger("nexus.orrery.bleed")
+
+_WORD_RE = re.compile(r"\b\w+\b", re.UNICODE)
 
 _BLEED_GRAPH_NODES_SQL = """
     /* orrery:bleed_proximity_nodes */
@@ -215,12 +220,21 @@ def load_bleed_candidates(
     session: Any,
     *,
     anchor_chunk_id: int,
+    density: float,
     limit: Optional[int],
 ) -> list[BleedCandidate]:
     """Load narrated Orrery candidates that are eligible before the anchor."""
 
     if limit is not None and limit <= 0:
         return []
+    if not 0.0 <= density <= 1.0:
+        raise ValueError(f"Bleed density must be between 0.0 and 1.0, got {density}")
+    if density == 0.0:
+        return []
+    if density < 1.0:
+        rng = seeded_stochastic_rng("bleed", anchor_chunk_id, "density")
+        if rng.random() >= density:
+            return []
 
     limit_clause = "LIMIT :limit" if limit is not None else ""
     rows = session.execute(
@@ -239,7 +253,9 @@ def load_bleed_candidates(
                 n.perceptual_descriptor,
                 actor.name AS actor_name,
                 target.name AS target_name,
-                we.event_type
+                we.event_type,
+                r.offer_count,
+                r.use_count
             FROM orrery_resolutions r
             JOIN offscreen_narrations n ON n.id = r.narration_chunk_id
             LEFT JOIN entity_names_v actor ON actor.id = r.actor_entity_id
@@ -272,7 +288,14 @@ def load_bleed_candidates(
         },
     ).mappings()
 
-    return [_candidate_from_row(row) for row in rows]
+    bounded_rows = list(rows)
+    bounded_rows.sort(
+        key=lambda row: bool(
+            int(row.get("offer_count") or 0) >= 2
+            and int(row.get("use_count") or 0) == 0
+        )
+    )
+    return [_candidate_from_row(row) for row in bounded_rows]
 
 
 def select_bleed_menu(
@@ -280,6 +303,7 @@ def select_bleed_menu(
     *,
     anchor_chunk_id: int,
     anchor_entity_ids: Iterable[int],
+    density: float,
     max_candidates: int,
     near_distance_max: int,
     reserved_remote_slots: int,
@@ -296,6 +320,7 @@ def select_bleed_menu(
     candidate_pool = load_bleed_candidates(
         session,
         anchor_chunk_id=anchor_chunk_id,
+        density=density,
         # The empty-anchor fallback needs only the top of the pure ordering;
         # the proximity path partitions a bounded scan window (scan_limit).
         limit=max_candidates if not anchors else scan_limit,
@@ -391,6 +416,165 @@ def record_bleed_offers(
         },
     )
     session.commit()
+
+
+def four_gram_overlap_ratio(stub_text: str, accepted_text: str) -> float:
+    """Return the share of offered-stub 4-grams present in accepted prose."""
+
+    stub_words = [word.casefold() for word in _WORD_RE.findall(stub_text)]
+    accepted_words = [word.casefold() for word in _WORD_RE.findall(accepted_text)]
+    stub_grams = {
+        tuple(stub_words[index : index + 4])
+        for index in range(max(0, len(stub_words) - 3))
+    }
+    if not stub_grams:
+        return 0.0
+    accepted_grams = {
+        tuple(accepted_words[index : index + 4])
+        for index in range(max(0, len(accepted_words) - 3))
+    }
+    return len(stub_grams & accepted_grams) / len(stub_grams)
+
+
+def record_bleed_uptake_sync(
+    conn: Any,
+    *,
+    resolution_ids: Iterable[int],
+    accepted_chunk_id: int,
+    accepted_text: str,
+) -> int:
+    """Stamp exact-name uptake for Bleed offers used by an accepted chunk."""
+
+    offered_resolution_ids = tuple(int(value) for value in resolution_ids)
+    if not offered_resolution_ids:
+        return 0
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            /* orrery:bleed_uptake_candidates */
+            SELECT r.id, actor.name AS actor_name, n.text AS stub_text
+            FROM orrery_resolutions r
+            JOIN offscreen_narrations n ON n.id = r.narration_chunk_id
+            LEFT JOIN entity_names_v actor ON actor.id = r.actor_entity_id
+            WHERE r.id = ANY(%s)
+            ORDER BY r.id
+            """,
+            (list(offered_resolution_ids),),
+        )
+        rows = cur.fetchall()
+
+    used_count = 0
+    for row in rows:
+        resolution_id = int(_row_value(row, "id", 0))
+        actor_name = _row_value(row, "actor_name", 1)
+        stub_text = str(_row_value(row, "stub_text", 2) or "")
+        name_matched = _actor_name_matches(actor_name, accepted_text)
+        overlap_ratio = four_gram_overlap_ratio(stub_text, accepted_text)
+        logger.info(
+            "Measured Orrery Bleed uptake",
+            extra={
+                "event": "orrery_bleed_uptake",
+                "resolution_id": resolution_id,
+                "accepted_chunk_id": accepted_chunk_id,
+                "actor_name": actor_name,
+                "name_matched": name_matched,
+                "four_gram_overlap_ratio": overlap_ratio,
+            },
+        )
+        if not name_matched:
+            continue
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                /* orrery:stamp_bleed_uptake */
+                UPDATE orrery_resolutions
+                SET used_chunk_id = %s,
+                    use_count = use_count + 1
+                WHERE id = %s
+                """,
+                (accepted_chunk_id, resolution_id),
+            )
+        used_count += 1
+    return used_count
+
+
+async def record_bleed_uptake_async(
+    conn: Any,
+    *,
+    resolution_ids: Iterable[int],
+    accepted_chunk_id: int,
+    accepted_text: str,
+) -> int:
+    """Async stamp of exact-name uptake for offers used by an accepted chunk."""
+
+    offered_resolution_ids = tuple(int(value) for value in resolution_ids)
+    if not offered_resolution_ids:
+        return 0
+    rows = await conn.fetch(
+        """
+        /* orrery:bleed_uptake_candidates */
+        SELECT r.id, actor.name AS actor_name, n.text AS stub_text
+        FROM orrery_resolutions r
+        JOIN offscreen_narrations n ON n.id = r.narration_chunk_id
+        LEFT JOIN entity_names_v actor ON actor.id = r.actor_entity_id
+        WHERE r.id = ANY($1::bigint[])
+        ORDER BY r.id
+        """,
+        list(offered_resolution_ids),
+    )
+
+    used_count = 0
+    for row in rows:
+        resolution_id = int(_row_value(row, "id", 0))
+        actor_name = _row_value(row, "actor_name", 1)
+        stub_text = str(_row_value(row, "stub_text", 2) or "")
+        name_matched = _actor_name_matches(actor_name, accepted_text)
+        overlap_ratio = four_gram_overlap_ratio(stub_text, accepted_text)
+        logger.info(
+            "Measured Orrery Bleed uptake",
+            extra={
+                "event": "orrery_bleed_uptake",
+                "resolution_id": resolution_id,
+                "accepted_chunk_id": accepted_chunk_id,
+                "actor_name": actor_name,
+                "name_matched": name_matched,
+                "four_gram_overlap_ratio": overlap_ratio,
+            },
+        )
+        if not name_matched:
+            continue
+        await conn.execute(
+            """
+            /* orrery:stamp_bleed_uptake */
+            UPDATE orrery_resolutions
+            SET used_chunk_id = $1,
+                use_count = use_count + 1
+            WHERE id = $2
+            """,
+            accepted_chunk_id,
+            resolution_id,
+        )
+        used_count += 1
+    return used_count
+
+
+def _actor_name_matches(actor_name: Any, accepted_text: str) -> bool:
+    """Return whether prose contains the full case-sensitive actor name."""
+
+    if not actor_name:
+        return False
+    return re.search(rf"\b{re.escape(str(actor_name))}\b", accepted_text) is not None
+
+
+def _row_value(row: Any, key: str, index: int) -> Any:
+    """Read one field from mapping-like or positional DB rows."""
+
+    if isinstance(row, Mapping):
+        return row[key]
+    try:
+        return row[key]
+    except (KeyError, TypeError):
+        return row[index]
 
 
 def _candidate_from_row(row: Mapping[str, Any]) -> BleedCandidate:

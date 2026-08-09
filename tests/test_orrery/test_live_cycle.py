@@ -253,6 +253,7 @@ def test_live_orrery_cycle_resolve_commit_promote_narrate_bleed() -> None:
                     session,
                     anchor_chunk_id=anchor_chunk_id,
                 ),
+                density=1.0,
                 max_candidates=int(bleed_settings["max_candidates"]),
                 near_distance_max=int(bleed_settings["near_distance_max"]),
                 reserved_remote_slots=int(bleed_settings["reserved_remote_slots"]),

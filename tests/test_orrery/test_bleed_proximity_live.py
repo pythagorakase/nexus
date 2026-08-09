@@ -390,6 +390,7 @@ def _select(
         db["session"],
         anchor_chunk_id=int(db["chunks"][anchor_chunk]),
         anchor_entity_ids=anchor_entity_ids,
+        density=1.0,
         max_candidates=max_candidates,
         near_distance_max=near_distance_max,
         reserved_remote_slots=reserved_remote_slots,
@@ -464,6 +465,7 @@ def test_live_faction_anchor_and_empty_anchor_fallback(
     old_order = load_bleed_candidates(
         db["session"],
         anchor_chunk_id=db["chunks"]["empty"],
+        density=1.0,
         limit=3,
     )
     fallback = _select(
@@ -537,6 +539,7 @@ class _FixtureLore:
             "orrery": {
                 "enabled": True,
                 "bleed": {
+                    "density": 1.0,
                     "max_candidates": 2,
                     "near_distance_max": 2,
                     "reserved_remote_slots": 1,

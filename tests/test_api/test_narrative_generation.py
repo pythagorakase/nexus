@@ -15,6 +15,7 @@ from nexus.agents.logon.apex_schema import (
     StorytellerResponseMinimal,
 )
 from nexus.api import narrative, narrative_generation
+from nexus.api.lore_adapter import split_staged_orrery_payload
 from nexus.api.narrative_schemas import (
     ContinueNarrativeRequest,
     RegenerateNarrativeRequest,
@@ -158,6 +159,7 @@ async def test_continuation_threads_logon_model_into_incubator(
             self.turn_context = SimpleNamespace(
                 error_log=[],
                 orrery_proposal=None,
+                bleed_menu=[SimpleNamespace(resolution_id=501)],
                 private_correspondence=GeneratedCorrespondence(
                     writer_letter=self.secret,
                     gaia_letter="PRIVATE-GAIA-PROGRESS-SENTINEL",
@@ -208,6 +210,10 @@ async def test_continuation_threads_logon_model_into_incubator(
     )
 
     assert written[0]["generation_model"] == "resolved-provider-model"
+    assert split_staged_orrery_payload(written[0]["orrery_proposal"]) == (
+        None,
+        (501,),
+    )
     assert written[0]["correspondence_writer_letter"] == SuccessfulLore.secret
     assert SuccessfulLore.calls == [("Continue.", 7, None)]
     assert [status for _session, status, _data in manager.events][-1] == "complete"

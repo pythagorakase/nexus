@@ -21,6 +21,9 @@ from typing import Any, Callable, Mapping, Sequence, cast
 
 import tomlkit
 
+from nexus.api.db_pool import get_connection
+from nexus.api.slot_utils import slot_dbname
+
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG_PATH = Path(__file__).with_name("qa_shift.toml")
@@ -58,6 +61,7 @@ class ShiftConfig:
 
 UsageReader = Callable[[Path, str | None], dict[str, Any]]
 JobsReader = Callable[[Path, int], dict[str, Any]]
+BleedUptakeReader = Callable[[Path, int], dict[str, Any]]
 
 
 def _required_int(table: Mapping[str, Any], key: str) -> int:
@@ -190,6 +194,77 @@ def _read_jobs(repo_root: Path, slot: int) -> dict[str, Any]:
             f"`nexus jobs --slot {slot} --json` reported failure: {payload}"
         )
     return payload
+
+
+def _read_bleed_uptake(
+    _repo_root: Path,
+    slot: int,
+) -> dict[str, Any]:
+    """Read cumulative Bleed offer and uptake counters for one QA slot."""
+
+    with get_connection(slot_dbname(slot), dict_cursor=True) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    COALESCE(sum(offer_count), 0)::bigint AS offered_count,
+                    COALESCE(sum(use_count), 0)::bigint AS used_count
+                FROM orrery_resolutions
+                """,
+            )
+            row = cur.fetchone()
+    if row is None:
+        raise ShiftError("Bleed uptake query returned no summary row")
+    return dict(row)
+
+
+def _bleed_uptake_summary(
+    payload: Mapping[str, Any],
+    *,
+    baseline_offered_count: int,
+    baseline_used_count: int,
+    started_at: datetime,
+    ended_at: datetime,
+) -> dict[str, Any]:
+    """Validate and annotate one shift-window Bleed uptake summary."""
+
+    offered_count, used_count = _bleed_uptake_counts(payload)
+    if offered_count < baseline_offered_count or used_count < baseline_used_count:
+        raise ShiftError("Bleed uptake counters decreased during the shift")
+    shift_offered_count = offered_count - baseline_offered_count
+    shift_used_count = used_count - baseline_used_count
+    uptake_rate_percent = (
+        round(shift_used_count * 100 / shift_offered_count, 4)
+        if shift_offered_count
+        else 0.0
+    )
+    return {
+        "started_at": _utc_text(started_at),
+        "ended_at": _utc_text(ended_at),
+        "offered_count": shift_offered_count,
+        "used_count": shift_used_count,
+        "uptake_rate_percent": uptake_rate_percent,
+    }
+
+
+def _bleed_uptake_counts(payload: Mapping[str, Any]) -> tuple[int, int]:
+    """Validate cumulative Bleed counters from the QA slot."""
+
+    offered_count = payload.get("offered_count")
+    used_count = payload.get("used_count")
+    if (
+        isinstance(offered_count, bool)
+        or not isinstance(offered_count, int)
+        or offered_count < 0
+    ):
+        raise ShiftError("Bleed uptake offered_count must be a non-negative integer")
+    if (
+        isinstance(used_count, bool)
+        or not isinstance(used_count, int)
+        or used_count < 0
+    ):
+        raise ShiftError("Bleed uptake used_count must be a non-negative integer")
+    return offered_count, used_count
 
 
 def _usage_snapshot(payload: Mapping[str, Any]) -> dict[str, Any]:
@@ -520,6 +595,7 @@ def begin_shift(
     repo_root: Path = REPO_ROOT,
     usage_reader: UsageReader = _read_usage,
     jobs_reader: JobsReader = _read_jobs,
+    bleed_uptake_reader: BleedUptakeReader = _read_bleed_uptake,
     now: datetime | None = None,
 ) -> dict[str, Any]:
     """Create a shift archive, isolated config, and usage baseline."""
@@ -543,6 +619,9 @@ def begin_shift(
             "OpenAI daily usage has reached the configured token fence "
             f"({usage['total']:,} >= {config.token_fence:,})."
         )
+    baseline_bleed_offered, baseline_bleed_used = _bleed_uptake_counts(
+        bleed_uptake_reader(repo_root, config.slot)
+    )
 
     archive_root = config.archive_root
     if not archive_root.is_absolute():
@@ -580,6 +659,8 @@ def begin_shift(
         "last_event_count": len(usage["events"]),
         "last_unknown_usage_events": usage["unknown"],
         "baseline_failed_jobs": jobs["counts"]["failed"],
+        "baseline_bleed_offered_count": baseline_bleed_offered,
+        "baseline_bleed_used_count": baseline_bleed_used,
         "checks": 0,
         "max_command_delta": 0,
         "config": _config_payload(config),
@@ -594,6 +675,10 @@ def begin_shift(
         "daily_limit": config.daily_token_limit,
         "token_fence": config.token_fence,
         "tokens_before_fence": config.token_fence - usage["total"],
+        "bleed_uptake_baseline": {
+            "offered_count": baseline_bleed_offered,
+            "used_count": baseline_bleed_used,
+        },
         "jobs": jobs,
     }
     _append_jsonl(
@@ -850,6 +935,7 @@ def finish_shift(
     repo_root: Path = REPO_ROOT,
     usage_reader: UsageReader = _read_usage,
     jobs_reader: JobsReader = _read_jobs,
+    bleed_uptake_reader: BleedUptakeReader = _read_bleed_uptake,
     now: datetime | None = None,
 ) -> dict[str, Any]:
     """Capture final usage and close the shift state."""
@@ -882,6 +968,15 @@ def finish_shift(
         shift_openai_total=shift_openai_total,
     )
     _atomic_write_json(archive / "rejection_ledger.json", rejection_ledger)
+    started_at = _parse_utc(str(state["started_at"]))
+    bleed_uptake = _bleed_uptake_summary(
+        bleed_uptake_reader(repo_root, slot),
+        baseline_offered_count=int(state["baseline_bleed_offered_count"]),
+        baseline_used_count=int(state["baseline_bleed_used_count"]),
+        started_at=started_at,
+        ended_at=current_time,
+    )
+    _atomic_write_json(archive / "bleed_uptake.json", bleed_uptake)
     final_state = dict(state)
     final_state.update(
         {
@@ -903,6 +998,7 @@ def finish_shift(
                 "repair_tax_percent_unavailable_reasons"
             ],
             "skald_writer_tripwire": rejection_ledger["skald_writer_tripwire"],
+            "bleed_uptake": bleed_uptake,
             "jobs": jobs,
             "usage_settled": usage_settled,
             "baseline_failed_jobs": baseline_failed_jobs,
@@ -926,6 +1022,8 @@ def finish_shift(
         ],
         "skald_writer_tripwire": rejection_ledger["skald_writer_tripwire"],
         "rejection_ledger": str(archive / "rejection_ledger.json"),
+        "bleed_uptake": bleed_uptake,
+        "bleed_uptake_report": str(archive / "bleed_uptake.json"),
         "archive": str(archive),
         "jobs": jobs,
         "usage_settled": usage_settled,

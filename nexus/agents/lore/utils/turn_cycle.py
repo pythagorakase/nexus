@@ -1393,6 +1393,7 @@ class TurnCycleManager:
                 session,
                 anchor_chunk_id=anchor_chunk_id,
                 anchor_entity_ids=anchor_entity_ids,
+                density=bleed_settings.density,
                 max_candidates=max_candidates,
                 near_distance_max=bleed_settings.near_distance_max,
                 reserved_remote_slots=bleed_settings.reserved_remote_slots,

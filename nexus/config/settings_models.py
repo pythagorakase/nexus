@@ -1288,6 +1288,14 @@ class OrreryBleedSettings(BaseModel):
         exclude=True,
         description="Deprecated and ignored; Bleed scans the eligible ordered pool.",
     )
+    density: float = Field(
+        default=0.20,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Per-anchor deterministic probability of offering Bleed candidates."
+        ),
+    )
     max_candidates: int = Field(default=3, ge=0)
     near_distance_max: int = Field(default=2, ge=0)
     reserved_remote_slots: int = Field(default=1, ge=0)

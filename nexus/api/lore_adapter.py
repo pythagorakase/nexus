@@ -7,7 +7,8 @@ Handles conversion between structured Pydantic models and database JSONB fields.
 """
 
 import logging
-from typing import Dict, Any, Optional, List
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
+
 from nexus.agents.logon.apex_schema import StateUpdates, StoryTurnResponse
 from nexus.api.choice_handling import (
     ChoiceObject,
@@ -17,6 +18,8 @@ from nexus.api.choice_handling import (
 from nexus.memory.correspondence import GeneratedCorrespondence
 
 logger = logging.getLogger("nexus.api.lore_adapter")
+
+_BLEED_OFFER_MANIFEST_KEY = "_bleed_offer_resolution_ids"
 
 
 def _model_to_json_dict(model: Any) -> Dict[str, Any]:
@@ -126,6 +129,7 @@ def response_to_incubator(
     user_text: str,
     session_id: str,
     orrery_proposal: Optional[Any] = None,
+    bleed_offer_resolution_ids: Iterable[int] = (),
     correspondence: Optional[GeneratedCorrespondence] = None,
 ) -> Dict[str, Any]:
     """
@@ -137,6 +141,7 @@ def response_to_incubator(
         user_text: The user's input text
         session_id: Session ID for tracking
         orrery_proposal: Optional no-write Orrery proposal from TurnContext
+        bleed_offer_resolution_ids: Resolutions offered to this exact draft
 
     Returns:
         Dictionary formatted for incubator table insertion
@@ -168,7 +173,10 @@ def response_to_incubator(
         "metadata_updates": extract_metadata_updates(response),
         "entity_updates": extract_entity_updates(response),
         "reference_updates": extract_reference_updates(response),
-        "orrery_proposal": _serialize_orrery_proposal(orrery_proposal),
+        "orrery_proposal": _serialize_orrery_staging(
+            orrery_proposal,
+            bleed_offer_resolution_ids=bleed_offer_resolution_ids,
+        ),
         "orrery_adjudications": extract_orrery_adjudications(response),
         "new_entities": extract_new_entities(response),
         "correspondence_writer_letter": (
@@ -195,6 +203,57 @@ def _serialize_orrery_proposal(proposal: Optional[Any]) -> Optional[Dict[str, An
     if isinstance(proposal, dict):
         return proposal
     raise TypeError(f"Unsupported Orrery proposal type: {type(proposal).__name__}")
+
+
+def _serialize_orrery_staging(
+    proposal: Optional[Any],
+    *,
+    bleed_offer_resolution_ids: Iterable[int],
+) -> Dict[str, Any]:
+    """Stage an Orrery proposal and exact-draft Bleed manifest in one JSONB value."""
+
+    payload = _serialize_orrery_proposal(proposal) or {}
+    raw_resolution_ids = tuple(bleed_offer_resolution_ids)
+    if any(
+        isinstance(resolution_id, bool) or not isinstance(resolution_id, int)
+        for resolution_id in raw_resolution_ids
+    ):
+        raise ValueError("Bleed offer resolution ids must be integers")
+    resolution_ids = tuple(raw_resolution_ids)
+    if any(resolution_id <= 0 for resolution_id in resolution_ids):
+        raise ValueError("Bleed offer resolution ids must be positive integers")
+    if len(set(resolution_ids)) != len(resolution_ids):
+        raise ValueError("Bleed offer resolution ids must be unique")
+    return {
+        **payload,
+        _BLEED_OFFER_MANIFEST_KEY: list(resolution_ids),
+    }
+
+
+def split_staged_orrery_payload(
+    value: Optional[Mapping[str, Any]],
+) -> Tuple[Optional[Dict[str, Any]], Tuple[int, ...]]:
+    """Separate the canonical proposal from its exact-draft Bleed manifest."""
+
+    if value is None:
+        return None, ()
+    payload = dict(value)
+    raw_resolution_ids = payload.pop(_BLEED_OFFER_MANIFEST_KEY, None)
+    if raw_resolution_ids is None:
+        return payload or None, ()
+    if not isinstance(raw_resolution_ids, list):
+        raise ValueError("Staged Bleed offer manifest must be a JSON array")
+    if any(
+        isinstance(resolution_id, bool) or not isinstance(resolution_id, int)
+        for resolution_id in raw_resolution_ids
+    ):
+        raise ValueError("Staged Bleed offer manifest ids must be integers")
+    resolution_ids = tuple(raw_resolution_ids)
+    if any(resolution_id <= 0 for resolution_id in resolution_ids):
+        raise ValueError("Staged Bleed offer manifest ids must be positive")
+    if len(set(resolution_ids)) != len(resolution_ids):
+        raise ValueError("Staged Bleed offer manifest ids must be unique")
+    return payload or None, resolution_ids
 
 
 def extract_metadata_updates(response: StoryTurnResponse) -> Dict[str, Any]:

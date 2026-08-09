@@ -488,8 +488,20 @@ def test_context_prompt_includes_orrery_bleed_menu_controls() -> None:
     assert "=== ORRERY AMBIENT PERIPHERALS ===" in prompt
     assert "optional ambient peripherals from off-screen events" in prompt
     assert "Ignore freely, render subtly" in prompt
-    assert "include that exact name at least once" in prompt
+    assert (
+        "If you use one with an actor name, include that exact name at least once "
+        "in the prose — uptake is detected by matching that exact name."
+    ) in prompt
     assert "[digital] Mara: street cameras briefly lose Mara" in prompt
+
+
+def test_storyteller_core_has_no_model_side_bleed_density_target() -> None:
+    """Bleed pacing lives in seeded selection code, not Storyteller prose."""
+
+    prompt = (PROMPTS_DIR / "storyteller_core.md").read_text(encoding="utf-8")
+
+    assert "Roughly 10–20% of off-screen activity should bleed" not in prompt
+    assert "The rest stays invisible, maintaining the simulation's integrity" in prompt
 
 
 def test_context_prompt_renders_anchor_scene_conditions() -> None:

@@ -247,6 +247,16 @@ async def generate_narrative_async(
                     orrery_proposal=(
                         lore.turn_context.orrery_proposal if lore.turn_context else None
                     ),
+                    bleed_offer_resolution_ids=(
+                        (
+                            candidate.resolution_id
+                            for candidate in getattr(
+                                lore.turn_context, "bleed_menu", ()
+                            )
+                        )
+                        if lore.turn_context is not None
+                        else ()
+                    ),
                     correspondence=(
                         getattr(lore.turn_context, "private_correspondence", None)
                         if lore.turn_context is not None

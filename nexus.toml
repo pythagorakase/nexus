@@ -519,6 +519,7 @@ model_ref = "@anthropic.default"
 #   retry_delay_seconds — backoff between attempts (default 300)
 
 [orrery.bleed]
+density = 0.20
 max_candidates = 3
 near_distance_max = 2
 reserved_remote_slots = 1
