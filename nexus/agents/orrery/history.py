@@ -21,6 +21,7 @@ from typing import Any, List, Optional
 
 from sqlalchemy import text
 
+from nexus.agents.orrery.reconstruction import playable_narrative_predicate
 from nexus.agents.orrery.resolver import _entity_label, _load_entity_names
 
 _ACTIONS = ("defer", "replace", "void")
@@ -338,6 +339,36 @@ def adjudication_history(
     )
     if recent_rulings_limit is not None:
         recent_rulings = recent_rulings[:recent_rulings_limit]
+
+    if through_tick is not None and recent_rulings:
+        ruling_ticks = sorted({row["tick_chunk_id"] for row in recent_rulings})
+        ordinal_rows = session.execute(
+            text(
+                f"""
+                /* orrery_history:recent_ruling_ordinals */
+                WITH accepted_chunks AS (
+                    SELECT nc.id,
+                           row_number() OVER (ORDER BY nc.id DESC) AS turn_offset
+                    FROM narrative_chunks nc
+                    WHERE nc.id <= :through_tick
+                      AND {playable_narrative_predicate()}
+                )
+                SELECT id, turn_offset
+                FROM accepted_chunks
+                WHERE id = ANY(CAST(:ruling_ticks AS bigint[]))
+                """
+            ),
+            {"through_tick": through_tick, "ruling_ticks": ruling_ticks},
+        ).mappings()
+        turn_offsets = {int(row["id"]): int(row["turn_offset"]) for row in ordinal_rows}
+        missing_ticks = set(ruling_ticks) - set(turn_offsets)
+        if missing_ticks:
+            raise ValueError(
+                "Recent Orrery rulings reference non-playable narrative chunks: "
+                + ", ".join(str(tick) for tick in sorted(missing_ticks))
+            )
+        for ruling in recent_rulings:
+            ruling["turn_offset"] = turn_offsets[ruling["tick_chunk_id"]]
 
     # --- Names and epoch honesty --------------------------------------------
     entity_ids = {

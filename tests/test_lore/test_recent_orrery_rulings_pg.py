@@ -6,13 +6,13 @@ import asyncio
 import os
 import time
 import uuid
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import Any, Iterator
 
 import psycopg2
 import pytest
 from psycopg2 import sql
-from psycopg2.extras import Json
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -22,6 +22,13 @@ from nexus.agents.lore.utils.turn_cycle import (
     TurnCycleManager,
     _context_component_token_count,
 )
+from nexus.agents.orrery.events import commit_orrery_tick_sync
+from nexus.agents.orrery.resolver import (
+    OrreryResolutionDraft,
+    OrreryTickProposal,
+    resolve_dry_run,
+)
+from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
 from nexus.config import load_settings_as_dict
 from nexus.memory import ContextMemoryManager
 
@@ -39,9 +46,112 @@ def _connect(dbname: str) -> Any:
     )
 
 
+def _insert_accepted_chunk_after_rollback_gap(dbname: str, index: int) -> int:
+    """Consume one BIGSERIAL value, then insert the real accepted chunk."""
+
+    gap_conn = _connect(dbname)
+    try:
+        with gap_conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO narrative_chunks (raw_text, storyteller_text)
+                VALUES (%s, %s)
+                RETURNING id
+                """,
+                (f"Rolled-back raw {index}", f"Rolled-back prose {index}"),
+            )
+            rolled_back_id = int(cur.fetchone()[0])
+        gap_conn.rollback()
+    finally:
+        gap_conn.close()
+
+    accepted_conn = _connect(dbname)
+    try:
+        with accepted_conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO narrative_chunks (raw_text, storyteller_text)
+                VALUES (%s, %s)
+                RETURNING id
+                """,
+                (f"Issue 685 raw {index}", f"Issue 685 prose {index}"),
+            )
+            accepted_id = int(cur.fetchone()[0])
+        accepted_conn.commit()
+    finally:
+        accepted_conn.close()
+
+    assert accepted_id > rolled_back_id
+    return accepted_id
+
+
+def _draft(
+    *,
+    template_id: str,
+    binding_hash: str,
+    actor_entity_id: int,
+    narrative_stub: str,
+    state_delta: dict[str, Any],
+) -> OrreryResolutionDraft:
+    """Build one controlled draft for the real adjudication/commit boundary."""
+
+    return OrreryResolutionDraft(
+        template_id=template_id,
+        priority=40,
+        binding_hash=binding_hash,
+        bindings={"actor": actor_entity_id},
+        branch_label=f"Issue 685 {template_id}",
+        narrative_stub=narrative_stub,
+        state_delta=state_delta,
+        magnitude=0.2,
+        promotable=False,
+    )
+
+
+def _resolve_then_commit(
+    seeded: dict[str, Any],
+    *,
+    tick_chunk_id: int,
+    drafts: tuple[OrreryResolutionDraft, ...],
+    adjudications: list[dict[str, Any]],
+) -> Any:
+    """Exercise the live-cycle resolve then real adjudication/commit path."""
+
+    settings = seeded["settings"]
+    with seeded["Session"]() as session:
+        resolved = resolve_dry_run(
+            session,
+            BUILTIN_TEMPLATES,
+            anchor_chunk_id=tick_chunk_id,
+            window_chunks=int(settings["orrery"]["binding"]["window_chunks"]),
+            sunhelm_settings=settings["orrery"].get("sunhelm"),
+        )
+    assert resolved.anchor_chunk_id == tick_chunk_id
+
+    proposal = OrreryTickProposal(
+        anchor_chunk_id=tick_chunk_id,
+        actor_count=max(1, resolved.actor_count),
+        resolutions=drafts,
+    )
+    conn = _connect(seeded["dbname"])
+    try:
+        result = commit_orrery_tick_sync(
+            conn,
+            proposal,
+            tick_chunk_id=tick_chunk_id,
+            adjudications=adjudications,
+            prompt_settings=settings["orrery"]["prompt"],
+            sunhelm_settings=settings["orrery"].get("sunhelm"),
+        )
+        conn.commit()
+        return result
+    finally:
+        conn.close()
+
+
 @pytest.fixture()
 def recent_rulings_db() -> Iterator[dict[str, Any]]:
-    """Clone the template, seed genuine outcome ledgers, and always drop it."""
+    """Create real outcomes through resolve/adjudicate/commit, then drop the DB."""
 
     dbname = f"nexus_test_i685_{uuid.uuid4().hex[:12]}"
     admin = _connect("postgres")
@@ -56,89 +166,121 @@ def recent_rulings_db() -> Iterator[dict[str, Any]]:
                 )
             )
 
-        with _connect(dbname) as conn:
-            with conn.cursor() as cur:
-                chunk_ids: list[int] = []
-                for index in range(1, 7):
-                    cur.execute(
-                        """
-                        INSERT INTO narrative_chunks (raw_text, storyteller_text)
-                        VALUES (%s, %s)
-                        RETURNING id
-                        """,
-                        (f"Issue 685 raw {index}", f"Issue 685 prose {index}"),
-                    )
-                    chunk_ids.append(int(cur.fetchone()[0]))
-
-                defer_delta = {"character.current_activity": "waiting in cover"}
-                for tick_chunk_id in chunk_ids[3:6]:
-                    cur.execute(
-                        """
-                        INSERT INTO orrery_adjudication_log (
-                            tick_chunk_id, proposal_id, template_id,
-                            binding_hash, action, adjudication_source,
-                            original_state_delta, bindings
-                        ) VALUES (
-                            %s, 'hide:defer-streak', 'hide', 'defer-streak',
-                            'defer', 'explicit', %s::jsonb, '{}'::jsonb
-                        )
-                        """,
-                        (tick_chunk_id, Json(defer_delta)),
-                    )
-
-                cur.execute(
-                    """
-                    INSERT INTO orrery_adjudication_log (
-                        tick_chunk_id, proposal_id, template_id, binding_hash,
-                        action, adjudication_source, original_state_delta, bindings
-                    ) VALUES (
-                        %s, 'sleep:voided-no-note', 'sleep', 'voided-no-note',
-                        'void', 'explicit',
-                        '{"character.current_activity":"dozing"}'::jsonb,
-                        '{}'::jsonb
-                    )
-                    """,
-                    (chunk_ids[4],),
-                )
-                cur.execute(
-                    """
-                    INSERT INTO orrery_adjudication_log (
-                        tick_chunk_id, proposal_id, template_id, binding_hash,
-                        action, adjudication_source, skald_note,
-                        original_state_delta, bindings
-                    ) VALUES (
-                        %s, 'sleep:voided', 'sleep', 'voided', 'void',
-                        'explicit', 'Contradicts the witnessed departure',
-                        '{"character.current_activity":"sleeping"}'::jsonb,
-                        '{}'::jsonb
-                    )
-                    """,
-                    (chunk_ids[5],),
-                )
-                cur.execute(
-                    """
-                    INSERT INTO orrery_resolutions (
-                        tick_chunk_id, template_id, binding_hash,
-                        priority, state_delta, brief, promotion_status
-                    ) VALUES (
-                        %s, 'surveil', 'ratified', 40,
-                        '{"character.current_activity":"watching the quay"}'::jsonb,
-                        'Mara watches the quay from a darkened window.', 'pending'
-                    )
-                    """,
-                    (chunk_ids[5],),
-                )
-
         engine = create_engine(
             f"postgresql://{os.environ.get('PGUSER', 'pythagor')}@"
             f"{os.environ.get('PGHOST', 'localhost')}:"
             f"{os.environ.get('PGPORT', '5432')}/{dbname}"
         )
-        yield {
+        settings = load_settings_as_dict()
+        seeded = {
             "dbname": dbname,
             "Session": sessionmaker(bind=engine),
+            "settings": settings,
+        }
+        actor_conn = _connect(dbname)
+        try:
+            with actor_conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO global_variables (id, new_story, base_timestamp)
+                    VALUES (true, true, %s)
+                    ON CONFLICT (id) DO UPDATE
+                    SET base_timestamp = EXCLUDED.base_timestamp
+                    """,
+                    (datetime(2042, 8, 18, 8, 54, tzinfo=timezone.utc),),
+                )
+                cur.execute(
+                    "INSERT INTO entities (kind, is_active) "
+                    "VALUES ('character', true) RETURNING id"
+                )
+                actor_entity_id = int(cur.fetchone()[0])
+                cur.execute(
+                    "INSERT INTO characters (name, summary, entity_id) "
+                    "VALUES ('Mara', 'Issue 685 production-path actor.', %s)",
+                    (actor_entity_id,),
+                )
+            actor_conn.commit()
+        finally:
+            actor_conn.close()
+
+        chunk_ids = [
+            _insert_accepted_chunk_after_rollback_gap(dbname, index)
+            for index in range(1, 5)
+        ]
+        assert all(
+            later - earlier > 1 for earlier, later in zip(chunk_ids, chunk_ids[1:])
+        ), "fixture must prove sparse BIGSERIAL chronology"
+
+        defer_draft = _draft(
+            template_id="hide",
+            binding_hash="defer-streak",
+            actor_entity_id=actor_entity_id,
+            narrative_stub="The watcher remains hidden.",
+            state_delta={"character.current_activity": "waiting in cover"},
+        )
+        void_no_note = _draft(
+            template_id="sleep",
+            binding_hash="voided-no-note",
+            actor_entity_id=actor_entity_id,
+            narrative_stub="The watcher dozes.",
+            state_delta={"character.current_activity": "dozing"},
+        )
+        void_with_note = _draft(
+            template_id="sleep",
+            binding_hash="voided",
+            actor_entity_id=actor_entity_id,
+            narrative_stub="The watcher sleeps.",
+            state_delta={"character.current_activity": "sleeping"},
+        )
+        ratified = _draft(
+            template_id="surveil",
+            binding_hash="ratified",
+            actor_entity_id=actor_entity_id,
+            narrative_stub="Mara watches the quay from a darkened window.",
+            state_delta={},
+        )
+
+        first = _resolve_then_commit(
+            seeded,
+            tick_chunk_id=chunk_ids[1],
+            drafts=(defer_draft,),
+            adjudications=[{"proposal_id": defer_draft.proposal_id, "action": "defer"}],
+        )
+        assert first.deferred_count == 1
+
+        second = _resolve_then_commit(
+            seeded,
+            tick_chunk_id=chunk_ids[2],
+            drafts=(defer_draft, void_no_note),
+            adjudications=[
+                {"proposal_id": defer_draft.proposal_id, "action": "defer"},
+                {"proposal_id": void_no_note.proposal_id, "action": "void"},
+            ],
+        )
+        assert second.deferred_count == 1
+        assert second.voided_count == 1
+
+        third = _resolve_then_commit(
+            seeded,
+            tick_chunk_id=chunk_ids[3],
+            drafts=(defer_draft, void_with_note, ratified),
+            adjudications=[
+                {"proposal_id": defer_draft.proposal_id, "action": "defer"},
+                {
+                    "proposal_id": void_with_note.proposal_id,
+                    "action": "void",
+                    "note": "Contradicts the witnessed departure",
+                },
+            ],
+        )
+        assert third.deferred_count == 1
+        assert third.voided_count == 1
+        assert third.resolution_count == 1
+
+        yield {
+            **seeded,
             "empty_anchor": chunk_ids[0],
-            "outcome_anchor": chunk_ids[5],
+            "outcome_anchor": chunk_ids[3],
         }
     finally:
         if engine is not None:
@@ -188,10 +330,10 @@ def _assemble_prompt(
     return prompt, context.context_payload
 
 
-def test_recent_rulings_render_all_outcomes_for_both_seats_and_count_budget(
+def test_recent_rulings_render_real_outcomes_across_sparse_chunk_ids(
     recent_rulings_db: dict[str, Any],
 ) -> None:
-    """Real assembly renders every shape and carries it into Gaia's prompt."""
+    """Production writes render by accepted order, then reach both seats."""
 
     prompt, payload = _assemble_prompt(
         recent_rulings_db,
@@ -257,7 +399,7 @@ def test_recent_rulings_respect_configured_cap(
 def test_recent_rulings_omit_empty_section(
     recent_rulings_db: dict[str, Any],
 ) -> None:
-    """An anchor before every seeded outcome emits no header or payload key."""
+    """An anchor before every outcome emits no header or payload key."""
 
     prompt, payload = _assemble_prompt(
         recent_rulings_db,

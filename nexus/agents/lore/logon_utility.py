@@ -1957,14 +1957,14 @@ class LogonUtility:
 
         lines = ["=== RECENT ORRERY RULINGS ==="]
         for ruling in rulings:
-            tick_chunk_id = ruling["tick_chunk_id"]
-            if isinstance(tick_chunk_id, bool) or not isinstance(tick_chunk_id, int):
-                raise TypeError("Recent Orrery ruling tick_chunk_id must be an integer")
-            turn_offset = anchor_chunk_id - tick_chunk_id + 1
-            if turn_offset <= 0:
+            turn_offset = ruling.get("turn_offset")
+            if (
+                isinstance(turn_offset, bool)
+                or not isinstance(turn_offset, int)
+                or turn_offset <= 0
+            ):
                 raise ValueError(
-                    "Recent Orrery ruling cannot occur after the prompt anchor: "
-                    f"ruling_tick={tick_chunk_id}, anchor_tick={anchor_chunk_id}"
+                    "Recent Orrery ruling requires a positive accepted-turn offset"
                 )
 
             outcome = ruling["outcome"]
@@ -2284,7 +2284,14 @@ class LogonUtility:
         max_rendered_proposals = prompt_settings.max_rendered_proposals
         max_rendered_pressures = prompt_settings.max_rendered_pressures
 
-        recent_rulings_section = context.get("orrery_recent_rulings_section") or []
+        recent_rulings_section = context.get("orrery_recent_rulings_section")
+        if recent_rulings_section is None:
+            recent_rulings_section = []
+        elif not isinstance(recent_rulings_section, list):
+            raise TypeError(
+                "orrery_recent_rulings_section must be None or a list, got "
+                f"{recent_rulings_section!r}"
+            )
         if not isinstance(recent_rulings_section, list) or not all(
             isinstance(line, str) and line for line in recent_rulings_section
         ):
