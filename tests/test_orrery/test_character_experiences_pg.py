@@ -41,6 +41,7 @@ from nexus.agents.logon.skald_wire import (
     hydrate_skald_turn,
 )
 from nexus.api.commit_handler_sync import commit_incubator_to_database_sync
+from nexus.memory.manager import empty_pass2_baseline
 from nexus.api.lore_adapter import response_to_incubator
 from nexus.config import load_settings_as_dict
 
@@ -217,6 +218,7 @@ def _stage_incubator(
         user_text="Continue.",
         session_id=session_id,
         orrery_proposal=proposal,
+        lore_pass_baseline=empty_pass2_baseline({}),
     )
     staged["generation_model"] = "TEST"
     staged["llm_response_id"] = f"response-{session_id}"
@@ -228,11 +230,11 @@ def _stage_incubator(
             metadata_updates, entity_updates, reference_updates,
             orrery_proposal, orrery_adjudications, new_entities,
             correspondence_writer_letter, correspondence_gaia_letter,
-            session_id, llm_response_id, status
+            session_id, llm_response_id, status, lore_pass_baseline
         ) VALUES (
             TRUE, %s, %s, 'Continue.', 'The accepted scene advances.',
             'TEST', NULL, NULL, %s, %s, %s, %s, %s, %s,
-            NULL, NULL, %s, %s, 'provisional'
+            NULL, NULL, %s, %s, 'provisional', %s
         )
         """,
         (
@@ -246,6 +248,7 @@ def _stage_incubator(
             Json(staged["new_entities"]),
             staged["session_id"],
             staged["llm_response_id"],
+            Json(staged["lore_pass_baseline"]),
         ),
     )
 

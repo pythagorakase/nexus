@@ -23,6 +23,7 @@ from nexus.agents.orrery.experiences import (
     ExperienceRenderBatch,
     validate_render_batch,
 )
+from nexus.memory.manager import empty_pass2_baseline
 from nexus.api.lore_adapter import response_to_incubator
 from nexus.config import load_settings
 
@@ -46,6 +47,7 @@ def test_scene_reset_survives_internal_incubator_staging() -> None:
         parent_chunk_id=4,
         user_text="Go inside.",
         session_id="experience-boundary",
+        lore_pass_baseline=empty_pass2_baseline({}),
     )
 
     assert staged["metadata_updates"]["scene_boundary"] is True
