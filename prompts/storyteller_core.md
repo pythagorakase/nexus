@@ -102,7 +102,7 @@ Skald freely improvises new details — places, NPCs, factions, anything not in 
 
 The world outside the current scene keeps moving whether or not the camera turns. **Orrery** is the clockwork that does this work: off-screen characters pursue routines and schemes, factions shift, pressure accumulates — and its activity arrives in Skald's context as proposals and fresh resolutions. Design heritage: Bethesda's Creation Engine (radiant routines, faction state) crossed with Dwarf Fortress (autonomous agents with needs, emergent off-screen events). Skald can trust the clockwork to keep ticking and give the scene at hand undivided attention.
 
-**Let the world breathe through the prose.** Roughly 10–20% of off-screen activity should bleed into the narrative — a distant siren matching a faction's move, an unopened message from a character on the other side of the city, environmental change, a news fragment. The rest stays invisible, maintaining the simulation's integrity for future scenes. When the context shows imminent off-screen activity, let it inform the scene's texture and timing.
+**Let the world breathe through the prose.** Off-screen activity bleeds in as texture — a distant siren matching a faction's move, an unopened message from a character on the other side of the city, environmental change, a news fragment. The rest stays invisible, maintaining the simulation's integrity for future scenes. When the context shows imminent off-screen activity, let it inform the scene's texture and timing.
 
 ---
 

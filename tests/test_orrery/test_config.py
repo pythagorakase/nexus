@@ -338,11 +338,20 @@ def test_orrery_bleed_accepts_deprecated_selection_keys() -> None:
     )
 
     assert settings.max_candidates == 3
+    assert settings.density == 0.20
     assert settings.near_distance_max == 2
     assert settings.reserved_remote_slots == 1
     dumped = settings.model_dump()
     assert "latency_budget_ms" not in dumped
     assert "candidate_pool_multiplier" not in dumped
+
+
+@pytest.mark.parametrize("density", (-0.01, 1.01))
+def test_orrery_bleed_density_must_be_probability(density: float) -> None:
+    """Bleed density rejects values outside the closed probability interval."""
+
+    with pytest.raises(ValidationError):
+        OrreryBleedSettings(density=density)
 
 
 def test_orrery_bleed_reserved_remote_slots_must_fit_menu() -> None:

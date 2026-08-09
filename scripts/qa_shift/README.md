@@ -129,6 +129,10 @@ validation classes from only the current gateway process's log slice. A
 recovered retry still represents real cost and latency; a novel class must still
 meet the normal repeatability standard before publication.
 
+`finish` also writes `bleed_uptake.json` with the cumulative-counter deltas for
+offered and exact-name-used resolutions plus the uptake rate between the
+shift's start and finish snapshots.
+
 The repair-tax percentage is unavailable when final OpenAI usage is unknown or
 a rejection came from an unexpected provider, because those events do not share
 a trustworthy OpenAI denominator. Preserve the attempts and token evidence, and

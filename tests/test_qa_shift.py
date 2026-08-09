@@ -116,6 +116,20 @@ def _settled_jobs_reader(_root: Path, _slot: int) -> dict[str, object]:
     return _jobs()
 
 
+def _bleed_uptake_reader(
+    _root: Path,
+    _slot: int,
+) -> dict[str, object]:
+    return {"offered_count": 4, "used_count": 1}
+
+
+def _empty_bleed_uptake_reader(
+    _root: Path,
+    _slot: int,
+) -> dict[str, object]:
+    return {"offered_count": 0, "used_count": 0}
+
+
 def _state(config: qa_shift.ShiftConfig) -> dict[str, object]:
     return {
         "schema_version": 1,
@@ -157,6 +171,7 @@ def test_begin_creates_archive_and_pins_every_openai_role(
         config=config,
         usage_reader=lambda _root, _day: _usage(total=123),
         jobs_reader=_settled_jobs_reader,
+        bleed_uptake_reader=_empty_bleed_uptake_reader,
         now=NOW,
     )
 
@@ -167,6 +182,8 @@ def test_begin_creates_archive_and_pins_every_openai_role(
     roles = model["api_models"]["openai"]["roles"]
 
     assert state["baseline_total"] == 123
+    assert state["baseline_bleed_offered_count"] == 0
+    assert state["baseline_bleed_used_count"] == 0
     assert state["status"] == "active"
     assert model["default_slot_model"] == "gpt-5.6-terra"
     assert set(roles) >= {"default", "gaia"}
@@ -184,6 +201,7 @@ def test_begin_creates_archive_and_pins_every_openai_role(
     assert "## Structured-output rejection ledger" in ledger
     assert "Repair tax" in ledger
     assert "## Structured-output rejections" in report
+    assert "## Bleed uptake" in report
     assert "Repair tax" in report
     assert "Seed-promotion disposition" in report
 
@@ -198,6 +216,7 @@ def test_generated_runtime_environment_selects_qa_config(
         config=config,
         usage_reader=lambda _root, _day: _usage(total=123),
         jobs_reader=_settled_jobs_reader,
+        bleed_uptake_reader=_empty_bleed_uptake_reader,
         now=NOW,
     )
     archive = Path(result["archive"])
@@ -431,6 +450,7 @@ def test_pending_post_check_retains_late_usage_in_causal_command_delta(
         config=config,
         usage_reader=lambda _root, _day: _usage(total=100),
         jobs_reader=_settled_jobs_reader,
+        bleed_uptake_reader=_empty_bleed_uptake_reader,
         now=NOW,
     )
     archive = Path(begin["archive"])
@@ -509,6 +529,7 @@ def test_failure_during_pending_stops_after_settlement_with_full_delta(
         config=config,
         usage_reader=lambda _root, _day: _usage(total=100),
         jobs_reader=_settled_jobs_reader,
+        bleed_uptake_reader=_empty_bleed_uptake_reader,
         now=NOW,
     )
     archive = Path(begin["archive"])
@@ -569,6 +590,7 @@ def test_check_reads_queue_before_usage_to_close_settlement_race(
         config=config,
         usage_reader=lambda _root, _day: _usage(total=100),
         jobs_reader=_settled_jobs_reader,
+        bleed_uptake_reader=_empty_bleed_uptake_reader,
         now=NOW,
     )
     archive = Path(begin["archive"])
@@ -643,6 +665,7 @@ def test_preexisting_failed_jobs_become_shift_baseline(tmp_path: Path) -> None:
         config=config,
         usage_reader=lambda _root, _day: _usage(total=100),
         jobs_reader=lambda _root, _slot: _jobs(failed_jobs=2),
+        bleed_uptake_reader=_empty_bleed_uptake_reader,
         now=NOW,
     )
     archive = Path(begin["archive"])
@@ -736,6 +759,7 @@ def test_check_and_finish_persist_end_to_end_tally(tmp_path: Path) -> None:
         config=config,
         usage_reader=lambda _root, _day: _usage(total=100),
         jobs_reader=_settled_jobs_reader,
+        bleed_uptake_reader=_empty_bleed_uptake_reader,
         now=NOW,
     )
     archive = Path(begin["archive"])
@@ -753,6 +777,7 @@ def test_check_and_finish_persist_end_to_end_tally(tmp_path: Path) -> None:
         exit_condition="dry_well",
         usage_reader=lambda _root, _day: _usage(total=350, events=[first_event]),
         jobs_reader=_settled_jobs_reader,
+        bleed_uptake_reader=_bleed_uptake_reader,
         now=NOW + timedelta(minutes=2),
     )
 
@@ -768,6 +793,10 @@ def test_check_and_finish_persist_end_to_end_tally(tmp_path: Path) -> None:
     assert state["exit_condition"] == "dry_well"
     assert (archive / "usage_end.json").exists()
     assert (archive / "rejection_ledger.json").exists()
+    assert (archive / "bleed_uptake.json").exists()
+    assert finish["bleed_uptake"]["offered_count"] == 4
+    assert finish["bleed_uptake"]["used_count"] == 1
+    assert finish["bleed_uptake"]["uptake_rate_percent"] == 25.0
     assert finish["rejected_attempts"] == 0
     assert finish["repair_tax_tokens"] == 0
     assert finish["repair_tax_percent"] == 0.0
@@ -797,6 +826,7 @@ def test_finish_persists_exact_repair_tax_and_writer_tripwire(
             events=[historical_rejection],
         ),
         jobs_reader=_settled_jobs_reader,
+        bleed_uptake_reader=_empty_bleed_uptake_reader,
         now=NOW,
     )
     archive = Path(begin["archive"])
@@ -821,6 +851,7 @@ def test_finish_persists_exact_repair_tax_and_writer_tripwire(
             events=[historical_rejection, writer_rejection, accepted_retry],
         ),
         jobs_reader=_settled_jobs_reader,
+        bleed_uptake_reader=_bleed_uptake_reader,
         now=NOW + timedelta(minutes=2),
     )
     ledger = json.loads((archive / "rejection_ledger.json").read_text())
@@ -871,6 +902,7 @@ def test_finish_withholds_repair_tax_percent_for_untrusted_denominator(
         config=config,
         usage_reader=lambda _root, _day: _usage(total=100),
         jobs_reader=_settled_jobs_reader,
+        bleed_uptake_reader=_empty_bleed_uptake_reader,
         now=NOW,
     )
     archive = Path(begin["archive"])
@@ -888,6 +920,7 @@ def test_finish_withholds_repair_tax_percent_for_untrusted_denominator(
             events=[rejection],
         ),
         jobs_reader=_settled_jobs_reader,
+        bleed_uptake_reader=_bleed_uptake_reader,
         now=NOW + timedelta(minutes=2),
     )
     ledger = json.loads((archive / "rejection_ledger.json").read_text())
@@ -905,6 +938,7 @@ def test_finish_reads_original_quota_day_after_rollover(tmp_path: Path) -> None:
         config=config,
         usage_reader=lambda _root, _day: _usage(total=100),
         jobs_reader=_settled_jobs_reader,
+        bleed_uptake_reader=_empty_bleed_uptake_reader,
         now=NOW,
     )
     archive = Path(begin["archive"])
@@ -930,6 +964,7 @@ def test_finish_reads_original_quota_day_after_rollover(tmp_path: Path) -> None:
         exit_condition="token_fence",
         usage_reader=read_original_day,
         jobs_reader=_settled_jobs_reader,
+        bleed_uptake_reader=_bleed_uptake_reader,
         now=datetime(2026, 7, 31, 0, 2, tzinfo=timezone.utc),
     )
     state = json.loads((archive / "shift_state.json").read_text())
@@ -957,6 +992,7 @@ def test_finish_reports_maturation_settlement_without_refusal(
         config=config,
         usage_reader=lambda _root, _day: _usage(total=100),
         jobs_reader=_settled_jobs_reader,
+        bleed_uptake_reader=_empty_bleed_uptake_reader,
         now=NOW,
     )
     archive = Path(begin["archive"])
@@ -966,6 +1002,7 @@ def test_finish_reports_maturation_settlement_without_refusal(
         exit_condition="blocked",
         usage_reader=lambda _root, _day: _usage(total=125),
         jobs_reader=lambda _root, _slot: _jobs(state=job_state),
+        bleed_uptake_reader=_bleed_uptake_reader,
         now=NOW + timedelta(minutes=1),
     )
     final_state = json.loads((archive / "shift_state.json").read_text())
@@ -984,6 +1021,7 @@ def test_finish_marks_new_maturation_failure_unsettled(tmp_path: Path) -> None:
         config=config,
         usage_reader=lambda _root, _day: _usage(total=100),
         jobs_reader=lambda _root, _slot: _jobs(failed_jobs=1),
+        bleed_uptake_reader=_empty_bleed_uptake_reader,
         now=NOW,
     )
     archive = Path(begin["archive"])
@@ -993,6 +1031,7 @@ def test_finish_marks_new_maturation_failure_unsettled(tmp_path: Path) -> None:
         exit_condition="blocked",
         usage_reader=lambda _root, _day: _usage(total=125),
         jobs_reader=lambda _root, _slot: _jobs(failed_jobs=2),
+        bleed_uptake_reader=_bleed_uptake_reader,
         now=NOW + timedelta(minutes=1),
     )
 

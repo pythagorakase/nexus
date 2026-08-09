@@ -180,6 +180,7 @@ def _select(
         session,
         anchor_chunk_id=100,
         anchor_entity_ids=anchor_entity_ids,
+        density=1.0,
         max_candidates=max_candidates,
         near_distance_max=near_distance_max,
         reserved_remote_slots=reserved_remote_slots,
@@ -200,6 +201,7 @@ def _settings():
         "orrery": {
             "enabled": True,
             "bleed": {
+                "density": 1.0,
                 "max_candidates": 3,
             },
         },
@@ -212,6 +214,7 @@ def test_load_bleed_candidates_coerces_descriptor() -> None:
     candidates = load_bleed_candidates(
         FakeSession(candidate_rows=[_candidate_row()]),
         anchor_chunk_id=100,
+        density=1.0,
         limit=3,
     )
 
@@ -220,6 +223,46 @@ def test_load_bleed_candidates_coerces_descriptor() -> None:
     assert candidates[0].channel == "digital"
     assert candidates[0].summary == "street cameras briefly lose Mara"
     assert candidates[0].magnitude == 0.72
+
+
+def test_bleed_density_draw_is_deterministic_for_anchor_chunk() -> None:
+    """The same persisted anchor identity produces the same offer decision."""
+
+    first_session = FakeSession(candidate_rows=[_candidate_row()])
+    second_session = FakeSession(candidate_rows=[_candidate_row()])
+
+    first = load_bleed_candidates(
+        first_session,
+        anchor_chunk_id=173,
+        density=0.5,
+        limit=3,
+    )
+    second = load_bleed_candidates(
+        second_session,
+        anchor_chunk_id=173,
+        density=0.5,
+        limit=3,
+    )
+
+    assert first == second
+    assert bool(first_session.executed) is bool(second_session.executed)
+
+
+def test_bleed_density_zero_skips_candidate_query() -> None:
+    """A failing density decision offers no candidates and does no scan."""
+
+    session = FakeSession(candidate_rows=[_candidate_row()])
+
+    assert (
+        load_bleed_candidates(
+            session,
+            anchor_chunk_id=173,
+            density=0.0,
+            limit=3,
+        )
+        == []
+    )
+    assert session.executed == []
 
 
 def test_select_bleed_menu_returns_top_candidate_without_recording_offers() -> None:
@@ -398,6 +441,7 @@ def test_empty_anchor_preserves_existing_order_without_graph_queries() -> None:
         for candidate in load_bleed_candidates(
             session,
             anchor_chunk_id=100,
+            density=1.0,
             limit=2,
         )
     ]
@@ -463,6 +507,7 @@ def test_select_bleed_menu_is_deterministic_with_tie_order() -> None:
     candidate_sql = next(
         sql for sql, _ in session.executed if "orrery:bleed_candidates" in sql
     )
+    assert "r.offer_count >= 2 AND r.use_count = 0" in candidate_sql
     assert "r.id DESC" in candidate_sql
 
 
@@ -603,6 +648,7 @@ async def test_call_apex_ai_records_bleed_offers_after_generation_success() -> N
     context.bleed_menu = load_bleed_candidates(
         FakeSession(candidate_rows=[_candidate_row()]),
         anchor_chunk_id=100,
+        density=1.0,
         limit=1,
     )
     context.phase_states["orrery_bleed"] = {
@@ -645,6 +691,7 @@ async def test_call_apex_ai_does_not_record_bleed_offers_on_generation_failure()
     context.bleed_menu = load_bleed_candidates(
         FakeSession(candidate_rows=[_candidate_row()]),
         anchor_chunk_id=100,
+        density=1.0,
         limit=1,
     )
     context.phase_states["orrery_bleed"] = {

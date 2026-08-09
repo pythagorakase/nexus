@@ -19,6 +19,7 @@ from nexus.agents.logon.apex_schema import (
     ReferencedEntities,
     StateUpdates,
 )
+from nexus.agents.orrery.bleed import record_bleed_uptake_async
 from nexus.agents.orrery.events import commit_orrery_tick_async
 from nexus.agents.orrery.reconstruction import (
     capture_state_checkpoint_async,
@@ -728,6 +729,18 @@ async def commit_incubator_to_database(
                 drift_settings=orrery_settings.get("drift"),
                 reveal_settings=orrery_settings.get("reveal"),
             )
+            bleed_used_count = await record_bleed_uptake_async(
+                conn,
+                offered_anchor_chunk_id=incubator["parent_chunk_id"],
+                accepted_chunk_id=chunk_id,
+                accepted_text=storyteller_text,
+            )
+            if bleed_used_count:
+                logger.info(
+                    "Stamped %s Orrery Bleed uptake rows for chunk %s",
+                    bleed_used_count,
+                    chunk_id,
+                )
             if (
                 orrery_result.resolution_count
                 or orrery_result.skipped_existing_count

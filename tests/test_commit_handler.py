@@ -47,6 +47,7 @@ class AsyncCommitConnection:
         self.factions = {}
         self.character_junctions = []
         self.place_junctions = []
+        self.bleed_offers = []
         self.statements = []
         self.parent_metadata = {
             "season": 1,
@@ -103,6 +104,12 @@ class AsyncCommitConnection:
 
     async def fetch(self, sql, *args):
         normalized = " ".join(sql.split())
+        if "/* orrery:bleed_uptake_candidates */" in normalized:
+            return [
+                offer
+                for offer in self.bleed_offers
+                if offer["last_offered_chunk_id"] == args[0]
+            ]
         if "SELECT id FROM characters WHERE name" in normalized:
             entity_id = self.characters.get(args[0])
             return [{"id": entity_id}] if entity_id is not None else []
@@ -127,7 +134,14 @@ class AsyncCommitConnection:
     async def execute(self, sql, *args):
         normalized = " ".join(sql.split())
         self.statements.append((normalized, args))
-        if "INSERT INTO characters" in normalized:
+        if "/* orrery:stamp_bleed_uptake */" in normalized:
+            chunk_id, resolution_id = args
+            offer = next(
+                offer for offer in self.bleed_offers if offer["id"] == resolution_id
+            )
+            offer["used_chunk_id"] = chunk_id
+            offer["use_count"] += 1
+        elif "INSERT INTO characters" in normalized:
             self.characters[args[0]] = 72
         elif "INSERT INTO chunk_character_references" in normalized:
             self.character_junctions.append(args)
@@ -221,6 +235,56 @@ async def test_async_commit_links_same_turn_character_declaration(monkeypatch):
 
     assert chunk_id == conn.chunk_id
     assert conn.character_junctions == [(conn.chunk_id, 72, "present")]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("name_present", (True, False))
+async def test_async_commit_measures_seeded_bleed_offer_uptake(
+    monkeypatch: pytest.MonkeyPatch,
+    name_present: bool,
+) -> None:
+    """The async commit path mirrors exact-name Bleed uptake stamping."""
+
+    conn = AsyncCommitConnection()
+    conn.incubator["new_entities"] = []
+    conn.incubator["reference_updates"] = {
+        "characters": [],
+        "places": [],
+        "factions": [],
+    }
+    conn.incubator["storyteller_text"] = (
+        "Mara Venn opens the rain-dark gate."
+        if name_present
+        else "The gatekeeper opens the rain-dark gate."
+    )
+    conn.bleed_offers = [
+        {
+            "id": 502,
+            "actor_name": "Mara Venn",
+            "stub_text": "Mara Venn opens the rain-dark gate.",
+            "last_offered_chunk_id": conn.incubator["parent_chunk_id"],
+            "used_chunk_id": None,
+            "use_count": 0,
+        }
+    ]
+
+    async def no_op(*_args, **_kwargs):
+        return None
+
+    async def empty_orrery_tick(*_args, **_kwargs):
+        return _empty_orrery_result()
+
+    monkeypatch.setattr(commit_handler, "set_commit_chunk_attribution_async", no_op)
+    monkeypatch.setattr(commit_handler, "commit_orrery_tick_async", empty_orrery_tick)
+    monkeypatch.setattr(
+        commit_handler, "_orrery_checkpoint_interval", lambda _settings: 0
+    )
+
+    chunk_id = await commit_incubator_to_database(conn, "bleed-session", slot=5)
+
+    offer = conn.bleed_offers[0]
+    assert offer["used_chunk_id"] == (chunk_id if name_present else None)
+    assert offer["use_count"] == (1 if name_present else 0)
 
 
 @pytest.mark.asyncio

@@ -1,5 +1,6 @@
 """Unit tests for synchronous narrative commit helpers."""
 
+import logging
 from types import SimpleNamespace
 
 import pytest
@@ -78,6 +79,7 @@ class CommitCursor:
     def __init__(self, connection):
         self.connection = connection
         self.result = None
+        self.rows = []
         self.rowcount = 0
 
     def __enter__(self):
@@ -89,6 +91,7 @@ class CommitCursor:
     def execute(self, sql, params=None):
         normalized = " ".join(sql.split())
         self.connection.statements.append((normalized, params))
+        self.rows = []
         self.rowcount = 0
         if normalized.startswith("DELETE FROM incubator"):
             self.rowcount = 1
@@ -120,11 +123,31 @@ class CommitCursor:
         elif "INSERT INTO chunk_character_references" in normalized:
             self.connection.character_junctions.append(params)
             self.result = None
+        elif "/* orrery:bleed_uptake_candidates */" in normalized:
+            self.rows = [
+                offer
+                for offer in self.connection.bleed_offers
+                if offer["last_offered_chunk_id"] == params[0]
+            ]
+            self.result = None
+        elif "/* orrery:stamp_bleed_uptake */" in normalized:
+            chunk_id, resolution_id = params
+            offer = next(
+                offer
+                for offer in self.connection.bleed_offers
+                if offer["id"] == resolution_id
+            )
+            offer["used_chunk_id"] = chunk_id
+            offer["use_count"] += 1
+            self.result = None
         else:
             self.result = None
 
     def fetchone(self):
         return self.result
+
+    def fetchall(self):
+        return self.rows
 
 
 class CommitConnection:
@@ -137,6 +160,7 @@ class CommitConnection:
         self.factions = {}
         self.character_junctions = []
         self.place_junctions = []
+        self.bleed_offers = []
         self.statements = []
         self.rollback_called = False
         self.parent_metadata = {
@@ -265,6 +289,56 @@ def test_sync_commit_links_same_turn_character_declaration(monkeypatch):
         "FROM incubator" in sql and "FOR UPDATE" in sql
         for sql, _params in conn.statements
     )
+
+
+@pytest.mark.parametrize("name_present", (True, False))
+def test_sync_commit_measures_seeded_bleed_offer_uptake(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    name_present: bool,
+) -> None:
+    """The genuine commit path stamps only exact-name Bleed uptake."""
+
+    caplog.set_level(logging.INFO, logger="nexus.orrery.bleed")
+    conn = CommitConnection()
+    conn.incubator["new_entities"] = []
+    conn.incubator["reference_updates"] = {
+        "characters": [],
+        "places": [],
+        "factions": [],
+    }
+    conn.incubator["storyteller_text"] = (
+        "Iria Vale slips through the rain-dark station."
+        if name_present
+        else "The courier slips through the rain-dark station."
+    )
+    conn.bleed_offers = [
+        {
+            "id": 501,
+            "actor_name": "Iria Vale",
+            "stub_text": "Iria Vale slips through the rain-dark station.",
+            "last_offered_chunk_id": conn.incubator["parent_chunk_id"],
+            "used_chunk_id": None,
+            "use_count": 0,
+        }
+    ]
+    _patch_sync_commit_runtime(monkeypatch)
+
+    chunk_id = commit_incubator_to_database_sync(conn, "bleed-session", slot=5)
+
+    offer = conn.bleed_offers[0]
+    assert offer["used_chunk_id"] == (chunk_id if name_present else None)
+    assert offer["use_count"] == (1 if name_present else 0)
+    uptake_record = next(
+        record
+        for record in caplog.records
+        if getattr(record, "event", None) == "orrery_bleed_uptake"
+    )
+    assert uptake_record.name_matched is name_present
+    if name_present:
+        assert uptake_record.four_gram_overlap_ratio == 1.0
+    else:
+        assert 0.0 < uptake_record.four_gram_overlap_ratio < 1.0
 
 
 def test_sync_reconciled_mentions_flow_through_adapter_and_commit(monkeypatch):

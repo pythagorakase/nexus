@@ -31,10 +31,17 @@ Summarize both failures and negative results from `probe_ledger.md`.
 - Stable-rate comparison:
 - `skald_writer` #639 tripwire:
 
+## Bleed uptake
+
+- Offered resolutions in shift window:
+- Used resolutions in shift window:
+- Uptake rate:
+
 ## Preserved evidence
 
 - `gateway-8012.log`:
 - `rejection_ledger.json`:
+- `bleed_uptake.json`:
 - `save_04_before.dump`:
 - Promoted seed and manifest:
 - Additional payloads/traces:
