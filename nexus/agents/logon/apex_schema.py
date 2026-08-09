@@ -59,15 +59,6 @@ class Coordinates(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-class NamedObservation(BaseModel):
-    """Strict key/value observation entry for JSONB-style side notes."""
-
-    key: str = Field(min_length=1, description="Observation key or label")
-    value: str = Field(description="Observation value as concise prose")
-
-    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
-
-
 class FactionStanceChange(BaseModel):
     """Strict faction stance change entry."""
 
@@ -78,7 +69,7 @@ class FactionStanceChange(BaseModel):
 
 
 def _stringify_structured_value(value: Any) -> str:
-    """Render arbitrary legacy observation values into strict-schema prose."""
+    """Render arbitrary legacy structured values into strict-schema prose."""
 
     if value is None:
         return ""
@@ -392,28 +383,10 @@ class CharacterStateUpdate(BaseModel):
     emotional_state: Optional[str] = Field(
         default=None, description="Character's emotional state"
     )
-    extra_observations: List[NamedObservation] = Field(
-        default_factory=list,
-        description="Strict key/value observations for extra_data JSONB.",
-    )
     orrery_tags: Optional[OrreryTagBestowal] = Field(
         default=None,
         description="Registered tag deltas for this character.",
     )
-
-    @field_validator("extra_observations", mode="before")
-    @classmethod
-    def normalize_extra_observations(cls, value: Any) -> Any:
-        """Accept legacy dict observations while emitting strict list schema."""
-
-        if value is None or isinstance(value, list):
-            return value
-        if isinstance(value, dict):
-            return [
-                {"key": str(key), "value": _stringify_structured_value(item)}
-                for key, item in value.items()
-            ]
-        return value
 
     model_config = ConfigDict(extra="forbid")
 

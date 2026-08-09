@@ -166,9 +166,6 @@ def test_response_to_incubator_preserves_full_canonical_state_updates() -> None:
                         "current_location": 41,
                         "current_activity": "tracking the drowned clerk",
                         "emotional_state": "alert but composed",
-                        "extra_observations": [
-                            {"key": "clue", "value": "heard the drowned bell"}
-                        ],
                         "orrery_tags": {
                             "applied_tags": ["perceptive"],
                             "tags_to_clear": ["resting"],
@@ -225,9 +222,6 @@ def test_response_to_incubator_preserves_full_canonical_state_updates() -> None:
     payload = incubator["entity_updates"]
 
     character = payload["characters"][0]
-    assert character["extra_observations"] == [
-        {"key": "clue", "value": "heard the drowned bell"}
-    ]
     assert character["orrery_tags"]["applied_tags"] == ["perceptive"]
     place = payload["locations"][0]
     assert place["current_conditions"] == "Floodwater is rising."
