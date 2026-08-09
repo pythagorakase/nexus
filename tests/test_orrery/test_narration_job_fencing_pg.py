@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
+from datetime import datetime, timezone
 import os
 from pathlib import Path
 from threading import Event
@@ -14,9 +15,13 @@ import psycopg2
 from psycopg2 import sql
 from psycopg2.errors import UniqueViolation
 import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.engine import URL
+from sqlalchemy.orm import Session
 
 from nexus.agents.orrery.events import commit_orrery_tick_sync
-from nexus.agents.orrery.resolver import OrreryResolutionDraft, OrreryTickProposal
+from nexus.agents.orrery.resolver import resolve_dry_run
+from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
 from nexus.agents.orrery.worker import (
     drain_narration_outbox_sync,
     promote_pending_resolutions_sync,
@@ -109,7 +114,7 @@ def _disposable_narration_db() -> Iterator[str]:
             admin.close()
 
 
-def _settings() -> dict[str, Any]:
+def _settings(*, lease_duration_seconds: int = 60) -> dict[str, Any]:
     """Return deterministic narration worker settings for database tests."""
 
     return {
@@ -119,7 +124,7 @@ def _settings() -> dict[str, Any]:
                 "model_ref": "test-narrator",
                 "max_attempts": 3,
                 "retry_delay_seconds": 0,
-                "lease_duration_seconds": 60,
+                "lease_duration_seconds": lease_duration_seconds,
                 "max_jobs_per_drain": 5,
             },
             "promote": {
@@ -144,11 +149,15 @@ def _insert_chunk(cur: Any, label: str, *, world_layer: str = "primary") -> int:
         "INSERT INTO chunk_metadata (chunk_id, world_layer) VALUES (%s, %s)",
         (chunk_id, world_layer),
     )
+    cur.execute(
+        "UPDATE chunk_metadata SET world_time = %s WHERE chunk_id = %s",
+        (datetime(2196, 7, 6, 23, 0, tzinfo=timezone.utc), chunk_id),
+    )
     return chunk_id
 
 
 def _materialize_pending_resolution(conn: Any, *, label: str) -> tuple[int, int]:
-    """Commit a real Orrery proposal at a narrative chunk anchor."""
+    """Resolve and commit a genuine Orrery proposal at a narrative anchor."""
 
     with conn.cursor() as cur:
         chunk_id = _insert_chunk(cur, f"Issue 676 anchor: {label}")
@@ -158,22 +167,65 @@ def _materialize_pending_resolution(conn: Any, *, label: str) -> tuple[int, int]
             "INSERT INTO characters (name, entity_id) VALUES (%s, %s)",
             (f"Courier {label}", actor_id),
         )
+        cur.execute(
+            """
+            UPDATE character_need_states
+            SET debt_score = 60,
+                last_evaluated_at = %s
+            WHERE character_entity_id = %s
+              AND need_type = 'sleep'
+            """,
+            (datetime(2196, 7, 6, 23, 0, tzinfo=timezone.utc), actor_id),
+        )
+        assert cur.rowcount == 1, "Character trigger did not initialize sleep debt"
+        cur.execute(
+            """
+            INSERT INTO world_events (
+                event_type, tick_chunk_id, actor_entity_id,
+                world_layer, source, changed_fields, payload
+            ) VALUES (
+                'slept', %s, %s, 'primary', 'resolver', '{}', '{}'::jsonb
+            )
+            """,
+            (chunk_id, actor_id),
+        )
+    conn.commit()
 
-    binding_hash = f"issue-676-{label}-{uuid4()}"
-    draft = OrreryResolutionDraft(
-        template_id="hide",
-        priority=80,
-        binding_hash=binding_hash,
-        bindings={"actor": actor_id},
-        binding_names={"actor": f"Courier {label}"},
-        branch_label="Issue 676 narration fencing probe",
-        narrative_stub="{actor} disappears below the viaduct.",
-        magnitude=0.72,
+    engine = create_engine(
+        URL.create(
+            "postgresql+psycopg2",
+            username=os.environ.get("PGUSER", "pythagor"),
+            host=os.environ.get("PGHOST", "localhost"),
+            port=int(os.environ.get("PGPORT", "5432")),
+            database=conn.info.dbname,
+        ),
+        future=True,
     )
-    proposal = OrreryTickProposal(
-        anchor_chunk_id=chunk_id,
-        actor_count=1,
-        resolutions=(draft,),
+    try:
+        with Session(engine) as session:
+            proposal = resolve_dry_run(
+                session,
+                BUILTIN_TEMPLATES,
+                anchor_chunk_id=chunk_id,
+                window_chunks=30,
+                epistemics_settings={"enabled": False},
+            )
+    finally:
+        engine.dispose()
+
+    assert proposal.resolutions, (
+        "Genuine Orrery resolver produced no draft for the seeded high sleep debt; "
+        f"actor={actor_id}, chunk={chunk_id}"
+    )
+    assert proposal.actor_count == 1
+    assert len(proposal.resolutions) == 1, (
+        "Issue 676 fixture must resolve exactly one deterministic draft; got "
+        f"{[draft.template_id for draft in proposal.resolutions]}"
+    )
+    draft = proposal.resolutions[0]
+    assert draft.template_id == "sleep", (
+        "Seeded high sleep debt must resolve through the real SLEEP package; got "
+        f"{draft.template_id}"
     )
     result = commit_orrery_tick_sync(
         conn,
@@ -185,7 +237,7 @@ def _materialize_pending_resolution(conn: Any, *, label: str) -> tuple[int, int]
     with conn.cursor() as cur:
         cur.execute(
             "SELECT id FROM orrery_resolutions WHERE binding_hash = %s",
-            (binding_hash,),
+            (draft.binding_hash,),
         )
         return int(cur.fetchone()[0]), chunk_id
 
@@ -207,14 +259,19 @@ def _enqueue(conn: Any, resolution_id: int) -> None:
         assert int(cur.fetchone()[0]) == 1
 
 
-def _drain(dbname: str, provider: Any) -> tuple[int, int]:
+def _drain(
+    dbname: str,
+    provider: Any,
+    *,
+    lease_duration_seconds: int = 60,
+) -> tuple[int, int]:
     """Run the public narration drain with its own worker connection."""
 
     conn = _connect(dbname)
     try:
         return drain_narration_outbox_sync(
             slot=676,
-            settings=_settings(),
+            settings=_settings(lease_duration_seconds=lease_duration_seconds),
             narration_provider=provider,
             conn=conn,
         )
@@ -347,6 +404,122 @@ def test_stale_anchor_completion_is_terminally_rejected() -> None:
                 assert state == "stale_rejected"
                 assert int(anchor_chunk) == original_chunk
                 assert "anchor changed" in error
+                cur.execute(
+                    "SELECT count(*) FROM offscreen_narrations "
+                    "WHERE resolution_id = %s",
+                    (resolution_id,),
+                )
+                assert int(cur.fetchone()[0]) == 0
+        finally:
+            conn.close()
+
+
+def test_completion_locks_world_layer_before_comparing_anchor() -> None:
+    """A concurrent layer update wins before completion and rejects stale prose."""
+
+    with _disposable_narration_db() as dbname:
+        conn = _connect(dbname)
+        try:
+            with conn:
+                resolution_id, anchor_chunk = _materialize_pending_resolution(
+                    conn, label="layer-lock"
+                )
+            _enqueue(conn, resolution_id)
+        finally:
+            conn.close()
+
+        provider = _BlockingProvider()
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            completion = executor.submit(_drain, dbname, provider)
+            assert provider.started.wait(timeout=10)
+
+            layer_writer = _connect(dbname)
+            try:
+                with layer_writer.cursor() as cur:
+                    cur.execute(
+                        "UPDATE chunk_metadata SET world_layer = 'flashback' "
+                        "WHERE chunk_id = %s",
+                        (anchor_chunk,),
+                    )
+                    assert cur.rowcount == 1
+                provider.release.set()
+                assert Event().wait(timeout=0.2) is False
+                assert not completion.done()
+                layer_writer.commit()
+            finally:
+                layer_writer.close()
+
+            assert completion.result(timeout=10) == (0, 1)
+
+        conn = _connect(dbname)
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT j.state::text, cm.world_layer::text, count(n.id) "
+                    "FROM orrery_narration_jobs AS j "
+                    "JOIN orrery_resolutions AS r ON r.id = j.resolution_id "
+                    "JOIN chunk_metadata AS cm ON cm.chunk_id = r.tick_chunk_id "
+                    "LEFT JOIN offscreen_narrations AS n "
+                    "ON n.resolution_id = r.id "
+                    "WHERE r.id = %s "
+                    "GROUP BY j.state, cm.world_layer",
+                    (resolution_id,),
+                )
+                assert cur.fetchone() == ("stale_rejected", "flashback", 0)
+        finally:
+            conn.close()
+
+
+def test_completion_clock_counts_time_blocked_on_job_lock() -> None:
+    """A lease that expires during lock wait cannot complete with stale now()."""
+
+    with _disposable_narration_db() as dbname:
+        conn = _connect(dbname)
+        try:
+            with conn:
+                resolution_id, _ = _materialize_pending_resolution(
+                    conn, label="wall-clock-expiry"
+                )
+            _enqueue(conn, resolution_id)
+        finally:
+            conn.close()
+
+        provider = _BlockingProvider()
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            completion = executor.submit(
+                _drain,
+                dbname,
+                provider,
+                lease_duration_seconds=1,
+            )
+            assert provider.started.wait(timeout=10)
+
+            job_locker = _connect(dbname)
+            try:
+                with job_locker.cursor() as cur:
+                    cur.execute(
+                        "SELECT id FROM orrery_narration_jobs "
+                        "WHERE resolution_id = %s FOR UPDATE",
+                        (resolution_id,),
+                    )
+                    assert cur.fetchone() is not None
+                provider.release.set()
+                assert Event().wait(timeout=1.2) is False
+                job_locker.commit()
+            finally:
+                job_locker.close()
+
+            assert completion.result(timeout=10) == (0, 1)
+
+        conn = _connect(dbname)
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT state::text, lease_until < clock_timestamp() "
+                    "FROM orrery_narration_jobs WHERE resolution_id = %s",
+                    (resolution_id,),
+                )
+                assert cur.fetchone() == ("leased", True)
                 cur.execute(
                     "SELECT count(*) FROM offscreen_narrations "
                     "WHERE resolution_id = %s",

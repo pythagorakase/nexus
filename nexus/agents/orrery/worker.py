@@ -250,7 +250,7 @@ def drain_narration_outbox_sync(
                         r.brief,
                         r.promotion_verdict,
                         r.event_ids,
-                        cm.world_layer::text AS world_layer,
+                        COALESCE(cm.world_layer::text, 'primary') AS world_layer,
                         n.name AS actor_name
                     FROM orrery_narration_jobs j
                     JOIN orrery_resolutions r ON r.id = j.resolution_id
@@ -260,12 +260,12 @@ def drain_narration_outbox_sync(
                       AND (
                             (
                                 j.state = 'queued'
-                                AND j.available_at <= now()
+                                AND j.available_at <= clock_timestamp()
                             )
                             OR (
                                 j.state = 'leased'
                                 AND j.lease_until IS NOT NULL
-                                AND j.lease_until < now()
+                                AND j.lease_until < clock_timestamp()
                             )
                       )
                     ORDER BY
@@ -292,7 +292,8 @@ def drain_narration_outbox_sync(
                         """
                         UPDATE orrery_narration_jobs
                         SET state = 'leased',
-                            lease_until = now() + (%s * interval '1 second'),
+                            lease_until = clock_timestamp()
+                                + (%s * interval '1 second'),
                             locked_by = %s,
                             lease_nonce = %s,
                             attempts = attempts + 1,
@@ -508,22 +509,49 @@ def _mark_narration_succeeded(
             j.state::text AS state,
             j.locked_by,
             j.lease_nonce,
-            j.lease_until > now() AS lease_is_current,
+            j.lease_until,
             j.anchor_tick_chunk_id,
             j.anchor_world_layer::text AS anchor_world_layer,
             r.tick_chunk_id AS current_tick_chunk_id,
-            COALESCE(cm.world_layer::text, 'primary') AS current_world_layer,
             nc.id IS NOT NULL AS anchor_exists
         FROM orrery_narration_jobs AS j
         JOIN orrery_resolutions AS r ON r.id = j.resolution_id
         LEFT JOIN narrative_chunks AS nc ON nc.id = j.anchor_tick_chunk_id
-        LEFT JOIN chunk_metadata AS cm ON cm.chunk_id = r.tick_chunk_id
         WHERE j.id = %s
         FOR UPDATE OF j, r
         """,
         (row["job_id"],),
     )
     current = cur.fetchone()
+    if current is None:
+        return NarrationLeaseLostError(f"job {row['job_id']} no longer exists")
+
+    cur.execute(
+        """
+        /* orrery:narration:anchor_fence */
+        SELECT COALESCE(world_layer::text, 'primary') AS current_world_layer
+        FROM chunk_metadata
+        WHERE chunk_id = %s
+        FOR SHARE
+        """,
+        (current["current_tick_chunk_id"],),
+    )
+    metadata = cur.fetchone()
+    current["current_world_layer"] = (
+        metadata.get("current_world_layer") if metadata is not None else None
+    )
+    cur.execute(
+        """
+        SELECT lease_until > clock_timestamp() AS lease_is_current
+        FROM orrery_narration_jobs
+        WHERE id = %s
+        """,
+        (row["job_id"],),
+    )
+    lease_check = cur.fetchone()
+    current["lease_is_current"] = bool(
+        lease_check and lease_check.get("lease_is_current")
+    )
     if not _lease_matches(current, row):
         return NarrationLeaseLostError(
             f"job {row['job_id']} is no longer owned by "
@@ -605,7 +633,7 @@ def _mark_narration_succeeded(
           AND state = 'leased'
           AND locked_by = %s
           AND lease_nonce = %s
-          AND lease_until > now()
+          AND lease_until > clock_timestamp()
         """,
         (row["job_id"], row["locked_by"], row["lease_nonce"]),
     )
@@ -630,7 +658,8 @@ def _mark_narration_failed(
             """
             UPDATE orrery_narration_jobs
             SET state = 'queued',
-                available_at = now() + (%s * interval '1 second'),
+                available_at = clock_timestamp()
+                    + (%s * interval '1 second'),
                 lease_until = NULL,
                 locked_by = NULL,
                 lease_nonce = NULL,
@@ -640,7 +669,7 @@ def _mark_narration_failed(
               AND state = 'leased'
               AND locked_by = %s
               AND lease_nonce = %s
-              AND lease_until > now()
+              AND lease_until > clock_timestamp()
             RETURNING id
             """,
             (
@@ -678,7 +707,7 @@ def _mark_narration_failed(
           AND state = 'leased'
           AND locked_by = %s
           AND lease_nonce = %s
-          AND lease_until > now()
+          AND lease_until > clock_timestamp()
         RETURNING id
         """,
         (

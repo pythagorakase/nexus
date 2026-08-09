@@ -74,13 +74,17 @@ class WorkerCursor:
                 "state": "leased",
                 "locked_by": self.current_lease["locked_by"],
                 "lease_nonce": self.current_lease["lease_nonce"],
-                "lease_is_current": True,
                 "anchor_tick_chunk_id": job["anchor_tick_chunk_id"],
                 "anchor_world_layer": job["anchor_world_layer"],
                 "current_tick_chunk_id": job["anchor_tick_chunk_id"],
-                "current_world_layer": job["anchor_world_layer"],
                 "anchor_exists": True,
             }
+        elif "/* orrery:narration:anchor_fence */" in normalized:
+            self._fetchone = {
+                "current_world_layer": self.job_rows[0]["anchor_world_layer"]
+            }
+        elif normalized.startswith("SELECT lease_until > clock_timestamp()"):
+            self._fetchone = {"lease_is_current": True}
         elif "INSERT INTO offscreen_narrations" in normalized:
             self._fetchone = {"id": 501}
             self.rowcount = 1
@@ -358,6 +362,11 @@ def test_drain_narration_outbox_persists_offscreen_narration() -> None:
     assert failed == 0
     assert provider.prompts
     assert "FOR UPDATE OF j SKIP LOCKED" in statements
+    assert "/* orrery:narration:anchor_fence */" in statements
+    assert "FOR SHARE" in statements
+    assert "clock_timestamp()" in statements
+    assert "lease_until > now()" not in statements
+    assert "lease_until < now()" not in statements
     assert "INSERT INTO offscreen_narrations" in statements
     assert "narration_status = 'succeeded'" in statements
     assert "state = 'succeeded'" in statements
@@ -402,7 +411,8 @@ def test_drain_narration_outbox_requeues_transient_failures() -> None:
     assert narrated == 0
     assert failed == 1
     assert "state = 'queued'" in statements
-    assert "available_at = now() + (%s * interval '1 second')" in statements
+    assert "available_at = clock_timestamp()" in statements
+    assert "+ (%s * interval '1 second')" in statements
     assert "narration_status = 'queued'" in statements
     assert "narration_status = 'failed'" not in statements
 
