@@ -7,6 +7,7 @@ contract and transactional lifecycle semantics.
 
 from nexus.interactions.models import (
     AuthorizationDecision,
+    AuthorizationEnvelope,
     AuthorizationPolicy,
     AuthorizationRule,
     DenialReason,
@@ -16,26 +17,31 @@ from nexus.interactions.models import (
     InteractionSnapshot,
     InteractionStatus,
     InteractionTransition,
+    MembershipHistoryState,
     ReplayedInteraction,
     TimelineAnchor,
 )
 from nexus.interactions.service import (
     AuthorizationRecordNotFound,
+    CommandIdConflict,
     InteractionAuthorizationDenied,
     InteractionError,
     InteractionNotFound,
     InteractionService,
     InteractionStateError,
-    RecoveryCleanupHook,
+    NamedRecoveryCleanupHook,
     TrustedHandler,
     UntrustedHandlerError,
+    UnknownExecutorTransition,
 )
 
 __all__ = [
     "AuthorizationDecision",
+    "AuthorizationEnvelope",
     "AuthorizationPolicy",
     "AuthorizationRecordNotFound",
     "AuthorizationRule",
+    "CommandIdConflict",
     "DenialReason",
     "InteractionAuthorizationDenied",
     "InteractionError",
@@ -48,9 +54,11 @@ __all__ = [
     "InteractionStateError",
     "InteractionStatus",
     "InteractionTransition",
-    "RecoveryCleanupHook",
+    "MembershipHistoryState",
+    "NamedRecoveryCleanupHook",
     "ReplayedInteraction",
     "TimelineAnchor",
     "TrustedHandler",
     "UntrustedHandlerError",
+    "UnknownExecutorTransition",
 ]

@@ -34,7 +34,16 @@ ActionName = Annotated[
         pattern=r"^[a-z][a-z0-9_.:-]*$",
     ),
 ]
+MaterialField = Annotated[
+    str,
+    StringConstraints(
+        strip_whitespace=True,
+        min_length=1,
+        pattern=r"^[A-Za-z_][A-Za-z0-9_]*$",
+    ),
+]
 NonEmptyText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+EnvelopeHash = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
 
 
 class _StrictModel(BaseModel):
@@ -52,7 +61,7 @@ class InteractionStatus(str, Enum):
 
 
 class InteractionEventType(str, Enum):
-    """Append-only lifecycle event vocabulary."""
+    """Append-only interaction event vocabulary."""
 
     PROPOSED = "proposed"
     AUTHORIZED = "authorized"
@@ -61,10 +70,15 @@ class InteractionEventType(str, Enum):
     COMPLETED = "completed"
     STOPPED = "stopped"
     INTERRUPTED = "interrupted"
+    MEMBERSHIP_JOINED = "membership_joined"
+    MEMBERSHIP_LEFT = "membership_left"
+    LEASE_TOUCHED = "lease_touched"
+    RECOVERY_CLAIMED = "recovery_claimed"
+    CLEANUP_COMPLETED = "cleanup_completed"
 
 
 class DenialReason(str, Enum):
-    """Typed fail-closed reasons returned by authorization and freshness checks."""
+    """Typed fail-closed authorization, vocabulary, and freshness reasons."""
 
     MISSING_AUTHORIZATION = "missing_authorization"
     MALFORMED_AUTHORIZATION = "malformed_authorization"
@@ -72,17 +86,27 @@ class DenialReason(str, Enum):
     EXPIRED_AUTHORIZATION = "expired_authorization"
     REVOKED_AUTHORIZATION = "revoked_authorization"
     STALE_AUTHORIZATION = "stale_authorization"
+    AUTHORIZATION_TERMS_CHANGED = "authorization_terms_changed"
     ACTION_NOT_DECLARED = "action_not_declared"
+    UNKNOWN_TRANSITION = "unknown_transition"
     EVALUATION_UNAVAILABLE = "evaluation_unavailable"
     STALE_ANCHOR = "stale_anchor"
     STALE_TIMELINE = "stale_timeline"
 
 
 class AuthorizationRule(_StrictModel):
-    """One action's all-participant, bounded-validity authorization rule."""
+    """One action's all-participant, bounded, material-term policy."""
 
     max_validity_seconds: int = Field(gt=0)
+    material_fields: tuple[MaterialField, ...] = ()
     require_all_active_participants: Literal[True] = True
+
+    @field_validator("material_fields")
+    @classmethod
+    def _material_fields_are_unique(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        if len(value) != len(set(value)):
+            raise ValueError("material payload fields must be unique")
+        return value
 
 
 class AuthorizationPolicy(_StrictModel):
@@ -92,21 +116,33 @@ class AuthorizationPolicy(_StrictModel):
 
     @model_validator(mode="after")
     def _require_lifecycle_actions(self) -> "AuthorizationPolicy":
-        """Start and completion can never execute without declared policies."""
         missing = {"start", "complete"} - set(self.actions)
         if missing:
             raise ValueError(
                 "authorization policy must declare lifecycle actions: "
                 f"{sorted(missing)}"
             )
+        for lifecycle_action in ("start", "complete"):
+            if self.actions[lifecycle_action].material_fields:
+                raise ValueError(
+                    f"{lifecycle_action} cannot declare material payload fields"
+                )
         return self
 
 
 class TimelineAnchor(_StrictModel):
-    """Authoritative story position used for post-latency freshness checks."""
+    """Expected authoritative story position for execution fencing."""
 
     anchor_chunk_id: int = Field(gt=0)
     timeline_id: NonEmptyText
+
+
+class AuthorizationEnvelope(_StrictModel):
+    """Action, transition type, and proposed terms presented for authorization."""
+
+    action: ActionName
+    transition_type: NamespacedIdentifier
+    payload: dict[str, JsonValue] = Field(default_factory=dict)
 
 
 class InteractionProposal(_StrictModel):
@@ -136,6 +172,14 @@ class InteractionTransition(_StrictModel):
     authorization_action: ActionName
     payload: dict[str, JsonValue] = Field(default_factory=dict)
 
+    def authorization_envelope(self) -> AuthorizationEnvelope:
+        """Return the actual command envelope revalidated at execution."""
+        return AuthorizationEnvelope(
+            action=self.authorization_action,
+            transition_type=self.transition_type,
+            payload=self.payload,
+        )
+
 
 class InteractionSnapshot(_StrictModel):
     """Materialized durable state returned by lifecycle operations."""
@@ -149,6 +193,7 @@ class InteractionSnapshot(_StrictModel):
     revision: int
     anchor: TimelineAnchor
     participant_entity_ids: tuple[int, ...]
+    lease_until: datetime | None
     created_at: datetime
     updated_at: datetime
 
@@ -177,6 +222,7 @@ class AuthorizationGrantState(_StrictModel):
     id: int
     participant_entity_id: int
     action: ActionName
+    envelope_hash: EnvelopeHash
     continuation_id: UUID
     interaction_revision: int = Field(gt=0)
     granted: Literal[True]
@@ -201,7 +247,7 @@ class AuthorizationGrantState(_StrictModel):
 
 
 class InteractionEvent(_StrictModel):
-    """One immutable event from the lifecycle ledger."""
+    """One immutable command or cleanup event from the lifecycle ledger."""
 
     id: int
     interaction_id: UUID
@@ -209,15 +255,33 @@ class InteractionEvent(_StrictModel):
     interaction_revision: int
     actor_participant_entity_id: int | None
     actor_handler: str | None
+    command_id: UUID
+    command_step: str
+    command_fingerprint: EnvelopeHash
     payload: dict[str, Any]
+    outcome: dict[str, Any]
     occurred_at: datetime
 
 
+class MembershipHistoryState(_StrictModel):
+    """One reconstructed participant membership interval."""
+
+    membership_id: int
+    participant_entity_id: int
+    joined_at: datetime
+    joined_revision: int
+    left_at: datetime | None = None
+    left_revision: int | None = None
+
+
 class ReplayedInteraction(_StrictModel):
-    """Lifecycle state reconstructed exclusively from append-only events."""
+    """Full interaction state reconstructed from durable rows or events."""
 
     interaction_id: UUID
     status: InteractionStatus
     revision: int
+    active_participant_entity_ids: tuple[int, ...]
+    membership_history: tuple[MembershipHistoryState, ...]
+    grants: tuple[AuthorizationGrantState, ...]
     transition_types: tuple[str, ...]
-    authorization_events: int
+    lease_until: datetime | None

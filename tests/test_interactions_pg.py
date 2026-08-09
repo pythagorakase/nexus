@@ -1,4 +1,4 @@
-"""Real-PostgreSQL acceptance tests for durable interaction threads."""
+"""Public-API PostgreSQL acceptance tests for interaction threads."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Callable, Iterator
 
 import psycopg2
 import pytest
@@ -18,8 +18,10 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session, sessionmaker
 
 from nexus.interactions import (
+    AuthorizationEnvelope,
     AuthorizationPolicy,
     AuthorizationRule,
+    CommandIdConflict,
     DenialReason,
     InteractionAuthorizationDenied,
     InteractionEventType,
@@ -28,10 +30,12 @@ from nexus.interactions import (
     InteractionSnapshot,
     InteractionStatus,
     InteractionTransition,
+    NamedRecoveryCleanupHook,
     TimelineAnchor,
+    TrustedHandler,
+    UnknownExecutorTransition,
     UntrustedHandlerError,
 )
-from nexus.interactions.service import TrustedHandler
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -81,11 +85,11 @@ def disposable_interaction_db() -> Iterator[str]:
 @dataclass
 class _RuntimeState:
     now: datetime
-    anchor: TimelineAnchor
 
-    def resolve_anchor(self, _session: Session) -> TimelineAnchor:
-        """Return the test's current authoritative timeline position."""
-        return self.anchor
+    @staticmethod
+    def expected_identity(stored: TimelineAnchor) -> TimelineAnchor:
+        """Return expected identities without database access."""
+        return stored
 
     def evaluation_time(self, _session: Session) -> datetime:
         """Return the controllable evaluation time."""
@@ -99,7 +103,64 @@ class _InteractionHarness:
     service: InteractionService
     handler: TrustedHandler
     runtime: _RuntimeState
-    participant_ids: tuple[int, int]
+    participant_ids: tuple[int, int, int]
+    anchor: TimelineAnchor
+
+
+def _seed_anchor(session: Session, *, scene: int) -> TimelineAnchor:
+    chunk_id = int(
+        session.execute(
+            text(
+                """
+                INSERT INTO narrative_chunks (raw_text, storyteller_text)
+                VALUES (:text, :text)
+                RETURNING id
+                """
+            ),
+            {"text": f"interaction anchor {scene}"},
+        ).scalar_one()
+    )
+    session.execute(
+        text(
+            """
+            INSERT INTO chunk_metadata (
+                chunk_id, season, episode, scene, world_layer, slug
+            ) VALUES (
+                :chunk_id, 1, 1, :scene, 'primary', :slug
+            )
+            """
+        ),
+        {
+            "chunk_id": chunk_id,
+            "scene": scene,
+            "slug": f"I{scene:04d}",
+        },
+    )
+    return TimelineAnchor(anchor_chunk_id=chunk_id, timeline_id="primary")
+
+
+def _construct_service(
+    factory: sessionmaker[Session],
+    runtime: _RuntimeState,
+    *,
+    expected_identity: Callable[[TimelineAnchor], TimelineAnchor] | None = None,
+) -> tuple[InteractionService, TrustedHandler]:
+    capabilities: list[TrustedHandler] = []
+    service = InteractionService(
+        factory,
+        trusted_handler_identity="test.trusted-handler",
+        capability_receiver=capabilities.append,
+        expected_identity_resolver=expected_identity or runtime.expected_identity,
+        executor_registry={
+            "nexus.test.negotiation": (
+                "negotiation.counteroffer",
+                "negotiation.accept",
+            )
+        },
+        evaluation_time_provider=runtime.evaluation_time,
+    )
+    assert len(capabilities) == 1
+    return service, capabilities[0]
 
 
 @pytest.fixture()
@@ -121,46 +182,32 @@ def interaction_harness(
                 text(
                     """
                     INSERT INTO entities (kind, is_active)
-                    VALUES ('character', TRUE), ('character', TRUE)
+                    VALUES
+                        ('character', TRUE),
+                        ('character', TRUE),
+                        ('character', TRUE)
                     RETURNING id
                     """
                 )
             ).scalars()
         )
-        anchor_chunk_id = int(
-            session.execute(
-                text(
-                    """
-                    INSERT INTO narrative_chunks (raw_text, storyteller_text)
-                    VALUES ('interaction anchor', 'interaction anchor')
-                    RETURNING id
-                    """
-                )
-            ).scalar_one()
-        )
-
-    runtime = _RuntimeState(
-        now=datetime(2035, 1, 2, 3, 4, tzinfo=timezone.utc),
-        anchor=TimelineAnchor(
-            anchor_chunk_id=anchor_chunk_id,
-            timeline_id="primary:continuity-a",
-        ),
-    )
-    service = InteractionService(
-        factory,
-        freshness_resolver=runtime.resolve_anchor,
-        evaluation_time_provider=runtime.evaluation_time,
-    )
-    harness = _InteractionHarness(
-        engine=engine,
-        session_factory=factory,
-        service=service,
-        handler=service.bind_trusted_handler("test.trusted-handler"),
-        runtime=runtime,
-        participant_ids=(participant_ids[0], participant_ids[1]),
-    )
+        anchor = _seed_anchor(session, scene=901)
+    runtime = _RuntimeState(now=datetime(2035, 1, 2, 3, 4, tzinfo=timezone.utc))
+    service, handler = _construct_service(factory, runtime)
     try:
-        yield harness
+        yield _InteractionHarness(
+            engine=engine,
+            session_factory=factory,
+            service=service,
+            handler=handler,
+            runtime=runtime,
+            participant_ids=(
+                participant_ids[0],
+                participant_ids[1],
+                participant_ids[2],
+            ),
+            anchor=anchor,
+        )
     finally:
         engine.dispose()
 
@@ -172,40 +219,71 @@ def _proposal(harness: _InteractionHarness) -> InteractionProposal:
         policy=AuthorizationPolicy(
             actions={
                 "start": AuthorizationRule(max_validity_seconds=120),
-                "advance": AuthorizationRule(max_validity_seconds=120),
+                "advance": AuthorizationRule(
+                    max_validity_seconds=120,
+                    material_fields=("amount", "currency"),
+                ),
                 "complete": AuthorizationRule(max_validity_seconds=120),
             }
         ),
-        participant_entity_ids=list(harness.participant_ids),
-        anchor=harness.runtime.anchor,
+        participant_entity_ids=list(harness.participant_ids[:2]),
+        anchor=harness.anchor,
     )
 
 
-def _propose(harness: _InteractionHarness) -> uuid.UUID:
-    return harness.service.propose(harness.handler, _proposal(harness)).id
+def _propose(
+    harness: _InteractionHarness, *, command_id: uuid.UUID | None = None
+) -> tuple[uuid.UUID, uuid.UUID]:
+    command = command_id or uuid.uuid4()
+    snapshot = harness.service.propose(
+        harness.handler,
+        _proposal(harness),
+        command_id=command,
+    )
+    return snapshot.id, command
+
+
+def _lifecycle_envelope(action: str) -> AuthorizationEnvelope:
+    return AuthorizationEnvelope(
+        action=action,
+        transition_type=f"lifecycle.{action}",
+    )
+
+
+def _transition(*, amount: int = 42, currency: str = "septim") -> InteractionTransition:
+    return InteractionTransition(
+        transition_type="negotiation.counteroffer",
+        authorization_action="advance",
+        payload={"amount": amount, "currency": currency, "flavor": "non-material"},
+    )
 
 
 def _grant_all(
     harness: _InteractionHarness,
     interaction_id: uuid.UUID,
-    action: str,
+    envelope: AuthorizationEnvelope,
     *,
+    participant_ids: tuple[int, ...] | None = None,
     validity_seconds: int = 60,
-) -> None:
-    expires_at = harness.runtime.now + timedelta(seconds=validity_seconds)
-    for participant_id in harness.participant_ids:
-        harness.service.grant(
-            harness.handler,
-            interaction_id=interaction_id,
-            participant_entity_id=participant_id,
-            action=action,
-            expires_at=expires_at,
+) -> tuple[int, ...]:
+    grants: list[int] = []
+    for participant_id in participant_ids or harness.participant_ids[:2]:
+        grants.append(
+            harness.service.grant(
+                harness.handler,
+                interaction_id=interaction_id,
+                participant_entity_id=participant_id,
+                envelope=envelope,
+                expires_at=harness.runtime.now + timedelta(seconds=validity_seconds),
+                command_id=uuid.uuid4(),
+            )
         )
+    return tuple(grants)
 
 
 def _assert_denied(
     expected_reason: DenialReason,
-    operation: Any,
+    operation: Callable[[], object],
 ) -> InteractionAuthorizationDenied:
     with pytest.raises(InteractionAuthorizationDenied) as caught:
         operation()
@@ -213,23 +291,28 @@ def _assert_denied(
     return caught.value
 
 
-def test_each_participant_needs_an_independent_positive_grant(
+def test_independent_grants_and_fail_closed_states(
     interaction_harness: _InteractionHarness,
 ) -> None:
     harness = interaction_harness
-    interaction_id = _propose(harness)
-    first, second = harness.participant_ids
+    start_envelope = _lifecycle_envelope("start")
+    interaction_id, _ = _propose(harness)
+    first, second = harness.participant_ids[:2]
     harness.service.grant(
         harness.handler,
         interaction_id=interaction_id,
         participant_entity_id=first,
-        action="start",
-        expires_at=harness.runtime.now + timedelta(seconds=60),
+        envelope=start_envelope,
+        expires_at=harness.runtime.now + timedelta(seconds=30),
+        command_id=uuid.uuid4(),
     )
-
     denial = _assert_denied(
         DenialReason.MISSING_AUTHORIZATION,
-        lambda: harness.service.start(harness.handler, interaction_id=interaction_id),
+        lambda: harness.service.start(
+            harness.handler,
+            interaction_id=interaction_id,
+            command_id=uuid.uuid4(),
+        ),
     )
     assert denial.decision.participant_entity_id == second
 
@@ -237,90 +320,456 @@ def test_each_participant_needs_an_independent_positive_grant(
         harness.handler,
         interaction_id=interaction_id,
         participant_entity_id=second,
-        action="start",
-        expires_at=harness.runtime.now + timedelta(seconds=60),
+        envelope=start_envelope,
+        expires_at=harness.runtime.now + timedelta(seconds=30),
+        command_id=uuid.uuid4(),
     )
-    assert (
-        harness.service.start(harness.handler, interaction_id=interaction_id).status
-        is InteractionStatus.IN_PROGRESS
-    )
-
-
-def test_expired_revoked_stale_and_malformed_authorization_deny_typed(
-    interaction_harness: _InteractionHarness,
-) -> None:
-    harness = interaction_harness
-
-    expired_id = _propose(harness)
-    _grant_all(harness, expired_id, "start", validity_seconds=30)
     harness.runtime.now += timedelta(seconds=31)
     _assert_denied(
         DenialReason.EXPIRED_AUTHORIZATION,
-        lambda: harness.service.start(harness.handler, interaction_id=expired_id),
-    )
-
-    revoked_id = _propose(harness)
-    _grant_all(harness, revoked_id, "start")
-    harness.service.revoke(
-        harness.handler,
-        interaction_id=revoked_id,
-        participant_entity_id=harness.participant_ids[1],
-        action="start",
-    )
-    _assert_denied(
-        DenialReason.REVOKED_AUTHORIZATION,
-        lambda: harness.service.start(harness.handler, interaction_id=revoked_id),
-    )
-
-    stale_id = _propose(harness)
-    _grant_all(harness, stale_id, "start")
-    _grant_all(harness, stale_id, "advance")
-    harness.service.start(harness.handler, interaction_id=stale_id)
-    _assert_denied(
-        DenialReason.STALE_AUTHORIZATION,
-        lambda: harness.service.transition(
+        lambda: harness.service.start(
             harness.handler,
-            interaction_id=stale_id,
-            transition=InteractionTransition(
-                transition_type="negotiation.advance",
-                authorization_action="advance",
-            ),
+            interaction_id=interaction_id,
+            command_id=uuid.uuid4(),
         ),
     )
 
-    malformed_id = _propose(harness)
-    _grant_all(harness, malformed_id, "start")
-    future_granted_at = harness.runtime.now + timedelta(seconds=10)
-    future_expires_at = future_granted_at + timedelta(seconds=10)
+    revoked_id, _ = _propose(harness)
+    _grant_all(harness, revoked_id, start_envelope)
+    harness.service.revoke(
+        harness.handler,
+        interaction_id=revoked_id,
+        participant_entity_id=second,
+        envelope=start_envelope,
+        command_id=uuid.uuid4(),
+    )
+    _assert_denied(
+        DenialReason.REVOKED_AUTHORIZATION,
+        lambda: harness.service.start(
+            harness.handler,
+            interaction_id=revoked_id,
+            command_id=uuid.uuid4(),
+        ),
+    )
+    assert harness.service.replay(revoked_id) == harness.service.current_state(
+        revoked_id
+    )
+
+
+def test_material_term_drift_requires_fresh_authorization(
+    interaction_harness: _InteractionHarness,
+) -> None:
+    harness = interaction_harness
+    interaction_id, _ = _propose(harness)
+    _grant_all(harness, interaction_id, _lifecycle_envelope("start"))
+    harness.service.start(
+        harness.handler,
+        interaction_id=interaction_id,
+        command_id=uuid.uuid4(),
+    )
+    authorized = _transition(amount=42)
+    _grant_all(harness, interaction_id, authorized.authorization_envelope())
+
+    _assert_denied(
+        DenialReason.AUTHORIZATION_TERMS_CHANGED,
+        lambda: harness.service.transition(
+            harness.handler,
+            interaction_id=interaction_id,
+            transition=_transition(amount=43),
+            command_id=uuid.uuid4(),
+        ),
+    )
+    changed_non_material = _transition(amount=42)
+    changed_non_material.payload["flavor"] = "different but non-material"
+    result = harness.service.transition(
+        harness.handler,
+        interaction_id=interaction_id,
+        transition=changed_non_material,
+        command_id=uuid.uuid4(),
+    )
+    assert result.status is InteractionStatus.IN_PROGRESS
+
+
+def test_constructor_only_capability_and_executor_vocabulary(
+    interaction_harness: _InteractionHarness,
+) -> None:
+    harness = interaction_harness
+    assert not hasattr(harness.service, "bind_trusted_handler")
+    interaction_id, _ = _propose(harness)
+    with pytest.raises(UntrustedHandlerError):
+        harness.service.grant(
+            _proposal(harness),  # type: ignore[arg-type]
+            interaction_id=interaction_id,
+            participant_entity_id=harness.participant_ids[0],
+            envelope=_lifecycle_envelope("start"),
+            expires_at=harness.runtime.now + timedelta(seconds=60),
+            command_id=uuid.uuid4(),
+        )
+
+    _grant_all(harness, interaction_id, _lifecycle_envelope("start"))
+    harness.service.start(
+        harness.handler,
+        interaction_id=interaction_id,
+        command_id=uuid.uuid4(),
+    )
+    unknown = InteractionTransition(
+        transition_type="negotiation.unregistered",
+        authorization_action="advance",
+        payload={"amount": 42, "currency": "septim"},
+    )
+    with pytest.raises(UnknownExecutorTransition) as caught:
+        harness.service.transition(
+            harness.handler,
+            interaction_id=interaction_id,
+            transition=unknown,
+            command_id=uuid.uuid4(),
+        )
+    assert caught.value.decision.reason is DenialReason.UNKNOWN_TRANSITION
+
+
+def test_command_retries_return_recorded_outcome_without_new_event(
+    interaction_harness: _InteractionHarness,
+) -> None:
+    harness = interaction_harness
+    propose_command = uuid.uuid4()
+    proposal = _proposal(harness)
+    first_snapshot = harness.service.propose(
+        harness.handler, proposal, command_id=propose_command
+    )
+    retry_snapshot = harness.service.propose(
+        harness.handler, proposal, command_id=propose_command
+    )
+    assert first_snapshot == retry_snapshot
+    first = first_snapshot.id
+
+    _grant_all(harness, first, _lifecycle_envelope("start"))
+    start_command = uuid.uuid4()
+    first_start = harness.service.start(
+        harness.handler, interaction_id=first, command_id=start_command
+    )
+    retry_start = harness.service.start(
+        harness.handler, interaction_id=first, command_id=start_command
+    )
+    assert retry_start == first_start
+    assert (
+        sum(
+            event.event_type is InteractionEventType.STARTED
+            for event in harness.service.history(first)
+        )
+        == 1
+    )
+
+    stop_command = uuid.uuid4()
+    first_stop = harness.service.stop(
+        interaction_id=first,
+        participant_entity_id=harness.participant_ids[1],
+        command_id=stop_command,
+    )
+    retry_stop = harness.service.stop(
+        interaction_id=first,
+        participant_entity_id=harness.participant_ids[1],
+        command_id=stop_command,
+    )
+    assert retry_stop == first_stop
+    assert (
+        sum(
+            event.event_type is InteractionEventType.STOPPED
+            for event in harness.service.history(first)
+        )
+        == 1
+    )
+    with pytest.raises(CommandIdConflict):
+        harness.service.complete(
+            harness.handler, interaction_id=first, command_id=stop_command
+        )
+
+
+def test_locked_authoritative_head_rejects_stale_start_and_unavailable_identity(
+    interaction_harness: _InteractionHarness,
+) -> None:
+    harness = interaction_harness
+    interaction_id, _ = _propose(harness)
+    _grant_all(harness, interaction_id, _lifecycle_envelope("start"))
+    with harness.session_factory() as session, session.begin():
+        current_anchor = _seed_anchor(session, scene=902)
+    _assert_denied(
+        DenialReason.STALE_ANCHOR,
+        lambda: harness.service.start(
+            harness.handler,
+            interaction_id=interaction_id,
+            command_id=uuid.uuid4(),
+        ),
+    )
+
+    def unavailable(_stored: TimelineAnchor) -> TimelineAnchor:
+        raise RuntimeError("expected identity unavailable")
+
+    unavailable_service, unavailable_handler = _construct_service(
+        harness.session_factory,
+        harness.runtime,
+        expected_identity=unavailable,
+    )
+    _assert_denied(
+        DenialReason.EVALUATION_UNAVAILABLE,
+        lambda: unavailable_service.start(
+            unavailable_handler,
+            interaction_id=interaction_id,
+            command_id=uuid.uuid4(),
+        ),
+    )
+
+    transition_proposal = _proposal(harness).model_copy(
+        update={"anchor": current_anchor}
+    )
+    transition_interaction = harness.service.propose(
+        harness.handler,
+        transition_proposal,
+        command_id=uuid.uuid4(),
+    ).id
+    _grant_all(harness, transition_interaction, _lifecycle_envelope("start"))
+    harness.service.start(
+        harness.handler,
+        interaction_id=transition_interaction,
+        command_id=uuid.uuid4(),
+    )
+    transition = _transition()
+    _grant_all(harness, transition_interaction, transition.authorization_envelope())
+    with harness.session_factory() as session, session.begin():
+        _seed_anchor(session, scene=903)
+    _assert_denied(
+        DenialReason.STALE_ANCHOR,
+        lambda: harness.service.transition(
+            harness.handler,
+            interaction_id=transition_interaction,
+            transition=transition,
+            command_id=uuid.uuid4(),
+        ),
+    )
+
+
+def test_membership_changes_bump_revision_void_grants_and_replay_history(
+    interaction_harness: _InteractionHarness,
+) -> None:
+    harness = interaction_harness
+    interaction_id, _ = _propose(harness)
+    _grant_all(harness, interaction_id, _lifecycle_envelope("start"))
+    joined = harness.service.join(
+        harness.handler,
+        interaction_id=interaction_id,
+        participant_entity_id=harness.participant_ids[2],
+        command_id=uuid.uuid4(),
+    )
+    assert joined.revision == 2
+    _assert_denied(
+        DenialReason.STALE_AUTHORIZATION,
+        lambda: harness.service.start(
+            harness.handler,
+            interaction_id=interaction_id,
+            command_id=uuid.uuid4(),
+        ),
+    )
+    left = harness.service.leave(
+        harness.handler,
+        interaction_id=interaction_id,
+        participant_entity_id=harness.participant_ids[2],
+        command_id=uuid.uuid4(),
+    )
+    assert left.revision == 3
+    _grant_all(harness, interaction_id, _lifecycle_envelope("start"))
+    harness.service.start(
+        harness.handler,
+        interaction_id=interaction_id,
+        command_id=uuid.uuid4(),
+    )
+    assert harness.service.replay(interaction_id) == harness.service.current_state(
+        interaction_id
+    )
+
+
+def test_explicit_lease_and_cleanup_completion_make_recovery_idempotent(
+    interaction_harness: _InteractionHarness,
+) -> None:
+    harness = interaction_harness
+    no_lease_id, _ = _propose(harness)
+    _grant_all(harness, no_lease_id, _lifecycle_envelope("start"))
+    harness.service.start(
+        harness.handler,
+        interaction_id=no_lease_id,
+        command_id=uuid.uuid4(),
+    )
+    harness.runtime.now += timedelta(days=1)
+    assert harness.service.recover(harness.handler, command_id=uuid.uuid4()) == ()
+
+    interaction_id, _ = _propose(harness)
+    _grant_all(harness, interaction_id, _lifecycle_envelope("start"))
+    harness.service.start(
+        harness.handler,
+        interaction_id=interaction_id,
+        command_id=uuid.uuid4(),
+    )
+    harness.service.touch(
+        harness.handler,
+        interaction_id=interaction_id,
+        lease_until=harness.runtime.now + timedelta(seconds=30),
+        command_id=uuid.uuid4(),
+    )
+    harness.runtime.now += timedelta(seconds=31)
+    cleanup_calls: list[uuid.UUID] = []
+
+    def cleanup(_session: Session, snapshot: InteractionSnapshot) -> None:
+        cleanup_calls.append(snapshot.id)
+
+    recovery_command = uuid.uuid4()
+    hooks = (NamedRecoveryCleanupHook("release_executor", cleanup),)
+    first = harness.service.recover(
+        harness.handler,
+        command_id=recovery_command,
+        cleanup_hooks=hooks,
+    )
+    second = harness.service.recover(
+        harness.handler,
+        command_id=recovery_command,
+        cleanup_hooks=hooks,
+    )
+    assert first == second == (interaction_id,)
+    assert cleanup_calls == [interaction_id]
+    events = harness.service.history(interaction_id)
+    assert (
+        sum(
+            event.event_type is InteractionEventType.CLEANUP_COMPLETED
+            for event in events
+        )
+        == 1
+    )
+    assert (
+        sum(event.event_type is InteractionEventType.INTERRUPTED for event in events)
+        == 1
+    )
+    assert harness.service.replay(interaction_id) == harness.service.current_state(
+        interaction_id
+    )
+
+
+def test_cooperative_public_api_flow_replay_equals_live_state(
+    interaction_harness: _InteractionHarness,
+) -> None:
+    harness = interaction_harness
+    interaction_id, _ = _propose(harness)
+    _grant_all(harness, interaction_id, _lifecycle_envelope("start"))
+    harness.service.start(
+        harness.handler,
+        interaction_id=interaction_id,
+        command_id=uuid.uuid4(),
+    )
+    harness.service.touch(
+        harness.handler,
+        interaction_id=interaction_id,
+        lease_until=harness.runtime.now + timedelta(seconds=90),
+        command_id=uuid.uuid4(),
+    )
+    transition = _transition()
+    _grant_all(harness, interaction_id, transition.authorization_envelope())
+    harness.service.transition(
+        harness.handler,
+        interaction_id=interaction_id,
+        transition=transition,
+        command_id=uuid.uuid4(),
+    )
+    _grant_all(harness, interaction_id, _lifecycle_envelope("complete"))
+    completed = harness.service.complete(
+        harness.handler,
+        interaction_id=interaction_id,
+        command_id=uuid.uuid4(),
+    )
+    assert completed.status is InteractionStatus.COMPLETED
+    assert harness.service.recover(harness.handler, command_id=uuid.uuid4()) == ()
+    assert harness.service.replay(interaction_id) == harness.service.current_state(
+        interaction_id
+    )
+
+
+def test_adversarial_public_api_flow_stops_and_replays_exactly(
+    interaction_harness: _InteractionHarness,
+) -> None:
+    harness = interaction_harness
+    interaction_id, _ = _propose(harness)
+    _grant_all(harness, interaction_id, _lifecycle_envelope("start"))
+    harness.service.start(
+        harness.handler,
+        interaction_id=interaction_id,
+        command_id=uuid.uuid4(),
+    )
+    authorized = _transition(amount=7)
+    _grant_all(harness, interaction_id, authorized.authorization_envelope())
+    _assert_denied(
+        DenialReason.AUTHORIZATION_TERMS_CHANGED,
+        lambda: harness.service.transition(
+            harness.handler,
+            interaction_id=interaction_id,
+            transition=_transition(amount=7000),
+            command_id=uuid.uuid4(),
+        ),
+    )
+    harness.service.transition(
+        harness.handler,
+        interaction_id=interaction_id,
+        transition=authorized,
+        command_id=uuid.uuid4(),
+    )
+    stop_command = uuid.uuid4()
+    stopped = harness.service.stop(
+        interaction_id=interaction_id,
+        participant_entity_id=harness.participant_ids[0],
+        command_id=stop_command,
+    )
+    assert stopped.status is InteractionStatus.STOPPED
+    assert (
+        harness.service.stop(
+            interaction_id=interaction_id,
+            participant_entity_id=harness.participant_ids[0],
+            command_id=stop_command,
+        )
+        == stopped
+    )
+    assert harness.service.recover(harness.handler, command_id=uuid.uuid4()) == ()
+    assert harness.service.replay(interaction_id) == harness.service.current_state(
+        interaction_id
+    )
+
+
+def test_malformed_stored_authorization_and_policy_deny_typed(
+    interaction_harness: _InteractionHarness,
+) -> None:
+    harness = interaction_harness
+    interaction_id, _ = _propose(harness)
+    _grant_all(harness, interaction_id, _lifecycle_envelope("start"))
     with harness.session_factory() as session, session.begin():
         session.execute(
             text(
                 """
                 UPDATE interaction_authorizations
-                SET granted_at = :granted_at, expires_at = :expires_at
+                SET granted_at = :future, expires_at = :expiry
                 WHERE interaction_id = :interaction_id
                   AND participant_entity_id = :participant_id
-                  AND action = 'start'
                 """
             ),
             {
-                "granted_at": future_granted_at,
-                "expires_at": future_expires_at,
-                "interaction_id": malformed_id,
+                "future": harness.runtime.now + timedelta(seconds=10),
+                "expiry": harness.runtime.now + timedelta(seconds=20),
+                "interaction_id": interaction_id,
                 "participant_id": harness.participant_ids[0],
             },
         )
     _assert_denied(
         DenialReason.MALFORMED_AUTHORIZATION,
-        lambda: harness.service.start(harness.handler, interaction_id=malformed_id),
+        lambda: harness.service.start(
+            harness.handler,
+            interaction_id=interaction_id,
+            command_id=uuid.uuid4(),
+        ),
     )
 
-
-def test_malformed_policy_and_unavailable_freshness_fail_closed(
-    interaction_harness: _InteractionHarness,
-) -> None:
-    harness = interaction_harness
-    malformed_id = _propose(harness)
+    malformed_id, _ = _propose(harness)
     with harness.session_factory() as session, session.begin():
         session.execute(
             text(
@@ -337,199 +786,15 @@ def test_malformed_policy_and_unavailable_freshness_fail_closed(
         )
     _assert_denied(
         DenialReason.MALFORMED_POLICY,
-        lambda: harness.service.start(harness.handler, interaction_id=malformed_id),
-    )
-
-    unavailable_id = _propose(harness)
-    _grant_all(harness, unavailable_id, "start")
-
-    def unavailable(_session: Session) -> TimelineAnchor:
-        raise RuntimeError("authoritative timeline store unavailable")
-
-    unavailable_service = InteractionService(
-        harness.session_factory,
-        freshness_resolver=unavailable,
-        evaluation_time_provider=harness.runtime.evaluation_time,
-    )
-    unavailable_handler = unavailable_service.bind_trusted_handler("recovery.test")
-    _assert_denied(
-        DenialReason.EVALUATION_UNAVAILABLE,
-        lambda: unavailable_service.start(
-            unavailable_handler, interaction_id=unavailable_id
-        ),
-    )
-
-
-def test_model_shaped_input_cannot_act_as_trusted_grant_caller(
-    interaction_harness: _InteractionHarness,
-) -> None:
-    harness = interaction_harness
-    interaction_id = _propose(harness)
-    with pytest.raises(UntrustedHandlerError):
-        harness.service.grant(
-            _proposal(harness),  # type: ignore[arg-type]
-            interaction_id=interaction_id,
-            participant_entity_id=harness.participant_ids[0],
-            action="start",
-            expires_at=harness.runtime.now + timedelta(seconds=60),
-        )
-
-
-def test_any_participant_can_stop_immediately_without_peer_or_handler_veto(
-    interaction_harness: _InteractionHarness,
-) -> None:
-    harness = interaction_harness
-    interaction_id = _propose(harness)
-    withdrawing_participant = harness.participant_ids[1]
-
-    stopped = harness.service.stop(
-        interaction_id=interaction_id,
-        participant_entity_id=withdrawing_participant,
-    )
-
-    assert stopped.status is InteractionStatus.STOPPED
-    events = harness.service.history(interaction_id)
-    assert [event.event_type for event in events] == [
-        InteractionEventType.PROPOSED,
-        InteractionEventType.STOPPED,
-    ]
-    assert events[-1].actor_participant_entity_id == withdrawing_participant
-    assert events[-1].payload == {"reason": "participant_withdrawal"}
-
-
-def test_stale_anchor_rejects_start_and_transition(
-    interaction_harness: _InteractionHarness,
-) -> None:
-    harness = interaction_harness
-    stale_start_id = _propose(harness)
-    _grant_all(harness, stale_start_id, "start")
-    original_anchor = harness.runtime.anchor
-    harness.runtime.anchor = TimelineAnchor(
-        anchor_chunk_id=original_anchor.anchor_chunk_id + 1000,
-        timeline_id=original_anchor.timeline_id,
-    )
-    _assert_denied(
-        DenialReason.STALE_ANCHOR,
-        lambda: harness.service.start(harness.handler, interaction_id=stale_start_id),
-    )
-
-    harness.runtime.anchor = original_anchor
-    stale_transition_id = _propose(harness)
-    _grant_all(harness, stale_transition_id, "start")
-    harness.service.start(harness.handler, interaction_id=stale_transition_id)
-    _grant_all(harness, stale_transition_id, "advance")
-    harness.runtime.anchor = TimelineAnchor(
-        anchor_chunk_id=original_anchor.anchor_chunk_id + 1000,
-        timeline_id=original_anchor.timeline_id,
-    )
-    _assert_denied(
-        DenialReason.STALE_ANCHOR,
-        lambda: harness.service.transition(
+        lambda: harness.service.start(
             harness.handler,
-            interaction_id=stale_transition_id,
-            transition=InteractionTransition(
-                transition_type="negotiation.counteroffer",
-                authorization_action="advance",
-            ),
+            interaction_id=malformed_id,
+            command_id=uuid.uuid4(),
         ),
     )
 
 
-def test_recovery_interrupts_orphans_with_cleanup_exactly_once(
-    interaction_harness: _InteractionHarness,
-) -> None:
-    harness = interaction_harness
-    interaction_id = _propose(harness)
-    _grant_all(harness, interaction_id, "start")
-    harness.service.start(harness.handler, interaction_id=interaction_id)
-    harness.runtime.now += timedelta(minutes=10)
-    cleanup_calls: list[uuid.UUID] = []
-
-    def cleanup(_session: Session, interaction: InteractionSnapshot) -> None:
-        cleanup_calls.append(interaction.id)
-
-    first = harness.service.recover(
-        harness.handler,
-        orphaned_before=harness.runtime.now,
-        cleanup_hooks=(cleanup,),
-    )
-    second = harness.service.recover(
-        harness.handler,
-        orphaned_before=harness.runtime.now,
-        cleanup_hooks=(cleanup,),
-    )
-
-    assert first == (interaction_id,)
-    assert second == ()
-    assert cleanup_calls == [interaction_id]
-    assert harness.service.get(interaction_id).status is InteractionStatus.INTERRUPTED
-    assert (
-        sum(
-            event.event_type is InteractionEventType.INTERRUPTED
-            for event in harness.service.history(interaction_id)
-        )
-        == 1
-    )
-
-
-def test_lifecycle_events_replay_full_history(
-    interaction_harness: _InteractionHarness,
-) -> None:
-    harness = interaction_harness
-    interaction_id = _propose(harness)
-    _grant_all(harness, interaction_id, "start")
-    harness.service.start(harness.handler, interaction_id=interaction_id)
-    _grant_all(harness, interaction_id, "advance")
-    harness.service.transition(
-        harness.handler,
-        interaction_id=interaction_id,
-        transition=InteractionTransition(
-            transition_type="negotiation.counteroffer",
-            authorization_action="advance",
-            payload={"amount": 42, "currency": "septim"},
-        ),
-    )
-    _grant_all(harness, interaction_id, "complete")
-    harness.service.complete(harness.handler, interaction_id=interaction_id)
-
-    events = harness.service.history(interaction_id)
-    assert [event.event_type for event in events] == [
-        InteractionEventType.PROPOSED,
-        InteractionEventType.AUTHORIZED,
-        InteractionEventType.AUTHORIZED,
-        InteractionEventType.STARTED,
-        InteractionEventType.AUTHORIZED,
-        InteractionEventType.AUTHORIZED,
-        InteractionEventType.TRANSITIONED,
-        InteractionEventType.AUTHORIZED,
-        InteractionEventType.AUTHORIZED,
-        InteractionEventType.COMPLETED,
-    ]
-    assert [event.interaction_revision for event in events] == [
-        1,
-        1,
-        1,
-        2,
-        2,
-        2,
-        3,
-        3,
-        3,
-        4,
-    ]
-    assert events[6].payload == {
-        "transition_type": "negotiation.counteroffer",
-        "authorization_action": "advance",
-        "payload": {"amount": 42, "currency": "septim"},
-    }
-    replayed = harness.service.replay(interaction_id)
-    assert replayed.status is InteractionStatus.COMPLETED
-    assert replayed.revision == 4
-    assert replayed.transition_types == ("negotiation.counteroffer",)
-    assert replayed.authorization_events == 6
-
-
-def test_migration_comments_every_column_and_events_are_append_only(
+def test_migration_comments_columns_and_events_are_append_only(
     interaction_harness: _InteractionHarness,
 ) -> None:
     harness = interaction_harness
@@ -555,7 +820,7 @@ def test_migration_comments_every_column_and_events_are_append_only(
         ).all()
     assert uncommented == []
 
-    interaction_id = _propose(harness)
+    interaction_id, _ = _propose(harness)
     with pytest.raises(DBAPIError, match="append-only"):
         with harness.session_factory() as session, session.begin():
             session.execute(
