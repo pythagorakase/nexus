@@ -128,6 +128,7 @@ def test_response_to_incubator_stages_exact_draft_bleed_manifest() -> None:
         user_text="Continue.",
         session_id="draft-a",
         bleed_offer_resolution_ids=[501],
+        lore_pass_baseline=TEST_BASELINE,
     )
     draft_b = response_to_incubator(
         response=response,
@@ -135,6 +136,7 @@ def test_response_to_incubator_stages_exact_draft_bleed_manifest() -> None:
         user_text="Continue.",
         session_id="draft-b",
         bleed_offer_resolution_ids=[],
+        lore_pass_baseline=TEST_BASELINE,
     )
 
     assert split_staged_orrery_payload(draft_a["orrery_proposal"]) == (None, (501,))
