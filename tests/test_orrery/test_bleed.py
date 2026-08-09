@@ -81,6 +81,9 @@ class FakeSession:
         if "SELECT max(nc.id) AS max_id" in sql:
             assert "orrery:retrograde_prologue_anchor" in sql
             return FakeResult([{"max_id": self.max_chunk_id}])
+        if "FROM orrery_adjudication_log" in sql:
+            assert "tick_chunk_id <= :through_tick" in sql
+            return FakeResult([])
         raise AssertionError(f"Unexpected Bleed query: {sql}")
 
     def commit(self):
