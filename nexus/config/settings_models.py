@@ -1868,7 +1868,11 @@ class OrreryRecallSettings(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    semantic_fit_weight: float = Field(default=0.35, ge=0.0)
+    semantic_fit_weight: float = Field(
+        default=0.35,
+        ge=0.0,
+        description="Semantic-fit weight for character experiences only.",
+    )
     event_severity_weight: float = Field(default=0.15, ge=0.0)
     actor_involvement_weight: float = Field(default=0.15, ge=0.0)
     emotional_salience_weight: float = Field(default=0.10, ge=0.0)

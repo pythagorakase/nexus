@@ -758,8 +758,10 @@ def test_warm_analysis_ignores_parent_authorial_directives(
     )
 
 
-def test_deep_queries_use_raw_chunk_only(turn_manager: TurnCycleManager) -> None:
-    """Full chunk text should seed retrieval without successor directives."""
+def test_deep_queries_use_raw_scene_and_current_input(
+    turn_manager: TurnCycleManager,
+) -> None:
+    """One raw scene-and-input representation should seed retrieval."""
 
     class DummyMemnon:
         def __init__(self) -> None:
@@ -799,7 +801,8 @@ def test_deep_queries_use_raw_chunk_only(turn_manager: TurnCycleManager) -> None
     asyncio.run(turn_manager.execute_deep_queries(ctx))
 
     assert memnon.queries == [
-        "Full parent chunk text with all the messy narrative details."
+        "Full parent chunk text with all the messy narrative details.\n\n"
+        "CURRENT TURN INPUT:\nContinue."
     ]
     assert ctx.phase_states["deep_queries"]["query_sources"] == {
         "raw_chunk": 1,

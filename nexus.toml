@@ -454,6 +454,8 @@ recent_reveal_window_chunks = 5
 
 [orrery.recall]
 # Weighted deterministic ranking over actor-owned eligible material only.
+# Semantic fit applies only to character experiences and their own vectors.
+# Claim-text embeddings are future work if semantic claim recall is wanted.
 semantic_fit_weight = 0.35
 event_severity_weight = 0.15
 actor_involvement_weight = 0.15

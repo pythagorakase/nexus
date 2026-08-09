@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
+import json
 import os
 from pathlib import Path
-from typing import Any, Iterator
+from types import SimpleNamespace
+from typing import Any, Iterator, cast
 from uuid import uuid4
 
 import psycopg2
@@ -16,7 +20,12 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import URL
 from sqlalchemy.orm import Session
 
-from nexus.agents.memnon.utils.embedding_tables import ensure_embedding_table
+from nexus.agents.lore.utils.turn_context import TurnContext
+from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
+from nexus.agents.memnon.utils.embedding_tables import (
+    ensure_character_experience_embedding_table,
+    ensure_embedding_table,
+)
 from nexus.agents.orrery.knowledge_surfacing import build_knowledge_digest_sync
 
 
@@ -376,6 +385,7 @@ def _digest(
     turn_id: str,
     max_entries: int = 12,
     recall: dict[str, Any] | None = None,
+    query_embeddings: dict[str, list[float]] | None = None,
 ) -> list[dict[str, Any]]:
     return build_knowledge_digest_sync(
         session,
@@ -389,6 +399,7 @@ def _digest(
         recall_settings=recall or {},
         disclosure_settings={},
         turn_id=turn_id,
+        query_embeddings=query_embeddings,
     )
 
 
@@ -500,6 +511,16 @@ def test_ownership_and_anchor_validity_are_hard_boundaries(session: Session) -> 
     assert invalid_experience not in {entry.get("experience_id") for entry in digest}
     assert future_experience not in {entry.get("experience_id") for entry in digest}
     assert {entry["character_entity_id"] for entry in digest} == {alpha[0]}
+    semantic_status = session.execute(
+        text(
+            "SELECT score_components ->> 'semantic_status' "
+            "FROM orrery_recall_trace "
+            "WHERE turn_id = 'ownership-boundary' "
+            "AND candidate_kind = 'experience' AND candidate_id = :experience_id"
+        ),
+        {"experience_id": valid_experience},
+    ).scalar_one()
+    assert semantic_status == "skipped_no_query_embedding"
     raw_connection = session.connection().connection.driver_connection
     with raw_connection.cursor(cursor_factory=RealDictCursor) as cursor:
         cursor_digest = build_knowledge_digest_sync(
@@ -640,75 +661,279 @@ def test_world_clock_decay_lowers_rank_without_mutating_possession(
     assert awareness_ids == {old_awareness, recent_awareness}
 
 
-def test_semantic_fit_uses_raw_turn_and_eligible_corpus_vectors(
+def test_claim_rank_is_invariant_to_unpossessed_sibling_secret(
     session: Session,
 ) -> None:
     base = datetime(2078, 3, 15, tzinfo=timezone.utc)
-    relevant = _chunk(session, label="semantic relevant", world_time=base, scene=1)
-    irrelevant = _chunk(session, label="semantic irrelevant", world_time=base, scene=2)
-    anchor = _chunk(
-        session, label="semantic raw current turn", world_time=base, scene=3
-    )
-    alpha = _character(session, "semantic")
+    source = _chunk(session, label="distorted source", world_time=base, scene=1)
+    anchor = _chunk(session, label="claim invariance anchor", world_time=base, scene=2)
+    alpha = _character(session, "claim-invariance")
     _present(session, chunk_id=anchor, characters=[alpha])
-    relevant_claim, _ = _claim(
+    distorted_claim, _ = _claim(
         session,
         owner_entity_id=alpha[0],
-        chunk_id=relevant,
+        chunk_id=source,
         acquired_at=base,
-        label="semantic match",
+        label="distorted possessed account",
     )
-    irrelevant_claim, _ = _claim(
+    world_event_id = int(
+        session.execute(
+            text("SELECT world_event_id FROM claims WHERE id = :claim_id"),
+            {"claim_id": distorted_claim},
+        ).scalar_one()
+    )
+    _claim(
         session,
         owner_entity_id=alpha[0],
-        chunk_id=irrelevant,
+        chunk_id=source,
         acquired_at=base,
-        label="semantic mismatch",
+        label="possessed comparison account",
     )
     table_name = ensure_embedding_table(session.connection(), 2)
     session.execute(
         text(
             f"""
             INSERT INTO {table_name} (chunk_id, model, embedding)
-            VALUES
-                (:anchor, 'qa678', '[1,0]'::vector(2)),
-                (:relevant, 'qa678', '[1,0]'::vector(2)),
-                (:irrelevant, 'qa678', '[0,1]'::vector(2))
+            VALUES (:source, 'qa678', '[1,0]'::vector(2))
             """
         ),
-        {"anchor": anchor, "relevant": relevant, "irrelevant": irrelevant},
+        {"source": source},
     )
 
-    digest = _digest(
+    before_digest = _digest(
         session,
         present=[alpha[0]],
         anchor=anchor,
-        turn_id="semantic-fit",
-        max_entries=1,
-        recall={
-            "per_character_max_entries": 1,
-            "mandatory_reserved_entries": 0,
-            "semantic_fit_weight": 1.0,
-            "event_severity_weight": 0.0,
-            "actor_involvement_weight": 0.0,
-            "emotional_salience_weight": 0.0,
-            "recency_weight": 0.0,
-            "place_match_weight": 0.0,
-        },
+        turn_id="claim-invariance-before",
+        query_embeddings={"qa678": [1.0, 0.0]},
     )
-
-    assert [entry["claim_id"] for entry in digest] == [relevant_claim]
-    components = {
-        int(row["claim_id"]): row["score_components"]
-        for row in session.execute(
+    before_trace = (
+        session.execute(
             text(
-                "SELECT claim_id, score_components FROM orrery_recall_trace "
-                "WHERE turn_id = 'semantic-fit'"
-            )
-        ).mappings()
-    }
-    assert components[relevant_claim]["semantic_fit"] == pytest.approx(1.0)
-    assert components[irrelevant_claim]["semantic_fit"] == pytest.approx(0.0)
+                "SELECT score, score_components FROM orrery_recall_trace "
+                "WHERE turn_id = 'claim-invariance-before' AND claim_id = :claim_id"
+            ),
+            {"claim_id": distorted_claim},
+        )
+        .mappings()
+        .one()
+    )
+    before_rank = [entry.get("claim_id") for entry in before_digest].index(
+        distorted_claim
+    )
+    before_bytes = json.dumps(
+        {
+            "rank": before_rank,
+            "score": str(before_trace["score"]),
+            "components": before_trace["score_components"],
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+
+    secret_claim, _ = _claim(
+        session,
+        owner_entity_id=None,
+        chunk_id=source,
+        acquired_at=base,
+        label="unpossessed sibling secret",
+        scope="private",
+        world_event_id=world_event_id,
+    )
+    session.execute(
+        text(
+            f"UPDATE {table_name} SET embedding = '[0,1]'::vector(2) "
+            "WHERE chunk_id = :source AND model = 'qa678'"
+        ),
+        {"source": source},
+    )
+    after_digest = _digest(
+        session,
+        present=[alpha[0]],
+        anchor=anchor,
+        turn_id="claim-invariance-after",
+        query_embeddings={"qa678": [1.0, 0.0]},
+    )
+    after_trace = (
+        session.execute(
+            text(
+                "SELECT score, score_components FROM orrery_recall_trace "
+                "WHERE turn_id = 'claim-invariance-after' AND claim_id = :claim_id"
+            ),
+            {"claim_id": distorted_claim},
+        )
+        .mappings()
+        .one()
+    )
+    after_rank = [entry.get("claim_id") for entry in after_digest].index(
+        distorted_claim
+    )
+    after_bytes = json.dumps(
+        {
+            "rank": after_rank,
+            "score": str(after_trace["score"]),
+            "components": after_trace["score_components"],
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+
+    assert secret_claim not in {entry.get("claim_id") for entry in after_digest}
+    assert before_bytes == after_bytes
+    assert after_trace["score_components"]["semantic_fit"] is None
+    assert after_trace["score_components"]["semantic_status"] == "not_applicable_claim"
+
+
+class _TurnMemnonHarness:
+    def __init__(self, session: Session) -> None:
+        self.session = session
+        self.query_embedding_ids: list[int] = []
+
+    @contextmanager
+    def Session(self) -> Iterator[Session]:
+        yield self.session
+
+    def query_memory(
+        self,
+        query: str,
+        k: int,
+        use_hybrid: bool,
+        query_embeddings: dict[str, list[float]],
+        **_kwargs: Any,
+    ) -> dict[str, list[dict[str, Any]]]:
+        assert k == 15
+        assert use_hybrid is True
+        self.query_embedding_ids.append(id(query_embeddings))
+        query_embeddings["qa678"] = [1.0, 0.0] if "fire" in query else [0.0, 1.0]
+        return {"results": []}
+
+
+class _TurnLoreHarness:
+    token_manager = None
+    memory_manager = None
+    enable_logon = False
+
+    def __init__(self, session: Session) -> None:
+        self.memnon = _TurnMemnonHarness(session)
+        self.settings = {
+            "Agent Settings": {
+                "LORE": {
+                    "token_budget": {
+                        "apex_context_window": 75_000,
+                        "prompt_overhead_tokens": 4_000,
+                    }
+                },
+                "MEMNON": {
+                    "retrieval": {"hybrid_search": {"presence_boost_enabled": False}}
+                },
+            },
+            "orrery": {
+                "enabled": True,
+                "bleed": {"max_candidates": 0},
+                "knowledge": {
+                    "enabled": True,
+                    "max_entries": 1,
+                    "recent_reveal_window_chunks": 3,
+                },
+                "recall": {
+                    "semantic_fit_weight": 1.0,
+                    "event_severity_weight": 0.0,
+                    "actor_involvement_weight": 0.0,
+                    "emotional_salience_weight": 0.0,
+                    "recency_weight": 0.0,
+                    "place_match_weight": 0.0,
+                    "per_character_max_entries": 1,
+                    "mandatory_reserved_entries": 0,
+                },
+            },
+        }
+
+
+def test_turn_inputs_change_experience_ranking_via_shared_query_embedding(
+    session: Session,
+) -> None:
+    base = datetime(2078, 3, 20, tzinfo=timezone.utc)
+    fire_source = _chunk(session, label="fire experience", world_time=base, scene=1)
+    harbor_source = _chunk(session, label="harbor experience", world_time=base, scene=2)
+    anchor = _chunk(session, label="turn semantic anchor", world_time=base, scene=3)
+    alpha = _character(session, "turn-semantic")
+    _present(session, chunk_id=anchor, characters=[alpha])
+    fire_experience = _experience(
+        session,
+        owner_entity_id=alpha[0],
+        chunk_id=fire_source,
+        world_time=base,
+        label="fire memory",
+    )
+    harbor_experience = _experience(
+        session,
+        owner_entity_id=alpha[0],
+        chunk_id=harbor_source,
+        world_time=base,
+        label="harbor memory",
+    )
+    table_name = ensure_character_experience_embedding_table(session.connection(), 2)
+    session.execute(
+        text(
+            f"""
+            INSERT INTO {table_name} (experience_id, model, embedding)
+            VALUES
+                (:fire, 'qa678', '[1,0]'::vector(2)),
+                (:harbor, 'qa678', '[0,1]'::vector(2))
+            """
+        ),
+        {"fire": fire_experience, "harbor": harbor_experience},
+    )
+    lore = _TurnLoreHarness(session)
+    manager = TurnCycleManager(lore)
+
+    selected: list[int] = []
+    for turn_id, user_input in (
+        ("turn-semantic-fire", "Recall the fire at the gate."),
+        ("turn-semantic-harbor", "Recall the harbor at dawn."),
+    ):
+        context = TurnContext(
+            turn_id=turn_id,
+            user_input=user_input,
+            start_time=0,
+            warm_slice=[
+                {
+                    "id": anchor,
+                    "is_target": True,
+                    "full_text": "The same current scene anchor for both turns.",
+                }
+            ],
+        )
+        context.token_counts = {"total_available": 75_000}
+        context.orrery_proposal = cast(
+            Any,
+            SimpleNamespace(
+                anchor_chunk_id=anchor,
+                pressure_count=0,
+                resolution_count=0,
+                joint_beats=(),
+            ),
+        )
+
+        asyncio.run(manager.execute_deep_queries(context))
+        shared_mapping_id = id(context.recall_query_embeddings)
+        asyncio.run(manager.assemble_context_payload(context))
+
+        assert shared_mapping_id == lore.memnon.query_embedding_ids[-1]
+        entry = context.context_payload["world_knowledge"][0]
+        selected.append(int(entry["experience_id"]))
+        semantic_trace = session.execute(
+            text(
+                "SELECT score_components ->> 'semantic_status' "
+                "FROM orrery_recall_trace "
+                "WHERE turn_id = :turn_id AND candidate_kind = 'experience' "
+                "AND candidate_id = :candidate_id"
+            ),
+            {"turn_id": turn_id, "candidate_id": entry["experience_id"]},
+        ).scalar_one()
+        assert semantic_trace == "scored"
+
+    assert selected == [fire_experience, harbor_experience]
 
 
 def test_disclosure_suppression_is_logged_and_not_surfaced(session: Session) -> None:

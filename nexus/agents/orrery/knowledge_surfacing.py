@@ -14,7 +14,6 @@ from sqlalchemy import text
 
 from nexus.agents.memnon.utils.embedding_tables import (
     parse_character_experience_embedding_table_dimensions,
-    parse_embedding_table_dimensions,
 )
 from nexus.agents.orrery.reconstruction import playable_narrative_predicate
 from nexus.config.settings_models import (
@@ -61,7 +60,7 @@ class _Candidate:
     salience: float
     freshly_revealed: bool
     current_scene_acquisition: bool
-    semantic_fit: float = 0.0
+    semantic_fit: float | None = None
     score: float = 0.0
     mandatory: bool = False
     score_components: dict[str, Any] = field(default_factory=dict)
@@ -375,17 +374,14 @@ def _candidate(row: Mapping[str, Any]) -> _Candidate:
     )
 
 
-def _embedding_tables(session_or_cur: Any) -> list[str]:
+def _experience_embedding_tables(session_or_cur: Any) -> list[str]:
     result = _execute(
         session_or_cur,
         """
         SELECT table_name
         FROM information_schema.tables
         WHERE table_schema = current_schema()
-          AND (
-              table_name ~ '^chunk_embeddings_[0-9]+d$'
-              OR table_name ~ '^character_experience_embeddings_[0-9]+d$'
-          )
+          AND table_name ~ '^character_experience_embeddings_[0-9]+d$'
         ORDER BY table_name
         """,
         {},
@@ -397,17 +393,26 @@ def _semantic_scores(
     session_or_cur: Any,
     *,
     candidates: Sequence[_Candidate],
-    current_turn_chunk_id: int,
+    query_embeddings: Mapping[str, Sequence[float]] | None,
     missing_score: float,
-) -> dict[tuple[str, int], float]:
-    """Compare eligible corpus vectors with the stored raw-turn chunk vector."""
+) -> dict[int, tuple[float | None, str]]:
+    """Compare actor-owned experience vectors with current-turn query vectors."""
 
-    tables = _embedding_tables(session_or_cur)
-    chunk_tables = {
-        dimensions: table_name
-        for table_name in tables
-        if (dimensions := parse_embedding_table_dimensions(table_name)) is not None
-    }
+    experience_ids = sorted(
+        candidate.candidate_id
+        for candidate in candidates
+        if candidate.kind == "experience"
+    )
+    if not experience_ids:
+        return {}
+    usable_embeddings = dict(query_embeddings or {})
+    if not usable_embeddings:
+        return {
+            experience_id: (None, "skipped_no_query_embedding")
+            for experience_id in experience_ids
+        }
+
+    tables = _experience_embedding_tables(session_or_cur)
     experience_tables = {
         dimensions: table_name
         for table_name in tables
@@ -418,94 +423,58 @@ def _semantic_scores(
         )
         is not None
     }
-    accumulated: dict[tuple[str, int], list[float]] = {}
-    source_chunk_ids = sorted(
-        {
-            candidate.source_chunk_id
-            for candidate in candidates
-            if candidate.kind == "claim"
-        }
-    )
-    experience_ids = sorted(
-        {
-            candidate.candidate_id
-            for candidate in candidates
-            if candidate.kind == "experience"
-        }
-    )
-    for dimensions, chunk_table in sorted(chunk_tables.items()):
-        if source_chunk_ids:
-            result = _execute(
-                session_or_cur,
-                f"""
-                SELECT source.chunk_id AS candidate_id,
-                       avg(1 - (source.embedding <=> query.embedding)) AS score
-                FROM {chunk_table} source
-                JOIN {chunk_table} query
-                  ON query.chunk_id = :current_turn_chunk_id
-                 AND query.model = source.model
-                WHERE source.chunk_id = ANY(:candidate_ids)
-                GROUP BY source.chunk_id
-                """,
-                {
-                    "current_turn_chunk_id": current_turn_chunk_id,
-                    "candidate_ids": source_chunk_ids,
-                },
-            )
-            for row in _rows(result):
-                accumulated.setdefault(("claim", int(row["candidate_id"])), []).append(
-                    float(row["score"])
-                )
+    accumulated: dict[int, list[float]] = {}
+    for model, embedding in sorted(usable_embeddings.items()):
+        dimensions = len(embedding)
         experience_table = experience_tables.get(dimensions)
-        if experience_ids and experience_table is not None:
-            result = _execute(
-                session_or_cur,
-                f"""
-                SELECT source.experience_id AS candidate_id,
-                       avg(1 - (source.embedding <=> query.embedding)) AS score
-                FROM {experience_table} source
-                JOIN {chunk_table} query
-                  ON query.chunk_id = :current_turn_chunk_id
-                 AND query.model = source.model
-                WHERE source.experience_id = ANY(:candidate_ids)
-                GROUP BY source.experience_id
-                """,
-                {
-                    "current_turn_chunk_id": current_turn_chunk_id,
-                    "candidate_ids": experience_ids,
-                },
+        if experience_table is None:
+            continue
+        embedding_value = "[" + ",".join(str(value) for value in embedding) + "]"
+        result = _execute(
+            session_or_cur,
+            f"""
+            SELECT source.experience_id AS candidate_id,
+                   1 - (
+                       source.embedding <=>
+                       CAST(:query_embedding AS vector({dimensions}))
+                   ) AS score
+            FROM {experience_table} source
+            WHERE source.model = :model
+              AND source.experience_id = ANY(:candidate_ids)
+            """,
+            {
+                "query_embedding": embedding_value,
+                "model": model,
+                "candidate_ids": experience_ids,
+            },
+        )
+        for row in _rows(result):
+            accumulated.setdefault(int(row["candidate_id"]), []).append(
+                float(row["score"])
             )
-            for row in _rows(result):
-                accumulated.setdefault(
-                    ("experience", int(row["candidate_id"])), []
-                ).append(float(row["score"]))
 
-    scores: dict[tuple[str, int], float] = {}
-    for candidate in candidates:
-        identity = (
-            ("claim", candidate.source_chunk_id)
-            if candidate.kind == "claim"
-            else ("experience", candidate.candidate_id)
+    return {
+        experience_id: (
+            (sum(values) / len(values), "scored")
+            if (values := accumulated.get(experience_id))
+            else (missing_score, "missing_experience_embedding")
         )
-        values = accumulated.get(identity)
-        scores[(candidate.kind, candidate.candidate_id)] = (
-            sum(values) / len(values) if values else missing_score
-        )
-    return scores
+        for experience_id in experience_ids
+    }
 
 
 def _score_candidates(
     rows: Sequence[Mapping[str, Any]],
     *,
     session_or_cur: Any,
-    current_turn_chunk_id: int,
+    query_embeddings: Mapping[str, Sequence[float]] | None,
     settings: OrreryRecallSettings,
 ) -> list[_Candidate]:
     candidates = [_candidate(row) for row in rows]
     semantics = _semantic_scores(
         session_or_cur,
         candidates=candidates,
-        current_turn_chunk_id=current_turn_chunk_id,
+        query_embeddings=query_embeddings,
         missing_score=settings.missing_embedding_score,
     )
     for candidate, row in zip(candidates, rows, strict=True):
@@ -532,9 +501,17 @@ def _score_candidates(
             and candidate.location_id is not None
             and int(setting_place_id) == candidate.location_id
         )
-        semantic = semantics[(candidate.kind, candidate.candidate_id)]
+        if candidate.kind == "experience":
+            semantic, semantic_status = semantics[candidate.candidate_id]
+            semantic_contribution = (
+                settings.semantic_fit_weight * semantic if semantic is not None else 0.0
+            )
+        else:
+            semantic = None
+            semantic_status = "not_applicable_claim"
+            semantic_contribution = 0.0
         raw_score = (
-            settings.semantic_fit_weight * semantic
+            semantic_contribution
             + settings.event_severity_weight * severity
             + settings.actor_involvement_weight * involvement
             + settings.emotional_salience_weight * candidate.salience
@@ -549,7 +526,8 @@ def _score_candidates(
             and candidate.current_scene_acquisition
         )
         candidate.score_components = {
-            "semantic_fit": round(semantic, 8),
+            "semantic_fit": round(semantic, 8) if semantic is not None else None,
+            "semantic_status": semantic_status,
             "event_severity": round(severity, 8),
             "actor_involvement": round(involvement, 8),
             "emotional_salience": round(candidate.salience, 8),
@@ -974,7 +952,7 @@ def build_knowledge_digest_sync(
     recall_settings: Any = None,
     disclosure_settings: Any = None,
     turn_id: str | None = None,
-    current_turn_chunk_id: int | None = None,
+    query_embeddings: Mapping[str, Sequence[float]] | None = None,
 ) -> list[dict[str, Any]]:
     """Build ranked, audience-filtered knowledge for present characters.
 
@@ -1001,8 +979,6 @@ def build_knowledge_digest_sync(
     trace_turn_id = turn_id or f"anchor:{anchor}"
     if not trace_turn_id.strip():
         raise ValueError("turn_id must be nonempty")
-    raw_turn_chunk_id = int(current_turn_chunk_id or anchor)
-
     eligible = _eligible_rows(
         session_or_cur,
         present_entity_ids=present_ids,
@@ -1012,7 +988,7 @@ def build_knowledge_digest_sync(
     candidates = _score_candidates(
         eligible,
         session_or_cur=session_or_cur,
-        current_turn_chunk_id=raw_turn_chunk_id,
+        query_embeddings=query_embeddings,
         settings=recall,
     )
     ranked, excluded = _select_ranked(

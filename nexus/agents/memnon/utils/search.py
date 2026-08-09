@@ -77,6 +77,7 @@ class SearchManager:
         top_k: Optional[int] = None,
         present_character_ids: Optional[Sequence[int]] = None,
         presence_boost_enabled: Optional[bool] = None,
+        query_embeddings: Optional[Dict[str, List[float]]] = None,
     ) -> List[Dict[str, Any]]:
         """
         Perform hybrid search using both vector embeddings and text search.
@@ -88,6 +89,8 @@ class SearchManager:
             top_k: Maximum number of results to return
             present_character_ids: Character IDs present in the retrieval anchor
             presence_boost_enabled: Optional measurement override for the config flag
+            query_embeddings: Caller-owned mapping populated with the exact vectors
+                used by hybrid retrieval
 
         Returns:
             List of matching chunks with scores and metadata
@@ -173,12 +176,17 @@ class SearchManager:
             )
 
             # Generate embeddings for all active models
-            query_embeddings = {}
+            if query_embeddings is None:
+                query_embeddings = {}
+            else:
+                query_embeddings.clear()
             for model_key in active_models:
                 try:
-                    query_embeddings[model_key] = (
-                        self.embedding_manager.generate_embedding(query_text, model_key)
+                    embedding = self.embedding_manager.generate_embedding(
+                        query_text, model_key
                     )
+                    if embedding is not None:
+                        query_embeddings[model_key] = embedding
                 except Exception as e:
                     logger.error(
                         f"Error generating embedding for model {model_key}: {e}"

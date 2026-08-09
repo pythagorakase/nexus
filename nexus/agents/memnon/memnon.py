@@ -1759,6 +1759,7 @@ class MEMNON:
         k: Optional[int] = None,
         use_hybrid: bool = True,
         present_character_ids: Optional[Sequence[int]] = None,
+        query_embeddings: Optional[Dict[str, List[float]]] = None,
     ) -> Dict[str, Any]:
         """
         Execute a query against memory and return matching results.
@@ -1770,6 +1771,8 @@ class MEMNON:
             k: Maximum number of results to return
             use_hybrid: Whether to use hybrid search
             present_character_ids: Character IDs present in the retrieval anchor
+            query_embeddings: Caller-owned mapping populated with the exact vectors
+                used by hybrid retrieval
 
         Returns:
             Dictionary containing query results and metadata
@@ -1859,6 +1862,7 @@ class MEMNON:
                         filters=strategy.get("filters"),
                         top_k=strategy.get("limit", k),
                         present_character_ids=present_character_ids,
+                        query_embeddings=query_embeddings,
                     )
                     all_results.extend(results)
 
