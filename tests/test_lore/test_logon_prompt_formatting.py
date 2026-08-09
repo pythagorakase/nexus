@@ -372,6 +372,15 @@ def test_context_prompt_without_bootstrap_data_keeps_standard_shape() -> None:
     )
 
 
+def test_context_prompt_rejects_nonpositive_recent_rulings_cap() -> None:
+    """The recent-rulings cap is validated with its sibling prompt limits."""
+
+    utility = LogonUtility({"orrery": {"prompt": {"max_rendered_recent_rulings": 0}}})
+
+    with pytest.raises(ValueError, match="max_rendered_recent_rulings"):
+        utility._format_context_prompt({"user_input": "Continue."})
+
+
 def test_context_prompt_includes_orrery_scene_pressure_controls() -> None:
     """Prompt-only Orrery pressures are framed as Storyteller-controlled."""
 

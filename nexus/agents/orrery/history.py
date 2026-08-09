@@ -85,14 +85,29 @@ def adjudication_history(
     session: Any,
     *,
     template_id: Optional[str] = None,
+    through_tick: Optional[int] = None,
+    recent_rulings_limit: Optional[int] = None,
 ) -> dict[str, Any]:
     """Return the adjudication-history payload for one slot.
 
-    Read-only. ``template_id`` narrows every block to one package.
+    Read-only. ``template_id`` narrows every block to one package;
+    ``through_tick`` excludes later outcomes during replay/regeneration.
     """
 
-    template_clause = "WHERE template_id = :template_id" if template_id else ""
-    params: dict[str, Any] = {"template_id": template_id} if template_id else {}
+    if through_tick is not None and through_tick <= 0:
+        raise ValueError("through_tick must be positive")
+    if recent_rulings_limit is not None and recent_rulings_limit <= 0:
+        raise ValueError("recent_rulings_limit must be positive")
+
+    filters: list[str] = []
+    params: dict[str, Any] = {}
+    if template_id:
+        filters.append("template_id = :template_id")
+        params["template_id"] = template_id
+    if through_tick is not None:
+        filters.append("tick_chunk_id <= :through_tick")
+        params["through_tick"] = through_tick
+    template_clause = f"WHERE {' AND '.join(filters)}" if filters else ""
 
     log_rows = [
         dict(row)
@@ -100,9 +115,10 @@ def adjudication_history(
             text(
                 f"""
                 /* orrery_history:adjudication_log */
-                SELECT tick_chunk_id, proposal_id, template_id, binding_hash,
+                SELECT id, tick_chunk_id, proposal_id, template_id, binding_hash,
                        action, adjudication_source, skald_note,
-                       applied_resolution_id, actor_entity_id, bindings
+                       original_state_delta, applied_resolution_id,
+                       actor_entity_id, bindings
                 FROM orrery_adjudication_log
                 {template_clause}
                 ORDER BY proposal_id, tick_chunk_id, id
@@ -118,8 +134,9 @@ def adjudication_history(
             text(
                 f"""
                 /* orrery_history:resolutions */
-                SELECT tick_chunk_id, template_id, binding_hash,
-                       actor_entity_id, promotion_status::text
+                SELECT id, tick_chunk_id, template_id, binding_hash,
+                       actor_entity_id, state_delta, brief,
+                       promotion_status::text
                            AS promotion_status,
                        narration_status::text AS narration_status
                 FROM orrery_resolutions
@@ -249,6 +266,79 @@ def adjudication_history(
         )
     defer_streaks.sort(key=lambda item: (-item["length"], item["proposal_id"]))
 
+    # --- Recent per-outcome rulings -----------------------------------------
+    # A replace that materialized a resolution is not ratification-by-omission.
+    replaced_resolution_ids = {
+        row["applied_resolution_id"]
+        for row in log_rows
+        if row["action"] == "replace" and row["applied_resolution_id"] is not None
+    }
+    ruling_timelines: dict[str, list[tuple[int, int, str, Optional[int]]]] = {}
+    for row in log_rows:
+        ruling_timelines.setdefault(row["proposal_id"], []).append(
+            (row["tick_chunk_id"], 0, row["action"], row["id"])
+        )
+    for row in resolution_rows:
+        proposal_id = f"{row['template_id']}:{row['binding_hash']}"
+        ruling_timelines.setdefault(proposal_id, []).append(
+            (row["tick_chunk_id"], 1, "committed", None)
+        )
+
+    deferral_counts: dict[int, int] = {}
+    for proposal_events in ruling_timelines.values():
+        consecutive = 0
+        for _tick, _order, action, log_id in sorted(proposal_events):
+            if action == "defer":
+                consecutive += 1
+                if log_id is None:
+                    raise RuntimeError("Deferred ruling is missing its ledger id")
+                deferral_counts[log_id] = consecutive
+            else:
+                consecutive = 0
+
+    recent_rulings: list[dict[str, Any]] = []
+    for row in resolution_rows:
+        if row["id"] in replaced_resolution_ids:
+            continue
+        recent_rulings.append(
+            {
+                "outcome": "ratified",
+                "tick_chunk_id": row["tick_chunk_id"],
+                "source_id": row["id"],
+                "proposal_id": f"{row['template_id']}:{row['binding_hash']}",
+                "template_id": row["template_id"],
+                "summary": row["brief"],
+                "state_delta": row["state_delta"],
+                "note": None,
+                "consecutive_deferrals": 0,
+            }
+        )
+    for row in log_rows:
+        if row["action"] not in {"defer", "void"}:
+            continue
+        recent_rulings.append(
+            {
+                "outcome": "deferred" if row["action"] == "defer" else "voided",
+                "tick_chunk_id": row["tick_chunk_id"],
+                "source_id": row["id"],
+                "proposal_id": row["proposal_id"],
+                "template_id": row["template_id"],
+                "summary": None,
+                "state_delta": row["original_state_delta"],
+                "note": row["skald_note"],
+                "consecutive_deferrals": deferral_counts.get(row["id"], 0),
+            }
+        )
+    recent_rulings.sort(
+        key=lambda row: (
+            -row["tick_chunk_id"],
+            0 if row["outcome"] == "ratified" else 1,
+            -row["source_id"],
+        )
+    )
+    if recent_rulings_limit is not None:
+        recent_rulings = recent_rulings[:recent_rulings_limit]
+
     # --- Names and epoch honesty --------------------------------------------
     entity_ids = {
         actor_id for actor_id in actor_by_proposal.values() if actor_id is not None
@@ -281,6 +371,7 @@ def adjudication_history(
         },
         "templates": templates,
         "defer_streaks": defer_streaks,
+        "recent_rulings": recent_rulings,
         "exposures": {
             "resolution": exposures.get(
                 "resolution", {"rows": 0, "earliest_tick": None}

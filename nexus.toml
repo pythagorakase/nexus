@@ -454,6 +454,7 @@ checkpoint_interval_chunks = 25
 # prompt-exposure log records the same first-N slice, so these are also the
 # boundary between "ratified by omission" and "never shown".
 max_rendered_proposals = 5
+max_rendered_recent_rulings = 5
 max_rendered_pressures = 5
 
 [orrery.habituation]

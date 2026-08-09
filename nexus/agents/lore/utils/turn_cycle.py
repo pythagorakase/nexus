@@ -46,6 +46,7 @@ try:
         LORERetrievalSettings,
         OrreryBleedSettings,
         OrreryKnowledgeSettings,
+        OrreryPromptSettings,
     )
 except ImportError:
     # If relative import fails, try absolute
@@ -78,6 +79,7 @@ except ImportError:
         LORERetrievalSettings,
         OrreryBleedSettings,
         OrreryKnowledgeSettings,
+        OrreryPromptSettings,
     )
 
 try:
@@ -978,6 +980,7 @@ class TurnCycleManager:
 
         await self.select_orrery_bleed(turn_context)
         world_knowledge = self._build_world_knowledge(turn_context)
+        recent_rulings_section = self._build_recent_orrery_rulings_section(turn_context)
 
         # Build the context payload
         turn_context.context_payload = {
@@ -1056,6 +1059,11 @@ class TurnCycleManager:
                 getattr(world_knowledge, "truncated", False)
             )
 
+        if recent_rulings_section:
+            turn_context.context_payload["orrery_recent_rulings_section"] = (
+                recent_rulings_section
+            )
+
         if turn_context.target_chunk_id is not None:
             turn_context.context_payload["metadata"][
                 "target_chunk_id"
@@ -1083,6 +1091,40 @@ class TurnCycleManager:
         }
 
         logger.info(f"Context payload assembled: {utilization:.1f}% budget utilization")
+
+    def _build_recent_orrery_rulings_section(
+        self, turn_context: TurnContext
+    ) -> list[str]:
+        """Read and render recent rulings before payload-budget accounting."""
+
+        orrery_settings = self.settings.get("orrery", {})
+        if not orrery_settings.get("enabled", False):
+            return []
+        if not self.lore.memnon:
+            raise RuntimeError("Recent Orrery rulings require MEMNON database access")
+
+        prompt_settings = OrreryPromptSettings.model_validate(
+            orrery_settings.get("prompt", {})
+        )
+        with self.lore.memnon.Session() as session:
+            proposal = turn_context.orrery_proposal
+            anchor_chunk_id = (
+                proposal.anchor_chunk_id
+                if proposal is not None
+                else turn_context.target_chunk_id
+            )
+            if anchor_chunk_id is None:
+                anchor_chunk_id = self._orrery_anchor_chunk_id(session, turn_context)
+            if anchor_chunk_id is None:
+                return []
+
+            from nexus.agents.lore.logon_utility import LogonUtility
+
+            return LogonUtility.build_recent_orrery_rulings_section(
+                session,
+                anchor_chunk_id=anchor_chunk_id,
+                limit=prompt_settings.max_rendered_recent_rulings,
+            )
 
     def _enforce_context_payload_budget(
         self, turn_context: TurnContext

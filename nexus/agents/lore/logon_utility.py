@@ -1930,6 +1930,95 @@ class LogonUtility:
         )
         return bool(context_payload.get("is_bootstrap", False) or metadata_bootstrap)
 
+    @staticmethod
+    def build_recent_orrery_rulings_section(
+        session: Any,
+        *,
+        anchor_chunk_id: int,
+        limit: int,
+    ) -> list[str]:
+        """Build recent adjudication lines for the shared storyteller context."""
+
+        from nexus.agents.orrery.history import adjudication_history
+
+        if anchor_chunk_id <= 0:
+            raise ValueError("anchor_chunk_id must be positive")
+        if limit <= 0:
+            raise ValueError("limit must be positive")
+
+        history = adjudication_history(
+            session,
+            through_tick=anchor_chunk_id,
+            recent_rulings_limit=limit,
+        )
+        rulings = history["recent_rulings"]
+        if not rulings:
+            return []
+
+        lines = ["=== RECENT ORRERY RULINGS ==="]
+        for ruling in rulings:
+            tick_chunk_id = ruling["tick_chunk_id"]
+            if isinstance(tick_chunk_id, bool) or not isinstance(tick_chunk_id, int):
+                raise TypeError("Recent Orrery ruling tick_chunk_id must be an integer")
+            turn_offset = anchor_chunk_id - tick_chunk_id + 1
+            if turn_offset <= 0:
+                raise ValueError(
+                    "Recent Orrery ruling cannot occur after the prompt anchor: "
+                    f"ruling_tick={tick_chunk_id}, anchor_tick={anchor_chunk_id}"
+                )
+
+            outcome = ruling["outcome"]
+            if outcome == "ratified":
+                summary = ruling.get("summary")
+                if not isinstance(summary, str) or not summary.strip():
+                    raise ValueError(
+                        "Ratified Orrery ruling requires its committed brief"
+                    )
+                summary = " ".join(summary.split())
+            elif outcome in {"deferred", "voided"}:
+                state_delta = ruling.get("state_delta")
+                if not isinstance(state_delta, Mapping):
+                    raise TypeError(
+                        f"{outcome.title()} Orrery ruling requires its state_delta"
+                    )
+                rendered_delta = json.dumps(
+                    state_delta,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    default=str,
+                )
+                summary = f"{ruling['template_id']}: state_delta={rendered_delta}"
+            else:
+                raise ValueError(f"Unsupported recent Orrery outcome: {outcome!r}")
+
+            turn_label = f"(turn N-{turn_offset})"
+            if outcome == "ratified":
+                lines.append(f"[RATIFIED] {summary} {turn_label}")
+            elif outcome == "deferred":
+                count = ruling["consecutive_deferrals"]
+                if isinstance(count, bool) or not isinstance(count, int) or count <= 0:
+                    raise ValueError(
+                        "Deferred Orrery ruling requires a positive consecutive count"
+                    )
+                suffix = (
+                    "th"
+                    if 10 < count % 100 < 14
+                    else {1: "st", 2: "nd", 3: "rd"}.get(count % 10, "th")
+                )
+                lines.append(
+                    f"[DEFERRED] {summary} {turn_label} — "
+                    f"{count}{suffix} consecutive deferral"
+                )
+            elif outcome == "voided":
+                note = ruling.get("note")
+                rendered_note = " ".join(note.split()) if isinstance(note, str) else ""
+                lines.append(
+                    f"[VOIDED — {rendered_note or 'no note'}] "
+                    f"{summary} {turn_label}"
+                )
+        return lines
+
     def _format_context_prompt(
         self,
         context: Dict,
@@ -2190,18 +2279,21 @@ class LogonUtility:
         # the orrery section is absent.
         from nexus.config.settings_models import OrreryPromptSettings
 
-        _prompt_defaults = OrreryPromptSettings()
         _prompt_cfg = (self.settings.get("orrery") or {}).get("prompt") or {}
-        max_rendered_proposals = int(
-            _prompt_cfg.get(
-                "max_rendered_proposals", _prompt_defaults.max_rendered_proposals
+        prompt_settings = OrreryPromptSettings.model_validate(_prompt_cfg)
+        max_rendered_proposals = prompt_settings.max_rendered_proposals
+        max_rendered_pressures = prompt_settings.max_rendered_pressures
+
+        recent_rulings_section = context.get("orrery_recent_rulings_section") or []
+        if not isinstance(recent_rulings_section, list) or not all(
+            isinstance(line, str) and line for line in recent_rulings_section
+        ):
+            raise TypeError(
+                "orrery_recent_rulings_section must be a list of nonempty strings"
             )
-        )
-        max_rendered_pressures = int(
-            _prompt_cfg.get(
-                "max_rendered_pressures", _prompt_defaults.max_rendered_pressures
-            )
-        )
+        if recent_rulings_section:
+            sections.append("")
+            sections.extend(recent_rulings_section)
 
         imminent_activity = context.get("orrery_imminent_activity") or []
         if imminent_activity:
