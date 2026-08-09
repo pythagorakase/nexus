@@ -28,6 +28,11 @@ class FakeResult:
     def first(self):
         return self._rows[0] if self._rows else None
 
+    def one(self):
+        if len(self._rows) != 1:
+            raise AssertionError(f"FakeResult.one() with {len(self._rows)} rows")
+        return self._rows[0]
+
     def __iter__(self):
         return iter(self._rows)
 
@@ -81,8 +86,11 @@ class FakeSession:
         if "SELECT max(nc.id) AS max_id" in sql:
             assert "orrery:retrograde_prologue_anchor" in sql
             return FakeResult([{"max_id": self.max_chunk_id}])
-        if "FROM orrery_adjudication_log" in sql:
-            assert "tick_chunk_id <= :through_tick" in sql
+        if "/* orrery_history:scene_pressures */" in sql:
+            assert ":through_tick" in sql
+            return FakeResult([{"rows": 0, "earliest_tick": None}])
+        if "/* orrery_history:" in sql:
+            assert ":through_tick" in sql
             return FakeResult([])
         raise AssertionError(f"Unexpected Bleed query: {sql}")
 
