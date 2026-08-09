@@ -986,7 +986,7 @@ use_query_type_weights = true
 use_query_type_temporal_factors = true
 target_model = "inf-retriever-v1-1.5b"
 temporal_boost_factor = 0.6
-presence_boost_enabled = false  # Measured arm; enable only after live evaluation
+presence_boost_enabled = true  # Measured arm; enable only after live evaluation
 presence_boost_factor = 0.15
 
 [memnon.retrieval.hybrid_search.weights_by_query_type.character]
