@@ -7,6 +7,7 @@ import json
 import logging
 import os
 from typing import Any, Mapping, Optional
+from uuid import uuid4
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -62,6 +63,18 @@ class OrreryWorkerResult(BaseModel):
     maturation_failed: int = 0
 
 
+class NarrationCompletionRejectedError(RuntimeError):
+    """Base error for a narration completion rejected by a durable fence."""
+
+
+class NarrationLeaseLostError(NarrationCompletionRejectedError):
+    """Raised when a worker no longer owns an unexpired narration lease."""
+
+
+class NarrationAnchorStaleError(NarrationCompletionRejectedError):
+    """Raised after a leased job is terminally rejected for a stale anchor."""
+
+
 class OrreryStatus(BaseModel):
     """Operational snapshot for Orrery outbox and tag-clearance state."""
 
@@ -69,6 +82,7 @@ class OrreryStatus(BaseModel):
     queued_narration_jobs: int = 0
     leased_narration_jobs: int = 0
     failed_narration_jobs: int = 0
+    stale_rejected_narration_jobs: int = 0
     pending_offscreen_embeddings: int = 0
     failed_offscreen_embeddings: int = 0
     active_semantic_tags: int = 0
@@ -84,7 +98,7 @@ def process_orrery_outbox_sync(
     slot: Optional[int] = None,
     *,
     promotion_limit: int = 20,
-    narration_limit: int = 5,
+    narration_limit: Optional[int] = None,
     semantic_clearance_limit: int = DEFAULT_SEMANTIC_CLEARANCE_LIMIT,
     semantic_clearance_recent_chunks: int = DEFAULT_SEMANTIC_CLEARANCE_RECENT_CHUNKS,
     semantic_clearance_evidence_chunks: int = (
@@ -196,17 +210,26 @@ def promote_pending_resolutions_sync(
 def drain_narration_outbox_sync(
     slot: Optional[int] = None,
     *,
-    limit: int = 5,
+    limit: Optional[int] = None,
     settings: Optional[Mapping[str, Any]] = None,
     narration_provider: Optional[Any] = None,
     conn: Optional[Any] = None,
 ) -> tuple[int, int]:
-    """Generate off-screen narrations for queued Orrery jobs."""
+    """Generate off-screen narrations for queued or expired Orrery jobs."""
 
+    settings_dict = dict(settings or load_settings_as_dict())
+    narration_settings = _narration_settings(settings_dict)
+    max_attempts, retry_delay_seconds = _narration_retry_settings(settings_dict)
+    job_limit = narration_settings.max_jobs_per_drain
+    if limit is not None:
+        if limit < 0:
+            raise ValueError("Narration job limit must be non-negative")
+        job_limit = min(limit, job_limit)
+    if job_limit == 0:
+        return (0, 0)
+    worker_owner = _narration_worker_owner(slot)
     owns_conn = conn is None
     conn = conn or _connect_for_slot(slot)
-    settings_dict = dict(settings or load_settings_as_dict())
-    max_attempts, retry_delay_seconds = _narration_retry_settings(settings_dict)
     try:
         with conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -217,6 +240,8 @@ def drain_narration_outbox_sync(
                         j.resolution_id,
                         j.slot,
                         j.attempts,
+                        j.anchor_tick_chunk_id,
+                        j.anchor_world_layer::text AS anchor_world_layer,
                         r.tick_chunk_id,
                         r.template_id,
                         r.actor_entity_id,
@@ -225,40 +250,69 @@ def drain_narration_outbox_sync(
                         r.brief,
                         r.promotion_verdict,
                         r.event_ids,
-                        cm.world_layer::text AS world_layer,
+                        COALESCE(cm.world_layer::text, 'primary') AS world_layer,
                         n.name AS actor_name
                     FROM orrery_narration_jobs j
                     JOIN orrery_resolutions r ON r.id = j.resolution_id
                     LEFT JOIN chunk_metadata cm ON cm.chunk_id = r.tick_chunk_id
                     LEFT JOIN entity_names_v n ON n.id = r.actor_entity_id
-                    WHERE j.state = 'queued'
-                      AND j.available_at <= now()
-                    ORDER BY j.available_at, j.id
+                    WHERE j.superseded_at IS NULL
+                      AND (
+                            (
+                                j.state = 'queued'
+                                AND j.available_at <= clock_timestamp()
+                            )
+                            OR (
+                                j.state = 'leased'
+                                AND j.lease_until IS NOT NULL
+                                AND j.lease_until < clock_timestamp()
+                            )
+                      )
+                    ORDER BY
+                        CASE
+                            WHEN j.state = 'leased' THEN j.lease_until
+                            ELSE j.available_at
+                        END,
+                        j.id
                     LIMIT %s
                     FOR UPDATE OF j SKIP LOCKED
                     """,
-                    (limit,),
+                    (job_limit,),
                 )
                 rows = cur.fetchall()
                 if not rows:
                     return (0, 0)
 
                 provider = narration_provider or _narration_provider(settings_dict)
-                for row in rows:
+                leased_rows = []
+                for selected_row in rows:
+                    row = dict(selected_row)
+                    lease_nonce = str(uuid4())
                     cur.execute(
                         """
                         UPDATE orrery_narration_jobs
                         SET state = 'leased',
-                            lease_until = now() + interval '5 minutes',
+                            lease_until = clock_timestamp()
+                                + (%s * interval '1 second'),
+                            locked_by = %s,
+                            lease_nonce = %s,
                             attempts = attempts + 1,
                             updated_at = now()
                         WHERE id = %s
                         """,
-                        (row["job_id"],),
+                        (
+                            narration_settings.lease_duration_seconds,
+                            worker_owner,
+                            lease_nonce,
+                            row["job_id"],
+                        ),
                     )
+                    row["locked_by"] = worker_owner
+                    row["lease_nonce"] = lease_nonce
+                    leased_rows.append(row)
         narrated = 0
         failed = 0
-        for row in rows:
+        for row in leased_rows:
             try:
                 with usage_context(
                     seat="orrery_narration",
@@ -267,26 +321,43 @@ def drain_narration_outbox_sync(
                 ):
                     narration_text = _generate_narration(provider, row)
                 descriptor = _perceptual_descriptor(row)
+                completion_error = None
                 with conn:
                     with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                        _mark_narration_succeeded(
+                        completion_error = _mark_narration_succeeded(
                             cur,
                             row=row,
                             narration_text=narration_text,
                             descriptor=descriptor,
                         )
+                if completion_error is not None:
+                    raise completion_error
                 narrated += 1
+            except NarrationCompletionRejectedError as exc:
+                failed += 1
+                logger.error(
+                    "Rejected completion for Orrery narration job %s: %s",
+                    row["job_id"],
+                    exc,
+                )
             except Exception as exc:
                 failed += 1
-                with conn:
-                    with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                        _mark_narration_failed(
-                            cur,
-                            row=row,
-                            error=str(exc),
-                            max_attempts=max_attempts,
-                            retry_delay_seconds=retry_delay_seconds,
-                        )
+                try:
+                    with conn:
+                        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                            _mark_narration_failed(
+                                cur,
+                                row=row,
+                                error=str(exc),
+                                max_attempts=max_attempts,
+                                retry_delay_seconds=retry_delay_seconds,
+                            )
+                except NarrationLeaseLostError as fence_exc:
+                    logger.error(
+                        "Rejected failure write for Orrery narration job %s: %s",
+                        row["job_id"],
+                        fence_exc,
+                    )
                 logger.exception("Failed to narrate Orrery job %s", row["job_id"])
         return (narrated, failed)
     finally:
@@ -344,6 +415,7 @@ def load_orrery_status_sync(
                         SELECT count(*) AS count
                         FROM orrery_narration_jobs
                         WHERE state = 'queued'
+                          AND superseded_at IS NULL
                         """,
                     ),
                     leased_narration_jobs=_count_sync(
@@ -352,6 +424,7 @@ def load_orrery_status_sync(
                         SELECT count(*) AS count
                         FROM orrery_narration_jobs
                         WHERE state = 'leased'
+                          AND superseded_at IS NULL
                         """,
                     ),
                     failed_narration_jobs=_count_sync(
@@ -360,6 +433,16 @@ def load_orrery_status_sync(
                         SELECT count(*) AS count
                         FROM orrery_narration_jobs
                         WHERE state = 'failed'
+                          AND superseded_at IS NULL
+                        """,
+                    ),
+                    stale_rejected_narration_jobs=_count_sync(
+                        cur,
+                        """
+                        SELECT count(*) AS count
+                        FROM orrery_narration_jobs
+                        WHERE state = 'stale_rejected'
+                          AND superseded_at IS NULL
                         """,
                     ),
                     pending_offscreen_embeddings=_count_sync(
@@ -418,7 +501,100 @@ def _mark_narration_succeeded(
     row: Mapping[str, Any],
     narration_text: str,
     descriptor: Mapping[str, Any],
-) -> None:
+) -> Optional[NarrationCompletionRejectedError]:
+    cur.execute(
+        """
+        /* orrery:narration:complete_fence */
+        SELECT
+            j.state::text AS state,
+            j.locked_by,
+            j.lease_nonce,
+            j.lease_until,
+            j.anchor_tick_chunk_id,
+            j.anchor_world_layer::text AS anchor_world_layer,
+            r.tick_chunk_id AS current_tick_chunk_id,
+            nc.id IS NOT NULL AS anchor_exists
+        FROM orrery_narration_jobs AS j
+        JOIN orrery_resolutions AS r ON r.id = j.resolution_id
+        LEFT JOIN narrative_chunks AS nc ON nc.id = j.anchor_tick_chunk_id
+        WHERE j.id = %s
+        FOR UPDATE OF j, r
+        """,
+        (row["job_id"],),
+    )
+    current = cur.fetchone()
+    if current is None:
+        return NarrationLeaseLostError(f"job {row['job_id']} no longer exists")
+
+    cur.execute(
+        """
+        /* orrery:narration:anchor_fence */
+        SELECT COALESCE(world_layer::text, 'primary') AS current_world_layer
+        FROM chunk_metadata
+        WHERE chunk_id = %s
+        FOR SHARE
+        """,
+        (current["current_tick_chunk_id"],),
+    )
+    metadata = cur.fetchone()
+    current["current_world_layer"] = (
+        metadata.get("current_world_layer") if metadata is not None else None
+    )
+    cur.execute(
+        """
+        SELECT lease_until > clock_timestamp() AS lease_is_current
+        FROM orrery_narration_jobs
+        WHERE id = %s
+        """,
+        (row["job_id"],),
+    )
+    lease_check = cur.fetchone()
+    current["lease_is_current"] = bool(
+        lease_check and lease_check.get("lease_is_current")
+    )
+    if not _lease_matches(current, row):
+        return NarrationLeaseLostError(
+            f"job {row['job_id']} is no longer owned by "
+            f"{row['locked_by']} with nonce {row['lease_nonce']}"
+        )
+
+    anchor_matches = (
+        bool(current.get("anchor_exists"))
+        and current.get("anchor_tick_chunk_id") == row.get("anchor_tick_chunk_id")
+        and current.get("current_tick_chunk_id") == row.get("anchor_tick_chunk_id")
+        and current.get("anchor_world_layer") == row.get("anchor_world_layer")
+        and current.get("current_world_layer") == row.get("anchor_world_layer")
+    )
+    if not anchor_matches:
+        error = (
+            f"job {row['job_id']} anchor changed: enqueued tick/layer "
+            f"{row.get('anchor_tick_chunk_id')}/{row.get('anchor_world_layer')}, "
+            f"current {current.get('current_tick_chunk_id')}/"
+            f"{current.get('current_world_layer')}"
+        )
+        cur.execute(
+            """
+            UPDATE orrery_narration_jobs
+            SET state = 'stale_rejected',
+                lease_until = NULL,
+                locked_by = NULL,
+                lease_nonce = NULL,
+                last_error = %s,
+                updated_at = now()
+            WHERE id = %s
+            """,
+            (error, row["job_id"]),
+        )
+        cur.execute(
+            """
+            UPDATE orrery_resolutions
+            SET narration_status = 'failed'
+            WHERE id = %s
+            """,
+            (row["resolution_id"],),
+        )
+        return NarrationAnchorStaleError(error)
+
     cur.execute(
         """
         INSERT INTO offscreen_narrations (
@@ -450,11 +626,22 @@ def _mark_narration_succeeded(
         UPDATE orrery_narration_jobs
         SET state = 'succeeded',
             lease_until = NULL,
+            locked_by = NULL,
+            lease_nonce = NULL,
             updated_at = now()
         WHERE id = %s
+          AND state = 'leased'
+          AND locked_by = %s
+          AND lease_nonce = %s
+          AND lease_until > clock_timestamp()
         """,
-        (row["job_id"],),
+        (row["job_id"], row["locked_by"], row["lease_nonce"]),
     )
+    if cur.rowcount != 1:
+        raise RuntimeError(
+            f"Narration job {row['job_id']} fence changed while row-locked"
+        )
+    return None
 
 
 def _mark_narration_failed(
@@ -471,14 +658,32 @@ def _mark_narration_failed(
             """
             UPDATE orrery_narration_jobs
             SET state = 'queued',
-                available_at = now() + (%s * interval '1 second'),
+                available_at = clock_timestamp()
+                    + (%s * interval '1 second'),
                 lease_until = NULL,
+                locked_by = NULL,
+                lease_nonce = NULL,
                 last_error = %s,
                 updated_at = now()
             WHERE id = %s
+              AND state = 'leased'
+              AND locked_by = %s
+              AND lease_nonce = %s
+              AND lease_until > clock_timestamp()
+            RETURNING id
             """,
-            (retry_delay_seconds, error, row["job_id"]),
+            (
+                retry_delay_seconds,
+                error,
+                row["job_id"],
+                row["locked_by"],
+                row["lease_nonce"],
+            ),
         )
+        if cur.fetchone() is None:
+            raise NarrationLeaseLostError(
+                f"job {row['job_id']} lost its lease before retry persistence"
+            )
         cur.execute(
             """
             UPDATE orrery_resolutions
@@ -494,12 +699,28 @@ def _mark_narration_failed(
         UPDATE orrery_narration_jobs
         SET state = 'failed',
             lease_until = NULL,
+            locked_by = NULL,
+            lease_nonce = NULL,
             last_error = %s,
             updated_at = now()
         WHERE id = %s
+          AND state = 'leased'
+          AND locked_by = %s
+          AND lease_nonce = %s
+          AND lease_until > clock_timestamp()
+        RETURNING id
         """,
-        (error, row["job_id"]),
+        (
+            error,
+            row["job_id"],
+            row["locked_by"],
+            row["lease_nonce"],
+        ),
     )
+    if cur.fetchone() is None:
+        raise NarrationLeaseLostError(
+            f"job {row['job_id']} lost its lease before failure persistence"
+        )
     cur.execute(
         """
         UPDATE orrery_resolutions
@@ -575,10 +796,18 @@ def _mark_promoted(
     cur.execute(
         """
         INSERT INTO orrery_narration_jobs (
-            resolution_id, slot, provider, model_ref
-        ) VALUES (%s, %s, %s, %s)
+            resolution_id, slot, provider, model_ref,
+            anchor_tick_chunk_id, anchor_world_layer
+        )
+        SELECT
+            r.id, %s, %s, %s, r.tick_chunk_id,
+            COALESCE(cm.world_layer, 'primary'::world_layer_type)
+        FROM orrery_resolutions AS r
+        LEFT JOIN chunk_metadata AS cm ON cm.chunk_id = r.tick_chunk_id
+        WHERE r.id = %s
+        ON CONFLICT (resolution_id) WHERE superseded_at IS NULL DO NOTHING
         """,
-        (row["id"], slot_label, provider, model_ref),
+        (slot_label, provider, model_ref, row["id"]),
     )
 
 
@@ -701,6 +930,26 @@ def _narration_retry_settings(settings: Mapping[str, Any]) -> tuple[int, int]:
     return max(1, narration.max_attempts), max(0, narration.retry_delay_seconds)
 
 
+def _lease_matches(
+    current: Optional[Mapping[str, Any]], leased_row: Mapping[str, Any]
+) -> bool:
+    """Return whether the durable job still matches this worker's live lease."""
+
+    return bool(
+        current
+        and current.get("state") == "leased"
+        and current.get("locked_by") == leased_row.get("locked_by")
+        and current.get("lease_nonce") == leased_row.get("lease_nonce")
+        and current.get("lease_is_current")
+    )
+
+
+def _narration_worker_owner(slot: Optional[int]) -> str:
+    """Build a unique owner label for one narration drain invocation."""
+
+    return f"{_slot_label(slot)}:{os.getpid()}:{uuid4()}"
+
+
 def _connect_for_slot(slot: Optional[int]) -> Any:
     from nexus.api.db_pool import get_connect_timeout_seconds
     from nexus.api.slot_utils import require_slot_dbname
@@ -745,8 +994,11 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument(
         "--narration-limit",
         type=int,
-        default=5,
-        help="Maximum queued narration jobs to drain in this run.",
+        default=None,
+        help=(
+            "Maximum narration jobs to drain, capped by "
+            "orrery.narration.max_jobs_per_drain."
+        ),
     )
     parser.add_argument(
         "--maturation-limit",

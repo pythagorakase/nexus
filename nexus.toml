@@ -517,6 +517,8 @@ model_ref = "@anthropic.default"
 #   max_output_tokens  — narration output ceiling (default 1200)
 #   max_attempts       — narration job attempts before failure (default 3)
 #   retry_delay_seconds — backoff between attempts (default 300)
+lease_duration_seconds = 300
+max_jobs_per_drain = 5
 
 [orrery.bleed]
 density = 0.20
