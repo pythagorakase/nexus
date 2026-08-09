@@ -5,6 +5,7 @@
 
 import type {
   CatalogPayload,
+  CognitionTracePayload,
   ContextPayload,
   CoveragePayload,
   OverridesRequest,
@@ -72,6 +73,21 @@ export function fetchEntityContext(params: {
       entity_ids: params.entityIds,
       anchor_chunk_id: params.anchorChunkId ?? null,
       recent_events_limit: 3,
+    }),
+  });
+}
+
+export function fetchCognitionTrace(params: {
+  slot: number;
+  entityId: number;
+  anchorChunkId: number;
+}): Promise<CognitionTracePayload> {
+  return request<CognitionTracePayload>("/cognition/trace", {
+    method: "POST",
+    body: JSON.stringify({
+      slot: params.slot,
+      entity_id: params.entityId,
+      anchor_chunk_id: params.anchorChunkId,
     }),
   });
 }

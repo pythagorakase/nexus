@@ -291,6 +291,166 @@ export interface ContextPayload {
   entities: ContextEntity[];
 }
 
+// --- character cognition trace ---------------------------------------------
+
+export interface CognitionSourceEvent {
+  event_id: number;
+  event_type: string;
+  severity: string | null;
+  tick_chunk_id: number;
+  actor_entity_id: number | null;
+  target_entity_id: number | null;
+  location_id: number | null;
+  world_time: string | null;
+}
+
+export interface CognitionTracePayload {
+  entity: { entity_id: number; name: string };
+  anchor: {
+    chunk_id: number;
+    world_time: string | null;
+    world_layer: string;
+    season: number;
+    episode: number;
+    scene: number;
+  };
+  actor_facing: {
+    possessed_accounts: {
+      awareness_id: number;
+      claim_id: number;
+      summary: string;
+      scope: string;
+      account_label: string;
+      account_payload: unknown;
+      possession: {
+        source_tier: string;
+        channel: string | null;
+        acquisition_chunk_id: number | null;
+        acquired_at_world_time: string | null;
+        propagation_depth: number | null;
+        source_chain: {
+          kind: string;
+          entity_id: number;
+          name: string;
+        }[];
+      };
+      source_event: { event_id: number };
+    }[];
+    experiences: {
+      experience_id: number;
+      anchor_chunk_id: number;
+      basis: string;
+      claim_id: number | null;
+      claim_awareness_id: number | null;
+      seed_summary: string;
+      experience_text: string | null;
+      salience: number;
+      render_status: string;
+      render_model: string | null;
+      renderer_version: string | null;
+      render_generation_id: string | null;
+      source_event_ids: number[];
+    }[];
+    recall_candidates: {
+      trace_id: number;
+      turn_id: string;
+      candidate_kind: "claim" | "experience";
+      candidate_id: number;
+      claim_id: number | null;
+      summary: string | null;
+      source_chunk_id: number | null;
+      decision: "included" | "excluded" | "suppressed";
+      reason: string;
+      mandatory: boolean;
+      score: number;
+      score_components: Record<string, unknown>;
+      threshold: number | null;
+      truncated: boolean;
+      created_at: string;
+    }[];
+    recall_truncated: boolean;
+    disclosure_results: {
+      trace_id: number;
+      candidate_kind: "claim" | "experience";
+      candidate_id: number;
+      allowed: boolean;
+      reason: string;
+      blocking_reasons: string[];
+      components: Record<string, unknown>;
+    }[];
+    prompt_exposure: {
+      orrery_proposals: {
+        kind: string;
+        exposure_id: number;
+        proposal_id: string;
+        template_id: string;
+        binding_hash: string;
+        position: number;
+        created_at: string;
+        actor_entity_id: number | null;
+        target_entity_id: number | null;
+        payload: unknown;
+      }[];
+      knowledge_surfacing: {
+        kind: string;
+        trace_id: number;
+        turn_id: string;
+        candidate_kind: "claim" | "experience";
+        candidate_id: number;
+        summary: string | null;
+        position: number;
+      }[];
+    };
+    experience_jobs: {
+      job_id: number;
+      state: string;
+      attempts: number;
+      available_at: string;
+      lease_until: string | null;
+      locked_by: string | null;
+      lease_nonce: string | null;
+      last_error: string | null;
+      requested_model: string;
+      source_digest: string;
+      experience_ids: number[];
+      timeline_identity: Record<string, string | number>;
+    }[];
+    generation_identity: {
+      render_generation_ids: string[];
+      timeline: Record<string, string | number>;
+    };
+  };
+  effective_config: {
+    enabled: Record<string, boolean>;
+    caps: Record<string, number | null>;
+    weights: Record<string, number | null>;
+    thresholds: Record<string, number | null>;
+    producer_coverage: Record<string, string[]>;
+  };
+  canonical_truth: {
+    guarded: true;
+    source_events: CognitionSourceEvent[];
+    unpossessed_sibling_accounts: {
+      claim_id: number;
+      world_event_id: number;
+      summary: string;
+      scope: string;
+      account_label: string;
+      account_payload: unknown;
+    }[];
+    latent_secrets: {
+      secret_id: number;
+      claim_id: number;
+      summary: string;
+      account_payload: unknown;
+      gate_template_id: string;
+      holder_entity_id: number;
+      source_chunk_id: number | null;
+      status: string;
+    }[];
+  };
+}
+
 // --- coverage ----------------------------------------------------------------
 
 export interface CoveragePayload {
@@ -402,6 +562,7 @@ export interface ResolutionCardVM {
 }
 
 export interface EntityAuditVM {
+  entityId: number;
   name: string;
   place: string;
   classes: string;
@@ -422,6 +583,7 @@ export interface EntityAuditVM {
   hasKnowledge: boolean;
   events: { t: string; type: string }[];
   hasEvents: boolean;
+  onOpenCognition: () => void;
 }
 
 export interface EntityAuditTagVM {
@@ -432,6 +594,87 @@ export interface EntityAuditTagVM {
   dotTitle: string;
   onEnter?: () => void;
   onLeave?: () => void;
+}
+
+export interface CognitionSourceNodeVM {
+  key: string;
+  kind: string;
+  label: string;
+  children: CognitionSourceNodeVM[];
+}
+
+export interface CognitionTraceVM {
+  title: string;
+  anchor: string;
+  timeline: string;
+  accounts: {
+    key: string;
+    sourceKey: string;
+    claim: string;
+    meta: string;
+    summary: string;
+    sourceChunk: string;
+    sourcePreview: string;
+    chain: CognitionSourceNodeVM[];
+    payload: string;
+  }[];
+  experiences: {
+    key: string;
+    sourceKey: string;
+    id: string;
+    meta: string;
+    summary: string;
+    sourcePreview: string;
+    renderStatus: string;
+    salience: string;
+  }[];
+  recalls: {
+    key: string;
+    sourceKey: string;
+    sourceLabel: string;
+    summary: string;
+    decision: string;
+    reason: string;
+    score: string;
+    threshold: string;
+    mandatory: boolean;
+    truncated: boolean;
+    components: { label: string; value: string; pct: string }[];
+  }[];
+  truncated: boolean;
+  disclosures: {
+    key: string;
+    sourceKey: string;
+    sourceLabel: string;
+    allowed: boolean;
+    reason: string;
+    reasons: string[];
+    components: string;
+  }[];
+  exposures: {
+    key: string;
+    kind: string;
+    label: string;
+    meta: string;
+    preview: string;
+    payload: string;
+  }[];
+  jobs: {
+    key: string;
+    id: string;
+    state: string;
+    attempts: string;
+    lease: string;
+    error: string | null;
+    timeline: string;
+    generations: string;
+  }[];
+  config: { section: string; values: { key: string; value: string }[] }[];
+  canonical: {
+    events: { key: string; label: string; summary: string; payload: string }[];
+    siblings: { key: string; label: string; summary: string; payload: string }[];
+    secrets: { key: string; label: string; summary: string; payload: string }[];
+  };
 }
 
 export type RowStatus = "winner" | "shadowed" | "gate_failed" | "not_applicable";

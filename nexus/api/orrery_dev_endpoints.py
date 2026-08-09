@@ -21,7 +21,12 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
-from nexus.agents.orrery.audit import build_catalog, entity_context, explain_dry_run
+from nexus.agents.orrery.audit import (
+    build_catalog,
+    cognition_trace,
+    entity_context,
+    explain_dry_run,
+)
 from nexus.agents.orrery.coverage import analyze_coverage, sample_anchor_ids
 from nexus.agents.orrery.history import adjudication_history
 from nexus.agents.orrery.overrides import (
@@ -232,6 +237,16 @@ class OrreryEntityContextRequest(BaseModel):
     recent_events_limit: int = Field(default=5, ge=1, le=50)
 
 
+class OrreryCognitionTraceRequest(BaseModel):
+    """Parameters for one anchor-aware character cognition trace."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    slot: Optional[int] = Field(default=None)
+    entity_id: int = Field(ge=1)
+    anchor_chunk_id: int = Field(ge=1)
+
+
 def _orrery_settings() -> dict[str, Any]:
     from nexus.config import load_settings_as_dict
 
@@ -353,6 +368,21 @@ async def post_entity_context(
             recent_events_limit=request.recent_events_limit,
             sunhelm_settings=orrery.get("sunhelm"),
             contagion_settings=orrery.get("contagion"),
+        )
+
+
+@router.post("/cognition/trace")
+async def post_cognition_trace(
+    request: OrreryCognitionTraceRequest,
+) -> dict[str, Any]:
+    """Anchor-aware character cognition trace. Read-only and dev-gated."""
+
+    with _slot_session(request.slot) as session:
+        return cognition_trace(
+            session,
+            request.entity_id,
+            anchor_chunk_id=request.anchor_chunk_id,
+            orrery_settings=_orrery_settings(),
         )
 
 

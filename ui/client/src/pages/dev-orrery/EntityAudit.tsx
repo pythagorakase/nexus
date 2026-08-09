@@ -6,6 +6,7 @@
 
 import { useState } from "react";
 import type { CSSProperties } from "react";
+import { Button } from "@/components/ui/button";
 import type { EntityAuditTagVM, EntityAuditVM } from "./types";
 
 function initialsOf(name: string): string {
@@ -380,6 +381,14 @@ export default function EntityAudit({ ent }: { ent: EntityAuditVM }) {
           ))}
         </div>
       )}
+      <Button
+        variant="outline"
+        size="sm"
+        className="font-mono uppercase tracking-widest"
+        onClick={ent.onOpenCognition}
+      >
+        Cognition
+      </Button>
     </div>
   );
 }

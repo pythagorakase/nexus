@@ -8,10 +8,14 @@ no mocks, no database.
 
 from __future__ import annotations
 
+from copy import deepcopy
 import json
+
+import pytest
 
 from nexus.agents.orrery.audit import (
     NOT_APPLICABLE_REASON,
+    _cognition_effective_config,
     build_catalog,
 )
 from nexus.agents.orrery.substrate import (
@@ -35,6 +39,21 @@ def _catalog() -> dict:
         sunhelm_settings=orrery.get("sunhelm"),
         promote_settings=orrery.get("promote"),
     )
+
+
+def test_cognition_config_projection_names_missing_sections_and_keys() -> None:
+    """The dev trace reports config truth instead of dashboard defaults."""
+
+    with pytest.raises(KeyError, match=r"\[orrery\.knowledge\]"):
+        _cognition_effective_config({})
+
+    orrery = deepcopy(load_settings_as_dict()["orrery"])
+    del orrery["recall"]["semantic_fit_weight"]
+    with pytest.raises(
+        KeyError,
+        match=r"\[orrery\.recall\]\.semantic_fit_weight",
+    ):
+        _cognition_effective_config(orrery)
 
 
 def test_catalog_covers_every_template_exactly_once() -> None:

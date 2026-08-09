@@ -1158,6 +1158,790 @@ def _iso(value: Optional[datetime]) -> Optional[str]:
     return value.isoformat() if value is not None else None
 
 
+def _cognition_source_chain(
+    row: Mapping[str, Any], entity_names: Mapping[int, str]
+) -> list[dict[str, Any]]:
+    """Build an ordered acquisition chain without inferring missing sources."""
+
+    chain: list[dict[str, Any]] = []
+    root_id = row.get("root_source_entity_id")
+    immediate_id = row.get("immediate_source_entity_id")
+    if root_id is not None:
+        root = int(root_id)
+        chain.append(
+            {
+                "kind": "root_source",
+                "entity_id": root,
+                "name": _entity_label(root, entity_names),
+            }
+        )
+    if immediate_id is not None and immediate_id != root_id:
+        immediate = int(immediate_id)
+        chain.append(
+            {
+                "kind": "immediate_source",
+                "entity_id": immediate,
+                "name": _entity_label(immediate, entity_names),
+            }
+        )
+    owner = int(row["character_entity_id"])
+    chain.append(
+        {
+            "kind": "possession",
+            "entity_id": owner,
+            "name": _entity_label(owner, entity_names),
+        }
+    )
+    return chain
+
+
+def _required_cognition_config_section(
+    orrery_settings: Mapping[str, Any], section: str
+) -> Mapping[str, Any]:
+    """Return one required Orrery config section or fail with its full name."""
+
+    if section not in orrery_settings:
+        raise KeyError(f"Missing required cognition config section [orrery.{section}]")
+    value = orrery_settings[section]
+    if not isinstance(value, Mapping):
+        raise TypeError(f"Cognition config [orrery.{section}] must be a mapping")
+    return value
+
+
+def _required_cognition_config_value(
+    section: Mapping[str, Any], section_name: str, key: str
+) -> Any:
+    """Return one required reported value without inventing a dashboard default."""
+
+    if key not in section:
+        raise KeyError(
+            f"Missing required cognition config key [orrery.{section_name}].{key}"
+        )
+    return section[key]
+
+
+def _cognition_effective_config(orrery_settings: Mapping[str, Any]) -> dict[str, Any]:
+    """Project only cognition-relevant config, failing on incomplete truth."""
+
+    knowledge = _required_cognition_config_section(orrery_settings, "knowledge")
+    recall = _required_cognition_config_section(orrery_settings, "recall")
+    disclosure = _required_cognition_config_section(orrery_settings, "disclosure")
+    experiences = _required_cognition_config_section(orrery_settings, "experiences")
+    epistemics = _required_cognition_config_section(orrery_settings, "epistemics")
+    prompt = _required_cognition_config_section(orrery_settings, "prompt")
+
+    def required(section: Mapping[str, Any], section_name: str, key: str) -> Any:
+        return _required_cognition_config_value(section, section_name, key)
+
+    return {
+        "enabled": {
+            "knowledge": bool(required(knowledge, "knowledge", "enabled")),
+            "experiences": bool(required(experiences, "experiences", "enabled")),
+            "epistemics": bool(required(epistemics, "epistemics", "enabled")),
+        },
+        "caps": {
+            "knowledge_max_entries": required(knowledge, "knowledge", "max_entries"),
+            "recall_per_character_max_entries": required(
+                recall, "recall", "per_character_max_entries"
+            ),
+            "recall_mandatory_reserved_entries": required(
+                recall, "recall", "mandatory_reserved_entries"
+            ),
+            "recall_trace_rows_per_character": required(
+                recall, "recall", "trace_rows_per_character"
+            ),
+            "experience_max_seeds_per_render": required(
+                experiences, "experiences", "max_seeds_per_render"
+            ),
+            "experience_max_jobs_per_drain": required(
+                experiences, "experiences", "max_jobs_per_drain"
+            ),
+            "prompt_max_rendered_proposals": required(
+                prompt, "prompt", "max_rendered_proposals"
+            ),
+            "prompt_max_rendered_pressures": required(
+                prompt, "prompt", "max_rendered_pressures"
+            ),
+            "prompt_max_rendered_recent_rulings": required(
+                prompt, "prompt", "max_rendered_recent_rulings"
+            ),
+        },
+        "weights": {
+            key: required(recall, "recall", key)
+            for key in (
+                "semantic_fit_weight",
+                "event_severity_weight",
+                "actor_involvement_weight",
+                "emotional_salience_weight",
+                "recency_weight",
+                "place_match_weight",
+            )
+        },
+        "thresholds": {
+            "disclosure_minimum_score": required(
+                disclosure, "disclosure", "minimum_score"
+            ),
+            "disclosure_private_claim_minimum_score": required(
+                disclosure, "disclosure", "private_claim_minimum_score"
+            ),
+            "recall_decay_half_life_hours": required(
+                recall, "recall", "decay_half_life_hours"
+            ),
+            "recall_recency_horizon_hours": required(
+                recall, "recall", "recency_horizon_hours"
+            ),
+        },
+        "producer_coverage": {
+            "claim_event_types": list(
+                required(epistemics, "epistemics", "claim_event_types")
+            ),
+            "aware_roles": list(required(epistemics, "epistemics", "aware_roles")),
+            "experience_basis": ["participant", "witness", "acquisition"],
+        },
+    }
+
+
+def cognition_trace(
+    session: Any,
+    entity_id: int,
+    *,
+    anchor_chunk_id: int,
+    orrery_settings: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Return one character's cognition chain at an accepted scene anchor.
+
+    Actor-facing material is assembled only from possession rows, actor-owned
+    experiences, and durable recall/exposure traces. Unpossessed sibling
+    accounts and latent secrets are queried independently into
+    ``canonical_truth`` so callers cannot accidentally interleave them.
+    """
+
+    if entity_id <= 0 or anchor_chunk_id <= 0:
+        raise ValueError("entity_id and anchor_chunk_id must be positive")
+    anchor = (
+        session.execute(
+            text(
+                """
+            /* orrery_audit:cognition_anchor */
+            SELECT cm.chunk_id, cm.world_time,
+                   cm.world_layer::text AS world_layer,
+                   cm.season, cm.episode, cm.scene,
+                   nc.created_at
+            FROM chunk_metadata cm
+            JOIN narrative_chunks nc ON nc.id = cm.chunk_id
+            WHERE cm.chunk_id = :anchor_chunk_id
+            """
+            ),
+            {"anchor_chunk_id": anchor_chunk_id},
+        )
+        .mappings()
+        .first()
+    )
+    if anchor is None:
+        raise ValueError(f"Anchor chunk {anchor_chunk_id} has no timeline metadata")
+    character = (
+        session.execute(
+            text(
+                """
+            /* orrery_audit:cognition_character */
+            SELECT character.entity_id, character.name
+            FROM characters character
+            JOIN entities entity ON entity.id = character.entity_id
+            WHERE character.entity_id = :entity_id
+              AND entity.is_active = true
+            """
+            ),
+            {"entity_id": entity_id},
+        )
+        .mappings()
+        .first()
+    )
+    if character is None:
+        raise ValueError(f"Entity {entity_id} is not an active character")
+
+    account_rows = list(
+        session.execute(
+            text(
+                """
+                /* orrery_audit:cognition_possessed_accounts */
+                WITH anchor AS (
+                    SELECT cm.world_layer::text AS world_layer,
+                           cm.world_time, nc.created_at
+                    FROM chunk_metadata cm
+                    JOIN narrative_chunks nc ON nc.id = cm.chunk_id
+                    WHERE cm.chunk_id = :anchor_chunk_id
+                )
+                SELECT awareness.id AS awareness_id,
+                       awareness.knower_entity_id AS character_entity_id,
+                       awareness.source_tier, awareness.channel,
+                       awareness.immediate_source_entity_id,
+                       awareness.root_source_entity_id,
+                       awareness.acquired_at_world_time,
+                       awareness.source_chunk_id AS acquisition_chunk_id,
+                       claim.id AS claim_id, claim.world_event_id,
+                       claim.summary, claim.scope, claim.account_label,
+                       claim.account_payload, claim.distorted_from_claim_id,
+                       claim.distortion_min_depth,
+                       propagated.depth
+                FROM claim_awareness awareness
+                JOIN claims claim ON claim.id = awareness.claim_id
+                JOIN world_events incident ON incident.id = claim.world_event_id
+                JOIN chunk_metadata source_meta ON source_meta.chunk_id =
+                    COALESCE(awareness.source_chunk_id, claim.source_chunk_id)
+                CROSS JOIN anchor
+                LEFT JOIN LATERAL (
+                    SELECT (event.payload ->> 'depth')::integer AS depth
+                    FROM world_events event
+                    WHERE event.event_type = 'claim_propagated'
+                      AND event.payload ? 'awareness_id'
+                      AND (event.payload ->> 'awareness_id')::bigint = awareness.id
+                    ORDER BY event.id DESC
+                    LIMIT 1
+                ) propagated ON TRUE
+                WHERE awareness.knower_entity_id = :entity_id
+                  AND incident.tick_chunk_id <= :anchor_chunk_id
+                  AND source_meta.chunk_id <= :anchor_chunk_id
+                  AND source_meta.world_layer::text IS NOT DISTINCT FROM
+                      anchor.world_layer
+                  AND (
+                      awareness.acquired_at_world_time IS NULL
+                      OR awareness.acquired_at_world_time <= anchor.world_time
+                  )
+                  AND (
+                      awareness.source_chunk_id IS NOT NULL
+                      OR awareness.created_at <= anchor.created_at
+                  )
+                  AND NOT EXISTS (
+                      SELECT 1 FROM backstory_secrets secret
+                      WHERE secret.claim_id = claim.id
+                        AND COALESCE(
+                            secret.source_chunk_id, claim.source_chunk_id
+                        ) <= :anchor_chunk_id
+                        AND (
+                            secret.revealed_by_chunk_id IS NULL
+                            OR secret.revealed_by_chunk_id > :anchor_chunk_id
+                        )
+                        AND secret.status <> 'retired'
+                  )
+                ORDER BY awareness.id
+                """
+            ),
+            {"entity_id": entity_id, "anchor_chunk_id": anchor_chunk_id},
+        ).mappings()
+    )
+    referenced_ids = {entity_id}
+    for row in account_rows:
+        for key in (
+            "immediate_source_entity_id",
+            "root_source_entity_id",
+        ):
+            if row[key] is not None:
+                referenced_ids.add(int(row[key]))
+    entity_names = _load_entity_names(session, referenced_ids)
+
+    accounts: list[dict[str, Any]] = []
+    for row in account_rows:
+        accounts.append(
+            {
+                "awareness_id": int(row["awareness_id"]),
+                "claim_id": int(row["claim_id"]),
+                "summary": str(row["summary"]),
+                "scope": str(row["scope"]),
+                "account_label": str(row["account_label"]),
+                "account_payload": row["account_payload"],
+                "distorted_from_claim_id": row["distorted_from_claim_id"],
+                "distortion_min_depth": row["distortion_min_depth"],
+                "possession": {
+                    "source_tier": str(row["source_tier"]),
+                    "channel": row["channel"],
+                    "acquisition_chunk_id": row["acquisition_chunk_id"],
+                    "acquired_at_world_time": _iso(row["acquired_at_world_time"]),
+                    "propagation_depth": row["depth"],
+                    "source_chain": _cognition_source_chain(row, entity_names),
+                },
+                "source_event": {
+                    "event_id": int(row["world_event_id"]),
+                },
+            }
+        )
+
+    experience_rows = list(
+        session.execute(
+            text(
+                """
+                /* orrery_audit:cognition_experiences */
+                SELECT experience.*
+                FROM character_experiences experience
+                JOIN chunk_metadata source_meta
+                  ON source_meta.chunk_id = experience.anchor_chunk_id
+                WHERE experience.character_entity_id = :entity_id
+                  AND experience.anchor_chunk_id <= :anchor_chunk_id
+                  AND source_meta.world_layer::text IS NOT DISTINCT FROM
+                      :world_layer
+                  AND (
+                      experience.world_time IS NULL
+                      OR experience.world_time <= :anchor_world_time
+                  )
+                  AND NOT EXISTS (
+                      SELECT 1 FROM backstory_secrets secret
+                      JOIN claims secret_claim ON secret_claim.id = secret.claim_id
+                      WHERE secret.claim_id = experience.claim_id
+                        AND COALESCE(
+                            secret.source_chunk_id, secret_claim.source_chunk_id
+                        ) <= :anchor_chunk_id
+                        AND (
+                            secret.revealed_by_chunk_id IS NULL
+                            OR secret.revealed_by_chunk_id > :anchor_chunk_id
+                        )
+                        AND secret.status <> 'retired'
+                  )
+                ORDER BY experience.anchor_chunk_id, experience.id
+                """
+            ),
+            {
+                "entity_id": entity_id,
+                "anchor_chunk_id": anchor_chunk_id,
+                "world_layer": anchor["world_layer"],
+                "anchor_world_time": anchor["world_time"],
+            },
+        ).mappings()
+    )
+    experiences: list[dict[str, Any]] = []
+    for row in experience_rows:
+        rendered = row["experience_text"] is not None
+        status = (
+            "invalidated"
+            if str(row["invalidation_status"]) == "invalidated"
+            else ("rendered" if rendered else "unrendered")
+        )
+        experiences.append(
+            {
+                "experience_id": int(row["id"]),
+                "anchor_chunk_id": int(row["anchor_chunk_id"]),
+                "basis": str(row["basis"]),
+                "claim_id": row["claim_id"],
+                "claim_awareness_id": row["claim_awareness_id"],
+                "location_id": row["location_id"],
+                "world_time": _iso(row["world_time"]),
+                "seed_summary": str(row["seed_summary"]),
+                "experience_text": row["experience_text"],
+                "emotion": row["emotion"],
+                "salience": float(row["salience"]),
+                "render_status": status,
+                "render_model": row["render_model"],
+                "renderer_version": row["renderer_version"],
+                "render_generation_id": (
+                    str(row["render_generation_id"])
+                    if row["render_generation_id"] is not None
+                    else None
+                ),
+                "source_digest": str(row["source_digest"]),
+                "world_layer": str(row["world_layer"]),
+                "invalidated_at": _iso(row["invalidated_at"]),
+                "source_event_ids": [
+                    int(event_id) for event_id in row["world_event_ids"]
+                ],
+            }
+        )
+
+    trace_rows = list(
+        session.execute(
+            text(
+                """
+                /* orrery_audit:cognition_recall_trace */
+                SELECT trace.*,
+                       COALESCE(claim.summary, experience.seed_summary) AS summary,
+                       CASE
+                           WHEN trace.candidate_kind = 'claim'
+                           THEN COALESCE(
+                               awareness.source_chunk_id, claim.source_chunk_id
+                           )
+                           ELSE experience.anchor_chunk_id
+                       END AS source_chunk_id
+                FROM orrery_recall_trace trace
+                LEFT JOIN claim_awareness awareness
+                  ON trace.candidate_kind = 'claim'
+                 AND awareness.id = trace.candidate_id
+                LEFT JOIN claims claim ON claim.id = awareness.claim_id
+                LEFT JOIN character_experiences experience
+                  ON trace.candidate_kind = 'experience'
+                 AND experience.id = trace.candidate_id
+                WHERE trace.character_entity_id = :entity_id
+                  AND trace.anchor_chunk_id = :anchor_chunk_id
+                ORDER BY trace.created_at, trace.id
+                """
+            ),
+            {"entity_id": entity_id, "anchor_chunk_id": anchor_chunk_id},
+        ).mappings()
+    )
+    recall_candidates: list[dict[str, Any]] = []
+    disclosure_results: list[dict[str, Any]] = []
+    knowledge_exposures: list[dict[str, Any]] = []
+    for row in trace_rows:
+        components = dict(row["score_components"])
+        disclosure = dict(components.get("disclosure") or {})
+        candidate = {
+            "trace_id": int(row["id"]),
+            "turn_id": str(row["turn_id"]),
+            "candidate_kind": str(row["candidate_kind"]),
+            "candidate_id": int(row["candidate_id"]),
+            "claim_id": row["claim_id"],
+            "summary": row["summary"],
+            "source_chunk_id": row["source_chunk_id"],
+            "decision": str(row["decision"]),
+            "reason": str(row["reason"]),
+            "mandatory": bool(row["mandatory"]),
+            "score": float(row["score"]),
+            "score_components": components,
+            "threshold": disclosure.get("threshold"),
+            "truncated": str(row["decision"]) == "excluded",
+            "created_at": _iso(row["created_at"]),
+        }
+        recall_candidates.append(candidate)
+        if row["decision"] in {"included", "suppressed"}:
+            disclosure_results.append(
+                {
+                    "trace_id": int(row["id"]),
+                    "candidate_kind": str(row["candidate_kind"]),
+                    "candidate_id": int(row["candidate_id"]),
+                    "allowed": row["decision"] == "included",
+                    "reason": str(row["reason"]),
+                    "blocking_reasons": (
+                        [] if row["decision"] == "included" else [str(row["reason"])]
+                    ),
+                    "components": disclosure,
+                }
+            )
+        if row["decision"] == "included":
+            knowledge_exposures.append(
+                {
+                    "kind": "knowledge_surfacing",
+                    "trace_id": int(row["id"]),
+                    "turn_id": str(row["turn_id"]),
+                    "candidate_kind": str(row["candidate_kind"]),
+                    "candidate_id": int(row["candidate_id"]),
+                    "summary": row["summary"],
+                    "position": len(knowledge_exposures),
+                }
+            )
+
+    proposal_exposures: list[dict[str, Any]] = []
+    for row in session.execute(
+        text(
+            """
+            /* orrery_audit:cognition_prompt_exposures */
+            SELECT exposure.id, exposure.kind, exposure.proposal_id,
+                   exposure.template_id, exposure.binding_hash,
+                   exposure.position, exposure.created_at,
+                   resolution.actor_entity_id AS resolution_actor_entity_id,
+                   resolution.brief, resolution.state_delta,
+                   pressure.actor_entity_id AS pressure_actor_entity_id,
+                   pressure.target_entity_id AS pressure_target_entity_id,
+                   pressure.prompt_text, pressure.bindings
+            FROM orrery_prompt_exposures exposure
+            LEFT JOIN orrery_resolutions resolution
+              ON exposure.kind = 'resolution'
+             AND resolution.tick_chunk_id = exposure.tick_chunk_id
+             AND resolution.template_id = exposure.template_id
+             AND resolution.binding_hash = exposure.binding_hash
+            LEFT JOIN orrery_scene_pressures pressure
+              ON exposure.kind = 'scene_pressure'
+             AND pressure.tick_chunk_id = exposure.tick_chunk_id
+             AND pressure.template_id = exposure.template_id
+             AND pressure.binding_hash = exposure.binding_hash
+            WHERE exposure.tick_chunk_id = :anchor_chunk_id
+              AND (
+                  resolution.actor_entity_id = :entity_id
+                  OR pressure.actor_entity_id = :entity_id
+                  OR pressure.target_entity_id = :entity_id
+              )
+            ORDER BY exposure.kind, exposure.position, exposure.id
+            """
+        ),
+        {"entity_id": entity_id, "anchor_chunk_id": anchor_chunk_id},
+    ).mappings():
+        proposal_exposures.append(
+            {
+                "kind": str(row["kind"]),
+                "exposure_id": int(row["id"]),
+                "proposal_id": str(row["proposal_id"]),
+                "template_id": str(row["template_id"]),
+                "binding_hash": str(row["binding_hash"]),
+                "position": int(row["position"]),
+                "created_at": _iso(row["created_at"]),
+                "actor_entity_id": (
+                    row["resolution_actor_entity_id"]
+                    if row["kind"] == "resolution"
+                    else row["pressure_actor_entity_id"]
+                ),
+                "target_entity_id": row["pressure_target_entity_id"],
+                "payload": (
+                    {
+                        "brief": row["brief"],
+                        "state_delta": row["state_delta"],
+                    }
+                    if row["kind"] == "resolution"
+                    else {
+                        "prompt_text": row["prompt_text"],
+                        "bindings": row["bindings"],
+                    }
+                ),
+            }
+        )
+
+    experience_ids = [row["experience_id"] for row in experiences]
+    jobs: list[dict[str, Any]] = []
+    if experience_ids:
+        for row in session.execute(
+            text(
+                """
+                /* orrery_audit:cognition_experience_jobs */
+                SELECT *
+                FROM character_experience_jobs
+                WHERE experience_ids && CAST(:experience_ids AS bigint[])
+                ORDER BY boundary_chunk_id, batch_ordinal, id
+                """
+            ),
+            {"experience_ids": experience_ids},
+        ).mappings():
+            jobs.append(
+                {
+                    "job_id": int(row["id"]),
+                    "state": str(row["state"]),
+                    "attempts": int(row["attempts"]),
+                    "available_at": _iso(row["available_at"]),
+                    "lease_until": _iso(row["lease_until"]),
+                    "locked_by": row["locked_by"],
+                    "lease_nonce": (
+                        str(row["lease_nonce"])
+                        if row["lease_nonce"] is not None
+                        else None
+                    ),
+                    "last_error": row["last_error"],
+                    "requested_model": str(row["requested_model"]),
+                    "source_digest": str(row["source_digest"]),
+                    "experience_ids": list(row["experience_ids"]),
+                    "timeline_identity": {
+                        "world_layer": str(row["world_layer"]),
+                        "boundary_chunk_id": int(row["boundary_chunk_id"]),
+                        "boundary_season": int(row["boundary_season"]),
+                        "boundary_episode": int(row["boundary_episode"]),
+                        "boundary_scene": int(row["boundary_scene"]),
+                        "scene_end_chunk_id": int(row["scene_end_chunk_id"]),
+                        "scene_end_season": int(row["scene_end_season"]),
+                        "scene_end_episode": int(row["scene_end_episode"]),
+                        "scene_end_scene": int(row["scene_end_scene"]),
+                    },
+                }
+            )
+
+    sibling_accounts = [
+        {
+            "claim_id": int(row["claim_id"]),
+            "world_event_id": int(row["world_event_id"]),
+            "summary": str(row["summary"]),
+            "scope": str(row["scope"]),
+            "account_label": str(row["account_label"]),
+            "account_payload": row["account_payload"],
+            "distorted_from_claim_id": row["distorted_from_claim_id"],
+            "distortion_min_depth": row["distortion_min_depth"],
+        }
+        for row in session.execute(
+            text(
+                """
+                /* orrery_audit:cognition_unpossessed_siblings */
+                WITH anchor AS (
+                    SELECT cm.world_time, nc.created_at
+                    FROM chunk_metadata cm
+                    JOIN narrative_chunks nc ON nc.id = cm.chunk_id
+                    WHERE cm.chunk_id = :anchor_chunk_id
+                ),
+                possessed_incidents AS (
+                    SELECT DISTINCT claim.world_event_id
+                    FROM claim_awareness awareness
+                    JOIN claims claim ON claim.id = awareness.claim_id
+                    CROSS JOIN anchor
+                    WHERE awareness.knower_entity_id = :entity_id
+                      AND (
+                          (
+                              awareness.source_chunk_id IS NOT NULL
+                              AND awareness.source_chunk_id <= :anchor_chunk_id
+                          )
+                          OR (
+                              awareness.source_chunk_id IS NULL
+                              AND awareness.created_at <= anchor.created_at
+                          )
+                      )
+                      AND (
+                          awareness.acquired_at_world_time IS NULL
+                          OR awareness.acquired_at_world_time <= anchor.world_time
+                      )
+                )
+                SELECT claim.id AS claim_id, claim.world_event_id,
+                       claim.summary, claim.scope, claim.account_label,
+                       claim.account_payload, claim.distorted_from_claim_id,
+                       claim.distortion_min_depth
+                FROM claims claim
+                JOIN possessed_incidents incident
+                  ON incident.world_event_id = claim.world_event_id
+                JOIN world_events event ON event.id = claim.world_event_id
+                CROSS JOIN anchor
+                WHERE event.tick_chunk_id <= :anchor_chunk_id
+                  AND NOT EXISTS (
+                      SELECT 1 FROM claim_awareness awareness
+                      WHERE awareness.claim_id = claim.id
+                        AND awareness.knower_entity_id = :entity_id
+                        AND (
+                            (
+                                awareness.source_chunk_id IS NOT NULL
+                                AND awareness.source_chunk_id <= :anchor_chunk_id
+                            )
+                            OR (
+                                awareness.source_chunk_id IS NULL
+                                AND awareness.created_at <= anchor.created_at
+                            )
+                        )
+                        AND (
+                            awareness.acquired_at_world_time IS NULL
+                            OR awareness.acquired_at_world_time <= anchor.world_time
+                        )
+                  )
+                ORDER BY claim.world_event_id, claim.id
+                """
+            ),
+            {"entity_id": entity_id, "anchor_chunk_id": anchor_chunk_id},
+        ).mappings()
+    ]
+    latent_secrets = [
+        {
+            "secret_id": int(row["secret_id"]),
+            "claim_id": int(row["claim_id"]),
+            "world_event_id": int(row["world_event_id"]),
+            "summary": str(row["summary"]),
+            "account_payload": row["account_payload"],
+            "gate_template_id": str(row["gate_template_id"]),
+            "holder_entity_id": int(row["holder_entity_id"]),
+            "source_chunk_id": row["source_chunk_id"],
+            "status": str(row["status_at_anchor"]),
+        }
+        for row in session.execute(
+            text(
+                """
+                /* orrery_audit:cognition_latent_secrets */
+                SELECT secret.id AS secret_id, secret.claim_id,
+                       claim.world_event_id,
+                       claim.summary, claim.account_payload,
+                       secret.gate_template_id, secret.holder_entity_id,
+                       secret.source_chunk_id,
+                       'latent'::text AS status_at_anchor
+                FROM backstory_secrets secret
+                JOIN claims claim ON claim.id = secret.claim_id
+                JOIN world_events event ON event.id = claim.world_event_id
+                WHERE secret.holder_entity_id = :entity_id
+                  AND COALESCE(
+                      secret.source_chunk_id, claim.source_chunk_id
+                  ) <= :anchor_chunk_id
+                  AND (
+                      secret.revealed_by_chunk_id IS NULL
+                      OR secret.revealed_by_chunk_id > :anchor_chunk_id
+                  )
+                  AND secret.status <> 'retired'
+                  AND event.tick_chunk_id <= :anchor_chunk_id
+                ORDER BY secret.id
+                """
+            ),
+            {"entity_id": entity_id, "anchor_chunk_id": anchor_chunk_id},
+        ).mappings()
+    ]
+
+    canonical_event_ids = (
+        {int(row["world_event_id"]) for row in account_rows}
+        | {int(row["world_event_id"]) for row in sibling_accounts}
+        | {int(row["world_event_id"]) for row in latent_secrets}
+    )
+    canonical_event_ids.update(
+        int(event_id) for row in experience_rows for event_id in row["world_event_ids"]
+    )
+    canonical_source_events: list[dict[str, Any]] = []
+    if canonical_event_ids:
+        for row in session.execute(
+            text(
+                """
+                /* orrery_audit:cognition_canonical_source_events */
+                SELECT event.id, event.event_type, event.tick_chunk_id,
+                       event.actor_entity_id, event.target_entity_id,
+                       event.location_id, event.world_time, event.payload,
+                       event_type.severity::text AS severity
+                FROM world_events event
+                JOIN event_types event_type ON event_type.type = event.event_type
+                WHERE event.id = ANY(:event_ids)
+                ORDER BY event.tick_chunk_id, event.id
+                """
+            ),
+            {"event_ids": sorted(canonical_event_ids)},
+        ).mappings():
+            canonical_source_events.append(
+                {
+                    "event_id": int(row["id"]),
+                    "event_type": str(row["event_type"]),
+                    "severity": row["severity"],
+                    "tick_chunk_id": int(row["tick_chunk_id"]),
+                    "actor_entity_id": row["actor_entity_id"],
+                    "target_entity_id": row["target_entity_id"],
+                    "location_id": row["location_id"],
+                    "world_time": _iso(row["world_time"]),
+                    "payload": row["payload"],
+                }
+            )
+
+    render_generation_ids = sorted(
+        {
+            row["render_generation_id"]
+            for row in experiences
+            if row["render_generation_id"] is not None
+        }
+    )
+    return {
+        "entity": {"entity_id": entity_id, "name": str(character["name"])},
+        "anchor": {
+            "chunk_id": int(anchor["chunk_id"]),
+            "world_time": _iso(anchor["world_time"]),
+            "world_layer": str(anchor["world_layer"]),
+            "season": int(anchor["season"]),
+            "episode": int(anchor["episode"]),
+            "scene": int(anchor["scene"]),
+        },
+        "actor_facing": {
+            "possessed_accounts": accounts,
+            "experiences": experiences,
+            "recall_candidates": recall_candidates,
+            "recall_truncated": any(row["truncated"] for row in recall_candidates),
+            "disclosure_results": disclosure_results,
+            "prompt_exposure": {
+                "orrery_proposals": proposal_exposures,
+                "knowledge_surfacing": knowledge_exposures,
+            },
+            "experience_jobs": jobs,
+            "generation_identity": {
+                "render_generation_ids": render_generation_ids,
+                "timeline": {
+                    "world_layer": str(anchor["world_layer"]),
+                    "season": int(anchor["season"]),
+                    "episode": int(anchor["episode"]),
+                    "scene": int(anchor["scene"]),
+                },
+            },
+        },
+        "effective_config": _cognition_effective_config(orrery_settings),
+        "canonical_truth": {
+            "guarded": True,
+            "source_events": canonical_source_events,
+            "unpossessed_sibling_accounts": sibling_accounts,
+            "latent_secrets": latent_secrets,
+        },
+    }
+
+
 def entity_context(
     session: Any,
     entity_ids: Iterable[int],
