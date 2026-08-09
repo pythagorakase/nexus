@@ -8,7 +8,7 @@ applies scaled boosting based on how well a document's temporal position matches
 
 import re
 import logging
-from typing import Dict, List, Optional, Any, Tuple, Union, Set
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
 
 from nexus.memory.context_state import is_retrograde_summary
 
@@ -288,6 +288,8 @@ def execute_time_aware_search(
     filters: Optional[Dict[str, Any]] = None,
     top_k: int = 10,
     idf_dict=None,
+    present_character_ids: Optional[Sequence[int]] = None,
+    presence_boost_factor: float = 0.0,
 ) -> List[Dict[str, Any]]:
     """
     Execute a time-aware search using continuous temporal scaling.
@@ -303,6 +305,8 @@ def execute_time_aware_search(
         filters: Optional metadata filters
         top_k: Maximum number of results to return
         idf_dict: Optional IDF dictionary for term weighting
+        present_character_ids: Character IDs present in the retrieval anchor
+        presence_boost_factor: Additive score boost for co-present narrative chunks
 
     Returns:
         List of matching chunks with scores and metadata
@@ -333,15 +337,17 @@ def execute_time_aware_search(
                 f"Query is temporally neutral, using standard hybrid search: {query_text}"
             )
             return db_access.execute_hybrid_search(
-                db_url,
-                query_text,
-                query_embedding,
-                model_key,
-                vector_weight,
-                text_weight,
-                filters,
-                top_k,
-                idf_dict,
+                db_url=db_url,
+                query_text=query_text,
+                query_embedding=query_embedding,
+                model_key=model_key,
+                vector_weight=vector_weight,
+                text_weight=text_weight,
+                filters=filters,
+                top_k=top_k,
+                idf_dict=idf_dict,
+                present_character_ids=present_character_ids,
+                presence_boost_factor=presence_boost_factor,
             )
 
         # For temporal queries, perform hybrid search but apply temporal boosting
@@ -364,22 +370,28 @@ def execute_time_aware_search(
             password=password,
             database=database,
         )
+        conn.set_session(readonly=True)
 
         # Get total number of chunks for normalization
-        total_chunks = get_total_chunks(conn)
+        try:
+            total_chunks = get_total_chunks(conn)
+        finally:
+            conn.close()
         logger.debug(f"Total chunks for temporal normalization: {total_chunks}")
 
         # Execute standard hybrid search but with increased result count
         original_results = db_access.execute_hybrid_search(
-            db_url,
-            query_text,
-            query_embedding,
-            model_key,
-            vector_weight,
-            text_weight,
-            filters,
-            top_k * 2,  # Get more results for reranking
-            idf_dict,
+            db_url=db_url,
+            query_text=query_text,
+            query_embedding=query_embedding,
+            model_key=model_key,
+            vector_weight=vector_weight,
+            text_weight=text_weight,
+            filters=filters,
+            top_k=top_k * 2,  # Get more results for reranking
+            idf_dict=idf_dict,
+            present_character_ids=present_character_ids,
+            presence_boost_factor=presence_boost_factor,
         )
 
         # Apply temporal boosting to each result using the continuous approach
@@ -434,15 +446,17 @@ def execute_time_aware_search(
         # Fall back to standard hybrid search
         logger.info("Falling back to standard hybrid search after error")
         return db_access.execute_hybrid_search(
-            db_url,
-            query_text,
-            query_embedding,
-            model_key,
-            vector_weight,
-            text_weight,
-            filters,
-            top_k,
-            idf_dict,
+            db_url=db_url,
+            query_text=query_text,
+            query_embedding=query_embedding,
+            model_key=model_key,
+            vector_weight=vector_weight,
+            text_weight=text_weight,
+            filters=filters,
+            top_k=top_k,
+            idf_dict=idf_dict,
+            present_character_ids=present_character_ids,
+            presence_boost_factor=presence_boost_factor,
         )
 
 
@@ -457,6 +471,8 @@ def execute_multi_model_time_aware_search(
     filters: Optional[Dict[str, Any]] = None,
     top_k: int = 10,
     idf_dict=None,
+    present_character_ids: Optional[Sequence[int]] = None,
+    presence_boost_factor: float = 0.0,
 ) -> List[Dict[str, Any]]:
     """
     Execute a time-aware search using multiple embedding models simultaneously.
@@ -472,6 +488,8 @@ def execute_multi_model_time_aware_search(
         filters: Optional metadata filters
         top_k: Maximum number of results to return
         idf_dict: Optional IDF dictionary for term weighting
+        present_character_ids: Character IDs present in the retrieval anchor
+        presence_boost_factor: Additive score boost for co-present narrative chunks
 
     Returns:
         List of matching chunks with scores and metadata
@@ -502,15 +520,17 @@ def execute_multi_model_time_aware_search(
                 f"Query is temporally neutral, using standard multi-model hybrid search: {query_text}"
             )
             return db_access.execute_multi_model_hybrid_search(
-                db_url,
-                query_text,
-                query_embeddings,
-                model_weights,
-                vector_weight,
-                text_weight,
-                filters,
-                top_k,
-                idf_dict,
+                db_url=db_url,
+                query_text=query_text,
+                query_embeddings=query_embeddings,
+                model_weights=model_weights,
+                vector_weight=vector_weight,
+                text_weight=text_weight,
+                filters=filters,
+                top_k=top_k,
+                idf_dict=idf_dict,
+                present_character_ids=present_character_ids,
+                presence_boost_factor=presence_boost_factor,
             )
 
         # For temporal queries, perform multi-model hybrid search but apply temporal boosting
@@ -533,22 +553,28 @@ def execute_multi_model_time_aware_search(
             password=password,
             database=database,
         )
+        conn.set_session(readonly=True)
 
         # Get total number of chunks for normalization
-        total_chunks = get_total_chunks(conn)
+        try:
+            total_chunks = get_total_chunks(conn)
+        finally:
+            conn.close()
         logger.debug(f"Total chunks for temporal normalization: {total_chunks}")
 
         # Execute standard multi-model hybrid search but with increased result count
         original_results = db_access.execute_multi_model_hybrid_search(
-            db_url,
-            query_text,
-            query_embeddings,
-            model_weights,
-            vector_weight,
-            text_weight,
-            filters,
-            top_k * 2,  # Get more results for reranking
-            idf_dict,
+            db_url=db_url,
+            query_text=query_text,
+            query_embeddings=query_embeddings,
+            model_weights=model_weights,
+            vector_weight=vector_weight,
+            text_weight=text_weight,
+            filters=filters,
+            top_k=top_k * 2,  # Get more results for reranking
+            idf_dict=idf_dict,
+            present_character_ids=present_character_ids,
+            presence_boost_factor=presence_boost_factor,
         )
 
         # Apply temporal boosting to each result using the continuous approach
@@ -603,13 +629,15 @@ def execute_multi_model_time_aware_search(
         # Fall back to standard multi-model hybrid search
         logger.info("Falling back to standard multi-model hybrid search after error")
         return db_access.execute_multi_model_hybrid_search(
-            db_url,
-            query_text,
-            query_embeddings,
-            model_weights,
-            vector_weight,
-            text_weight,
-            filters,
-            top_k,
-            idf_dict,
+            db_url=db_url,
+            query_text=query_text,
+            query_embeddings=query_embeddings,
+            model_weights=model_weights,
+            vector_weight=vector_weight,
+            text_weight=text_weight,
+            filters=filters,
+            top_k=top_k,
+            idf_dict=idf_dict,
+            present_character_ids=present_character_ids,
+            presence_boost_factor=presence_boost_factor,
         )

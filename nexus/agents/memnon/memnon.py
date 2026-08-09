@@ -21,7 +21,7 @@ import logging
 import json
 import time
 import requests
-from typing import Dict, List, Tuple, Optional, Union, Any, Set
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
 from datetime import datetime, date
 from pathlib import Path
 
@@ -1758,6 +1758,7 @@ class MEMNON:
         filters: Optional[Dict[str, Any]] = None,
         k: Optional[int] = None,
         use_hybrid: bool = True,
+        present_character_ids: Optional[Sequence[int]] = None,
     ) -> Dict[str, Any]:
         """
         Execute a query against memory and return matching results.
@@ -1768,6 +1769,7 @@ class MEMNON:
             filters: Optional metadata filters
             k: Maximum number of results to return
             use_hybrid: Whether to use hybrid search
+            present_character_ids: Character IDs present in the retrieval anchor
 
         Returns:
             Dictionary containing query results and metadata
@@ -1856,6 +1858,7 @@ class MEMNON:
                         query_text=strategy["query"],
                         filters=strategy.get("filters"),
                         top_k=strategy.get("limit", k),
+                        present_character_ids=present_character_ids,
                     )
                     all_results.extend(results)
 

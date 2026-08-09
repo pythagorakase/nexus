@@ -27,6 +27,24 @@ def _nexus_toml_dict() -> dict:
         return tomllib.load(handle)
 
 
+@pytest.mark.parametrize(
+    "field",
+    [
+        "presence_boost_enabled",
+        "presence_boost_factor",
+        "presence_boost_factors",
+    ],
+)
+def test_presence_boost_settings_are_required(field: str) -> None:
+    """Deleting any presence arm key must fail full config validation."""
+
+    raw = _nexus_toml_dict()
+    del raw["memnon"]["retrieval"]["hybrid_search"][field]
+
+    with pytest.raises(ValidationError, match=field):
+        Settings(**raw)
+
+
 def test_model_config_rejects_unknown_default_model():
     """Legacy display defaults must stay anchored to registered model IDs."""
     with pytest.raises(ValidationError, match="default_model references unknown"):

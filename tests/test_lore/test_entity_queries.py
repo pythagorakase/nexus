@@ -10,6 +10,7 @@ from nexus.agents.lore.utils.entity_queries import (
     fetch_all_characters_with_references,
     fetch_all_places_with_references,
     fetch_place_ids_by_names,
+    fetch_present_character_ids,
 )
 
 
@@ -176,6 +177,26 @@ class _PlaceQuerySession:
             return _Result(list(self.places.values()))
 
         raise AssertionError(f"Unexpected place query: {sql}")
+
+
+def test_present_character_ids_use_exact_chunk_roster() -> None:
+    """Presence retrieval carries only sorted present rows from its anchor."""
+
+    class PresenceSession:
+        def execute(
+            self, statement: Any, parameters: Optional[Dict[str, Any]] = None
+        ) -> _Result:
+            assert "reference::text = 'present'" in str(statement)
+            assert parameters == {"chunk_id": 42}
+            return _Result(
+                [
+                    _Row(character_id=9),
+                    _Row(character_id=3),
+                    _Row(character_id=9),
+                ]
+            )
+
+    assert fetch_present_character_ids(PresenceSession(), 42) == [3, 9]
 
 
 def test_user_character_does_not_consume_non_user_character_cap() -> None:

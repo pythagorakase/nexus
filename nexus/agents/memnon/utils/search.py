@@ -8,7 +8,7 @@ across different data sources.
 import logging
 import json
 import re
-from typing import Dict, List, Optional, Any, Set, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
 
 from nexus.agents.orrery.reconstruction import playable_narrative_predicate
 
@@ -75,6 +75,8 @@ class SearchManager:
         query_text: str,
         filters: Optional[Dict[str, Any]] = None,
         top_k: Optional[int] = None,
+        present_character_ids: Optional[Sequence[int]] = None,
+        presence_boost_enabled: Optional[bool] = None,
     ) -> List[Dict[str, Any]]:
         """
         Perform hybrid search using both vector embeddings and text search.
@@ -84,6 +86,8 @@ class SearchManager:
             query_text: The query text
             filters: Optional metadata filters to apply
             top_k: Maximum number of results to return
+            present_character_ids: Character IDs present in the retrieval anchor
+            presence_boost_enabled: Optional measurement override for the config flag
 
         Returns:
             List of matching chunks with scores and metadata
@@ -102,6 +106,20 @@ class SearchManager:
             query_info = self.query_analyzer.analyze_query(query_text)
             query_type = query_info.get("type", "general")
             logger.debug(f"Query classified as type: {query_type}")
+
+            apply_presence_boost = (
+                hybrid_config.get("presence_boost_enabled", False)
+                if presence_boost_enabled is None
+                else presence_boost_enabled
+            )
+            presence_boost_factor = 0.0
+            if apply_presence_boost and present_character_ids:
+                presence_boost_factor = hybrid_config.get(
+                    "presence_boost_factors", {}
+                ).get(
+                    query_type,
+                    hybrid_config.get("presence_boost_factor", 0.15),
+                )
 
             # Get weights based on query type or use defaults
             if hybrid_config.get(
@@ -217,6 +235,8 @@ class SearchManager:
                     filters=filters,
                     top_k=top_k,
                     idf_dict=self.idf_dictionary,
+                    present_character_ids=present_character_ids,
+                    presence_boost_factor=presence_boost_factor,
                 )
             else:
                 # Use standard multi-model hybrid search for non-temporal queries
@@ -235,6 +255,8 @@ class SearchManager:
                     filters=filters,
                     top_k=top_k,
                     idf_dict=self.idf_dictionary,
+                    present_character_ids=present_character_ids,
+                    presence_boost_factor=presence_boost_factor,
                 )
 
             logger.info(f"Multi-model hybrid search returned {len(results)} results")

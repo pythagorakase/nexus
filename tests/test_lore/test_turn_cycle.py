@@ -31,7 +31,10 @@ class DummyLore:
                         "apex_context_window": 75_000,
                         "prompt_overhead_tokens": 0,
                     }
-                }
+                },
+                "MEMNON": {
+                    "retrieval": {"hybrid_search": {"presence_boost_enabled": False}}
+                },
             },
             "memory": {},
         }
@@ -802,6 +805,132 @@ def test_deep_queries_use_raw_chunk_only(turn_manager: TurnCycleManager) -> None
         "raw_chunk": 1,
         "llm_generated": 0,
     }
+
+
+@pytest.mark.parametrize("presence_boost_enabled", [False, True])
+def test_turn_phases_gate_and_thread_produced_presence_roster(
+    monkeypatch: pytest.MonkeyPatch,
+    presence_boost_enabled: bool,
+) -> None:
+    """The real entity phase produces the exact roster only for the enabled arm."""
+
+    roster_query_count = 0
+
+    class Row:
+        def __init__(self, character_id: int) -> None:
+            self.character_id = character_id
+
+    class Result:
+        def __init__(self, rows: list[Any] | None = None) -> None:
+            self.rows = rows or []
+
+        def fetchall(self) -> list[Any]:
+            return self.rows
+
+        def fetchone(self) -> Any | None:
+            return self.rows[0] if self.rows else None
+
+        def __iter__(self):
+            return iter(self.rows)
+
+    class ProductionSession:
+        def __enter__(self) -> "ProductionSession":
+            return self
+
+        def __exit__(self, *_args: Any) -> None:
+            return None
+
+        def execute(
+            self, statement: Any, parameters: Dict[str, Any] | None = None
+        ) -> Result:
+            nonlocal roster_query_count
+            sql = " ".join(str(statement).split())
+            if (
+                "SELECT character_id FROM chunk_character_references" in sql
+                and "reference::text = 'present'" in sql
+            ):
+                if not presence_boost_enabled:
+                    raise AssertionError("disabled arm executed the roster query")
+                assert parameters == {"chunk_id": 42}
+                roster_query_count += 1
+                return Result([Row(9), Row(3)])
+            return Result()
+
+    class DummyMemnon:
+        def __init__(self) -> None:
+            self.threaded_present_ids: list[int] | None = None
+
+        Session = ProductionSession
+
+        def query_memory(
+            self,
+            query: str,
+            k: int,
+            use_hybrid: bool,
+            **kwargs: Any,
+        ) -> Dict[str, list[Dict[str, Any]]]:
+            present_ids = kwargs.get("present_character_ids")
+            self.threaded_present_ids = (
+                list(present_ids) if present_ids is not None else None
+            )
+            return {"results": []}
+
+    class PresenceLore:
+        def __init__(self) -> None:
+            self.settings = load_settings_as_dict()
+            self.settings["Agent Settings"]["MEMNON"]["retrieval"]["hybrid_search"][
+                "presence_boost_enabled"
+            ] = presence_boost_enabled
+            self.memnon = DummyMemnon()
+            self.memory_manager = None
+            self.token_manager = None
+            self.enable_logon = True
+
+    monkeypatch.setattr(
+        turn_cycle_module,
+        "fetch_all_characters_with_references",
+        lambda *_args, **_kwargs: {"baseline": [], "featured": []},
+    )
+    monkeypatch.setattr(
+        turn_cycle_module,
+        "fetch_all_places_with_references",
+        lambda *_args, **_kwargs: {"baseline": [], "featured": []},
+    )
+    monkeypatch.setattr(
+        turn_cycle_module,
+        "fetch_all_factions_with_references",
+        lambda *_args, **_kwargs: {"baseline": [], "featured": []},
+    )
+
+    lore = PresenceLore()
+    manager = TurnCycleManager(lore)
+    ctx = TurnContext(
+        turn_id="turn_presence_retrieval",
+        user_input="Continue.",
+        start_time=time.time(),
+        target_chunk_id=42,
+        provider_wire_type="local",
+        provider_name="local",
+        warm_slice=[
+            {
+                "chunk_id": 42,
+                "is_target": True,
+                "full_text": "Who is standing beside the protagonist?",
+            }
+        ],
+    )
+
+    asyncio.run(manager.query_entity_states(ctx))
+    asyncio.run(manager.execute_deep_queries(ctx))
+
+    if presence_boost_enabled:
+        assert roster_query_count == 1
+        assert ctx.present_character_ids == [3, 9]
+        assert lore.memnon.threaded_present_ids == [3, 9]
+    else:
+        assert roster_query_count == 0
+        assert ctx.present_character_ids == []
+        assert lore.memnon.threaded_present_ids is None
 
 
 def test_deep_queries_can_skip_without_raw_text(

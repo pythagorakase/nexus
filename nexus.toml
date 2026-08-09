@@ -944,6 +944,8 @@ use_query_type_weights = true
 use_query_type_temporal_factors = true
 target_model = "inf-retriever-v1-1.5b"
 temporal_boost_factor = 0.6
+presence_boost_enabled = false  # Measured arm; enable only after live evaluation
+presence_boost_factor = 0.15
 
 [memnon.retrieval.hybrid_search.weights_by_query_type.character]
 vector = 0.8
@@ -977,6 +979,15 @@ event = 0.4
 location = 0.25
 theme = 0.3
 general = 0.4
+
+[memnon.retrieval.hybrid_search.presence_boost_factors]
+# Co-presence is most informative for character and relationship queries.
+character = 0.25
+relationship = 0.25
+event = 0.10
+location = 0.05
+theme = 0.05
+general = 0.15
 
 [memnon.retrieval.cross_encoder_reranking]
 # Cross-encoder reranking for improved relevance.
