@@ -114,6 +114,16 @@ _ACTOR_TARGET_FACTION_SLOTS: Tuple[Slot, ...] = (
 NOT_APPLICABLE_REASON = "no_target_bound"
 
 
+class CognitionTraceInputError(ValueError):
+    """A cognition trace identifier failed database-backed validation."""
+
+    def __init__(self, field: str, value: int, reason: str) -> None:
+        self.field = field
+        self.value = value
+        self.reason = reason
+        super().__init__(f"{field}={value}: {reason}")
+
+
 @dataclass(frozen=True, slots=True)
 class ActorGroupExplanation:
     """All explained stacks for one off-screen actor in one tick.
@@ -1338,7 +1348,11 @@ def cognition_trace(
         .first()
     )
     if anchor is None:
-        raise ValueError(f"Anchor chunk {anchor_chunk_id} has no timeline metadata")
+        raise CognitionTraceInputError(
+            "anchor_chunk_id",
+            anchor_chunk_id,
+            "narrative chunk has no timeline metadata",
+        )
     character = (
         session.execute(
             text(
@@ -1357,7 +1371,11 @@ def cognition_trace(
         .first()
     )
     if character is None:
-        raise ValueError(f"Entity {entity_id} is not an active character")
+        raise CognitionTraceInputError(
+            "entity_id",
+            entity_id,
+            "entity is not an active character",
+        )
 
     account_rows = list(
         session.execute(
