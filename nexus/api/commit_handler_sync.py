@@ -679,7 +679,7 @@ def commit_incubator_to_database_sync(
             )
             if experience_count:
                 logger.info(
-                    "Inserted %s character experience seeds for chunk %s",
+                    "Inserted %s character experience seeds through chunk %s",
                     experience_count,
                     chunk_id,
                 )

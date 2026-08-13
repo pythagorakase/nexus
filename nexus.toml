@@ -380,6 +380,7 @@ duration_hours = 12
 
 [orrery.experiences]
 enabled = true
+include_player_character = false
 model = "@openai.gaia"
 dossier_fields = ["summary", "background", "personality"]
 minimum_dossier_fields = 2

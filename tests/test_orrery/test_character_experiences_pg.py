@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from copy import deepcopy
 from contextlib import contextmanager
+from copy import deepcopy
 from datetime import datetime, timezone
+import json
 import os
 from pathlib import Path
 import re
@@ -20,6 +21,16 @@ from sqlalchemy import create_engine
 from sqlalchemy.engine import URL
 from sqlalchemy.orm import Session
 
+from nexus.agents.logon.skald_wire import (
+    CharacterRef,
+    PlaceRef,
+    PresenceBaseline,
+    PresenceDelta,
+    SceneReset,
+    SkaldTurnWire,
+    hydrate_skald_turn,
+)
+from nexus.agents.orrery.events import commit_orrery_tick_sync
 from nexus.agents.orrery.experiences import (
     ExperienceRecollection,
     ExperienceRenderBatch,
@@ -31,25 +42,22 @@ from nexus.agents.orrery.experiences import (
 )
 from nexus.agents.orrery.resolver import resolve_dry_run
 from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
-from nexus.agents.logon.skald_wire import (
-    CharacterRef,
-    PlaceRef,
-    PresenceBaseline,
-    PresenceDelta,
-    SceneReset,
-    SkaldTurnWire,
-    hydrate_skald_turn,
-)
 from nexus.api.commit_handler_sync import commit_incubator_to_database_sync
-from nexus.memory.manager import empty_pass2_baseline
 from nexus.api.lore_adapter import response_to_incubator
 from nexus.config import load_settings_as_dict
+from nexus.memory.manager import empty_pass2_baseline
 
 
 pytestmark = pytest.mark.requires_postgres
 
 ROOT = Path(__file__).parents[2]
-MIGRATION_SQL = (ROOT / "migrations" / "104_character_experiences.sql").read_text()
+MIGRATION_SQL = "\n".join(
+    (ROOT / "migrations" / name).read_text()
+    for name in (
+        "104_character_experiences.sql",
+        "110_experience_formation_sweep.sql",
+    )
+)
 
 
 def _connect(dbname: str) -> Any:
@@ -86,6 +94,22 @@ def _disposable_database() -> Iterator[str]:
             with conn:
                 with conn.cursor() as cur:
                     cur.execute(MIGRATION_SQL)
+                    cur.execute(
+                        """
+                        INSERT INTO global_variables (id, base_timestamp)
+                        VALUES (true, %s)
+                        ON CONFLICT (id) DO UPDATE
+                        SET base_timestamp = EXCLUDED.base_timestamp
+                        """,
+                        (datetime(2196, 7, 6, 23, 0, tzinfo=timezone.utc),),
+                    )
+                    fixture_character_id, _fixture_entity_id = _insert_character(
+                        cur,
+                        "Fixture Player",
+                        summary="The canonical test-only player identity.",
+                        background="Exists so default exclusion never guesses.",
+                    )
+                    _set_player_character(cur, fixture_character_id)
         finally:
             conn.close()
         yield dbname
@@ -141,6 +165,40 @@ def _insert_character(
         (name, entity_id, summary, background),
     )
     return int(cur.fetchone()[0]), entity_id
+
+
+def _set_player_character(cur: Any, character_id: int) -> None:
+    base_timestamp = datetime(2196, 7, 6, 23, 0, tzinfo=timezone.utc)
+    cur.execute(
+        """
+        INSERT INTO global_variables (id, user_character, base_timestamp)
+        VALUES (true, %s, %s)
+        ON CONFLICT (id) DO UPDATE
+        SET user_character = EXCLUDED.user_character,
+            base_timestamp = EXCLUDED.base_timestamp
+        """,
+        (character_id, base_timestamp),
+    )
+    assert cur.rowcount == 1
+
+
+def _set_only_need_due(
+    cur: Any,
+    *,
+    character_entity_id: int,
+    need_type: str,
+) -> None:
+    evaluated_at = datetime(2196, 7, 6, 23, 0, tzinfo=timezone.utc)
+    cur.execute(
+        """
+        UPDATE character_need_states
+        SET debt_score = CASE WHEN need_type = %s THEN 60 ELSE 0 END,
+            last_evaluated_at = %s
+        WHERE character_entity_id = %s
+        """,
+        (need_type, evaluated_at, character_entity_id),
+    )
+    assert cur.rowcount > 0
 
 
 def _insert_place(cur: Any, name: str) -> int:
@@ -253,6 +311,103 @@ def _stage_incubator(
     )
 
 
+def _accept_turn(
+    conn: Any,
+    *,
+    parent_chunk_id: int,
+    proposal: Any,
+    characters: list[tuple[int, str]],
+) -> int:
+    session_id = str(uuid4())
+    with conn:
+        with conn.cursor() as cur:
+            _stage_incubator(
+                cur,
+                session_id=session_id,
+                parent_chunk_id=parent_chunk_id,
+                proposal=proposal,
+                characters=characters,
+                scene_boundary=False,
+            )
+    return commit_incubator_to_database_sync(conn, session_id, slot=708)
+
+
+def _setup_due_actor(conn: Any) -> tuple[int, int, int]:
+    with conn:
+        with conn.cursor() as cur:
+            parent_chunk_id = _insert_chunk(cur, "Issue 708 historical anchor")
+            player_character_id, _player_entity_id = _insert_character(
+                cur,
+                "Player Observer",
+                summary="The player character remains outside this receipt.",
+                background="A complete but uninvolved player dossier.",
+            )
+            actor_character_id, actor_entity_id = _insert_character(
+                cur,
+                "Aster Vale",
+                summary="A courier who keeps moving.",
+                background="Raised among the night trains.",
+            )
+            _set_player_character(cur, player_character_id)
+            cur.execute(
+                """
+                INSERT INTO world_events (
+                    event_type, tick_chunk_id, actor_entity_id,
+                    world_layer, source, changed_fields, payload
+                ) VALUES (
+                    'slept', %s, %s, 'primary', 'resolver', '{}', '{}'::jsonb
+                )
+                """,
+                (parent_chunk_id, actor_entity_id),
+            )
+            _set_only_need_due(
+                cur,
+                character_entity_id=actor_entity_id,
+                need_type="sleep",
+            )
+    return parent_chunk_id, actor_character_id, actor_entity_id
+
+
+def _seed_bytes_for_event(conn: Any, event_id: int) -> bytes:
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            SELECT character_entity_id, anchor_chunk_id, world_event_ids,
+                   claim_id, claim_awareness_id, basis::text AS basis,
+                   location_id, world_time, seed_summary, emotion, salience,
+                   source_digest, world_layer::text AS world_layer
+            FROM character_experiences
+            WHERE %s = ANY(world_event_ids)
+              AND claim_awareness_id IS NULL
+            """,
+            (event_id,),
+        )
+        rows = [dict(row) for row in cur.fetchall()]
+    assert len(rows) == 1
+    return json.dumps(
+        rows[0],
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+        default=str,
+    ).encode("utf-8")
+
+
+def _pin_next_world_event_id(conn: Any, event_id: int) -> None:
+    with conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT setval(
+                    pg_get_serial_sequence('world_events', 'id'),
+                    %s,
+                    false
+                )
+                """,
+                (event_id,),
+            )
+
+
 class _SceneProvider:
     """Structured provider double invoked only after a genuine durable lease."""
 
@@ -282,6 +437,17 @@ class _FailingSceneProvider:
 
     def get_structured_completion(self, *_args: Any) -> Any:
         raise RuntimeError("synthetic experience render failure")
+
+
+class _ForbiddenSceneProvider:
+    """Record an invariant violation if an excluded job reaches the provider."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def get_structured_completion(self, *_args: Any) -> Any:
+        self.calls += 1
+        raise AssertionError("excluded player experience reached the provider")
 
 
 class _IdleTransactionProvider(_SceneProvider):
@@ -356,6 +522,448 @@ class _TimelineDriftingProvider(_SceneProvider):
         finally:
             conn.close()
         return super().get_structured_completion(prompt, schema)
+
+
+def test_genesis_events_form_on_the_next_genuine_accept(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A chunk-1 event survives the wizard-shaped gap and forms at chunk 2."""
+
+    monkeypatch.setattr(
+        "nexus.api.presence_audit.presence_audit_enabled", lambda: False
+    )
+    with _disposable_database() as dbname:
+        conn = _connect(dbname)
+        try:
+            parent_chunk_id, actor_character_id, actor_entity_id = _setup_due_actor(
+                conn
+            )
+            proposal = _resolve_sleep(dbname, parent_chunk_id)
+            assert any(draft.template_id == "sleep" for draft in proposal.resolutions)
+            with conn:
+                result = commit_orrery_tick_sync(
+                    conn,
+                    proposal,
+                    tick_chunk_id=parent_chunk_id,
+                )
+            assert result.event_count == 1
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    """
+                    SELECT id, experiences_formed_at
+                    FROM world_events
+                    WHERE tick_chunk_id = %s AND resolution_id IS NOT NULL
+                    """,
+                    (parent_chunk_id,),
+                )
+                genesis_event = dict(cur.fetchone())
+            assert genesis_event["experiences_formed_at"] is None
+
+            accepted_chunk_id = _accept_turn(
+                conn,
+                parent_chunk_id=parent_chunk_id,
+                proposal=None,
+                characters=[],
+            )
+            assert accepted_chunk_id > parent_chunk_id
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    """
+                    SELECT character_entity_id, anchor_chunk_id, world_event_ids
+                    FROM character_experiences
+                    WHERE %s = ANY(world_event_ids)
+                    """,
+                    (genesis_event["id"],),
+                )
+                seed = dict(cur.fetchone())
+                cur.execute(
+                    "SELECT experiences_formed_at FROM world_events WHERE id = %s",
+                    (genesis_event["id"],),
+                )
+                formed_at = cur.fetchone()["experiences_formed_at"]
+            assert seed == {
+                "character_entity_id": actor_entity_id,
+                "anchor_chunk_id": parent_chunk_id,
+                "world_event_ids": [genesis_event["id"]],
+            }
+            assert formed_at is not None
+        finally:
+            conn.close()
+
+
+def test_late_same_owner_event_forms_once_at_its_past_anchor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A late event forms once and remains renderable after an old boundary."""
+
+    monkeypatch.setattr(
+        "nexus.api.presence_audit.presence_audit_enabled", lambda: False
+    )
+    settings = load_settings_as_dict()
+    with _disposable_database() as dbname:
+        conn = _connect(dbname)
+        try:
+            parent_chunk_id, actor_character_id, actor_entity_id = _setup_due_actor(
+                conn
+            )
+            sleep_proposal = _resolve_sleep(dbname, parent_chunk_id)
+            accepted_chunk_id = _accept_turn(
+                conn,
+                parent_chunk_id=parent_chunk_id,
+                proposal=sleep_proposal,
+                characters=[],
+            )
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    """
+                    SELECT id, world_event_ids
+                    FROM character_experiences
+                    WHERE character_entity_id = %s
+                      AND anchor_chunk_id = %s
+                      AND claim_awareness_id IS NULL
+                    """,
+                    (actor_entity_id, accepted_chunk_id),
+                )
+                first_seed = dict(cur.fetchone())
+
+            with conn:
+                with conn.cursor() as cur:
+                    _set_only_need_due(
+                        cur,
+                        character_entity_id=actor_entity_id,
+                        need_type="thirst",
+                    )
+            drink_proposal = _resolve_sleep(dbname, accepted_chunk_id)
+            assert any(
+                draft.template_id == "drink" for draft in drink_proposal.resolutions
+            )
+            with conn:
+                late_result = commit_orrery_tick_sync(
+                    conn,
+                    drink_proposal,
+                    tick_chunk_id=accepted_chunk_id,
+                )
+            assert late_result.event_count == 1
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    """
+                    SELECT id
+                    FROM world_events
+                    WHERE tick_chunk_id = %s
+                      AND experiences_formed_at IS NULL
+                    ORDER BY id
+                    """,
+                    (accepted_chunk_id,),
+                )
+                late_event_ids = [int(row["id"]) for row in cur.fetchall()]
+            assert len(late_event_ids) == 1
+
+            with conn:
+                with conn.cursor() as cur:
+                    first_boundary_id = _insert_chunk(
+                        cur, "Boundary before late formation"
+                    )
+                assert (
+                    enqueue_scene_experience_job_sync(
+                        conn,
+                        boundary_chunk_id=first_boundary_id,
+                        scene_end_chunk_id=accepted_chunk_id,
+                        world_layer="primary",
+                        slot=708,
+                        settings=settings,
+                    )
+                    == 1
+                )
+
+            next_chunk_id = _accept_turn(
+                conn,
+                parent_chunk_id=first_boundary_id,
+                proposal=None,
+                characters=[],
+            )
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    """
+                    SELECT id, anchor_chunk_id, world_event_ids
+                    FROM character_experiences
+                    WHERE character_entity_id = %s
+                      AND anchor_chunk_id = %s
+                      AND claim_awareness_id IS NULL
+                    ORDER BY id
+                    """,
+                    (actor_entity_id, accepted_chunk_id),
+                )
+                seeds_after_sweep = [dict(row) for row in cur.fetchall()]
+            assert [
+                (seed["anchor_chunk_id"], seed["world_event_ids"])
+                for seed in seeds_after_sweep
+            ] == [
+                (accepted_chunk_id, first_seed["world_event_ids"]),
+                (accepted_chunk_id, late_event_ids),
+            ]
+            late_seed_id = int(seeds_after_sweep[1]["id"])
+
+            with conn:
+                with conn.cursor() as cur:
+                    second_boundary_id = _insert_chunk(
+                        cur, "Boundary after late formation"
+                    )
+                assert (
+                    enqueue_scene_experience_job_sync(
+                        conn,
+                        boundary_chunk_id=second_boundary_id,
+                        scene_end_chunk_id=next_chunk_id,
+                        world_layer="primary",
+                        slot=708,
+                        settings=settings,
+                    )
+                    == 1
+                )
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    """
+                    SELECT experience_ids
+                    FROM character_experience_jobs
+                    WHERE boundary_chunk_id = %s
+                    """,
+                    (second_boundary_id,),
+                )
+                assert cur.fetchone()["experience_ids"] == [late_seed_id]
+
+            final_chunk_id = _accept_turn(
+                conn,
+                parent_chunk_id=second_boundary_id,
+                proposal=None,
+                characters=[],
+            )
+            assert final_chunk_id > second_boundary_id
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SELECT count(*) AS count FROM character_experiences")
+                final_count = int(cur.fetchone()["count"])
+                cur.execute(
+                    """
+                    SELECT count(*) AS count
+                    FROM world_events
+                    WHERE id = ANY(%s) AND experiences_formed_at IS NOT NULL
+                    """,
+                    (first_seed["world_event_ids"] + late_event_ids,),
+                )
+                stamped_count = int(cur.fetchone()["count"])
+            assert final_count == 2
+            assert stamped_count == 2
+        finally:
+            conn.close()
+
+
+def _form_sleep_seed(*, late: bool) -> bytes:
+    with _disposable_database() as dbname:
+        conn = _connect(dbname)
+        try:
+            parent_chunk_id, actor_character_id, _actor_entity_id = _setup_due_actor(
+                conn
+            )
+            proposal = _resolve_sleep(dbname, parent_chunk_id)
+            if late:
+                event_anchor = _accept_turn(
+                    conn,
+                    parent_chunk_id=parent_chunk_id,
+                    proposal=None,
+                    characters=[],
+                )
+                _pin_next_world_event_id(conn, 708000001)
+                with conn:
+                    result = commit_orrery_tick_sync(
+                        conn,
+                        proposal,
+                        tick_chunk_id=event_anchor,
+                    )
+                assert result.event_count == 1
+                _accept_turn(
+                    conn,
+                    parent_chunk_id=event_anchor,
+                    proposal=None,
+                    characters=[],
+                )
+            else:
+                _pin_next_world_event_id(conn, 708000001)
+                event_anchor = _accept_turn(
+                    conn,
+                    parent_chunk_id=parent_chunk_id,
+                    proposal=proposal,
+                    characters=[],
+                )
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    """
+                    SELECT id
+                    FROM world_events
+                    WHERE tick_chunk_id = %s AND event_type = 'slept'
+                    ORDER BY id
+                    """,
+                    (event_anchor,),
+                )
+                event_ids = [int(row["id"]) for row in cur.fetchall()]
+            assert len(event_ids) == 1
+            return _seed_bytes_for_event(conn, event_ids[0])
+        finally:
+            conn.close()
+
+
+def test_late_seed_bytes_equal_commit_time_seed_bytes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Seed content and identity derive from event rows, never sweep timing."""
+
+    monkeypatch.setattr(
+        "nexus.api.presence_audit.presence_audit_enabled", lambda: False
+    )
+    assert _form_sleep_seed(late=True) == _form_sleep_seed(late=False)
+
+
+@pytest.mark.parametrize(
+    ("include_player_character", "expected_count"),
+    [(False, 0), (True, 1)],
+)
+def test_player_experience_ownership_follows_config(
+    monkeypatch: pytest.MonkeyPatch,
+    include_player_character: bool,
+    expected_count: int,
+) -> None:
+    """The canonical player owns no seed by default and can be opted in."""
+
+    monkeypatch.setattr(
+        "nexus.api.presence_audit.presence_audit_enabled", lambda: False
+    )
+    settings = load_settings_as_dict()
+    settings["orrery"]["experiences"][
+        "include_player_character"
+    ] = include_player_character
+    monkeypatch.setattr(
+        "nexus.api.commit_handler_sync._load_orrery_settings",
+        lambda: settings["orrery"],
+    )
+    with _disposable_database() as dbname:
+        conn = _connect(dbname)
+        try:
+            parent_chunk_id, actor_character_id, actor_entity_id = _setup_due_actor(
+                conn
+            )
+            with conn:
+                with conn.cursor() as cur:
+                    _set_player_character(cur, actor_character_id)
+            proposal = _resolve_sleep(dbname, parent_chunk_id)
+            accepted_chunk_id = _accept_turn(
+                conn,
+                parent_chunk_id=parent_chunk_id,
+                proposal=proposal,
+                characters=[],
+            )
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    """
+                    SELECT count(*) AS count
+                    FROM character_experiences
+                    WHERE character_entity_id = %s
+                    """,
+                    (actor_entity_id,),
+                )
+                owned_count = int(cur.fetchone()["count"])
+                cur.execute(
+                    """
+                    SELECT count(*) AS count
+                    FROM world_events
+                    WHERE tick_chunk_id = %s
+                      AND event_type = 'slept'
+                      AND resolution_id IS NOT NULL
+                      AND experiences_formed_at IS NOT NULL
+                    """,
+                    (accepted_chunk_id,),
+                )
+                stamped_count = int(cur.fetchone()["count"])
+            assert owned_count == expected_count
+            assert stamped_count == 1
+        finally:
+            conn.close()
+
+
+def test_default_config_rejects_an_existing_player_render_job(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Default exclusion stale-rejects queued player work before rendering."""
+
+    monkeypatch.setattr(
+        "nexus.api.presence_audit.presence_audit_enabled", lambda: False
+    )
+    opt_in_settings = load_settings_as_dict()
+    opt_in_settings["orrery"]["experiences"]["include_player_character"] = True
+    monkeypatch.setattr(
+        "nexus.api.commit_handler_sync._load_orrery_settings",
+        lambda: opt_in_settings["orrery"],
+    )
+    with _disposable_database() as dbname:
+        conn = _connect(dbname)
+        try:
+            parent_chunk_id, actor_character_id, actor_entity_id = _setup_due_actor(
+                conn
+            )
+            with conn:
+                with conn.cursor() as cur:
+                    _set_player_character(cur, actor_character_id)
+            proposal = _resolve_sleep(dbname, parent_chunk_id)
+            accepted_chunk_id = _accept_turn(
+                conn,
+                parent_chunk_id=parent_chunk_id,
+                proposal=proposal,
+                characters=[],
+            )
+            with conn:
+                with conn.cursor() as cur:
+                    boundary_chunk_id = _insert_chunk(cur, "Player render boundary")
+                assert (
+                    enqueue_scene_experience_job_sync(
+                        conn,
+                        boundary_chunk_id=boundary_chunk_id,
+                        scene_end_chunk_id=accepted_chunk_id,
+                        world_layer="primary",
+                        slot=708,
+                        settings=opt_in_settings,
+                    )
+                    == 1
+                )
+            forbidden_provider = _ForbiddenSceneProvider()
+            rendered, failed = drain_experience_render_jobs_sync(
+                slot=708,
+                settings=load_settings_as_dict(),
+                conn=conn,
+                provider=forbidden_provider,
+            )
+            assert (rendered, failed) == (0, 1)
+            assert forbidden_provider.calls == 0
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SELECT character_entity_id FROM character_experiences")
+                assert [int(row["character_entity_id"]) for row in cur.fetchall()] == [
+                    actor_entity_id
+                ]
+                cur.execute(
+                    """
+                    SELECT state::text AS state, last_error
+                    FROM character_experience_jobs
+                    """
+                )
+                job = dict(cur.fetchone())
+                cur.execute(
+                    """
+                    SELECT experience_text
+                    FROM character_experiences
+                    WHERE character_entity_id = %s
+                    """,
+                    (actor_entity_id,),
+                )
+                assert cur.fetchone()["experience_text"] is None
+            assert job["state"] == "stale_rejected"
+            assert "player-owned seed" in job["last_error"]
+        finally:
+            conn.close()
 
 
 def test_real_commit_forms_verified_seeds_and_boundary_batch(

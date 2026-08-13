@@ -1283,15 +1283,26 @@ class OrreryNarrationSettings(BaseModel):
     )
 
 
+_ExperienceDossierField = Literal["summary", "background", "personality"]
+
+
+def _default_experience_dossier_fields() -> List[_ExperienceDossierField]:
+    return ["summary", "background", "personality"]
+
+
 class OrreryExperienceSettings(BaseModel):
     """Actor-owned experiential memory settings for ``[orrery.experiences]``."""
 
     model_config = ConfigDict(extra="forbid")
 
     enabled: bool = False
+    include_player_character: bool = Field(
+        default=False,
+        description="Whether the player character may own experience rows",
+    )
     model: str = Field(..., description="Model ID or @provider.role reference")
-    dossier_fields: List[Literal["summary", "background", "personality"]] = Field(
-        default_factory=lambda: ["summary", "background", "personality"],
+    dossier_fields: List[_ExperienceDossierField] = Field(
+        default_factory=_default_experience_dossier_fields,
         min_length=1,
         description="Character dossier fields counted by the eligibility gate",
     )

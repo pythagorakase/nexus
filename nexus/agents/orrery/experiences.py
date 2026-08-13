@@ -25,6 +25,10 @@ from nexus.telemetry.usage import usage_context
 logger = logging.getLogger("nexus.orrery.experiences")
 
 RENDERER_VERSION = "experience-renderer-v1"
+_PLAYER_EXCLUSION_JOB_ERROR = (
+    "Experience render job contains a player-owned seed while "
+    "include_player_character is false"
+)
 _PROMPT_PATH = (
     Path(__file__).resolve().parents[3] / "prompts" / "experience_renderer.md"
 )
@@ -69,7 +73,8 @@ _SENTENCE_INITIAL_ALLOWLIST = frozenset(
 _FIRST_PERSON = re.compile(r"\b(?:I|me|my|mine|we|us|our|ours)\b", re.IGNORECASE)
 _SENTENCE = re.compile(r"(?<=[.!?])(?:[\"']?\s+|$)")
 _ACQUISITION_RECEIPT = re.compile(
-    r"\b(?:told|heard|learned|informed|received|read|listened|account|message|report)\b",
+    r"\b(?:told|heard|learned|informed|received|read|listened|account|"
+    r"message|report)\b",
     re.IGNORECASE,
 )
 _ACQUISITION_WITNESS = re.compile(
@@ -201,22 +206,150 @@ def _presence_duration(
     return duration
 
 
-def _active_mood(cur: Any, character_entity_id: int) -> Optional[str]:
+def _player_character_entity_id(cur: Any) -> int:
+    """Return the canonical player entity id, preserving the character/id join."""
+
     cur.execute(
         """
-        SELECT t.tag
+        SELECT gv.user_character, character.entity_id
+        FROM global_variables gv
+        LEFT JOIN characters character ON character.id = gv.user_character
+        WHERE gv.id = true
+        """,
+    )
+    row = cur.fetchone()
+    if row is None:
+        raise RuntimeError(
+            "Cannot exclude player-owned experiences: global player identity "
+            "is missing"
+        )
+    user_character = _row_value(row, "user_character", 0)
+    if user_character is None:
+        raise RuntimeError(
+            "Cannot exclude player-owned experiences: user_character is NULL"
+        )
+    entity_id = _row_value(row, "entity_id", 1)
+    if entity_id is None:
+        raise RuntimeError(
+            f"Player character row {user_character} has no canonical entity id"
+        )
+    return int(entity_id)
+
+
+def _provenance_at_or_before(
+    *,
+    source_chunk_id: Any,
+    provenance_world_time: Any,
+    anchor_chunk_id: int,
+    anchor_world_time: Any,
+    label: str,
+) -> bool:
+    """Resolve exact chunk provenance, or fail on an unusable legacy clock."""
+
+    if source_chunk_id is not None:
+        return int(source_chunk_id) <= anchor_chunk_id
+    if provenance_world_time is None:
+        raise RuntimeError(f"{label} has no chunk or world-time provenance")
+    if anchor_world_time is None:
+        raise RuntimeError(
+            f"Experience anchor {anchor_chunk_id} has no world time for {label}"
+        )
+    return bool(provenance_world_time <= anchor_world_time)
+
+
+def _mood_at_anchor(
+    cur: Any,
+    *,
+    character_entity_id: int,
+    anchor_chunk_id: int,
+    anchor_world_time: Any,
+) -> Optional[str]:
+    """Project the character's mechanical mood at the event's own anchor."""
+
+    cur.execute(
+        """
+        SELECT et.id AS entity_tag_id, t.tag, et.source_chunk_id,
+               et.applied_at_world_time, et.expires_at_world_time,
+               et.cleared_at, clearance.id AS clearance_id,
+               clearance.source_chunk_id AS clearance_chunk_id,
+               clearance.cleared_at_world_time
         FROM entity_tags et
         JOIN tags t ON t.id = et.tag_id
+        LEFT JOIN tag_clearance_log clearance
+          ON clearance.entity_tag_id = et.id
         WHERE et.entity_id = %s
-          AND et.cleared_at IS NULL
           AND t.category = 'mood'
-        ORDER BY et.applied_at DESC, et.id DESC
-        LIMIT 1
+        ORDER BY et.id, clearance.id
         """,
         (character_entity_id,),
     )
-    row = cur.fetchone()
-    return str(_row_value(row, "tag", 0)) if row is not None else None
+    histories: dict[int, dict[str, Any]] = {}
+    for raw_row in cur.fetchall():
+        row = dict(raw_row)
+        entity_tag_id = int(row["entity_tag_id"])
+        history = histories.setdefault(
+            entity_tag_id,
+            {
+                "tag": str(row["tag"]),
+                "source_chunk_id": row.get("source_chunk_id"),
+                "applied_at_world_time": row.get("applied_at_world_time"),
+                "expires_at_world_time": row.get("expires_at_world_time"),
+                "cleared_at": row.get("cleared_at"),
+                "clearances": [],
+            },
+        )
+        if row.get("clearance_id") is not None:
+            history["clearances"].append(
+                {
+                    "id": int(row["clearance_id"]),
+                    "source_chunk_id": row.get("clearance_chunk_id"),
+                    "cleared_at_world_time": row.get("cleared_at_world_time"),
+                }
+            )
+
+    active: list[str] = []
+    for entity_tag_id, history in histories.items():
+        if not _provenance_at_or_before(
+            source_chunk_id=history["source_chunk_id"],
+            provenance_world_time=history["applied_at_world_time"],
+            anchor_chunk_id=anchor_chunk_id,
+            anchor_world_time=anchor_world_time,
+            label=f"mood entity_tag {entity_tag_id} application",
+        ):
+            continue
+        expires_at = history["expires_at_world_time"]
+        if expires_at is not None:
+            if anchor_world_time is None:
+                raise RuntimeError(
+                    f"Experience anchor {anchor_chunk_id} has no world time for "
+                    f"mood entity_tag {entity_tag_id} expiry"
+                )
+            if expires_at <= anchor_world_time:
+                continue
+        clearances = history["clearances"]
+        if history["cleared_at"] is not None and not clearances:
+            raise RuntimeError(
+                f"Cleared mood entity_tag {entity_tag_id} has no clearance ledger row"
+            )
+        cleared = any(
+            _provenance_at_or_before(
+                source_chunk_id=clearance["source_chunk_id"],
+                provenance_world_time=clearance["cleared_at_world_time"],
+                anchor_chunk_id=anchor_chunk_id,
+                anchor_world_time=anchor_world_time,
+                label=f"mood clearance {clearance['id']}",
+            )
+            for clearance in clearances
+        )
+        if not cleared:
+            active.append(str(history["tag"]))
+
+    if len(active) > 1:
+        raise RuntimeError(
+            f"Character entity {character_entity_id} has multiple moods at "
+            f"experience anchor {anchor_chunk_id}: {sorted(active)}"
+        )
+    return active[0] if active else None
 
 
 def _salience(
@@ -349,7 +482,6 @@ def _insert_experience(
             %s, %s, %s, %s, %s, %s::character_experience_basis, %s, %s,
             %s, %s, %s, %s, %s::world_layer_type
         )
-        ON CONFLICT DO NOTHING
         RETURNING id
         """,
         (
@@ -368,7 +500,10 @@ def _insert_experience(
             world_layer,
         ),
     )
-    return cur.fetchone() is not None
+    row = cur.fetchone()
+    if row is None:
+        raise RuntimeError("Experience insert returned no durable row")
+    return True
 
 
 def seed_character_experiences_sync(
@@ -377,7 +512,7 @@ def seed_character_experiences_sync(
     anchor_chunk_id: int,
     settings: Mapping[str, Any],
 ) -> int:
-    """Insert deterministic participant, witness, and acquisition seeds."""
+    """Sweep and seed every unformed event at or before an accepted chunk."""
 
     cfg = experience_settings(settings)
     if not cfg.enabled:
@@ -385,65 +520,69 @@ def seed_character_experiences_sync(
     inserted = 0
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
+            "SELECT 1 FROM chunk_metadata WHERE chunk_id = %s",
+            (anchor_chunk_id,),
+        )
+        if cur.fetchone() is None:
+            raise RuntimeError(
+                f"Experience anchor chunk {anchor_chunk_id} has no metadata"
+            )
+        player_entity_id = (
+            None if cfg.include_player_character else _player_character_entity_id(cur)
+        )
+
+        cur.execute(
             """
-            SELECT cm.world_time, cm.world_layer::text AS world_layer,
-                   setting.place_id AS setting_place_id
-            FROM chunk_metadata cm
+            SELECT e.id, e.tick_chunk_id, e.event_type, e.actor_entity_id,
+                   e.target_entity_id, e.location_id, e.magnitude, e.payload,
+                   actor.name AS actor_name, target.name AS target_name,
+                   place.name AS location_name, r.state_delta,
+                   metadata.world_time AS anchor_world_time,
+                   metadata.world_layer::text AS anchor_world_layer,
+                   setting.place_id AS setting_place_id,
+                   COALESCE(participants.rows, '[]'::jsonb) AS participants
+            FROM world_events e
+            JOIN chunk_metadata metadata ON metadata.chunk_id = e.tick_chunk_id
             LEFT JOIN LATERAL (
                 SELECT pcr.place_id
                 FROM place_chunk_references pcr
-                WHERE pcr.chunk_id = cm.chunk_id
+                WHERE pcr.chunk_id = e.tick_chunk_id
                   AND pcr.reference_type::text = 'setting'
                 ORDER BY pcr.place_id
                 LIMIT 1
             ) setting ON TRUE
-            WHERE cm.chunk_id = %s
-            """,
-            (anchor_chunk_id,),
-        )
-        metadata = cur.fetchone()
-        if metadata is None:
-            raise RuntimeError(
-                f"Experience anchor chunk {anchor_chunk_id} has no metadata"
-            )
-        world_time = metadata["world_time"]
-        world_layer = str(metadata["world_layer"])
-
-        cur.execute(
-            """
-            SELECT e.id, e.event_type, e.actor_entity_id, e.target_entity_id,
-                   e.location_id, e.magnitude, e.payload,
-                   actor.name AS actor_name, target.name AS target_name,
-                   place.name AS location_name, r.state_delta,
-                   COALESCE(
-                       jsonb_agg(
+            LEFT JOIN LATERAL (
+                SELECT jsonb_agg(
                            jsonb_build_object(
                                'entity_id', wee.entity_id,
                                'role', wee.role::text
                            )
                            ORDER BY wee.entity_id, wee.role::text
-                       ) FILTER (WHERE wee.entity_id IS NOT NULL),
-                       '[]'::jsonb
-                   ) AS participants
-            FROM world_events e
+                       ) AS rows
+                FROM world_event_entities wee
+                WHERE wee.event_id = e.id
+            ) participants ON TRUE
             LEFT JOIN entity_names_v actor ON actor.id = e.actor_entity_id
             LEFT JOIN entity_names_v target ON target.id = e.target_entity_id
             LEFT JOIN places place ON place.id = e.location_id
             LEFT JOIN orrery_resolutions r ON r.id = e.resolution_id
-            LEFT JOIN world_event_entities wee ON wee.event_id = e.id
-            WHERE e.tick_chunk_id = %s
+            WHERE e.tick_chunk_id <= %s
+              AND e.experiences_formed_at IS NULL
               AND e.superseded_by_event_id IS NULL
-            GROUP BY e.id, actor.name, target.name, place.name, r.state_delta
             ORDER BY e.id
+            FOR UPDATE OF e
             """,
             (anchor_chunk_id,),
         )
         events = [dict(row) for row in cur.fetchall()]
-        receipts: dict[tuple[int, str], list[dict[str, Any]]] = {}
+        receipts: dict[tuple[int, int, str], list[dict[str, Any]]] = {}
         for event in events:
             for entity_id, basis in _event_receipts(event).items():
-                receipts.setdefault((entity_id, basis), []).append(event)
-        receipt_entity_ids = sorted({entity_id for entity_id, _basis in receipts})
+                key = (int(event["tick_chunk_id"]), entity_id, basis)
+                receipts.setdefault(key, []).append(event)
+        receipt_entity_ids = sorted(
+            {entity_id for _event_anchor, entity_id, _basis in receipts}
+        )
         eligible_by_id: dict[int, dict[str, Any]] = {}
         if receipt_entity_ids:
             cur.execute(
@@ -459,15 +598,30 @@ def seed_character_experiences_sync(
                 int(row["entity_id"]): dict(row)
                 for row in cur.fetchall()
                 if _eligible_character(row, cfg)
+                and (
+                    player_entity_id is None
+                    or int(row["entity_id"]) != player_entity_id
+                )
             }
-        for (character_id, basis), owned_events in sorted(receipts.items()):
+        ordered_receipts = sorted(
+            receipts.items(),
+            key=lambda item: (
+                min(int(event["id"]) for event in item[1]),
+                item[0][1],
+                item[0][2],
+            ),
+        )
+        for (event_anchor, character_id, basis), owned_events in ordered_receipts:
             character = eligible_by_id.get(character_id)
             if character is None:
                 continue
+            metadata = owned_events[0]
+            world_time = metadata.get("anchor_world_time")
+            world_layer = str(metadata["anchor_world_layer"])
             duration = _presence_duration(
                 cur,
                 character_entity_id=character_id,
-                anchor_chunk_id=anchor_chunk_id,
+                anchor_chunk_id=event_anchor,
                 world_layer=world_layer,
                 cap=cfg.presence_duration_cap_chunks,
             )
@@ -490,7 +644,7 @@ def seed_character_experiences_sync(
                 _insert_experience(
                     cur,
                     character_entity_id=character_id,
-                    anchor_chunk_id=anchor_chunk_id,
+                    anchor_chunk_id=event_anchor,
                     world_event_ids=[int(row["id"]) for row in owned_events],
                     claim_id=None,
                     claim_awareness_id=None,
@@ -498,7 +652,12 @@ def seed_character_experiences_sync(
                     location_id=location_id,
                     world_time=world_time,
                     seed_summary=seed_summary,
-                    emotion=_active_mood(cur, character_id),
+                    emotion=_mood_at_anchor(
+                        cur,
+                        character_entity_id=character_id,
+                        anchor_chunk_id=event_anchor,
+                        anchor_world_time=world_time,
+                    ),
                     salience=_salience(
                         events=owned_events,
                         presence_duration=duration,
@@ -512,27 +671,43 @@ def seed_character_experiences_sync(
             """
             SELECT ca.id AS awareness_id, ca.claim_id, ca.knower_entity_id,
                    ca.source_tier, ca.acquired_at_world_time,
+                   ca.source_chunk_id AS anchor_chunk_id,
                    c.summary AS claim_summary, c.account_label,
                    c.world_event_id AS incident_event_id,
                    character.name, character.summary, character.background,
                    character.personality,
                    delivery.id AS delivery_event_id,
-                   incident.location_id
+                   incident.location_id,
+                   metadata.world_time AS anchor_world_time,
+                   metadata.world_layer::text AS anchor_world_layer
             FROM claim_awareness ca
             JOIN claims c ON c.id = ca.claim_id
             JOIN characters character ON character.entity_id = ca.knower_entity_id
             JOIN world_events incident ON incident.id = c.world_event_id
-            LEFT JOIN world_events delivery
-              ON delivery.tick_chunk_id = ca.source_chunk_id
-             AND delivery.payload ->> 'awareness_id' = ca.id::text
-            WHERE ca.source_chunk_id = %s
+            JOIN chunk_metadata metadata ON metadata.chunk_id = ca.source_chunk_id
+            LEFT JOIN LATERAL (
+                SELECT event.id
+                FROM world_events event
+                WHERE event.tick_chunk_id = ca.source_chunk_id
+                  AND event.payload ->> 'awareness_id' = ca.id::text
+                ORDER BY event.id
+                LIMIT 1
+            ) delivery ON TRUE
+            LEFT JOIN character_experiences existing
+              ON existing.claim_awareness_id = ca.id
+            WHERE ca.source_chunk_id <= %s
               AND ca.source_tier IN ('told', 'granted')
+              AND existing.id IS NULL
             ORDER BY ca.id
+            FOR UPDATE OF ca
             """,
             (anchor_chunk_id,),
         )
         for acquisition in (dict(row) for row in cur.fetchall()):
             if not _eligible_character(acquisition, cfg):
+                continue
+            character_id = int(acquisition["knower_entity_id"])
+            if player_entity_id is not None and character_id == player_entity_id:
                 continue
             source_ids = [int(acquisition["incident_event_id"])]
             if acquisition.get("delivery_event_id") is not None:
@@ -542,28 +717,55 @@ def seed_character_experiences_sync(
                 f"{acquisition['account_label']} account by being "
                 f"{acquisition['source_tier']}: {acquisition['claim_summary']}"
             )
-            character_id = int(acquisition["knower_entity_id"])
+            acquisition_anchor = int(acquisition["anchor_chunk_id"])
+            acquisition_world_time = acquisition.get("anchor_world_time")
             inserted += int(
                 _insert_experience(
                     cur,
                     character_entity_id=character_id,
-                    anchor_chunk_id=anchor_chunk_id,
+                    anchor_chunk_id=acquisition_anchor,
                     world_event_ids=source_ids,
                     claim_id=int(acquisition["claim_id"]),
                     claim_awareness_id=int(acquisition["awareness_id"]),
                     basis="acquisition",
                     location_id=acquisition.get("location_id"),
-                    world_time=acquisition.get("acquired_at_world_time") or world_time,
+                    world_time=(
+                        acquisition.get("acquired_at_world_time")
+                        or acquisition_world_time
+                    ),
                     seed_summary=seed_summary,
-                    emotion=_active_mood(cur, character_id),
+                    emotion=_mood_at_anchor(
+                        cur,
+                        character_entity_id=character_id,
+                        anchor_chunk_id=acquisition_anchor,
+                        anchor_world_time=acquisition_world_time,
+                    ),
                     salience=_salience(
                         events=[{"magnitude": 0.0, "state_delta": {}}],
                         presence_duration=0,
                         cfg=cfg,
                     ),
-                    world_layer=world_layer,
+                    world_layer=str(acquisition["anchor_world_layer"]),
                 )
             )
+        if events:
+            event_ids = [int(event["id"]) for event in events]
+            cur.execute(
+                """
+                UPDATE world_events
+                SET experiences_formed_at = CURRENT_TIMESTAMP
+                WHERE id = ANY(%s)
+                  AND experiences_formed_at IS NULL
+                RETURNING id
+                """,
+                (event_ids,),
+            )
+            stamped_ids = sorted(int(row["id"]) for row in cur.fetchall())
+            if stamped_ids != sorted(event_ids):
+                raise RuntimeError(
+                    "Experience formation stamp mismatch: expected event ids "
+                    f"{sorted(event_ids)}, stamped {stamped_ids}"
+                )
     return inserted
 
 
@@ -591,6 +793,9 @@ def enqueue_scene_experience_job_sync(
     if not cfg.enabled or scene_end_chunk_id <= 0:
         return 0
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        player_entity_id = (
+            None if cfg.include_player_character else _player_character_entity_id(cur)
+        )
         cur.execute(
             """
             SELECT boundary.season AS boundary_season,
@@ -636,27 +841,31 @@ def enqueue_scene_experience_job_sync(
             return 0
         cur.execute(
             """
-            SELECT max(boundary_chunk_id) AS previous_boundary
-            FROM character_experience_jobs
-            WHERE world_layer::text = %s
-              AND boundary_chunk_id < %s
+            SELECT experience.id, experience.source_digest
+            FROM character_experiences experience
+            WHERE experience.anchor_chunk_id <= %s
+              AND experience.world_layer::text = %s
+              AND experience.invalidation_status = 'valid'
+              AND experience.experience_text IS NULL
+              AND (%s IS NULL OR experience.character_entity_id <> %s)
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM character_experience_jobs prior_job
+                  WHERE experience.id = ANY(prior_job.experience_ids)
+                    AND (
+                        prior_job.state <> 'stale_rejected'
+                        OR prior_job.last_error IS DISTINCT FROM %s
+                    )
+              )
+            ORDER BY experience.id
             """,
-            (world_layer, boundary_chunk_id),
-        )
-        previous = cur.fetchone()["previous_boundary"]
-        lower_bound = int(previous) if previous is not None else 0
-        cur.execute(
-            """
-            SELECT id, source_digest
-            FROM character_experiences
-            WHERE anchor_chunk_id >= %s
-              AND anchor_chunk_id <= %s
-              AND world_layer::text = %s
-              AND invalidation_status = 'valid'
-              AND experience_text IS NULL
-            ORDER BY id
-            """,
-            (lower_bound, scene_end_chunk_id, world_layer),
+            (
+                scene_end_chunk_id,
+                world_layer,
+                player_entity_id,
+                player_entity_id,
+                _PLAYER_EXCLUSION_JOB_ERROR,
+            ),
         )
         rows = [dict(row) for row in cur.fetchall()]
         if not rows:
@@ -1157,38 +1366,85 @@ def drain_experience_render_jobs_sync(
         return (0, 0)
     owner = f"experience:{slot if slot is not None else 'default'}:{uuid4()}"
     renderer: Any = None
+    failed_count = 0
     with conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            player_entity_id = (
+                None
+                if cfg.include_player_character
+                else _player_character_entity_id(cur)
+            )
             cur.execute(
                 """
-                SELECT id AS job_id, experience_ids, attempts, requested_model,
+                SELECT job.id AS job_id, job.experience_ids, job.attempts,
+                       job.requested_model,
                        source_digest, world_layer::text AS world_layer, slot,
                        boundary_chunk_id, scene_end_chunk_id,
                        boundary_season, boundary_episode, boundary_scene,
-                       scene_end_season, scene_end_episode, scene_end_scene
-                FROM character_experience_jobs
+                       scene_end_season, scene_end_episode, scene_end_scene,
+                       ARRAY(
+                           SELECT experience.id
+                           FROM character_experiences experience
+                           WHERE experience.id = ANY(job.experience_ids)
+                             AND experience.character_entity_id = %s
+                           ORDER BY experience.id
+                       ) AS excluded_player_experience_ids
+                FROM character_experience_jobs job
                 WHERE (
-                    (state = 'queued' AND available_at <= clock_timestamp())
+                    (job.state = 'queued'
+                     AND job.available_at <= clock_timestamp())
                     OR
-                    (state = 'leased' AND lease_until < clock_timestamp())
+                    (job.state = 'leased'
+                     AND job.lease_until < clock_timestamp())
                 )
                 ORDER BY CASE
-                    WHEN state = 'leased' THEN lease_until ELSE available_at
+                    WHEN job.state = 'leased'
+                    THEN job.lease_until ELSE job.available_at
                 END,
-                         id
+                         job.id
                 LIMIT %s
-                FOR UPDATE SKIP LOCKED
+                FOR UPDATE OF job SKIP LOCKED
                 """,
-                (job_limit,),
+                (player_entity_id, job_limit),
             )
             selected_jobs = cur.fetchall()
-            if selected_jobs:
+            renderable_jobs = []
+            for selected in selected_jobs:
+                job = dict(selected)
+                excluded_ids = [
+                    int(value) for value in job.pop("excluded_player_experience_ids")
+                ]
+                if excluded_ids:
+                    cur.execute(
+                        """
+                        UPDATE character_experience_jobs
+                        SET state = 'stale_rejected', lease_until = NULL,
+                            locked_by = NULL, lease_nonce = NULL,
+                            last_error = %s, updated_at = now()
+                        WHERE id = %s
+                        """,
+                        (_PLAYER_EXCLUSION_JOB_ERROR, job["job_id"]),
+                    )
+                    if cur.rowcount != 1:
+                        raise RuntimeError(
+                            "Failed to stale-reject player-owned experience job "
+                            f"{job['job_id']}"
+                        )
+                    logger.error(
+                        "Stale-rejected experience job %s because player-owned "
+                        "seeds %s are excluded by config",
+                        job["job_id"],
+                        excluded_ids,
+                    )
+                    failed_count += 1
+                    continue
+                renderable_jobs.append(job)
+            if renderable_jobs:
                 # Match the hardened narration queue: provider construction
                 # must succeed before any durable lease is acquired.
                 renderer = provider or _experience_provider(cfg)
             jobs = []
-            for selected in selected_jobs:
-                job = dict(selected)
+            for job in renderable_jobs:
                 nonce = str(uuid4())
                 cur.execute(
                     """
@@ -1205,7 +1461,6 @@ def drain_experience_render_jobs_sync(
                 job["lease_nonce"] = nonce
                 jobs.append(job)
     rendered_count = 0
-    failed_count = 0
     for job in jobs:
         try:
             with conn:
