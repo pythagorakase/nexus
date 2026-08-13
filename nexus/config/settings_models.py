@@ -2913,6 +2913,34 @@ class MemorySettings(BaseModel):
 # =============================================================================
 
 
+# Compaction first fires when the journal grows past its configured ceiling.
+# Six consecutive failed post-accept attempts therefore retain exchanges 11-16
+# at the committed ceiling of 10, so the rendered-context invariant must budget
+# six exchanges beyond the nominal ceiling while leaving runtime overflow loud.
+CORRESPONDENCE_COMPACTION_FAILURE_EXCHANGE_ALLOWANCE = 6
+
+
+def calculate_digest_hard_cap_tokens(
+    *,
+    max_digest_tokens: int,
+    digest_hard_cap_multiplier: float,
+) -> int:
+    """Return the largest whole-token count allowed by the digest hard cap."""
+
+    if max_digest_tokens < 1:
+        raise ValueError("max_digest_tokens must be positive")
+    multiplier = Decimal(str(digest_hard_cap_multiplier))
+    if not multiplier.is_finite() or multiplier <= Decimal("1"):
+        raise ValueError("digest_hard_cap_multiplier must be finite and greater than 1")
+    hard_cap_tokens = int(Decimal(max_digest_tokens) * multiplier)
+    if hard_cap_tokens <= max_digest_tokens:
+        raise ValueError(
+            "digest_hard_cap_multiplier must permit at least one whole token "
+            "above max_digest_tokens"
+        )
+    return hard_cap_tokens
+
+
 class StorytellerCorrespondenceSettings(BaseModel):
     """Private writer/Gaia correspondence and hysteresis compaction."""
 
@@ -2940,7 +2968,15 @@ class StorytellerCorrespondenceSettings(BaseModel):
     max_digest_tokens: int = Field(
         ...,
         ge=1,
-        description="Semantic output limit for a compacted correspondence digest.",
+        description="Prompt target for a compacted correspondence digest.",
+    )
+    digest_hard_cap_multiplier: float = Field(
+        ...,
+        gt=1.0,
+        allow_inf_nan=False,
+        description=(
+            "Maximum accepted digest size as a multiplier of max_digest_tokens."
+        ),
     )
     max_rendered_tokens: int = Field(
         ...,
@@ -2957,10 +2993,17 @@ class StorytellerCorrespondenceSettings(BaseModel):
                 "storyteller.correspondence.floor_turns must be less than "
                 "ceiling_turns"
             )
-        bounded_content_tokens = (
-            self.ceiling_turns * 2 * self.max_letter_tokens + self.max_digest_tokens
+        digest_hard_cap_tokens = calculate_digest_hard_cap_tokens(
+            max_digest_tokens=self.max_digest_tokens,
+            digest_hard_cap_multiplier=self.digest_hard_cap_multiplier,
         )
-        structural_overhead_tokens = 256 + self.ceiling_turns * 32
+        bounded_exchange_turns = (
+            self.ceiling_turns + CORRESPONDENCE_COMPACTION_FAILURE_EXCHANGE_ALLOWANCE
+        )
+        bounded_content_tokens = (
+            bounded_exchange_turns * 2 * self.max_letter_tokens + digest_hard_cap_tokens
+        )
+        structural_overhead_tokens = 256 + bounded_exchange_turns * 32
         if (
             bounded_content_tokens + structural_overhead_tokens
             > self.max_rendered_tokens

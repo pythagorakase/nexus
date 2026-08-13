@@ -1126,6 +1126,7 @@ class LogonUtility:
         system_prompt: str,
         user_prompt: str,
         max_digest_tokens: int,
+        digest_hard_cap_multiplier: float,
     ) -> str:
         """Run one isolated structured completion with bounded digest repair."""
 
@@ -1136,7 +1137,8 @@ class LogonUtility:
         compaction_provider.system_prompt = system_prompt
         compaction_provider.usage_seat = "correspondence_compaction"
         compaction_provider.output_validator = build_digest_length_validator(
-            max_digest_tokens=max_digest_tokens
+            max_digest_tokens=max_digest_tokens,
+            digest_hard_cap_multiplier=digest_hard_cap_multiplier,
         )
         if isinstance(compaction_provider, AnthropicProvider):
             # The compact digest schema is intentionally small enough for

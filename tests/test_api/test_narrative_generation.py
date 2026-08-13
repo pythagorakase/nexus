@@ -20,6 +20,7 @@ from nexus.api.narrative_schemas import (
     ContinueNarrativeRequest,
     RegenerateNarrativeRequest,
 )
+from nexus.api.presence_reconciliation import CharacterRosterRows
 from nexus.memory.correspondence import GeneratedCorrespondence
 from nexus.memory.manager import empty_pass2_baseline
 
@@ -311,6 +312,17 @@ async def test_bootstrap_threads_logon_model_into_incubator_payload(
 
     monkeypatch.setattr(
         "nexus.agents.lore.logon_utility.LogonUtility", FakeLogonUtility
+    )
+
+    async def empty_character_roster(_dbname: str) -> CharacterRosterRows:
+        """Keep this model-provenance unit test independent of PostgreSQL."""
+
+        return CharacterRosterRows(characters=[], aliases=[])
+
+    monkeypatch.setattr(
+        narrative_generation,
+        "read_character_roster_async",
+        empty_character_roster,
     )
 
     payload = await narrative_generation.generate_bootstrap_narrative(

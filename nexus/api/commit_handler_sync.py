@@ -841,6 +841,7 @@ def compact_accepted_correspondence_sync(
     if not isinstance(dbname, str) or not dbname:
         raise RuntimeError("Correspondence compaction requires a slot DB connection")
     max_digest_tokens = int(config["max_digest_tokens"])
+    digest_hard_cap_multiplier = float(config["digest_hard_cap_multiplier"])
     utility = LogonUtility(
         settings,
         dbname=dbname,
@@ -852,6 +853,7 @@ def compact_accepted_correspondence_sync(
         ),
         user_prompt=plan.render_user_prompt(),
         max_digest_tokens=max_digest_tokens,
+        digest_hard_cap_multiplier=digest_hard_cap_multiplier,
     )
 
     # The model call intentionally owns no database transaction. Re-plan after

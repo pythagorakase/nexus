@@ -28,12 +28,13 @@ from nexus.agents.memnon.utils.embedding_tables import (
     ensure_character_experience_embedding_table,
     ensure_embedding_table,
 )
-from nexus.agents.orrery.audit import cognition_trace
+from nexus.agents.orrery.audit import CognitionTraceInputError, cognition_trace
 from nexus.agents.orrery.events import commit_orrery_tick_sync
 from nexus.agents.orrery.knowledge_surfacing import build_knowledge_digest_sync
+from nexus.agents.orrery.retrograde_markers import RETROGRADE_PROLOGUE_MARKER
 from nexus.agents.orrery.resolver import resolve_dry_run
 from nexus.agents.orrery.substrate import ALWAYS, Branch, DriveBand, Slot, Template
-from nexus.api import orrery_dev_endpoints
+from nexus.api import narrative, orrery_dev_endpoints
 from nexus.config import load_settings_as_dict
 
 
@@ -430,6 +431,361 @@ def _digest(
         turn_id=turn_id,
         query_embeddings=query_embeddings,
     )
+
+
+def test_cognition_trace_endpoint_rejects_invalid_identifiers(
+    session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The gateway returns field-specific 4xx errors for invalid trace ids."""
+
+    base = datetime(2078, 1, 31, tzinfo=timezone.utc)
+    anchor = _chunk(session, label="cognition boundary", world_time=base, scene=1)
+    actor = _character(session, "cognition-boundary")
+    inactive_actor = _character(session, "cognition-inactive")
+    session.execute(
+        text("UPDATE entities SET is_active = false WHERE id = :entity_id"),
+        {"entity_id": inactive_actor[0]},
+    )
+    orphan_character_entity_id = int(
+        session.execute(
+            text(
+                """
+                INSERT INTO entities (kind, is_active)
+                VALUES ('character', true)
+                RETURNING id
+                """
+            )
+        ).scalar_one()
+    )
+    faction_entity_id = _faction(session, "cognition-boundary")
+    missing_metadata_anchor_id = int(
+        session.execute(
+            text(
+                """
+                INSERT INTO narrative_chunks (raw_text, storyteller_text)
+                VALUES ('cognition missing metadata', 'cognition missing metadata')
+                RETURNING id
+                """
+            )
+        ).scalar_one()
+    )
+    non_playable_anchor_id = _chunk(
+        session,
+        label="cognition non-playable",
+        world_time=base + timedelta(hours=1),
+        scene=2,
+    )
+    session.execute(
+        text(
+            """
+            UPDATE narrative_chunks
+            SET authorial_directives = :authorial_directives
+            WHERE id = :chunk_id
+            """
+        ),
+        {
+            "authorial_directives": json.dumps([RETROGRADE_PROLOGUE_MARKER]),
+            "chunk_id": non_playable_anchor_id,
+        },
+    )
+    missing_entity_id = int(
+        session.execute(
+            text("SELECT COALESCE(max(id), 0) + 1 FROM entities")
+        ).scalar_one()
+    )
+    provisional_anchor_id = int(
+        session.execute(
+            text("SELECT COALESCE(max(id), 0) + 1 FROM narrative_chunks")
+        ).scalar_one()
+    )
+    missing_anchor_id = provisional_anchor_id + 1
+    session.execute(
+        text(
+            """
+            INSERT INTO incubator (chunk_id, parent_chunk_id, status)
+            VALUES (:chunk_id, :parent_chunk_id, 'provisional')
+            """
+        ),
+        {"chunk_id": provisional_anchor_id, "parent_chunk_id": anchor},
+    )
+    session.flush()
+
+    @contextmanager
+    def seeded_session(_slot: int | None) -> Iterator[Session]:
+        yield session
+
+    monkeypatch.setattr(orrery_dev_endpoints, "_slot_session", seeded_session)
+
+    app = narrative.app
+    original_route_count = len(app.router.routes)
+    cognition_route_registered = any(
+        getattr(route, "path", None) == "/api/dev/orrery/cognition/trace"
+        and "POST" in (getattr(route, "methods", None) or set())
+        for route in app.router.routes
+    )
+    if not cognition_route_registered:
+        app.include_router(orrery_dev_endpoints.router)
+
+    try:
+        with TestClient(app, raise_server_exceptions=False) as client:
+            wrong_kind = client.post(
+                "/api/dev/orrery/cognition/trace",
+                json={
+                    "slot": 1,
+                    "entity_id": faction_entity_id,
+                    "anchor_chunk_id": anchor,
+                },
+            )
+            unknown_actor = client.post(
+                "/api/dev/orrery/cognition/trace",
+                json={
+                    "slot": 1,
+                    "entity_id": missing_entity_id,
+                    "anchor_chunk_id": anchor,
+                },
+            )
+            inactive = client.post(
+                "/api/dev/orrery/cognition/trace",
+                json={
+                    "slot": 1,
+                    "entity_id": inactive_actor[0],
+                    "anchor_chunk_id": anchor,
+                },
+            )
+            orphan_character = client.post(
+                "/api/dev/orrery/cognition/trace",
+                json={
+                    "slot": 1,
+                    "entity_id": orphan_character_entity_id,
+                    "anchor_chunk_id": anchor,
+                },
+            )
+            unknown_anchor = client.post(
+                "/api/dev/orrery/cognition/trace",
+                json={
+                    "slot": 1,
+                    "entity_id": actor[0],
+                    "anchor_chunk_id": missing_anchor_id,
+                },
+            )
+            provisional_anchor = client.post(
+                "/api/dev/orrery/cognition/trace",
+                json={
+                    "slot": 1,
+                    "entity_id": actor[0],
+                    "anchor_chunk_id": provisional_anchor_id,
+                },
+            )
+            missing_metadata_anchor = client.post(
+                "/api/dev/orrery/cognition/trace",
+                json={
+                    "slot": 1,
+                    "entity_id": actor[0],
+                    "anchor_chunk_id": missing_metadata_anchor_id,
+                },
+            )
+            non_playable_anchor = client.post(
+                "/api/dev/orrery/cognition/trace",
+                json={
+                    "slot": 1,
+                    "entity_id": actor[0],
+                    "anchor_chunk_id": non_playable_anchor_id,
+                },
+            )
+            valid = client.post(
+                "/api/dev/orrery/cognition/trace",
+                json={
+                    "slot": 1,
+                    "entity_id": actor[0],
+                    "anchor_chunk_id": anchor,
+                },
+            )
+            schema_invalid = client.post(
+                "/api/dev/orrery/cognition/trace",
+                json={
+                    "slot": 1,
+                    "entity_id": actor[0],
+                    "anchor_chunk_id": anchor,
+                    "unexpected": True,
+                },
+            )
+    finally:
+        if not cognition_route_registered:
+            del app.router.routes[original_route_count:]
+
+    assert wrong_kind.status_code == 422
+    assert wrong_kind.json() == {
+        "detail": (
+            f"entity_id={faction_entity_id}: expected an active character, "
+            "found entity kind 'faction'"
+        )
+    }
+    assert unknown_actor.status_code == 404
+    assert unknown_actor.json() == {
+        "detail": f"entity_id={missing_entity_id}: entity does not exist"
+    }
+    assert inactive.status_code == 422
+    assert inactive.json() == {
+        "detail": f"entity_id={inactive_actor[0]}: character is inactive"
+    }
+    assert orphan_character.status_code == 422
+    assert orphan_character.json() == {
+        "detail": (
+            f"entity_id={orphan_character_entity_id}: "
+            "character entity has no character record"
+        )
+    }
+    assert unknown_anchor.status_code == 404
+    assert unknown_anchor.json() == {
+        "detail": (
+            f"anchor_chunk_id={missing_anchor_id}: narrative chunk does not exist"
+        )
+    }
+    assert provisional_anchor.status_code == 422
+    assert provisional_anchor.json() == {
+        "detail": (
+            f"anchor_chunk_id={provisional_anchor_id}: narrative chunk is "
+            "provisional and not yet accepted"
+        )
+    }
+    assert missing_metadata_anchor.status_code == 422
+    assert missing_metadata_anchor.json() == {
+        "detail": (
+            f"anchor_chunk_id={missing_metadata_anchor_id}: "
+            "narrative chunk has no timeline metadata"
+        )
+    }
+    assert non_playable_anchor.status_code == 422
+    assert non_playable_anchor.json() == {
+        "detail": (
+            f"anchor_chunk_id={non_playable_anchor_id}: "
+            "narrative chunk is not a playable anchor"
+        )
+    }
+    assert valid.status_code == 200, valid.text
+    assert valid.json()["entity"]["entity_id"] == actor[0]
+    assert valid.json()["anchor"]["chunk_id"] == anchor
+    assert schema_invalid.status_code == 422
+    assert schema_invalid.json() == {
+        "detail": [
+            {
+                "type": "extra_forbidden",
+                "loc": ["body", "unexpected"],
+                "msg": "Extra inputs are not permitted",
+            }
+        ]
+    }
+    rejection_logs = [
+        record
+        for record in caplog.records
+        if record.name == "nexus.api.orrery_dev_endpoints"
+    ]
+    assert [record.getMessage() for record in rejection_logs] == [
+        (
+            "Rejected cognition trace request: "
+            f"entity_id={faction_entity_id}: expected an active character, "
+            "found entity kind 'faction'"
+        ),
+        (
+            "Rejected cognition trace request: "
+            f"entity_id={missing_entity_id}: entity does not exist"
+        ),
+        (
+            "Rejected cognition trace request: "
+            f"entity_id={inactive_actor[0]}: character is inactive"
+        ),
+        (
+            "Rejected cognition trace request: "
+            f"entity_id={orphan_character_entity_id}: "
+            "character entity has no character record"
+        ),
+        (
+            "Rejected cognition trace request: "
+            f"anchor_chunk_id={missing_anchor_id}: narrative chunk does not exist"
+        ),
+        (
+            "Rejected cognition trace request: "
+            f"anchor_chunk_id={provisional_anchor_id}: narrative chunk is "
+            "provisional and not yet accepted"
+        ),
+        (
+            "Rejected cognition trace request: "
+            f"anchor_chunk_id={missing_metadata_anchor_id}: "
+            "narrative chunk has no timeline metadata"
+        ),
+        (
+            "Rejected cognition trace request: "
+            f"anchor_chunk_id={non_playable_anchor_id}: "
+            "narrative chunk is not a playable anchor"
+        ),
+    ]
+    assert all(record.exc_info is None for record in rejection_logs)
+
+
+def test_cognition_trace_deep_reads_reject_post_validation_mutations(
+    session: Session,
+) -> None:
+    """Deep reads enforce actor and anchor validity after boundary checks."""
+
+    base = datetime(2078, 1, 31, tzinfo=timezone.utc)
+    anchor = _chunk(session, label="cognition race anchor", world_time=base, scene=1)
+    actor = _character(session, "cognition-race")
+    orrery_settings = load_settings_as_dict()["orrery"]
+
+    orrery_dev_endpoints._validate_cognition_trace_boundary(
+        session,
+        entity_id=actor[0],
+        anchor_chunk_id=anchor,
+    )
+    session.execute(
+        text("UPDATE entities SET kind = 'faction' WHERE id = :entity_id"),
+        {"entity_id": actor[0]},
+    )
+    with pytest.raises(CognitionTraceInputError) as actor_error:
+        cognition_trace(
+            session,
+            actor[0],
+            anchor_chunk_id=anchor,
+            orrery_settings=orrery_settings,
+        )
+    assert actor_error.value.field == "entity_id"
+    assert actor_error.value.value == actor[0]
+    assert actor_error.value.reason == "entity is not an active character"
+
+    session.execute(
+        text("UPDATE entities SET kind = 'character' WHERE id = :entity_id"),
+        {"entity_id": actor[0]},
+    )
+    orrery_dev_endpoints._validate_cognition_trace_boundary(
+        session,
+        entity_id=actor[0],
+        anchor_chunk_id=anchor,
+    )
+    session.execute(
+        text(
+            """
+            UPDATE narrative_chunks
+            SET authorial_directives = :authorial_directives
+            WHERE id = :chunk_id
+            """
+        ),
+        {
+            "authorial_directives": json.dumps([RETROGRADE_PROLOGUE_MARKER]),
+            "chunk_id": anchor,
+        },
+    )
+    with pytest.raises(CognitionTraceInputError) as anchor_error:
+        cognition_trace(
+            session,
+            actor[0],
+            anchor_chunk_id=anchor,
+            orrery_settings=orrery_settings,
+        )
+    assert anchor_error.value.field == "anchor_chunk_id"
+    assert anchor_error.value.value == anchor
+    assert anchor_error.value.reason == "narrative chunk has no timeline metadata"
 
 
 def test_cognition_trace_endpoint_keeps_canonical_truth_guarded(
@@ -946,6 +1302,7 @@ def test_ownership_and_anchor_validity_are_hard_boundaries(session: Session) -> 
     ).scalar_one()
     assert semantic_status == "skipped_no_query_embedding"
     raw_connection = session.connection().connection.driver_connection
+    assert raw_connection is not None
     with raw_connection.cursor(cursor_factory=RealDictCursor) as cursor:
         cursor_digest = build_knowledge_digest_sync(
             cursor,
@@ -1067,14 +1424,15 @@ def test_world_clock_decay_lowers_rank_without_mutating_possession(
     )
 
     assert [entry["claim_id"] for entry in digest] == [recent_claim]
-    scores = dict(
-        session.execute(
+    scores: dict[int, float] = {
+        int(row[0]): float(row[1])
+        for row in session.execute(
             text(
                 "SELECT claim_id, score FROM orrery_recall_trace "
                 "WHERE turn_id = 'decay-rank'"
             )
         ).all()
-    )
+    }
     assert scores[recent_claim] > scores[old_claim]
     awareness_ids = set(
         session.execute(
