@@ -1158,12 +1158,16 @@ floor_turns = 5
 ceiling_turns = 10
 compaction_model = "@openai.gaia"
 # Semantic limits are enforced inside the bounded structured-output repair
-# loops. Their configured worst case consumes 8K of the 12K context budget.
+# loops. With six failed compactions budgeted, their configured worst case
+# consumes 11.8K of the 16K context budget.
 max_letter_tokens = 300
+# This remains the prompt target. Marginal overages are accepted through the
+# mechanical hard cap; larger digests enter the bounded provider repair loop.
 max_digest_tokens = 2000
+digest_hard_cap_multiplier = 1.1
 # The complete digest + verbatim exchange block is structural context. Exceeding
 # this cap is a should-never-fire invariant, never permission to truncate.
-max_rendered_tokens = 12000
+max_rendered_tokens = 16000
 
 # =============================================================================
 # APEX API Settings (Story Generation)

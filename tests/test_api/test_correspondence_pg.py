@@ -282,6 +282,7 @@ def test_accept_reject_hysteresis_and_digest_undo(
         system_prompt: str,
         user_prompt: str,
         max_digest_tokens: int,
+        digest_hard_cap_multiplier: float,
     ) -> str:
         with pytest.raises(RuntimeError):
             asyncio.get_running_loop()
@@ -291,6 +292,7 @@ def test_accept_reject_hysteresis_and_digest_undo(
                 "system_prompt": system_prompt,
                 "user_prompt": user_prompt,
                 "max_digest_tokens": max_digest_tokens,
+                "digest_hard_cap_multiplier": digest_hard_cap_multiplier,
             }
         )
         return "Durable digest produced across the FastAPI worker boundary."
@@ -461,6 +463,7 @@ def test_accept_reject_hysteresis_and_digest_undo(
             in compaction_calls[0]["system_prompt"]
         )
         assert "{{MAX_DIGEST_TOKENS}}" not in compaction_calls[0]["system_prompt"]
+        assert compaction_calls[0]["digest_hard_cap_multiplier"] == 1.1
 
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
