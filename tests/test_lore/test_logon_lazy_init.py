@@ -236,6 +236,7 @@ def test_anthropic_storyteller_transport_and_guide_follow_settings(
                 "compaction_model": "claude-sonnet-4-5",
                 "max_letter_tokens": 300,
                 "max_digest_tokens": 2000,
+                "digest_hard_cap_multiplier": 1.1,
                 "max_rendered_tokens": 12000,
             }
         },

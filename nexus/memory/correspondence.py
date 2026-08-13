@@ -3,16 +3,21 @@
 from __future__ import annotations
 
 import inspect
+import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Mapping, Optional, Sequence
+from typing import Any, Awaitable, Callable, Coroutine, Mapping, Optional, Sequence
 
 import psycopg2
 from pydantic import BaseModel, ConfigDict, Field
 from psycopg2.extras import RealDictCursor
 
 from nexus.agents.lore.utils.chunk_operations import calculate_chunk_tokens
+from nexus.config.settings_models import calculate_digest_hard_cap_tokens
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -35,13 +40,14 @@ class CorrespondenceDigestWire(BaseModel):
 
 
 OutputValidator = Callable[[Any, Any], Any | Awaitable[Any]]
+AsyncOutputValidator = Callable[[Any, Any], Coroutine[Any, Any, Any]]
 
 
 def build_letter_length_validator(
     *,
     max_letter_tokens: int,
     delegate: Optional[OutputValidator] = None,
-) -> OutputValidator:
+) -> AsyncOutputValidator:
     """Build a repairable semantic validator for every storyteller wire letter."""
 
     if max_letter_tokens < 1:
@@ -70,11 +76,17 @@ def build_letter_length_validator(
     return _validate
 
 
-def build_digest_length_validator(*, max_digest_tokens: int) -> OutputValidator:
-    """Build a repairable semantic validator for correspondence compaction."""
+def build_digest_length_validator(
+    *,
+    max_digest_tokens: int,
+    digest_hard_cap_multiplier: float,
+) -> AsyncOutputValidator:
+    """Build two-band digest enforcement for correspondence compaction."""
 
-    if max_digest_tokens < 1:
-        raise ValueError("max_digest_tokens must be positive")
+    hard_cap_tokens = calculate_digest_hard_cap_tokens(
+        max_digest_tokens=max_digest_tokens,
+        digest_hard_cap_multiplier=digest_hard_cap_multiplier,
+    )
 
     async def _validate(_ctx: Any, output: Any) -> Any:
         if not isinstance(output, CorrespondenceDigestWire):
@@ -83,14 +95,29 @@ def build_digest_length_validator(*, max_digest_tokens: int) -> OutputValidator:
                 "CorrespondenceDigestWire"
             )
         token_count = calculate_chunk_tokens(output.digest)
-        if token_count > max_digest_tokens:
+        if token_count > hard_cap_tokens:
             from pydantic_ai import ModelRetry
 
             raise ModelRetry(
                 "The complete correspondence digest is too long "
-                f"({token_count} rendered tokens; limit "
-                f"{max_digest_tokens}). Compact it further without dropping "
+                f"({token_count} rendered tokens; hard cap "
+                f"{hard_cap_tokens}; target {max_digest_tokens}). Compact it "
+                "further without dropping "
                 "plan judgments and resubmit the complete response."
+            )
+        if token_count > max_digest_tokens:
+            logger.warning(
+                "CORRESPONDENCE_DIGEST_OVER_TARGET digest_tokens=%s "
+                "target_tokens=%s hard_cap_tokens=%s",
+                token_count,
+                max_digest_tokens,
+                hard_cap_tokens,
+                extra={
+                    "event": "correspondence_digest_over_target",
+                    "digest_tokens": token_count,
+                    "target_tokens": max_digest_tokens,
+                    "hard_cap_tokens": hard_cap_tokens,
+                },
             )
         return output
 

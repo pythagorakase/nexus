@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import logging
 from pathlib import Path
 import re
 import tomllib
@@ -25,10 +26,15 @@ from nexus.agents.logon.skald_wire import (
     skald_writer_lenient_schema,
     skald_writer_strict_text_format,
 )
+from nexus.agents.lore.utils.chunk_operations import calculate_chunk_tokens
 from nexus.agents.lore.logon_utility import LogonUtility
 from nexus.api.lore_adapter import compute_raw_text, response_to_incubator
 from nexus.config.loader import load_settings_as_dict
-from nexus.config.settings_models import Settings, StorytellerCorrespondenceSettings
+from nexus.config.settings_models import (
+    Settings,
+    StorytellerCorrespondenceSettings,
+    calculate_digest_hard_cap_tokens,
+)
 from nexus.memory import correspondence
 from nexus.memory.correspondence import (
     CorrespondenceContext,
@@ -56,6 +62,14 @@ def _exchange(chunk_id: int) -> CorrespondenceExchange:
             ("gaia", f"gaia reply {chunk_id}"),
         ),
     )
+
+
+def _digest_with_exact_tokens(token_count: int) -> CorrespondenceDigestWire:
+    """Build a digest whose size is verified by the shipped token counter."""
+
+    digest = ("digest " * token_count).strip()
+    assert calculate_chunk_tokens(digest) == token_count
+    return CorrespondenceDigestWire(digest=digest)
 
 
 def test_compaction_prompt_keeps_digest_budget_as_a_placeholder() -> None:
@@ -89,26 +103,30 @@ def test_digest_budget_render_fails_when_placeholder_is_missing() -> None:
         )
 
 
-def test_compaction_prompt_and_validator_share_real_digest_budget(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_compaction_prompt_and_validator_share_real_digest_budget() -> None:
     """Real settings bind the same digest budget to prompt and validator."""
 
     settings = load_settings_as_dict(PROMPTS_DIR.parent / "nexus.toml")
     configured = correspondence_settings(settings)
     expected = int(configured["max_digest_tokens"])
-    prompt = load_compaction_system_prompt(max_digest_tokens=expected)
-    validator = build_digest_length_validator(max_digest_tokens=expected)
-    output = CorrespondenceDigestWire(digest="Complete digest.")
-    monkeypatch.setattr(
-        correspondence,
-        "calculate_chunk_tokens",
-        lambda _text: expected + 1,
+    multiplier = float(configured["digest_hard_cap_multiplier"])
+    hard_cap = calculate_digest_hard_cap_tokens(
+        max_digest_tokens=expected,
+        digest_hard_cap_multiplier=multiplier,
     )
+    prompt = load_compaction_system_prompt(max_digest_tokens=expected)
+    validator = build_digest_length_validator(
+        max_digest_tokens=expected,
+        digest_hard_cap_multiplier=multiplier,
+    )
+    output = _digest_with_exact_tokens(hard_cap + 1)
 
     assert prompt.count(str(expected)) == 1
     assert "{{MAX_DIGEST_TOKENS}}" not in prompt
-    with pytest.raises(ModelRetry, match=rf"limit {expected}\)"):
+    with pytest.raises(
+        ModelRetry,
+        match=rf"hard cap {hard_cap}; target {expected}\)",
+    ):
         asyncio.run(validator(None, output))
 
 
@@ -268,10 +286,88 @@ def test_context_render_is_complete_and_token_cap_fails_loudly() -> None:
         context.render(max_tokens=1)
 
 
+@pytest.mark.parametrize("token_count", [9, 10])
+def test_digest_at_or_under_target_is_accepted_without_warning(
+    token_count: int,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The target band preserves the complete digest without diagnostics."""
+
+    output = _digest_with_exact_tokens(token_count)
+    validator = build_digest_length_validator(
+        max_digest_tokens=10,
+        digest_hard_cap_multiplier=2.0,
+    )
+
+    with caplog.at_level(logging.WARNING, logger="nexus.memory.correspondence"):
+        validated = asyncio.run(validator(None, output))
+
+    assert validated is output
+    assert not any(
+        getattr(record, "event", None) == "correspondence_digest_over_target"
+        for record in caplog.records
+    )
+
+
+@pytest.mark.parametrize("token_count", [15, 20])
+def test_digest_over_target_through_hard_cap_is_accepted_with_warning(
+    token_count: int,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Marginal overage is accepted whole and reports exact band accounting."""
+
+    output = _digest_with_exact_tokens(token_count)
+    validator = build_digest_length_validator(
+        max_digest_tokens=10,
+        digest_hard_cap_multiplier=2.0,
+    )
+
+    with caplog.at_level(logging.WARNING, logger="nexus.memory.correspondence"):
+        validated = asyncio.run(validator(None, output))
+
+    assert validated is output
+    warnings = [
+        record
+        for record in caplog.records
+        if getattr(record, "event", None) == "correspondence_digest_over_target"
+    ]
+    assert len(warnings) == 1
+    warning = warnings[0]
+    assert warning.levelno == logging.WARNING
+    assert warning.digest_tokens == token_count
+    assert warning.target_tokens == 10
+    assert warning.hard_cap_tokens == 20
+    assert warning.getMessage() == (
+        "CORRESPONDENCE_DIGEST_OVER_TARGET "
+        f"digest_tokens={token_count} target_tokens=10 hard_cap_tokens=20"
+    )
+
+
+def test_digest_beyond_hard_cap_is_rejected_loudly() -> None:
+    """Runaway digests still enter the bounded provider repair path."""
+
+    output = _digest_with_exact_tokens(21)
+    validator = build_digest_length_validator(
+        max_digest_tokens=10,
+        digest_hard_cap_multiplier=2.0,
+    )
+
+    with pytest.raises(
+        ModelRetry,
+        match=r"21 rendered tokens; hard cap 20; target 10\)",
+    ) as digest_error:
+        asyncio.run(validator(None, output))
+
+    assert output.digest not in str(digest_error.value)
+
+
 def test_letter_and_digest_limits_are_repairable_semantic_errors() -> None:
     secret = "SECRET-WORD " * 20
     letter_validator = build_letter_length_validator(max_letter_tokens=2)
-    digest_validator = build_digest_length_validator(max_digest_tokens=2)
+    digest_validator = build_digest_length_validator(
+        max_digest_tokens=2,
+        digest_hard_cap_multiplier=2.0,
+    )
 
     letter_outputs = [
         SkaldWriterWire(
@@ -314,6 +410,7 @@ def test_correspondence_settings_are_mandatory_bounded_and_use_role_ref() -> Non
         "compaction_model": "@openai.gaia",
         "max_letter_tokens": 300,
         "max_digest_tokens": 2000,
+        "digest_hard_cap_multiplier": 1.1,
         "max_rendered_tokens": 12000,
     }
     with pytest.raises(ValidationError, match="floor_turns"):
@@ -324,15 +421,23 @@ def test_correspondence_settings_are_mandatory_bounded_and_use_role_ref() -> Non
         StorytellerCorrespondenceSettings(**{**valid, "max_letter_tokens": 400})
     with pytest.raises(ValidationError, match="plus exchange headings"):
         StorytellerCorrespondenceSettings(**{**valid, "max_rendered_tokens": 8200})
+    with pytest.raises(ValidationError, match="greater than 1"):
+        StorytellerCorrespondenceSettings(
+            **{**valid, "digest_hard_cap_multiplier": 1.0}
+        )
 
     with Path("nexus.toml").open("rb") as handle:
         raw = tomllib.load(handle)
     configured = raw["storyteller"]["correspondence"]
     assert configured["compaction_model"].startswith("@")
+    digest_hard_cap_tokens = calculate_digest_hard_cap_tokens(
+        max_digest_tokens=configured["max_digest_tokens"],
+        digest_hard_cap_multiplier=configured["digest_hard_cap_multiplier"],
+    )
     assert (
         configured["ceiling_turns"] * 2 * configured["max_letter_tokens"]
-        + configured["max_digest_tokens"]
-        == 8000
+        + digest_hard_cap_tokens
+        == 8200
     )
 
     missing = copy.deepcopy(raw)
