@@ -162,21 +162,30 @@ def test_usage_valid_empty_day_keeps_success_output(
         pytest.param("2189-02-30T18:26:00-04:00", id="impossible-date"),
     ),
 )
-@pytest.mark.parametrize("as_json", (False, True), ids=("human", "json"))
+@pytest.mark.parametrize(
+    "json_position",
+    (
+        pytest.param(None, id="human"),
+        pytest.param("global", id="global-json"),
+        pytest.param("subcommand", id="subcommand-json"),
+    ),
+)
 def test_record_revelation_invalid_world_time_exits_with_one_concise_error(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
     world_time: str,
-    as_json: bool,
+    json_position: str | None,
 ) -> None:
     """Invalid public timestamps fail before database resolution or mutation."""
 
     argv = ["nexus"]
-    if as_json:
+    if json_position == "global":
+        argv.append("--json")
+    argv.append("record-revelation")
+    if json_position == "subcommand":
         argv.append("--json")
     argv.extend(
         [
-            "record-revelation",
             "--slot",
             "4",
             "--claim-id",
@@ -197,7 +206,7 @@ def test_record_revelation_invalid_world_time_exits_with_one_concise_error(
         f"got {world_time!r}"
     )
     assert captured.out == ""
-    if as_json:
+    if json_position is not None:
         assert captured.err == json.dumps({"error": message}) + "\n"
     else:
         assert captured.err == f"Error: {message}\n"

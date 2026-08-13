@@ -3580,6 +3580,18 @@ Examples:
         help="Grant told or manual awareness of an existing claim",
     )
     revelation_parser.add_argument(
+        "--json",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Emit JSON output",
+    )
+    revelation_parser.add_argument(
+        "--truncate",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Truncate long text fields (accepted for global CLI consistency)",
+    )
+    revelation_parser.add_argument(
         "--slot", type=int, required=True, help="Slot number (1-5)"
     )
     revelation_parser.add_argument("--claim-id", type=int, required=True)
