@@ -2207,9 +2207,7 @@ def run_record_revelation(
 
     world_time = None
     if args.world_time is not None:
-        world_time = datetime.fromisoformat(args.world_time)
-        if world_time.tzinfo is None:
-            raise ValueError("--world-time must include a UTC offset")
+        world_time = parse_record_revelation_world_time(args.world_time)
     dbname = slot_dbname(args.slot)
 
     def apply(conn: Any) -> Any:
@@ -2252,6 +2250,19 @@ def run_record_revelation(
         "source_tier": revelation.source_tier,
         "inserted": revelation.inserted,
     }
+
+
+def parse_record_revelation_world_time(value: str) -> datetime:
+    """Parse one timezone-aware ISO-8601 revelation timestamp."""
+
+    message = f"--world-time must be a timezone-aware ISO-8601 datetime, got {value!r}"
+    try:
+        world_time = datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise ValueError(message) from exc
+    if world_time.tzinfo is None or world_time.utcoffset() is None:
+        raise ValueError(message)
+    return world_time
 
 
 def _load_retrograde_packet_file(path: Path) -> Dict[str, Any]:
@@ -3857,6 +3868,13 @@ def main() -> int:
     if args.command == "logs" and args.lines is not None and args.lines < 1:
         emit_error("Log line count must be a positive integer", args.json)
         return 1
+
+    if args.command == "record-revelation" and args.world_time is not None:
+        try:
+            parse_record_revelation_world_time(args.world_time)
+        except ValueError as exc:
+            emit_error(str(exc), args.json)
+            return 1
 
     # Execute command
     if args.command == "up":

@@ -7,7 +7,7 @@ from argparse import Namespace
 from typing import Any, cast
 
 import pytest
-import requests
+import requests  # type: ignore[import-untyped]
 import tomlkit
 
 from nexus import cli
@@ -152,6 +152,56 @@ def test_usage_valid_empty_day_keeps_success_output(
             "Seats:\n"
             "  (none)\n"
         )
+
+
+@pytest.mark.parametrize(
+    "world_time",
+    (
+        pytest.param("2189-10-17T18:26:00", id="naive"),
+        pytest.param("2189-2-3T18:26:00-04:00", id="malformed-non-padded"),
+        pytest.param("2189-02-30T18:26:00-04:00", id="impossible-date"),
+    ),
+)
+@pytest.mark.parametrize("as_json", (False, True), ids=("human", "json"))
+def test_record_revelation_invalid_world_time_exits_with_one_concise_error(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    world_time: str,
+    as_json: bool,
+) -> None:
+    """Invalid public timestamps fail before database resolution or mutation."""
+
+    argv = ["nexus"]
+    if as_json:
+        argv.append("--json")
+    argv.extend(
+        [
+            "record-revelation",
+            "--slot",
+            "4",
+            "--claim-id",
+            "1",
+            "--knower",
+            "16",
+            "--world-time",
+            world_time,
+        ]
+    )
+    monkeypatch.setattr(sys, "argv", argv)
+
+    assert cli.main() == 1
+
+    captured = capsys.readouterr()
+    message = (
+        "--world-time must be a timezone-aware ISO-8601 datetime, "
+        f"got {world_time!r}"
+    )
+    assert captured.out == ""
+    if as_json:
+        assert captured.err == json.dumps({"error": message}) + "\n"
+    else:
+        assert captured.err == f"Error: {message}\n"
+    assert "Traceback" not in captured.out + captured.err
 
 
 def test_generation_poll_window_covers_live_reasoning_models() -> None:
