@@ -24,9 +24,16 @@ from nexus.agents.logon.skald_wire import SkaldTurnWire
 from nexus.agents.lore.logon_utility import LogonUtility
 from nexus.agents.lore.lore import LORE
 from nexus.agents.orrery.retrograde_markers import RETROGRADE_PROLOGUE_MARKER
-from nexus.api import commit_handler_sync, narrative, presence_audit, slot_utils
+from nexus.api import (
+    commit_handler_sync,
+    db_pool,
+    narrative,
+    presence_audit,
+    slot_utils,
+)
 from nexus.api.narrative_generation import generate_narrative_async
 from nexus.config import load_settings_as_dict
+from scripts import new_story_setup
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -72,31 +79,37 @@ def wizard_database() -> Iterator[str]:
     """Clone the template for one test and always drop the scratch database."""
 
     dbname = f"qa655_wizard_{uuid4().hex[:10]}"
-    source_db = os.environ.get("NEXUS_TEST_TEMPLATE_DB", "NEXUS_template")
-    assert source_db == "NEXUS_template" or source_db.startswith("qa655_")
-    admin = _connect("postgres")
-    admin.autocommit = True
+    admin: Any = None
+    original_use_pool = new_story_setup.USE_POOL
     try:
-        with admin.cursor() as cur:
-            cur.execute(
-                sql.SQL("CREATE DATABASE {} TEMPLATE {}").format(
-                    sql.Identifier(dbname),
-                    sql.Identifier(source_db),
-                )
-            )
+        try:
+            admin = _connect("postgres")
+        except psycopg2.Error as exc:
+            pytest.skip(f"PostgreSQL admin connection unavailable: {exc}")
+        admin.autocommit = True
+        new_story_setup.USE_POOL = False
+        new_story_setup.initialize_slot_database(
+            dbname,
+            source_db="NEXUS_template",
+        )
         _seed_post_transition_world(dbname)
         yield dbname
     finally:
-        with admin.cursor() as cur:
-            cur.execute(
-                "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
-                "WHERE datname = %s AND pid <> pg_backend_pid()",
-                (dbname,),
-            )
-            cur.execute(
-                sql.SQL("DROP DATABASE IF EXISTS {}").format(sql.Identifier(dbname))
-            )
-        admin.close()
+        new_story_setup.USE_POOL = original_use_pool
+        pool = db_pool._pools.pop(dbname, None)
+        if pool is not None:
+            pool.closeall()
+        if admin is not None:
+            with admin.cursor() as cur:
+                cur.execute(
+                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+                    "WHERE datname = %s AND pid <> pg_backend_pid()",
+                    (dbname,),
+                )
+                cur.execute(
+                    sql.SQL("DROP DATABASE IF EXISTS {}").format(sql.Identifier(dbname))
+                )
+            admin.close()
 
 
 def _insert_entity(cur: Any, kind: str) -> int:
