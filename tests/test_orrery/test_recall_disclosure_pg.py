@@ -28,7 +28,7 @@ from nexus.agents.memnon.utils.embedding_tables import (
     ensure_character_experience_embedding_table,
     ensure_embedding_table,
 )
-from nexus.agents.orrery.audit import cognition_trace
+from nexus.agents.orrery.audit import CognitionTraceInputError, cognition_trace
 from nexus.agents.orrery.events import commit_orrery_tick_sync
 from nexus.agents.orrery.knowledge_surfacing import build_knowledge_digest_sync
 from nexus.agents.orrery.retrograde_markers import RETROGRADE_PROLOGUE_MARKER
@@ -495,10 +495,20 @@ def test_cognition_trace_endpoint_rejects_invalid_identifiers(
             text("SELECT COALESCE(max(id), 0) + 1 FROM entities")
         ).scalar_one()
     )
-    missing_anchor_id = int(
+    provisional_anchor_id = int(
         session.execute(
             text("SELECT COALESCE(max(id), 0) + 1 FROM narrative_chunks")
         ).scalar_one()
+    )
+    missing_anchor_id = provisional_anchor_id + 1
+    session.execute(
+        text(
+            """
+            INSERT INTO incubator (chunk_id, parent_chunk_id, status)
+            VALUES (:chunk_id, :parent_chunk_id, 'provisional')
+            """
+        ),
+        {"chunk_id": provisional_anchor_id, "parent_chunk_id": anchor},
     )
     session.flush()
 
@@ -558,6 +568,14 @@ def test_cognition_trace_endpoint_rejects_invalid_identifiers(
                     "slot": 1,
                     "entity_id": actor[0],
                     "anchor_chunk_id": missing_anchor_id,
+                },
+            )
+            provisional_anchor = client.post(
+                "/api/dev/orrery/cognition/trace",
+                json={
+                    "slot": 1,
+                    "entity_id": actor[0],
+                    "anchor_chunk_id": provisional_anchor_id,
                 },
             )
             missing_metadata_anchor = client.post(
@@ -625,6 +643,13 @@ def test_cognition_trace_endpoint_rejects_invalid_identifiers(
             f"anchor_chunk_id={missing_anchor_id}: narrative chunk does not exist"
         )
     }
+    assert provisional_anchor.status_code == 422
+    assert provisional_anchor.json() == {
+        "detail": (
+            f"anchor_chunk_id={provisional_anchor_id}: narrative chunk is "
+            "provisional and not yet accepted"
+        )
+    }
     assert missing_metadata_anchor.status_code == 422
     assert missing_metadata_anchor.json() == {
         "detail": (
@@ -682,6 +707,11 @@ def test_cognition_trace_endpoint_rejects_invalid_identifiers(
         ),
         (
             "Rejected cognition trace request: "
+            f"anchor_chunk_id={provisional_anchor_id}: narrative chunk is "
+            "provisional and not yet accepted"
+        ),
+        (
+            "Rejected cognition trace request: "
             f"anchor_chunk_id={missing_metadata_anchor_id}: "
             "narrative chunk has no timeline metadata"
         ),
@@ -692,6 +722,70 @@ def test_cognition_trace_endpoint_rejects_invalid_identifiers(
         ),
     ]
     assert all(record.exc_info is None for record in rejection_logs)
+
+
+def test_cognition_trace_deep_reads_reject_post_validation_mutations(
+    session: Session,
+) -> None:
+    """Deep reads enforce actor and anchor validity after boundary checks."""
+
+    base = datetime(2078, 1, 31, tzinfo=timezone.utc)
+    anchor = _chunk(session, label="cognition race anchor", world_time=base, scene=1)
+    actor = _character(session, "cognition-race")
+    orrery_settings = load_settings_as_dict()["orrery"]
+
+    orrery_dev_endpoints._validate_cognition_trace_boundary(
+        session,
+        entity_id=actor[0],
+        anchor_chunk_id=anchor,
+    )
+    session.execute(
+        text("UPDATE entities SET kind = 'faction' WHERE id = :entity_id"),
+        {"entity_id": actor[0]},
+    )
+    with pytest.raises(CognitionTraceInputError) as actor_error:
+        cognition_trace(
+            session,
+            actor[0],
+            anchor_chunk_id=anchor,
+            orrery_settings=orrery_settings,
+        )
+    assert actor_error.value.field == "entity_id"
+    assert actor_error.value.value == actor[0]
+    assert actor_error.value.reason == "entity is not an active character"
+
+    session.execute(
+        text("UPDATE entities SET kind = 'character' WHERE id = :entity_id"),
+        {"entity_id": actor[0]},
+    )
+    orrery_dev_endpoints._validate_cognition_trace_boundary(
+        session,
+        entity_id=actor[0],
+        anchor_chunk_id=anchor,
+    )
+    session.execute(
+        text(
+            """
+            UPDATE narrative_chunks
+            SET authorial_directives = :authorial_directives
+            WHERE id = :chunk_id
+            """
+        ),
+        {
+            "authorial_directives": json.dumps([RETROGRADE_PROLOGUE_MARKER]),
+            "chunk_id": anchor,
+        },
+    )
+    with pytest.raises(CognitionTraceInputError) as anchor_error:
+        cognition_trace(
+            session,
+            actor[0],
+            anchor_chunk_id=anchor,
+            orrery_settings=orrery_settings,
+        )
+    assert anchor_error.value.field == "anchor_chunk_id"
+    assert anchor_error.value.value == anchor
+    assert anchor_error.value.reason == "narrative chunk has no timeline metadata"
 
 
 def test_cognition_trace_endpoint_keeps_canonical_truth_guarded(

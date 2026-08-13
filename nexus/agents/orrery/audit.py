@@ -47,17 +47,18 @@ from nexus.agents.orrery.epistemics import (
     load_epistemics_policy,
 )
 from nexus.agents.orrery.explain import StackExplanation, explain_stack
-from nexus.agents.orrery.reciprocal import OrreryJointBeat, detect_joint_beats
-from nexus.agents.orrery.overrides import (
-    OverrideValidationError,
-    WorldStateOverrides,
-    apply_overrides,
-)
 from nexus.agents.orrery.needs import (
     NEED_SEVERITY_PREFIX,
     coerce_need_tuning,
     severity_for_debt,
 )
+from nexus.agents.orrery.overrides import (
+    OverrideValidationError,
+    WorldStateOverrides,
+    apply_overrides,
+)
+from nexus.agents.orrery.reciprocal import OrreryJointBeat, detect_joint_beats
+from nexus.agents.orrery.reconstruction import playable_narrative_predicate
 from nexus.agents.orrery.resolver import (
     _LOCATION_CLASS_CATEGORY_SQL,
     OrreryScenePressureDraft,
@@ -1340,6 +1341,9 @@ def cognition_trace(
             FROM chunk_metadata cm
             JOIN narrative_chunks nc ON nc.id = cm.chunk_id
             WHERE cm.chunk_id = :anchor_chunk_id
+              AND """
+                + playable_narrative_predicate("nc")
+                + """
             """
             ),
             {"anchor_chunk_id": anchor_chunk_id},
@@ -1362,6 +1366,7 @@ def cognition_trace(
             FROM characters character
             JOIN entities entity ON entity.id = character.entity_id
             WHERE character.entity_id = :entity_id
+              AND entity.kind = 'character'
               AND entity.is_active = true
             """
             ),

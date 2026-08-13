@@ -378,6 +378,25 @@ def _validate_cognition_trace_boundary(
         .first()
     )
     if anchor is None:
+        provisional = session.execute(
+            text(
+                """
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM incubator
+                    WHERE chunk_id = :anchor_chunk_id
+                )
+                """
+            ),
+            {"anchor_chunk_id": anchor_chunk_id},
+        ).scalar_one()
+        if provisional:
+            _reject_cognition_trace_input(
+                status_code=422,
+                field="anchor_chunk_id",
+                value=anchor_chunk_id,
+                reason="narrative chunk is provisional and not yet accepted",
+            )
         _reject_cognition_trace_input(
             status_code=404,
             field="anchor_chunk_id",
