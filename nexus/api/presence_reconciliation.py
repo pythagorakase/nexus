@@ -150,6 +150,39 @@ def _is_accounted(
     )
 
 
+def reconcile_public_prose_mentions(
+    prose_parts: Sequence[str],
+    *,
+    accounted_references: Sequence[PresenceRef],
+    roster_rows: CharacterRosterRows,
+) -> List[PresenceRef]:
+    """Return missing canonical mentions detected in public narrative prose.
+
+    This is the shared pre-hydration boundary for ordinary Skald turns and
+    wizard-opening bootstrap turns. Callers supply the character references
+    already accounted for by their route-specific presence representation.
+    """
+
+    detector = _reconciliation_detector(roster_rows)
+    detected = detector.detect_entities("\n".join(prose_parts)).characters
+    accounted = list(accounted_references)
+    reconciled: List[PresenceRef] = []
+
+    for character in detected:
+        if _is_accounted(character, accounted):
+            continue
+        canonical = PresenceRef(
+            kind="character",
+            name=character["name"],
+            id=character["id"],
+        )
+        reconciled.append(canonical)
+        accounted.append(canonical)
+        logger.warning("presence prose mention normalized: %s", canonical.name)
+
+    return reconciled
+
+
 def reconcile_prose_mentions(
     wire: SkaldTurnWire,
     *,
@@ -164,29 +197,19 @@ def reconcile_prose_mentions(
     baseline by design and therefore require their own child mention.
     """
 
-    detector = _reconciliation_detector(roster_rows)
-    public_text = "\n".join([wire.narrative, *wire.choices])
-    detected = detector.detect_entities(public_text).characters
     presence = wire.presence
     end_roster = _end_of_turn_roster(presence, presence_baseline)
     mentions = presence.mentions if presence is not None else []
     parent_present = presence_baseline.present if presence_baseline is not None else []
+    reconciled = reconcile_public_prose_mentions(
+        [wire.narrative, *wire.choices],
+        accounted_references=[*end_roster, *mentions, *parent_present],
+        roster_rows=roster_rows,
+    )
 
-    for character in detected:
-        if any(
-            _is_accounted(character, references)
-            for references in (end_roster, mentions, parent_present)
-        ):
-            continue
+    if reconciled:
         if wire.presence is None:
             wire.presence = PresenceDelta()
-            mentions = wire.presence.mentions
-        canonical = PresenceRef(
-            kind="character",
-            name=character["name"],
-            id=character["id"],
-        )
-        wire.presence.mentions.append(canonical)
-        logger.warning("presence prose mention normalized: %s", canonical.name)
+        wire.presence.mentions.extend(reconciled)
 
     return wire

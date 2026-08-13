@@ -17,12 +17,17 @@ from typing import Any, Awaitable, Callable, Dict, Optional, Protocol
 from fastapi import HTTPException
 from psycopg2.extras import RealDictCursor
 
+from nexus.agents.logon.skald_wire import PresenceRef
 from nexus.agents.lore.lore import LORE
 from nexus.api.lore_adapter import (
     response_to_incubator,
     validate_incubator_data,
 )
 from nexus.api.narrative_lease import finish_generation
+from nexus.api.presence_reconciliation import (
+    read_character_roster_async,
+    reconcile_public_prose_mentions,
+)
 from nexus.memory.context_state import validate_staged_pass2_baseline
 from nexus.memory.manager import empty_pass2_baseline
 from nexus.telemetry.usage import usage_context
@@ -247,7 +252,9 @@ async def generate_narrative_async(
                     user_text=user_text,
                     session_id=session_id,
                     lore_pass_baseline=validate_staged_pass2_baseline(
-                        lore.turn_context.memory_state["lore_pass_baseline"]
+                        lore.turn_context.memory_state[  # type: ignore[attr-defined]
+                            "lore_pass_baseline"
+                        ]
                     ),
                     orrery_proposal=(
                         lore.turn_context.orrery_proposal if lore.turn_context else None
@@ -678,8 +685,27 @@ async def generate_bootstrap_narrative(
     logon = LogonUtility(settings, dbname=dbname, bootstrap_mode=True)
     story_response = await logon.generate_narrative_async(bootstrap_context)
 
-    # Extract narrative text
+    # Reconcile after the wizard and Retrograde identities are durable, but
+    # before the opening can enter the incubator. Bootstrap has no provider-
+    # authored presence block, so its manually staged protagonist is the
+    # route-specific accounted baseline for the shared reconciliation core.
     narrative_text = story_response.narrative
+    accounted_characters = (
+        [
+            PresenceRef(
+                kind="character",
+                name=character_name,
+                id=character_id,
+            )
+        ]
+        if character_id
+        else []
+    )
+    reconciled_mentions = reconcile_public_prose_mentions(
+        [narrative_text, *story_response.choices],
+        accounted_references=accounted_characters,
+        roster_rows=await read_character_roster_async(dbname),
+    )
 
     # Build incubator data
     incubator_data = {
@@ -707,7 +733,15 @@ async def generate_bootstrap_narrative(
                 [{"character_id": character_id, "reference_type": "present"}]
                 if character_id
                 else []
-            ),
+            )
+            + [
+                {
+                    "character_id": reference.id,
+                    "character_name": reference.name,
+                    "reference_type": "mentioned",
+                }
+                for reference in reconciled_mentions
+            ],
             "places": [
                 {
                     "place_id": location_id,
