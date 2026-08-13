@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import logging
 from contextlib import contextmanager
-from typing import Any, Iterator, List, Literal, Optional
+from typing import Any, Iterator, List, Literal, NoReturn, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
@@ -22,6 +22,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
 from nexus.agents.orrery.audit import (
+    CognitionTraceInputError,
     build_catalog,
     cognition_trace,
     entity_context,
@@ -291,6 +292,133 @@ def _default_anchor_chunk_id(session: Session) -> Optional[int]:
     return row["max_id"] if row else None
 
 
+def _reject_cognition_trace_input(
+    *, status_code: int, field: str, value: int, reason: str
+) -> NoReturn:
+    detail = f"{field}={value}: {reason}"
+    logger.warning("Rejected cognition trace request: %s", detail)
+    raise HTTPException(status_code=status_code, detail=detail)
+
+
+def _validate_cognition_trace_boundary(
+    session: Session,
+    *,
+    entity_id: int,
+    anchor_chunk_id: int,
+) -> None:
+    """Reject unknown or semantically invalid trace identifiers."""
+
+    entity = (
+        session.execute(
+            text(
+                """
+                SELECT entity.kind::text AS kind,
+                       entity.is_active,
+                       EXISTS (
+                           SELECT 1
+                           FROM characters character
+                           WHERE character.entity_id = entity.id
+                       ) AS has_character
+                FROM entities entity
+                WHERE entity.id = :entity_id
+                """
+            ),
+            {"entity_id": entity_id},
+        )
+        .mappings()
+        .first()
+    )
+    if entity is None:
+        _reject_cognition_trace_input(
+            status_code=404,
+            field="entity_id",
+            value=entity_id,
+            reason="entity does not exist",
+        )
+    if entity["kind"] != "character":
+        _reject_cognition_trace_input(
+            status_code=422,
+            field="entity_id",
+            value=entity_id,
+            reason=(
+                "expected an active character, found entity kind " f"{entity['kind']!r}"
+            ),
+        )
+    if not entity["is_active"]:
+        _reject_cognition_trace_input(
+            status_code=422,
+            field="entity_id",
+            value=entity_id,
+            reason="character is inactive",
+        )
+    if not entity["has_character"]:
+        _reject_cognition_trace_input(
+            status_code=422,
+            field="entity_id",
+            value=entity_id,
+            reason="character entity has no character record",
+        )
+
+    anchor = (
+        session.execute(
+            text(
+                """
+                SELECT cm.chunk_id IS NOT NULL AS has_timeline_metadata,
+                       ("""
+                + playable_narrative_predicate("nc")
+                + """) AS is_playable
+                FROM narrative_chunks nc
+                LEFT JOIN chunk_metadata cm ON cm.chunk_id = nc.id
+                WHERE nc.id = :anchor_chunk_id
+                """
+            ),
+            {"anchor_chunk_id": anchor_chunk_id},
+        )
+        .mappings()
+        .first()
+    )
+    if anchor is None:
+        provisional = session.execute(
+            text(
+                """
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM incubator
+                    WHERE chunk_id = :anchor_chunk_id
+                )
+                """
+            ),
+            {"anchor_chunk_id": anchor_chunk_id},
+        ).scalar_one()
+        if provisional:
+            _reject_cognition_trace_input(
+                status_code=422,
+                field="anchor_chunk_id",
+                value=anchor_chunk_id,
+                reason="narrative chunk is provisional and not yet accepted",
+            )
+        _reject_cognition_trace_input(
+            status_code=404,
+            field="anchor_chunk_id",
+            value=anchor_chunk_id,
+            reason="narrative chunk does not exist",
+        )
+    if not anchor["has_timeline_metadata"]:
+        _reject_cognition_trace_input(
+            status_code=422,
+            field="anchor_chunk_id",
+            value=anchor_chunk_id,
+            reason="narrative chunk has no timeline metadata",
+        )
+    if not anchor["is_playable"]:
+        _reject_cognition_trace_input(
+            status_code=422,
+            field="anchor_chunk_id",
+            value=anchor_chunk_id,
+            reason="narrative chunk is not a playable anchor",
+        )
+
+
 @router.get("/catalog")
 async def get_catalog() -> dict[str, Any]:
     """Static template catalog: bands, pseudo-templates, families, event map."""
@@ -378,12 +506,25 @@ async def post_cognition_trace(
     """Anchor-aware character cognition trace. Read-only and dev-gated."""
 
     with _slot_session(request.slot) as session:
-        return cognition_trace(
+        _validate_cognition_trace_boundary(
             session,
-            request.entity_id,
+            entity_id=request.entity_id,
             anchor_chunk_id=request.anchor_chunk_id,
-            orrery_settings=_orrery_settings(),
         )
+        try:
+            return cognition_trace(
+                session,
+                request.entity_id,
+                anchor_chunk_id=request.anchor_chunk_id,
+                orrery_settings=_orrery_settings(),
+            )
+        except CognitionTraceInputError as exc:
+            _reject_cognition_trace_input(
+                status_code=422,
+                field=exc.field,
+                value=exc.value,
+                reason=exc.reason,
+            )
 
 
 @router.post("/coverage")

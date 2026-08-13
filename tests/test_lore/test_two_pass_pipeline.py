@@ -166,6 +166,7 @@ class _RecordingProvider:
         self.output_validator = output_validator
         self.structured_transport = structured_transport
         self.structured_output_retries = structured_output_retries
+        self.usage_seat: str | None = None
         self.outputs = outputs
         self.calls: list[dict[str, Any]] = []
 
@@ -188,7 +189,7 @@ class _RecordingProvider:
             }
         )
 
-    def _parse_next_output(self, schema_model: type) -> Any:
+    def _parse_next_output(self, schema_model: Any) -> Any:
         output = self.outputs.pop(0)
         if isinstance(output, BaseException):
             raise output
@@ -333,7 +334,8 @@ def _utility(
                 "compaction_model": "two-pass-test-model",
                 "max_letter_tokens": max_letter_tokens,
                 "max_digest_tokens": 2000,
-                "max_rendered_tokens": 12000,
+                "digest_hard_cap_multiplier": 1.1,
+                "max_rendered_tokens": 16000,
             }
         },
     }
@@ -946,6 +948,7 @@ def test_compaction_repairs_overlong_digest_with_small_structured_wire() -> None
         system_prompt="Compact the authorial correspondence.",
         user_prompt="Aging exchanges.",
         max_digest_tokens=10,
+        digest_hard_cap_multiplier=1.1,
     )
 
     assert digest == "LIVE: ring the bell later."
