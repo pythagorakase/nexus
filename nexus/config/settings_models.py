@@ -2913,6 +2913,13 @@ class MemorySettings(BaseModel):
 # =============================================================================
 
 
+# Compaction first fires when the journal grows past its configured ceiling.
+# Six consecutive failed post-accept attempts therefore retain exchanges 11-16
+# at the committed ceiling of 10, so the rendered-context invariant must budget
+# six exchanges beyond the nominal ceiling while leaving runtime overflow loud.
+CORRESPONDENCE_COMPACTION_FAILURE_EXCHANGE_ALLOWANCE = 6
+
+
 def calculate_digest_hard_cap_tokens(
     *,
     max_digest_tokens: int,
@@ -2990,10 +2997,13 @@ class StorytellerCorrespondenceSettings(BaseModel):
             max_digest_tokens=self.max_digest_tokens,
             digest_hard_cap_multiplier=self.digest_hard_cap_multiplier,
         )
-        bounded_content_tokens = (
-            self.ceiling_turns * 2 * self.max_letter_tokens + digest_hard_cap_tokens
+        bounded_exchange_turns = (
+            self.ceiling_turns + CORRESPONDENCE_COMPACTION_FAILURE_EXCHANGE_ALLOWANCE
         )
-        structural_overhead_tokens = 256 + self.ceiling_turns * 32
+        bounded_content_tokens = (
+            bounded_exchange_turns * 2 * self.max_letter_tokens + digest_hard_cap_tokens
+        )
+        structural_overhead_tokens = 256 + bounded_exchange_turns * 32
         if (
             bounded_content_tokens + structural_overhead_tokens
             > self.max_rendered_tokens

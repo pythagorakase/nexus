@@ -335,7 +335,7 @@ def _utility(
                 "max_letter_tokens": max_letter_tokens,
                 "max_digest_tokens": 2000,
                 "digest_hard_cap_multiplier": 1.1,
-                "max_rendered_tokens": 12000,
+                "max_rendered_tokens": 16000,
             }
         },
     }

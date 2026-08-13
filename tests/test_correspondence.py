@@ -31,6 +31,7 @@ from nexus.agents.lore.logon_utility import LogonUtility
 from nexus.api.lore_adapter import compute_raw_text, response_to_incubator
 from nexus.config.loader import load_settings_as_dict
 from nexus.config.settings_models import (
+    CORRESPONDENCE_COMPACTION_FAILURE_EXCHANGE_ALLOWANCE,
     Settings,
     StorytellerCorrespondenceSettings,
     calculate_digest_hard_cap_tokens,
@@ -64,12 +65,20 @@ def _exchange(chunk_id: int) -> CorrespondenceExchange:
     )
 
 
+def _text_with_exact_tokens(token: str, token_count: int) -> str:
+    """Build repeated text whose size is verified by the shipped counter."""
+
+    text = (f"{token} " * token_count).strip()
+    assert calculate_chunk_tokens(text) == token_count
+    return text
+
+
 def _digest_with_exact_tokens(token_count: int) -> CorrespondenceDigestWire:
     """Build a digest whose size is verified by the shipped token counter."""
 
-    digest = ("digest " * token_count).strip()
-    assert calculate_chunk_tokens(digest) == token_count
-    return CorrespondenceDigestWire(digest=digest)
+    return CorrespondenceDigestWire(
+        digest=_text_with_exact_tokens("digest", token_count)
+    )
 
 
 def test_compaction_prompt_keeps_digest_budget_as_a_placeholder() -> None:
@@ -286,6 +295,41 @@ def test_context_render_is_complete_and_token_cap_fails_loudly() -> None:
         context.render(max_tokens=1)
 
 
+def test_rendered_context_invariant_budgets_failed_compaction_pileup() -> None:
+    """Six failed compactions keep their turns without breaching the invariant."""
+
+    settings = load_settings_as_dict(PROMPTS_DIR.parent / "nexus.toml")
+    configured = correspondence_settings(settings)
+    max_letter_tokens = int(configured["max_letter_tokens"])
+    hard_cap_tokens = calculate_digest_hard_cap_tokens(
+        max_digest_tokens=int(configured["max_digest_tokens"]),
+        digest_hard_cap_multiplier=float(configured["digest_hard_cap_multiplier"]),
+    )
+    exchange_count = (
+        int(configured["ceiling_turns"])
+        + CORRESPONDENCE_COMPACTION_FAILURE_EXCHANGE_ALLOWANCE
+    )
+    letter = _text_with_exact_tokens("letter", max_letter_tokens)
+    context = CorrespondenceContext(
+        digest=_text_with_exact_tokens("digest", hard_cap_tokens),
+        compacted_through_chunk_id=0,
+        exchanges=tuple(
+            CorrespondenceExchange(
+                chunk_id=chunk_id,
+                letters=(("writer", letter), ("gaia", letter)),
+            )
+            for chunk_id in range(1, exchange_count + 1)
+        ),
+    )
+
+    rendered = context.render(max_tokens=int(configured["max_rendered_tokens"]))
+
+    rendered_tokens = calculate_chunk_tokens(rendered)
+    assert exchange_count == 16
+    assert rendered_tokens == 12063
+    assert rendered_tokens <= int(configured["max_rendered_tokens"])
+
+
 @pytest.mark.parametrize("token_count", [9, 10])
 def test_digest_at_or_under_target_is_accepted_without_warning(
     token_count: int,
@@ -341,6 +385,56 @@ def test_digest_over_target_through_hard_cap_is_accepted_with_warning(
         "CORRESPONDENCE_DIGEST_OVER_TARGET "
         f"digest_tokens={token_count} target_tokens=10 hard_cap_tokens=20"
     )
+
+
+def test_digest_warning_counts_the_normalized_persisted_text(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Whitespace normalization can move a digest into the warning band."""
+
+    raw_digest = " unimaginable" + " digest" * 7
+    normalized_digest = raw_digest.strip()
+    assert calculate_chunk_tokens(raw_digest) == 8
+    assert calculate_chunk_tokens(normalized_digest) == 11
+    output = CorrespondenceDigestWire(digest=raw_digest)
+    validator = build_digest_length_validator(
+        max_digest_tokens=10,
+        digest_hard_cap_multiplier=2.0,
+    )
+
+    with caplog.at_level(logging.WARNING, logger="nexus.memory.correspondence"):
+        validated = asyncio.run(validator(None, output))
+
+    assert validated.digest == normalized_digest
+    warning = next(
+        record
+        for record in caplog.records
+        if getattr(record, "event", None) == "correspondence_digest_over_target"
+    )
+    assert warning.digest_tokens == 11
+    assert warning.target_tokens == 10
+    assert warning.hard_cap_tokens == 20
+
+
+def test_digest_normalization_cannot_cross_hard_cap() -> None:
+    """The reviewer's raw-at-cap digest is rejected after normalization grows it."""
+
+    raw_digest = " unimaginable" + " digest" * 2199
+    normalized_digest = raw_digest.strip()
+    assert calculate_chunk_tokens(raw_digest) == 2200
+    assert calculate_chunk_tokens(normalized_digest) == 2203
+    validator = build_digest_length_validator(
+        max_digest_tokens=2000,
+        digest_hard_cap_multiplier=1.1,
+    )
+
+    with pytest.raises(
+        ModelRetry,
+        match=r"2203 rendered tokens; hard cap 2200; target 2000\)",
+    ) as digest_error:
+        asyncio.run(validator(None, CorrespondenceDigestWire(digest=raw_digest)))
+
+    assert raw_digest not in str(digest_error.value)
 
 
 def test_digest_beyond_hard_cap_is_rejected_loudly() -> None:
@@ -411,7 +505,7 @@ def test_correspondence_settings_are_mandatory_bounded_and_use_role_ref() -> Non
         "max_letter_tokens": 300,
         "max_digest_tokens": 2000,
         "digest_hard_cap_multiplier": 1.1,
-        "max_rendered_tokens": 12000,
+        "max_rendered_tokens": 16000,
     }
     with pytest.raises(ValidationError, match="floor_turns"):
         StorytellerCorrespondenceSettings(
@@ -434,10 +528,14 @@ def test_correspondence_settings_are_mandatory_bounded_and_use_role_ref() -> Non
         max_digest_tokens=configured["max_digest_tokens"],
         digest_hard_cap_multiplier=configured["digest_hard_cap_multiplier"],
     )
+    budgeted_exchange_turns = (
+        configured["ceiling_turns"]
+        + CORRESPONDENCE_COMPACTION_FAILURE_EXCHANGE_ALLOWANCE
+    )
     assert (
-        configured["ceiling_turns"] * 2 * configured["max_letter_tokens"]
+        budgeted_exchange_turns * 2 * configured["max_letter_tokens"]
         + digest_hard_cap_tokens
-        == 8200
+        == 11800
     )
 
     missing = copy.deepcopy(raw)

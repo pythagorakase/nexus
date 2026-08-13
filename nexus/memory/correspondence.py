@@ -94,7 +94,15 @@ def build_digest_length_validator(
                 "Correspondence compaction validator requires "
                 "CorrespondenceDigestWire"
             )
-        token_count = calculate_chunk_tokens(output.digest)
+        # Logon and persistence both strip the digest. Validate that exact text
+        # because stripping can change token boundaries and increase the count.
+        normalized_digest = output.digest.strip()
+        normalized_output = (
+            output
+            if normalized_digest == output.digest
+            else output.model_copy(update={"digest": normalized_digest})
+        )
+        token_count = calculate_chunk_tokens(normalized_digest)
         if token_count > hard_cap_tokens:
             from pydantic_ai import ModelRetry
 
@@ -119,7 +127,7 @@ def build_digest_length_validator(
                     "hard_cap_tokens": hard_cap_tokens,
                 },
             )
-        return output
+        return normalized_output
 
     return _validate
 
