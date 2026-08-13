@@ -101,8 +101,34 @@ class FakeRegistryCursor:
         return False
 
     def execute(self, sql: str, params: Tuple[Any, ...] = ()) -> None:
-        if "WITH candidates AS" in sql and "entity_tags_current" in sql:
+        if "WITH candidates AS" in sql:
+            ordinals, kinds, wire_ids, names, _tags, _anchor = params
             self._result = []
+            for ordinal, kind, wire_id, name in zip(ordinals, kinds, wire_ids, names):
+                name_matches = self.entities_by_name.get(str(name), [])
+                name_match_count = name_matches.count(kind)
+                name_entity_id = 9000 + int(ordinal) if name_match_count == 1 else None
+                id_entity_id = (
+                    int(wire_id)
+                    if wire_id is not None
+                    and self.entity_kinds_by_id.get(int(wire_id)) == kind
+                    else None
+                )
+                verified_entity_id = id_entity_id or name_entity_id
+                self._result.append(
+                    (
+                        ordinal,
+                        id_entity_id,
+                        name if id_entity_id is not None else None,
+                        name_match_count,
+                        name_entity_id,
+                        name if name_entity_id is not None else None,
+                        verified_entity_id,
+                        None,
+                        None,
+                        False,
+                    )
+                )
             self._one = None
         elif "FROM entities" in sql and "kind::text" in sql:
             entity_ids = params[0]

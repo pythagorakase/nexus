@@ -97,7 +97,7 @@ async def fetch_chunk_metadata(
     """
     row = await conn.fetchrow(
         """
-        SELECT season, episode, scene, world_layer, time_delta
+        SELECT season, episode, scene, world_layer, time_delta, world_time
         FROM chunk_metadata
         WHERE chunk_id = $1
         """,
@@ -360,13 +360,16 @@ async def apply_state_updates(
     conn: asyncpg.Connection,
     state_updates: StateUpdates,
     source_chunk_id: Optional[int] = None,
+    anchor_world_time: Optional[datetime] = None,
 ) -> None:
     """
     Apply entity state updates from the LLM response.
 
     This updates scalar state for characters and places. Faction semantics are
     intentionally not written to legacy faction prose columns; use Orrery tag
-    deltas / pair-tags and world events instead.
+    deltas / pair-tags and world events instead. ``anchor_world_time`` is the
+    accepted turn's parent clock; ``source_chunk_id`` remains the new child for
+    provenance.
     """
     # Update character states
     for char_update in state_updates.characters:
@@ -436,6 +439,7 @@ async def apply_state_updates(
                 subtype_id=char_update.character_id,
                 bestowal=bestowal,
                 source_chunk_id=source_chunk_id,
+                anchor_world_time=anchor_world_time,
             )
 
     # Update place states. The schema field is current_conditions
@@ -477,6 +481,7 @@ async def apply_state_updates(
                 subtype_id=place_update.place_id,
                 bestowal=bestowal,
                 source_chunk_id=source_chunk_id,
+                anchor_world_time=anchor_world_time,
             )
 
     for faction_update in state_updates.factions:
@@ -491,6 +496,7 @@ async def apply_state_updates(
                 subtype_id=faction_update.faction_id,
                 bestowal=bestowal,
                 source_chunk_id=source_chunk_id,
+                anchor_world_time=anchor_world_time,
             )
 
     for relationship_update in state_updates.relationships:
@@ -538,8 +544,9 @@ async def apply_state_tags_async(
     kind: str,
     subtype_table: str,
     subtype_id: int,
-    bestowal,
+    bestowal: Any,
     source_chunk_id: Optional[int] = None,
+    anchor_world_time: Optional[datetime] = None,
 ) -> None:
     """Look up the entity_id for a subtype row and apply Skald-bestowed tags."""
 
@@ -557,6 +564,8 @@ async def apply_state_tags_async(
         entity_kind=kind,
         bestowal=bestowal,
         source_kind="skald_inline",
+        world_time=anchor_world_time,
+        world_time_is_authoritative=True,
         source_chunk_id=source_chunk_id,
     )
     if any(counters.values()):
@@ -620,15 +629,30 @@ async def commit_incubator_to_database(
             validate_staged_pass2_baseline(incubator["lore_pass_baseline"])
             logger.info("Processing incubator session %s", session_id)
 
-            # Step 2: Get parent context
-            parent_meta = await fetch_chunk_metadata(conn, incubator["parent_chunk_id"])
-            logger.info(
-                "Parent chunk %s: S%sE%s scene %s",
-                incubator["parent_chunk_id"],
-                parent_meta["season"],
-                parent_meta["episode"],
-                parent_meta["scene"],
-            )
+            # Step 2: Get parent context. Bootstrap has no parent clock, so its
+            # inline tags deliberately retain NULL applied/expires timestamps.
+            parent_meta: Dict[str, Any]
+            if incubator["parent_chunk_id"] == 0:
+                parent_meta = {
+                    "season": 1,
+                    "episode": 1,
+                    "scene": 0,
+                    "world_layer": "primary",
+                    "time_delta": 0,
+                    "world_time": None,
+                }
+                logger.info("Bootstrap chunk - using default metadata (S1E1 scene 1)")
+            else:
+                parent_meta = await fetch_chunk_metadata(
+                    conn, incubator["parent_chunk_id"]
+                )
+                logger.info(
+                    "Parent chunk %s: S%sE%s scene %s",
+                    incubator["parent_chunk_id"],
+                    parent_meta["season"],
+                    parent_meta["episode"],
+                    parent_meta["scene"],
+                )
 
             # Step 3: Convert metadata
             metadata_update = ChunkMetadataUpdate(**incubator["metadata_updates"])
@@ -721,7 +745,12 @@ async def commit_incubator_to_database(
 
             # Step 9: Update entity states (if provided)
             if state_updates is not None:
-                await apply_state_updates(conn, state_updates, source_chunk_id=chunk_id)
+                await apply_state_updates(
+                    conn,
+                    state_updates,
+                    source_chunk_id=chunk_id,
+                    anchor_world_time=parent_meta.get("world_time"),
+                )
 
             # Step 9.5: Commit Orrery proposal inside the accepted-chunk transaction
             orrery_settings = _load_orrery_settings()

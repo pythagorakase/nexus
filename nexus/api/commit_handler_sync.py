@@ -361,13 +361,15 @@ def commit_incubator_to_database_sync(
                     "scene": 0,  # Will be incremented to 1
                     "world_layer": "primary",
                     "time_delta": 0,
+                    "world_time": None,
                 }
                 logger.info("Bootstrap chunk - using default metadata (S1E1 scene 1)")
             else:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
                     cur.execute(
                         """
-                        SELECT season, episode, scene, world_layer, time_delta
+                        SELECT season, episode, scene, world_layer, time_delta,
+                               world_time
                         FROM chunk_metadata
                         WHERE chunk_id = %s
                     """,
@@ -596,7 +598,12 @@ def commit_incubator_to_database_sync(
 
             # Step 9: Update entity states (if provided)
             if state_updates is not None:
-                apply_state_updates_sync(conn, state_updates, source_chunk_id=chunk_id)
+                apply_state_updates_sync(
+                    conn,
+                    state_updates,
+                    source_chunk_id=chunk_id,
+                    anchor_world_time=parent_meta.get("world_time"),
+                )
 
             # Step 9.5: Commit Orrery proposal inside the accepted-chunk transaction
             orrery_settings = _load_orrery_settings()
@@ -873,9 +880,12 @@ def compact_accepted_correspondence_sync(
 
 
 def apply_state_updates_sync(
-    conn, state_updates: StateUpdates, source_chunk_id: Optional[int] = None
-):
-    """Apply entity state updates synchronously"""
+    conn: Any,
+    state_updates: StateUpdates,
+    source_chunk_id: Optional[int] = None,
+    anchor_world_time: Optional[datetime] = None,
+) -> None:
+    """Apply state updates using the parent clock and child provenance."""
     with conn.cursor() as cur:
         # Update character states
         for char_update in state_updates.characters:
@@ -939,6 +949,7 @@ def apply_state_updates_sync(
                     subtype_id=char_update.character_id,
                     bestowal=bestowal,
                     source_chunk_id=source_chunk_id,
+                    anchor_world_time=anchor_world_time,
                 )
 
         # Update place states. The schema field is current_conditions
@@ -977,6 +988,7 @@ def apply_state_updates_sync(
                     subtype_id=place_update.place_id,
                     bestowal=bestowal,
                     source_chunk_id=source_chunk_id,
+                    anchor_world_time=anchor_world_time,
                 )
 
         # Update faction states
@@ -992,6 +1004,7 @@ def apply_state_updates_sync(
                     subtype_id=faction_update.faction_id,
                     bestowal=bestowal,
                     source_chunk_id=source_chunk_id,
+                    anchor_world_time=anchor_world_time,
                 )
 
         for relationship_update in state_updates.relationships:
@@ -1033,13 +1046,14 @@ def apply_state_updates_sync(
 
 
 def _apply_state_tags(
-    cur,
+    cur: Any,
     *,
-    kind,
-    subtype_table,
-    subtype_id,
-    bestowal,
+    kind: str,
+    subtype_table: str,
+    subtype_id: int,
+    bestowal: Any,
     source_chunk_id: Optional[int] = None,
+    anchor_world_time: Optional[datetime] = None,
 ) -> None:
     """Look up the entity_id for a subtype row and apply Skald-bestowed tags."""
     cur.execute(
@@ -1057,6 +1071,8 @@ def _apply_state_tags(
         entity_kind=kind,
         bestowal=bestowal,
         source_kind="skald_inline",
+        world_time=anchor_world_time,
+        world_time_is_authoritative=True,
         source_chunk_id=source_chunk_id,
     )
     if any(counters.values()):

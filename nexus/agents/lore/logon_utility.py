@@ -393,6 +393,10 @@ class LogonUtility:
         # Current prompt proposal bindings are read by the generation-time
         # replacement-delta validator. They are replaced atomically per turn.
         self._active_orrery_proposal_bindings: Dict[str, Mapping[str, Any]] = {}
+        # Dynamic parent anchor consumed by the reusable provider validator.
+        # This must change per generation; capturing it at provider construction
+        # would use a stale clock on the next turn.
+        self._active_anchor_chunk_id: Optional[int] = None
         # One setting snapshot per utility instance: both seats of a
         # two-pass turn must compose against the same SettingCard.
         self._setting_context: Optional[str] = None
@@ -772,6 +776,7 @@ class LogonUtility:
             suggestion_limit=int(tag_library_settings.get("suggestion_limit", 3)),
             allow_same_turn_faction_declarations=maturation_settings.enabled,
             proposal_bindings_provider=(lambda: self._active_orrery_proposal_bindings),
+            anchor_chunk_id_provider=lambda: self._active_anchor_chunk_id,
         )
         output_validator = tag_output_validator
         if not provider_bootstrap_mode:
@@ -924,6 +929,7 @@ class LogonUtility:
         self._active_orrery_proposal_bindings = _proposal_bindings_from_payload(
             context_payload
         )
+        self._active_anchor_chunk_id = self._parent_chunk_id(context_payload)
         self._ensure_provider(
             context_payload,
             expected_model=expected_model,
@@ -1008,6 +1014,7 @@ class LogonUtility:
         self._active_orrery_proposal_bindings = _proposal_bindings_from_payload(
             context_payload
         )
+        self._active_anchor_chunk_id = self._parent_chunk_id(context_payload)
         self._ensure_provider(
             context_payload,
             expected_model=expected_model,

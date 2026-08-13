@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 from contextlib import contextmanager
 from dataclasses import dataclass
+from datetime import timedelta
 from hashlib import sha256
 import os
 from typing import Iterator, Literal, Optional, Sequence
@@ -36,6 +37,8 @@ class TagLibraryEntry:
     category_description: str
     prompt_order: int
     reapplication_policy: Optional[str] = None
+    clearance_kind: Optional[str] = None
+    default_duration: Optional[timedelta] = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,7 +112,9 @@ def read_tag_library(
                     t.tag,
                     t.is_ephemeral,
                     t.description,
-                    t.reapplication_policy::text AS reapplication_policy
+                    t.reapplication_policy::text AS reapplication_policy,
+                    t.clearance_kind::text AS clearance_kind,
+                    t.default_duration
                 FROM tag_category_registry r
                 JOIN tags t ON t.category = r.category
                 WHERE {' AND '.join(where)}
@@ -135,6 +140,12 @@ def read_tag_library(
                         if row.get("reapplication_policy") is not None
                         else None
                     ),
+                    clearance_kind=(
+                        str(row["clearance_kind"])
+                        if row.get("clearance_kind") is not None
+                        else None
+                    ),
+                    default_duration=row.get("default_duration"),
                 )
                 for row in cur.fetchall()
             ]

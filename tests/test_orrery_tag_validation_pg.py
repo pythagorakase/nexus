@@ -3,15 +3,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 import logging
 import os
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Iterator, List, Optional
 import uuid
 
 import psycopg2
 from psycopg2 import sql
+from psycopg2.extras import Json
 from pydantic import ValidationError
+from pydantic_ai import ModelRetry
 import pytest
 
 from nexus.agents.logon.gaia_registry_schema import (
@@ -29,19 +33,29 @@ from nexus.agents.logon.orrery_tag_validation import (
 from nexus.agents.logon.skald_wire import (
     CharacterUpdateDelta,
     FactionUpdateDelta,
+    hydrate_skald_turn,
     PlaceUpdateDelta,
     SkaldGaiaWire,
     SkaldTurnWire,
 )
+from nexus.api.commit_handler_sync import (
+    apply_state_updates_sync,
+    commit_incubator_to_database_sync,
+    resolve_state_update_ids_sync,
+)
 from nexus.api.db_pool import close_all_pools
+from nexus.api.lore_adapter import response_to_incubator
 from nexus.api.slot_utils import VALID_DBNAMES
+from nexus.memory.manager import empty_pass2_baseline
 
 
 pytestmark = pytest.mark.requires_postgres
 
 CHARACTER_TAG = "recently_protective"
+EVENT_TAG = "dying"
 FACTION_TAG = "schismatic_internal_threat"
 PLACE_TAG = "qa649_place_watch"
+TIME_TAG = "intoxicated:stimulant"
 CHARACTER_REJECTION = (
     "updates.characters[0]: applied_tags: Tag 'recently_protective' uses "
     "reapplication_policy='extend_expiry', which requires duration_override; "
@@ -64,9 +78,19 @@ class _Qa649Database:
     """Disposable database plus the entity rows seeded into it."""
 
     dbname: str
+    anchor_chunk_id: int
+    source_chunk_id: int
+    anchor_world_time: datetime
     active_character: _EntityRef
     inactive_character: _EntityRef
+    time_character: _EntityRef
+    rebased_time_character: _EntityRef
+    mixed_time_character: _EntityRef
+    semantic_character: _EntityRef
+    expired_character: _EntityRef
+    commit_character: _EntityRef
     place: _EntityRef
+    no_default_place: _EntityRef
     faction: _EntityRef
 
 
@@ -119,17 +143,51 @@ def _insert_entity(cur: Any, kind: str, name: str) -> _EntityRef:
     )
 
 
-def _activate_tag(cur: Any, entity_id: int, tag: str) -> None:
+def _activate_tag(
+    cur: Any,
+    entity_id: int,
+    tag: str,
+    *,
+    expires_at_world_time: Optional[datetime] = None,
+) -> None:
     cur.execute(
         """
-        INSERT INTO entity_tags (entity_id, tag_id, source_kind)
-        SELECT %s, id, 'llm_generated'
+        INSERT INTO entity_tags (
+            entity_id, tag_id, source_kind, expires_at_world_time
+        )
+        SELECT %s, id, 'llm_generated', %s
         FROM tags
         WHERE tag = %s
         """,
-        (entity_id, tag),
+        (entity_id, expires_at_world_time, tag),
     )
     assert cur.rowcount == 1
+
+
+def _insert_chunk_at(cur: Any, world_time: datetime, *, scene: int) -> int:
+    """Create one real anchor chunk pinned to an exact world clock."""
+
+    cur.execute(
+        """
+        INSERT INTO narrative_chunks (raw_text, storyteller_text)
+        VALUES ('Issue 649 clock anchor.', 'Issue 649 clock anchor.')
+        RETURNING id
+        """
+    )
+    chunk_id = int(cur.fetchone()[0])
+    cur.execute(
+        """
+        INSERT INTO chunk_metadata (
+            chunk_id, season, episode, scene, world_layer, slug, world_time
+        ) VALUES (%s, 64, 49, %s, 'primary', %s, %s)
+        """,
+        (chunk_id, scene, f"Q649{scene:03d}", world_time),
+    )
+    cur.execute(
+        "UPDATE chunk_metadata SET world_time = %s WHERE chunk_id = %s",
+        (world_time, chunk_id),
+    )
+    return chunk_id
 
 
 @pytest.fixture(scope="module")
@@ -150,6 +208,13 @@ def qa649_db() -> Iterator[_Qa649Database]:
         VALID_DBNAMES.add(dbname)
         with _connect(dbname) as conn:
             with conn.cursor() as cur:
+                migration_sql = (
+                    Path(__file__).resolve().parents[1]
+                    / "migrations"
+                    / "109_extend_expiry_default_durations.sql"
+                ).read_text()
+                cur.execute(migration_sql)
+                cur.execute(migration_sql)
                 cur.execute(
                     """
                     INSERT INTO global_variables (id, new_story, base_timestamp)
@@ -159,13 +224,48 @@ def qa649_db() -> Iterator[_Qa649Database]:
                     """
                 )
                 cur.execute("INSERT INTO entities (kind) VALUES ('place')")
+                anchor_world_time = datetime(2026, 8, 13, 12, 0, tzinfo=timezone.utc)
+                anchor_chunk_id = _insert_chunk_at(cur, anchor_world_time, scene=1)
+                source_chunk_id = _insert_chunk_at(
+                    cur,
+                    anchor_world_time + timedelta(days=1),
+                    scene=3,
+                )
+                # The legacy statement trigger recomputes earlier clocks when
+                # the later row is inserted. Re-pin the exact target anchor;
+                # a world_time-only update does not invoke that trigger.
+                cur.execute(
+                    "UPDATE chunk_metadata SET world_time = %s WHERE chunk_id = %s",
+                    (anchor_world_time, anchor_chunk_id),
+                )
                 active_character = _insert_entity(
                     cur, "character", "QA649 Active Character"
                 )
                 inactive_character = _insert_entity(
                     cur, "character", "QA649 Inactive Character"
                 )
+                time_character = _insert_entity(
+                    cur, "character", "QA649 Time Character"
+                )
+                rebased_time_character = _insert_entity(
+                    cur, "character", "QA649 Rebased Time Character"
+                )
+                mixed_time_character = _insert_entity(
+                    cur, "character", "QA649 Mixed Time Character"
+                )
+                semantic_character = _insert_entity(
+                    cur, "character", "QA649 Semantic Character"
+                )
+                expired_character = _insert_entity(
+                    cur, "character", "QA649 Expired Character"
+                )
+                commit_character = _insert_entity(
+                    cur, "character", "QA649 Commit Character"
+                )
                 place = _insert_entity(cur, "place", "QA649 Place")
+                no_default_place = _insert_entity(
+                    cur, "place", "QA649 No Default Place"
+                )
                 faction = _insert_entity(cur, "faction", "QA649 Faction")
                 cur.execute(
                     """
@@ -180,7 +280,7 @@ def qa649_db() -> Iterator[_Qa649Database]:
                         %s,
                         'place_threat',
                         true,
-                        'semantic',
+                        'time',
                         'extend_expiry',
                         'Issue 649 disposable place tag.'
                     )
@@ -192,9 +292,19 @@ def qa649_db() -> Iterator[_Qa649Database]:
                 _activate_tag(cur, faction.entity_id, FACTION_TAG)
         yield _Qa649Database(
             dbname=dbname,
+            anchor_chunk_id=anchor_chunk_id,
+            source_chunk_id=source_chunk_id,
+            anchor_world_time=anchor_world_time,
             active_character=active_character,
             inactive_character=inactive_character,
+            time_character=time_character,
+            rebased_time_character=rebased_time_character,
+            mixed_time_character=mixed_time_character,
+            semantic_character=semantic_character,
+            expired_character=expired_character,
+            commit_character=commit_character,
             place=place,
+            no_default_place=no_default_place,
             faction=faction,
         )
     finally:
@@ -288,6 +398,115 @@ def _normalize_and_collect(
                 proposal_bindings=proposal_bindings,
             )
     return normalized, issues
+
+
+async def _validate_and_apply(
+    response: SkaldTurnWire,
+    database: _Qa649Database,
+) -> SkaldTurnWire:
+    """Drive the real validation, hydration, identity resolution, and writer."""
+
+    validator = build_storyteller_tag_validator(
+        database.dbname,
+        anchor_chunk_id_provider=lambda: database.anchor_chunk_id,
+    )
+    assert validator is not None
+    validated = await validator(SimpleNamespace(retry=0), response)
+    assert validated is response
+    hydrated = hydrate_skald_turn(validated)
+    assert hydrated.state_updates is not None
+    with _connect(database.dbname) as conn:
+        resolved = resolve_state_update_ids_sync(conn, hydrated.state_updates)
+        apply_state_updates_sync(
+            conn,
+            resolved,
+            source_chunk_id=database.source_chunk_id,
+            anchor_world_time=database.anchor_world_time,
+        )
+    return validated
+
+
+def _current_tag_row(
+    database: _Qa649Database,
+    *,
+    entity_id: int,
+    tag: str,
+) -> Optional[tuple[Any, ...]]:
+    """Return one entity's current durable tag row from the scratch database."""
+
+    with _connect(database.dbname) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    et.applied_at_world_time,
+                    et.expires_at_world_time,
+                    et.source_chunk_id
+                FROM entity_tags et
+                JOIN tags registry ON registry.id = et.tag_id
+                WHERE et.entity_id = %s
+                  AND registry.tag = %s
+                  AND et.cleared_at IS NULL
+                """,
+                (entity_id, tag),
+            )
+            return cur.fetchone()
+
+
+def _stage_incubator_response(
+    cur: Any,
+    *,
+    database: _Qa649Database,
+    response: SkaldTurnWire,
+    session_id: str,
+) -> None:
+    """Hydrate and stage a validated response through the real draft adapter."""
+
+    hydrated = hydrate_skald_turn(response)
+    hydrated.generation_model = "TEST"
+    staged = response_to_incubator(
+        hydrated,
+        parent_chunk_id=database.anchor_chunk_id,
+        user_text="Continue.",
+        session_id=session_id,
+        lore_pass_baseline=empty_pass2_baseline({}),
+    )
+    staged["llm_response_id"] = f"response-{session_id}"
+    cur.execute(
+        """
+        INSERT INTO incubator (
+            id, chunk_id, parent_chunk_id, user_text, storyteller_text,
+            generation_model, choice_object, choice_text,
+            metadata_updates, entity_updates, reference_updates,
+            orrery_proposal, orrery_adjudications, new_entities,
+            correspondence_writer_letter, correspondence_gaia_letter,
+            session_id, llm_response_id, status, lore_pass_baseline
+        ) VALUES (
+            TRUE, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+            %s, %s, %s, %s, %s, %s, %s, 'provisional', %s
+        )
+        """,
+        (
+            staged["chunk_id"],
+            staged["parent_chunk_id"],
+            staged["user_text"],
+            staged["storyteller_text"],
+            staged["generation_model"],
+            Json(staged["choice_object"]),
+            staged["choice_text"],
+            Json(staged["metadata_updates"]),
+            Json(staged["entity_updates"]),
+            Json(staged["reference_updates"]),
+            Json(staged["orrery_proposal"]),
+            Json(staged["orrery_adjudications"]),
+            Json(staged["new_entities"]),
+            staged["correspondence_writer_letter"],
+            staged["correspondence_gaia_letter"],
+            staged["session_id"],
+            staged["llm_response_id"],
+            Json(staged["lore_pass_baseline"]),
+        ),
+    )
 
 
 def test_identity_only_active_character_update_is_removed_before_registry_coercion(
@@ -600,3 +819,441 @@ def test_active_place_and_faction_identity_only_reassert_arms_are_removed_by_id(
     assert response.updates is not None
     assert getattr(response.updates, array_name) == []
     assert issues == []
+
+
+def test_migration_109_seeds_only_time_cleared_defaults(
+    qa649_db: _Qa649Database,
+) -> None:
+    with _connect(qa649_db.dbname) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT tag, default_duration
+                FROM tags
+                WHERE default_duration IS NOT NULL
+                ORDER BY tag
+                """
+            )
+            assert cur.fetchall() == [
+                ("intoxicated:depressant", timedelta(hours=8)),
+                ("intoxicated:dissociative", timedelta(hours=6)),
+                ("intoxicated:hallucinogen", timedelta(hours=8)),
+                ("intoxicated:stimulant", timedelta(hours=6)),
+            ]
+            cur.execute(
+                """
+                SELECT col_description(
+                    'tags'::regclass,
+                    (
+                        SELECT attnum
+                        FROM pg_attribute
+                        WHERE attrelid = 'tags'::regclass
+                          AND attname = 'default_duration'
+                    )
+                )
+                """
+            )
+            comment = cur.fetchone()[0]
+            assert "time-cleared" in comment
+            assert "semantic- and event-cleared" in comment
+
+
+@pytest.mark.asyncio
+async def test_time_first_application_lands_with_registry_default_expiry(
+    qa649_db: _Qa649Database,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    response = _response(
+        characters=[
+            {
+                "id": qa649_db.time_character.wire_id,
+                "name": qa649_db.time_character.name,
+                "tags_add": [TIME_TAG],
+            }
+        ]
+    )
+
+    with caplog.at_level(
+        logging.WARNING,
+        logger="nexus.logon.orrery_tag_validation",
+    ):
+        await _validate_and_apply(response, qa649_db)
+
+    assert "reason=first-application-time-defaulted" in caplog.text
+    row = _current_tag_row(
+        qa649_db,
+        entity_id=qa649_db.time_character.entity_id,
+        tag=TIME_TAG,
+    )
+    assert row == (
+        qa649_db.anchor_world_time,
+        qa649_db.anchor_world_time + timedelta(hours=6),
+        qa649_db.source_chunk_id,
+    )
+
+
+@pytest.mark.asyncio
+async def test_removed_active_update_rebases_later_defaulted_application(
+    qa649_db: _Qa649Database,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    response = _response(
+        characters=[
+            {
+                "id": qa649_db.active_character.wire_id,
+                "name": qa649_db.active_character.name,
+                "tags_add": [CHARACTER_TAG],
+            },
+            {
+                "id": qa649_db.rebased_time_character.wire_id,
+                "name": qa649_db.rebased_time_character.name,
+                "tags_add": [TIME_TAG],
+            },
+        ]
+    )
+
+    caplog.clear()
+    with caplog.at_level(
+        logging.WARNING,
+        logger="nexus.logon.orrery_tag_validation",
+    ):
+        await _validate_and_apply(response, qa649_db)
+
+    assert "reason=normalized-active" in caplog.text
+    assert "reason=first-application-time-defaulted" in caplog.text
+    assert response.updates is not None
+    assert [update.name for update in response.updates.characters] == [
+        qa649_db.rebased_time_character.name
+    ]
+    row = _current_tag_row(
+        qa649_db,
+        entity_id=qa649_db.rebased_time_character.entity_id,
+        tag=TIME_TAG,
+    )
+    assert row == (
+        qa649_db.anchor_world_time,
+        qa649_db.anchor_world_time + timedelta(hours=6),
+        qa649_db.source_chunk_id,
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("tag", "clearance_kind"),
+    [
+        (CHARACTER_TAG, "semantic"),
+        (EVENT_TAG, "event"),
+    ],
+)
+async def test_semantic_and_event_first_applications_land_without_expiry(
+    qa649_db: _Qa649Database,
+    caplog: pytest.LogCaptureFixture,
+    tag: str,
+    clearance_kind: str,
+) -> None:
+    response = _response(
+        characters=[
+            {
+                "id": qa649_db.semantic_character.wire_id,
+                "name": qa649_db.semantic_character.name,
+                "tags_add": [tag],
+            }
+        ]
+    )
+
+    caplog.clear()
+    with caplog.at_level(
+        logging.WARNING,
+        logger="nexus.logon.orrery_tag_validation",
+    ):
+        await _validate_and_apply(response, qa649_db)
+
+    assert "reason=first-application-landed-no-expiry" in caplog.text
+    assert f"clearance_kind={clearance_kind}" in caplog.text
+    row = _current_tag_row(
+        qa649_db,
+        entity_id=qa649_db.semantic_character.entity_id,
+        tag=tag,
+    )
+    assert row == (
+        qa649_db.anchor_world_time,
+        None,
+        qa649_db.source_chunk_id,
+    )
+
+
+@pytest.mark.asyncio
+async def test_time_first_application_without_default_rejects_loudly(
+    qa649_db: _Qa649Database,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    response = _response(
+        places=[
+            {
+                "id": qa649_db.no_default_place.wire_id,
+                "name": qa649_db.no_default_place.name,
+                "tags_add": [PLACE_TAG],
+            }
+        ]
+    )
+    validator = build_storyteller_tag_validator(
+        qa649_db.dbname,
+        anchor_chunk_id_provider=lambda: qa649_db.anchor_chunk_id,
+    )
+    assert validator is not None
+
+    with caplog.at_level(
+        logging.WARNING,
+        logger="nexus.logon.orrery_tag_validation",
+    ):
+        with pytest.raises(ModelRetry) as exc_info:
+            await validator(SimpleNamespace(retry=0), response)
+
+    assert "requires duration_override" in exc_info.value.message
+    rejection_log = next(
+        record.getMessage()
+        for record in caplog.records
+        if "reason=no-default-rejected" in record.getMessage()
+    )
+    assert "array=places" in rejection_log
+    assert "index=0" in rejection_log
+    assert f"supplied_id={qa649_db.no_default_place.wire_id}" in rejection_log
+    assert f"supplied_name='{qa649_db.no_default_place.name}'" in rejection_log
+    assert f"offending_tags=['{PLACE_TAG}']" in rejection_log
+
+
+@pytest.mark.asyncio
+async def test_expiry_at_anchor_is_inactive_and_defaulted_from_exact_anchor(
+    qa649_db: _Qa649Database,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with _connect(qa649_db.dbname) as conn:
+        with conn.cursor() as cur:
+            _activate_tag(
+                cur,
+                qa649_db.expired_character.entity_id,
+                TIME_TAG,
+                expires_at_world_time=qa649_db.anchor_world_time,
+            )
+    response = _response(
+        characters=[
+            {
+                "id": qa649_db.expired_character.wire_id,
+                "name": qa649_db.expired_character.name,
+                "tags_add": [TIME_TAG],
+            }
+        ]
+    )
+
+    caplog.clear()
+    with caplog.at_level(
+        logging.WARNING,
+        logger="nexus.logon.orrery_tag_validation",
+    ):
+        await _validate_and_apply(response, qa649_db)
+
+    assert "reason=expiry-disagreement" in caplog.text
+    assert "reason=first-application-time-defaulted" in caplog.text
+    row = _current_tag_row(
+        qa649_db,
+        entity_id=qa649_db.expired_character.entity_id,
+        tag=TIME_TAG,
+    )
+    assert row == (
+        qa649_db.anchor_world_time,
+        qa649_db.anchor_world_time + timedelta(hours=6),
+        qa649_db.source_chunk_id,
+    )
+
+
+@pytest.mark.asyncio
+async def test_expired_semantic_row_is_relanded_without_expiry(
+    qa649_db: _Qa649Database,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with _connect(qa649_db.dbname) as conn:
+        with conn.cursor() as cur:
+            _activate_tag(
+                cur,
+                qa649_db.expired_character.entity_id,
+                CHARACTER_TAG,
+                expires_at_world_time=qa649_db.anchor_world_time,
+            )
+    response = _response(
+        characters=[
+            {
+                "id": qa649_db.expired_character.wire_id,
+                "name": qa649_db.expired_character.name,
+                "tags_add": [CHARACTER_TAG],
+            }
+        ]
+    )
+
+    caplog.clear()
+    with caplog.at_level(
+        logging.WARNING,
+        logger="nexus.logon.orrery_tag_validation",
+    ):
+        await _validate_and_apply(response, qa649_db)
+
+    assert "reason=expiry-disagreement" in caplog.text
+    assert "reason=first-application-landed-no-expiry" in caplog.text
+    row = _current_tag_row(
+        qa649_db,
+        entity_id=qa649_db.expired_character.entity_id,
+        tag=CHARACTER_TAG,
+    )
+    assert row == (
+        qa649_db.anchor_world_time,
+        None,
+        qa649_db.source_chunk_id,
+    )
+
+
+@pytest.mark.asyncio
+async def test_id_name_disagreement_rejects_with_distinct_reason(
+    qa649_db: _Qa649Database,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    response = _response(
+        characters=[
+            {
+                "id": qa649_db.time_character.wire_id,
+                "name": qa649_db.semantic_character.name,
+                "tags_add": [TIME_TAG],
+            }
+        ]
+    )
+    validator = build_storyteller_tag_validator(
+        qa649_db.dbname,
+        anchor_chunk_id_provider=lambda: qa649_db.anchor_chunk_id,
+    )
+    assert validator is not None
+
+    caplog.clear()
+    with caplog.at_level(
+        logging.WARNING,
+        logger="nexus.logon.orrery_tag_validation",
+    ):
+        with pytest.raises(ModelRetry) as exc_info:
+            await validator(SimpleNamespace(retry=0), response)
+
+    assert "reason=id-name-conflict" in exc_info.value.message
+    conflict_log = next(
+        record.getMessage()
+        for record in caplog.records
+        if "reason=id-name-conflict" in record.getMessage()
+    )
+    assert "array=characters" in conflict_log
+    assert "index=0" in conflict_log
+    assert f"supplied_id={qa649_db.time_character.wire_id}" in conflict_log
+    assert f"supplied_name='{qa649_db.semantic_character.name}'" in conflict_log
+    assert f"offending_tags=['{TIME_TAG}']" in conflict_log
+
+
+@pytest.mark.asyncio
+async def test_mixed_payload_logs_active_defaulted_and_rejected_reasons(
+    qa649_db: _Qa649Database,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    response = _response(
+        characters=[
+            {
+                "id": qa649_db.active_character.wire_id,
+                "name": qa649_db.active_character.name,
+                "tags_add": [CHARACTER_TAG],
+            },
+            {
+                "id": qa649_db.mixed_time_character.wire_id,
+                "name": qa649_db.mixed_time_character.name,
+                "tags_add": [TIME_TAG],
+            },
+        ],
+        places=[
+            {
+                "id": qa649_db.no_default_place.wire_id,
+                "name": qa649_db.no_default_place.name,
+                "tags_add": [PLACE_TAG],
+            }
+        ],
+    )
+    validator = build_storyteller_tag_validator(
+        qa649_db.dbname,
+        anchor_chunk_id_provider=lambda: qa649_db.anchor_chunk_id,
+    )
+    assert validator is not None
+
+    caplog.clear()
+    with caplog.at_level(
+        logging.WARNING,
+        logger="nexus.logon.orrery_tag_validation",
+    ):
+        with pytest.raises(ModelRetry) as exc_info:
+            await validator(SimpleNamespace(retry=0), response)
+
+    assert "requires duration_override" in exc_info.value.message
+    assert TIME_TAG not in exc_info.value.message
+    messages = [record.getMessage() for record in caplog.records]
+    assert sum("reason=normalized-active" in message for message in messages) == 1
+    assert (
+        sum(
+            "reason=first-application-time-defaulted" in message for message in messages
+        )
+        == 1
+    )
+    assert sum("reason=no-default-rejected" in message for message in messages) == 1
+    assert response.updates is not None
+    assert [update.name for update in response.updates.characters] == [
+        qa649_db.mixed_time_character.name
+    ]
+
+
+@pytest.mark.asyncio
+async def test_time_default_survives_real_draft_and_commit_route(
+    qa649_db: _Qa649Database,
+) -> None:
+    response = _response(
+        characters=[
+            {
+                "id": qa649_db.commit_character.wire_id,
+                "name": qa649_db.commit_character.name,
+                "tags_add": [TIME_TAG],
+            }
+        ]
+    )
+    validator = build_storyteller_tag_validator(
+        qa649_db.dbname,
+        anchor_chunk_id_provider=lambda: qa649_db.anchor_chunk_id,
+    )
+    assert validator is not None
+    validated = await validator(SimpleNamespace(retry=0), response)
+    assert validated is response
+    session_id = str(uuid.uuid4())
+
+    with _connect(qa649_db.dbname) as conn:
+        with conn.cursor() as cur:
+            _stage_incubator_response(
+                cur,
+                database=qa649_db,
+                response=response,
+                session_id=session_id,
+            )
+    commit_conn = _connect(qa649_db.dbname)
+    try:
+        accepted_chunk_id = commit_incubator_to_database_sync(
+            commit_conn,
+            session_id,
+        )
+    finally:
+        commit_conn.close()
+
+    row = _current_tag_row(
+        qa649_db,
+        entity_id=qa649_db.commit_character.entity_id,
+        tag=TIME_TAG,
+    )
+    assert row == (
+        qa649_db.anchor_world_time,
+        qa649_db.anchor_world_time + timedelta(hours=6),
+        accepted_chunk_id,
+    )

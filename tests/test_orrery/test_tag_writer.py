@@ -177,7 +177,11 @@ class FakeCursor:
             )
             self.rowcount = 1
             return
-        if sql_upper.startswith("SELECT ID, CATEGORY, IS_EPHEMERAL"):
+        if (
+            sql_upper.startswith("SELECT")
+            and "FROM TAGS" in sql_upper
+            and "SYNONYM_FOR IS NULL" in sql_upper
+        ):
             (name,) = params
             row = self.tags.get(name)
             if (
@@ -194,10 +198,44 @@ class FakeCursor:
                     "category": row["category"],
                     "is_ephemeral": row["is_ephemeral"],
                     "reapplication_policy": row.get("reapplication_policy"),
+                    "clearance_kind": row.get("clearance_kind"),
+                    "default_duration": row.get("default_duration"),
                 },
-                ["id", "category", "is_ephemeral", "reapplication_policy"],
+                [
+                    "id",
+                    "category",
+                    "is_ephemeral",
+                    "reapplication_policy",
+                    "clearance_kind",
+                    "default_duration",
+                ],
             )
             self.rowcount = 1
+            return
+        if (
+            sql_upper.startswith("WITH ANCHOR")
+            and "FROM ENTITY_TAGS AS ET" in sql_upper
+        ):
+            world_time, entity_id, tag_id = params
+            current = next(
+                (
+                    row
+                    for row in self.entity_tags
+                    if row["entity_id"] == entity_id
+                    and row["tag_id"] == tag_id
+                    and row["cleared_at"] is None
+                    and (
+                        world_time is None
+                        or row.get("expires_at_world_time") is None
+                        or row["expires_at_world_time"] > world_time
+                    )
+                ),
+                None,
+            )
+            self._next_row = (
+                _FakeRow({"id": current["id"]}, ["id"]) if current is not None else None
+            )
+            self.rowcount = 1 if current is not None else 0
             return
         if sql_upper.startswith("SELECT ID") and "FROM ENTITY_TAGS" in sql_upper:
             entity_id, tag_id = params
@@ -233,10 +271,16 @@ class FakeCursor:
                     and row["cleared_at"] is None
                 ):
                     if "GREATEST" in sql_upper:
-                        base = max(
-                            row.get("expires_at_world_time") or world_time,
-                            world_time,
-                        )
+                        existing_expiry = row.get("expires_at_world_time")
+                        if not isinstance(world_time, datetime):
+                            raise AssertionError("GREATEST upsert requires world_time")
+                        if existing_expiry is not None and not isinstance(
+                            existing_expiry, datetime
+                        ):
+                            raise AssertionError("existing expiry must be datetime")
+                        if not isinstance(duration_override, timedelta):
+                            raise AssertionError("GREATEST upsert requires duration")
+                        base = max(existing_expiry or world_time, world_time)
                         row["applied_at_world_time"] = world_time
                         row["expires_at_world_time"] = base + duration_override
                         row["source_kind"] = source_kind
@@ -345,14 +389,31 @@ def _registered(*entries):
         if len(entry) == 3:
             name, category, ephemeral = entry
             reapplication_policy = None
-        else:
+            clearance_kind = "semantic" if ephemeral else None
+            default_duration = None
+        elif len(entry) == 4:
             name, category, ephemeral, reapplication_policy = entry
+            clearance_kind = "semantic" if ephemeral else None
+            default_duration = None
+        elif len(entry) == 5:
+            name, category, ephemeral, reapplication_policy, clearance_kind = entry
+            default_duration = None
+        else:
+            (
+                name,
+                category,
+                ephemeral,
+                reapplication_policy,
+                clearance_kind,
+                default_duration,
+            ) = entry
         table[name] = {
             "id": hash(name) & 0xFFFFFF,
             "category": category,
             "is_ephemeral": ephemeral,
             "reapplication_policy": reapplication_policy,
-            "clearance_kind": "semantic" if ephemeral else None,
+            "clearance_kind": clearance_kind,
+            "default_duration": default_duration,
             "deprecated": False,
             "synonym_for": None,
         }
@@ -516,7 +577,14 @@ def test_extend_expiry_policy_extends_from_later_of_expiry_or_world_time():
 def test_extend_expiry_policy_requires_duration_override():
     cur = FakeCursor(
         tags=_registered(
-            ("intoxicated:stimulant", "state", True, "extend_expiry"),
+            (
+                "intoxicated:stimulant",
+                "state",
+                True,
+                "extend_expiry",
+                "time",
+                None,
+            ),
         )
     )
 

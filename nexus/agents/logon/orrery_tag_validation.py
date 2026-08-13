@@ -16,13 +16,15 @@ back to the model while it still owns the turn.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from difflib import get_close_matches
 import logging
-from typing import Any, Callable, FrozenSet, List, Mapping, Optional, Tuple
+from typing import Any, Callable, FrozenSet, List, Mapping, MutableSet, Optional, Tuple
 
 from nexus.agents.orrery.declaration_validation import (
     collect_new_entity_declaration_vocabulary_issues,
 )
+from nexus.agents.orrery.tag_activity import active_entity_tag_at_world_time_sql
 from nexus.agents.orrery.tag_library import (
     read_event_types,
     read_pair_tag_library,
@@ -57,6 +59,12 @@ class StorytellerVocabulary:
     tag_reapplication_policies_by_kind: Mapping[str, Mapping[str, str]] = field(
         default_factory=dict
     )
+    tag_clearance_kinds_by_kind: Mapping[str, Mapping[str, str]] = field(
+        default_factory=dict
+    )
+    tag_default_durations_by_kind: Mapping[str, Mapping[str, timedelta]] = field(
+        default_factory=dict
+    )
 
 
 def read_storyteller_vocabulary(dbname: str) -> StorytellerVocabulary:
@@ -72,6 +80,16 @@ def read_storyteller_vocabulary(dbname: str) -> StorytellerVocabulary:
         "place": {},
         "faction": {},
     }
+    clearance_kinds_by_kind: dict[str, dict[str, str]] = {
+        "character": {},
+        "place": {},
+        "faction": {},
+    }
+    default_durations_by_kind: dict[str, dict[str, timedelta]] = {
+        "character": {},
+        "place": {},
+        "faction": {},
+    }
     for entry in read_tag_library(dbname):
         if entry.entity_kind in tags_by_kind:
             tags_by_kind[entry.entity_kind].add(entry.tag)
@@ -79,6 +97,14 @@ def read_storyteller_vocabulary(dbname: str) -> StorytellerVocabulary:
                 policies_by_kind[entry.entity_kind][
                     entry.tag
                 ] = entry.reapplication_policy
+            if entry.clearance_kind is not None:
+                clearance_kinds_by_kind[entry.entity_kind][
+                    entry.tag
+                ] = entry.clearance_kind
+            if entry.default_duration is not None:
+                default_durations_by_kind[entry.entity_kind][
+                    entry.tag
+                ] = entry.default_duration
     return StorytellerVocabulary(
         tag_names_by_kind={
             kind: frozenset(tag_names) for kind, tag_names in tags_by_kind.items()
@@ -87,6 +113,14 @@ def read_storyteller_vocabulary(dbname: str) -> StorytellerVocabulary:
         event_types=frozenset(read_event_types(dbname)),
         tag_reapplication_policies_by_kind={
             kind: dict(policies) for kind, policies in policies_by_kind.items()
+        },
+        tag_clearance_kinds_by_kind={
+            kind: dict(clearance_kinds)
+            for kind, clearance_kinds in clearance_kinds_by_kind.items()
+        },
+        tag_default_durations_by_kind={
+            kind: dict(default_durations)
+            for kind, default_durations in default_durations_by_kind.items()
         },
     )
 
@@ -460,17 +494,19 @@ def collect_faction_identity_issues(
 
 def _validate_bestowal_against_vocabulary(
     *,
+    path: str,
     entity_kind: str,
     bestowal: OrreryTagBestowal,
     vocabulary: StorytellerVocabulary,
     suggestion_limit: int,
+    handled_extend_expiry_sites: FrozenSet[Tuple[str, int]],
 ) -> List[str]:
     """Return field-qualified issues from the cached per-kind tag catalog."""
 
     allowed_tags = vocabulary.tag_names_by_kind.get(entity_kind, frozenset())
     issues: List[str] = []
     for field_name in ("applied_tags", "tags_to_clear"):
-        for tag_name in getattr(bestowal, field_name):
+        for tag_index, tag_name in enumerate(getattr(bestowal, field_name)):
             if tag_name not in allowed_tags:
                 issue = (
                     f"{field_name}: Unknown or entity-kind-incompatible tag "
@@ -490,6 +526,7 @@ def _validate_bestowal_against_vocabulary(
                     entity_kind, {}
                 ).get(tag_name)
                 == "extend_expiry"
+                and (path, tag_index) not in handled_extend_expiry_sites
             ):
                 issues.append(
                     f"{field_name}: Tag {tag_name!r} uses "
@@ -535,6 +572,8 @@ class _ExtendExpiryCandidate:
     """One wire-list entry eligible for active-state normalization."""
 
     ordinal: int
+    array_name: str
+    update_index: int
     entity_kind: str
     update: Any
     tags_add: List[str]
@@ -542,6 +581,12 @@ class _ExtendExpiryCandidate:
     wire_id: Optional[int]
     wire_name: str
     tag: str
+
+    @property
+    def path(self) -> str:
+        """Return the public wire path for this update."""
+
+        return f"updates.{self.array_name}[{self.update_index}]"
 
 
 _SUBSTANTIVE_UPDATE_PREDICATES: Mapping[str, Mapping[str, Callable[[Any], bool]]] = {
@@ -579,8 +624,18 @@ def normalize_extend_expiry_reasserts(
     cur: Any,
     *,
     vocabulary: StorytellerVocabulary,
+    anchor_world_time: Optional[datetime] = None,
+    boundary_issues: Optional[List[str]] = None,
+    handled_extend_expiry_sites: Optional[MutableSet[Tuple[str, int]]] = None,
 ) -> int:
-    """Remove already-active ``extend_expiry`` tags from wire update deltas."""
+    """Normalize or classify wire-level ``extend_expiry`` applications.
+
+    Active occurrences are removed as no-ops. Inactive time-cleared
+    occurrences are admitted only when the registry carries a default duration;
+    semantic/event occurrences are admitted with no expiry. Identity failures
+    are surfaced through ``boundary_issues`` when the production validator
+    supplies it.
+    """
 
     updates = getattr(response, "updates", None)
     if updates is None:
@@ -598,7 +653,7 @@ def normalize_extend_expiry_reasserts(
             continue
         update_lists_by_kind[entity_kind] = update_list
         policies = vocabulary.tag_reapplication_policies_by_kind.get(entity_kind, {})
-        for update in update_list:
+        for update_index, update in enumerate(update_list):
             tags_add = getattr(update, "tags_add", None)
             if not tags_add:
                 continue
@@ -608,6 +663,8 @@ def normalize_extend_expiry_reasserts(
                 candidates.append(
                     _ExtendExpiryCandidate(
                         ordinal=len(candidates),
+                        array_name=array_name,
+                        update_index=update_index,
                         entity_kind=entity_kind,
                         update=update,
                         tags_add=tags_add,
@@ -621,8 +678,12 @@ def normalize_extend_expiry_reasserts(
     if not candidates:
         return 0
 
+    activity_predicate = active_entity_tag_at_world_time_sql(
+        entity_tag_alias="current_tag",
+        world_time_sql="anchor.world_time",
+    )
     cur.execute(
-        """
+        f"""
         WITH candidates AS (
             SELECT *
             FROM UNNEST(
@@ -632,6 +693,9 @@ def normalize_extend_expiry_reasserts(
                 %s::text[],
                 %s::text[]
             ) AS candidate(ordinal, entity_kind, wire_id, wire_name, tag)
+        ),
+        anchor AS (
+            SELECT %s::timestamptz AS world_time
         ),
         canonical_entities AS (
             SELECT
@@ -657,27 +721,50 @@ def normalize_extend_expiry_reasserts(
         )
         SELECT
             candidate.ordinal,
-            canonical.canonical_name,
-            (current_tag.entity_id IS NOT NULL) AS is_active
+            id_match.entity_id AS id_entity_id,
+            id_match.canonical_name AS id_canonical_name,
+            name_match.match_count AS name_match_count,
+            name_match.entity_id AS name_entity_id,
+            name_match.canonical_name AS name_canonical_name,
+            entity.id AS verified_entity_id,
+            current_tag.id AS current_tag_id,
+            current_tag.expires_at_world_time,
+            (
+                current_tag.id IS NOT NULL
+                AND {activity_predicate}
+            ) AS is_active
         FROM candidates candidate
-        JOIN canonical_entities canonical
-          ON canonical.entity_kind = candidate.entity_kind
-         AND (
-             (
-                 candidate.wire_id IS NOT NULL
-                 AND canonical.wire_id = candidate.wire_id
-             )
-             OR (
-                 candidate.wire_id IS NULL
-                 AND canonical.canonical_name = candidate.wire_name
-             )
-         )
-        JOIN entities entity
-          ON entity.id = canonical.entity_id
+        CROSS JOIN anchor
+        LEFT JOIN canonical_entities id_match
+          ON candidate.wire_id IS NOT NULL
+         AND id_match.entity_kind = candidate.entity_kind
+         AND id_match.wire_id = candidate.wire_id
+        LEFT JOIN LATERAL (
+            SELECT
+                count(*)::integer AS match_count,
+                min(named.entity_id) AS entity_id,
+                min(named.canonical_name) AS canonical_name
+            FROM canonical_entities named
+            WHERE named.entity_kind = candidate.entity_kind
+              AND named.canonical_name = candidate.wire_name
+        ) name_match ON TRUE
+        LEFT JOIN entities entity
+          ON entity.id = COALESCE(
+              id_match.entity_id,
+              CASE
+                  WHEN name_match.match_count = 1 THEN name_match.entity_id
+                  ELSE NULL
+              END
+          )
          AND entity.kind::text = candidate.entity_kind
-        LEFT JOIN entity_tags_current current_tag
+        LEFT JOIN tags registry_tag
+          ON registry_tag.tag = candidate.tag
+         AND NOT registry_tag.deprecated
+         AND registry_tag.synonym_for IS NULL
+        LEFT JOIN entity_tags current_tag
           ON current_tag.entity_id = entity.id
-         AND current_tag.tag = candidate.tag
+         AND current_tag.tag_id = registry_tag.id
+         AND current_tag.cleared_at IS NULL
         ORDER BY candidate.ordinal
         """,
         (
@@ -686,16 +773,22 @@ def normalize_extend_expiry_reasserts(
             [candidate.wire_id for candidate in candidates],
             [candidate.wire_name for candidate in candidates],
             [candidate.tag for candidate in candidates],
+            anchor_world_time,
         ),
     )
-    matches_by_ordinal: dict[int, List[Tuple[str, bool]]] = {}
+    matches_by_ordinal: dict[int, Tuple[Any, ...]] = {}
     for row in cur.fetchall():
         ordinal = int(_row_value(row, "ordinal", 0))
-        matches_by_ordinal.setdefault(ordinal, []).append(
-            (
-                str(_row_value(row, "canonical_name", 1)),
-                bool(_row_value(row, "is_active", 2)),
-            )
+        matches_by_ordinal[ordinal] = (
+            _row_value(row, "id_entity_id", 1),
+            _row_value(row, "id_canonical_name", 2),
+            int(_row_value(row, "name_match_count", 3)),
+            _row_value(row, "name_entity_id", 4),
+            _row_value(row, "name_canonical_name", 5),
+            _row_value(row, "verified_entity_id", 6),
+            _row_value(row, "current_tag_id", 7),
+            _row_value(row, "expires_at_world_time", 8),
+            bool(_row_value(row, "is_active", 9)),
         )
 
     removals_by_update: dict[
@@ -704,10 +797,155 @@ def normalize_extend_expiry_reasserts(
     ] = {}
     normalized = 0
     for candidate in candidates:
-        matches = matches_by_ordinal.get(candidate.ordinal, [])
-        if len(matches) != 1 or not matches[0][1]:
+        match = matches_by_ordinal.get(candidate.ordinal)
+        if match is None:
+            raise RuntimeError(
+                "Extend-expiry boundary query omitted candidate "
+                f"ordinal={candidate.ordinal}"
+            )
+        (
+            id_entity_id,
+            id_canonical_name,
+            name_match_count,
+            name_entity_id,
+            name_canonical_name,
+            verified_entity_id,
+            current_tag_id,
+            expires_at_world_time,
+            is_active,
+        ) = match
+
+        rejection_reason: Optional[str] = None
+        canonical_name: Optional[str] = None
+        if candidate.wire_id is not None:
+            if id_entity_id is None or verified_entity_id is None:
+                rejection_reason = "identity-miss"
+            elif str(id_canonical_name) != candidate.wire_name:
+                rejection_reason = "id-name-conflict"
+            else:
+                canonical_name = str(id_canonical_name)
+        elif name_match_count > 1:
+            rejection_reason = "ambiguous"
+        elif name_match_count == 0 or verified_entity_id is None:
+            rejection_reason = "identity-miss"
+        else:
+            canonical_name = str(name_canonical_name)
+
+        site = (candidate.path, candidate.tag_index)
+        if rejection_reason is not None:
+            logger.warning(
+                "extend-expiry boundary rejected: reason=%s kind=%s array=%s "
+                "index=%s supplied_id=%r supplied_name=%r offending_tags=%r",
+                rejection_reason,
+                candidate.entity_kind,
+                candidate.array_name,
+                candidate.update_index,
+                candidate.wire_id,
+                candidate.wire_name,
+                [candidate.tag],
+            )
+            if boundary_issues is not None:
+                boundary_issues.append(
+                    f"{candidate.path}: Extend-expiry update identity rejected "
+                    f"(reason={rejection_reason}, supplied_id={candidate.wire_id!r}, "
+                    f"supplied_name={candidate.wire_name!r}, "
+                    f"offending_tags={[candidate.tag]!r})"
+                )
+            if handled_extend_expiry_sites is not None:
+                handled_extend_expiry_sites.add(site)
             continue
-        canonical_name = matches[0][0]
+
+        if canonical_name is None or verified_entity_id not in {
+            id_entity_id,
+            name_entity_id,
+        }:
+            raise RuntimeError(
+                "Extend-expiry identity resolution produced an inconsistent match"
+            )
+
+        if current_tag_id is not None and not is_active:
+            logger.warning(
+                "extend-expiry boundary activity disagreement: "
+                "reason=expiry-disagreement kind=%s entity=%s tag=%s "
+                "expires_at_world_time=%s anchor_world_time=%s",
+                candidate.entity_kind,
+                canonical_name,
+                candidate.tag,
+                expires_at_world_time,
+                anchor_world_time,
+            )
+
+        if not is_active:
+            clearance_kind = vocabulary.tag_clearance_kinds_by_kind.get(
+                candidate.entity_kind, {}
+            ).get(candidate.tag)
+            default_duration = vocabulary.tag_default_durations_by_kind.get(
+                candidate.entity_kind, {}
+            ).get(candidate.tag)
+            if clearance_kind == "time" and default_duration is not None:
+                if anchor_world_time is None:
+                    logger.warning(
+                        "extend-expiry boundary rejected: "
+                        "reason=anchor-time-missing kind=%s array=%s index=%s "
+                        "supplied_id=%r supplied_name=%r offending_tags=%r",
+                        candidate.entity_kind,
+                        candidate.array_name,
+                        candidate.update_index,
+                        candidate.wire_id,
+                        candidate.wire_name,
+                        [candidate.tag],
+                    )
+                    continue
+                logger.warning(
+                    "extend-expiry first-application defaulted: "
+                    "kind=%s entity=%s tag=%s duration=%s "
+                    "reason=first-application-time-defaulted array=%s index=%s",
+                    candidate.entity_kind,
+                    canonical_name,
+                    candidate.tag,
+                    default_duration,
+                    candidate.array_name,
+                    candidate.update_index,
+                )
+                if handled_extend_expiry_sites is not None:
+                    handled_extend_expiry_sites.add(site)
+                continue
+            if clearance_kind in {"semantic", "event"}:
+                if default_duration is not None:
+                    raise RuntimeError(
+                        "Semantic/event extend-expiry tag unexpectedly carries "
+                        f"default_duration: kind={candidate.entity_kind!r} "
+                        f"tag={candidate.tag!r}"
+                    )
+                logger.warning(
+                    "extend-expiry first-application landed: "
+                    "reason=first-application-landed-no-expiry kind=%s "
+                    "entity=%s tag=%s clearance_kind=%s array=%s index=%s",
+                    candidate.entity_kind,
+                    canonical_name,
+                    candidate.tag,
+                    clearance_kind,
+                    candidate.array_name,
+                    candidate.update_index,
+                )
+                if handled_extend_expiry_sites is not None:
+                    handled_extend_expiry_sites.add(site)
+                continue
+
+            logger.warning(
+                "extend-expiry boundary rejected: reason=no-default-rejected "
+                "kind=%s array=%s index=%s supplied_id=%r supplied_name=%r "
+                "offending_tags=%r clearance_kind=%r",
+                candidate.entity_kind,
+                candidate.array_name,
+                candidate.update_index,
+                candidate.wire_id,
+                candidate.wire_name,
+                [candidate.tag],
+                clearance_kind,
+            )
+            continue
+
         update_key = id(candidate.update)
         if update_key not in removals_by_update:
             removals_by_update[update_key] = (
@@ -724,7 +962,24 @@ def normalize_extend_expiry_reasserts(
             canonical_name,
             candidate.tag,
         )
+        logger.warning(
+            "extend-expiry boundary classified: reason=normalized-active "
+            "kind=%s entity=%s tag=%s array=%s index=%s",
+            candidate.entity_kind,
+            canonical_name,
+            candidate.tag,
+            candidate.array_name,
+            candidate.update_index,
+        )
         normalized += 1
+
+    handled_candidates: List[_ExtendExpiryCandidate] = []
+    if handled_extend_expiry_sites is not None:
+        handled_candidates = [
+            candidate
+            for candidate in candidates
+            if (candidate.path, candidate.tag_index) in handled_extend_expiry_sites
+        ]
 
     removed_update_ids_by_kind: dict[str, set[int]] = {}
     for (
@@ -754,6 +1009,36 @@ def normalize_extend_expiry_reasserts(
         update_list[:] = [
             update for update in update_list if id(update) not in removed_update_ids
         ]
+
+    if handled_extend_expiry_sites is not None:
+        for candidate in handled_candidates:
+            handled_extend_expiry_sites.discard((candidate.path, candidate.tag_index))
+            update_list = update_lists_by_kind[candidate.entity_kind]
+            current_update_index = next(
+                (
+                    index
+                    for index, update in enumerate(update_list)
+                    if update is candidate.update
+                ),
+                None,
+            )
+            if current_update_index is None:
+                raise RuntimeError(
+                    "Handled extend-expiry application was removed from its "
+                    f"wire update: kind={candidate.entity_kind!r} "
+                    f"tag={candidate.tag!r}"
+                )
+            removal_entry = removals_by_update.get(id(candidate.update))
+            removal_indexes = removal_entry[3] if removal_entry is not None else set()
+            current_tag_index = candidate.tag_index - sum(
+                index < candidate.tag_index for index in removal_indexes
+            )
+            handled_extend_expiry_sites.add(
+                (
+                    f"updates.{candidate.array_name}[{current_update_index}]",
+                    current_tag_index,
+                )
+            )
 
     return normalized
 
@@ -836,6 +1121,7 @@ def collect_orrery_tag_issues(
     vocabulary: Optional[StorytellerVocabulary] = None,
     suggestion_limit: int = 3,
     proposal_bindings: Optional[Mapping[str, Mapping[str, Any]]] = None,
+    handled_extend_expiry_sites: FrozenSet[Tuple[str, int]] = frozenset(),
 ) -> List[str]:
     """Validate every bestowal and declaration against the live registry."""
 
@@ -856,10 +1142,12 @@ def collect_orrery_tag_issues(
             )
         else:
             bestowal_issues = _validate_bestowal_against_vocabulary(
+                path=path,
                 entity_kind=entity_kind,
                 bestowal=bestowal,
                 vocabulary=vocabulary,
                 suggestion_limit=suggestion_limit,
+                handled_extend_expiry_sites=handled_extend_expiry_sites,
             )
         for issue in bestowal_issues:
             issues.append(f"{path}: {issue}")
@@ -922,6 +1210,7 @@ def build_storyteller_tag_validator(
     proposal_bindings_provider: Optional[
         Callable[[], Mapping[str, Mapping[str, Any]]]
     ] = None,
+    anchor_chunk_id_provider: Optional[Callable[[], Optional[int]]] = None,
 ) -> Optional[Any]:
     """Return an async registry output validator bound to ``dbname``.
 
@@ -951,17 +1240,61 @@ def build_storyteller_tag_validator(
         vocabulary = read_storyteller_vocabulary(dbname)
         with get_connection(dbname) as conn:
             with conn.cursor() as cur:
+                anchor_world_time: Optional[datetime] = None
+                if anchor_chunk_id_provider is not None:
+                    anchor_chunk_id = anchor_chunk_id_provider()
+                    if anchor_chunk_id is not None:
+                        if isinstance(anchor_chunk_id, bool) or not isinstance(
+                            anchor_chunk_id, int
+                        ):
+                            raise TypeError(
+                                "anchor_chunk_id_provider must return a positive "
+                                "integer or None"
+                            )
+                        if anchor_chunk_id <= 0:
+                            raise ValueError(
+                                "anchor_chunk_id_provider must return a positive "
+                                "integer or None"
+                            )
+                        cur.execute(
+                            """
+                            SELECT world_time
+                            FROM chunk_metadata
+                            WHERE chunk_id = %s
+                            """,
+                            (anchor_chunk_id,),
+                        )
+                        anchor_row = cur.fetchone()
+                        if anchor_row is None:
+                            raise ValueError(
+                                "Storyteller tag validation anchor chunk does not "
+                                f"exist: chunk_id={anchor_chunk_id}"
+                            )
+                        anchor_world_time = _row_value(anchor_row, "world_time", 0)
+                        if anchor_world_time is not None and not isinstance(
+                            anchor_world_time, datetime
+                        ):
+                            raise TypeError(
+                                "Storyteller tag validation anchor world_time has "
+                                f"an unexpected type: chunk_id={anchor_chunk_id}"
+                            )
+                boundary_issues: List[str] = []
+                handled_extend_expiry_sites: set[Tuple[str, int]] = set()
                 normalize_extend_expiry_reasserts(
                     output,
                     cur,
                     vocabulary=vocabulary,
+                    anchor_world_time=anchor_world_time,
+                    boundary_issues=boundary_issues,
+                    handled_extend_expiry_sites=handled_extend_expiry_sites,
                 )
-                issues = collect_orrery_tag_issues(
+                issues = boundary_issues + collect_orrery_tag_issues(
                     output,
                     cur,
                     vocabulary=vocabulary,
                     suggestion_limit=suggestion_limit,
                     proposal_bindings=proposal_bindings,
+                    handled_extend_expiry_sites=frozenset(handled_extend_expiry_sites),
                 )
                 issues.extend(
                     collect_faction_identity_issues(

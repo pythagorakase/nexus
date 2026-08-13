@@ -297,7 +297,9 @@ class TraitCompilerCursor:
             (tag,) = params
             row = self.tags.get(tag)
             self._next_row = (
-                (row["id"], row["category"], False, None) if row is not None else None
+                (row["id"], row["category"], False, None, None, None)
+                if row is not None
+                else None
             )
             self.rowcount = 1 if row else 0
             return
