@@ -12,6 +12,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from hashlib import sha256
 import json
+import logging
 from typing import Any, Mapping, Optional
 
 from nexus.agents.orrery.ambient import AMBIENT_EXPOSURE_TEMPLATE_ID
@@ -77,6 +78,8 @@ from nexus.agents.orrery.tag_writer import (
     apply_status_pair_tag_bestowal_async,
 )
 
+
+logger = logging.getLogger("nexus.orrery.events")
 
 ENTITY_BINDING_SLOTS = frozenset({"actor", "target", "targets", "faction"})
 SUPPORTED_STATE_DELTA_KEYS = frozenset(
@@ -251,6 +254,183 @@ class CommitOrreryTickResult:
     prompt_exposure_count: int = 0
     propagation_count: int = 0
     reveal_count: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class WorldEventSupersessionResult:
+    """Durable effects of superseding one canonical world event."""
+
+    event_id: int
+    replacement_event_id: int
+    invalidated_experience_ids: tuple[int, ...]
+    reopened_event_ids: tuple[int, ...]
+    retained_rendered_experience_ids: tuple[int, ...]
+
+
+def supersede_world_event_sync(
+    conn: Any,
+    *,
+    event_id: int,
+    replacement_event_id: int,
+) -> WorldEventSupersessionResult:
+    """Supersede an event and reconcile its direct experience seeds.
+
+    The caller owns the surrounding transaction. Event and experience row
+    locks make supersession deterministic against concurrent formation and
+    rendering: a pending direct seed is invalidated, while an already-rendered
+    seed remains narrative history. Live siblings from an invalidated
+    multi-event seed are reopened for the next accepted-chunk sweep.
+    """
+
+    if event_id <= 0 or replacement_event_id <= 0:
+        raise ValueError("World event supersession ids must be positive")
+    if event_id == replacement_event_id:
+        raise ValueError("A world event cannot supersede itself")
+
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT id, superseded_by_event_id
+            FROM world_events
+            WHERE id = ANY(%s)
+            ORDER BY id
+            FOR UPDATE
+            """,
+            ([event_id, replacement_event_id],),
+        )
+        event_rows = {
+            int(_row_get(row, "id", 0)): _row_get(row, "superseded_by_event_id", 1)
+            for row in cur.fetchall()
+        }
+        missing_event_ids = sorted({event_id, replacement_event_id} - set(event_rows))
+        if missing_event_ids:
+            raise ValueError(
+                "Cannot supersede world event; missing event ids "
+                f"{missing_event_ids}"
+            )
+        prior_replacement_id = event_rows[event_id]
+        if prior_replacement_id is not None:
+            raise RuntimeError(
+                f"World event {event_id} is already superseded by event "
+                f"{int(prior_replacement_id)}"
+            )
+
+        cur.execute(
+            """
+            UPDATE world_events
+            SET superseded_by_event_id = %s
+            WHERE id = %s
+              AND superseded_by_event_id IS NULL
+            RETURNING id
+            """,
+            (replacement_event_id, event_id),
+        )
+        updated_event = cur.fetchone()
+        if updated_event is None or int(_row_get(updated_event, "id", 0)) != event_id:
+            raise RuntimeError(f"World event {event_id} changed while being superseded")
+
+        cur.execute(
+            """
+            SELECT id, world_event_ids, experience_text,
+                   invalidation_status::text AS invalidation_status
+            FROM character_experiences
+            WHERE claim_awareness_id IS NULL
+              AND world_event_ids @> ARRAY[%s]::bigint[]
+            ORDER BY id
+            FOR UPDATE
+            """,
+            (event_id,),
+        )
+        experience_rows = list(cur.fetchall())
+        invalidation_candidates = {
+            int(_row_get(row, "id", 0))
+            for row in experience_rows
+            if _row_get(row, "experience_text", 2) is None
+            and _row_get(row, "invalidation_status", 3) == "valid"
+        }
+        retained_rendered_ids = tuple(
+            sorted(
+                int(_row_get(row, "id", 0))
+                for row in experience_rows
+                if _row_get(row, "experience_text", 2) is not None
+            )
+        )
+
+        invalidated_rows: list[Any] = []
+        if invalidation_candidates:
+            cur.execute(
+                """
+                UPDATE character_experiences
+                SET invalidation_status = 'invalidated',
+                    invalidated_at = CURRENT_TIMESTAMP
+                WHERE id = ANY(%s)
+                  AND experience_text IS NULL
+                  AND invalidation_status = 'valid'
+                RETURNING id, world_event_ids
+                """,
+                (sorted(invalidation_candidates),),
+            )
+            invalidated_rows = list(cur.fetchall())
+        invalidated_ids = tuple(
+            sorted(int(_row_get(row, "id", 0)) for row in invalidated_rows)
+        )
+        if set(invalidated_ids) != invalidation_candidates:
+            raise RuntimeError(
+                "Experience supersession invalidation mismatch: expected ids "
+                f"{sorted(invalidation_candidates)}, invalidated "
+                f"{list(invalidated_ids)}"
+            )
+
+        sibling_event_ids = sorted(
+            {
+                int(sibling_event_id)
+                for row in invalidated_rows
+                for sibling_event_id in _row_get(row, "world_event_ids", 1)
+                if int(sibling_event_id) != event_id
+            }
+        )
+        reopened_event_ids: tuple[int, ...] = ()
+        if sibling_event_ids:
+            cur.execute(
+                """
+                UPDATE world_events
+                SET experiences_formed_at = NULL
+                WHERE id = ANY(%s)
+                  AND superseded_by_event_id IS NULL
+                  AND experiences_formed_at IS NOT NULL
+                RETURNING id
+                """,
+                (sibling_event_ids,),
+            )
+            reopened_event_ids = tuple(
+                sorted(int(_row_get(row, "id", 0)) for row in cur.fetchall())
+            )
+
+    logger.warning(
+        "Superseded Orrery world event %s with %s; invalidated pending "
+        "experience seeds %s, reopened live sibling events %s, retained "
+        "rendered experience seeds %s",
+        event_id,
+        replacement_event_id,
+        list(invalidated_ids),
+        list(reopened_event_ids),
+        list(retained_rendered_ids),
+        extra={
+            "event": "orrery_experience_supersession",
+            "world_event_id": event_id,
+            "replacement_event_id": replacement_event_id,
+            "invalidated_experience_ids": list(invalidated_ids),
+            "reopened_world_event_ids": list(reopened_event_ids),
+            "retained_rendered_experience_ids": list(retained_rendered_ids),
+        },
+    )
+    return WorldEventSupersessionResult(
+        event_id=event_id,
+        replacement_event_id=replacement_event_id,
+        invalidated_experience_ids=invalidated_ids,
+        reopened_event_ids=reopened_event_ids,
+        retained_rendered_experience_ids=retained_rendered_ids,
+    )
 
 
 def _coerce_prompt_limits(prompt_settings: Any) -> tuple[int, int]:

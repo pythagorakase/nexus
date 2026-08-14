@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from datetime import datetime, timezone
+import json
+from pathlib import Path
+import re
 from typing import Any, Iterator, Literal
 
 import pytest
@@ -18,6 +21,7 @@ from nexus.agents.logon.skald_wire import (
     hydrate_skald_turn,
 )
 from nexus.agents.orrery import experience_embedding
+from nexus.agents.orrery.epistemics import CLAIM_BIRTH_ROLE_POLICY
 from nexus.agents.orrery.experiences import (
     ExperienceRecollection,
     ExperienceRenderBatch,
@@ -26,6 +30,29 @@ from nexus.agents.orrery.experiences import (
 from nexus.api.lore_adapter import response_to_incubator
 from nexus.config import load_settings
 from nexus.memory.manager import empty_pass2_baseline
+
+
+ROOT = Path(__file__).parents[2]
+
+
+def test_migration_role_policy_matches_runtime_source_of_truth() -> None:
+    """Migration receipt roles cannot drift from runtime formation policy."""
+
+    migration_sql = (
+        ROOT / "migrations" / "110_experience_formation_sweep.sql"
+    ).read_text()
+    match = re.search(
+        r"SELECT '(?P<policy>\{.*?\})'::jsonb AS roles_by_event_type",
+        migration_sql,
+        flags=re.DOTALL,
+    )
+    assert match is not None
+    migration_policy = {
+        event_type: frozenset(roles)
+        for event_type, roles in json.loads(match.group("policy")).items()
+    }
+
+    assert migration_policy == dict(CLAIM_BIRTH_ROLE_POLICY)
 
 
 def test_scene_reset_survives_internal_incubator_staging() -> None:

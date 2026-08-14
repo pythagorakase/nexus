@@ -439,6 +439,7 @@ def seed_character_experiences_sync(
                 FROM unnest(%s::bigint[]) candidate(event_id)
                 JOIN character_experiences experience
                   ON experience.claim_awareness_id IS NULL
+                 AND experience.invalidation_status = 'valid'
                  AND experience.world_event_ids @> ARRAY[candidate.event_id]
                 GROUP BY candidate.event_id, experience.character_entity_id
                 ORDER BY candidate.event_id, experience.character_entity_id
