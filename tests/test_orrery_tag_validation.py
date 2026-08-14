@@ -101,8 +101,34 @@ class FakeRegistryCursor:
         return False
 
     def execute(self, sql: str, params: Tuple[Any, ...] = ()) -> None:
-        if "WITH candidates AS" in sql and "entity_tags_current" in sql:
+        if "WITH candidates AS" in sql:
+            ordinals, kinds, wire_ids, names, _tags, _anchor = params
             self._result = []
+            for ordinal, kind, wire_id, name in zip(ordinals, kinds, wire_ids, names):
+                name_matches = self.entities_by_name.get(str(name), [])
+                has_name_match = kind in name_matches
+                name_entity_id = 9000 + int(ordinal) if has_name_match else None
+                id_entity_id = (
+                    int(wire_id)
+                    if wire_id is not None
+                    and self.entity_kinds_by_id.get(int(wire_id)) == kind
+                    else None
+                )
+                verified_entity_id = id_entity_id or name_entity_id
+                self._result.append(
+                    (
+                        ordinal,
+                        id_entity_id,
+                        name if id_entity_id is not None else None,
+                        has_name_match,
+                        name_entity_id,
+                        name if name_entity_id is not None else None,
+                        verified_entity_id,
+                        None,
+                        None,
+                        False,
+                    )
+                )
             self._one = None
         elif "FROM entities" in sql and "kind::text" in sql:
             entity_ids = params[0]
@@ -1029,7 +1055,7 @@ async def test_storyteller_validator_attributes_declaration_failure_to_model_ret
             await validator(
                 SimpleNamespace(retry=0),
                 _storyteller_response(
-                    tag_hints=["invented:tag"],
+                    tag_hints=["invented:tag", "invented:other"],
                     pair_tag_hints=[
                         {
                             "tag": "contact:social",
@@ -1052,9 +1078,10 @@ async def test_storyteller_validator_attributes_declaration_failure_to_model_ret
             "Storyteller output failed registry validation"
         )
     )
-    formatted_issues = exc_info.value.message.rsplit(":\n", maxsplit=1)[1]
-    assert "requesting model retry:\n- new_entities[0].tag_hints:" in validation_log
-    assert validation_log.endswith(formatted_issues)
+    assert "issue_count=2 requesting model retry retry_issues=" in validation_log
+    assert "new_entities[0].tag_hints:" in validation_log
+    assert "requesting model retry:\n" not in validation_log
+    assert "\\n" in validation_log
 
 
 @pytest.mark.asyncio

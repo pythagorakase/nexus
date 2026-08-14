@@ -24,9 +24,10 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import AbstractSet, Any, Literal, Optional, TypeAlias
+from typing import AbstractSet, Any, Literal, Optional, TypeAlias, cast
 
 from nexus.agents.orrery.status_family import STATUS_TAGS, status_tag_for_level
+from nexus.agents.orrery.tag_activity import active_entity_tag_at_world_time_sql
 from nexus.agents.orrery.tag_constants import CANONICAL_TAGS
 from nexus.agents.orrery.tag_library import VALID_ENTITY_KINDS
 from nexus.agents.orrery.tag_schemas import OrreryTagBestowal
@@ -43,6 +44,9 @@ ReapplicationPolicy: TypeAlias = Literal["new_row", "extend_expiry", "replace"]
 class _TagApplication:
     tag_id: int
     reapplication_policy: Optional[ReapplicationPolicy]
+    clearance_kind: Optional[str]
+    duration_override: Optional[timedelta]
+    uses_registry_lifecycle: bool
 
 
 def apply_tag_bestowal(
@@ -53,6 +57,7 @@ def apply_tag_bestowal(
     bestowal: Optional[OrreryTagBestowal],
     source_kind: str = "skald_inline",
     world_time: Optional[datetime] = None,
+    world_time_is_authoritative: bool = False,
     duration_override: Optional[timedelta] = None,
     source_chunk_id: Optional[int] = None,
 ) -> dict[str, int]:
@@ -68,6 +73,10 @@ def apply_tag_bestowal(
     Unknown, deprecated, or entity-kind-incompatible tags raise ``ValueError``.
     ``duration_override`` sets ``entity_tags.expires_at_world_time`` for
     duration-bearing applications and drives ``extend_expiry`` reapplications.
+    Without an override, time-cleared ``extend_expiry`` tags use the registry
+    default; semantic- and event-cleared tags land without an expiry.
+    ``world_time_is_authoritative`` preserves an explicitly supplied atemporal
+    anchor instead of deriving a clock from ``source_chunk_id``.
 
     Returns counter dict suitable for logging:
     ``{"applied", "cleared"}``.
@@ -94,7 +103,7 @@ def apply_tag_bestowal(
             f"No Orrery tag categories registered for entity_kind={entity_kind!r}"
         )
 
-    if world_time is None:
+    if world_time is None and not world_time_is_authoritative:
         if source_chunk_id is not None:
             # Chunk-keyed rows take the bestowing chunk's clock or stay NULL —
             # never the global-max fallback, which would stamp an "exact" row
@@ -114,9 +123,11 @@ def apply_tag_bestowal(
             entity_kind=entity_kind,
         )
         tags_to_apply.append(
-            _TagApplication(
-                tag_id=_row_value(tag_row, "id", 0),
-                reapplication_policy=_row_value(tag_row, "reapplication_policy", 3),
+            _prepare_tag_application(
+                tag_name=canonical_name,
+                tag_row=tag_row,
+                requested_duration=duration_override,
+                world_time=world_time,
             )
         )
 
@@ -140,8 +151,10 @@ def apply_tag_bestowal(
             tag_id=tag_application.tag_id,
             source_kind=source_kind,
             world_time=world_time,
-            duration_override=duration_override,
+            duration_override=tag_application.duration_override,
             reapplication_policy=tag_application.reapplication_policy,
+            clearance_kind=tag_application.clearance_kind,
+            uses_registry_lifecycle=tag_application.uses_registry_lifecycle,
             source_chunk_id=source_chunk_id,
         )
         if applied:
@@ -214,6 +227,7 @@ async def apply_tag_bestowal_async(
     bestowal: Optional[OrreryTagBestowal],
     source_kind: str = "skald_inline",
     world_time: Optional[datetime] = None,
+    world_time_is_authoritative: bool = False,
     duration_override: Optional[timedelta] = None,
     source_chunk_id: Optional[int] = None,
 ) -> dict[str, int]:
@@ -240,7 +254,7 @@ async def apply_tag_bestowal_async(
             f"No Orrery tag categories registered for entity_kind={entity_kind!r}"
         )
 
-    if world_time is None:
+    if world_time is None and not world_time_is_authoritative:
         if source_chunk_id is not None:
             # Same rule as the sync twin: chunk clock or NULL, never global max.
             world_time = await _chunk_world_time_async(conn, source_chunk_id)
@@ -258,9 +272,11 @@ async def apply_tag_bestowal_async(
             entity_kind=entity_kind,
         )
         tags_to_apply.append(
-            _TagApplication(
-                tag_id=_row_value(tag_row, "id", 0),
-                reapplication_policy=_row_value(tag_row, "reapplication_policy", 3),
+            _prepare_tag_application(
+                tag_name=canonical_name,
+                tag_row=tag_row,
+                requested_duration=duration_override,
+                world_time=world_time,
             )
         )
 
@@ -283,8 +299,10 @@ async def apply_tag_bestowal_async(
             tag_id=tag_application.tag_id,
             source_kind=source_kind,
             world_time=world_time,
-            duration_override=duration_override,
+            duration_override=tag_application.duration_override,
             reapplication_policy=tag_application.reapplication_policy,
+            clearance_kind=tag_application.clearance_kind,
+            uses_registry_lifecycle=tag_application.uses_registry_lifecycle,
             source_chunk_id=source_chunk_id,
         )
         if applied:
@@ -349,9 +367,6 @@ def apply_exclusive_tag_bestowal(
         tag_name=canonical_name,
         entity_kind=entity_kind,
     )
-    tag_id = _row_value(tag_row, "id", 0)
-    reapplication_policy = _row_value(tag_row, "reapplication_policy", 3)
-
     if world_time is None:
         if source_chunk_id is not None:
             # Chunk-keyed rows take the bestowing chunk's clock or stay NULL —
@@ -361,23 +376,31 @@ def apply_exclusive_tag_bestowal(
         else:
             world_time = _load_world_time(cur)
 
+    tag_application = _prepare_tag_application(
+        tag_name=canonical_name,
+        tag_row=tag_row,
+        requested_duration=duration_override,
+        world_time=world_time,
+    )
     _clear_entity_tag_siblings(
         cur,
         entity_id=entity_id,
         category=category,
         world_time=world_time,
         source_chunk_id=source_chunk_id,
-        keep_tag_id=tag_id,
+        keep_tag_id=tag_application.tag_id,
     )
     return _insert_entity_tag(
         cur,
         entity_id=entity_id,
-        tag_id=tag_id,
+        tag_id=tag_application.tag_id,
         source_kind=source_kind,
         world_time=world_time,
         source_chunk_id=source_chunk_id,
-        duration_override=duration_override,
-        reapplication_policy=reapplication_policy,
+        duration_override=tag_application.duration_override,
+        reapplication_policy=tag_application.reapplication_policy,
+        clearance_kind=tag_application.clearance_kind,
+        uses_registry_lifecycle=tag_application.uses_registry_lifecycle,
     )
 
 
@@ -415,15 +438,18 @@ async def apply_exclusive_tag_bestowal_async(
         tag_name=canonical_name,
         entity_kind=entity_kind,
     )
-    tag_id = _row_value(tag_row, "id", 0)
-    reapplication_policy = _row_value(tag_row, "reapplication_policy", 3)
-
     if world_time is None:
         if source_chunk_id is not None:
             world_time = await _chunk_world_time_async(conn, source_chunk_id)
         else:
             world_time = await _load_world_time_async(conn)
 
+    tag_application = _prepare_tag_application(
+        tag_name=canonical_name,
+        tag_row=tag_row,
+        requested_duration=duration_override,
+        world_time=world_time,
+    )
     sibling_rows = await conn.fetch(
         """
         SELECT et.tag_id
@@ -438,7 +464,7 @@ async def apply_exclusive_tag_bestowal_async(
         """,
         entity_id,
         category,
-        tag_id,
+        tag_application.tag_id,
     )
     for row in sibling_rows:
         await _clear_entity_tag_async(
@@ -452,12 +478,14 @@ async def apply_exclusive_tag_bestowal_async(
     return await _insert_entity_tag_async(
         conn,
         entity_id=entity_id,
-        tag_id=tag_id,
+        tag_id=tag_application.tag_id,
         source_kind=source_kind,
         world_time=world_time,
         source_chunk_id=source_chunk_id,
-        duration_override=duration_override,
-        reapplication_policy=reapplication_policy,
+        duration_override=tag_application.duration_override,
+        reapplication_policy=tag_application.reapplication_policy,
+        clearance_kind=tag_application.clearance_kind,
+        uses_registry_lifecycle=tag_application.uses_registry_lifecycle,
     )
 
 
@@ -488,7 +516,13 @@ async def _lookup_allowed_categories_async(conn: Any, entity_kind: str) -> set[s
 def _lookup_tag(cur: Any, tag_name: str) -> Optional[Any]:
     cur.execute(
         """
-        SELECT id, category, is_ephemeral, reapplication_policy
+        SELECT
+            id,
+            category,
+            is_ephemeral,
+            reapplication_policy,
+            clearance_kind,
+            default_duration
         FROM tags
         WHERE tag = %s AND NOT deprecated AND synonym_for IS NULL
         """,
@@ -500,7 +534,13 @@ def _lookup_tag(cur: Any, tag_name: str) -> Optional[Any]:
 async def _lookup_tag_async(conn: Any, tag_name: str) -> Optional[Any]:
     return await conn.fetchrow(
         """
-        SELECT id, category, is_ephemeral, reapplication_policy
+        SELECT
+            id,
+            category,
+            is_ephemeral,
+            reapplication_policy,
+            clearance_kind,
+            default_duration
         FROM tags
         WHERE tag = $1 AND NOT deprecated AND synonym_for IS NULL
         """,
@@ -554,6 +594,61 @@ def _validate_source_kind(source_kind: str) -> None:
             f"source_kind={source_kind!r} is not accepted by Orrery writers; "
             "closed-vocabulary bestowals must not auto-register tags"
         )
+
+
+def _prepare_tag_application(
+    *,
+    tag_name: str,
+    tag_row: Any,
+    requested_duration: Optional[timedelta],
+    world_time: Optional[datetime],
+) -> _TagApplication:
+    """Resolve registry lifecycle data before any bestowal mutation begins."""
+
+    policy_value = _row_value(tag_row, "reapplication_policy", 3)
+    reapplication_policy = cast(ReapplicationPolicy, policy_value or "new_row")
+    if reapplication_policy not in _REAPPLICATION_POLICIES:
+        raise ValueError(
+            "Unsupported entity tag "
+            f"reapplication_policy={reapplication_policy!r} for tag {tag_name!r}"
+        )
+
+    clearance_kind = _row_value(tag_row, "clearance_kind", 4)
+    default_duration = _row_value(tag_row, "default_duration", 5)
+    effective_duration = requested_duration
+    uses_registry_lifecycle = (
+        reapplication_policy == "extend_expiry" and requested_duration is None
+    )
+
+    if uses_registry_lifecycle:
+        if clearance_kind == "time":
+            if not isinstance(
+                default_duration, timedelta
+            ) or default_duration <= timedelta(0):
+                raise ValueError(
+                    "reapplication_policy='extend_expiry' requires "
+                    "duration_override or a positive registry default_duration "
+                    f"for time-cleared tag {tag_name!r}"
+                )
+            effective_duration = default_duration
+        elif clearance_kind in {"semantic", "event"}:
+            effective_duration = None
+        else:
+            raise ValueError(
+                f"extend_expiry tag {tag_name!r} has unsupported "
+                f"clearance_kind={clearance_kind!r}"
+            )
+
+    if effective_duration is not None and world_time is None:
+        raise ValueError("duration_override requires a known Orrery world_time")
+
+    return _TagApplication(
+        tag_id=_row_value(tag_row, "id", 0),
+        reapplication_policy=reapplication_policy,
+        clearance_kind=clearance_kind,
+        duration_override=effective_duration,
+        uses_registry_lifecycle=uses_registry_lifecycle,
+    )
 
 
 def _load_world_time(cur: Any) -> Optional[datetime]:
@@ -667,38 +762,63 @@ async def _chunk_world_time_async(
     )
 
 
-def _has_current_entity_tag(cur: Any, *, entity_id: int, tag_id: int) -> bool:
-    """Return whether one entity/tag pair already has an uncleared row."""
+def _has_active_entity_tag(
+    cur: Any,
+    *,
+    entity_id: int,
+    tag_id: int,
+    world_time: Optional[datetime],
+) -> bool:
+    """Return whether one entity/tag pair is active at the supplied anchor."""
 
+    activity_predicate = active_entity_tag_at_world_time_sql(
+        entity_tag_alias="et",
+        world_time_sql="anchor.world_time",
+    )
     cur.execute(
-        """
-        SELECT id
-        FROM entity_tags
-        WHERE entity_id = %s
-          AND tag_id = %s
-          AND cleared_at IS NULL
+        f"""
+        WITH anchor(world_time) AS (VALUES (%s::timestamptz))
+        SELECT et.id
+        FROM entity_tags AS et
+        CROSS JOIN anchor
+        WHERE et.entity_id = %s
+          AND et.tag_id = %s
+          AND et.cleared_at IS NULL
+          AND {activity_predicate}
         LIMIT 1
         """,
-        (entity_id, tag_id),
+        (world_time, entity_id, tag_id),
     )
     return cur.fetchone() is not None
 
 
-async def _has_current_entity_tag_async(
-    conn: Any, *, entity_id: int, tag_id: int
+async def _has_active_entity_tag_async(
+    conn: Any,
+    *,
+    entity_id: int,
+    tag_id: int,
+    world_time: Optional[datetime],
 ) -> bool:
-    """Asyncpg twin of ``_has_current_entity_tag``."""
+    """Asyncpg twin of :func:`_has_active_entity_tag`."""
 
+    activity_predicate = active_entity_tag_at_world_time_sql(
+        entity_tag_alias="et",
+        world_time_sql="anchor.world_time",
+    )
     return (
         await conn.fetchval(
-            """
-            SELECT id
-            FROM entity_tags
-            WHERE entity_id = $1
-              AND tag_id = $2
-              AND cleared_at IS NULL
+            f"""
+            WITH anchor(world_time) AS (VALUES ($1::timestamptz))
+            SELECT et.id
+            FROM entity_tags AS et
+            CROSS JOIN anchor
+            WHERE et.entity_id = $2
+              AND et.tag_id = $3
+              AND et.cleared_at IS NULL
+              AND {activity_predicate}
             LIMIT 1
             """,
+            world_time,
             entity_id,
             tag_id,
         )
@@ -716,26 +836,44 @@ def _insert_entity_tag(
     duration_override: Optional[timedelta],
     reapplication_policy: Optional[ReapplicationPolicy],
     source_chunk_id: Optional[int] = None,
+    clearance_kind: Optional[str] = None,
+    uses_registry_lifecycle: bool = False,
 ) -> bool:
     reapplication_policy = reapplication_policy or "new_row"
     if reapplication_policy not in _REAPPLICATION_POLICIES:
         raise ValueError(
             f"Unsupported entity tag reapplication_policy={reapplication_policy!r}"
         )
-    if reapplication_policy == "extend_expiry" and duration_override is None:
-        if source_kind == "skald_inline" and _has_current_entity_tag(
+    if (
+        reapplication_policy == "extend_expiry"
+        and uses_registry_lifecycle
+        and source_kind == "skald_inline"
+        and _has_active_entity_tag(
             cur,
             entity_id=entity_id,
             tag_id=tag_id,
-        ):
-            logger.info(
-                "Ignoring storyteller reapplication of active extend_expiry "
-                "entity tag entity_id=%s tag_id=%s: the storyteller wire "
-                "cannot express duration_override",
-                entity_id,
-                tag_id,
-            )
-            return False
+            world_time=world_time,
+        )
+    ):
+        logger.info(
+            "Ignoring storyteller reapplication of active extend_expiry "
+            "entity tag entity_id=%s tag_id=%s: the storyteller wire "
+            "cannot express duration_override",
+            entity_id,
+            tag_id,
+        )
+        return False
+
+    lands_without_expiry = (
+        reapplication_policy == "extend_expiry"
+        and duration_override is None
+        and clearance_kind in {"semantic", "event"}
+    )
+    if (
+        reapplication_policy == "extend_expiry"
+        and duration_override is None
+        and not lands_without_expiry
+    ):
         raise ValueError(
             "reapplication_policy='extend_expiry' requires duration_override"
         )
@@ -773,7 +911,7 @@ def _insert_entity_tag(
         )
         return bool(cur.rowcount)
 
-    if reapplication_policy == "extend_expiry":
+    if reapplication_policy == "extend_expiry" and not lands_without_expiry:
         cur.execute(
             """
             INSERT INTO entity_tags (
@@ -810,6 +948,39 @@ def _insert_entity_tag(
         # conflict-updated. For replace/extend, "applied" is broader than insert.
         return bool(cur.rowcount)
 
+    if lands_without_expiry:
+        existing_row_is_active = active_entity_tag_at_world_time_sql(
+            entity_tag_alias="entity_tags",
+            world_time_sql="EXCLUDED.applied_at_world_time",
+        )
+        cur.execute(
+            f"""
+            INSERT INTO entity_tags (
+                entity_id, tag_id, applied_at_world_time,
+                expires_at_world_time, source_kind, source_chunk_id
+            )
+            VALUES (%s, %s, %s, %s, %s::entity_tag_source_kind, %s)
+            ON CONFLICT (entity_id, tag_id)
+              WHERE cleared_at IS NULL
+              DO UPDATE SET
+                applied_at = now(),
+                applied_at_world_time = EXCLUDED.applied_at_world_time,
+                expires_at_world_time = NULL,
+                source_kind = EXCLUDED.source_kind,
+                source_chunk_id = EXCLUDED.source_chunk_id
+              WHERE NOT {existing_row_is_active}
+            """,
+            (
+                entity_id,
+                tag_id,
+                world_time,
+                None,
+                source_kind,
+                source_chunk_id,
+            ),
+        )
+        return bool(cur.rowcount)
+
     cur.execute(
         """
         INSERT INTO entity_tags (
@@ -843,26 +1014,44 @@ async def _insert_entity_tag_async(
     duration_override: Optional[timedelta],
     reapplication_policy: Optional[ReapplicationPolicy],
     source_chunk_id: Optional[int] = None,
+    clearance_kind: Optional[str] = None,
+    uses_registry_lifecycle: bool = False,
 ) -> bool:
     reapplication_policy = reapplication_policy or "new_row"
     if reapplication_policy not in _REAPPLICATION_POLICIES:
         raise ValueError(
             f"Unsupported entity tag reapplication_policy={reapplication_policy!r}"
         )
-    if reapplication_policy == "extend_expiry" and duration_override is None:
-        if source_kind == "skald_inline" and await _has_current_entity_tag_async(
+    if (
+        reapplication_policy == "extend_expiry"
+        and uses_registry_lifecycle
+        and source_kind == "skald_inline"
+        and await _has_active_entity_tag_async(
             conn,
             entity_id=entity_id,
             tag_id=tag_id,
-        ):
-            logger.info(
-                "Ignoring storyteller reapplication of active extend_expiry "
-                "entity tag entity_id=%s tag_id=%s: the storyteller wire "
-                "cannot express duration_override",
-                entity_id,
-                tag_id,
-            )
-            return False
+            world_time=world_time,
+        )
+    ):
+        logger.info(
+            "Ignoring storyteller reapplication of active extend_expiry "
+            "entity tag entity_id=%s tag_id=%s: the storyteller wire "
+            "cannot express duration_override",
+            entity_id,
+            tag_id,
+        )
+        return False
+
+    lands_without_expiry = (
+        reapplication_policy == "extend_expiry"
+        and duration_override is None
+        and clearance_kind in {"semantic", "event"}
+    )
+    if (
+        reapplication_policy == "extend_expiry"
+        and duration_override is None
+        and not lands_without_expiry
+    ):
         raise ValueError(
             "reapplication_policy='extend_expiry' requires duration_override"
         )
@@ -898,7 +1087,7 @@ async def _insert_entity_tag_async(
         )
         return _asyncpg_status_changed(result)
 
-    if reapplication_policy == "extend_expiry":
+    if reapplication_policy == "extend_expiry" and not lands_without_expiry:
         result = await conn.execute(
             """
             INSERT INTO entity_tags (
@@ -928,6 +1117,37 @@ async def _insert_entity_tag_async(
             source_kind,
             source_chunk_id,
             duration_override,
+        )
+        return _asyncpg_status_changed(result)
+
+    if lands_without_expiry:
+        existing_row_is_active = active_entity_tag_at_world_time_sql(
+            entity_tag_alias="entity_tags",
+            world_time_sql="EXCLUDED.applied_at_world_time",
+        )
+        result = await conn.execute(
+            f"""
+            INSERT INTO entity_tags (
+                entity_id, tag_id, applied_at_world_time,
+                expires_at_world_time, source_kind, source_chunk_id
+            )
+            VALUES ($1, $2, $3, $4, $5::entity_tag_source_kind, $6)
+            ON CONFLICT (entity_id, tag_id)
+              WHERE cleared_at IS NULL
+              DO UPDATE SET
+                applied_at = now(),
+                applied_at_world_time = EXCLUDED.applied_at_world_time,
+                expires_at_world_time = NULL,
+                source_kind = EXCLUDED.source_kind,
+                source_chunk_id = EXCLUDED.source_chunk_id
+              WHERE NOT {existing_row_is_active}
+            """,
+            entity_id,
+            tag_id,
+            world_time,
+            None,
+            source_kind,
+            source_chunk_id,
         )
         return _asyncpg_status_changed(result)
 

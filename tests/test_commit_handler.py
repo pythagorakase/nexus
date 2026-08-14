@@ -1,6 +1,7 @@
 """Unit tests for asynchronous narrative commit helpers."""
 
 import json
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -55,12 +56,15 @@ class AsyncCommitConnection:
         self.place_junctions = []
         self.bleed_offers = []
         self.statements = []
+        self.child_world_time_read = False
+        self.child_world_time = datetime(2026, 8, 13, 19, 0, tzinfo=timezone.utc)
         self.parent_metadata = {
             "season": 1,
             "episode": 1,
             "scene": 8,
             "world_layer": "primary",
             "time_delta": None,
+            "world_time": datetime(2026, 8, 13, 12, 0, tzinfo=timezone.utc),
         }
         self.incubator = {
             "chunk_id": None,
@@ -122,6 +126,13 @@ class AsyncCommitConnection:
         normalized = " ".join(sql.split())
         if "INSERT INTO narrative_chunks" in normalized:
             return self.chunk_id
+        if normalized == "SELECT world_time FROM chunk_metadata WHERE chunk_id = $1":
+            if args != (self.chunk_id,):
+                raise AssertionError(
+                    f"Child world-time lookup used unexpected args: {args}"
+                )
+            self.child_world_time_read = True
+            return self.child_world_time
         if "SELECT id FROM characters WHERE name" in normalized:
             return self.characters.get(args[0])
         if "SELECT id FROM places WHERE name" in normalized:
@@ -145,6 +156,10 @@ class AsyncCommitConnection:
             offer["used_chunk_id"] = chunk_id
             offer["use_count"] += 1
         elif "INSERT INTO characters" in normalized:
+            if not self.child_world_time_read:
+                raise AssertionError(
+                    "Declaration stub was inserted before the child clock was read"
+                )
             self.characters[args[0]] = 72
         elif "INSERT INTO chunk_character_references" in normalized:
             self.character_junctions.append(args)
@@ -238,6 +253,18 @@ async def test_async_commit_links_same_turn_character_declaration(monkeypatch):
 
     assert chunk_id == conn.chunk_id
     assert conn.character_junctions == [(conn.chunk_id, 72, "present")]
+    assert conn.child_world_time_read
+    metadata_insert_index = next(
+        index
+        for index, (statement, _args) in enumerate(conn.statements)
+        if statement.startswith("INSERT INTO chunk_metadata")
+    )
+    declaration_insert_index = next(
+        index
+        for index, (statement, _args) in enumerate(conn.statements)
+        if statement.startswith("INSERT INTO characters")
+    )
+    assert metadata_insert_index < declaration_insert_index
     baseline_writes = [
         args
         for sql, args in conn.statements
@@ -455,6 +482,7 @@ async def test_async_commit_resolves_all_name_addressed_state_updates(monkeypatc
         for sql, args in sql_and_args
     )
     assert tag_writes[0]["entity_id"] == 303
+    assert tag_writes[0]["world_time"] == conn.child_world_time
 
 
 @pytest.mark.asyncio
