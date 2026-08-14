@@ -209,13 +209,16 @@ def qa649_db() -> Iterator[_Qa649Database]:
         VALID_DBNAMES.add(dbname)
         with _connect(dbname) as conn:
             with conn.cursor() as cur:
-                migration_sql = (
-                    Path(__file__).resolve().parents[1]
-                    / "migrations"
-                    / "109_extend_expiry_default_durations.sql"
-                ).read_text()
-                cur.execute(migration_sql)
-                cur.execute(migration_sql)
+                migrations_dir = Path(__file__).resolve().parents[1] / "migrations"
+                for migration_name in (
+                    "109_extend_expiry_default_durations.sql",
+                    # The real commit route now runs the experience-formation
+                    # sweep, which needs migration 110's formation stamps.
+                    "110_experience_formation_sweep.sql",
+                ):
+                    migration_sql = (migrations_dir / migration_name).read_text()
+                    cur.execute(migration_sql)
+                    cur.execute(migration_sql)
                 anchor_world_time = datetime(2026, 8, 13, 12, 0, tzinfo=timezone.utc)
                 cur.execute(
                     """
@@ -225,6 +228,14 @@ def qa649_db() -> Iterator[_Qa649Database]:
                     SET base_timestamp = EXCLUDED.base_timestamp
                     """,
                     (anchor_world_time,),
+                )
+                # The real commit route now runs the experience-formation
+                # sweep, whose player-identity lookup fails loudly on a save
+                # without a protagonist. Model a complete save.
+                protagonist = _insert_entity(cur, "character", "Fixture Protagonist")
+                cur.execute(
+                    "UPDATE global_variables SET user_character = %s WHERE id = true",
+                    (protagonist.wire_id,),
                 )
                 cur.execute("INSERT INTO entities (kind) VALUES ('place')")
                 anchor_chunk_id = _insert_chunk_at(cur, anchor_world_time, scene=1)
