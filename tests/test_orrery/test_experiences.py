@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from datetime import datetime, timezone
-from typing import Any, Iterator
+import json
+from pathlib import Path
+import re
+from typing import Any, Iterator, Literal
 
 import pytest
 
@@ -18,14 +21,38 @@ from nexus.agents.logon.skald_wire import (
     hydrate_skald_turn,
 )
 from nexus.agents.orrery import experience_embedding
+from nexus.agents.orrery.epistemics import CLAIM_BIRTH_ROLE_POLICY
 from nexus.agents.orrery.experiences import (
     ExperienceRecollection,
     ExperienceRenderBatch,
     validate_render_batch,
 )
-from nexus.memory.manager import empty_pass2_baseline
 from nexus.api.lore_adapter import response_to_incubator
 from nexus.config import load_settings
+from nexus.memory.manager import empty_pass2_baseline
+
+
+ROOT = Path(__file__).parents[2]
+
+
+def test_migration_role_policy_matches_runtime_source_of_truth() -> None:
+    """Migration receipt roles cannot drift from runtime formation policy."""
+
+    migration_sql = (
+        ROOT / "migrations" / "110_experience_formation_sweep.sql"
+    ).read_text()
+    match = re.search(
+        r"SELECT '(?P<policy>\{.*?\})'::jsonb AS roles_by_event_type",
+        migration_sql,
+        flags=re.DOTALL,
+    )
+    assert match is not None
+    migration_policy = {
+        event_type: frozenset(roles)
+        for event_type, roles in json.loads(match.group("policy")).items()
+    }
+
+    assert migration_policy == dict(CLAIM_BIRTH_ROLE_POLICY)
 
 
 def test_scene_reset_survives_internal_incubator_staging() -> None:
@@ -57,19 +84,20 @@ def test_scene_reset_survives_internal_incubator_staging() -> None:
 def test_experience_config_resolves_model_and_eligibility() -> None:
     """Shipped tuning is validated and its provider role is resolved."""
     settings = load_settings("nexus.toml")
+    assert settings.orrery is not None
+    experiences = settings.orrery.experiences
 
-    assert settings.orrery.experiences.enabled is True
-    assert settings.orrery.experiences.model == (
+    assert experiences.enabled is True
+    assert experiences.include_player_character is False
+    assert experiences.model == (
         settings.global_.model.api_models["openai"].roles["gaia"]
     )
-    assert settings.orrery.experiences.minimum_dossier_fields == 2
-    assert settings.orrery.experiences.max_seeds_per_render == 12
-    assert sum(
-        (
-            settings.orrery.experiences.magnitude_weight,
-            settings.orrery.experiences.valence_delta_weight,
-            settings.orrery.experiences.presence_duration_weight,
-        )
+    assert experiences.minimum_dossier_fields == 2
+    assert experiences.max_seeds_per_render == 12
+    assert (
+        experiences.magnitude_weight
+        + experiences.valence_delta_weight
+        + experiences.presence_duration_weight
     ) == pytest.approx(1.0)
 
 
@@ -206,7 +234,7 @@ class _EmbeddingCursor:
     def __enter__(self) -> "_EmbeddingCursor":
         return self
 
-    def __exit__(self, *_args: Any) -> bool:
+    def __exit__(self, *_args: Any) -> Literal[False]:
         return False
 
     def execute(self, statement: str, params: Any = None) -> None:

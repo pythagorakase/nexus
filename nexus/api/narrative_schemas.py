@@ -6,7 +6,7 @@ serialization of API requests and responses.
 """
 
 from datetime import datetime
-from typing import Dict, List, Optional, Any, Literal
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -58,6 +58,10 @@ class ContinueNarrativeResponse(BaseModel):
     session_id: str = Field(description="Session ID for tracking this generation")
     status: str = Field(description="Status of the operation")
     message: str = Field(description="Status message")
+    warnings: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Loud, non-fatal warnings recorded while accepting a chunk",
+    )
 
 
 class GenerationLeaseConflictDetail(BaseModel):

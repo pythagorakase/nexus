@@ -655,6 +655,7 @@ def _resolve_and_approve_pending_sync(
     user_text: str,
     choice: Optional[int],
     accept_fate: bool,
+    warning_sink: Optional[List[Dict[str, Any]]] = None,
 ) -> tuple[str, int, Optional[threading.Thread]]:
     """Resolve and approve a pending choice with worker-owned connection life."""
 
@@ -674,7 +675,17 @@ def _resolve_and_approve_pending_sync(
             connection=conn,
             incubator_session_id=session_id,
         )
-        approved_chunk_id = commit_incubator_to_database_sync(conn, session_id, slot)
+        if warning_sink is None:
+            approved_chunk_id = commit_incubator_to_database_sync(
+                conn, session_id, slot
+            )
+        else:
+            approved_chunk_id = commit_incubator_to_database_sync(
+                conn,
+                session_id,
+                slot,
+                warning_sink=warning_sink,
+            )
     except HTTPException:
         conn.rollback()
         raise
@@ -701,9 +712,10 @@ async def _resolve_and_approve_pending(
     choice: Optional[int],
     accept_fate: bool,
     background_tasks: BackgroundTasks,
-) -> tuple[str, int]:
+) -> tuple[str, int, List[Dict[str, Any]]]:
     """Resolve and approve without exposing the worker connection to cancellation."""
 
+    commit_warnings: List[Dict[str, Any]] = []
     resolved_user_text, approved_chunk_id, post_commit_thread = await asyncio.to_thread(
         _resolve_and_approve_pending_sync,
         slot=slot,
@@ -712,10 +724,11 @@ async def _resolve_and_approve_pending(
         user_text=user_text,
         choice=choice,
         accept_fate=accept_fate,
+        warning_sink=commit_warnings,
     )
     if post_commit_thread is not None:
         background_tasks.add_task(post_commit_thread.join)
-    return resolved_user_text, approved_chunk_id
+    return resolved_user_text, approved_chunk_id, commit_warnings
 
 
 # API Endpoints
@@ -794,6 +807,7 @@ async def continue_narrative(
         operation="continue",
     )
     scheduled = False
+    accept_warnings: List[Dict[str, Any]] = []
     failure_reason = "Narrative request ended before generation was scheduled."
     try:
         if request.chunk_id is None and state is not None:
@@ -813,7 +827,7 @@ async def continue_narrative(
                         narrative_state.session_id,
                         request.slot,
                     )
-                    resolved_user_text, approved_chunk_id = (
+                    resolved_user_text, approved_chunk_id, accept_warnings = (
                         await _resolve_and_approve_pending(
                             slot=request.slot,
                             session_id=narrative_state.session_id,
@@ -920,6 +934,7 @@ async def continue_narrative(
             session_id=session_id,
             status="processing",
             message=message,
+            warnings=accept_warnings,
         )
     except asyncio.CancelledError:
         failure_reason = "CancelledError"
@@ -1260,12 +1275,20 @@ def _approve_narrative_sync(
             from nexus.api.commit_handler_sync import commit_incubator_to_database_sync
 
             try:
-                chunk_id = commit_incubator_to_database_sync(conn, session_id, slot)
+                commit_warnings: List[Dict[str, Any]] = []
+                chunk_id = commit_incubator_to_database_sync(
+                    conn,
+                    session_id,
+                    slot,
+                    warning_sink=commit_warnings,
+                )
                 result = {
                     "status": "committed",
                     "message": f"Narrative committed as chunk {chunk_id}",
                     "chunk_id": chunk_id,
                 }
+                if commit_warnings:
+                    result["warnings"] = commit_warnings
             except Exception as e:
                 logger.error(f"Failed to commit narrative: {e}")
                 raise HTTPException(

@@ -221,6 +221,7 @@ def knowledge_db() -> Iterator[dict[str, Any]]:
     connection = engine.connect()
     transaction = connection.begin()
     raw_connection = connection.connection.driver_connection
+    assert raw_connection is not None
     with raw_connection.cursor(cursor_factory=RealDictCursor) as cur:
         install_claim_accounts_shadow_sync(cur)
     session = Session(bind=connection)
@@ -473,6 +474,7 @@ def test_digest_surfaces_only_possessed_safe_accounts(
         present_entity_ids=db["present"],
         anchor_chunk_id=db["anchor"],
         settings=_settings(),
+        include_player_character=True,
     )
     by_claim = {entry["claim_id"]: entry for entry in digest}
     claims = db["claims"]
@@ -516,6 +518,7 @@ def test_digest_surfaces_only_possessed_safe_accounts(
             present_entity_ids=db["present"],
             anchor_chunk_id=db["anchor"],
             settings=_settings(),
+            include_player_character=True,
         )
     assert cursor_digest == digest
 
@@ -531,6 +534,7 @@ def test_digest_cap_drops_oldest_and_reports_truncation(
         present_entity_ids=knowledge_db["present"],
         anchor_chunk_id=knowledge_db["anchor"],
         settings=_settings(max_entries=2),
+        include_player_character=True,
     )
 
     assert len(digest) == 2
@@ -567,6 +571,10 @@ class _LiveLoreHarness:
                 "enabled": True,
                 "bleed": {"max_candidates": 0},
                 "knowledge": _settings(enabled=enabled),
+                "experiences": {
+                    "include_player_character": True,
+                    "model": "@openai.gaia",
+                },
             },
         }
         self.memnon = _LiveMemnonHarness(session)

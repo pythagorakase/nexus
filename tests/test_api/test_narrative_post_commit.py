@@ -96,13 +96,29 @@ async def test_auto_approval_runs_commit_and_compaction_off_event_loop(
         },
     )()
     commit_threads: list[int] = []
+    quarantine_warning = {
+        "code": "experience_event_quarantined",
+        "message": "Experience formation quarantined malformed world event 73",
+        "world_event_id": 73,
+        "event_type": "warning_delivered",
+        "reason_code": "invalid_audience_id",
+        "reason": "Public event 73 audience index 0 has invalid entity id 0",
+    }
 
-    def commit_in_worker(_conn: Any, session_id: str, slot: int | None) -> int:
+    def commit_in_worker(
+        _conn: Any,
+        session_id: str,
+        slot: int | None,
+        *,
+        warning_sink: list[dict[str, Any]] | None = None,
+    ) -> int:
         assert session_id == "pending-session"
         assert slot == 4
+        assert warning_sink is not None
         with pytest.raises(RuntimeError):
             asyncio.get_running_loop()
         commit_threads.append(threading.get_ident())
+        warning_sink.append(quarantine_warning)
         return 42
 
     monkeypatch.setattr(narrative, "get_db_connection", lambda _slot: connection)
@@ -134,7 +150,7 @@ async def test_auto_approval_runs_commit_and_compaction_off_event_loop(
         background_tasks=background_tasks,
     )
 
-    assert result == ("resolved player response", 42)
+    assert result == ("resolved player response", 42, [quarantine_warning])
     assert commit_threads and commit_threads[0] != event_loop_thread
     assert connection.closed is True
     assert len(background_tasks.tasks) == 1
@@ -180,7 +196,14 @@ async def test_explicit_approval_runs_commit_and_compaction_off_event_loop(
     connection = _PendingConnection()
     commit_threads: list[int] = []
 
-    def commit_in_worker(_conn: Any, _session_id: str, _slot: int | None) -> int:
+    def commit_in_worker(
+        _conn: Any,
+        _session_id: str,
+        _slot: int | None,
+        *,
+        warning_sink: list[dict[str, Any]] | None = None,
+    ) -> int:
+        assert warning_sink == []
         with pytest.raises(RuntimeError):
             asyncio.get_running_loop()
         commit_threads.append(threading.get_ident())
@@ -233,7 +256,14 @@ async def test_cancelled_approval_leaves_worker_connection_owned_until_exit(
 
     connection = BlockingConnection()
 
-    def blocking_commit(_conn: Any, _session_id: str, _slot: int | None) -> int:
+    def blocking_commit(
+        _conn: Any,
+        _session_id: str,
+        _slot: int | None,
+        *,
+        warning_sink: list[dict[str, Any]] | None = None,
+    ) -> int:
+        assert warning_sink == []
         commit_threads.append(threading.get_ident())
         commit_started.set()
         assert release_commit.wait(timeout=5)
@@ -294,7 +324,14 @@ async def test_cancelled_auto_approval_releases_lease_and_hands_off_post_commit(
         def close(self) -> None:
             connection_closed.set()
 
-    def blocking_commit(_conn: Any, _session_id: str, _slot: int | None) -> int:
+    def blocking_commit(
+        _conn: Any,
+        _session_id: str,
+        _slot: int | None,
+        *,
+        warning_sink: list[dict[str, Any]] | None = None,
+    ) -> int:
+        assert warning_sink == []
         commit_started.set()
         assert release_commit.wait(timeout=5)
         assert not connection_closed.is_set()
