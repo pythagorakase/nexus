@@ -110,6 +110,7 @@ class CommitCursor:
                 raise AssertionError(
                     f"Child world-time lookup used unexpected params: {params}"
                 )
+            self.connection.child_world_time_read = True
             self.result = (self.connection.child_world_time,)
         elif "FROM chunk_metadata" in normalized:
             self.result = self.connection.parent_metadata
@@ -176,6 +177,7 @@ class CommitConnection:
         self.bleed_offers = []
         self.statements = []
         self.rollback_called = False
+        self.child_world_time_read = False
         self.child_world_time = datetime(2026, 8, 13, 19, 0, tzinfo=timezone.utc)
         self.parent_metadata = {
             "season": 1,
@@ -270,8 +272,11 @@ def test_sync_commit_links_same_turn_character_declaration(monkeypatch):
     """The real sync commit resolves references after declaration stub creation."""
 
     conn = CommitConnection()
+    declaration_clock = {}
 
-    def create_stub(connection, **_kwargs):
+    def create_stub(connection, **kwargs):
+        declaration_clock["world_time"] = kwargs["accepting_world_time"]
+        declaration_clock["read_before_declaration"] = connection.child_world_time_read
         connection.characters["Iria Vale"] = 71
         return SimpleNamespace(
             declared=1,
@@ -311,6 +316,10 @@ def test_sync_commit_links_same_turn_character_declaration(monkeypatch):
 
     assert chunk_id == conn.chunk_id
     assert conn.character_junctions == [(conn.chunk_id, 71, "present")]
+    assert declaration_clock == {
+        "world_time": conn.child_world_time,
+        "read_before_declaration": True,
+    }
     baseline_writes = [
         params
         for sql, params in conn.statements

@@ -56,6 +56,7 @@ class AsyncCommitConnection:
         self.place_junctions = []
         self.bleed_offers = []
         self.statements = []
+        self.child_world_time_read = False
         self.child_world_time = datetime(2026, 8, 13, 19, 0, tzinfo=timezone.utc)
         self.parent_metadata = {
             "season": 1,
@@ -130,6 +131,7 @@ class AsyncCommitConnection:
                 raise AssertionError(
                     f"Child world-time lookup used unexpected args: {args}"
                 )
+            self.child_world_time_read = True
             return self.child_world_time
         if "SELECT id FROM characters WHERE name" in normalized:
             return self.characters.get(args[0])
@@ -154,6 +156,10 @@ class AsyncCommitConnection:
             offer["used_chunk_id"] = chunk_id
             offer["use_count"] += 1
         elif "INSERT INTO characters" in normalized:
+            if not self.child_world_time_read:
+                raise AssertionError(
+                    "Declaration stub was inserted before the child clock was read"
+                )
             self.characters[args[0]] = 72
         elif "INSERT INTO chunk_character_references" in normalized:
             self.character_junctions.append(args)
@@ -247,6 +253,18 @@ async def test_async_commit_links_same_turn_character_declaration(monkeypatch):
 
     assert chunk_id == conn.chunk_id
     assert conn.character_junctions == [(conn.chunk_id, 72, "present")]
+    assert conn.child_world_time_read
+    metadata_insert_index = next(
+        index
+        for index, (statement, _args) in enumerate(conn.statements)
+        if statement.startswith("INSERT INTO chunk_metadata")
+    )
+    declaration_insert_index = next(
+        index
+        for index, (statement, _args) in enumerate(conn.statements)
+        if statement.startswith("INSERT INTO characters")
+    )
+    assert metadata_insert_index < declaration_insert_index
     baseline_writes = [
         args
         for sql, args in conn.statements

@@ -487,42 +487,7 @@ def commit_incubator_to_database_sync(
                     gaia_letter=incubator.get("correspondence_gaia_letter"),
                 )
 
-            # Step 5: Process declarations before name-reference resolution.
-            maturation_result = enqueue_declared_entity_maturations(
-                conn,
-                declarations=incubator.get("new_entities") or [],
-                chunk_id=chunk_id,
-                raw_text=raw_text,
-                slot=slot,
-            )
-            if maturation_result.declared:
-                logger.info(
-                    "Processed %s new-entity declarations for chunk %s: "
-                    "%s stubs created, %s jobs enqueued, %s already present, "
-                    "%s without engagement signal, %s skipped (disabled)",
-                    maturation_result.declared,
-                    chunk_id,
-                    maturation_result.stubs_created,
-                    maturation_result.jobs_enqueued,
-                    maturation_result.jobs_already_present,
-                    maturation_result.signal_absent,
-                    maturation_result.skipped_disabled,
-                )
-
-            # Step 6: Resolve references, including same-turn declarations.
-            ref_entities = ReferencedEntities(**incubator["reference_updates"])
-            character_refs = resolve_character_references_sync(
-                ref_entities.characters, conn
-            )
-            place_refs = resolve_place_references_sync(ref_entities.places, conn)
-            faction_refs = resolve_faction_references_sync(ref_entities.factions, conn)
-            if incubator.get("entity_updates"):
-                state_updates = resolve_state_update_ids_sync(
-                    conn,
-                    StateUpdates(**incubator["entity_updates"]),
-                )
-
-            # Step 7: Insert chunk metadata
+            # Step 5: Insert metadata and capture the accepting child's clock.
             with conn.cursor() as cur:
                 # Generate slug (e.g., "S05E06_001")
                 slug = (
@@ -544,6 +509,48 @@ def commit_incubator_to_database_sync(
                     scene_weather=metadata_update.scene_weather,
                 )
                 logger.info("Created metadata for chunk %s: %s", chunk_id, slug)
+                accepting_world_time = _require_chunk_world_time_sync(cur, chunk_id)
+
+            # Two-time contract: Gaia validates activity at the parent anchor,
+            # while every tag written by this commit becomes true at the accepting
+            # child. Use this exact trigger-authored child clock for declaration
+            # hints and ordinary state writes; never derive either from parent time.
+
+            # Step 6: Process declarations before name-reference resolution.
+            maturation_result = enqueue_declared_entity_maturations(
+                conn,
+                declarations=incubator.get("new_entities") or [],
+                chunk_id=chunk_id,
+                raw_text=raw_text,
+                slot=slot,
+                accepting_world_time=accepting_world_time,
+            )
+            if maturation_result.declared:
+                logger.info(
+                    "Processed %s new-entity declarations for chunk %s: "
+                    "%s stubs created, %s jobs enqueued, %s already present, "
+                    "%s without engagement signal, %s skipped (disabled)",
+                    maturation_result.declared,
+                    chunk_id,
+                    maturation_result.stubs_created,
+                    maturation_result.jobs_enqueued,
+                    maturation_result.jobs_already_present,
+                    maturation_result.signal_absent,
+                    maturation_result.skipped_disabled,
+                )
+
+            # Step 7: Resolve references, including same-turn declarations.
+            ref_entities = ReferencedEntities(**incubator["reference_updates"])
+            character_refs = resolve_character_references_sync(
+                ref_entities.characters, conn
+            )
+            place_refs = resolve_place_references_sync(ref_entities.places, conn)
+            faction_refs = resolve_faction_references_sync(ref_entities.factions, conn)
+            if incubator.get("entity_updates"):
+                state_updates = resolve_state_update_ids_sync(
+                    conn,
+                    StateUpdates(**incubator["entity_updates"]),
+                )
 
             # Step 8: Insert junction table references
             # Insert place references
@@ -615,12 +622,6 @@ def commit_incubator_to_database_sync(
 
             # Step 9: Update entity states (if provided)
             if state_updates is not None:
-                with conn.cursor() as cur:
-                    accepting_world_time = _require_chunk_world_time_sync(cur, chunk_id)
-                # Two-time contract: Gaia validated activity at the parent anchor,
-                # while a first application becomes true at the accepting child.
-                # Thread the trigger-authored child clock into writes, never the
-                # parent clock used to validate the model-visible state.
                 apply_state_updates_sync(
                     conn,
                     state_updates,

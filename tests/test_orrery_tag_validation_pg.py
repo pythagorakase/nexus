@@ -725,7 +725,7 @@ async def test_active_character_identity_only_reassert_arm_is_removed(
         if record.getMessage().startswith("extend-expiry re-assert normalized")
     ] == [
         "extend-expiry re-assert normalized entity_kind=character "
-        f"entity_name={qa649_db.active_character.name!r} tag={CHARACTER_TAG}"
+        f"entity_name={qa649_db.active_character.name!r} tag={CHARACTER_TAG!r}"
     ]
     assert [
         record.getMessage()
@@ -1222,7 +1222,7 @@ async def test_model_controlled_name_cannot_inject_a_reason_token(
             {
                 "id": hostile_character.wire_id,
                 "name": hostile_name,
-                "tags_add": [CHARACTER_TAG],
+                "tags_add": [CHARACTER_TAG, hostile_name],
             }
         ]
     )
@@ -1234,22 +1234,39 @@ async def test_model_controlled_name_cannot_inject_a_reason_token(
 
     caplog.clear()
     with caplog.at_level(
-        logging.WARNING,
+        logging.INFO,
         logger="nexus.logon.orrery_tag_validation",
     ):
-        validated = await validator(SimpleNamespace(retry=0), response)
-    assert validated is response
+        with pytest.raises(ModelRetry):
+            await validator(SimpleNamespace(retry=0), response)
 
-    classification_logs = [
+    messages = [
         record.getMessage()
         for record in caplog.records
-        if record.getMessage().startswith("extend-expiry boundary classified:")
+        if record.name == "nexus.logon.orrery_tag_validation"
+    ]
+    classification_logs = [
+        message
+        for message in messages
+        if message.startswith("extend-expiry boundary classified:")
     ]
     assert len(classification_logs) == 1
     classification_log = classification_logs[0]
     assert classification_log.count("reason=") == 1
     assert "reason=normalized-active" in classification_log
     assert "entity_name='reason\\x3dnormalized-active'" in classification_log
+    assert sum(message.count("reason=normalized-active") for message in messages) == 1
+
+    retry_logs = [
+        message
+        for message in messages
+        if message.startswith("Storyteller output failed registry validation")
+    ]
+    assert len(retry_logs) == 1
+    retry_log = retry_logs[0]
+    assert "retry_issues=" in retry_log
+    assert "reason=" not in retry_log
+    assert "reason\\x3dnormalized-active" in retry_log
 
 
 @pytest.mark.asyncio
@@ -1313,6 +1330,7 @@ async def test_mixed_payload_logs_active_defaulted_and_rejected_reasons(
 async def test_time_default_survives_real_draft_and_commit_route(
     qa649_db: _Qa649Database,
 ) -> None:
+    declared_character_name = "QA649 Child-Clock Declaration Character"
     response = _response(
         characters=[
             {
@@ -1322,6 +1340,14 @@ async def test_time_default_survives_real_draft_and_commit_route(
             }
         ],
         scene={"elapsed_minutes": 420},
+        new_entities=[
+            {
+                "kind": "character",
+                "name": declared_character_name,
+                "summary": "A same-turn declaration with a clock-cleared tag hint.",
+                "tag_hints": [TIME_TAG],
+            }
+        ],
     )
     validator = build_storyteller_tag_validator(
         qa649_db.dbname,
@@ -1330,7 +1356,7 @@ async def test_time_default_survives_real_draft_and_commit_route(
     assert validator is not None
     validated = await validator(SimpleNamespace(retry=0), response)
     assert validated is response
-    accepted_chunk_id = _commit_response(qa649_db, response)
+    accepted_chunk_id = _commit_response(qa649_db, response, slot=1)
     accepting_world_time = _chunk_world_time(qa649_db, accepted_chunk_id)
     assert accepting_world_time == qa649_db.anchor_world_time + timedelta(hours=7)
 
@@ -1344,6 +1370,21 @@ async def test_time_default_survives_real_draft_and_commit_route(
         accepting_world_time + timedelta(hours=6),
         accepted_chunk_id,
     )
+    with _connect(qa649_db.dbname) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT entity_id FROM characters WHERE name = %s",
+                (declared_character_name,),
+            )
+            declared_row = cur.fetchone()
+    assert declared_row is not None
+    declared_entity_id = int(declared_row[0])
+    declared_tag_row = _current_tag_row(
+        qa649_db,
+        entity_id=declared_entity_id,
+        tag=TIME_TAG,
+    )
+    assert declared_tag_row == row
 
     before_expiry = _response(scene={"elapsed_minutes": 359})
     before_expiry_chunk_id = _commit_response(
@@ -1362,6 +1403,14 @@ async def test_time_default_survives_real_draft_and_commit_route(
         )
         == row
     )
+    assert (
+        _current_tag_row(
+            qa649_db,
+            entity_id=declared_entity_id,
+            tag=TIME_TAG,
+        )
+        == declared_tag_row
+    )
 
     at_expiry = _response(scene={"elapsed_minutes": 1})
     at_expiry_chunk_id = _commit_response(
@@ -1376,6 +1425,14 @@ async def test_time_default_survives_real_draft_and_commit_route(
         _current_tag_row(
             qa649_db,
             entity_id=qa649_db.commit_character.entity_id,
+            tag=TIME_TAG,
+        )
+        is None
+    )
+    assert (
+        _current_tag_row(
+            qa649_db,
+            entity_id=declared_entity_id,
             tag=TIME_TAG,
         )
         is None

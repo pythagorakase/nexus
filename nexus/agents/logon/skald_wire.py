@@ -43,6 +43,7 @@ from nexus.api.native_structured_output import (
     openai_response_text_format,
     strict_json_schema,
 )
+from nexus.util.log_safety import quote_log_value
 
 
 logger = logging.getLogger("nexus.logon.skald_wire")
@@ -216,8 +217,8 @@ class PresenceDelta(BaseModel):
                 )
                 mention_keys.add(mention_key)
             logger.warning(
-                "presence out-and-back normalized to mention: %s",
-                name,
+                "presence out-and-back normalized to mention: name=%s",
+                quote_log_value(name),
             )
         normalized["mentions"] = normalized_mentions
         return normalized

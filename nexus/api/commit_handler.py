@@ -724,12 +724,31 @@ async def commit_incubator_to_database(
                 json.dumps(bound_baseline.model_dump(mode="json")),
             )
 
-            # Step 5: Create declaration stubs before name-reference resolution.
+            # Step 5: Insert metadata and capture the accepting child's clock.
+            await insert_chunk_metadata(
+                conn,
+                chunk_id=chunk_id,
+                season=db_meta["season"],
+                episode=db_meta["episode"],
+                scene=db_meta["scene"],
+                world_layer=world_layer,
+                time_delta=db_meta["time_delta"],
+                generation_model=incubator.get("generation_model"),
+                scene_weather=metadata_update.scene_weather,
+            )
+            accepting_world_time = await _require_chunk_world_time(conn, chunk_id)
+
+            # Two-time contract: Gaia validates activity at the parent anchor,
+            # while every tag written by this commit becomes true at the accepting
+            # child. Use this exact trigger-authored child clock for declaration
+            # work and ordinary state writes; never derive either from parent time.
+
+            # Step 6: Create declaration stubs before name-reference resolution.
             await create_declared_entity_stubs(
                 incubator.get("new_entities") or [], conn
             )
 
-            # Step 6: Resolve entity references, including same-turn declarations.
+            # Step 7: Resolve entity references, including same-turn declarations.
             ref_entities = ReferencedEntities(**incubator["reference_updates"])
             character_refs = await resolve_character_references(
                 ref_entities.characters, conn
@@ -742,19 +761,6 @@ async def commit_incubator_to_database(
                     StateUpdates(**incubator["entity_updates"]),
                 )
 
-            # Step 7: Insert chunk metadata
-            await insert_chunk_metadata(
-                conn,
-                chunk_id=chunk_id,
-                season=db_meta["season"],
-                episode=db_meta["episode"],
-                scene=db_meta["scene"],
-                world_layer=world_layer,
-                time_delta=db_meta["time_delta"],
-                generation_model=incubator.get("generation_model"),
-                scene_weather=metadata_update.scene_weather,
-            )
-
             # Step 8: Insert junction table references
             await insert_place_references(conn, chunk_id, place_refs)
             await insert_character_references(conn, chunk_id, character_refs)
@@ -762,11 +768,6 @@ async def commit_incubator_to_database(
 
             # Step 9: Update entity states (if provided)
             if state_updates is not None:
-                accepting_world_time = await _require_chunk_world_time(conn, chunk_id)
-                # Two-time contract: Gaia validated activity at the parent anchor,
-                # while a first application becomes true at the accepting child.
-                # Thread the trigger-authored child clock into writes, never the
-                # parent clock used to validate the model-visible state.
                 await apply_state_updates(
                     conn,
                     state_updates,

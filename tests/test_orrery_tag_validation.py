@@ -1055,7 +1055,7 @@ async def test_storyteller_validator_attributes_declaration_failure_to_model_ret
             await validator(
                 SimpleNamespace(retry=0),
                 _storyteller_response(
-                    tag_hints=["invented:tag"],
+                    tag_hints=["invented:tag", "invented:other"],
                     pair_tag_hints=[
                         {
                             "tag": "contact:social",
@@ -1078,9 +1078,10 @@ async def test_storyteller_validator_attributes_declaration_failure_to_model_ret
             "Storyteller output failed registry validation"
         )
     )
-    formatted_issues = exc_info.value.message.rsplit(":\n", maxsplit=1)[1]
-    assert "requesting model retry:\n- new_entities[0].tag_hints:" in validation_log
-    assert validation_log.endswith(formatted_issues)
+    assert "issue_count=2 requesting model retry retry_issues=" in validation_log
+    assert "new_entities[0].tag_hints:" in validation_log
+    assert "requesting model retry:\n" not in validation_log
+    assert "\\n" in validation_log
 
 
 @pytest.mark.asyncio
