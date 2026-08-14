@@ -1,6 +1,7 @@
 """Unit tests for asynchronous narrative commit helpers."""
 
 import json
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -55,12 +56,14 @@ class AsyncCommitConnection:
         self.place_junctions = []
         self.bleed_offers = []
         self.statements = []
+        self.child_world_time = datetime(2026, 8, 13, 19, 0, tzinfo=timezone.utc)
         self.parent_metadata = {
             "season": 1,
             "episode": 1,
             "scene": 8,
             "world_layer": "primary",
             "time_delta": None,
+            "world_time": datetime(2026, 8, 13, 12, 0, tzinfo=timezone.utc),
         }
         self.incubator = {
             "chunk_id": None,
@@ -122,6 +125,12 @@ class AsyncCommitConnection:
         normalized = " ".join(sql.split())
         if "INSERT INTO narrative_chunks" in normalized:
             return self.chunk_id
+        if normalized == "SELECT world_time FROM chunk_metadata WHERE chunk_id = $1":
+            if args != (self.chunk_id,):
+                raise AssertionError(
+                    f"Child world-time lookup used unexpected args: {args}"
+                )
+            return self.child_world_time
         if "SELECT id FROM characters WHERE name" in normalized:
             return self.characters.get(args[0])
         if "SELECT id FROM places WHERE name" in normalized:
@@ -455,6 +464,7 @@ async def test_async_commit_resolves_all_name_addressed_state_updates(monkeypatc
         for sql, args in sql_and_args
     )
     assert tag_writes[0]["entity_id"] == 303
+    assert tag_writes[0]["world_time"] == conn.child_world_time
 
 
 @pytest.mark.asyncio

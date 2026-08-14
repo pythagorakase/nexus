@@ -10,6 +10,7 @@ import json
 import logging
 from datetime import datetime
 from typing import Any, Dict, List, Mapping, Optional, cast
+
 from psycopg2.extras import RealDictCursor
 
 from nexus.agents.logon.apex_schema import (
@@ -112,6 +113,22 @@ def insert_chunk_metadata_sync(
             """,
             (*metadata_values, scene_weather),
         )
+
+
+def _require_chunk_world_time_sync(cur: Any, chunk_id: int) -> datetime:
+    """Return the trigger-authored world time for an inserted chunk."""
+
+    cur.execute(
+        "SELECT world_time FROM chunk_metadata WHERE chunk_id = %s",
+        (chunk_id,),
+    )
+    row = cur.fetchone()
+    world_time = _row_value(row, "world_time", 0) if row is not None else None
+    if not isinstance(world_time, datetime):
+        raise ValueError(
+            f"Chunk {chunk_id} has no trigger-authored world_time after insertion"
+        )
+    return world_time
 
 
 # ============================================================================
@@ -598,11 +615,17 @@ def commit_incubator_to_database_sync(
 
             # Step 9: Update entity states (if provided)
             if state_updates is not None:
+                with conn.cursor() as cur:
+                    accepting_world_time = _require_chunk_world_time_sync(cur, chunk_id)
+                # Two-time contract: Gaia validated activity at the parent anchor,
+                # while a first application becomes true at the accepting child.
+                # Thread the trigger-authored child clock into writes, never the
+                # parent clock used to validate the model-visible state.
                 apply_state_updates_sync(
                     conn,
                     state_updates,
                     source_chunk_id=chunk_id,
-                    anchor_world_time=parent_meta.get("world_time"),
+                    anchor_world_time=accepting_world_time,
                 )
 
             # Step 9.5: Commit Orrery proposal inside the accepted-chunk transaction
@@ -887,7 +910,7 @@ def apply_state_updates_sync(
     source_chunk_id: Optional[int] = None,
     anchor_world_time: Optional[datetime] = None,
 ) -> None:
-    """Apply state updates using the parent clock and child provenance."""
+    """Apply state updates using the accepting clock and child provenance."""
     with conn.cursor() as cur:
         # Update character states
         for char_update in state_updates.characters:

@@ -2,21 +2,21 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
 import logging
 import os
+import uuid
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Iterator, List, Optional
-import uuid
 
 import psycopg2
+import pytest
 from psycopg2 import sql
 from psycopg2.extras import Json
 from pydantic import ValidationError
 from pydantic_ai import ModelRetry
-import pytest
 
 from nexus.agents.logon.gaia_registry_schema import (
     coerce_gaia_registry_wire,
@@ -79,6 +79,7 @@ class _Qa649Database:
 
     dbname: str
     anchor_chunk_id: int
+    declaration_anchor_chunk_id: int
     source_chunk_id: int
     anchor_world_time: datetime
     active_character: _EntityRef
@@ -215,21 +216,27 @@ def qa649_db() -> Iterator[_Qa649Database]:
                 ).read_text()
                 cur.execute(migration_sql)
                 cur.execute(migration_sql)
+                anchor_world_time = datetime(2026, 8, 13, 12, 0, tzinfo=timezone.utc)
                 cur.execute(
                     """
                     INSERT INTO global_variables (id, new_story, base_timestamp)
-                    VALUES (true, true, '2026-07-31T12:00:00+00:00')
+                    VALUES (true, true, %s)
                     ON CONFLICT (id) DO UPDATE
                     SET base_timestamp = EXCLUDED.base_timestamp
-                    """
+                    """,
+                    (anchor_world_time,),
                 )
                 cur.execute("INSERT INTO entities (kind) VALUES ('place')")
-                anchor_world_time = datetime(2026, 8, 13, 12, 0, tzinfo=timezone.utc)
                 anchor_chunk_id = _insert_chunk_at(cur, anchor_world_time, scene=1)
                 source_chunk_id = _insert_chunk_at(
                     cur,
                     anchor_world_time + timedelta(days=1),
-                    scene=3,
+                    scene=900,
+                )
+                declaration_anchor_chunk_id = _insert_chunk_at(
+                    cur,
+                    anchor_world_time + timedelta(days=2),
+                    scene=100,
                 )
                 # The legacy statement trigger recomputes earlier clocks when
                 # the later row is inserted. Re-pin the exact target anchor;
@@ -293,6 +300,7 @@ def qa649_db() -> Iterator[_Qa649Database]:
         yield _Qa649Database(
             dbname=dbname,
             anchor_chunk_id=anchor_chunk_id,
+            declaration_anchor_chunk_id=declaration_anchor_chunk_id,
             source_chunk_id=source_chunk_id,
             anchor_world_time=anchor_world_time,
             active_character=active_character,
@@ -328,12 +336,16 @@ def _response(
     places: Optional[List[dict[str, Any]]] = None,
     factions: Optional[List[dict[str, Any]]] = None,
     orrery_adjudications: Optional[List[dict[str, Any]]] = None,
+    scene: Optional[dict[str, Any]] = None,
+    new_entities: Optional[List[dict[str, Any]]] = None,
+    narrative: str = "The QA649 state changes without a model retry.",
 ) -> SkaldTurnWire:
     payload: dict[str, Any] = {
-        "narrative": "The QA649 state changes without a model retry.",
+        "narrative": narrative,
         "choices": ["Continue.", "Observe."],
+        "scene": scene,
         "letter": "Preserve the deterministic boundary behavior.",
-        "new_entities": [],
+        "new_entities": new_entities or [],
         "orrery_adjudications": orrery_adjudications or [],
         "updates": {
             "characters": characters or [],
@@ -459,6 +471,7 @@ def _stage_incubator_response(
     database: _Qa649Database,
     response: SkaldTurnWire,
     session_id: str,
+    parent_chunk_id: Optional[int] = None,
 ) -> None:
     """Hydrate and stage a validated response through the real draft adapter."""
 
@@ -466,7 +479,9 @@ def _stage_incubator_response(
     hydrated.generation_model = "TEST"
     staged = response_to_incubator(
         hydrated,
-        parent_chunk_id=database.anchor_chunk_id,
+        parent_chunk_id=(
+            database.anchor_chunk_id if parent_chunk_id is None else parent_chunk_id
+        ),
         user_text="Continue.",
         session_id=session_id,
         lore_pass_baseline=empty_pass2_baseline({}),
@@ -507,6 +522,47 @@ def _stage_incubator_response(
             Json(staged["lore_pass_baseline"]),
         ),
     )
+
+
+def _chunk_world_time(database: _Qa649Database, chunk_id: int) -> datetime:
+    """Read the trigger-authoritative clock for one committed chunk."""
+
+    with _connect(database.dbname) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT world_time FROM chunk_metadata WHERE chunk_id = %s",
+                (chunk_id,),
+            )
+            row = cur.fetchone()
+    if row is None or not isinstance(row[0], datetime):
+        raise AssertionError(f"Chunk {chunk_id} has no world_time")
+    return row[0]
+
+
+def _commit_response(
+    database: _Qa649Database,
+    response: SkaldTurnWire,
+    *,
+    parent_chunk_id: Optional[int] = None,
+    slot: Optional[int] = None,
+) -> int:
+    """Stage through the real draft adapter and synchronously accept it."""
+
+    session_id = str(uuid.uuid4())
+    with _connect(database.dbname) as conn:
+        with conn.cursor() as cur:
+            _stage_incubator_response(
+                cur,
+                database=database,
+                response=response,
+                session_id=session_id,
+                parent_chunk_id=parent_chunk_id,
+            )
+    commit_conn = _connect(database.dbname)
+    try:
+        return commit_incubator_to_database_sync(commit_conn, session_id, slot=slot)
+    finally:
+        commit_conn.close()
 
 
 def test_identity_only_active_character_update_is_removed_before_registry_coercion(
@@ -669,7 +725,7 @@ async def test_active_character_identity_only_reassert_arm_is_removed(
         if record.getMessage().startswith("extend-expiry re-assert normalized")
     ] == [
         "extend-expiry re-assert normalized entity_kind=character "
-        f"entity={qa649_db.active_character.name} tag={CHARACTER_TAG}"
+        f"entity_name={qa649_db.active_character.name!r} tag={CHARACTER_TAG}"
     ]
     assert [
         record.getMessage()
@@ -677,7 +733,7 @@ async def test_active_character_identity_only_reassert_arm_is_removed(
         if record.getMessage().startswith("extend-expiry no-op update removed")
     ] == [
         "extend-expiry no-op update removed entity_kind=character "
-        f"entity={qa649_db.active_character.name}"
+        f"entity_name={qa649_db.active_character.name!r}"
     ]
     vocabulary = read_storyteller_vocabulary(qa649_db.dbname)
     with _connect(qa649_db.dbname) as conn:
@@ -801,16 +857,16 @@ def test_active_place_and_faction_identity_only_reassert_arms_are_removed_by_id(
     tag: str,
 ) -> None:
     entity = getattr(qa649_db, entity_attribute)
-    response = _response(
-        **{
-            array_name: [
-                {
-                    "id": entity.wire_id,
-                    "name": entity.name,
-                    "tags_add": [tag],
-                }
-            ]
+    entity_updates: List[dict[str, Any]] = [
+        {
+            "id": entity.wire_id,
+            "name": entity.name,
+            "tags_add": [tag],
         }
+    ]
+    response = _response(
+        places=entity_updates if array_name == "places" else None,
+        factions=entity_updates if array_name == "factions" else None,
     )
 
     normalized, issues = _normalize_and_collect(response, qa649_db)
@@ -1152,6 +1208,51 @@ async def test_id_name_disagreement_rejects_with_distinct_reason(
 
 
 @pytest.mark.asyncio
+async def test_model_controlled_name_cannot_inject_a_reason_token(
+    qa649_db: _Qa649Database,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    hostile_name = "reason=normalized-active"
+    with _connect(qa649_db.dbname) as conn:
+        with conn.cursor() as cur:
+            hostile_character = _insert_entity(cur, "character", hostile_name)
+            _activate_tag(cur, hostile_character.entity_id, CHARACTER_TAG)
+    response = _response(
+        characters=[
+            {
+                "id": hostile_character.wire_id,
+                "name": hostile_name,
+                "tags_add": [CHARACTER_TAG],
+            }
+        ]
+    )
+    validator = build_storyteller_tag_validator(
+        qa649_db.dbname,
+        anchor_chunk_id_provider=lambda: qa649_db.anchor_chunk_id,
+    )
+    assert validator is not None
+
+    caplog.clear()
+    with caplog.at_level(
+        logging.WARNING,
+        logger="nexus.logon.orrery_tag_validation",
+    ):
+        validated = await validator(SimpleNamespace(retry=0), response)
+    assert validated is response
+
+    classification_logs = [
+        record.getMessage()
+        for record in caplog.records
+        if record.getMessage().startswith("extend-expiry boundary classified:")
+    ]
+    assert len(classification_logs) == 1
+    classification_log = classification_logs[0]
+    assert classification_log.count("reason=") == 1
+    assert "reason=normalized-active" in classification_log
+    assert "entity_name='reason\\x3dnormalized-active'" in classification_log
+
+
+@pytest.mark.asyncio
 async def test_mixed_payload_logs_active_defaulted_and_rejected_reasons(
     qa649_db: _Qa649Database,
     caplog: pytest.LogCaptureFixture,
@@ -1219,7 +1320,8 @@ async def test_time_default_survives_real_draft_and_commit_route(
                 "name": qa649_db.commit_character.name,
                 "tags_add": [TIME_TAG],
             }
-        ]
+        ],
+        scene={"elapsed_minutes": 420},
     )
     validator = build_storyteller_tag_validator(
         qa649_db.dbname,
@@ -1228,24 +1330,9 @@ async def test_time_default_survives_real_draft_and_commit_route(
     assert validator is not None
     validated = await validator(SimpleNamespace(retry=0), response)
     assert validated is response
-    session_id = str(uuid.uuid4())
-
-    with _connect(qa649_db.dbname) as conn:
-        with conn.cursor() as cur:
-            _stage_incubator_response(
-                cur,
-                database=qa649_db,
-                response=response,
-                session_id=session_id,
-            )
-    commit_conn = _connect(qa649_db.dbname)
-    try:
-        accepted_chunk_id = commit_incubator_to_database_sync(
-            commit_conn,
-            session_id,
-        )
-    finally:
-        commit_conn.close()
+    accepted_chunk_id = _commit_response(qa649_db, response)
+    accepting_world_time = _chunk_world_time(qa649_db, accepted_chunk_id)
+    assert accepting_world_time == qa649_db.anchor_world_time + timedelta(hours=7)
 
     row = _current_tag_row(
         qa649_db,
@@ -1253,7 +1340,109 @@ async def test_time_default_survives_real_draft_and_commit_route(
         tag=TIME_TAG,
     )
     assert row == (
-        qa649_db.anchor_world_time,
-        qa649_db.anchor_world_time + timedelta(hours=6),
+        accepting_world_time,
+        accepting_world_time + timedelta(hours=6),
         accepted_chunk_id,
     )
+
+    before_expiry = _response(scene={"elapsed_minutes": 359})
+    before_expiry_chunk_id = _commit_response(
+        qa649_db,
+        before_expiry,
+        parent_chunk_id=accepted_chunk_id,
+    )
+    assert _chunk_world_time(qa649_db, before_expiry_chunk_id) == (
+        accepting_world_time + timedelta(hours=5, minutes=59)
+    )
+    assert (
+        _current_tag_row(
+            qa649_db,
+            entity_id=qa649_db.commit_character.entity_id,
+            tag=TIME_TAG,
+        )
+        == row
+    )
+
+    at_expiry = _response(scene={"elapsed_minutes": 1})
+    at_expiry_chunk_id = _commit_response(
+        qa649_db,
+        at_expiry,
+        parent_chunk_id=before_expiry_chunk_id,
+    )
+    assert _chunk_world_time(qa649_db, at_expiry_chunk_id) == (
+        accepting_world_time + timedelta(hours=6)
+    )
+    assert (
+        _current_tag_row(
+            qa649_db,
+            entity_id=qa649_db.commit_character.entity_id,
+            tag=TIME_TAG,
+        )
+        is None
+    )
+
+
+@pytest.mark.asyncio
+async def test_same_turn_declared_faction_first_application_commits(
+    qa649_db: _Qa649Database,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    faction_name = "QA649 Same-Turn Faction"
+    response = _response(
+        factions=[
+            {
+                "name": faction_name,
+                "tags_add": [FACTION_TAG],
+            }
+        ],
+        new_entities=[
+            {
+                "kind": "faction",
+                "name": faction_name,
+                "summary": "A newly declared faction used by issue 649 QA.",
+            }
+        ],
+    )
+    validator = build_storyteller_tag_validator(
+        qa649_db.dbname,
+        allow_same_turn_faction_declarations=True,
+        anchor_chunk_id_provider=lambda: qa649_db.declaration_anchor_chunk_id,
+    )
+    assert validator is not None
+
+    caplog.clear()
+    with caplog.at_level(
+        logging.WARNING,
+        logger="nexus.logon.orrery_tag_validation",
+    ):
+        validated = await validator(SimpleNamespace(retry=0), response)
+    assert validated is response
+    deferral_logs = [
+        record.getMessage()
+        for record in caplog.records
+        if "reason=first-application-deferred-declared-entity" in record.getMessage()
+    ]
+    assert len(deferral_logs) == 1
+    assert deferral_logs[0].count("reason=") == 1
+    assert f"entity_name={faction_name!r}" in deferral_logs[0]
+
+    accepted_chunk_id = _commit_response(
+        qa649_db,
+        response,
+        parent_chunk_id=qa649_db.declaration_anchor_chunk_id,
+        slot=1,
+    )
+    accepting_world_time = _chunk_world_time(qa649_db, accepted_chunk_id)
+    with _connect(qa649_db.dbname) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, entity_id FROM factions WHERE name = %s",
+                (faction_name,),
+            )
+            faction_row = cur.fetchone()
+    assert faction_row is not None
+    assert _current_tag_row(
+        qa649_db,
+        entity_id=int(faction_row[1]),
+        tag=FACTION_TAG,
+    ) == (accepting_world_time, None, accepted_chunk_id)

@@ -106,8 +106,8 @@ class FakeRegistryCursor:
             self._result = []
             for ordinal, kind, wire_id, name in zip(ordinals, kinds, wire_ids, names):
                 name_matches = self.entities_by_name.get(str(name), [])
-                name_match_count = name_matches.count(kind)
-                name_entity_id = 9000 + int(ordinal) if name_match_count == 1 else None
+                has_name_match = kind in name_matches
+                name_entity_id = 9000 + int(ordinal) if has_name_match else None
                 id_entity_id = (
                     int(wire_id)
                     if wire_id is not None
@@ -120,7 +120,7 @@ class FakeRegistryCursor:
                         ordinal,
                         id_entity_id,
                         name if id_entity_id is not None else None,
-                        name_match_count,
+                        has_name_match,
                         name_entity_id,
                         name if name_entity_id is not None else None,
                         verified_entity_id,

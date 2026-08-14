@@ -11,6 +11,7 @@ import json
 import logging
 from datetime import datetime
 from typing import Any, Awaitable, Callable, Dict, List, Mapping, Optional, cast
+
 import asyncpg  # type: ignore[import-untyped]
 
 from nexus.agents.logon.apex_schema import (
@@ -108,6 +109,22 @@ async def fetch_chunk_metadata(
         raise ValueError(f"No metadata found for chunk {chunk_id}")
 
     return dict(row)
+
+
+async def _require_chunk_world_time(
+    conn: asyncpg.Connection, chunk_id: int
+) -> datetime:
+    """Return the trigger-authored world time for an inserted chunk."""
+
+    world_time = await conn.fetchval(
+        "SELECT world_time FROM chunk_metadata WHERE chunk_id = $1",
+        chunk_id,
+    )
+    if not isinstance(world_time, datetime):
+        raise ValueError(
+            f"Chunk {chunk_id} has no trigger-authored world_time after insertion"
+        )
+    return world_time
 
 
 async def _require_state_update_id(
@@ -368,8 +385,8 @@ async def apply_state_updates(
     This updates scalar state for characters and places. Faction semantics are
     intentionally not written to legacy faction prose columns; use Orrery tag
     deltas / pair-tags and world events instead. ``anchor_world_time`` is the
-    accepted turn's parent clock; ``source_chunk_id`` remains the new child for
-    provenance.
+    accepting child's trigger-authored clock for tag writes;
+    ``source_chunk_id`` remains that child for provenance.
     """
     # Update character states
     for char_update in state_updates.characters:
@@ -629,8 +646,8 @@ async def commit_incubator_to_database(
             validate_staged_pass2_baseline(incubator["lore_pass_baseline"])
             logger.info("Processing incubator session %s", session_id)
 
-            # Step 2: Get parent context. Bootstrap has no parent clock, so its
-            # inline tags deliberately retain NULL applied/expires timestamps.
+            # Step 2: Get parent context. Bootstrap has no validation/read
+            # anchor; its inserted child metadata still supplies the write clock.
             parent_meta: Dict[str, Any]
             if incubator["parent_chunk_id"] == 0:
                 parent_meta = {
@@ -745,11 +762,16 @@ async def commit_incubator_to_database(
 
             # Step 9: Update entity states (if provided)
             if state_updates is not None:
+                accepting_world_time = await _require_chunk_world_time(conn, chunk_id)
+                # Two-time contract: Gaia validated activity at the parent anchor,
+                # while a first application becomes true at the accepting child.
+                # Thread the trigger-authored child clock into writes, never the
+                # parent clock used to validate the model-visible state.
                 await apply_state_updates(
                     conn,
                     state_updates,
                     source_chunk_id=chunk_id,
-                    anchor_world_time=parent_meta.get("world_time"),
+                    anchor_world_time=accepting_world_time,
                 )
 
             # Step 9.5: Commit Orrery proposal inside the accepted-chunk transaction

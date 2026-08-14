@@ -2,6 +2,7 @@
 
 import json
 import logging
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -104,6 +105,12 @@ class CommitCursor:
             self.result = None
         elif "FROM incubator" in normalized:
             self.result = self.connection.incubator
+        elif normalized == "SELECT world_time FROM chunk_metadata WHERE chunk_id = %s":
+            if params != (self.connection.chunk_id,):
+                raise AssertionError(
+                    f"Child world-time lookup used unexpected params: {params}"
+                )
+            self.result = (self.connection.child_world_time,)
         elif "FROM chunk_metadata" in normalized:
             self.result = self.connection.parent_metadata
         elif "SELECT id FROM characters WHERE name" in normalized:
@@ -169,12 +176,14 @@ class CommitConnection:
         self.bleed_offers = []
         self.statements = []
         self.rollback_called = False
+        self.child_world_time = datetime(2026, 8, 13, 19, 0, tzinfo=timezone.utc)
         self.parent_metadata = {
             "season": 1,
             "episode": 1,
             "scene": 4,
             "world_layer": "primary",
             "time_delta": None,
+            "world_time": datetime(2026, 8, 13, 12, 0, tzinfo=timezone.utc),
         }
         self.incubator = {
             "chunk_id": None,
@@ -359,11 +368,12 @@ def test_sync_commit_measures_seeded_bleed_offer_uptake(
         for record in caplog.records
         if getattr(record, "event", None) == "orrery_bleed_uptake"
     )
-    assert uptake_record.name_matched is name_present
+    assert getattr(uptake_record, "name_matched") is name_present
+    overlap_ratio = float(getattr(uptake_record, "four_gram_overlap_ratio"))
     if name_present:
-        assert uptake_record.four_gram_overlap_ratio == 1.0
+        assert overlap_ratio == 1.0
     else:
-        assert 0.0 < uptake_record.four_gram_overlap_ratio < 1.0
+        assert 0.0 < overlap_ratio < 1.0
 
 
 def test_sync_commit_does_not_stamp_offer_from_regenerated_away_draft(
@@ -615,6 +625,7 @@ def test_sync_commit_resolves_all_name_addressed_state_updates(monkeypatch):
         for sql, params in update_statements
     )
     assert tag_writes[0]["subtype_id"] == 91
+    assert tag_writes[0]["anchor_world_time"] == conn.child_world_time
 
 
 def test_sync_commit_aborts_on_unresolvable_state_update_name(monkeypatch):
