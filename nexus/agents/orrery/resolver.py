@@ -63,6 +63,7 @@ from nexus.agents.orrery.needs import (
     need_applies_to_tags,
     severity_for_debt,
 )
+from nexus.agents.orrery.tag_activity import active_entity_tag_at_world_time_sql
 
 logger = logging.getLogger(__name__)
 
@@ -422,16 +423,18 @@ def load_current_entity_tags(
 
     tags: dict[int, set[str]] = {}
     ephemeral_tags: dict[int, set[str]] = {}
+    activity_predicate = active_entity_tag_at_world_time_sql(
+        entity_tag_alias="et",
+        world_time_sql=":current_world_time",
+    )
     for row in session.execute(
         text(
-            """
+            f"""
             /* orrery:current_tags */
             SELECT etc.entity_id, etc.tag, etc.is_ephemeral
             FROM entity_tags_current etc
             JOIN entity_tags et ON et.id = etc.entity_tag_id
-            WHERE :current_world_time IS NULL
-               OR et.expires_at_world_time IS NULL
-               OR et.expires_at_world_time > :current_world_time
+            WHERE {activity_predicate}
             """
         ),
         {"current_world_time": current_world_time},

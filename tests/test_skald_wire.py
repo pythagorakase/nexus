@@ -1051,7 +1051,7 @@ def test_presence_normalizes_same_name_in_enter_and_exit_casefolded(
         record.getMessage()
         for record in caplog.records
         if "presence out-and-back normalized to mention:" in record.getMessage()
-    ] == ["presence out-and-back normalized to mention: nika rel"]
+    ] == ["presence out-and-back normalized to mention: name='nika rel'"]
 
 
 def test_presence_rejects_casefold_name_with_conflicting_ids(
@@ -1120,7 +1120,7 @@ def test_presence_mixed_compatible_and_conflicting_names_rejects_conflict(
         record.getMessage()
         for record in caplog.records
         if "presence out-and-back normalized to mention:" in record.getMessage()
-    ] == ["presence out-and-back normalized to mention: Nika Rel"]
+    ] == ["presence out-and-back normalized to mention: name='Nika Rel'"]
 
 
 def test_presence_out_and_back_normalization_is_idempotent(

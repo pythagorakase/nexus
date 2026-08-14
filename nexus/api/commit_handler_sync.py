@@ -10,6 +10,7 @@ import json
 import logging
 from datetime import datetime
 from typing import Any, Dict, List, Mapping, Optional, cast
+
 from psycopg2.extras import RealDictCursor
 
 from nexus.agents.logon.apex_schema import (
@@ -112,6 +113,22 @@ def insert_chunk_metadata_sync(
             """,
             (*metadata_values, scene_weather),
         )
+
+
+def _require_chunk_world_time_sync(cur: Any, chunk_id: int) -> datetime:
+    """Return the trigger-authored world time for an inserted chunk."""
+
+    cur.execute(
+        "SELECT world_time FROM chunk_metadata WHERE chunk_id = %s",
+        (chunk_id,),
+    )
+    row = cur.fetchone()
+    world_time = _row_value(row, "world_time", 0) if row is not None else None
+    if not isinstance(world_time, datetime):
+        raise ValueError(
+            f"Chunk {chunk_id} has no trigger-authored world_time after insertion"
+        )
+    return world_time
 
 
 # ============================================================================
@@ -361,13 +378,15 @@ def commit_incubator_to_database_sync(
                     "scene": 0,  # Will be incremented to 1
                     "world_layer": "primary",
                     "time_delta": 0,
+                    "world_time": None,
                 }
                 logger.info("Bootstrap chunk - using default metadata (S1E1 scene 1)")
             else:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
                     cur.execute(
                         """
-                        SELECT season, episode, scene, world_layer, time_delta
+                        SELECT season, episode, scene, world_layer, time_delta,
+                               world_time
                         FROM chunk_metadata
                         WHERE chunk_id = %s
                     """,
@@ -468,42 +487,7 @@ def commit_incubator_to_database_sync(
                     gaia_letter=incubator.get("correspondence_gaia_letter"),
                 )
 
-            # Step 5: Process declarations before name-reference resolution.
-            maturation_result = enqueue_declared_entity_maturations(
-                conn,
-                declarations=incubator.get("new_entities") or [],
-                chunk_id=chunk_id,
-                raw_text=raw_text,
-                slot=slot,
-            )
-            if maturation_result.declared:
-                logger.info(
-                    "Processed %s new-entity declarations for chunk %s: "
-                    "%s stubs created, %s jobs enqueued, %s already present, "
-                    "%s without engagement signal, %s skipped (disabled)",
-                    maturation_result.declared,
-                    chunk_id,
-                    maturation_result.stubs_created,
-                    maturation_result.jobs_enqueued,
-                    maturation_result.jobs_already_present,
-                    maturation_result.signal_absent,
-                    maturation_result.skipped_disabled,
-                )
-
-            # Step 6: Resolve references, including same-turn declarations.
-            ref_entities = ReferencedEntities(**incubator["reference_updates"])
-            character_refs = resolve_character_references_sync(
-                ref_entities.characters, conn
-            )
-            place_refs = resolve_place_references_sync(ref_entities.places, conn)
-            faction_refs = resolve_faction_references_sync(ref_entities.factions, conn)
-            if incubator.get("entity_updates"):
-                state_updates = resolve_state_update_ids_sync(
-                    conn,
-                    StateUpdates(**incubator["entity_updates"]),
-                )
-
-            # Step 7: Insert chunk metadata
+            # Step 5: Insert metadata and capture the accepting child's clock.
             with conn.cursor() as cur:
                 # Generate slug (e.g., "S05E06_001")
                 slug = (
@@ -525,6 +509,48 @@ def commit_incubator_to_database_sync(
                     scene_weather=metadata_update.scene_weather,
                 )
                 logger.info("Created metadata for chunk %s: %s", chunk_id, slug)
+                accepting_world_time = _require_chunk_world_time_sync(cur, chunk_id)
+
+            # Two-time contract: Gaia validates activity at the parent anchor,
+            # while every tag written by this commit becomes true at the accepting
+            # child. Use this exact trigger-authored child clock for declaration
+            # hints and ordinary state writes; never derive either from parent time.
+
+            # Step 6: Process declarations before name-reference resolution.
+            maturation_result = enqueue_declared_entity_maturations(
+                conn,
+                declarations=incubator.get("new_entities") or [],
+                chunk_id=chunk_id,
+                raw_text=raw_text,
+                slot=slot,
+                accepting_world_time=accepting_world_time,
+            )
+            if maturation_result.declared:
+                logger.info(
+                    "Processed %s new-entity declarations for chunk %s: "
+                    "%s stubs created, %s jobs enqueued, %s already present, "
+                    "%s without engagement signal, %s skipped (disabled)",
+                    maturation_result.declared,
+                    chunk_id,
+                    maturation_result.stubs_created,
+                    maturation_result.jobs_enqueued,
+                    maturation_result.jobs_already_present,
+                    maturation_result.signal_absent,
+                    maturation_result.skipped_disabled,
+                )
+
+            # Step 7: Resolve references, including same-turn declarations.
+            ref_entities = ReferencedEntities(**incubator["reference_updates"])
+            character_refs = resolve_character_references_sync(
+                ref_entities.characters, conn
+            )
+            place_refs = resolve_place_references_sync(ref_entities.places, conn)
+            faction_refs = resolve_faction_references_sync(ref_entities.factions, conn)
+            if incubator.get("entity_updates"):
+                state_updates = resolve_state_update_ids_sync(
+                    conn,
+                    StateUpdates(**incubator["entity_updates"]),
+                )
 
             # Step 8: Insert junction table references
             # Insert place references
@@ -596,7 +622,12 @@ def commit_incubator_to_database_sync(
 
             # Step 9: Update entity states (if provided)
             if state_updates is not None:
-                apply_state_updates_sync(conn, state_updates, source_chunk_id=chunk_id)
+                apply_state_updates_sync(
+                    conn,
+                    state_updates,
+                    source_chunk_id=chunk_id,
+                    anchor_world_time=accepting_world_time,
+                )
 
             # Step 9.5: Commit Orrery proposal inside the accepted-chunk transaction
             orrery_settings = _load_orrery_settings()
@@ -875,9 +906,12 @@ def compact_accepted_correspondence_sync(
 
 
 def apply_state_updates_sync(
-    conn, state_updates: StateUpdates, source_chunk_id: Optional[int] = None
-):
-    """Apply entity state updates synchronously"""
+    conn: Any,
+    state_updates: StateUpdates,
+    source_chunk_id: Optional[int] = None,
+    anchor_world_time: Optional[datetime] = None,
+) -> None:
+    """Apply state updates using the accepting clock and child provenance."""
     with conn.cursor() as cur:
         # Update character states
         for char_update in state_updates.characters:
@@ -941,6 +975,7 @@ def apply_state_updates_sync(
                     subtype_id=char_update.character_id,
                     bestowal=bestowal,
                     source_chunk_id=source_chunk_id,
+                    anchor_world_time=anchor_world_time,
                 )
 
         # Update place states. The schema field is current_conditions
@@ -979,6 +1014,7 @@ def apply_state_updates_sync(
                     subtype_id=place_update.place_id,
                     bestowal=bestowal,
                     source_chunk_id=source_chunk_id,
+                    anchor_world_time=anchor_world_time,
                 )
 
         # Update faction states
@@ -994,6 +1030,7 @@ def apply_state_updates_sync(
                     subtype_id=faction_update.faction_id,
                     bestowal=bestowal,
                     source_chunk_id=source_chunk_id,
+                    anchor_world_time=anchor_world_time,
                 )
 
         for relationship_update in state_updates.relationships:
@@ -1035,13 +1072,14 @@ def apply_state_updates_sync(
 
 
 def _apply_state_tags(
-    cur,
+    cur: Any,
     *,
-    kind,
-    subtype_table,
-    subtype_id,
-    bestowal,
+    kind: str,
+    subtype_table: str,
+    subtype_id: int,
+    bestowal: Any,
     source_chunk_id: Optional[int] = None,
+    anchor_world_time: Optional[datetime] = None,
 ) -> None:
     """Look up the entity_id for a subtype row and apply Skald-bestowed tags."""
     cur.execute(
@@ -1059,6 +1097,8 @@ def _apply_state_tags(
         entity_kind=kind,
         bestowal=bestowal,
         source_kind="skald_inline",
+        world_time=anchor_world_time,
+        world_time_is_authoritative=True,
         source_chunk_id=source_chunk_id,
     )
     if any(counters.values()):

@@ -116,6 +116,7 @@ def enqueue_declared_entity_maturations(
     raw_text: str,
     slot: Optional[int] = None,
     settings: Optional[Mapping[str, Any]] = None,
+    accepting_world_time: Optional[datetime] = None,
 ) -> MaturationEnqueueResult:
     """Process Skald new-entity declarations inside the commit transaction.
 
@@ -123,7 +124,9 @@ def enqueue_declared_entity_maturations(
     open so stub rows and job rows commit atomically with the chunk (the
     outbox pattern). Raises on unregistered tag/pair-tag hints and on
     ambiguous entity names; the commit fails loudly rather than persisting a
-    declaration the registries reject.
+    declaration the registries reject. Tag writes use the exact accepting
+    chunk clock supplied by the commit handler. Direct callers that omit it
+    resolve that same chunk-keyed clock and fail loudly if metadata is absent.
     """
 
     result = MaturationEnqueueResult()
@@ -159,19 +162,38 @@ def enqueue_declared_entity_maturations(
                 f"New-entity declaration vocabulary validation failed:\n{formatted}"
             )
 
+        if accepting_world_time is None and any(
+            declaration.tag_hints or declaration.pair_tag_hints
+            for declaration in parsed
+        ):
+            accepting_world_time = _require_accepting_world_time(cur, chunk_id)
+
         declaration_records = []
         for declaration in parsed:
-            record = _resolve_or_create_stub(cur, declaration)
+            record = _resolve_or_create_stub(
+                cur,
+                declaration,
+                source_chunk_id=chunk_id,
+                accepting_world_time=accepting_world_time,
+            )
             declaration_records.append((declaration, record))
             if record.created:
                 result.stubs_created += 1
 
         for declaration, record in declaration_records:
+            if not declaration.pair_tag_hints:
+                continue
+            if accepting_world_time is None:
+                raise RuntimeError(
+                    "Declaration pair-tag hints require the accepting chunk's "
+                    "world_time"
+                )
             _apply_declared_pair_tag_hints(
                 cur,
                 declaration=declaration,
                 record=record,
                 source_chunk_id=chunk_id,
+                accepting_world_time=accepting_world_time,
             )
 
         for declaration, record in declaration_records:
@@ -203,7 +225,11 @@ def enqueue_declared_entity_maturations(
 
 
 def _resolve_or_create_stub(
-    cur: Any, declaration: NewEntityDeclaration
+    cur: Any,
+    declaration: NewEntityDeclaration,
+    *,
+    source_chunk_id: int,
+    accepting_world_time: Optional[datetime],
 ) -> _DeclaredEntityRecord:
     """Resolve a declared entity by exact name, creating a stub when absent.
 
@@ -243,6 +269,10 @@ def _resolve_or_create_stub(
         )
 
     if declaration.tag_hints:
+        if accepting_world_time is None:
+            raise RuntimeError(
+                "Declaration tag hints require the accepting chunk's world_time"
+            )
         bestowal = OrreryTagBestowal(applied_tags=list(declaration.tag_hints))
         apply_tag_bestowal(
             cur,
@@ -250,6 +280,9 @@ def _resolve_or_create_stub(
             entity_kind=declaration.kind,
             bestowal=bestowal,
             source_kind="skald_inline",
+            world_time=accepting_world_time,
+            world_time_is_authoritative=True,
+            source_chunk_id=source_chunk_id,
         )
 
     return record
@@ -261,6 +294,7 @@ def _apply_declared_pair_tag_hints(
     declaration: NewEntityDeclaration,
     record: _DeclaredEntityRecord,
     source_chunk_id: int,
+    accepting_world_time: datetime,
 ) -> None:
     """Apply accepted declaration edges after every batch stub exists."""
 
@@ -281,6 +315,7 @@ def _apply_declared_pair_tag_hints(
                 subject_kind=subject.entity_kind,
                 level=level_from_status_tag(hint.tag),
                 source_kind="skald_inline",
+                world_time=accepting_world_time,
                 source_chunk_id=source_chunk_id,
             )
         else:
@@ -292,8 +327,26 @@ def _apply_declared_pair_tag_hints(
                 object_kind=object_entity.entity_kind,
                 tag=hint.tag,
                 source_kind="skald_inline",
+                world_time=accepting_world_time,
                 source_chunk_id=source_chunk_id,
             )
+
+
+def _require_accepting_world_time(cur: Any, chunk_id: int) -> datetime:
+    """Load one declaration batch's exact accepting-chunk clock."""
+
+    cur.execute(
+        "SELECT world_time FROM chunk_metadata WHERE chunk_id = %s",
+        (chunk_id,),
+    )
+    row = cur.fetchone()
+    world_time = None if row is None else _row_value(row, "world_time", 0)
+    if not isinstance(world_time, datetime):
+        raise RuntimeError(
+            "Declaration tag writes require trigger-authored world_time for "
+            f"chunk_id={chunk_id}; found {world_time!r}"
+        )
+    return world_time
 
 
 def _resolve_pair_hint_entity(cur: Any, name: str) -> _DeclaredEntityRecord:
