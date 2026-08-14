@@ -2,10 +2,14 @@
 -- Durable event-level formation tracking for past-anchored experience sweeps.
 
 ALTER TABLE world_events
-    ADD COLUMN IF NOT EXISTS experiences_formed_at timestamptz;
+    ADD COLUMN IF NOT EXISTS experiences_formed_at timestamptz,
+    ADD COLUMN IF NOT EXISTS experiences_quarantined_at timestamptz;
 
 COMMENT ON COLUMN world_events.experiences_formed_at IS
-    'Database time when the accepted-chunk experience sweep processed this event; NULL means it remains eligible for formation.';
+    'Database time when the accepted-chunk experience sweep processed this event; NULL means unprocessed unless experiences_quarantined_at is non-NULL.';
+
+COMMENT ON COLUMN world_events.experiences_quarantined_at IS
+    'Database time when experience formation quarantined this malformed event; non-NULL excludes it from automatic formation until manually cleared.';
 
 -- Preserve healthy saves only when every receipt owner is already represented
 -- by a valid direct participant/witness seed. Acquisition arrays are
@@ -195,26 +199,32 @@ UPDATE world_events event
 SET experiences_formed_at = represented.formed_at
 FROM owner_complete_events represented
 WHERE event.id = represented.event_id
-  AND event.experiences_formed_at IS NULL;
+  AND event.experiences_formed_at IS NULL
+  AND event.experiences_quarantined_at IS NULL;
 
-CREATE INDEX IF NOT EXISTS ix_world_events_unformed_experiences
+DROP INDEX IF EXISTS ix_world_events_unformed_experiences;
+
+CREATE INDEX ix_world_events_unformed_experiences
     ON world_events (tick_chunk_id, id)
     WHERE experiences_formed_at IS NULL
+      AND experiences_quarantined_at IS NULL
       AND superseded_by_event_id IS NULL;
 
 -- Migration 104 allowed only one direct seed per owner/anchor/basis. A later
 -- event at an already-formed historical anchor needs a distinct seed for its
 -- newly processed event set, while acquisitions retain awareness-row identity.
 DROP INDEX IF EXISTS ux_character_experiences_seed_identity;
+DROP INDEX IF EXISTS ux_character_experiences_event_set_identity;
 
-CREATE UNIQUE INDEX IF NOT EXISTS ux_character_experiences_event_set_identity
+CREATE UNIQUE INDEX ux_character_experiences_event_set_identity
     ON character_experiences (
         character_entity_id,
         anchor_chunk_id,
         basis,
         world_event_ids
     )
-    WHERE claim_awareness_id IS NULL;
+    WHERE claim_awareness_id IS NULL
+      AND invalidation_status = 'valid';
 
 CREATE UNIQUE INDEX IF NOT EXISTS ux_character_experiences_acquisition_identity
     ON character_experiences (claim_awareness_id)
@@ -229,16 +239,19 @@ DROP TRIGGER IF EXISTS trg_invalidate_experiences_for_event_supersession
 DROP FUNCTION IF EXISTS invalidate_experiences_for_event_supersession();
 
 -- One-shot repair for supersessions already present when migration 110 lands.
--- Invalidate pending direct seeds, then reopen every still-live event from
--- those multi-event seeds so the live-config sweep can restore missing owners.
--- Rendered rows remain narrative history and are reported by durable id.
+-- First invalidate pending direct seeds that still reference superseded events.
+-- Then consider every invalidated direct seed, including rows invalidated by an
+-- earlier review-build trigger, and reopen each stamped live event whose owner
+-- has no valid direct seed covering it. Rendered valid rows remain narrative
+-- history and are reported by durable id.
 DO $$
 DECLARE
-    invalidated_seed_ids bigint[];
+    newly_invalidated_seed_ids bigint[];
+    reopen_source_invalidated_seed_ids bigint[];
     reopened_live_event_ids bigint[];
     rendered_seed_ids bigint[];
 BEGIN
-    WITH invalidated AS (
+    WITH newly_invalidated AS (
         UPDATE character_experiences experience
         SET invalidation_status = 'invalidated',
             invalidated_at = CURRENT_TIMESTAMP
@@ -251,28 +264,61 @@ BEGIN
               WHERE superseded.id = ANY(experience.world_event_ids)
                 AND superseded.superseded_by_event_id IS NOT NULL
           )
-        RETURNING experience.id, experience.world_event_ids
+        RETURNING experience.id
+    )
+    SELECT COALESCE(array_agg(id ORDER BY id), '{}'::bigint[])
+    INTO newly_invalidated_seed_ids
+    FROM newly_invalidated;
+
+    -- This is deliberately a separate statement: PostgreSQL data-modifying
+    -- CTEs share a snapshot, while this read must see the rows invalidated by
+    -- the statement above as well as rows invalidated before migration 110.
+    WITH reopen_candidates AS (
+        SELECT DISTINCT experience.id AS seed_id, live.id AS event_id
+        FROM character_experiences experience
+        CROSS JOIN LATERAL unnest(experience.world_event_ids) source(event_id)
+        JOIN world_events live ON live.id = source.event_id
+        WHERE experience.claim_awareness_id IS NULL
+          AND experience.invalidation_status = 'invalidated'
+          AND live.superseded_by_event_id IS NULL
+          AND live.experiences_formed_at IS NOT NULL
+          AND NOT EXISTS (
+              SELECT 1
+              FROM character_experiences covering
+              WHERE covering.claim_awareness_id IS NULL
+                AND covering.invalidation_status = 'valid'
+                AND covering.character_entity_id =
+                    experience.character_entity_id
+                AND covering.world_event_ids
+                    @> ARRAY[live.id]::bigint[]
+          )
     ),
     reopened AS (
         UPDATE world_events live
         SET experiences_formed_at = NULL
         FROM (
-            SELECT DISTINCT unnest(invalidated.world_event_ids) AS event_id
-            FROM invalidated
-        ) sibling
-        WHERE live.id = sibling.event_id
-          AND live.superseded_by_event_id IS NULL
+            SELECT DISTINCT event_id
+            FROM reopen_candidates
+        ) candidate
+        WHERE live.id = candidate.event_id
+          AND live.experiences_formed_at IS NOT NULL
         RETURNING live.id
     )
     SELECT COALESCE(
-               (SELECT array_agg(id ORDER BY id) FROM invalidated),
+               (
+                   SELECT array_agg(seed_id ORDER BY seed_id)
+                   FROM (
+                       SELECT DISTINCT seed_id
+                       FROM reopen_candidates
+                   ) source_seeds
+               ),
                '{}'::bigint[]
            ),
            COALESCE(
                (SELECT array_agg(id ORDER BY id) FROM reopened),
                '{}'::bigint[]
            )
-    INTO invalidated_seed_ids, reopened_live_event_ids;
+    INTO reopen_source_invalidated_seed_ids, reopened_live_event_ids;
 
     SELECT COALESCE(array_agg(experience.id ORDER BY experience.id), '{}'::bigint[])
     INTO rendered_seed_ids
@@ -289,8 +335,12 @@ BEGIN
 
     RAISE NOTICE 'orrery_experience_supersession_migration_cleanup %',
       jsonb_build_object(
-        'invalidated_seed_count', cardinality(invalidated_seed_ids),
-        'invalidated_seed_ids', to_jsonb(invalidated_seed_ids),
+        'invalidated_seed_count', cardinality(newly_invalidated_seed_ids),
+        'invalidated_seed_ids', to_jsonb(newly_invalidated_seed_ids),
+        'reopen_source_invalidated_seed_count',
+            cardinality(reopen_source_invalidated_seed_ids),
+        'reopen_source_invalidated_seed_ids',
+            to_jsonb(reopen_source_invalidated_seed_ids),
         'reopened_live_event_count', cardinality(reopened_live_event_ids),
         'reopened_live_event_ids', to_jsonb(reopened_live_event_ids),
         'retained_rendered_seed_count', cardinality(rendered_seed_ids),

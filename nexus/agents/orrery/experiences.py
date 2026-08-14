@@ -26,6 +26,7 @@ from nexus.telemetry.usage import usage_context
 logger = logging.getLogger("nexus.orrery.experiences")
 
 RENDERER_VERSION = "experience-renderer-v1"
+_POSTGRES_BIGINT_MAX = 9_223_372_036_854_775_807
 _PLAYER_EXCLUSION_JOB_ERROR = (
     "Experience render job contains a player-owned seed while "
     "include_player_character is false"
@@ -107,6 +108,22 @@ class ExperienceLeaseLostError(RuntimeError):
 
 class ExperienceSourceStaleError(RuntimeError):
     """Raised when a scene job's immutable seed batch no longer matches."""
+
+
+class MalformedExperienceEventError(ValueError):
+    """A canonical event row cannot yield a safe experience receipt."""
+
+    def __init__(
+        self,
+        *,
+        event_id: int,
+        reason_code: str,
+        reason: str,
+    ) -> None:
+        self.event_id = event_id
+        self.reason_code = reason_code
+        self.reason = reason
+        super().__init__(reason)
 
 
 def experience_settings(settings: Mapping[str, Any]) -> OrreryExperienceSettings:
@@ -255,21 +272,64 @@ def _event_fact(row: Mapping[str, Any]) -> str:
 def _public_audience_entity_ids(row: Mapping[str, Any]) -> frozenset[int]:
     """Return an emitter-declared audience only for explicitly public events."""
 
-    payload = _json_mapping(row.get("payload"))
+    event_id = int(row["id"])
+    raw_payload = row.get("payload")
+    if raw_payload is None:
+        raise MalformedExperienceEventError(
+            event_id=event_id,
+            reason_code="malformed_payload",
+            reason=f"Event {event_id} payload must be a JSON object, not null",
+        )
+    try:
+        payload = _json_mapping(raw_payload)
+    except (TypeError, ValueError) as exc:
+        raise MalformedExperienceEventError(
+            event_id=event_id,
+            reason_code="malformed_payload",
+            reason=f"Event {event_id} payload must be a JSON object: {exc}",
+        ) from exc
     if payload.get("on_screen_public") is not True:
         return frozenset()
     raw_audience = payload.get("audience_entity_ids")
     if not isinstance(raw_audience, list):
-        raise ValueError(
-            f"Public event {row['id']} must declare audience_entity_ids as a list"
+        raise MalformedExperienceEventError(
+            event_id=event_id,
+            reason_code="malformed_audience_container",
+            reason=(
+                f"Public event {event_id} must declare audience_entity_ids as a list"
+            ),
         )
     audience: set[int] = set()
-    for raw_id in raw_audience:
+    for index, raw_id in enumerate(raw_audience):
         if isinstance(raw_id, bool):
-            raise ValueError(f"Public event {row['id']} has an invalid audience id")
-        entity_id = int(raw_id)
-        if entity_id <= 0:
-            raise ValueError(f"Public event {row['id']} has an invalid audience id")
+            raise MalformedExperienceEventError(
+                event_id=event_id,
+                reason_code="invalid_audience_id",
+                reason=(
+                    f"Public event {event_id} audience index {index} has invalid "
+                    f"entity id {raw_id!r}"
+                ),
+            )
+        try:
+            entity_id = int(raw_id)
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise MalformedExperienceEventError(
+                event_id=event_id,
+                reason_code="invalid_audience_id",
+                reason=(
+                    f"Public event {event_id} audience index {index} has invalid "
+                    f"entity id {raw_id!r}"
+                ),
+            ) from exc
+        if entity_id <= 0 or entity_id > _POSTGRES_BIGINT_MAX:
+            raise MalformedExperienceEventError(
+                event_id=event_id,
+                reason_code="invalid_audience_id",
+                reason=(
+                    f"Public event {event_id} audience index {index} has invalid "
+                    f"entity id {raw_id!r}"
+                ),
+            )
         audience.add(entity_id)
     return frozenset(audience)
 
@@ -277,14 +337,53 @@ def _public_audience_entity_ids(row: Mapping[str, Any]) -> frozenset[int]:
 def _event_receipts(row: Mapping[str, Any]) -> dict[int, str]:
     """Derive actor-owned receipt bases from canonical event roles and policy."""
 
+    event_id = int(row["id"])
     event_type = str(row["event_type"])
     birth_roles = CLAIM_BIRTH_ROLE_POLICY.get(event_type)
     receipts: dict[int, str] = {}
-    for participant in row.get("participants") or []:
+    raw_participants = row.get("participants")
+    if raw_participants is None:
+        raw_participants = []
+    if not isinstance(raw_participants, list):
+        raise MalformedExperienceEventError(
+            event_id=event_id,
+            reason_code="malformed_participant_receipt",
+            reason=f"Event {event_id} participants must be a list",
+        )
+    for index, participant in enumerate(raw_participants):
         if not isinstance(participant, Mapping):
-            raise ValueError(f"Event {row['id']} has a malformed participant receipt")
-        entity_id = int(participant["entity_id"])
-        role = str(participant["role"])
+            raise MalformedExperienceEventError(
+                event_id=event_id,
+                reason_code="malformed_participant_receipt",
+                reason=(
+                    f"Event {event_id} participant index {index} must be an object"
+                ),
+            )
+        try:
+            raw_entity_id = participant["entity_id"]
+            raw_role = participant["role"]
+            if isinstance(raw_entity_id, bool):
+                raise ValueError("boolean entity id")
+            entity_id = int(raw_entity_id)
+            role = str(raw_role).strip()
+        except (KeyError, TypeError, ValueError, OverflowError) as exc:
+            raise MalformedExperienceEventError(
+                event_id=event_id,
+                reason_code="malformed_participant_receipt",
+                reason=(
+                    f"Event {event_id} participant index {index} has malformed "
+                    "entity_id or role"
+                ),
+            ) from exc
+        if entity_id <= 0 or entity_id > _POSTGRES_BIGINT_MAX or not role:
+            raise MalformedExperienceEventError(
+                event_id=event_id,
+                reason_code="malformed_participant_receipt",
+                reason=(
+                    f"Event {event_id} participant index {index} has malformed "
+                    "entity_id or role"
+                ),
+            )
         if role in PARTICIPANT_ROLES and (birth_roles is None or role in birth_roles):
             receipts[entity_id] = "participant"
         elif role in WITNESS_ROLES and birth_roles is not None and role in birth_roles:
@@ -367,6 +466,7 @@ def seed_character_experiences_sync(
     *,
     anchor_chunk_id: int,
     settings: Mapping[str, Any],
+    warning_sink: Optional[list[dict[str, Any]]] = None,
 ) -> int:
     """Sweep and seed every unformed event at or before an accepted chunk."""
 
@@ -387,10 +487,59 @@ def seed_character_experiences_sync(
             None if cfg.include_player_character else canonical_player_entity_id(cur)
         )
 
+        # Lock the complete direct-seed event closure before reading owner
+        # coverage. Supersession takes this same ordered lock set before it
+        # invalidates a seed, so coverage and formation stamps cannot race that
+        # invalidation transaction.
+        cur.execute(
+            """
+            WITH candidate_events AS MATERIALIZED (
+                SELECT id
+                FROM world_events
+                WHERE tick_chunk_id <= %s
+                  AND experiences_formed_at IS NULL
+                  AND experiences_quarantined_at IS NULL
+                  AND superseded_by_event_id IS NULL
+            ),
+            affected_event_ids AS (
+                SELECT candidate.id
+                FROM candidate_events candidate
+
+                UNION
+
+                SELECT source.event_id
+                FROM character_experiences experience
+                CROSS JOIN LATERAL unnest(experience.world_event_ids)
+                    source(event_id)
+                WHERE experience.claim_awareness_id IS NULL
+                  AND experience.invalidation_status = 'valid'
+                  AND EXISTS (
+                      SELECT 1
+                      FROM candidate_events candidate
+                      WHERE experience.world_event_ids
+                          @> ARRAY[candidate.id]::bigint[]
+                  )
+            )
+            SELECT event.id, candidate.id IS NOT NULL AS is_candidate
+            FROM world_events event
+            JOIN affected_event_ids affected ON affected.id = event.id
+            LEFT JOIN candidate_events candidate ON candidate.id = event.id
+            ORDER BY event.id
+            FOR UPDATE OF event
+            """,
+            (anchor_chunk_id,),
+        )
+        locked_rows = list(cur.fetchall())
+        candidate_event_ids = [
+            int(row["id"]) for row in locked_rows if bool(row["is_candidate"])
+        ]
+
         cur.execute(
             """
             SELECT e.id, e.tick_chunk_id, e.event_type, e.actor_entity_id,
                    e.target_entity_id, e.location_id, e.magnitude, e.payload,
+                   e.resolution_id, e.source::text AS event_source,
+                   e.world_layer::text AS event_world_layer,
                    actor.name AS actor_name, target.name AS target_name,
                    place.name AS location_name, r.state_delta,
                    metadata.world_time AS anchor_world_time,
@@ -422,15 +571,75 @@ def seed_character_experiences_sync(
             LEFT JOIN entity_names_v target ON target.id = e.target_entity_id
             LEFT JOIN places place ON place.id = e.location_id
             LEFT JOIN orrery_resolutions r ON r.id = e.resolution_id
-            WHERE e.tick_chunk_id <= %s
+            WHERE e.id = ANY(%s::bigint[])
               AND e.experiences_formed_at IS NULL
+              AND e.experiences_quarantined_at IS NULL
               AND e.superseded_by_event_id IS NULL
             ORDER BY e.id
-            FOR UPDATE OF e
             """,
-            (anchor_chunk_id,),
+            (candidate_event_ids,),
         )
         events = [dict(row) for row in cur.fetchall()]
+        receipt_owners_by_event: dict[int, dict[int, str]] = {}
+        processable_events: list[dict[str, Any]] = []
+        for event in events:
+            event_id = int(event["id"])
+            try:
+                receipt_owners_by_event[event_id] = _event_receipts(event)
+            except MalformedExperienceEventError as exc:
+                cur.execute(
+                    """
+                    UPDATE world_events
+                    SET experiences_quarantined_at = CURRENT_TIMESTAMP
+                    WHERE id = %s
+                      AND experiences_formed_at IS NULL
+                      AND experiences_quarantined_at IS NULL
+                    RETURNING id
+                    """,
+                    (event_id,),
+                )
+                quarantined = cur.fetchone()
+                if quarantined is None or int(quarantined["id"]) != event_id:
+                    raise RuntimeError(
+                        "Malformed experience event changed while being "
+                        f"quarantined: {event_id}"
+                    )
+                warning = {
+                    "code": "experience_event_quarantined",
+                    "message": (
+                        f"Experience formation quarantined malformed world event "
+                        f"{event_id}: {exc.reason}"
+                    ),
+                    "world_event_id": event_id,
+                    "event_type": str(event["event_type"]),
+                    "reason_code": exc.reason_code,
+                    "reason": exc.reason,
+                }
+                logger.error(
+                    "Quarantined malformed Orrery experience event %s (%s): %s",
+                    event_id,
+                    exc.reason_code,
+                    exc.reason,
+                    extra={
+                        "event": "orrery_experience_event_quarantined",
+                        "world_event_id": event_id,
+                        "world_event_type": str(event["event_type"]),
+                        "world_event_tick_chunk_id": int(event["tick_chunk_id"]),
+                        "world_event_actor_entity_id": event.get("actor_entity_id"),
+                        "world_event_target_entity_id": event.get("target_entity_id"),
+                        "world_event_location_id": event.get("location_id"),
+                        "world_event_resolution_id": event.get("resolution_id"),
+                        "world_event_source": event.get("event_source"),
+                        "world_event_world_layer": event.get("event_world_layer"),
+                        "quarantine_reason_code": exc.reason_code,
+                        "quarantine_reason": exc.reason,
+                    },
+                )
+                if warning_sink is not None:
+                    warning_sink.append(warning)
+                continue
+            processable_events.append(event)
+        events = processable_events
         represented_pairs: set[tuple[int, int]] = set()
         if events:
             cur.execute(
@@ -452,8 +661,9 @@ def seed_character_experiences_sync(
             }
         receipts: dict[tuple[int, int, str], list[dict[str, Any]]] = {}
         for event in events:
-            for entity_id, basis in _event_receipts(event).items():
-                if (int(event["id"]), entity_id) in represented_pairs:
+            event_id = int(event["id"])
+            for entity_id, basis in receipt_owners_by_event[event_id].items():
+                if (event_id, entity_id) in represented_pairs:
                     continue
                 key = (int(event["tick_chunk_id"]), entity_id, basis)
                 receipts.setdefault(key, []).append(event)
@@ -621,6 +831,7 @@ def seed_character_experiences_sync(
                 SET experiences_formed_at = CURRENT_TIMESTAMP
                 WHERE id = ANY(%s)
                   AND experiences_formed_at IS NULL
+                  AND experiences_quarantined_at IS NULL
                 RETURNING id
                 """,
                 (event_ids,),

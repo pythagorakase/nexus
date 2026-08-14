@@ -303,7 +303,11 @@ def resolve_state_update_ids_sync(
 
 
 def commit_incubator_to_database_sync(
-    conn, session_id: str, slot: Optional[int] = None
+    conn: Any,
+    session_id: str,
+    slot: Optional[int] = None,
+    *,
+    warning_sink: Optional[List[Dict[str, Any]]] = None,
 ) -> int:
     """
     Synchronous version of commit flow from incubator to production tables.
@@ -316,6 +320,7 @@ def commit_incubator_to_database_sync(
     summary_tasks: List[SummaryTask] = []
     chunk_id: Optional[int] = None
     state_updates: Optional[StateUpdates] = None
+    experience_warnings: List[Dict[str, Any]] = []
 
     try:
         # Start transaction
@@ -676,6 +681,7 @@ def commit_incubator_to_database_sync(
                 conn,
                 anchor_chunk_id=chunk_id,
                 settings=orrery_settings,
+                warning_sink=experience_warnings,
             )
             if experience_count:
                 logger.info(
@@ -768,6 +774,8 @@ def commit_incubator_to_database_sync(
         )
 
     logger.info("Successfully committed chunk %s from session %s", chunk_id, session_id)
+    if warning_sink is not None:
+        warning_sink.extend(experience_warnings)
     return chunk_id
 
 

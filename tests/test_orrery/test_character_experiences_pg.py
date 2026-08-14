@@ -2,16 +2,21 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import json
+import logging
 import os
 from pathlib import Path
 import re
+import threading
+import time
 from typing import Any, Iterator
 from uuid import uuid4
 
+from fastapi.testclient import TestClient
 import psycopg2
 from psycopg2 import sql
 from psycopg2.extensions import TRANSACTION_STATUS_IDLE
@@ -47,6 +52,7 @@ from nexus.agents.orrery.knowledge_surfacing import build_knowledge_digest_sync
 from nexus.agents.orrery.resolver import resolve_dry_run
 from nexus.agents.orrery.tag_writer import apply_exclusive_tag_bestowal
 from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
+from nexus.api import narrative as narrative_api
 from nexus.api.commit_handler_sync import commit_incubator_to_database_sync
 from nexus.api.lore_adapter import response_to_incubator
 from nexus.config import load_settings_as_dict
@@ -873,11 +879,11 @@ def test_backfill_defers_dossier_eligibility_to_live_config(
 
 
 @pytest.mark.parametrize("malformed_audience_id", [0, -7])
-def test_backfill_preserves_malformed_audience_for_loud_runtime_rejection(
+def test_backfill_preserves_malformed_audience_for_runtime_quarantine(
     monkeypatch: pytest.MonkeyPatch,
     malformed_audience_id: int,
 ) -> None:
-    """An unmatchable audience receipt remains visible to runtime validation."""
+    """An unmatchable audience remains unformed until runtime quarantines it."""
 
     monkeypatch.setattr(
         "nexus.api.presence_audit.presence_audit_enabled", lambda: False
@@ -940,27 +946,52 @@ def test_backfill_preserves_malformed_audience_for_loud_runtime_rejection(
                     )
                     assert cur.fetchone()[0] is None
 
-            with pytest.raises(
-                ValueError,
-                match=rf"Public event {event_id} has an invalid audience id",
-            ):
-                _accept_turn(
-                    conn,
-                    parent_chunk_id=anchor_chunk_id,
-                    proposal=None,
-                    characters=[(actor_character_id, "Valid Public Actor")],
-                )
-            conn.rollback()
+            session_id = str(uuid4())
+            with conn:
+                with conn.cursor() as cur:
+                    _stage_incubator(
+                        cur,
+                        session_id=session_id,
+                        parent_chunk_id=anchor_chunk_id,
+                        proposal=None,
+                        characters=[(actor_character_id, "Valid Public Actor")],
+                        scene_boundary=False,
+                    )
+            warnings: list[dict[str, Any]] = []
+            accepted_chunk_id = commit_incubator_to_database_sync(
+                conn,
+                session_id,
+                slot=708,
+                warning_sink=warnings,
+            )
+            assert accepted_chunk_id > anchor_chunk_id
+            assert warnings == [
+                {
+                    "code": "experience_event_quarantined",
+                    "message": (
+                        "Experience formation quarantined malformed world event "
+                        f"{event_id}: Public event {event_id} audience index 0 has "
+                        f"invalid entity id {malformed_audience_id}"
+                    ),
+                    "world_event_id": event_id,
+                    "event_type": "slept",
+                    "reason_code": "invalid_audience_id",
+                    "reason": (
+                        f"Public event {event_id} audience index 0 has invalid "
+                        f"entity id {malformed_audience_id}"
+                    ),
+                }
+            ]
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 cur.execute(
                     """
-                    SELECT experiences_formed_at
+                    SELECT experiences_formed_at, experiences_quarantined_at
                     FROM world_events
                     WHERE id = %s
                     """,
                     (event_id,),
                 )
-                assert cur.fetchone()["experiences_formed_at"] is None
+                event_state = dict(cur.fetchone())
                 cur.execute(
                     """
                     SELECT id
@@ -971,6 +1002,8 @@ def test_backfill_preserves_malformed_audience_for_loud_runtime_rejection(
                     (event_id,),
                 )
                 assert [int(row["id"]) for row in cur.fetchall()] == [seed_id]
+            assert event_state["experiences_formed_at"] is None
+            assert event_state["experiences_quarantined_at"] is not None
         finally:
             conn.close()
 
@@ -1137,11 +1170,201 @@ def test_migration_cleans_preexisting_supersession_and_reopens_live_sibling() ->
             assert cleanup_payload == {
                 "invalidated_seed_count": 1,
                 "invalidated_seed_ids": [pending_seed_id],
+                "reopen_source_invalidated_seed_count": 1,
+                "reopen_source_invalidated_seed_ids": [pending_seed_id],
                 "reopened_live_event_count": 1,
                 "reopened_live_event_ids": [live_event_id],
                 "retained_rendered_seed_count": 1,
                 "retained_rendered_seed_ids": [rendered_seed_id],
             }
+        finally:
+            conn.close()
+
+
+def test_migration_reopens_preinvalidated_singleton_and_is_idempotent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Any invalidated direct seed reopens uncovered live events exactly once."""
+
+    monkeypatch.setattr(
+        "nexus.api.presence_audit.presence_audit_enabled", lambda: False
+    )
+    with _disposable_database(apply_formation_migration=False) as dbname:
+        conn = _connect(dbname)
+        try:
+            with conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        ALTER TABLE world_events
+                        ADD COLUMN experiences_formed_at timestamptz
+                        """
+                    )
+                    anchor_chunk_id = _insert_chunk(
+                        cur, "Pre-invalidated singleton cleanup"
+                    )
+                    owner_character_id, owner_entity_id = _insert_character(
+                        cur,
+                        "Pre-invalidated Owner",
+                        summary="Owns a stamped event whose seed was invalidated.",
+                        background="Needs migration cleanup to reopen the event.",
+                    )
+                    cur.execute(
+                        """
+                        INSERT INTO world_events (
+                            event_type, tick_chunk_id, actor_entity_id,
+                            world_layer, source, changed_fields, payload,
+                            experiences_formed_at
+                        ) VALUES (
+                            'slept', %s, %s, 'primary', 'resolver', '{}',
+                            '{}'::jsonb, CURRENT_TIMESTAMP
+                        ) RETURNING id
+                        """,
+                        (anchor_chunk_id, owner_entity_id),
+                    )
+                    live_event_id = int(cur.fetchone()[0])
+                    cur.execute(
+                        """
+                        INSERT INTO world_event_entities (
+                            event_id, entity_id, role
+                        ) VALUES (%s, %s, 'actor')
+                        """,
+                        (live_event_id, owner_entity_id),
+                    )
+                    invalidated_seed_id = _insert_direct_seed(
+                        cur,
+                        character_entity_id=owner_entity_id,
+                        anchor_chunk_id=anchor_chunk_id,
+                        world_event_ids=[live_event_id],
+                        label="preinvalidated-singleton",
+                    )
+                    cur.execute(
+                        """
+                        UPDATE character_experiences
+                        SET invalidation_status = 'invalidated',
+                            invalidated_at = CURRENT_TIMESTAMP
+                        WHERE id = %s
+                        """,
+                        (invalidated_seed_id,),
+                    )
+                    assert cur.rowcount == 1
+
+            conn.notices.clear()
+            with conn:
+                with conn.cursor() as cur:
+                    cur.execute(FORMATION_MIGRATION_SQL)
+
+            notice_prefix = "orrery_experience_supersession_migration_cleanup"
+            first_notice = next(
+                notice for notice in conn.notices if notice_prefix in notice
+            )
+            first_payload = json.loads(
+                first_notice.split(notice_prefix, maxsplit=1)[1].strip()
+            )
+            assert first_payload == {
+                "invalidated_seed_count": 0,
+                "invalidated_seed_ids": [],
+                "reopen_source_invalidated_seed_count": 1,
+                "reopen_source_invalidated_seed_ids": [invalidated_seed_id],
+                "reopened_live_event_count": 1,
+                "reopened_live_event_ids": [live_event_id],
+                "retained_rendered_seed_count": 0,
+                "retained_rendered_seed_ids": [],
+            }
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    """
+                    SELECT experiences_formed_at
+                    FROM world_events
+                    WHERE id = %s
+                    """,
+                    (live_event_id,),
+                )
+                assert cur.fetchone()["experiences_formed_at"] is None
+                cur.execute(
+                    """
+                    SELECT pg_get_indexdef(indexrelid) AS definition
+                    FROM pg_index
+                    WHERE indexrelid =
+                        'ux_character_experiences_event_set_identity'::regclass
+                    """
+                )
+                index_definition = str(cur.fetchone()["definition"])
+            assert "invalidation_status = 'valid'" in index_definition
+
+            conn.notices.clear()
+            with conn:
+                with conn.cursor() as cur:
+                    cur.execute(FORMATION_MIGRATION_SQL)
+            second_notice = next(
+                notice for notice in conn.notices if notice_prefix in notice
+            )
+            second_payload = json.loads(
+                second_notice.split(notice_prefix, maxsplit=1)[1].strip()
+            )
+            assert second_payload["invalidated_seed_count"] == 0
+            assert second_payload["reopen_source_invalidated_seed_count"] == 0
+            assert second_payload["reopened_live_event_count"] == 0
+
+            accepted_chunk_id = _accept_turn(
+                conn,
+                parent_chunk_id=anchor_chunk_id,
+                proposal=None,
+                characters=[(owner_character_id, "Pre-invalidated Owner")],
+            )
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    """
+                    SELECT id, invalidation_status::text AS invalidation_status,
+                           world_event_ids
+                    FROM character_experiences
+                    WHERE character_entity_id = %s
+                      AND %s = ANY(world_event_ids)
+                    ORDER BY id
+                    """,
+                    (owner_entity_id, live_event_id),
+                )
+                seed_rows = [dict(row) for row in cur.fetchall()]
+                cur.execute(
+                    """
+                    SELECT experiences_formed_at
+                    FROM world_events
+                    WHERE id = %s
+                    """,
+                    (live_event_id,),
+                )
+                restored_stamp = cur.fetchone()["experiences_formed_at"]
+            assert accepted_chunk_id > anchor_chunk_id
+            assert [row["invalidation_status"] for row in seed_rows] == [
+                "invalidated",
+                "valid",
+            ]
+            assert all(row["world_event_ids"] == [live_event_id] for row in seed_rows)
+            assert restored_stamp is not None
+
+            conn.notices.clear()
+            with conn:
+                with conn.cursor() as cur:
+                    cur.execute(FORMATION_MIGRATION_SQL)
+            third_notice = next(
+                notice for notice in conn.notices if notice_prefix in notice
+            )
+            third_payload = json.loads(
+                third_notice.split(notice_prefix, maxsplit=1)[1].strip()
+            )
+            assert third_payload["invalidated_seed_count"] == 0
+            assert third_payload["reopen_source_invalidated_seed_count"] == 0
+            assert third_payload["reopened_live_event_count"] == 0
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    """
+                    SELECT experiences_formed_at
+                    FROM world_events
+                    WHERE id = %s
+                    """,
+                    (live_event_id,),
+                )
+                assert cur.fetchone()["experiences_formed_at"] == restored_stamp
         finally:
             conn.close()
 
@@ -1211,6 +1434,222 @@ def test_genesis_events_form_on_the_next_genuine_accept(
             assert formed_at is not None
         finally:
             conn.close()
+
+
+def test_malformed_event_quarantines_without_blocking_accept_response(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """One malformed historical receipt is loud once while the save advances."""
+
+    monkeypatch.setattr(
+        "nexus.api.presence_audit.presence_audit_enabled", lambda: False
+    )
+    monkeypatch.setattr(
+        narrative_api,
+        "_start_post_commit_orrery_work",
+        lambda _slot: None,
+    )
+    with _disposable_database() as dbname:
+        setup_conn = _connect(dbname)
+        try:
+            with setup_conn:
+                with setup_conn.cursor() as cur:
+                    anchor_chunk_id = _insert_chunk(
+                        cur, "Malformed audience quarantine anchor"
+                    )
+                    owner_character_id, owner_entity_id = _insert_character(
+                        cur,
+                        "Quarantine Test Owner",
+                        summary="Owns the valid event beside malformed history.",
+                        background="Keeps playing after one receipt is quarantined.",
+                    )
+                    event_ids: list[int] = []
+                    for payload in (
+                        {"on_screen_public": True, "audience_entity_ids": [0]},
+                        {},
+                    ):
+                        cur.execute(
+                            """
+                            INSERT INTO world_events (
+                                event_type, tick_chunk_id, actor_entity_id,
+                                world_layer, source, changed_fields, payload
+                            ) VALUES (
+                                'slept', %s, %s, 'primary', 'resolver', '{}', %s
+                            ) RETURNING id
+                            """,
+                            (anchor_chunk_id, owner_entity_id, Json(payload)),
+                        )
+                        event_id = int(cur.fetchone()[0])
+                        event_ids.append(event_id)
+                        cur.execute(
+                            """
+                            INSERT INTO world_event_entities (
+                                event_id, entity_id, role
+                            ) VALUES (%s, %s, 'actor')
+                            """,
+                            (event_id, owner_entity_id),
+                        )
+                    malformed_event_id, valid_event_id = event_ids
+                    first_session_id = str(uuid4())
+                    _stage_incubator(
+                        cur,
+                        session_id=first_session_id,
+                        parent_chunk_id=anchor_chunk_id,
+                        proposal=None,
+                        characters=[(owner_character_id, "Quarantine Test Owner")],
+                        scene_boundary=False,
+                    )
+
+            monkeypatch.setattr(
+                narrative_api,
+                "get_db_connection",
+                lambda _slot: _connect(dbname),
+            )
+            caplog.clear()
+            with caplog.at_level(logging.ERROR, logger="nexus.orrery.experiences"):
+                with TestClient(narrative_api.app) as client:
+                    first_response = client.post(
+                        f"/api/narrative/approve/{first_session_id}?slot=4"
+                    )
+            assert first_response.status_code == 200
+            first_payload = first_response.json()
+            assert first_payload["status"] == "committed"
+            assert first_payload["warnings"] == [
+                {
+                    "code": "experience_event_quarantined",
+                    "message": (
+                        "Experience formation quarantined malformed world event "
+                        f"{malformed_event_id}: Public event {malformed_event_id} "
+                        "audience index 0 has invalid entity id 0"
+                    ),
+                    "world_event_id": malformed_event_id,
+                    "event_type": "slept",
+                    "reason_code": "invalid_audience_id",
+                    "reason": (
+                        f"Public event {malformed_event_id} audience index 0 has "
+                        "invalid entity id 0"
+                    ),
+                }
+            ]
+            quarantine_records = [
+                record
+                for record in caplog.records
+                if getattr(record, "event", None)
+                == "orrery_experience_event_quarantined"
+            ]
+            assert len(quarantine_records) == 1
+            quarantine_record = quarantine_records[0]
+            assert quarantine_record.levelno == logging.ERROR
+            assert quarantine_record.world_event_id == malformed_event_id
+            assert quarantine_record.world_event_type == "slept"
+            assert quarantine_record.world_event_tick_chunk_id == anchor_chunk_id
+            assert quarantine_record.world_event_actor_entity_id == owner_entity_id
+            assert quarantine_record.world_event_target_entity_id is None
+            assert quarantine_record.world_event_resolution_id is None
+            assert quarantine_record.world_event_source == "resolver"
+            assert quarantine_record.world_event_world_layer == "primary"
+            assert quarantine_record.quarantine_reason_code == "invalid_audience_id"
+
+            inspection_conn = _connect(dbname)
+            try:
+                with inspection_conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute(
+                        """
+                        SELECT id, experiences_formed_at,
+                               experiences_quarantined_at
+                        FROM world_events
+                        WHERE id = ANY(%s)
+                        ORDER BY id
+                        """,
+                        (event_ids,),
+                    )
+                    event_state = {int(row["id"]): dict(row) for row in cur.fetchall()}
+                    cur.execute(
+                        """
+                        SELECT character_entity_id, world_event_ids
+                        FROM character_experiences
+                        WHERE claim_awareness_id IS NULL
+                        ORDER BY id
+                        """
+                    )
+                    seeds = [dict(row) for row in cur.fetchall()]
+                quarantined_at = event_state[malformed_event_id][
+                    "experiences_quarantined_at"
+                ]
+                assert quarantined_at is not None
+                assert event_state[malformed_event_id]["experiences_formed_at"] is None
+                assert event_state[valid_event_id]["experiences_formed_at"] is not None
+                assert event_state[valid_event_id]["experiences_quarantined_at"] is None
+                assert seeds == [
+                    {
+                        "character_entity_id": owner_entity_id,
+                        "world_event_ids": [valid_event_id],
+                    }
+                ]
+
+                second_session_id = str(uuid4())
+                with inspection_conn:
+                    with inspection_conn.cursor() as cur:
+                        _stage_incubator(
+                            cur,
+                            session_id=second_session_id,
+                            parent_chunk_id=int(first_payload["chunk_id"]),
+                            proposal=None,
+                            characters=[(owner_character_id, "Quarantine Test Owner")],
+                            scene_boundary=False,
+                        )
+            finally:
+                inspection_conn.close()
+
+            with caplog.at_level(logging.ERROR, logger="nexus.orrery.experiences"):
+                with TestClient(narrative_api.app) as client:
+                    second_response = client.post(
+                        f"/api/narrative/approve/{second_session_id}?slot=4"
+                    )
+            assert second_response.status_code == 200
+            assert second_response.json().get("warnings", []) == []
+            assert (
+                len(
+                    [
+                        record
+                        for record in caplog.records
+                        if getattr(record, "event", None)
+                        == "orrery_experience_event_quarantined"
+                    ]
+                )
+                == 1
+            )
+            final_conn = _connect(dbname)
+            try:
+                with final_conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute(
+                        """
+                        SELECT experiences_formed_at,
+                               experiences_quarantined_at
+                        FROM world_events
+                        WHERE id = %s
+                        """,
+                        (malformed_event_id,),
+                    )
+                    malformed_state = dict(cur.fetchone())
+                    cur.execute(
+                        """
+                        SELECT count(*) AS count
+                        FROM character_experiences
+                        WHERE claim_awareness_id IS NULL
+                        """
+                    )
+                    seed_count = int(cur.fetchone()["count"])
+                assert malformed_state == {
+                    "experiences_formed_at": None,
+                    "experiences_quarantined_at": quarantined_at,
+                }
+                assert seed_count == 1
+            finally:
+                final_conn.close()
+        finally:
+            setup_conn.close()
 
 
 def test_late_same_owner_event_forms_once_at_its_past_anchor(
@@ -2103,6 +2542,365 @@ def test_supersession_invalidates_pending_seed_and_retains_rendered_history(
                 assert cur.fetchone()["experience_text"] is not None
         finally:
             conn.close()
+
+
+def test_supersession_rejects_cycle_and_already_superseded_target(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The application writer never permits a replacement-chain cycle."""
+
+    with _disposable_database() as dbname:
+        conn = _connect(dbname)
+        try:
+            with conn:
+                with conn.cursor() as cur:
+                    anchor_chunk_id = _insert_chunk(cur, "Supersession cycle rejection")
+                    _owner_character_id, owner_entity_id = _insert_character(
+                        cur,
+                        "Cycle Test Owner",
+                        summary="Owns the events used for cycle rejection.",
+                        background="Keeps retcon chains acyclic.",
+                    )
+                    event_ids: list[int] = []
+                    for label in ("event-a", "event-b", "event-c"):
+                        cur.execute(
+                            """
+                            INSERT INTO world_events (
+                                event_type, tick_chunk_id, actor_entity_id,
+                                world_layer, source, changed_fields, payload
+                            ) VALUES (
+                                'slept', %s, %s, 'primary', 'resolver', '{}',
+                                jsonb_build_object('label', %s)
+                            ) RETURNING id
+                            """,
+                            (anchor_chunk_id, owner_entity_id, label),
+                        )
+                        event_ids.append(int(cur.fetchone()[0]))
+            event_a_id, event_b_id, event_c_id = event_ids
+
+            with conn:
+                supersede_world_event_sync(
+                    conn,
+                    event_id=event_a_id,
+                    replacement_event_id=event_b_id,
+                )
+
+            caplog.clear()
+            with caplog.at_level(logging.ERROR, logger="nexus.orrery.events"):
+                with conn:
+                    with pytest.raises(ValueError, match="already superseded"):
+                        supersede_world_event_sync(
+                            conn,
+                            event_id=event_b_id,
+                            replacement_event_id=event_a_id,
+                        )
+                with conn:
+                    with pytest.raises(ValueError, match="already superseded"):
+                        supersede_world_event_sync(
+                            conn,
+                            event_id=event_c_id,
+                            replacement_event_id=event_a_id,
+                        )
+
+            rejection_records = [
+                record
+                for record in caplog.records
+                if getattr(record, "event", None)
+                == "orrery_world_event_supersession_rejected"
+            ]
+            assert [
+                record.supersession_rejection_reason for record in rejection_records
+            ] == [
+                "supersession_cycle",
+                "replacement_event_already_superseded",
+            ]
+            assert [
+                (
+                    record.world_event_id,
+                    record.replacement_event_id,
+                    record.supersession_rejection_detail,
+                )
+                for record in rejection_records
+            ] == [
+                (
+                    event_b_id,
+                    event_a_id,
+                    {"replacement_superseded_by_event_id": event_b_id},
+                ),
+                (
+                    event_c_id,
+                    event_a_id,
+                    {"replacement_superseded_by_event_id": event_b_id},
+                ),
+            ]
+            assert all(record.levelno == logging.ERROR for record in rejection_records)
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    """
+                    SELECT id, superseded_by_event_id
+                    FROM world_events
+                    WHERE id = ANY(%s)
+                    ORDER BY id
+                    """,
+                    (event_ids,),
+                )
+                successor_by_id = {
+                    int(row["id"]): row["superseded_by_event_id"]
+                    for row in cur.fetchall()
+                }
+            assert successor_by_id == {
+                event_a_id: event_b_id,
+                event_b_id: None,
+                event_c_id: None,
+            }
+        finally:
+            conn.close()
+
+
+def test_sweep_and_supersession_serialize_owner_coverage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The real accept sweep fences coverage through stamp persistence."""
+
+    monkeypatch.setattr(
+        "nexus.api.presence_audit.presence_audit_enabled", lambda: False
+    )
+    with _disposable_database() as dbname:
+        setup_conn = _connect(dbname)
+        try:
+            with setup_conn:
+                with setup_conn.cursor() as cur:
+                    anchor_chunk_id = _insert_chunk(
+                        cur, "Sweep supersession serialization"
+                    )
+                    owner_character_id, owner_entity_id = _insert_character(
+                        cur,
+                        "Serialized Seed Owner",
+                        summary="Owns the shared seed read by the sweep.",
+                        background="Must not be stranded by concurrent retcon.",
+                    )
+                    event_ids: list[int] = []
+                    for label in (
+                        "source-a",
+                        "live-b",
+                        "replacement",
+                        "unrelated-c",
+                    ):
+                        cur.execute(
+                            """
+                            INSERT INTO world_events (
+                                event_type, tick_chunk_id, actor_entity_id,
+                                world_layer, source, changed_fields, payload,
+                                experiences_formed_at
+                            ) VALUES (
+                                'slept', %s, %s, 'primary', 'resolver', '{}',
+                                jsonb_build_object('label', %s), CURRENT_TIMESTAMP
+                            ) RETURNING id
+                            """,
+                            (anchor_chunk_id, owner_entity_id, label),
+                        )
+                        event_id = int(cur.fetchone()[0])
+                        event_ids.append(event_id)
+                        cur.execute(
+                            """
+                            INSERT INTO world_event_entities (
+                                event_id, entity_id, role
+                            ) VALUES (%s, %s, 'actor')
+                            """,
+                            (event_id, owner_entity_id),
+                        )
+                    (
+                        source_event_id,
+                        live_event_id,
+                        replacement_event_id,
+                        unrelated_event_id,
+                    ) = event_ids
+                    shared_seed_id = _insert_direct_seed(
+                        cur,
+                        character_entity_id=owner_entity_id,
+                        anchor_chunk_id=anchor_chunk_id,
+                        world_event_ids=[source_event_id, live_event_id],
+                        label="serialization-a-b",
+                    )
+                    cur.execute(
+                        """
+                        UPDATE world_events
+                        SET experiences_formed_at = NULL
+                        WHERE id = ANY(%s)
+                        """,
+                        ([live_event_id, unrelated_event_id],),
+                    )
+                    assert cur.rowcount == 2
+
+            # The table lock lets the genuine sweep finish its event-lock and
+            # owner-coverage reads, then pauses its unrelated seed insert. It
+            # does not conflict with the writer's read-only seed discovery.
+            blocker_conn = _connect(dbname)
+            with blocker_conn.cursor() as cur:
+                cur.execute(
+                    """
+                    LOCK TABLE character_experiences
+                    IN SHARE ROW EXCLUSIVE MODE
+                    """
+                )
+                cur.execute("SELECT pg_backend_pid()")
+                blocker_pid = int(cur.fetchone()[0])
+
+            sweep_state: dict[str, Any] = {}
+            writer_state: dict[str, Any] = {}
+            sweep_pid_ready = threading.Event()
+            writer_pid_ready = threading.Event()
+
+            def run_sweep() -> int:
+                sweep_conn = _connect(dbname)
+                try:
+                    with sweep_conn.cursor() as cur:
+                        cur.execute("SELECT pg_backend_pid()")
+                        sweep_state["pid"] = int(cur.fetchone()[0])
+                    sweep_pid_ready.set()
+                    return _accept_turn(
+                        sweep_conn,
+                        parent_chunk_id=anchor_chunk_id,
+                        proposal=None,
+                        characters=[(owner_character_id, "Serialized Seed Owner")],
+                    )
+                finally:
+                    sweep_conn.close()
+
+            def run_supersession() -> Any:
+                writer_conn = _connect(dbname)
+                try:
+                    with writer_conn.cursor() as cur:
+                        cur.execute("SELECT pg_backend_pid()")
+                        writer_state["pid"] = int(cur.fetchone()[0])
+                    writer_pid_ready.set()
+                    with writer_conn:
+                        return supersede_world_event_sync(
+                            writer_conn,
+                            event_id=source_event_id,
+                            replacement_event_id=replacement_event_id,
+                        )
+                finally:
+                    writer_conn.close()
+
+            observer = _connect(dbname)
+
+            def wait_for_blockers(pid: int) -> list[int]:
+                blockers: list[int] = []
+                for _attempt in range(500):
+                    with observer.cursor() as cur:
+                        cur.execute("SELECT pg_blocking_pids(%s)", (pid,))
+                        blockers = [int(value) for value in cur.fetchone()[0]]
+                    if blockers:
+                        return blockers
+                    time.sleep(0.01)
+                return blockers
+
+            accepted_chunk_id: int
+            supersession: Any
+            try:
+                with ThreadPoolExecutor(max_workers=2) as executor:
+                    sweep_future = executor.submit(run_sweep)
+                    try:
+                        assert sweep_pid_ready.wait(timeout=10)
+                        assert wait_for_blockers(sweep_state["pid"]) == [blocker_pid]
+
+                        writer_future = executor.submit(run_supersession)
+                        assert writer_pid_ready.wait(timeout=10)
+                        assert wait_for_blockers(writer_state["pid"]) == [
+                            sweep_state["pid"]
+                        ]
+                    finally:
+                        # Always release the artificial blocker before the
+                        # executor waits for its workers, including failures.
+                        blocker_conn.commit()
+
+                    # The writer was blocked by the sweep's event rows, not by
+                    # the artificial table blocker. Accept stamps B/C before
+                    # supersession invalidates [A,B].
+                    accepted_chunk_id = sweep_future.result(timeout=10)
+                    supersession = writer_future.result(timeout=10)
+            finally:
+                if blocker_conn.closed == 0:
+                    blocker_conn.rollback()
+                    blocker_conn.close()
+                observer.close()
+
+            assert accepted_chunk_id > anchor_chunk_id
+            assert supersession.invalidated_experience_ids == (shared_seed_id,)
+            assert supersession.reopened_event_ids == (live_event_id,)
+            with setup_conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    """
+                    SELECT id, experiences_formed_at
+                    FROM world_events
+                    WHERE id = ANY(%s)
+                    ORDER BY id
+                    """,
+                    ([live_event_id, unrelated_event_id],),
+                )
+                post_race_event_state = {
+                    int(row["id"]): row["experiences_formed_at"]
+                    for row in cur.fetchall()
+                }
+                cur.execute(
+                    """
+                    SELECT invalidation_status::text AS invalidation_status
+                    FROM character_experiences
+                    WHERE id = %s
+                    """,
+                    (shared_seed_id,),
+                )
+                assert cur.fetchone()["invalidation_status"] == "invalidated"
+                cur.execute(
+                    """
+                    SELECT world_event_ids
+                    FROM character_experiences
+                    WHERE character_entity_id = %s
+                      AND %s = ANY(world_event_ids)
+                      AND invalidation_status = 'valid'
+                    """,
+                    (owner_entity_id, unrelated_event_id),
+                )
+                unrelated_seed = dict(cur.fetchone())
+            assert post_race_event_state[live_event_id] is None
+            assert post_race_event_state[unrelated_event_id] is not None
+            assert unrelated_seed == {"world_event_ids": [unrelated_event_id]}
+
+            restored_chunk_id = _accept_turn(
+                setup_conn,
+                parent_chunk_id=accepted_chunk_id,
+                proposal=None,
+                characters=[(owner_character_id, "Serialized Seed Owner")],
+            )
+            assert restored_chunk_id > accepted_chunk_id
+            with setup_conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    """
+                    SELECT world_event_ids
+                    FROM character_experiences
+                    WHERE character_entity_id = %s
+                      AND %s = ANY(world_event_ids)
+                      AND claim_awareness_id IS NULL
+                      AND invalidation_status = 'valid'
+                    ORDER BY id
+                    """,
+                    (owner_entity_id, live_event_id),
+                )
+                restored_seeds = [dict(row) for row in cur.fetchall()]
+                cur.execute(
+                    """
+                    SELECT experiences_formed_at
+                    FROM world_events
+                    WHERE id = %s
+                    """,
+                    (live_event_id,),
+                )
+                restored_stamp = cur.fetchone()["experiences_formed_at"]
+            assert restored_seeds == [{"world_event_ids": [live_event_id]}]
+            assert restored_stamp is not None
+        finally:
+            setup_conn.close()
 
 
 def test_supersession_reopens_live_sibling_for_next_real_sweep(

@@ -267,6 +267,32 @@ class WorldEventSupersessionResult:
     retained_rendered_experience_ids: tuple[int, ...]
 
 
+def _log_world_event_supersession_rejection(
+    *,
+    event_id: int,
+    replacement_event_id: int,
+    reason: str,
+    detail: Mapping[str, Any] | None = None,
+) -> None:
+    """Record one structured, queryable supersession rejection."""
+
+    structured_detail = dict(detail or {})
+    logger.error(
+        "Rejected Orrery world-event supersession %s -> %s: %s (%s)",
+        event_id,
+        replacement_event_id,
+        reason,
+        structured_detail,
+        extra={
+            "event": "orrery_world_event_supersession_rejected",
+            "world_event_id": event_id,
+            "replacement_event_id": replacement_event_id,
+            "supersession_rejection_reason": reason,
+            "supersession_rejection_detail": structured_detail,
+        },
+    )
+
+
 def supersede_world_event_sync(
     conn: Any,
     *,
@@ -283,11 +309,42 @@ def supersede_world_event_sync(
     """
 
     if event_id <= 0 or replacement_event_id <= 0:
+        _log_world_event_supersession_rejection(
+            event_id=event_id,
+            replacement_event_id=replacement_event_id,
+            reason="non_positive_event_id",
+        )
         raise ValueError("World event supersession ids must be positive")
     if event_id == replacement_event_id:
+        _log_world_event_supersession_rejection(
+            event_id=event_id,
+            replacement_event_id=replacement_event_id,
+            reason="self_supersession",
+        )
         raise ValueError("A world event cannot supersede itself")
 
     with conn.cursor() as cur:
+        # Direct experience source arrays are immutable. Discover their event
+        # closure before taking locks so every writer acquires the complete
+        # affected set in one global order. The formation sweep takes the same
+        # event locks before consulting owner coverage, so it cannot cache a
+        # seed while this transaction invalidates it.
+        cur.execute(
+            """
+            SELECT world_event_ids
+            FROM character_experiences
+            WHERE claim_awareness_id IS NULL
+              AND world_event_ids @> ARRAY[%s]::bigint[]
+            ORDER BY id
+            """,
+            (event_id,),
+        )
+        seed_event_ids = {
+            int(seed_event_id)
+            for row in cur.fetchall()
+            for seed_event_id in _row_get(row, "world_event_ids", 0)
+        }
+        affected_event_ids = sorted(seed_event_ids | {event_id, replacement_event_id})
         cur.execute(
             """
             SELECT id, superseded_by_event_id
@@ -296,23 +353,85 @@ def supersede_world_event_sync(
             ORDER BY id
             FOR UPDATE
             """,
-            ([event_id, replacement_event_id],),
+            (affected_event_ids,),
         )
         event_rows = {
             int(_row_get(row, "id", 0)): _row_get(row, "superseded_by_event_id", 1)
             for row in cur.fetchall()
         }
-        missing_event_ids = sorted({event_id, replacement_event_id} - set(event_rows))
+        missing_event_ids = sorted(set(affected_event_ids) - set(event_rows))
         if missing_event_ids:
+            _log_world_event_supersession_rejection(
+                event_id=event_id,
+                replacement_event_id=replacement_event_id,
+                reason="missing_affected_event",
+                detail={"missing_world_event_ids": missing_event_ids},
+            )
             raise ValueError(
                 "Cannot supersede world event; missing event ids "
                 f"{missing_event_ids}"
             )
         prior_replacement_id = event_rows[event_id]
         if prior_replacement_id is not None:
+            _log_world_event_supersession_rejection(
+                event_id=event_id,
+                replacement_event_id=replacement_event_id,
+                reason="source_event_already_superseded",
+                detail={"existing_replacement_event_id": int(prior_replacement_id)},
+            )
             raise RuntimeError(
                 f"World event {event_id} is already superseded by event "
                 f"{int(prior_replacement_id)}"
+            )
+        target_replacement_id = event_rows[replacement_event_id]
+        if target_replacement_id is not None:
+            target_replacement_id = int(target_replacement_id)
+            rejection_reason = (
+                "supersession_cycle"
+                if target_replacement_id == event_id
+                else "replacement_event_already_superseded"
+            )
+            _log_world_event_supersession_rejection(
+                event_id=event_id,
+                replacement_event_id=replacement_event_id,
+                reason=rejection_reason,
+                detail={"replacement_superseded_by_event_id": target_replacement_id},
+            )
+            raise ValueError(
+                f"Replacement world event {replacement_event_id} is already "
+                f"superseded by event {target_replacement_id}"
+            )
+
+        cur.execute(
+            """
+            SELECT id, world_event_ids, experience_text,
+                   invalidation_status::text AS invalidation_status
+            FROM character_experiences
+            WHERE claim_awareness_id IS NULL
+              AND world_event_ids @> ARRAY[%s]::bigint[]
+            ORDER BY id
+            FOR UPDATE
+            """,
+            (event_id,),
+        )
+        experience_rows = list(cur.fetchall())
+        observed_seed_event_ids = {
+            int(seed_event_id)
+            for row in experience_rows
+            for seed_event_id in _row_get(row, "world_event_ids", 1)
+        }
+        unlocked_event_ids = sorted(observed_seed_event_ids - set(event_rows))
+        if unlocked_event_ids:
+            _log_world_event_supersession_rejection(
+                event_id=event_id,
+                replacement_event_id=replacement_event_id,
+                reason="experience_event_set_changed_during_lock_acquisition",
+                detail={"unlocked_world_event_ids": unlocked_event_ids},
+            )
+            raise RuntimeError(
+                "Direct experience event set changed while locking world-event "
+                f"supersession {event_id} -> {replacement_event_id}; unlocked "
+                f"event ids {unlocked_event_ids}"
             )
 
         cur.execute(
@@ -329,19 +448,6 @@ def supersede_world_event_sync(
         if updated_event is None or int(_row_get(updated_event, "id", 0)) != event_id:
             raise RuntimeError(f"World event {event_id} changed while being superseded")
 
-        cur.execute(
-            """
-            SELECT id, world_event_ids, experience_text,
-                   invalidation_status::text AS invalidation_status
-            FROM character_experiences
-            WHERE claim_awareness_id IS NULL
-              AND world_event_ids @> ARRAY[%s]::bigint[]
-            ORDER BY id
-            FOR UPDATE
-            """,
-            (event_id,),
-        )
-        experience_rows = list(cur.fetchall())
         invalidation_candidates = {
             int(_row_get(row, "id", 0))
             for row in experience_rows
