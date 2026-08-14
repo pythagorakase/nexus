@@ -52,6 +52,7 @@ try:
         LORERetrievalSettings,
         OrreryBleedSettings,
         OrreryDisclosureSettings,
+        OrreryExperienceSettings,
         OrreryKnowledgeSettings,
         OrreryPromptSettings,
         OrreryRecallSettings,
@@ -92,6 +93,7 @@ except ImportError:
         LORERetrievalSettings,
         OrreryBleedSettings,
         OrreryDisclosureSettings,
+        OrreryExperienceSettings,
         OrreryKnowledgeSettings,
         OrreryPromptSettings,
         OrreryRecallSettings,
@@ -1392,6 +1394,9 @@ class TurnCycleManager:
                 "skipped": True,
             }
             return []
+        experience_settings = OrreryExperienceSettings.model_validate(
+            orrery_settings.get("experiences", {})
+        )
         if not self.lore.memnon:
             raise RuntimeError("World knowledge requires MEMNON database access")
 
@@ -1417,6 +1422,7 @@ class TurnCycleManager:
                 present_entity_ids=present_entity_ids,
                 anchor_chunk_id=anchor_chunk_id,
                 settings=knowledge_settings,
+                include_player_character=(experience_settings.include_player_character),
                 recall_settings=recall_settings,
                 disclosure_settings=disclosure_settings,
                 turn_id=turn_context.turn_id,

@@ -15,6 +15,7 @@ from sqlalchemy import text
 from nexus.agents.memnon.utils.embedding_tables import (
     parse_character_experience_embedding_table_dimensions,
 )
+from nexus.agents.orrery.player_identity import canonical_player_entity_id
 from nexus.agents.orrery.reconstruction import playable_narrative_predicate
 from nexus.config.settings_models import (
     OrreryDisclosureSettings,
@@ -118,6 +119,7 @@ def _eligible_rows(
     present_entity_ids: Sequence[int],
     anchor_chunk_id: int,
     recent_reveal_window_chunks: int,
+    excluded_experience_owner_entity_id: int | None,
 ) -> list[dict[str, Any]]:
     """Load only possessed claims and actor-owned, timeline-valid experiences."""
 
@@ -291,6 +293,11 @@ def _eligible_rows(
             LIMIT 1
         ) experience_severity ON TRUE
         WHERE experience.character_entity_id = ANY(:present_entity_ids)
+          AND (
+              :excluded_experience_owner_entity_id IS NULL
+              OR experience.character_entity_id <>
+                  :excluded_experience_owner_entity_id
+          )
           AND experience.invalidation_status = 'valid'
           AND experience.anchor_chunk_id <= :anchor_chunk_id
           AND experience.world_layer::text IS NOT DISTINCT FROM
@@ -322,6 +329,9 @@ def _eligible_rows(
         statement,
         {
             "anchor_chunk_id": anchor_chunk_id,
+            "excluded_experience_owner_entity_id": (
+                excluded_experience_owner_entity_id
+            ),
             "window_chunks": recent_reveal_window_chunks,
             "present_entity_ids": list(present_entity_ids),
         },
@@ -949,6 +959,7 @@ def build_knowledge_digest_sync(
     present_entity_ids: Sequence[int],
     anchor_chunk_id: int,
     settings: Any,
+    include_player_character: bool,
     recall_settings: Any = None,
     disclosure_settings: Any = None,
     turn_id: str | None = None,
@@ -976,6 +987,11 @@ def build_knowledge_digest_sync(
     present_ids = tuple(sorted({int(entity_id) for entity_id in present_entity_ids}))
     if not present_ids:
         return KnowledgeDigest()
+    if not isinstance(include_player_character, bool):
+        raise TypeError("include_player_character must be a boolean")
+    excluded_experience_owner_entity_id = (
+        None if include_player_character else canonical_player_entity_id(session_or_cur)
+    )
     trace_turn_id = turn_id or f"anchor:{anchor}"
     if not trace_turn_id.strip():
         raise ValueError("turn_id must be nonempty")
@@ -984,6 +1000,7 @@ def build_knowledge_digest_sync(
         present_entity_ids=present_ids,
         anchor_chunk_id=anchor,
         recent_reveal_window_chunks=knowledge.recent_reveal_window_chunks,
+        excluded_experience_owner_entity_id=(excluded_experience_owner_entity_id),
     )
     candidates = _score_candidates(
         eligible,

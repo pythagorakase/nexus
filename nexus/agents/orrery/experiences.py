@@ -18,6 +18,7 @@ from nexus.agents.orrery.epistemics import (
     PARTICIPANT_ROLES,
     WITNESS_ROLES,
 )
+from nexus.agents.orrery.player_identity import canonical_player_entity_id
 from nexus.config.settings_models import OrreryExperienceSettings
 from nexus.telemetry.usage import usage_context
 
@@ -206,152 +207,6 @@ def _presence_duration(
     return duration
 
 
-def _player_character_entity_id(cur: Any) -> int:
-    """Return the canonical player entity id, preserving the character/id join."""
-
-    cur.execute(
-        """
-        SELECT gv.user_character, character.entity_id
-        FROM global_variables gv
-        LEFT JOIN characters character ON character.id = gv.user_character
-        WHERE gv.id = true
-        """,
-    )
-    row = cur.fetchone()
-    if row is None:
-        raise RuntimeError(
-            "Cannot exclude player-owned experiences: global player identity "
-            "is missing"
-        )
-    user_character = _row_value(row, "user_character", 0)
-    if user_character is None:
-        raise RuntimeError(
-            "Cannot exclude player-owned experiences: user_character is NULL"
-        )
-    entity_id = _row_value(row, "entity_id", 1)
-    if entity_id is None:
-        raise RuntimeError(
-            f"Player character row {user_character} has no canonical entity id"
-        )
-    return int(entity_id)
-
-
-def _provenance_at_or_before(
-    *,
-    source_chunk_id: Any,
-    provenance_world_time: Any,
-    anchor_chunk_id: int,
-    anchor_world_time: Any,
-    label: str,
-) -> bool:
-    """Resolve exact chunk provenance, or fail on an unusable legacy clock."""
-
-    if source_chunk_id is not None:
-        return int(source_chunk_id) <= anchor_chunk_id
-    if provenance_world_time is None:
-        raise RuntimeError(f"{label} has no chunk or world-time provenance")
-    if anchor_world_time is None:
-        raise RuntimeError(
-            f"Experience anchor {anchor_chunk_id} has no world time for {label}"
-        )
-    return bool(provenance_world_time <= anchor_world_time)
-
-
-def _mood_at_anchor(
-    cur: Any,
-    *,
-    character_entity_id: int,
-    anchor_chunk_id: int,
-    anchor_world_time: Any,
-) -> Optional[str]:
-    """Project the character's mechanical mood at the event's own anchor."""
-
-    cur.execute(
-        """
-        SELECT et.id AS entity_tag_id, t.tag, et.source_chunk_id,
-               et.applied_at_world_time, et.expires_at_world_time,
-               et.cleared_at, clearance.id AS clearance_id,
-               clearance.source_chunk_id AS clearance_chunk_id,
-               clearance.cleared_at_world_time
-        FROM entity_tags et
-        JOIN tags t ON t.id = et.tag_id
-        LEFT JOIN tag_clearance_log clearance
-          ON clearance.entity_tag_id = et.id
-        WHERE et.entity_id = %s
-          AND t.category = 'mood'
-        ORDER BY et.id, clearance.id
-        """,
-        (character_entity_id,),
-    )
-    histories: dict[int, dict[str, Any]] = {}
-    for raw_row in cur.fetchall():
-        row = dict(raw_row)
-        entity_tag_id = int(row["entity_tag_id"])
-        history = histories.setdefault(
-            entity_tag_id,
-            {
-                "tag": str(row["tag"]),
-                "source_chunk_id": row.get("source_chunk_id"),
-                "applied_at_world_time": row.get("applied_at_world_time"),
-                "expires_at_world_time": row.get("expires_at_world_time"),
-                "cleared_at": row.get("cleared_at"),
-                "clearances": [],
-            },
-        )
-        if row.get("clearance_id") is not None:
-            history["clearances"].append(
-                {
-                    "id": int(row["clearance_id"]),
-                    "source_chunk_id": row.get("clearance_chunk_id"),
-                    "cleared_at_world_time": row.get("cleared_at_world_time"),
-                }
-            )
-
-    active: list[str] = []
-    for entity_tag_id, history in histories.items():
-        if not _provenance_at_or_before(
-            source_chunk_id=history["source_chunk_id"],
-            provenance_world_time=history["applied_at_world_time"],
-            anchor_chunk_id=anchor_chunk_id,
-            anchor_world_time=anchor_world_time,
-            label=f"mood entity_tag {entity_tag_id} application",
-        ):
-            continue
-        expires_at = history["expires_at_world_time"]
-        if expires_at is not None:
-            if anchor_world_time is None:
-                raise RuntimeError(
-                    f"Experience anchor {anchor_chunk_id} has no world time for "
-                    f"mood entity_tag {entity_tag_id} expiry"
-                )
-            if expires_at <= anchor_world_time:
-                continue
-        clearances = history["clearances"]
-        if history["cleared_at"] is not None and not clearances:
-            raise RuntimeError(
-                f"Cleared mood entity_tag {entity_tag_id} has no clearance ledger row"
-            )
-        cleared = any(
-            _provenance_at_or_before(
-                source_chunk_id=clearance["source_chunk_id"],
-                provenance_world_time=clearance["cleared_at_world_time"],
-                anchor_chunk_id=anchor_chunk_id,
-                anchor_world_time=anchor_world_time,
-                label=f"mood clearance {clearance['id']}",
-            )
-            for clearance in clearances
-        )
-        if not cleared:
-            active.append(str(history["tag"]))
-
-    if len(active) > 1:
-        raise RuntimeError(
-            f"Character entity {character_entity_id} has multiple moods at "
-            f"experience anchor {anchor_chunk_id}: {sorted(active)}"
-        )
-    return active[0] if active else None
-
-
 def _salience(
     *,
     events: Sequence[Mapping[str, Any]],
@@ -451,7 +306,6 @@ def _insert_experience(
     location_id: Optional[int],
     world_time: Any,
     seed_summary: str,
-    emotion: Optional[str],
     salience: float,
     world_layer: str,
 ) -> bool:
@@ -467,7 +321,10 @@ def _insert_experience(
             "location_id": location_id,
             "world_time": world_time,
             "seed_summary": seed_summary,
-            "emotion": emotion,
+            # Mechanical mood rows are destructively reapplied. They cannot
+            # participate in a seed whose identity must derive only from
+            # append-only event and receipt state.
+            "emotion": None,
             "salience": salience,
             "world_layer": world_layer,
         }
@@ -480,7 +337,7 @@ def _insert_experience(
             seed_summary, emotion, salience, source_digest, world_layer
         ) VALUES (
             %s, %s, %s, %s, %s, %s::character_experience_basis, %s, %s,
-            %s, %s, %s, %s, %s::world_layer_type
+            %s, NULL, %s, %s, %s::world_layer_type
         )
         RETURNING id
         """,
@@ -494,7 +351,6 @@ def _insert_experience(
             location_id,
             world_time,
             seed_summary,
-            emotion,
             salience,
             source_digest,
             world_layer,
@@ -528,7 +384,7 @@ def seed_character_experiences_sync(
                 f"Experience anchor chunk {anchor_chunk_id} has no metadata"
             )
         player_entity_id = (
-            None if cfg.include_player_character else _player_character_entity_id(cur)
+            None if cfg.include_player_character else canonical_player_entity_id(cur)
         )
 
         cur.execute(
@@ -575,9 +431,29 @@ def seed_character_experiences_sync(
             (anchor_chunk_id,),
         )
         events = [dict(row) for row in cur.fetchall()]
+        represented_pairs: set[tuple[int, int]] = set()
+        if events:
+            cur.execute(
+                """
+                SELECT candidate.event_id, experience.character_entity_id
+                FROM unnest(%s::bigint[]) candidate(event_id)
+                JOIN character_experiences experience
+                  ON experience.claim_awareness_id IS NULL
+                 AND experience.world_event_ids @> ARRAY[candidate.event_id]
+                GROUP BY candidate.event_id, experience.character_entity_id
+                ORDER BY candidate.event_id, experience.character_entity_id
+                """,
+                ([int(event["id"]) for event in events],),
+            )
+            represented_pairs = {
+                (int(row["event_id"]), int(row["character_entity_id"]))
+                for row in cur.fetchall()
+            }
         receipts: dict[tuple[int, int, str], list[dict[str, Any]]] = {}
         for event in events:
             for entity_id, basis in _event_receipts(event).items():
+                if (int(event["id"]), entity_id) in represented_pairs:
+                    continue
                 key = (int(event["tick_chunk_id"]), entity_id, basis)
                 receipts.setdefault(key, []).append(event)
         receipt_entity_ids = sorted(
@@ -652,12 +528,6 @@ def seed_character_experiences_sync(
                     location_id=location_id,
                     world_time=world_time,
                     seed_summary=seed_summary,
-                    emotion=_mood_at_anchor(
-                        cur,
-                        character_entity_id=character_id,
-                        anchor_chunk_id=event_anchor,
-                        anchor_world_time=world_time,
-                    ),
                     salience=_salience(
                         events=owned_events,
                         presence_duration=duration,
@@ -734,12 +604,6 @@ def seed_character_experiences_sync(
                         or acquisition_world_time
                     ),
                     seed_summary=seed_summary,
-                    emotion=_mood_at_anchor(
-                        cur,
-                        character_entity_id=character_id,
-                        anchor_chunk_id=acquisition_anchor,
-                        anchor_world_time=acquisition_world_time,
-                    ),
                     salience=_salience(
                         events=[{"magnitude": 0.0, "state_delta": {}}],
                         presence_duration=0,
@@ -794,7 +658,7 @@ def enqueue_scene_experience_job_sync(
         return 0
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         player_entity_id = (
-            None if cfg.include_player_character else _player_character_entity_id(cur)
+            None if cfg.include_player_character else canonical_player_entity_id(cur)
         )
         cur.execute(
             """
@@ -809,7 +673,8 @@ def enqueue_scene_experience_job_sync(
             FROM chunk_metadata boundary
             JOIN chunk_metadata scene_end ON scene_end.chunk_id = %s
             WHERE boundary.chunk_id = %s
-            FOR SHARE OF boundary, scene_end
+            FOR UPDATE OF boundary
+            FOR SHARE OF scene_end
             """,
             (scene_end_chunk_id, boundary_chunk_id),
         )
@@ -828,19 +693,6 @@ def enqueue_scene_experience_job_sync(
             )
         cur.execute(
             """
-            SELECT EXISTS (
-                SELECT 1
-                FROM character_experience_jobs
-                WHERE boundary_chunk_id = %s
-                  AND world_layer::text = %s
-            ) AS already_enqueued
-            """,
-            (boundary_chunk_id, world_layer),
-        )
-        if bool(cur.fetchone()["already_enqueued"]):
-            return 0
-        cur.execute(
-            """
             SELECT experience.id, experience.source_digest
             FROM character_experiences experience
             WHERE experience.anchor_chunk_id <= %s
@@ -852,10 +704,7 @@ def enqueue_scene_experience_job_sync(
                   SELECT 1
                   FROM character_experience_jobs prior_job
                   WHERE experience.id = ANY(prior_job.experience_ids)
-                    AND (
-                        prior_job.state <> 'stale_rejected'
-                        OR prior_job.last_error IS DISTINCT FROM %s
-                    )
+                    AND prior_job.state IN ('queued', 'leased', 'failed')
               )
             ORDER BY experience.id
             """,
@@ -864,16 +713,26 @@ def enqueue_scene_experience_job_sync(
                 world_layer,
                 player_entity_id,
                 player_entity_id,
-                _PLAYER_EXCLUSION_JOB_ERROR,
             ),
         )
         rows = [dict(row) for row in cur.fetchall()]
         if not rows:
             return 0
+        cur.execute(
+            """
+            SELECT COALESCE(max(batch_ordinal) + 1, 0) AS next_batch_ordinal
+            FROM character_experience_jobs
+            WHERE boundary_chunk_id = %s
+              AND world_layer::text = %s
+            """,
+            (boundary_chunk_id, world_layer),
+        )
+        next_batch_ordinal = int(cur.fetchone()["next_batch_ordinal"])
         inserted = 0
-        for batch_ordinal, start in enumerate(
+        for batch_offset, start in enumerate(
             range(0, len(rows), cfg.max_seeds_per_render)
         ):
+            batch_ordinal = next_batch_ordinal + batch_offset
             batch_rows = rows[start : start + cfg.max_seeds_per_render]
             cur.execute(
                 """
@@ -1142,7 +1001,7 @@ def _complete_render(
     cur: Any,
     *,
     job: Mapping[str, Any],
-    rows: Sequence[Mapping[str, Any]],
+    source_rows: Sequence[Mapping[str, Any]],
     rendered: Mapping[int, str],
     render_model: str,
 ) -> None:
@@ -1233,7 +1092,7 @@ def _complete_render(
     )
     current_rows = [dict(row) for row in cur.fetchall()]
     if (
-        len(current_rows) != len(rows)
+        len(current_rows) != len(source_rows)
         or _batch_digest(current_rows) != job["source_digest"]
         or any(row["experience_text"] is not None for row in current_rows)
         or any(row["invalidation_status"] != "valid" for row in current_rows)
@@ -1243,8 +1102,17 @@ def _complete_render(
             f"Experience job {job['job_id']} seed batch is stale"
         )
     generation_id = str(uuid4())
-    for row in current_rows:
-        experience_id = int(row["id"])
+    rows_by_id = {int(row["id"]): row for row in current_rows}
+    expected_render_ids = {
+        int(experience_id) for experience_id in job["render_experience_ids"]
+    }
+    if set(rendered) != expected_render_ids:
+        raise ExperienceSourceStaleError(
+            f"Experience job {job['job_id']} completion ids changed; "
+            f"expected={sorted(expected_render_ids)}, actual={sorted(rendered)}"
+        )
+    for experience_id, experience_text in rendered.items():
+        row = rows_by_id[experience_id]
         cur.execute(
             """
             UPDATE character_experiences
@@ -1258,7 +1126,7 @@ def _complete_render(
               AND invalidation_status = 'valid'
             """,
             (
-                rendered[experience_id],
+                experience_text,
                 render_model,
                 RENDERER_VERSION,
                 generation_id,
@@ -1372,7 +1240,7 @@ def drain_experience_render_jobs_sync(
             player_entity_id = (
                 None
                 if cfg.include_player_character
-                else _player_character_entity_id(cur)
+                else canonical_player_entity_id(cur)
             )
             cur.execute(
                 """
@@ -1414,7 +1282,12 @@ def drain_experience_render_jobs_sync(
                 excluded_ids = [
                     int(value) for value in job.pop("excluded_player_experience_ids")
                 ]
-                if excluded_ids:
+                render_ids = [
+                    int(value)
+                    for value in job["experience_ids"]
+                    if int(value) not in set(excluded_ids)
+                ]
+                if excluded_ids and not render_ids:
                     cur.execute(
                         """
                         UPDATE character_experience_jobs
@@ -1438,6 +1311,15 @@ def drain_experience_render_jobs_sync(
                     )
                     failed_count += 1
                     continue
+                if excluded_ids:
+                    logger.warning(
+                        "Filtered player-owned experience seeds %s from job %s; "
+                        "rendering eligible seeds %s",
+                        excluded_ids,
+                        job["job_id"],
+                        render_ids,
+                    )
+                job["render_experience_ids"] = render_ids
                 renderable_jobs.append(job)
             if renderable_jobs:
                 # Match the hardened narration queue: provider construction
@@ -1485,7 +1367,18 @@ def drain_experience_render_jobs_sync(
                         """,
                         (job["experience_ids"],),
                     )
-                    rows = [dict(row) for row in cur.fetchall()]
+                    source_rows = [dict(row) for row in cur.fetchall()]
+                    render_id_set = {
+                        int(experience_id)
+                        for experience_id in job["render_experience_ids"]
+                    }
+                    rows = [
+                        row for row in source_rows if int(row["id"]) in render_id_set
+                    ]
+                    if {int(row["id"]) for row in rows} != render_id_set:
+                        raise ExperienceSourceStaleError(
+                            f"Experience job {job['job_id']} lost renderable seeds"
+                        )
                     names = {
                         int(row["id"]): _known_and_allowed_names(cur, row)
                         for row in rows
@@ -1508,7 +1401,7 @@ def drain_experience_render_jobs_sync(
                     _complete_render(
                         cur,
                         job=job,
-                        rows=rows,
+                        source_rows=source_rows,
                         rendered=validated,
                         render_model=cfg.model,
                     )
