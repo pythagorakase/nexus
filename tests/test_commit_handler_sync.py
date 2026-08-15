@@ -114,6 +114,17 @@ class CommitCursor:
             self.result = (self.connection.child_world_time,)
         elif "FROM chunk_metadata" in normalized:
             self.result = self.connection.parent_metadata
+        elif normalized == (
+            "SELECT id, name, summary FROM characters WHERE name IS NOT NULL"
+        ):
+            self.rows = [
+                {"id": character_id, "name": name, "summary": None}
+                for name, character_id in sorted(self.connection.characters.items())
+            ]
+            self.result = None
+        elif normalized == "SELECT character_id, alias FROM character_aliases":
+            self.rows = []
+            self.result = None
         elif "SELECT id FROM characters WHERE name" in normalized:
             entity_id = self.connection.characters.get(params[0])
             self.result = (entity_id,) if entity_id is not None else None
