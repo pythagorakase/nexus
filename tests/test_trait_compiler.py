@@ -193,6 +193,16 @@ class TraitCompilerCursor:
             self.rowcount = 0
             return
 
+        if "ORRERY:CANONICAL_PLAYER_IDENTITY" in normalized:
+            player_character_id = min(self.characters)
+            self._next_row = (
+                player_character_id,
+                player_character_id,
+                self.characters[player_character_id]["entity_id"],
+            )
+            self.rowcount = 1
+            return
+
         if normalized.startswith("SELECT ID, ENTITY_ID, NAME FROM CHARACTERS"):
             self._next_rows = self._lookup_rows(self.characters, normalized, params)
             self.rowcount = len(self._next_rows)
@@ -239,7 +249,8 @@ class TraitCompilerCursor:
             self.rowcount = 1
             return
 
-        if normalized.startswith("SELECT P.ZONE FROM GLOBAL_VARIABLES"):
+        if normalized.startswith("SELECT P.ZONE FROM CHARACTERS"):
+            assert params == (min(self.characters),)
             self._next_row = (self.story_zone,)
             self.rowcount = 1
             return

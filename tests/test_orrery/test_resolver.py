@@ -114,6 +114,13 @@ class FakeResult:
     def first(self):
         return self._rows[0] if self._rows else None
 
+    def one_or_none(self):
+        if len(self._rows) > 1:
+            raise AssertionError(
+                f"FakeResult.one_or_none() with {len(self._rows)} rows"
+            )
+        return self.first()
+
     def __iter__(self):
         return iter(self._rows)
 
@@ -246,6 +253,16 @@ class FakeSession:
     def execute(self, statement, _params=None):
         sql = str(statement)
         self.executed_sql.append(sql)
+        if "/* orrery:canonical_player_identity */" in sql:
+            return FakeResult(
+                [
+                    {
+                        "user_character": 99,
+                        "character_id": 99,
+                        "entity_id": 99,
+                    }
+                ]
+            )
         if "/* orrery:epistemics_hydration:backstory_availability */" in sql:
             return FakeResult([{"available": True}])
         if "/* orrery:entity_activity */" in sql:

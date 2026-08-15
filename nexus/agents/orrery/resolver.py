@@ -21,6 +21,7 @@ from nexus.agents.orrery.epistemics import (
     load_epistemics_hydration,
     load_epistemics_policy,
 )
+from nexus.agents.orrery.player_identity import canonical_player_character_id
 from nexus.agents.orrery.reciprocal import (
     OrreryJointBeat,
     coerce_joint_beats,
@@ -2910,6 +2911,7 @@ def _load_local_weather(
         )
         return None, {}
 
+    player_character_id = canonical_player_character_id(session)
     row = (
         session.execute(
             text(
@@ -2922,13 +2924,16 @@ def _load_local_weather(
                 LEFT JOIN chunk_metadata cm
                   ON cm.chunk_id = :anchor_chunk_id
                 LEFT JOIN characters protagonist
-                  ON protagonist.id = gv.user_character
+                  ON protagonist.id = :player_character_id
                 LEFT JOIN places active_place
                   ON active_place.id = protagonist.current_location
                 WHERE gv.id = true
                 """
             ),
-            {"anchor_chunk_id": anchor_chunk_id},
+            {
+                "anchor_chunk_id": anchor_chunk_id,
+                "player_character_id": player_character_id,
+            },
         )
         .mappings()
         .first()

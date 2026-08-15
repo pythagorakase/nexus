@@ -25,6 +25,10 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
+from nexus.agents.orrery.player_identity import (
+    PlayerIdentityNotEstablishedError,
+    canonical_player_character_id,
+)
 from nexus.agents.orrery.reconstruction import playable_narrative_predicate
 from nexus.api.choice_handling import extract_presented_choices, resolve_input_text
 from nexus.api.db_pool import get_connection
@@ -143,16 +147,31 @@ def get_slot_state(slot: int) -> SlotState:
             # Check global_variables for post-transition bootstrap state
             cur.execute(
                 """
-                SELECT setting, user_character, base_timestamp
+                SELECT setting, base_timestamp
                 FROM global_variables
                 WHERE id = TRUE
                 """
             )
             global_row = cur.fetchone()
+            try:
+                canonical_player_character_id(cur)
+                has_player_character = True
+            except PlayerIdentityNotEstablishedError:
+                if (
+                    global_row is None
+                    or chunk_count > 0
+                    or incubator_count > 0
+                    or global_row.get("setting") is not None
+                    or global_row.get("base_timestamp") is not None
+                ):
+                    raise
+                # Empty slots and active wizard sessions intentionally precede
+                # every committed story marker and protagonist creation.
+                has_player_character = False
             has_global_story = global_row is not None and (
                 global_row.get("setting") is not None
-                or global_row.get("user_character") is not None
                 or global_row.get("base_timestamp") is not None
+                or has_player_character
             )
 
             has_wizard_data = wizard_cache is not None

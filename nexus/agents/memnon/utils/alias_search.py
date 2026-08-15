@@ -7,8 +7,11 @@ especially for handling cases where 'You' and 'Alex' are equivalent in 2nd-perso
 
 import logging
 import re
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Any, Dict, List, Optional, Tuple
+
 from sqlalchemy import text
+
+from nexus.agents.orrery.player_identity import canonical_player_character_id
 
 from .embedding_tables import embedding_table_exists, table_name_for_dimensions
 
@@ -34,6 +37,17 @@ def load_aliases_from_db(conn) -> Dict[str, List[str]]:
     Returns:
         Dict mapping lowercase character names to their aliases
     """
+    player_character_id = canonical_player_character_id(conn)
+    character_row = conn.execute(
+        text("SELECT name FROM characters WHERE id = :id"),
+        {"id": player_character_id},
+    ).fetchone()
+    if character_row is None or not character_row[0]:
+        raise RuntimeError(
+            f"Canonical player character row {player_character_id} has no name"
+        )
+    player_character_name = str(character_row[0])
+
     alias_lookup = {}
     try:
         # Query all characters with their aliases from the normalized table
@@ -62,32 +76,17 @@ def load_aliases_from_db(conn) -> Dict[str, List[str]]:
 
         logger.info(f"Loaded aliases for {len(alias_lookup)} characters from database")
 
-        # Ensure the POV character carries second-person aliases
-        try:
-            user_row = conn.execute(
-                text("SELECT user_character FROM global_variables WHERE id = true")
-            ).fetchone()
-            if user_row and user_row[0]:
-                character_row = conn.execute(
-                    text("SELECT name FROM characters WHERE id = :id"),
-                    {"id": user_row[0]},
-                ).fetchone()
-                if character_row and character_row[0]:
-                    canonical = character_row[0].lower()
-                    alias_lookup.setdefault(canonical, [character_row[0]])
-                    # Add the common second-person pronouns so "you" maps correctly
-                    second_person_aliases = ["You", "Your", "Yours", "Yourself"]
-                    for alias in second_person_aliases:
-                        if alias not in alias_lookup[canonical]:
-                            alias_lookup[canonical].append(alias)
-                    logger.info(
-                        "Mapped second-person pronouns to user character '%s'",
-                        character_row[0],
-                    )
-        except Exception as alias_exc:  # pragma: no cover - defensive logging
-            logger.warning(
-                "Failed to extend aliases with user character pronouns: %s", alias_exc
-            )
+        # Ensure the POV character carries second-person aliases.
+        canonical = player_character_name.lower()
+        alias_lookup.setdefault(canonical, [player_character_name])
+        second_person_aliases = ["You", "Your", "Yours", "Yourself"]
+        for alias in second_person_aliases:
+            if alias not in alias_lookup[canonical]:
+                alias_lookup[canonical].append(alias)
+        logger.info(
+            "Mapped second-person pronouns to user character '%s'",
+            player_character_name,
+        )
 
     except Exception as e:
         logger.error(f"Error loading aliases from database: {e}")

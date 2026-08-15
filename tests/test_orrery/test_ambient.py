@@ -81,9 +81,17 @@ class AmbientFakeSession(FakeSession):
 
     def execute(self, statement: Any, params: Any = None) -> FakeResult:
         sql = str(statement)
-        if "/* orrery:ambient_protagonist */" in sql:
+        if "/* orrery:canonical_player_identity */" in sql:
             self.executed_sql.append(sql)
-            return FakeResult([{"entity_id": 99}])
+            return FakeResult(
+                [
+                    {
+                        "user_character": 99,
+                        "character_id": 99,
+                        "entity_id": 99,
+                    }
+                ]
+            )
         if "/* orrery:ambient_claim_acquisitions */" in sql:
             self.executed_sql.append(sql)
             return FakeResult(self.claim_acquisition_rows)

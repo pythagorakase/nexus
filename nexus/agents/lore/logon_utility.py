@@ -51,6 +51,9 @@ from nexus.agents.logon.skald_wire import (  # noqa: E402
 from nexus.agents.lore.utils.chunk_operations import (  # noqa: E402
     calculate_chunk_tokens,
 )
+from nexus.agents.orrery.player_identity import (  # noqa: E402
+    canonical_player_character_id,
+)
 from nexus.agents.orrery.tag_library import (  # noqa: E402
     EntityRowReference,
     TagLibraryContext,
@@ -249,7 +252,7 @@ def read_presence_baseline(
     return PresenceBaseline(present=present, setting=setting)
 
 
-def read_user_character_id(dbname: str) -> Optional[int]:
+def read_user_character_id(dbname: str) -> int:
     """Read the configured user character for contextual tag exposure."""
 
     conn = psycopg2.connect(
@@ -261,17 +264,9 @@ def read_user_character_id(dbname: str) -> Optional[int]:
     try:
         conn.set_session(readonly=True, autocommit=True)
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT user_character
-                FROM global_variables
-                WHERE id = TRUE
-                """
-            )
-            row = cur.fetchone()
+            return canonical_player_character_id(cur)
     finally:
         conn.close()
-    return int(row[0]) if row and row[0] is not None else None
 
 
 async def read_presence_baseline_async(
@@ -2544,13 +2539,12 @@ class LogonUtility:
                 )
             )
         user_character_id = read_user_character_id(self.dbname)
-        if user_character_id is not None:
-            entity_refs.append(
-                EntityRowReference(
-                    kind="character",
-                    row_id=user_character_id,
-                )
+        entity_refs.append(
+            EntityRowReference(
+                kind="character",
+                row_id=user_character_id,
             )
+        )
 
         imminent_activity = context.get("orrery_imminent_activity") or []
         return format_contextual_tag_library(

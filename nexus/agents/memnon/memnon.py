@@ -716,6 +716,8 @@ class MEMNON:
         try:
             with self.Session() as session:
                 return load_aliases_from_db(session)
+        except RuntimeError:
+            raise
         except Exception as e:
             logger.error(f"Error loading aliases: {e}")
             return ALIAS_LOOKUP  # Use default if loading fails

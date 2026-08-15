@@ -13,6 +13,10 @@ from typing import Dict, List, Optional
 
 import psycopg2
 
+from nexus.agents.orrery.player_identity import (
+    PlayerIdentityNotEstablishedError,
+    canonical_player_character_id,
+)
 from nexus.api.db_pool import close_pool, get_connection
 from nexus.api.slot_utils import slot_dbname
 
@@ -44,6 +48,8 @@ def list_slots(dbname: Optional[str] = None) -> List[Dict]:
         db = slot_dbname(slot)
         try:
             results.append(_get_slot_metadata(slot, db))
+        except RuntimeError:
+            raise
         except Exception as e:
             logger.warning(f"Could not get metadata for slot {slot}: {e}")
             results.append({"slot_number": slot, "is_active": False})
@@ -54,29 +60,57 @@ def _get_slot_metadata(slot_number: int, dbname: str) -> Dict:
     """Get metadata for a single slot from global_variables."""
     with get_connection(dbname, dict_cursor=True) as conn:
         with conn.cursor() as cur:
-            # Join global_variables with characters to get character name
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT
                     g.new_story,
                     g.model,
-                    g.user_character,
-                    c.name as character_name
+                    g.setting IS NOT NULL AS has_setting,
+                    g.base_timestamp IS NOT NULL AS has_base_timestamp,
+                    EXISTS (SELECT 1 FROM narrative_chunks) AS has_chunks,
+                    EXISTS (SELECT 1 FROM incubator) AS has_incubator
                 FROM global_variables g
-                LEFT JOIN characters c ON c.id = g.user_character
                 WHERE g.id = TRUE
-            """)
+            """
+            )
             row = cur.fetchone()
 
-            if row:
-                return {
-                    "slot_number": slot_number,
-                    "character_name": row.get("character_name"),
-                    "model": row.get("model"),
-                    "is_active": not row.get("new_story", True),  # active if not in new_story mode
-                    "is_locked": is_slot_locked(slot_number, dbname),
-                }
+            try:
+                character_id = canonical_player_character_id(cur)
+            except PlayerIdentityNotEstablishedError:
+                if row is None or any(
+                    row.get(marker, False)
+                    for marker in (
+                        "has_setting",
+                        "has_base_timestamp",
+                        "has_chunks",
+                        "has_incubator",
+                    )
+                ):
+                    raise
+                # Slot cards include empty and in-progress wizard slots, before
+                # any story marker or canonical protagonist exists.
+                character_name = None
             else:
-                return {"slot_number": slot_number, "is_active": False}
+                cur.execute(
+                    "SELECT name FROM characters WHERE id = %s",
+                    (character_id,),
+                )
+                character_row = cur.fetchone()
+                if character_row is None:
+                    raise RuntimeError(
+                        "Canonical player character row "
+                        f"{character_id} disappeared during load"
+                    )
+                character_name = character_row.get("name")
+
+            return {
+                "slot_number": slot_number,
+                "character_name": character_name,
+                "model": row.get("model"),
+                "is_active": not row.get("new_story", True),
+                "is_locked": is_slot_locked(slot_number, dbname),
+            }
 
 
 def _get_admin_connection():
@@ -108,16 +142,19 @@ def is_slot_locked(slot_number: int, dbname: Optional[str] = None) -> bool:
     conn = _get_admin_connection()
     try:
         with conn.cursor() as cur:
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT setconfig
                 FROM pg_db_role_setting s
                 JOIN pg_database d ON d.oid = s.setdatabase
                 WHERE d.datname = %s AND s.setrole = 0
-            """, (db,))
+            """,
+                (db,),
+            )
             row = cur.fetchone()
             if row and row[0]:
                 # setconfig is an array like ['default_transaction_read_only=on']
-                return 'default_transaction_read_only=on' in row[0]
+                return "default_transaction_read_only=on" in row[0]
             return False
     finally:
         conn.close()
@@ -245,8 +282,7 @@ def set_slot_model(slot_number: int, model: str, dbname: Optional[str] = None) -
     with get_connection(db) as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "UPDATE global_variables SET model = %s WHERE id = TRUE",
-                (model,)
+                "UPDATE global_variables SET model = %s WHERE id = TRUE", (model,)
             )
     logger.info("Set model for slot %s to %s", slot_number, model)
 
