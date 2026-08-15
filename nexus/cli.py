@@ -3151,6 +3151,7 @@ def _add_global_output_args(parser: argparse.ArgumentParser) -> None:
 def build_parser() -> argparse.ArgumentParser:
     """Build CLI argument parser with subcommands."""
     parser = argparse.ArgumentParser(
+        allow_abbrev=False,
         description="NEXUS CLI - Story management command-line interface",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
@@ -3796,6 +3797,7 @@ Examples:
     )
 
     for subparser in subparsers.choices.values():
+        subparser.allow_abbrev = False
         _add_global_output_args(subparser)
 
     return parser
