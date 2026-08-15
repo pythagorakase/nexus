@@ -10,6 +10,8 @@ from typing import Any, Dict, List, Optional, Sequence, Set
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from nexus.agents.orrery.player_identity import canonical_player_character_id
+
 logger = logging.getLogger("nexus.lore.entity_queries")
 
 FACTION_TAG_CONTEXT_CATEGORIES = (
@@ -76,23 +78,8 @@ def fetch_all_characters_with_references(
     )
     baseline_rows = session.execute(baseline_query).fetchall()
 
-    # Get user character ID from global_variables
-    user_char_id = None
-    try:
-        user_char_query = text(
-            """
-            SELECT user_character
-            FROM global_variables
-            WHERE id = true
-            LIMIT 1
-        """
-        )
-        user_char_row = session.execute(user_char_query).fetchone()
-        if user_char_row and user_char_row.user_character:
-            user_char_id = user_char_row.user_character
-            logger.debug(f"User character ID from global_variables: {user_char_id}")
-    except Exception as e:
-        logger.warning(f"Could not query user_character from global_variables: {e}")
+    user_char_id = canonical_player_character_id(session)
+    logger.debug("Canonical user character ID: %d", user_char_id)
 
     # Get character IDs referenced in chunks
     featured_ids = {}
@@ -123,7 +110,7 @@ def fetch_all_characters_with_references(
         featured_ids = {row.character_id: str(row.reference) for row in ref_rows}
 
     # ALWAYS feature the user character, regardless of chunk references
-    if user_char_id and user_char_id not in featured_ids:
+    if user_char_id not in featured_ids:
         featured_ids[user_char_id] = "user_character"
         logger.debug(f"Added user character (ID {user_char_id}) to featured list")
 

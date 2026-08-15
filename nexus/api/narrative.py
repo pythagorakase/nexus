@@ -30,6 +30,10 @@ from psycopg2.extras import RealDictCursor
 
 from nexus.agents.lore.logon_utility import LogonUtility
 from nexus.agents.lore.lore import LORE
+from nexus.agents.orrery.player_identity import (
+    PlayerIdentityNotEstablishedError,
+    canonical_player_character_id,
+)
 from nexus.api.lore_adapter import (
     response_to_incubator,
     validate_incubator_data,
@@ -1571,7 +1575,7 @@ async def get_user_character(slot: Optional[int] = None):
     """
     Get the user's character name for the active slot.
 
-    Returns the character name from global_variables.user_character joined with characters.name.
+    Returns the character name resolved through the canonical player identity.
 
     Args:
         slot: Save slot number (1-5). If not provided, uses NEXUS_SLOT env var.
@@ -1595,16 +1599,38 @@ async def get_user_character(slot: Optional[int] = None):
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    SELECT c.name
-                    FROM global_variables gv
-                    JOIN characters c ON c.id = gv.user_character
-                    WHERE gv.id = TRUE
-                """
+                    SELECT setting IS NOT NULL,
+                           base_timestamp IS NOT NULL,
+                           EXISTS (SELECT 1 FROM narrative_chunks),
+                           EXISTS (SELECT 1 FROM incubator)
+                    FROM global_variables
+                    WHERE id = true
+                    """
+                )
+                lifecycle_row = cur.fetchone()
+                try:
+                    character_id = canonical_player_character_id(cur)
+                except PlayerIdentityNotEstablishedError:
+                    if lifecycle_row is None or any(lifecycle_row):
+                        raise
+                    # The UI polls this endpoint while an empty slot is still
+                    # in the wizard, before any story marker or protagonist.
+                    return {"name": None}
+                cur.execute(
+                    """
+                    SELECT name
+                    FROM characters
+                    WHERE id = %s
+                    """,
+                    (character_id,),
                 )
                 row = cur.fetchone()
-                if row:
-                    return {"name": row[0]}
-                return {"name": None}
+                if row is None:
+                    raise RuntimeError(
+                        "Canonical player character row "
+                        f"{character_id} disappeared during load"
+                    )
+                return {"name": row[0]}
     except psycopg2.Error as e:
         logger.error(f"Database error fetching user character: {e}")
         raise HTTPException(status_code=500, detail="Database error")

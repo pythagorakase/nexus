@@ -9,6 +9,7 @@ from typing import Any, Iterable, Literal, Mapping, Optional, Sequence, Tuple
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import text
 
+from nexus.agents.orrery.player_identity import canonical_player_entity_id
 from nexus.agents.orrery.reciprocal import OrreryJointBeat
 from nexus.agents.orrery.substrate import WorldState, seeded_stochastic_rng
 from nexus.config.settings_models import OrreryAmbientSettings
@@ -165,8 +166,8 @@ def build_ambient_scene_seeds(
         return ()
 
     present_ids = frozenset(int(value) for value in present_actor_ids)
-    protagonist_id = _load_protagonist_entity_id(session)
-    eligible_ids = present_ids - ({protagonist_id} if protagonist_id else set())
+    protagonist_id = canonical_player_entity_id(session)
+    eligible_ids = present_ids - {protagonist_id}
     if len(eligible_ids) < 2:
         return ()
 
@@ -257,27 +258,6 @@ def build_ambient_scene_seeds(
         )
         for candidate in selected
     )
-
-
-def _load_protagonist_entity_id(session: Any) -> Optional[int]:
-    row = (
-        session.execute(
-            text(
-                """
-                /* orrery:ambient_protagonist */
-                SELECT c.entity_id
-                FROM global_variables gv
-                JOIN characters c ON c.id = gv.user_character
-                WHERE gv.id = true
-                """
-            )
-        )
-        .mappings()
-        .first()
-    )
-    if row is None or row.get("entity_id") is None:
-        return None
-    return int(row["entity_id"])
 
 
 def _joint_beat_candidates(

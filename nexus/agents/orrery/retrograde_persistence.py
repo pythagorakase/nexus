@@ -17,6 +17,7 @@ from nexus.agents.orrery.epistemics import (
     mint_claim_for_event,
 )
 from nexus.agents.orrery.geo import story_active_zone
+from nexus.agents.orrery.player_identity import canonical_player_character_id
 from nexus.agents.orrery.retrograde_expansion import (
     RetrogradeExpansionDeathPlan,
     RetrogradeExpansionEventPlan,
@@ -2715,30 +2716,33 @@ def _load_entity_index(cur: Any) -> dict[tuple[str, str], list[_EntityRecord]]:
 
 def _load_persisted_protagonist_identity(
     cur: Any,
-) -> Optional[_PersistedProtagonistIdentity]:
+) -> _PersistedProtagonistIdentity:
     """Load the canonical player character and normalized alias rows."""
 
+    character_id = canonical_player_character_id(cur)
     cur.execute(
         """
         /* orrery:retrograde:protagonist_identity */
         SELECT c.id, c.name, ca.alias
-        FROM global_variables gv
-        JOIN characters c ON c.id = gv.user_character
+        FROM characters c
         LEFT JOIN character_aliases ca ON ca.character_id = c.id
-        WHERE gv.id = TRUE
+        WHERE c.id = %s
         ORDER BY ca.alias
-        """
+        """,
+        (character_id,),
     )
     rows = cur.fetchall()
     if not rows:
-        return None
-    character_id = int(_row_value(rows[0], "id", 0))
+        raise RuntimeError(
+            f"Canonical player character row {character_id} disappeared during load"
+        )
+    persisted_character_id = int(_row_value(rows[0], "id", 0))
     name = str(_row_value(rows[0], "name", 1))
     aliases = frozenset(
         str(alias) for row in rows if (alias := _row_value(row, "alias", 2)) is not None
     )
     return _PersistedProtagonistIdentity(
-        character_id=character_id,
+        character_id=persisted_character_id,
         name=name,
         aliases=aliases,
     )

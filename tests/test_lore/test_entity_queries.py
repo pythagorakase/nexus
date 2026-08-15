@@ -35,6 +35,14 @@ class _Result:
     def fetchone(self) -> Optional[_Row]:
         return self.rows[0] if self.rows else None
 
+    def mappings(self) -> "_Result":
+        return self
+
+    def one_or_none(self) -> Optional[_Row]:
+        if len(self.rows) > 1:
+            raise AssertionError(f"_Result.one_or_none() with {len(self.rows)} rows")
+        return self.fetchone()
+
     def __iter__(self):
         return iter(self.rows)
 
@@ -70,7 +78,15 @@ class _CharacterQuerySession:
         self.executed.append((sql, params))
 
         if "FROM global_variables" in sql:
-            return _Result([_Row(user_character=self.user_character_id)])
+            return _Result(
+                [
+                    _Row(
+                        user_character=self.user_character_id,
+                        character_id=self.user_character_id,
+                        entity_id=10_000 + self.user_character_id,
+                    )
+                ]
+            )
 
         if "FROM chunk_character_references" in sql:
             eligible = [

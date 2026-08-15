@@ -12,6 +12,8 @@ from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Set
 
 from sqlalchemy import text
 
+from nexus.agents.orrery.player_identity import canonical_player_character_id
+
 from .context_state import (
     ContextPackage,
     ContextStateManager,
@@ -1088,6 +1090,7 @@ class ContextMemoryManager:
 
         try:
             with engine.connect() as conn:
+                player_character_id = canonical_player_character_id(conn)
                 alias_lookup = load_aliases_from_db(conn)
 
                 for canonical_lc, aliases in alias_lookup.items():
@@ -1100,25 +1103,25 @@ class ContextMemoryManager:
                     for alias in aliases:
                         self.alias_inverse[alias.lower()] = canonical_lc
 
-                result = conn.execute(
-                    text("SELECT user_character FROM global_variables WHERE id = true")
+                user_row = conn.execute(
+                    text("SELECT name FROM characters WHERE id = :id"),
+                    {"id": player_character_id},
                 ).fetchone()
-                if result and result[0]:
-                    user_row = conn.execute(
-                        text("SELECT name FROM characters WHERE id = :id"),
-                        {"id": result[0]},
-                    ).fetchone()
-                    user_character_name = user_row[0] if user_row else None
-                    if user_character_name:
-                        self.user_character_name = user_character_name
-                        canonical = user_character_name.lower()
-                        if canonical not in self.alias_lookup:
-                            self.alias_lookup[canonical] = [user_character_name]
-                            self.canonical_name_map[canonical] = user_character_name
-                        for alias in self.alias_lookup[canonical]:
-                            self.alias_inverse[alias.lower()] = canonical
-                        for pronoun in ("you", "your", "yours", "yourself"):
-                            self.alias_inverse[pronoun] = canonical
+                if user_row is None or not user_row[0]:
+                    raise RuntimeError(
+                        "Canonical player character row "
+                        f"{player_character_id} has no name"
+                    )
+                user_character_name = str(user_row[0])
+                self.user_character_name = user_character_name
+                canonical = user_character_name.lower()
+                if canonical not in self.alias_lookup:
+                    self.alias_lookup[canonical] = [user_character_name]
+                    self.canonical_name_map[canonical] = user_character_name
+                for alias in self.alias_lookup[canonical]:
+                    self.alias_inverse[alias.lower()] = canonical
+                for pronoun in ("you", "your", "yours", "yourself"):
+                    self.alias_inverse[pronoun] = canonical
 
                 place_rows = conn.execute(text("SELECT name FROM places")).fetchall()
                 for row in place_rows:
@@ -1130,6 +1133,8 @@ class ContextMemoryManager:
                     if key.startswith("the "):
                         self.place_lookup[key[4:]] = name
 
+        except RuntimeError:
+            raise
         except Exception as exc:  # pragma: no cover - defensive logging
             logger.warning("Failed to load entity metadata: %s", exc)
 

@@ -255,13 +255,30 @@ async def test_bootstrap_threads_logon_model_into_incubator_payload(
             return None
 
         def execute(self, query: str, params: Any = None) -> None:
-            if "SELECT setting, user_character" in query:
+            if "SELECT setting FROM global_variables" in query:
                 self.result = {
                     "setting": {
                         "world_name": "Fixture World",
                         "story_seed": {"title": "Fixture Opening"},
-                    },
+                    }
+                }
+            elif "/* orrery:canonical_player_identity */" in query:
+                self.result = {
                     "user_character": 11,
+                    "character_id": 11,
+                    "entity_id": 111,
+                }
+            elif "JOIN places p" in query:
+                self.result = {
+                    "id": 27,
+                    "name": "Fixture Station",
+                    "summary": "A test-only location.",
+                    "history": "",
+                    "current_status": "",
+                    "secrets": "",
+                    "inhabitants": [],
+                    "atmosphere": "",
+                    "extra_data": {},
                 }
             elif "FROM characters" in query:
                 self.result = {
@@ -272,18 +289,6 @@ async def test_bootstrap_threads_logon_model_into_incubator_payload(
                     "personality": "",
                     "emotional_state": "",
                     "current_activity": "",
-                    "extra_data": {},
-                }
-            elif "JOIN characters c" in query:
-                self.result = {
-                    "id": 27,
-                    "name": "Fixture Station",
-                    "summary": "A test-only location.",
-                    "history": "",
-                    "current_status": "",
-                    "secrets": "",
-                    "inhabitants": [],
-                    "atmosphere": "",
                     "extra_data": {},
                 }
             else:

@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional, Union
 
 from nexus.agents.lore.utils.chunk_operations import calculate_chunk_tokens
+from nexus.agents.orrery.player_identity import canonical_player_character_id
 from nexus.memory.context_state import memory_identity
 from nexus.memory.manager import resolve_storyteller_prompt_overhead_tokens
 from nexus.memory.retrieval_coverage import coerce_chunk_id
@@ -553,6 +554,8 @@ class TurnCycleManager:
                 f"Characters: {len(characters_data['baseline'])} baseline, "
                 f"{len(characters_data['featured'])} featured"
             )
+        except RuntimeError:
+            raise
         except Exception as e:
             logger.error(f"Failed to query characters: {e}")
 
@@ -941,17 +944,18 @@ class TurnCycleManager:
         """Headline state at the anchor chunk: the runtime intertitle.
 
         Season/episode/scene/layer and the world clock come from the
-        anchor's chunk_metadata; the location is the user character's
-        (global_variables.user_character) current place, with its WGS84
-        geometry — Earth-shaped coordinates are the spatial-reasoning
-        offload the GIS layer exists for. Everything here is
-        display-and-prompt state; nothing is baked into narrative text.
+        anchor's chunk_metadata; the location is the canonical user
+        character's current place, with its WGS84 geometry — Earth-shaped
+        coordinates are the spatial-reasoning offload the GIS layer exists
+        for. Everything here is display-and-prompt state; nothing is baked
+        into narrative text.
         """
 
         if anchor_chunk_id is None:
             return None
         from sqlalchemy import text as _text
 
+        player_character_id = canonical_player_character_id(session)
         # Keep this protagonist.current_location authority in lockstep with
         # resolver._load_local_weather; the displayed place and anchor-scene
         # weather override must describe the same physical scene.
@@ -965,13 +969,15 @@ class TurnCycleManager:
                            p.name AS location_name,
                            ST_AsEWKT(p.coordinates::geometry) AS location_geom
                     FROM chunk_metadata cm
-                    LEFT JOIN global_variables gv ON gv.id = true
-                    LEFT JOIN characters c ON c.id = gv.user_character
+                    JOIN characters c ON c.id = :player_character_id
                     LEFT JOIN places p ON p.id = c.current_location
                     WHERE cm.chunk_id = :anchor
                     """
                 ),
-                {"anchor": anchor_chunk_id},
+                {
+                    "anchor": anchor_chunk_id,
+                    "player_character_id": player_character_id,
+                },
             )
             .mappings()
             .first()

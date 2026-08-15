@@ -19,6 +19,7 @@ from psycopg2.extras import RealDictCursor
 
 from nexus.agents.logon.skald_wire import PresenceRef
 from nexus.agents.lore.lore import LORE
+from nexus.agents.orrery.player_identity import canonical_player_character_id
 from nexus.api.lore_adapter import (
     response_to_incubator,
     validate_incubator_data,
@@ -541,13 +542,10 @@ async def generate_bootstrap_narrative(
     """
     from nexus.agents.lore.logon_utility import LogonUtility
     from nexus.api.slot_utils import require_slot_dbname
-    from psycopg2.extras import RealDictCursor
 
     # Load story context from global_variables
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute(
-            "SELECT setting, user_character FROM global_variables WHERE id = true"
-        )
+        cur.execute("SELECT setting FROM global_variables WHERE id = true")
         row = cur.fetchone()
         if not row or not row["setting"]:
             raise ValueError(
@@ -556,7 +554,7 @@ async def generate_bootstrap_narrative(
             )
 
         setting_data = row["setting"]
-        character_id = row["user_character"]
+        character_id = canonical_player_character_id(cur)
 
         # Get character details
         cur.execute(
@@ -569,31 +567,30 @@ async def generate_bootstrap_narrative(
             (character_id,),
         )
         char_row = cur.fetchone()
-        character_name = char_row["name"] if char_row else "Unknown"
-        character_summary = char_row.get("summary", "") if char_row else ""
-        character_appearance = char_row.get("appearance", "") if char_row else ""
-        character_background = char_row.get("background", "") if char_row else ""
-        character_personality = char_row.get("personality", "") if char_row else ""
-        character_emotional_state = (
-            char_row.get("emotional_state", "") if char_row else ""
-        )
-        character_current_activity = (
-            char_row.get("current_activity", "") if char_row else ""
-        )
-        character_traits = (char_row.get("extra_data") or {}) if char_row else {}
+        if char_row is None:
+            raise RuntimeError(
+                f"Canonical player character row {character_id} disappeared during load"
+            )
+        character_name = char_row["name"]
+        character_summary = char_row.get("summary", "")
+        character_appearance = char_row.get("appearance", "")
+        character_background = char_row.get("background", "")
+        character_personality = char_row.get("personality", "")
+        character_emotional_state = char_row.get("emotional_state", "")
+        character_current_activity = char_row.get("current_activity", "")
+        character_traits = char_row.get("extra_data") or {}
 
-        # Get starting location via FK chain:
-        # global_variables.user_character → characters.current_location → places.id
+        # Get the canonical player's starting location via characters.current_location.
         # Note: atmosphere is stored in extra_data JSONB
         cur.execute(
             """SELECT p.id, p.name, p.summary, p.history, p.current_status, p.secrets,
                       p.inhabitants,
                       p.extra_data->>'atmosphere' as atmosphere,
                       p.extra_data
-               FROM global_variables g
-               JOIN characters c ON c.id = g.user_character
+               FROM characters c
                JOIN places p ON p.id = c.current_location
-               WHERE g.id = true"""
+               WHERE c.id = %s""",
+            (character_id,),
         )
         place_row = cur.fetchone()
         if not place_row:

@@ -38,7 +38,8 @@ def geo_cur() -> Iterator[Any]:
                 );
                 CREATE TABLE characters (
                     id bigint PRIMARY KEY,
-                    current_location bigint
+                    current_location bigint,
+                    entity_id bigint
                 );
                 CREATE TABLE global_variables (
                     id boolean PRIMARY KEY,
@@ -96,7 +97,9 @@ def test_no_bounded_zone_raises(geo_cur: Any) -> None:
 
 def test_story_active_zone_and_corruption_raise(geo_cur: Any) -> None:
     geo_cur.execute("INSERT INTO places (id, zone) VALUES (5, 42)")
-    geo_cur.execute("INSERT INTO characters (id, current_location) VALUES (7, 5)")
+    geo_cur.execute(
+        "INSERT INTO characters (id, current_location, entity_id) VALUES (7, 5, 70)"
+    )
     geo_cur.execute(
         "INSERT INTO global_variables (id, user_character) VALUES (true, 7)"
     )
