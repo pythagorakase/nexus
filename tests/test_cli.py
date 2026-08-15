@@ -1,9 +1,10 @@
 """Tests for the NEXUS CLI helpers."""
 
+import argparse
+from argparse import Namespace
 import json
 from pathlib import Path
 import sys
-from argparse import Namespace
 from typing import Any, cast
 
 import pytest
@@ -68,6 +69,140 @@ def test_terminal_generation_statuses_include_api_and_incubator_values() -> None
     assert _is_terminal_generation_status("committed")
     assert not _is_terminal_generation_status("processing")
     assert not _is_terminal_generation_status("error")
+
+
+def test_every_subcommand_registers_post_command_output_flags() -> None:
+    """Every runtime subparser shares exact post-command output options."""
+
+    parser = cli.build_parser()
+    subparsers = next(
+        action
+        for action in parser._actions
+        if isinstance(action, argparse._SubParsersAction)
+    )
+
+    assert parser.allow_abbrev is False
+    for command, subparser in subparsers.choices.items():
+        assert subparser.allow_abbrev is False, command
+        for option in ("--json", "--truncate"):
+            action = subparser._option_string_actions.get(option)
+            assert action is not None, f"{command} does not accept {option}"
+            assert action.default == argparse.SUPPRESS, command
+
+
+@pytest.mark.parametrize(
+    ("command_args", "expected_error"),
+    (
+        pytest.param(
+            ("load", "--slot", "0"),
+            "Slot must be between 1 and 5",
+            id="load",
+        ),
+        pytest.param(
+            ("usage", "--day", "2099-12-31"),
+            None,
+            id="usage",
+        ),
+        pytest.param(
+            (
+                "record-revelation",
+                "--slot",
+                "4",
+                "--claim-id",
+                "1",
+                "--knower",
+                "16",
+                "--world-time",
+                "2189-10-17T18:26:00",
+            ),
+            (
+                "--world-time must be a timezone-aware ISO-8601 datetime, "
+                "got '2189-10-17T18:26:00'"
+            ),
+            id="record-revelation",
+        ),
+        pytest.param(
+            ("clear", "--slot", "0"),
+            "Slot must be between 1 and 5",
+            id="clear-mutation",
+        ),
+    ),
+)
+def test_global_output_flags_are_order_independent(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    command_args: tuple[str, ...],
+    expected_error: str | None,
+) -> None:
+    """Global and post-command output flags behave identically in the real CLI."""
+
+    observations: list[tuple[int, str, str]] = []
+    for post_command in (False, True):
+        argv = ["nexus"]
+        if not post_command:
+            argv.extend(("--json", "--truncate"))
+        argv.append(command_args[0])
+        if post_command:
+            argv.extend(("--json", "--truncate"))
+        argv.extend(command_args[1:])
+        monkeypatch.setattr(sys, "argv", argv)
+
+        exit_code = cli.main()
+        captured = capsys.readouterr()
+        observations.append((exit_code, captured.out, captured.err))
+
+        if expected_error is None:
+            assert exit_code == 0
+            assert captured.err == ""
+            payload = json.loads(captured.out)
+            assert payload["success"] is True
+            assert payload["usage"]["day"] == "2099-12-31"
+        else:
+            assert exit_code == 1
+            assert captured.out == ""
+            assert json.loads(captured.err) == {"error": expected_error}
+        assert "Traceback" not in captured.out + captured.err
+
+    assert observations[0] == observations[1]
+
+
+def test_trait_audit_requires_exact_long_option_spelling(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Long-option abbreviations fail while exact trait input remains accepted."""
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["nexus", "trait-audit", "--slot", "5", "--tr"],
+    )
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main()
+
+    assert exc_info.value.code == 2
+    abbreviated = capsys.readouterr()
+    assert abbreviated.out == ""
+    assert "unrecognized arguments: --tr" in abbreviated.err
+    assert "ambiguous option" not in abbreviated.err
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "nexus",
+            "trait-audit",
+            "--slot",
+            "0",
+            "--trait-inputs",
+            "{}",
+        ],
+    )
+
+    assert cli.main() == 1
+    exact = capsys.readouterr()
+    assert exact.out == ""
+    assert exact.err == "Error: Slot must be between 1 and 5\n"
 
 
 @pytest.mark.parametrize("day", ["02-30-2026", "2026-02-30", "2026-2-3"])

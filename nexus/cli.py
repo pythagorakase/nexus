@@ -3131,9 +3131,27 @@ def _print_usage(payload: Dict[str, Any]) -> None:
             )
 
 
+def _add_global_output_args(parser: argparse.ArgumentParser) -> None:
+    """Accept global output flags after a subcommand without resetting them."""
+
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Emit JSON output",
+    )
+    parser.add_argument(
+        "--truncate",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Truncate long text fields (accepted for global CLI consistency)",
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build CLI argument parser with subcommands."""
     parser = argparse.ArgumentParser(
+        allow_abbrev=False,
         description="NEXUS CLI - Story management command-line interface",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
@@ -3247,18 +3265,6 @@ Examples:
         help="Show exact provider-reported API token usage",
     )
     usage_parser.add_argument(
-        "--json",
-        action="store_true",
-        default=argparse.SUPPRESS,
-        help="Emit JSON output",
-    )
-    usage_parser.add_argument(
-        "--truncate",
-        action="store_true",
-        default=argparse.SUPPRESS,
-        help="Truncate long text fields (accepted for global CLI consistency)",
-    )
-    usage_parser.add_argument(
         "--day",
         help="UTC quota day in YYYY-MM-DD format (default: current UTC day)",
     )
@@ -3267,18 +3273,6 @@ Examples:
     jobs_parser = subparsers.add_parser(
         "jobs",
         help="Show durable Retrograde maturation job state for one slot",
-    )
-    jobs_parser.add_argument(
-        "--json",
-        action="store_true",
-        default=argparse.SUPPRESS,
-        help="Emit JSON output",
-    )
-    jobs_parser.add_argument(
-        "--truncate",
-        action="store_true",
-        default=argparse.SUPPRESS,
-        help="Truncate long text fields (accepted for global CLI consistency)",
     )
     jobs_parser.add_argument(
         "--slot", type=int, required=True, help="Slot number (1-5)"
@@ -3580,18 +3574,6 @@ Examples:
         help="Grant told or manual awareness of an existing claim",
     )
     revelation_parser.add_argument(
-        "--json",
-        action="store_true",
-        default=argparse.SUPPRESS,
-        help="Emit JSON output",
-    )
-    revelation_parser.add_argument(
-        "--truncate",
-        action="store_true",
-        default=argparse.SUPPRESS,
-        help="Truncate long text fields (accepted for global CLI consistency)",
-    )
-    revelation_parser.add_argument(
         "--slot", type=int, required=True, help="Slot number (1-5)"
     )
     revelation_parser.add_argument("--claim-id", type=int, required=True)
@@ -3813,6 +3795,10 @@ Examples:
     unlock_parser.add_argument(
         "--slot", type=int, required=True, help="Slot number (1-5)"
     )
+
+    for subparser in subparsers.choices.values():
+        subparser.allow_abbrev = False
+        _add_global_output_args(subparser)
 
     return parser
 
