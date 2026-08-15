@@ -6,11 +6,12 @@ import asyncio
 from dataclasses import dataclass
 import logging
 import os
-from typing import Any, List, Optional, Sequence
+from typing import Any, Collection, List, Literal, Mapping, Optional, Sequence
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
+from nexus.agents.logon.apex_schema import NewEntityDeclaration
 from nexus.agents.logon.skald_wire import (
     CharacterRef,
     PresenceBaseline,
@@ -22,6 +23,7 @@ from nexus.agents.logon.skald_wire import (
 )
 from nexus.api.presence_audit import _character_only_detector
 from nexus.memory.entity_detector import HighSpecificityEntityDetector
+from nexus.util.log_safety import quote_log_value
 
 
 logger = logging.getLogger("nexus.api.presence_reconciliation")
@@ -35,6 +37,32 @@ class CharacterRosterRows:
     aliases: List[Any]
 
 
+@dataclass(frozen=True)
+class _DeclaredNameCollision:
+    """One canonical or alias owner conflicting with a declared name."""
+
+    declared_id: int
+    declared_name: str
+    conflict_id: int
+    conflict_name: str
+    conflict_kind: Literal["canonical", "alias_of"]
+
+
+def read_character_roster_from_connection(conn: Any) -> CharacterRosterRows:
+    """Read the character roster through an existing psycopg2 transaction."""
+
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute("SELECT id, name, summary FROM characters WHERE name IS NOT NULL")
+        character_rows = cur.fetchall()
+        cur.execute("SELECT character_id, alias FROM character_aliases")
+        alias_rows = cur.fetchall()
+
+    return CharacterRosterRows(
+        characters=list(character_rows),
+        aliases=list(alias_rows),
+    )
+
+
 def read_character_roster(dbname: str) -> CharacterRosterRows:
     """Read the known-character roster and aliases for one turn."""
 
@@ -46,26 +74,30 @@ def read_character_roster(dbname: str) -> CharacterRosterRows:
     )
     try:
         conn.set_session(readonly=True, autocommit=True)
-        with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute(
-                "SELECT id, name, summary FROM characters WHERE name IS NOT NULL"
-            )
-            character_rows = cur.fetchall()
-            cur.execute("SELECT character_id, alias FROM character_aliases")
-            alias_rows = cur.fetchall()
+        return read_character_roster_from_connection(conn)
     finally:
         conn.close()
-
-    return CharacterRosterRows(
-        characters=list(character_rows),
-        aliases=list(alias_rows),
-    )
 
 
 async def read_character_roster_async(dbname: str) -> CharacterRosterRows:
     """Read the known-character roster without blocking the async turn loop."""
 
     return await asyncio.to_thread(read_character_roster, dbname)
+
+
+async def read_character_roster_from_async_connection(
+    conn: Any,
+) -> CharacterRosterRows:
+    """Read the character roster through an existing asyncpg transaction."""
+
+    character_rows = await conn.fetch(
+        "SELECT id, name, summary FROM characters WHERE name IS NOT NULL"
+    )
+    alias_rows = await conn.fetch("SELECT character_id, alias FROM character_aliases")
+    return CharacterRosterRows(
+        characters=list(character_rows),
+        aliases=list(alias_rows),
+    )
 
 
 def _matches_character(character: Any, reference: PresenceRef) -> bool:
@@ -150,6 +182,40 @@ def _is_accounted(
     )
 
 
+def _unaccounted_public_prose_mentions(
+    prose_parts: Sequence[str],
+    *,
+    accounted_references: Sequence[PresenceRef],
+    roster_rows: CharacterRosterRows,
+    candidate_character_ids: Optional[Collection[int]] = None,
+) -> List[PresenceRef]:
+    """Return unaccounted canonical mentions from the shared detector core."""
+
+    detector = _reconciliation_detector(roster_rows)
+    detected = detector.detect_entities("\n".join(prose_parts)).characters
+    accounted = list(accounted_references)
+    reconciled: List[PresenceRef] = []
+
+    for character in detected:
+        character_id = int(character["id"])
+        if (
+            candidate_character_ids is not None
+            and character_id not in candidate_character_ids
+        ):
+            continue
+        if _is_accounted(character, accounted):
+            continue
+        canonical = PresenceRef(
+            kind="character",
+            name=character["name"],
+            id=character_id,
+        )
+        reconciled.append(canonical)
+        accounted.append(canonical)
+
+    return reconciled
+
+
 def reconcile_public_prose_mentions(
     prose_parts: Sequence[str],
     *,
@@ -163,24 +229,217 @@ def reconcile_public_prose_mentions(
     already accounted for by their route-specific presence representation.
     """
 
-    detector = _reconciliation_detector(roster_rows)
-    detected = detector.detect_entities("\n".join(prose_parts)).characters
-    accounted = list(accounted_references)
-    reconciled: List[PresenceRef] = []
-
-    for character in detected:
-        if _is_accounted(character, accounted):
-            continue
-        canonical = PresenceRef(
-            kind="character",
-            name=character["name"],
-            id=character["id"],
-        )
-        reconciled.append(canonical)
-        accounted.append(canonical)
+    reconciled = _unaccounted_public_prose_mentions(
+        prose_parts,
+        accounted_references=accounted_references,
+        roster_rows=roster_rows,
+    )
+    for canonical in reconciled:
         logger.warning("presence prose mention normalized: %s", canonical.name)
-
     return reconciled
+
+
+def _declared_character_names(
+    declarations: Sequence[Mapping[str, Any]],
+) -> List[str]:
+    """Return unique character names from this committed wire's declarations."""
+
+    parsed = [
+        NewEntityDeclaration.model_validate(declaration) for declaration in declarations
+    ]
+    return list(
+        dict.fromkeys(
+            declaration.name
+            for declaration in parsed
+            if declaration.kind == "character"
+        )
+    )
+
+
+def _reconcile_declared_character_mentions(
+    prose_parts: Sequence[str],
+    *,
+    declared_names: Sequence[str],
+    accounted_character_ids: Collection[int],
+    roster_rows: CharacterRosterRows,
+) -> List[PresenceRef]:
+    """Detect only transaction-visible characters declared by this wire."""
+
+    rows_by_name: dict[str, List[Any]] = {name: [] for name in declared_names}
+    for character in roster_rows.characters:
+        name = str(character["name"])
+        if name in rows_by_name:
+            rows_by_name[name].append(character)
+
+    declared_rows: List[Any] = []
+    for name in declared_names:
+        matches = rows_by_name[name]
+        if len(matches) != 1:
+            raise ValueError(
+                f"Declared character name {name!r} resolved to {len(matches)} "
+                "roster rows after stub creation"
+            )
+        declared_rows.append(matches[0])
+
+    declared_ids = {int(character["id"]) for character in declared_rows}
+    collisions = _declared_name_collisions(declared_rows, roster_rows)
+    colliding_ids = set(collisions)
+    accounted_ids = set(accounted_character_ids)
+    accounted_references = [
+        PresenceRef(
+            kind="character",
+            name=str(character["name"]),
+            id=int(character["id"]),
+        )
+        for character in declared_rows
+        if int(character["id"]) in accounted_ids
+    ]
+    reconciled = _unaccounted_public_prose_mentions(
+        prose_parts,
+        accounted_references=accounted_references,
+        roster_rows=roster_rows,
+        candidate_character_ids=declared_ids - colliding_ids,
+    )
+    for canonical in reconciled:
+        logger.warning(
+            "presence declared mention normalized: %s",
+            quote_log_value(canonical.name),
+        )
+
+    for declared_row in declared_rows:
+        declared_id = int(declared_row["id"])
+        if declared_id not in colliding_ids:
+            continue
+        declared_roster = CharacterRosterRows(
+            characters=[declared_row],
+            aliases=[],
+        )
+        detected = _unaccounted_public_prose_mentions(
+            prose_parts,
+            accounted_references=[],
+            roster_rows=declared_roster,
+            candidate_character_ids={declared_id},
+        )
+        if not detected:
+            continue
+        for collision in collisions[declared_id]:
+            logger.warning(
+                "presence declared mention collision: declared=%s id=%s "
+                "conflicts %s=%s id=%s",
+                quote_log_value(collision.declared_name),
+                collision.declared_id,
+                collision.conflict_kind,
+                quote_log_value(collision.conflict_name),
+                collision.conflict_id,
+            )
+        reconciled.extend(
+            _unaccounted_public_prose_mentions(
+                prose_parts,
+                accounted_references=accounted_references,
+                roster_rows=declared_roster,
+                candidate_character_ids={declared_id},
+            )
+        )
+    return reconciled
+
+
+def _declared_name_collisions(
+    declared_rows: Sequence[Any],
+    roster_rows: CharacterRosterRows,
+) -> dict[int, List[_DeclaredNameCollision]]:
+    """Return case-insensitive canonical/alias conflicts for declared names."""
+
+    characters_by_id = {
+        int(character["id"]): character for character in roster_rows.characters
+    }
+    result: dict[int, List[_DeclaredNameCollision]] = {}
+
+    for declared in declared_rows:
+        declared_id = int(declared["id"])
+        declared_name = str(declared["name"])
+        declared_key = declared_name.casefold()
+        conflicts_by_id: dict[int, _DeclaredNameCollision] = {}
+
+        for character_id, character in characters_by_id.items():
+            if character_id == declared_id:
+                continue
+            conflict_name = str(character["name"])
+            if conflict_name.casefold() != declared_key:
+                continue
+            conflicts_by_id[character_id] = _DeclaredNameCollision(
+                declared_id=declared_id,
+                declared_name=declared_name,
+                conflict_id=character_id,
+                conflict_name=conflict_name,
+                conflict_kind="canonical",
+            )
+
+        for alias in roster_rows.aliases:
+            character_id = int(alias["character_id"])
+            if (
+                character_id == declared_id
+                or character_id in conflicts_by_id
+                or str(alias["alias"]).casefold() != declared_key
+            ):
+                continue
+            character = characters_by_id.get(character_id)
+            if character is None:
+                continue
+            conflicts_by_id[character_id] = _DeclaredNameCollision(
+                declared_id=declared_id,
+                declared_name=declared_name,
+                conflict_id=character_id,
+                conflict_name=str(character["name"]),
+                conflict_kind="alias_of",
+            )
+
+        if conflicts_by_id:
+            result[declared_id] = [
+                conflicts_by_id[character_id]
+                for character_id in sorted(conflicts_by_id)
+            ]
+
+    return result
+
+
+def reconcile_declared_character_mentions(
+    conn: Any,
+    prose_parts: Sequence[str],
+    *,
+    declarations: Sequence[Mapping[str, Any]],
+    accounted_character_ids: Collection[int],
+) -> List[PresenceRef]:
+    """Reconcile same-turn declarations inside a psycopg2 commit transaction."""
+
+    declared_names = _declared_character_names(declarations)
+    if not declared_names:
+        return []
+    return _reconcile_declared_character_mentions(
+        prose_parts,
+        declared_names=declared_names,
+        accounted_character_ids=accounted_character_ids,
+        roster_rows=read_character_roster_from_connection(conn),
+    )
+
+
+async def reconcile_declared_character_mentions_async(
+    conn: Any,
+    prose_parts: Sequence[str],
+    *,
+    declarations: Sequence[Mapping[str, Any]],
+    accounted_character_ids: Collection[int],
+) -> List[PresenceRef]:
+    """Reconcile same-turn declarations inside an asyncpg commit transaction."""
+
+    declared_names = _declared_character_names(declarations)
+    if not declared_names:
+        return []
+    return _reconcile_declared_character_mentions(
+        prose_parts,
+        declared_names=declared_names,
+        accounted_character_ids=accounted_character_ids,
+        roster_rows=await read_character_roster_from_async_connection(conn),
+    )
 
 
 def reconcile_prose_mentions(

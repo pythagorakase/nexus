@@ -117,6 +117,15 @@ class AsyncCommitConnection:
         normalized = " ".join(sql.split())
         if "/* orrery:bleed_uptake_candidates */" in normalized:
             return [offer for offer in self.bleed_offers if offer["id"] in args[0]]
+        if normalized == (
+            "SELECT id, name, summary FROM characters WHERE name IS NOT NULL"
+        ):
+            return [
+                {"id": character_id, "name": name, "summary": None}
+                for name, character_id in sorted(self.characters.items())
+            ]
+        if normalized == "SELECT character_id, alias FROM character_aliases":
+            return []
         if "SELECT id FROM characters WHERE name" in normalized:
             entity_id = self.characters.get(args[0])
             return [{"id": entity_id}] if entity_id is not None else []

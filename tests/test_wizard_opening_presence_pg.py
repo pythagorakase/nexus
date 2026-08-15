@@ -1,4 +1,4 @@
-"""Real wizard-opening presence reconciliation coverage for issue #655."""
+"""Real staging-to-audit presence coverage for issues #655 and #715."""
 
 from __future__ import annotations
 
@@ -33,6 +33,7 @@ from nexus.api import (
 )
 from nexus.api.narrative_generation import generate_narrative_async
 from nexus.config import load_settings_as_dict
+from nexus.util.log_safety import quote_log_value
 from scripts import new_story_setup
 
 
@@ -61,6 +62,35 @@ ORDINARY_PAYLOAD = {
     ],
     "letter": "Keep Wren off-scene until Lucky chooses whether to answer him.",
 }
+DECLARED_CHARACTER = "Keller"
+CANONICAL_COLLISION_CHARACTER = "KELLER"
+
+
+def _declared_payload(*, listed_present: bool) -> dict[str, Any]:
+    """Build one same-turn declaration, optionally authored as entering."""
+
+    payload: dict[str, Any] = {
+        "narrative": (
+            "Keller waits beneath the club awning while the rain erases the street."
+        ),
+        "choices": [
+            "Ask Keller what brought him to the Blue Canary.",
+            "Watch him from behind the locked door.",
+        ],
+        "new_entities": [
+            {
+                "kind": "character",
+                "name": DECLARED_CHARACTER,
+                "summary": "A rain-soaked courier making his first appearance.",
+            }
+        ],
+        "letter": "Keep Keller's purpose unresolved after his first appearance.",
+    }
+    if listed_present:
+        payload["presence"] = {
+            "enter": [{"kind": "character", "name": DECLARED_CHARACTER}]
+        }
+    return payload
 
 
 def _connect(dbname: str) -> Any:
@@ -260,6 +290,46 @@ def _seed_post_transition_world(dbname: str) -> None:
                     json.dumps([RETROGRADE_PROLOGUE_MARKER]),
                 ),
             )
+
+
+def _insert_character_alias(
+    dbname: str,
+    *,
+    character_name: str,
+    alias: str,
+) -> int:
+    """Give one existing roster character a collision-test alias."""
+
+    with _connect(dbname) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id FROM characters WHERE name = %s",
+                (character_name,),
+            )
+            row = cur.fetchone()
+            assert row is not None
+            character_id = int(row[0])
+            cur.execute(
+                "INSERT INTO character_aliases (character_id, alias) VALUES (%s, %s)",
+                (character_id, alias),
+            )
+    return character_id
+
+
+def _insert_roster_character(dbname: str, *, name: str) -> int:
+    """Insert an existing character whose canonical name collides by case."""
+
+    with _connect(dbname) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO characters (name, summary)
+                VALUES (%s, %s)
+                RETURNING id
+                """,
+                (name, "An existing roster identity used by collision QA."),
+            )
+            return int(cur.fetchone()[0])
 
 
 class _SchemaBoundaryProvider:
@@ -469,11 +539,118 @@ def _assert_mentioned_row(dbname: str, chunk_id: int) -> None:
     }
 
 
+def _assert_declared_row(
+    dbname: str,
+    chunk_id: int,
+    *,
+    expected_reference: str,
+) -> None:
+    """Require exactly one declared-character junction row with the given role."""
+
+    with _connect(dbname) as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT c.name, ccr.reference::text AS reference
+                FROM chunk_character_references AS ccr
+                JOIN characters AS c ON c.id = ccr.character_id
+                WHERE ccr.chunk_id = %s AND c.name = %s
+                """,
+                (chunk_id, DECLARED_CHARACTER),
+            )
+            rows = [dict(row) for row in cur.fetchall()]
+    assert rows == [{"name": DECLARED_CHARACTER, "reference": expected_reference}]
+
+
+def _assert_collision_rows(
+    dbname: str,
+    chunk_id: int,
+    *,
+    conflict_id: int,
+    conflict_name: str,
+) -> int:
+    """Require one mentioned row for each side of a declared-name collision."""
+
+    with _connect(dbname) as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT c.id, c.name, ccr.reference::text AS reference
+                FROM chunk_character_references AS ccr
+                JOIN characters AS c ON c.id = ccr.character_id
+                WHERE ccr.chunk_id = %s AND c.name IN (%s, %s)
+                ORDER BY c.id
+                """,
+                (chunk_id, DECLARED_CHARACTER, conflict_name),
+            )
+            rows = [dict(row) for row in cur.fetchall()]
+
+    conflict_rows = [row for row in rows if row["id"] == conflict_id]
+    declared_rows = [row for row in rows if row["name"] == DECLARED_CHARACTER]
+    assert conflict_rows == [
+        {"id": conflict_id, "name": conflict_name, "reference": "mentioned"}
+    ]
+    assert len(declared_rows) == 1
+    assert declared_rows[0]["reference"] == "mentioned"
+    assert len(rows) == 2
+    return int(declared_rows[0]["id"])
+
+
 def _assert_clean_presence_audit(caplog: pytest.LogCaptureFixture) -> None:
     """Require normalization evidence and no post-commit audit tripwire."""
 
     messages = [record.getMessage() for record in caplog.records]
     assert f"presence prose mention normalized: {KNOWN_CHARACTER}" in messages
+    assert not [
+        message for message in messages if message.startswith("presence audit:")
+    ]
+    assert not [
+        message
+        for message in messages
+        if message.startswith("presence audit failed for committed chunk")
+    ]
+
+
+def _assert_clean_declared_presence_audit(
+    caplog: pytest.LogCaptureFixture,
+    *,
+    normalized: bool,
+) -> None:
+    """Assert the declared marker contract and a silent genuine audit."""
+
+    messages = [record.getMessage() for record in caplog.records]
+    marker = (
+        "presence declared mention normalized: "
+        f"{quote_log_value(DECLARED_CHARACTER)}"
+    )
+    assert (marker in messages) is normalized
+    assert not [
+        message for message in messages if message.startswith("presence audit:")
+    ]
+    assert not [
+        message
+        for message in messages
+        if message.startswith("presence audit failed for committed chunk")
+    ]
+
+
+def _assert_clean_collision_presence_audit(
+    caplog: pytest.LogCaptureFixture,
+    *,
+    expected_warning: str,
+) -> None:
+    """Require exactly one collision marker and no post-commit audit finding."""
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert [
+        message
+        for message in messages
+        if message.startswith("presence declared mention collision:")
+    ] == [expected_warning]
+    assert (
+        "presence declared mention normalized: "
+        f"{quote_log_value(DECLARED_CHARACTER)}"
+    ) not in messages
     assert not [
         message for message in messages if message.startswith("presence audit:")
     ]
@@ -557,10 +734,76 @@ def _assert_staged_mention(
     )
 
 
+def _assert_staged_declared_reference(
+    dbname: str,
+    *,
+    session_id: str,
+    expected_reference: str | None,
+) -> None:
+    """Prove the declaration and its pre-stub reference state are staged."""
+
+    with _connect(dbname) as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT new_entities, reference_updates
+                FROM incubator
+                WHERE session_id = %s
+                """,
+                (session_id,),
+            )
+            staged = cur.fetchone()
+    assert staged is not None
+    assert [declaration["name"] for declaration in staged["new_entities"]] == [
+        DECLARED_CHARACTER
+    ]
+    declared_references = [
+        reference
+        for reference in staged["reference_updates"]["characters"]
+        if reference.get("character_name") == DECLARED_CHARACTER
+    ]
+    if expected_reference is None:
+        assert declared_references == []
+    else:
+        assert len(declared_references) == 1
+        assert declared_references[0]["reference_type"] == expected_reference
+
+
+def _assert_staged_collision_owner_reference(
+    dbname: str,
+    *,
+    session_id: str,
+    conflict_id: int,
+    conflict_name: str,
+) -> None:
+    """Prove the ordinary pre-stub pass retained the collision owner's row."""
+
+    with _connect(dbname) as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                "SELECT reference_updates FROM incubator WHERE session_id = %s",
+                (session_id,),
+            )
+            staged = cur.fetchone()
+    assert staged is not None
+    assert [
+        reference
+        for reference in staged["reference_updates"]["characters"]
+        if reference.get("character_id") == conflict_id
+    ] == [
+        {
+            "character_id": conflict_id,
+            "character_name": conflict_name,
+            "reference_type": "mentioned",
+        }
+    ]
+
+
 def _assert_committed_prose_names_character(
     dbname: str,
     *,
     chunk_id: int,
+    character_name: str = KNOWN_CHARACTER,
 ) -> None:
     """Require the audited committed prose to retain the named character."""
 
@@ -572,7 +815,18 @@ def _assert_committed_prose_names_character(
             )
             row = cur.fetchone()
     assert row is not None
-    assert KNOWN_CHARACTER in row[0]
+    assert character_name in row[0]
+
+
+def _accept_opening(dbname: str, settings: dict[str, Any]) -> int:
+    """Create the accepted ordinary-turn parent used by issue #715 controls."""
+
+    session_id, staged_chunk_id = _stage_narrative(
+        dbname,
+        parent_chunk_id=0,
+        settings=settings,
+    )
+    return _accept_pending(session_id, staged_chunk_id)
 
 
 def test_wizard_opening_stage_and_accept_reconcile_known_character(
@@ -608,6 +862,181 @@ def test_wizard_opening_stage_and_accept_reconcile_known_character(
     _assert_committed_prose_names_character(wizard_database, chunk_id=chunk_id)
     _assert_audit_observation(audit_observations, chunk_id)
     _assert_clean_presence_audit(caplog)
+
+
+def test_declared_character_named_without_presence_commits_mentioned_row(
+    wizard_database: str,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A transaction-visible same-turn stub is reconciled before junction writes."""
+
+    payloads: Dict[type[BaseModel], Deque[dict[str, Any]]] = {
+        StorytellerResponseBootstrap: deque([BOOTSTRAP_PAYLOAD.copy()]),
+        SkaldTurnWire: deque([_declared_payload(listed_present=False)]),
+    }
+    audit_observations = _install_route_boundaries(
+        monkeypatch,
+        dbname=wizard_database,
+        payloads=payloads,
+    )
+    settings = _route_settings()
+    opening_chunk_id = _accept_opening(wizard_database, settings)
+    audit_observations.clear()
+    caplog.clear()
+
+    with caplog.at_level(logging.WARNING):
+        session_id, staged_chunk_id = _stage_narrative(
+            wizard_database,
+            parent_chunk_id=opening_chunk_id,
+            settings=settings,
+        )
+        _assert_staged_declared_reference(
+            wizard_database,
+            session_id=session_id,
+            expected_reference=None,
+        )
+        chunk_id = _accept_pending(session_id, staged_chunk_id)
+
+    assert chunk_id == 3
+    _assert_declared_row(
+        wizard_database,
+        chunk_id,
+        expected_reference="mentioned",
+    )
+    _assert_committed_prose_names_character(
+        wizard_database,
+        chunk_id=chunk_id,
+        character_name=DECLARED_CHARACTER,
+    )
+    _assert_audit_observation(audit_observations, chunk_id)
+    _assert_clean_declared_presence_audit(caplog, normalized=True)
+
+
+def test_declared_character_already_listed_present_has_one_present_row(
+    wizard_database: str,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """An authored same-turn entry is accounted and never gains a duplicate mention."""
+
+    payloads: Dict[type[BaseModel], Deque[dict[str, Any]]] = {
+        StorytellerResponseBootstrap: deque([BOOTSTRAP_PAYLOAD.copy()]),
+        SkaldTurnWire: deque([_declared_payload(listed_present=True)]),
+    }
+    audit_observations = _install_route_boundaries(
+        monkeypatch,
+        dbname=wizard_database,
+        payloads=payloads,
+    )
+    settings = _route_settings()
+    opening_chunk_id = _accept_opening(wizard_database, settings)
+    audit_observations.clear()
+    caplog.clear()
+
+    with caplog.at_level(logging.WARNING):
+        session_id, staged_chunk_id = _stage_narrative(
+            wizard_database,
+            parent_chunk_id=opening_chunk_id,
+            settings=settings,
+        )
+        _assert_staged_declared_reference(
+            wizard_database,
+            session_id=session_id,
+            expected_reference="present",
+        )
+        chunk_id = _accept_pending(session_id, staged_chunk_id)
+
+    assert chunk_id == 3
+    _assert_declared_row(
+        wizard_database,
+        chunk_id,
+        expected_reference="present",
+    )
+    _assert_audit_observation(audit_observations, chunk_id)
+    _assert_clean_declared_presence_audit(caplog, normalized=False)
+
+
+@pytest.mark.parametrize(
+    "collision_kind",
+    ["alias", "canonical"],
+    ids=["alias-owner", "canonical-name"],
+)
+def test_declared_name_collision_references_both_identities(
+    wizard_database: str,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    collision_kind: str,
+) -> None:
+    """An unknowable declared-name collision stays dual-referenced and loud."""
+
+    payloads: Dict[type[BaseModel], Deque[dict[str, Any]]] = {
+        StorytellerResponseBootstrap: deque([BOOTSTRAP_PAYLOAD.copy()]),
+        SkaldTurnWire: deque([_declared_payload(listed_present=False)]),
+    }
+    audit_observations = _install_route_boundaries(
+        monkeypatch,
+        dbname=wizard_database,
+        payloads=payloads,
+    )
+    settings = _route_settings()
+    opening_chunk_id = _accept_opening(wizard_database, settings)
+
+    if collision_kind == "alias":
+        conflict_name = KNOWN_CHARACTER
+        conflict_id = _insert_character_alias(
+            wizard_database,
+            character_name=conflict_name,
+            alias=DECLARED_CHARACTER,
+        )
+        conflict_field = "alias_of"
+    else:
+        conflict_name = CANONICAL_COLLISION_CHARACTER
+        conflict_id = _insert_roster_character(
+            wizard_database,
+            name=conflict_name,
+        )
+        conflict_field = "canonical"
+
+    audit_observations.clear()
+    caplog.clear()
+    with caplog.at_level(logging.WARNING):
+        session_id, staged_chunk_id = _stage_narrative(
+            wizard_database,
+            parent_chunk_id=opening_chunk_id,
+            settings=settings,
+        )
+        _assert_staged_declared_reference(
+            wizard_database,
+            session_id=session_id,
+            expected_reference=None,
+        )
+        _assert_staged_collision_owner_reference(
+            wizard_database,
+            session_id=session_id,
+            conflict_id=conflict_id,
+            conflict_name=conflict_name,
+        )
+        chunk_id = _accept_pending(session_id, staged_chunk_id)
+
+    assert chunk_id == 3
+    declared_id = _assert_collision_rows(
+        wizard_database,
+        chunk_id,
+        conflict_id=conflict_id,
+        conflict_name=conflict_name,
+    )
+    expected_warning = (
+        "presence declared mention collision: "
+        f"declared={quote_log_value(DECLARED_CHARACTER)} id={declared_id} "
+        f"conflicts {conflict_field}={quote_log_value(conflict_name)} "
+        f"id={conflict_id}"
+    )
+    _assert_audit_observation(audit_observations, chunk_id)
+    _assert_clean_collision_presence_audit(
+        caplog,
+        expected_warning=expected_warning,
+    )
 
 
 def test_ordinary_turn_control_still_normalizes_before_commit(

@@ -50,6 +50,7 @@ from nexus.api.summary_triggers import (
     schedule_summary_generation,
 )
 from nexus.api.lore_adapter import compute_raw_text, split_staged_orrery_payload
+from nexus.api.presence_reconciliation import reconcile_declared_character_mentions
 from nexus.memory.correspondence import (
     correspondence_settings,
     insert_digest_version,
@@ -522,9 +523,10 @@ def commit_incubator_to_database_sync(
             # hints and ordinary state writes; never derive either from parent time.
 
             # Step 6: Process declarations before name-reference resolution.
+            declarations = incubator.get("new_entities") or []
             maturation_result = enqueue_declared_entity_maturations(
                 conn,
-                declarations=incubator.get("new_entities") or [],
+                declarations=declarations,
                 chunk_id=chunk_id,
                 raw_text=raw_text,
                 slot=slot,
@@ -549,6 +551,25 @@ def commit_incubator_to_database_sync(
             character_refs = resolve_character_references_sync(
                 ref_entities.characters, conn
             )
+            declared_prose_parts = [raw_text]
+            if choice_object:
+                declared_prose_parts.extend(choice_object["presented"])
+            declared_mentions = reconcile_declared_character_mentions(
+                conn,
+                declared_prose_parts,
+                declarations=declarations,
+                accounted_character_ids={
+                    int(reference["character_id"]) for reference in character_refs
+                },
+            )
+            for mention in declared_mentions:
+                if mention.id is None:
+                    raise RuntimeError(
+                        "Declared-character reconciliation returned no character id"
+                    )
+                character_refs.append(
+                    {"character_id": mention.id, "reference": "mentioned"}
+                )
             place_refs = resolve_place_references_sync(ref_entities.places, conn)
             faction_refs = resolve_faction_references_sync(ref_entities.factions, conn)
             if incubator.get("entity_updates"):
