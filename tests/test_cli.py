@@ -70,6 +70,82 @@ def test_terminal_generation_statuses_include_api_and_incubator_values() -> None
     assert not _is_terminal_generation_status("error")
 
 
+@pytest.mark.parametrize(
+    ("command_args", "expected_error"),
+    (
+        pytest.param(
+            ("load", "--slot", "0"),
+            "Slot must be between 1 and 5",
+            id="load",
+        ),
+        pytest.param(
+            ("usage", "--day", "2099-12-31"),
+            None,
+            id="usage",
+        ),
+        pytest.param(
+            (
+                "record-revelation",
+                "--slot",
+                "4",
+                "--claim-id",
+                "1",
+                "--knower",
+                "16",
+                "--world-time",
+                "2189-10-17T18:26:00",
+            ),
+            (
+                "--world-time must be a timezone-aware ISO-8601 datetime, "
+                "got '2189-10-17T18:26:00'"
+            ),
+            id="record-revelation",
+        ),
+        pytest.param(
+            ("clear", "--slot", "0"),
+            "Slot must be between 1 and 5",
+            id="clear-mutation",
+        ),
+    ),
+)
+def test_global_output_flags_are_order_independent(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    command_args: tuple[str, ...],
+    expected_error: str | None,
+) -> None:
+    """Global and post-command output flags behave identically in the real CLI."""
+
+    observations: list[tuple[int, str, str]] = []
+    for post_command in (False, True):
+        argv = ["nexus"]
+        if not post_command:
+            argv.extend(("--json", "--truncate"))
+        argv.append(command_args[0])
+        if post_command:
+            argv.extend(("--json", "--truncate"))
+        argv.extend(command_args[1:])
+        monkeypatch.setattr(sys, "argv", argv)
+
+        exit_code = cli.main()
+        captured = capsys.readouterr()
+        observations.append((exit_code, captured.out, captured.err))
+
+        if expected_error is None:
+            assert exit_code == 0
+            assert captured.err == ""
+            payload = json.loads(captured.out)
+            assert payload["success"] is True
+            assert payload["usage"]["day"] == "2099-12-31"
+        else:
+            assert exit_code == 1
+            assert captured.out == ""
+            assert json.loads(captured.err) == {"error": expected_error}
+        assert "Traceback" not in captured.out + captured.err
+
+    assert observations[0] == observations[1]
+
+
 @pytest.mark.parametrize("day", ["02-30-2026", "2026-02-30", "2026-2-3"])
 @pytest.mark.parametrize("as_json", [False, True])
 def test_usage_invalid_day_exits_with_one_concise_error(
