@@ -6,7 +6,7 @@ import asyncio
 from dataclasses import dataclass
 import logging
 import os
-from typing import Any, Collection, List, Mapping, Optional, Sequence
+from typing import Any, Collection, List, Literal, Mapping, Optional, Sequence
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -35,6 +35,17 @@ class CharacterRosterRows:
 
     characters: List[Any]
     aliases: List[Any]
+
+
+@dataclass(frozen=True)
+class _DeclaredNameCollision:
+    """One canonical or alias owner conflicting with a declared name."""
+
+    declared_id: int
+    declared_name: str
+    conflict_id: int
+    conflict_name: str
+    conflict_kind: Literal["canonical", "alias_of"]
 
 
 def read_character_roster_from_connection(conn: Any) -> CharacterRosterRows:
@@ -271,6 +282,8 @@ def _reconcile_declared_character_mentions(
         declared_rows.append(matches[0])
 
     declared_ids = {int(character["id"]) for character in declared_rows}
+    collisions = _declared_name_collisions(declared_rows, roster_rows)
+    colliding_ids = set(collisions)
     accounted_ids = set(accounted_character_ids)
     accounted_references = [
         PresenceRef(
@@ -285,14 +298,108 @@ def _reconcile_declared_character_mentions(
         prose_parts,
         accounted_references=accounted_references,
         roster_rows=roster_rows,
-        candidate_character_ids=declared_ids,
+        candidate_character_ids=declared_ids - colliding_ids,
     )
     for canonical in reconciled:
         logger.warning(
             "presence declared mention normalized: %s",
             quote_log_value(canonical.name),
         )
+
+    for declared_row in declared_rows:
+        declared_id = int(declared_row["id"])
+        if declared_id not in colliding_ids:
+            continue
+        declared_roster = CharacterRosterRows(
+            characters=[declared_row],
+            aliases=[],
+        )
+        detected = _unaccounted_public_prose_mentions(
+            prose_parts,
+            accounted_references=[],
+            roster_rows=declared_roster,
+            candidate_character_ids={declared_id},
+        )
+        if not detected:
+            continue
+        for collision in collisions[declared_id]:
+            logger.warning(
+                "presence declared mention collision: declared=%s id=%s "
+                "conflicts %s=%s id=%s",
+                quote_log_value(collision.declared_name),
+                collision.declared_id,
+                collision.conflict_kind,
+                quote_log_value(collision.conflict_name),
+                collision.conflict_id,
+            )
+        reconciled.extend(
+            _unaccounted_public_prose_mentions(
+                prose_parts,
+                accounted_references=accounted_references,
+                roster_rows=declared_roster,
+                candidate_character_ids={declared_id},
+            )
+        )
     return reconciled
+
+
+def _declared_name_collisions(
+    declared_rows: Sequence[Any],
+    roster_rows: CharacterRosterRows,
+) -> dict[int, List[_DeclaredNameCollision]]:
+    """Return case-insensitive canonical/alias conflicts for declared names."""
+
+    characters_by_id = {
+        int(character["id"]): character for character in roster_rows.characters
+    }
+    result: dict[int, List[_DeclaredNameCollision]] = {}
+
+    for declared in declared_rows:
+        declared_id = int(declared["id"])
+        declared_name = str(declared["name"])
+        declared_key = declared_name.casefold()
+        conflicts_by_id: dict[int, _DeclaredNameCollision] = {}
+
+        for character_id, character in characters_by_id.items():
+            if character_id == declared_id:
+                continue
+            conflict_name = str(character["name"])
+            if conflict_name.casefold() != declared_key:
+                continue
+            conflicts_by_id[character_id] = _DeclaredNameCollision(
+                declared_id=declared_id,
+                declared_name=declared_name,
+                conflict_id=character_id,
+                conflict_name=conflict_name,
+                conflict_kind="canonical",
+            )
+
+        for alias in roster_rows.aliases:
+            character_id = int(alias["character_id"])
+            if (
+                character_id == declared_id
+                or character_id in conflicts_by_id
+                or str(alias["alias"]).casefold() != declared_key
+            ):
+                continue
+            character = characters_by_id.get(character_id)
+            if character is None:
+                continue
+            conflicts_by_id[character_id] = _DeclaredNameCollision(
+                declared_id=declared_id,
+                declared_name=declared_name,
+                conflict_id=character_id,
+                conflict_name=str(character["name"]),
+                conflict_kind="alias_of",
+            )
+
+        if conflicts_by_id:
+            result[declared_id] = [
+                conflicts_by_id[character_id]
+                for character_id in sorted(conflicts_by_id)
+            ]
+
+    return result
 
 
 def reconcile_declared_character_mentions(
