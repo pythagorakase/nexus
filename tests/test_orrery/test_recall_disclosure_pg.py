@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 import json
 import math
 import os
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Iterator, Mapping, cast
 from uuid import uuid4
@@ -30,7 +31,10 @@ from nexus.agents.memnon.utils.embedding_tables import (
 )
 from nexus.agents.orrery.audit import CognitionTraceInputError, cognition_trace
 from nexus.agents.orrery.events import commit_orrery_tick_sync
-from nexus.agents.orrery.knowledge_surfacing import build_knowledge_digest_sync
+from nexus.agents.orrery.knowledge_surfacing import (
+    _eligible_rows,
+    build_knowledge_digest_sync,
+)
 from nexus.agents.orrery.retrograde_markers import RETROGRADE_PROLOGUE_MARKER
 from nexus.agents.orrery.resolver import resolve_dry_run
 from nexus.agents.orrery.substrate import ALWAYS, Branch, DriveBand, Slot, Template
@@ -40,6 +44,11 @@ from scripts import new_story_setup
 
 
 pytestmark = pytest.mark.requires_postgres
+ROOT = Path(__file__).parents[2]
+MIGRATION = ROOT / "migrations" / "106_recall_trace.sql"
+RECALL_ELIGIBILITY_MIGRATION = (
+    ROOT / "migrations" / "112_character_experience_recall_eligibility.sql"
+)
 
 
 def _connect(dbname: str) -> Any:
@@ -54,11 +63,11 @@ def _connect(dbname: str) -> Any:
 
 @pytest.fixture(scope="module")
 def recall_database() -> Iterator[str]:
-    """Create and drop one dump-cloned recall database."""
+    """Initialize a disposable database and reapply recall migrations."""
 
-    dbname = f"qa_wt721_{uuid4().hex[:10]}"
+    dbname = f"qa_wt724_recall_{uuid4().hex[:12]}"
     source = os.environ.get("NEXUS_TEST_TEMPLATE_DB", "NEXUS_template")
-    assert source == "NEXUS_template" or source.startswith("qa_wt721_")
+    assert source == "NEXUS_template" or source.startswith(("qa_wt724_", "qa_wt721_"))
     admin: Any = None
     original_use_pool = new_story_setup.USE_POOL
     try:
@@ -69,6 +78,14 @@ def recall_database() -> Iterator[str]:
         admin.autocommit = True
         new_story_setup.USE_POOL = False
         new_story_setup.initialize_slot_database(dbname, source_db=source)
+        with _connect(dbname) as conn:
+            with conn.cursor() as cur:
+                migration_sql = MIGRATION.read_text()
+                cur.execute(migration_sql)
+                cur.execute(migration_sql)
+                recall_index_sql = RECALL_ELIGIBILITY_MIGRATION.read_text()
+                cur.execute(recall_index_sql)
+                cur.execute(recall_index_sql)
         yield dbname
     finally:
         new_story_setup.USE_POOL = original_use_pool
@@ -121,6 +138,7 @@ def _chunk(
     label: str,
     world_time: datetime,
     scene: int,
+    world_layer: str = "primary",
 ) -> int:
     chunk_id = int(
         session.execute(
@@ -139,10 +157,18 @@ def _chunk(
             """
             INSERT INTO chunk_metadata (
                 chunk_id, season, episode, scene, world_layer, world_time
-            ) VALUES (:chunk_id, 1, 1, :scene, 'primary', :world_time)
+            ) VALUES (
+                :chunk_id, 1, 1, :scene,
+                CAST(:world_layer AS world_layer_type), :world_time
+            )
             """
         ),
-        {"chunk_id": chunk_id, "scene": scene, "world_time": world_time},
+        {
+            "chunk_id": chunk_id,
+            "scene": scene,
+            "world_layer": world_layer,
+            "world_time": world_time,
+        },
     )
     session.execute(
         text(
@@ -340,6 +366,8 @@ def _experience(
     world_time: datetime,
     label: str,
     invalidated: bool = False,
+    rendered: bool = False,
+    world_layer: str = "primary",
 ) -> int:
     event_type = f"qa678_experience_{uuid4().hex[:8]}"
     session.execute(
@@ -359,8 +387,8 @@ def _experience(
                     event_type, tick_chunk_id, actor_entity_id, world_layer,
                     source, changed_fields, payload
                 ) VALUES (
-                    :event_type, :chunk_id, :owner_id, 'primary', 'authored',
-                    '{}', '{}'
+                    :event_type, :chunk_id, :owner_id,
+                    CAST(:world_layer AS world_layer_type), 'authored', '{}', '{}'
                 ) RETURNING id
                 """
             ),
@@ -368,6 +396,7 @@ def _experience(
                 "event_type": event_type,
                 "chunk_id": chunk_id,
                 "owner_id": owner_entity_id,
+                "world_layer": world_layer,
             },
         ).scalar_one()
     )
@@ -378,11 +407,15 @@ def _experience(
                 INSERT INTO character_experiences (
                     character_entity_id, anchor_chunk_id, world_event_ids,
                     basis, world_time, seed_summary, salience, source_digest,
-                    world_layer, invalidation_status, invalidated_at
+                    experience_text, render_model, renderer_version,
+                    render_generation_id, world_layer, invalidation_status,
+                    invalidated_at
                 ) VALUES (
                     :owner_id, :chunk_id, ARRAY[:event_id]::bigint[],
                     'participant', :world_time, :summary, 0.8, :digest,
-                    'primary',
+                    :experience_text, :render_model, :renderer_version,
+                    :render_generation_id,
+                    CAST(:world_layer AS world_layer_type),
                     CAST(:status AS character_experience_invalidation_status),
                     :invalidated_at
                 ) RETURNING id
@@ -395,6 +428,13 @@ def _experience(
                 "world_time": world_time,
                 "summary": f"Experience fixture {label}",
                 "digest": uuid4().hex,
+                "experience_text": (
+                    f"Rendered experience fixture {label}" if rendered else None
+                ),
+                "render_model": "TEST" if rendered else None,
+                "renderer_version": "test-v1" if rendered else None,
+                "render_generation_id": uuid4() if rendered else None,
+                "world_layer": world_layer,
                 "status": "invalidated" if invalidated else "valid",
                 "invalidated_at": datetime.now(timezone.utc) if invalidated else None,
             },
@@ -411,6 +451,7 @@ def _digest(
     max_entries: int = 12,
     recall: dict[str, Any] | None = None,
     query_embeddings: dict[str, list[float]] | None = None,
+    include_player_character: bool = True,
 ) -> list[dict[str, Any]]:
     return build_knowledge_digest_sync(
         session,
@@ -421,12 +462,48 @@ def _digest(
             "max_entries": max_entries,
             "recent_reveal_window_chunks": 3,
         },
-        include_player_character=True,
+        include_player_character=include_player_character,
         recall_settings=recall or {},
         disclosure_settings={},
         turn_id=turn_id,
         query_embeddings=query_embeddings,
     )
+
+
+class _ExplainEligibilityCursor:
+    """Explain the production eligibility statement without returning candidates."""
+
+    description: list[Any] = []
+
+    def __init__(self, cursor: Any) -> None:
+        self._cursor = cursor
+        self.plan: dict[str, Any] | None = None
+
+    def execute(self, statement: str, parameters: Mapping[str, Any]) -> None:
+        """Run a JSON EXPLAIN for the exact statement supplied by production."""
+
+        self._cursor.execute(
+            "EXPLAIN (FORMAT JSON) " + statement,
+            dict(parameters),
+        )
+        row = self._cursor.fetchone()
+        if row is None:
+            raise RuntimeError("Eligibility EXPLAIN returned no plan")
+        self.plan = dict(row[0][0])
+
+    def fetchall(self) -> list[Any]:
+        """Return no candidates because this cursor exposes only a plan."""
+
+        return []
+
+
+def _plan_index_names(node: Mapping[str, Any]) -> set[str]:
+    """Return every index name in a PostgreSQL JSON plan tree."""
+
+    names = {str(node["Index Name"])} if node.get("Index Name") else set()
+    for child in node.get("Plans", []):
+        names.update(_plan_index_names(child))
+    return names
 
 
 @contextmanager
@@ -1409,6 +1486,221 @@ def test_ownership_and_anchor_validity_are_hard_boundaries(session: Session) -> 
             turn_id="ownership-boundary-cursor",
         )
     assert cursor_digest == digest
+
+
+def test_experience_recall_index_preserves_all_eligibility_boundaries(
+    session: Session,
+) -> None:
+    """Recall keeps both render states while enforcing every indexed boundary."""
+
+    base = datetime(2078, 1, 2, tzinfo=timezone.utc)
+    source = _chunk(session, label="index source", world_time=base, scene=1)
+    wrong_layer_source = _chunk(
+        session,
+        label="index flashback source",
+        world_time=base,
+        scene=4,
+        world_layer="flashback",
+    )
+    anchor = _chunk(
+        session,
+        label="index anchor",
+        world_time=base + timedelta(hours=2),
+        scene=2,
+    )
+    future = _chunk(
+        session,
+        label="index future source",
+        world_time=base + timedelta(hours=4),
+        scene=3,
+    )
+    session.execute(
+        text(
+            "UPDATE chunk_metadata SET world_time = :world_time "
+            "WHERE chunk_id = :chunk_id"
+        ),
+        {"chunk_id": anchor, "world_time": base + timedelta(hours=2)},
+    )
+    player = _character(session, "index-player")
+    owner = _character(session, "index-owner")
+    _present(session, chunk_id=anchor, characters=[player, owner])
+    session.execute(
+        text(
+            "UPDATE global_variables SET user_character = :character_id "
+            "WHERE id = true"
+        ),
+        {"character_id": player[1]},
+    )
+
+    unrendered_id = _experience(
+        session,
+        owner_entity_id=owner[0],
+        chunk_id=source,
+        world_time=base,
+        label="eligible unrendered",
+    )
+    rendered_id = _experience(
+        session,
+        owner_entity_id=owner[0],
+        chunk_id=source,
+        world_time=base,
+        label="eligible rendered",
+        rendered=True,
+    )
+    player_id = _experience(
+        session,
+        owner_entity_id=player[0],
+        chunk_id=source,
+        world_time=base,
+        label="excluded player",
+    )
+    future_id = _experience(
+        session,
+        owner_entity_id=owner[0],
+        chunk_id=future,
+        world_time=base + timedelta(hours=4),
+        label="excluded future anchor",
+    )
+    wrong_layer_id = _experience(
+        session,
+        owner_entity_id=owner[0],
+        chunk_id=wrong_layer_source,
+        world_time=base,
+        label="excluded world layer",
+        world_layer="flashback",
+    )
+    invalidated_id = _experience(
+        session,
+        owner_entity_id=owner[0],
+        chunk_id=source,
+        world_time=base,
+        label="excluded invalidated",
+        invalidated=True,
+    )
+
+    digest = _digest(
+        session,
+        present=[player[0], owner[0]],
+        anchor=anchor,
+        turn_id="experience-index-boundaries",
+        include_player_character=False,
+    )
+    recalled_ids = {
+        int(entry["experience_id"])
+        for entry in digest
+        if entry.get("experience_id") is not None
+    }
+    assert recalled_ids == {unrendered_id, rendered_id}
+    assert {
+        player_id,
+        future_id,
+        wrong_layer_id,
+        invalidated_id,
+    }.isdisjoint(recalled_ids)
+
+
+def test_experience_recall_large_shape_uses_eligibility_index(
+    session: Session,
+) -> None:
+    """The natural 50k production eligibility plan uses migration 112's index."""
+
+    base = datetime(2078, 1, 3, tzinfo=timezone.utc)
+    source = _chunk(session, label="plan source", world_time=base, scene=1)
+    anchor = _chunk(
+        session,
+        label="plan anchor",
+        world_time=base + timedelta(hours=1),
+        scene=2,
+    )
+    raw_connection = session.connection().connection.driver_connection
+    assert raw_connection is not None
+    with raw_connection.cursor() as cursor:
+        cursor.execute(
+            "INSERT INTO entities (kind, is_active) "
+            "SELECT 'character', true "
+            "FROM generate_series(1, 1000) "
+            "RETURNING id"
+        )
+        owner_ids = [int(row[0]) for row in cursor.fetchall()]
+        cursor.execute(
+            "INSERT INTO characters (entity_id, name) "
+            "SELECT owner_id, 'q724_plan_' || ordinality "
+            "FROM unnest(%s::bigint[]) WITH ORDINALITY "
+            "AS owners(owner_id, ordinality)",
+            (owner_ids,),
+        )
+        cursor.execute(
+            "INSERT INTO event_types (type, category, severity, description) "
+            "VALUES ("
+            "'q724plan', 'social', 'moderate', "
+            "'Order 724 committed plan regression'"
+            ")"
+        )
+        cursor.execute(
+            """
+            WITH inserted_events AS (
+                INSERT INTO world_events (
+                    event_type, tick_chunk_id, actor_entity_id, world_layer,
+                    source, changed_fields, payload
+                )
+                SELECT 'q724plan', %s, owner_id, 'primary', 'authored',
+                       '{}'::text[], '{}'::jsonb
+                FROM unnest(%s::bigint[]) owner(owner_id)
+                CROSS JOIN generate_series(1, 50)
+                RETURNING id, actor_entity_id
+            )
+            INSERT INTO character_experiences (
+                character_entity_id, anchor_chunk_id, world_event_ids, basis,
+                seed_summary, experience_text, salience, render_model,
+                renderer_version, source_digest, render_generation_id,
+                world_layer, invalidation_status
+            )
+            SELECT actor_entity_id, %s, ARRAY[id], 'participant',
+                   'plan seed ' || id,
+                   CASE WHEN id %% 2 = 0 THEN 'plan rendered ' || id END,
+                   0.8,
+                   CASE WHEN id %% 2 = 0 THEN 'TEST' END,
+                   CASE WHEN id %% 2 = 0 THEN 'test-v1' END,
+                   md5(id::text),
+                   CASE WHEN id %% 2 = 0
+                        THEN '00000000-0000-0000-0000-000000000724'::uuid END,
+                   'primary', 'valid'
+            FROM inserted_events
+            """,
+            (source, owner_ids, source),
+        )
+        assert cursor.rowcount == 50_000
+        cursor.execute(
+            """
+            SELECT count(*), count(DISTINCT character_entity_id),
+                   count(*) FILTER (WHERE experience_text IS NULL),
+                   count(*) FILTER (WHERE experience_text IS NOT NULL)
+            FROM character_experiences
+            """
+        )
+        assert cursor.fetchone() == (50_000, 1_000, 25_000, 25_000)
+        for table_name in (
+            "character_experiences",
+            "world_events",
+            "characters",
+            "entities",
+        ):
+            cursor.execute(sql.SQL("ANALYZE {}").format(sql.Identifier(table_name)))
+
+        explaining_cursor = _ExplainEligibilityCursor(cursor)
+        eligible = _eligible_rows(
+            explaining_cursor,
+            present_entity_ids=owner_ids[:10],
+            anchor_chunk_id=anchor,
+            recent_reveal_window_chunks=3,
+            excluded_experience_owner_entity_id=None,
+        )
+
+    assert eligible == []
+    assert explaining_cursor.plan is not None
+    assert "ix_character_experiences_recall_eligibility" in _plan_index_names(
+        explaining_cursor.plan["Plan"]
+    )
 
 
 def test_critical_current_scene_account_bypasses_ranking(session: Session) -> None:

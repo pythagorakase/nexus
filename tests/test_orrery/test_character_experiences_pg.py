@@ -57,6 +57,7 @@ from nexus.api.commit_handler_sync import commit_incubator_to_database_sync
 from nexus.api.lore_adapter import response_to_incubator
 from nexus.config import load_settings_as_dict
 from nexus.memory.manager import empty_pass2_baseline
+from scripts import new_story_setup
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -83,26 +84,35 @@ def _connect(dbname: str) -> Any:
 @contextmanager
 def _disposable_database(*, apply_formation_migration: bool = True) -> Iterator[str]:
     """Yield one migrated template clone and drop it even after failure."""
-    dbname = f"qa677_{uuid4().hex[:12]}"
+    dbname = f"qa_wt724_experience_{uuid4().hex[:12]}"
     source = os.environ.get("NEXUS_TEST_TEMPLATE_DB", "NEXUS_template")
-    assert source == "NEXUS_template" or source.startswith("qa677_")
+    assert source == "NEXUS_template" or source.startswith("qa_wt724_")
     admin: Any = None
+    original_use_pool = new_story_setup.USE_POOL
     try:
         try:
             admin = _connect("postgres")
         except psycopg2.Error as exc:
             pytest.skip(f"PostgreSQL admin connection unavailable: {exc}")
         admin.autocommit = True
-        with admin.cursor() as cur:
-            cur.execute(
-                sql.SQL("CREATE DATABASE {} TEMPLATE {}").format(
-                    sql.Identifier(dbname), sql.Identifier(source)
-                )
-            )
+        new_story_setup.USE_POOL = False
+        new_story_setup.initialize_slot_database(dbname, source_db=source)
         conn = _connect(dbname)
         try:
             with conn:
                 with conn.cursor() as cur:
+                    if not apply_formation_migration:
+                        cur.execute(
+                            "DROP INDEX IF EXISTS "
+                            "ix_world_events_unformed_experiences"
+                        )
+                        cur.execute(
+                            """
+                            ALTER TABLE world_events
+                            DROP COLUMN IF EXISTS experiences_quarantined_at,
+                            DROP COLUMN IF EXISTS experiences_formed_at
+                            """
+                        )
                     cur.execute(EXPERIENCE_MIGRATION_SQL)
                     if apply_formation_migration:
                         cur.execute(FORMATION_MIGRATION_SQL)
@@ -126,6 +136,7 @@ def _disposable_database(*, apply_formation_migration: bool = True) -> Iterator[
             conn.close()
         yield dbname
     finally:
+        new_story_setup.USE_POOL = original_use_pool
         if admin is not None:
             with admin.cursor() as cur:
                 cur.execute(
