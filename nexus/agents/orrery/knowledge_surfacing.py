@@ -883,9 +883,27 @@ def _write_trace(
     candidates: Sequence[_Candidate],
     decisions: Mapping[tuple[str, int], tuple[str, str]],
     trace_rows_per_character: int,
+    trace_batch_size: int,
 ) -> None:
-    for candidate in candidates:
-        decision, reason = decisions[(candidate.kind, candidate.candidate_id)]
+    for offset in range(0, len(candidates), trace_batch_size):
+        rows: list[dict[str, Any]] = []
+        for candidate in candidates[offset : offset + trace_batch_size]:
+            decision, reason = decisions[(candidate.kind, candidate.candidate_id)]
+            rows.append(
+                {
+                    "turn_id": turn_id,
+                    "anchor_chunk_id": anchor_chunk_id,
+                    "character_entity_id": candidate.character_entity_id,
+                    "candidate_kind": candidate.kind,
+                    "candidate_id": candidate.candidate_id,
+                    "claim_id": candidate.claim_id,
+                    "decision": decision,
+                    "reason": reason,
+                    "mandatory": candidate.mandatory,
+                    "score": candidate.score,
+                    "score_components": candidate.score_components,
+                }
+            )
         _execute(
             session_or_cur,
             """
@@ -893,10 +911,31 @@ def _write_trace(
                 turn_id, anchor_chunk_id, character_entity_id,
                 candidate_kind, candidate_id, claim_id, decision, reason,
                 mandatory, score, score_components
-            ) VALUES (
-                :turn_id, :anchor_chunk_id, :character_entity_id,
-                :candidate_kind, :candidate_id, :claim_id, :decision, :reason,
-                :mandatory, :score, CAST(:score_components AS jsonb)
+            )
+            SELECT
+                trace_row.turn_id,
+                trace_row.anchor_chunk_id,
+                trace_row.character_entity_id,
+                trace_row.candidate_kind,
+                trace_row.candidate_id,
+                trace_row.claim_id,
+                trace_row.decision,
+                trace_row.reason,
+                trace_row.mandatory,
+                trace_row.score,
+                trace_row.score_components
+            FROM jsonb_to_recordset(CAST(:rows AS jsonb)) AS trace_row (
+                turn_id text,
+                anchor_chunk_id bigint,
+                character_entity_id bigint,
+                candidate_kind text,
+                candidate_id bigint,
+                claim_id bigint,
+                decision text,
+                reason text,
+                mandatory boolean,
+                score double precision,
+                score_components jsonb
             )
             ON CONFLICT (
                 turn_id, character_entity_id, candidate_kind, candidate_id
@@ -910,21 +949,7 @@ def _write_trace(
                 score_components = EXCLUDED.score_components,
                 created_at = now()
             """,
-            {
-                "turn_id": turn_id,
-                "anchor_chunk_id": anchor_chunk_id,
-                "character_entity_id": candidate.character_entity_id,
-                "candidate_kind": candidate.kind,
-                "candidate_id": candidate.candidate_id,
-                "claim_id": candidate.claim_id,
-                "decision": decision,
-                "reason": reason,
-                "mandatory": candidate.mandatory,
-                "score": candidate.score,
-                "score_components": json.dumps(
-                    candidate.score_components, sort_keys=True
-                ),
-            },
+            {"rows": json.dumps(rows, sort_keys=True)},
         )
     character_ids = sorted({item.character_entity_id for item in candidates})
     if character_ids:
@@ -1048,6 +1073,7 @@ def build_knowledge_digest_sync(
         candidates=candidates,
         decisions=decisions,
         trace_rows_per_character=recall.trace_rows_per_character,
+        trace_batch_size=recall.trace_batch_size,
     )
 
     truncated = bool(excluded)

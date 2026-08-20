@@ -1895,6 +1895,7 @@ class OrreryRecallSettings(BaseModel):
     per_character_max_entries: int = Field(default=4, ge=1)
     mandatory_reserved_entries: int = Field(default=2, ge=0)
     trace_rows_per_character: int = Field(default=500, ge=1)
+    trace_batch_size: int = Field(default=500, ge=1)
     severity_scores: Dict[str, float] = Field(
         default_factory=lambda: {
             "minor": 0.25,
