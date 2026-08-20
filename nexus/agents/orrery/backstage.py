@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from nexus.agents.orrery.drift import derived_rung
 from nexus.agents.orrery.history import adjudication_history
+from nexus.agents.orrery.reconstruction import playable_narrative_predicate
 from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
 from nexus.memory.correspondence import read_accepted_correspondence
 
@@ -41,6 +42,7 @@ class BackstageExchange(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     chunk_id: int
+    turn_label: str
     letters: list[BackstageLetter]
 
 
@@ -53,6 +55,7 @@ class BackstageHeldThread(BaseModel):
     actor_name: Optional[str] = None
     streak_length: int
     start_tick: int
+    start_turn_label: str
 
 
 class BackstageCorrespondence(BaseModel):
@@ -62,6 +65,7 @@ class BackstageCorrespondence(BaseModel):
 
     digest: Optional[str] = None
     compacted_through_chunk_id: Optional[int] = None
+    digest_fresh: bool = False
     exchanges: list[BackstageExchange] = Field(default_factory=list)
     held_threads: list[BackstageHeldThread] = Field(default_factory=list)
 
@@ -162,6 +166,14 @@ class BackstageTurnResponse(BaseModel):
     orrery: BackstageOrrery
 
 
+class BackstageHealthResponse(BaseModel):
+    """Gate-discovery response served only when Backstage is registered."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ok: Literal[True] = True
+
+
 def _entity_label_sql(alias: str) -> str:
     return f"""
         COALESCE(
@@ -177,16 +189,20 @@ def _committed_chunks(
     session: Session, chunk_id: Optional[int]
 ) -> list[dict[str, Any]]:
     requested_clause = "AND nc.id = :chunk_id" if chunk_id is not None else ""
+    playable = playable_narrative_predicate("nc")
+    ordinal_playable = playable_narrative_predicate("ordinal")
     row = (
         session.execute(
             text(
                 f"""
                 SELECT nc.id, cm.slug, cm.world_time,
                        (SELECT count(*) FROM narrative_chunks ordinal
-                        WHERE ordinal.id <= nc.id) AS turn_number
+                        WHERE ordinal.id <= nc.id
+                          AND {ordinal_playable}) AS turn_number
                 FROM narrative_chunks nc
                 LEFT JOIN chunk_metadata cm ON cm.chunk_id = nc.id
                 WHERE nc.id <= COALESCE(:chunk_id, nc.id)
+                  AND {playable}
                 {requested_clause}
                 ORDER BY nc.id DESC
                 LIMIT 1
@@ -210,13 +226,15 @@ def _committed_chunks(
     rows = [dict(row)]
     prior = session.execute(
         text(
-            """
+            f"""
             SELECT nc.id, cm.slug, cm.world_time,
                    (SELECT count(*) FROM narrative_chunks ordinal
-                    WHERE ordinal.id <= nc.id) AS turn_number
+                    WHERE ordinal.id <= nc.id
+                      AND {ordinal_playable}) AS turn_number
             FROM narrative_chunks nc
             LEFT JOIN chunk_metadata cm ON cm.chunk_id = nc.id
             WHERE nc.id < :chunk_id
+              AND {playable}
             ORDER BY nc.id DESC
             LIMIT 2
             """
@@ -227,28 +245,62 @@ def _committed_chunks(
     return rows
 
 
+def _turn_labels(session: Session, chunk_ids: list[int]) -> dict[int, str]:
+    """Map persisted chunk IDs to canonical playable-rank labels."""
+
+    if not chunk_ids:
+        return {}
+    playable = playable_narrative_predicate("nc")
+    ordinal_playable = playable_narrative_predicate("ordinal")
+    rows = session.execute(
+        text(
+            f"""
+            SELECT nc.id,
+                   (SELECT count(*) FROM narrative_chunks ordinal
+                    WHERE ordinal.id <= nc.id
+                      AND {ordinal_playable}) AS turn_number
+            FROM narrative_chunks nc
+            WHERE nc.id = ANY(:chunk_ids)
+              AND {playable}
+            """
+        ),
+        {"chunk_ids": chunk_ids},
+    ).mappings()
+    return {int(row["id"]): f"t.{int(row['turn_number'])}" for row in rows}
+
+
 def _correspondence(session: Session, *, chunk_id: int) -> BackstageCorrespondence:
     connection = session.connection().connection
     driver_connection = getattr(connection, "driver_connection", connection)
     with driver_connection.cursor(cursor_factory=RealDictCursor) as cur:
         context = read_accepted_correspondence(cur, through_chunk_id=chunk_id)
     history = adjudication_history(session, through_tick=chunk_id)
+    exchange_ids = [exchange.chunk_id for exchange in context.exchanges[-3:]]
+    open_streaks = [
+        streak for streak in history["defer_streaks"] if streak["outcome"] == "open"
+    ]
+    labels = _turn_labels(
+        session,
+        exchange_ids + [int(streak["start_tick"]) for streak in open_streaks],
+    )
     held_threads = [
         BackstageHeldThread(
             template_id=str(streak["template_id"]),
             actor_name=streak.get("actor_name"),
             streak_length=int(streak["length"]),
             start_tick=int(streak["start_tick"]),
+            start_turn_label=labels[int(streak["start_tick"])],
         )
-        for streak in history["defer_streaks"]
-        if streak["outcome"] == "open"
+        for streak in open_streaks
     ]
     return BackstageCorrespondence(
         digest=context.digest,
         compacted_through_chunk_id=context.compacted_through_chunk_id,
+        digest_fresh=context.digest_accepting_chunk_id == chunk_id,
         exchanges=[
             BackstageExchange(
                 chunk_id=exchange.chunk_id,
+                turn_label=labels[exchange.chunk_id],
                 letters=[
                     BackstageLetter(seat=seat, body=body)
                     for seat, body in exchange.letters
@@ -300,22 +352,22 @@ def _relationship_writes(session: Session, chunk_id: int) -> list[BackstageWrite
         text(
             """
             SELECT version.old_row,
-                   COALESCE(
-                       (SELECT (later.old_row ->> 'valence_current')::numeric
-                        FROM relationship_versions later
-                        WHERE later.relationship_table = 'character_relationships'
-                          AND later.id > version.id
-                          AND later.old_row ->> 'character1_id' =
-                              version.old_row ->> 'character1_id'
-                          AND later.old_row ->> 'character2_id' =
-                              version.old_row ->> 'character2_id'
-                        ORDER BY later.id
-                        LIMIT 1),
-                       current.valence_current
-                   ) AS new_valence,
+                   COALESCE(successor.old_row, to_jsonb(current)) AS new_row,
                    first_character.name AS first_name,
                    second_character.name AS second_name
             FROM relationship_versions version
+            LEFT JOIN LATERAL (
+                SELECT later.old_row
+                FROM relationship_versions later
+                WHERE later.relationship_table = 'character_relationships'
+                  AND later.id > version.id
+                  AND later.old_row ->> 'character1_id' =
+                      version.old_row ->> 'character1_id'
+                  AND later.old_row ->> 'character2_id' =
+                      version.old_row ->> 'character2_id'
+                ORDER BY later.id
+                LIMIT 1
+            ) successor ON TRUE
             LEFT JOIN character_relationships current
               ON current.character1_id =
                     (version.old_row ->> 'character1_id')::bigint
@@ -338,21 +390,38 @@ def _relationship_writes(session: Session, chunk_id: int) -> list[BackstageWrite
     ).mappings()
     result: list[BackstageWrite] = []
     for row in rows:
-        old_valence = Decimal(str(row["old_row"]["valence_current"]))
-        new_value = row["new_valence"]
-        if new_value is None:
-            raise RuntimeError("Attributed relationship update has no successor value")
-        new_valence = Decimal(str(new_value))
-        result.append(
-            BackstageWrite(
-                kind="relation",
-                label=f"{row['first_name']} → {row['second_name']}",
-                field="valence",
-                old_value=float(old_valence),
-                new_value=float(new_valence),
-                held=derived_rung(old_valence) == derived_rung(new_valence),
+        old_row = row["old_row"]
+        new_row = row["new_row"]
+        if new_row is None:
+            raise RuntimeError("Attributed relationship update has no successor row")
+        label = f"{row['first_name']} → {row['second_name']}"
+        for field, storage_field in (
+            ("valence", "valence_current"),
+            ("relationship_type", "relationship_type"),
+            ("dynamic", "dynamic"),
+            ("recent_events", "recent_events"),
+        ):
+            old_value = old_row.get(storage_field)
+            new_value = new_row.get(storage_field)
+            if old_value == new_value:
+                continue
+            held = False
+            if field == "valence":
+                old_valence = Decimal(str(old_value))
+                new_valence = Decimal(str(new_value))
+                old_value = float(old_valence)
+                new_value = float(new_valence)
+                held = derived_rung(old_valence) == derived_rung(new_valence)
+            result.append(
+                BackstageWrite(
+                    kind="relation",
+                    label=label,
+                    field=field,
+                    old_value=old_value,
+                    new_value=new_value,
+                    held=held,
+                )
             )
-        )
     return result
 
 

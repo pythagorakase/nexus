@@ -39,12 +39,16 @@ const STATUSES: SecretStatus[] = [
   },
 ];
 
-function renderPane(settings: SettingsPayload = SETTINGS) {
+function renderPane(
+  settings: SettingsPayload = SETTINGS,
+  gateOpen: boolean = false,
+) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
   queryClient.setQueryData([...SETTINGS_QUERY_KEY], settings);
   queryClient.setQueryData([...SECRETS_QUERY_KEY], STATUSES);
+  queryClient.setQueryData(["/api/dev/backstage/health"], gateOpen);
 
   render(
     <QueryClientProvider client={queryClient}>
@@ -73,10 +77,7 @@ describe("SettingsPane developer mode", () => {
   });
 
   it("persists the gate-visible developer lever locally", () => {
-    renderPane({
-      ...SETTINGS,
-      orrery: { dashboard: { enabled: true } },
-    });
+    renderPane(SETTINGS, true);
 
     const lever = screen.getByTestId("lever-dev-mode");
     expect(screen.getByText(/ADVANCED/)).toBeInTheDocument();

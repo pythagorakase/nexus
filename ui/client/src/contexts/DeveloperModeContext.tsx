@@ -1,5 +1,5 @@
 import { createContext, ReactNode, useContext, useEffect, useState } from "react";
-import { useSettingsQuery } from "@/hooks/useSettings";
+import { useQuery } from "@tanstack/react-query";
 
 interface DeveloperModeContextType {
   gateOpen: boolean;
@@ -15,11 +15,22 @@ const DeveloperModeContext = createContext<DeveloperModeContextType | undefined>
 const STORAGE_KEY = "nexus-developer-mode";
 
 export function DeveloperModeProvider({ children }: { children: ReactNode }) {
-  const { data: settings } = useSettingsQuery();
   const [developerMode, setDeveloperModeState] = useState(
     () => localStorage.getItem(STORAGE_KEY) === "true",
   );
-  const gateOpen = settings?.orrery?.dashboard?.enabled === true;
+  const { data: gateOpen = false } = useQuery<boolean>({
+    queryKey: ["/api/dev/backstage/health"],
+    queryFn: async () => {
+      try {
+        const response = await fetch("/api/dev/backstage/health");
+        return response.status === 200;
+      } catch {
+        return false;
+      }
+    },
+    retry: false,
+    staleTime: Infinity,
+  });
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, String(developerMode));

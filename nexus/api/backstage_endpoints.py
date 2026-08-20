@@ -10,6 +10,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from nexus.agents.orrery.backstage import (
+    BackstageHealthResponse,
     BackstagePayloadError,
     BackstageTurnResponse,
     build_backstage_turn,
@@ -18,6 +19,13 @@ from nexus.api.slot_utils import get_slot_db_url
 
 
 router = APIRouter(prefix="/api/dev/backstage", tags=["backstage-dev"])
+
+
+@router.get("/health", response_model=BackstageHealthResponse)
+async def get_backstage_health() -> BackstageHealthResponse:
+    """Confirm that the server-side Backstage gate registered this router."""
+
+    return BackstageHealthResponse()
 
 
 @contextmanager

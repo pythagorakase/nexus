@@ -51,7 +51,6 @@ export interface LocalModelsUiKnobs {
 
 /** Mirrors `[orrery.dashboard]` (OrreryDashboardSettings). */
 export interface OrreryDashboardKnobs {
-  enabled?: boolean;
   backstage_poll_busy_ms?: number;
   backstage_poll_idle_ms?: number;
 }

@@ -147,6 +147,7 @@ class CorrespondenceContext:
     digest: Optional[str]
     compacted_through_chunk_id: Optional[int]
     exchanges: tuple[CorrespondenceExchange, ...]
+    digest_accepting_chunk_id: Optional[int] = None
 
     def render(self, *, max_tokens: int) -> str:
         """Render the complete private block, failing rather than truncating."""
@@ -296,6 +297,9 @@ def read_accepted_correspondence(
         digest=str(digest_row["digest"]) if digest_row else None,
         compacted_through_chunk_id=compacted_through,
         exchanges=exchanges,
+        digest_accepting_chunk_id=(
+            int(digest_row["accepting_chunk_id"]) if digest_row else None
+        ),
     )
 
 

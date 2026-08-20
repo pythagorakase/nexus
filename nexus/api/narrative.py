@@ -169,6 +169,11 @@ def _include_backstage_router(target_app: FastAPI, settings: Any = None) -> None
 
     orrery_settings = settings.orrery
     if orrery_settings is not None and orrery_settings.dashboard.enabled:
+        if any(
+            str(getattr(route, "path", "")).startswith("/api/dev/backstage")
+            for route in target_app.routes
+        ):
+            return
         from nexus.api.backstage_endpoints import router as backstage_router
 
         target_app.include_router(backstage_router)

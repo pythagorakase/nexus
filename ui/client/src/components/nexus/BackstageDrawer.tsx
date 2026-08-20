@@ -128,7 +128,7 @@ export function BackstageDrawer({
           <>
             <SectionHeader
               label="CORRESPONDENCE"
-              summary={`${data.correspondence.exchanges.length} exchanges · ${data.correspondence.digest ? "digest refreshed" : "no digest"} · ${data.correspondence.held_threads.length} held threads`}
+              summary={`${data.correspondence.exchanges.length} exchanges${data.correspondence.digest_fresh ? " · digest refreshed" : ""} · ${data.correspondence.held_threads.length} held threads`}
               open={correspondenceOpen}
               onToggle={() => setCorrespondenceOpen((open) => !open)}
             />
@@ -155,7 +155,7 @@ export function BackstageDrawer({
                         className={`nexus-backstage-bubble ${gaia ? "gaia" : "skald"}`}
                       >
                         <div className="nexus-backstage-bubble-label">
-                          {label} · t.{exchange.chunk_id}
+                          {label} · {exchange.turn_label}
                         </div>
                         <div>{letter.body}</div>
                       </div>
@@ -168,10 +168,12 @@ export function BackstageDrawer({
                       <span
                         key={`${thread.template_id}-${thread.start_tick}`}
                         className="nexus-backstage-chip"
+                        data-testid="backstage-held-thread"
                       >
                         {thread.template_id}
                         {thread.actor_name ? ` · ${thread.actor_name}` : ""} · seeded
-                        t.{thread.start_tick} · {thread.streak_length} deferred · unfired
+                        {" "}
+                        {`${thread.start_turn_label} · ${thread.streak_length} deferred · unfired`}
                       </span>
                     ))}
                   </div>

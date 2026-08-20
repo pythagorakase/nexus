@@ -41,16 +41,18 @@ const PAYLOAD: BackstageTurnResponse = {
     slot: 4,
     chunk_id: 203,
     chunk_label: "S01E07_203",
-    turn_label: "t.203",
+    turn_label: "t.17",
     world_time: "2189-10-17T18:24:00-04:00",
     skald_status: "idle",
   },
   correspondence: {
     digest: "Victor is cultivating Celia as an informant.",
     compacted_through_chunk_id: 200,
+    digest_fresh: false,
     exchanges: [
       {
         chunk_id: 203,
+        turn_label: "t.17",
         letters: [
           { seat: "writer", body: "Keep the marker beneath the prose." },
           { seat: "gaia", body: "Acknowledged; state remains quiet." },
@@ -63,6 +65,7 @@ const PAYLOAD: BackstageTurnResponse = {
         actor_name: "Celia",
         streak_length: 2,
         start_tick: 196,
+        start_turn_label: "t.12",
       },
     ],
   },
@@ -154,52 +157,66 @@ function renderLayout(settings: SettingsPayload) {
 }
 
 describe("NexusLayout Backstage", () => {
+  let healthStatus: number;
+
   beforeEach(() => {
     localStorage.clear();
     localStorage.setItem("activeSlot", "4");
+    healthStatus = 404;
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue(
-        new Response(JSON.stringify(PAYLOAD), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
-      ),
+      vi.fn().mockImplementation((input: RequestInfo | URL) => {
+        if (String(input).endsWith("/api/dev/backstage/health")) {
+          return Promise.resolve(new Response(null, { status: healthStatus }));
+        }
+        return Promise.resolve(
+          new Response(JSON.stringify(PAYLOAD), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        );
+      }),
     );
   });
 
-  it("hides the sigil without effective developer mode", () => {
+  it("hides the sigil when the health probe reports the gate closed", async () => {
     localStorage.setItem("nexus-developer-mode", "true");
     renderLayout({
       ui: { theme: "veil" },
-      orrery: { dashboard: { enabled: false } },
     });
 
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith("/api/dev/backstage/health"),
+    );
     expect(screen.queryByTestId("rail-backstage")).not.toBeInTheDocument();
     expect(screen.queryByTestId("backstage-drawer")).not.toBeInTheDocument();
   });
 
   it("opens, renders, and closes through the sigil and guarded keyboard", async () => {
+    healthStatus = 200;
     localStorage.setItem("nexus-developer-mode", "true");
     renderLayout({
       ui: { theme: "veil" },
       orrery: {
         dashboard: {
-          enabled: true,
           backstage_poll_busy_ms: 2000,
           backstage_poll_idle_ms: 8000,
         },
       },
     });
 
-    fireEvent.click(screen.getByTestId("rail-backstage"));
+    fireEvent.click(await screen.findByTestId("rail-backstage"));
     expect(await screen.findByTestId("backstage-drawer")).toBeInTheDocument();
-    expect(screen.getByTestId("backstage-digest")).toHaveTextContent(
+    expect(await screen.findByTestId("backstage-digest")).toHaveTextContent(
       "Victor is cultivating Celia as an informant.",
     );
     expect(screen.getByText(/SKALD → GAIA/)).toBeInTheDocument();
     expect(screen.getByText(/GAIA → SKALD/)).toBeInTheDocument();
-    expect(screen.getByText(/seeded t\.196 · 2 deferred · unfired/)).toBeInTheDocument();
+    expect(screen.getByText(/SKALD → GAIA · t\.17/)).toBeInTheDocument();
+    expect(screen.getByTestId("backstage-held-thread")).toHaveTextContent(
+      /seeded\s+t\.12 · 2 deferred · unfired/,
+    );
+    expect(screen.queryByText(/digest refreshed/)).not.toBeInTheDocument();
     expect(screen.getByText("held")).toBeInTheDocument();
     expect(screen.getByLabelText("magnitude")).toBeInTheDocument();
     expect(screen.getByText(/1 fired · 1 pressures · 1 events/)).toBeInTheDocument();

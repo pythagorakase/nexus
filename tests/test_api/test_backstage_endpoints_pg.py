@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import uuid
 from pathlib import Path
@@ -13,21 +14,18 @@ from fastapi.testclient import TestClient
 from psycopg2 import sql
 import pytest
 
-from nexus.agents.orrery.tag_schemas import OrreryTagBestowal
-from nexus.agents.orrery.tag_writer import (
-    apply_pair_tag_bestowal,
-    apply_tag_bestowal,
-    clear_entity_tag,
+from nexus.agents.orrery.retrograde_persistence import (
+    _ensure_prologue_metadata,
+    _insert_prologue_chunk,
 )
-from nexus.api import backstage_endpoints, db_pool
-from nexus.api.commit_handler_sync import log_state_delta_sync
-from nexus.agents.orrery.reconstruction import set_commit_chunk_attribution_sync
+from nexus.agents.orrery.tag_writer import apply_pair_tag_bestowal
+from nexus.api import backstage_endpoints, commit_handler_sync, db_pool
 from nexus.memory.correspondence import (
     CorrespondenceCompactionPlan,
     insert_digest_version,
-    persist_staged_correspondence,
 )
 from nexus.config import load_settings
+from nexus.memory.manager import empty_pass2_baseline
 from scripts import new_story_setup
 
 
@@ -126,12 +124,20 @@ def backstage_case(disposable_db: str) -> dict[str, Any]:
     try:
         with conn:
             with conn.cursor() as cur:
+                prologue_id = _insert_prologue_chunk(cur)
+                assert prologue_id == 1
+                _ensure_prologue_metadata(cur, prologue_chunk_id=prologue_id)
+
                 chunk_ids: list[int] = []
-                for number in range(1, 4):
+                for number in range(1, 3):
                     cur.execute(
-                        "INSERT INTO narrative_chunks (raw_text) VALUES (%s) "
+                        "INSERT INTO narrative_chunks (raw_text, storyteller_text) "
+                        "VALUES (%s, %s) "
                         "RETURNING id",
-                        (f"Backstage committed turn {number}",),
+                        (
+                            f"Backstage committed turn {number}",
+                            f"Backstage committed turn {number}",
+                        ),
                     )
                     chunk_id = int(cur.fetchone()[0])
                     chunk_ids.append(chunk_id)
@@ -148,6 +154,14 @@ def backstage_case(disposable_db: str) -> dict[str, Any]:
                         (chunk_id, number, f"S01E01_{number:03d}"),
                     )
 
+                cur.execute("INSERT INTO entities (kind) VALUES ('place') RETURNING id")
+                place_entity = int(cur.fetchone()[0])
+                cur.execute(
+                    "INSERT INTO places (name, type, entity_id) "
+                    "VALUES ('Rootline', 'fixed_location', %s) RETURNING id",
+                    (place_entity,),
+                )
+                place_id = int(cur.fetchone()[0])
                 cur.execute(
                     "INSERT INTO entities (kind) VALUES "
                     "('character'), ('character') RETURNING id"
@@ -155,11 +169,11 @@ def backstage_case(disposable_db: str) -> dict[str, Any]:
                 first_entity, second_entity = [int(row[0]) for row in cur.fetchall()]
                 cur.execute(
                     """
-                    INSERT INTO characters (name, entity_id)
-                    VALUES ('Celia', %s), ('Victor', %s)
+                    INSERT INTO characters (name, entity_id, current_location)
+                    VALUES ('Celia', %s, %s), ('Victor', %s, %s)
                     RETURNING id
                     """,
-                    (first_entity, second_entity),
+                    (first_entity, place_id, second_entity, place_id),
                 )
                 first_character, second_character = [
                     int(row[0]) for row in cur.fetchall()
@@ -183,47 +197,93 @@ def backstage_case(disposable_db: str) -> dict[str, Any]:
                         first_character,
                     ),
                 )
-
-                latest = chunk_ids[-1]
-                set_commit_chunk_attribution_sync(cur, latest)
                 cur.execute(
                     """
-                    UPDATE character_relationships
-                    SET valence_current = 0.05
-                    WHERE character1_id = %s AND character2_id = %s
+                    INSERT INTO global_variables (id, user_character, base_timestamp)
+                    VALUES (TRUE, %s, '2189-10-17T18:00:00+00:00')
+                    ON CONFLICT (id) DO UPDATE SET
+                        user_character = EXCLUDED.user_character,
+                        base_timestamp = EXCLUDED.base_timestamp
                     """,
-                    (first_character, second_character),
+                    (first_character,),
                 )
+                session_id = str(uuid.uuid4())
+                parent_chunk_id = chunk_ids[-1]
                 cur.execute(
                     """
-                    UPDATE character_relationships
-                    SET valence_current = 0.20
-                    WHERE character1_id = %s AND character2_id = %s
+                    INSERT INTO incubator (
+                        id, chunk_id, parent_chunk_id, user_text,
+                        storyteller_text, metadata_updates, entity_updates,
+                        reference_updates, correspondence_writer_letter,
+                        correspondence_gaia_letter, session_id, llm_response_id,
+                        status, generation_model, lore_pass_baseline,
+                        orrery_adjudications, new_entities
+                    ) VALUES (
+                        TRUE, %s, %s, 'continue', 'Celia watches the Rootline.',
+                        %s::jsonb, %s::jsonb, %s::jsonb, %s, %s, %s,
+                        'backstage-response', 'provisional', 'TEST', %s::jsonb,
+                        '[]'::jsonb, '[]'::jsonb
+                    )
                     """,
-                    (second_character, first_character),
-                )
-                log_state_delta_sync(
-                    cur,
-                    source_chunk_id=latest,
-                    writer="skald_state_update",
-                    entity_id=first_entity,
-                    field="characters.current_activity",
-                    new_value="watching the Rootline",
+                    (
+                        parent_chunk_id + 1,
+                        parent_chunk_id,
+                        json.dumps(
+                            {
+                                "chronology": {
+                                    "episode_transition": "continue",
+                                    "time_delta_hours": 1,
+                                },
+                                "world_layer": "primary",
+                            }
+                        ),
+                        json.dumps(
+                            {
+                                "characters": [
+                                    {
+                                        "character_id": first_character,
+                                        "character_name": "Celia",
+                                        "current_activity": "watching the Rootline",
+                                        "orrery_tags": {
+                                            "applied_tags": ["grieving"],
+                                            "tags_to_clear": ["grieving"],
+                                        },
+                                    }
+                                ],
+                                "relationships": [
+                                    {
+                                        "character1_id": first_character,
+                                        "character1_name": "Celia",
+                                        "character2_id": second_character,
+                                        "character2_name": "Victor",
+                                        "relationship_type": "friend",
+                                        "emotional_valence": "+2|friendly",
+                                        "dynamic": "trust sharpened by shared danger",
+                                        "recent_events": "Victor kept watch",
+                                    }
+                                ],
+                                "locations": [],
+                                "factions": [],
+                            }
+                        ),
+                        json.dumps({"characters": [], "places": [], "factions": []}),
+                        "Keep Celia's suspicion beneath the prose.",
+                        "Acknowledged; the durable state remains quiet.",
+                        session_id,
+                        json.dumps(empty_pass2_baseline({}).model_dump(mode="json")),
+                    ),
                 )
 
-                apply_tag_bestowal(
-                    cur,
-                    entity_id=first_entity,
-                    entity_kind="character",
-                    bestowal=OrreryTagBestowal(applied_tags=["grieving"]),
-                    source_chunk_id=latest,
-                )
-                assert clear_entity_tag(
-                    cur,
-                    entity_id=first_entity,
-                    tag="grieving",
-                    source_chunk_id=latest,
-                )
+        latest = commit_handler_sync.commit_incubator_to_database_sync(
+            conn,
+            session_id,
+            slot=None,
+        )
+        chunk_ids.append(latest)
+        assert chunk_ids == [2, 3, 4]
+
+        with conn:
+            with conn.cursor() as cur:
                 assert apply_pair_tag_bestowal(
                     cur,
                     subject_entity_id=second_entity,
@@ -232,13 +292,6 @@ def backstage_case(disposable_db: str) -> dict[str, Any]:
                     object_kind="character",
                     tag="hunting",
                     source_chunk_id=latest,
-                )
-
-                persist_staged_correspondence(
-                    cur,
-                    chunk_id=latest,
-                    writer_letter="Keep Celia's suspicion beneath the prose.",
-                    gaia_letter="Acknowledged; the durable state remains quiet.",
                 )
                 plan = CorrespondenceCompactionPlan(
                     accepting_chunk_id=latest,
@@ -336,6 +389,7 @@ def backstage_case(disposable_db: str) -> dict[str, Any]:
     return {
         "chunks": chunk_ids,
         "latest": chunk_ids[-1],
+        "prologue": prologue_id,
         "provisional": provisional_id,
     }
 
@@ -377,6 +431,8 @@ def test_payload_assembles_every_committed_stream(
     assert payload["header"]["world_time"] is not None
     correspondence = payload["correspondence"]
     assert correspondence["digest"] == "Victor is cultivating Celia as an informant."
+    assert correspondence["digest_fresh"] is True
+    assert correspondence["exchanges"][0]["turn_label"] == "t.3"
     assert [letter["seat"] for letter in correspondence["exchanges"][0]["letters"]] == [
         "writer",
         "gaia",
@@ -387,14 +443,45 @@ def test_payload_assembles_every_committed_stream(
             "actor_name": "Celia",
             "streak_length": 1,
             "start_tick": backstage_case["latest"],
+            "start_turn_label": "t.3",
         }
     ]
 
     writes = payload["state_writes"]["rows"]
     relationship_writes = [
-        row for row in writes if row["kind"] == "relation" and row["field"] == "valence"
+        row
+        for row in writes
+        if row["kind"] == "relation"
+        and row["operation"] == "set"
+        and row["field"] == "valence"
     ]
     assert sorted(row["held"] for row in relationship_writes) == [False, True]
+    changed_relationship_fields = {
+        row["field"]
+        for row in writes
+        if row["kind"] == "relation" and row["operation"] == "set"
+    }
+    assert changed_relationship_fields == {
+        "valence",
+        "relationship_type",
+        "dynamic",
+        "recent_events",
+    }
+    relationship_rows = {
+        row["field"]: row
+        for row in writes
+        if row["kind"] == "relation"
+        and row["operation"] == "set"
+        and row["field"] != "valence"
+    }
+    assert relationship_rows["relationship_type"]["old_value"] == "acquaintance"
+    assert relationship_rows["relationship_type"]["new_value"] == "friend"
+    assert relationship_rows["dynamic"]["old_value"] == "quiet"
+    assert (
+        relationship_rows["dynamic"]["new_value"] == "trust sharpened by shared danger"
+    )
+    assert relationship_rows["recent_events"]["old_value"] == "none"
+    assert relationship_rows["recent_events"]["new_value"] == "Victor kept watch"
     assert any(row["field"] == "characters.current_activity" for row in writes)
     assert any(
         row["operation"] == "bestow" and row["field"] == "grieving" for row in writes
@@ -405,10 +492,27 @@ def test_payload_assembles_every_committed_stream(
     assert any(
         row["operation"] == "bestow" and row["field"] == "hunting" for row in writes
     )
-    assert len(payload["state_writes"]["history"]) == 2
+    assert payload["state_writes"]["history"] == [
+        {
+            "chunk_id": backstage_case["chunks"][1],
+            "turn_label": "t.2",
+            "writes": 0,
+            "fired": None,
+            "pressures": None,
+            "events": None,
+        },
+        {
+            "chunk_id": backstage_case["chunks"][0],
+            "turn_label": "t.1",
+            "writes": 0,
+            "fired": None,
+            "pressures": None,
+            "events": None,
+        },
+    ]
 
     orrery = payload["orrery"]
-    assert orrery["counts"] == {"fired": 1, "pressures": 1, "events": 1}
+    assert orrery["counts"] == {"fired": 1, "pressures": 1, "events": 2}
     assert orrery["rows"] == [
         {
             "template_id": "evade_pursuers",
@@ -421,7 +525,7 @@ def test_payload_assembles_every_committed_stream(
             "drive_band": "crisis_constraint",
         }
     ]
-    assert len(orrery["history"]) == 2
+    assert [entry["turn_label"] for entry in orrery["history"]] == ["t.2", "t.1"]
 
 
 def test_requested_chunk_is_historically_bounded(
@@ -435,7 +539,9 @@ def test_requested_chunk_is_historically_bounded(
     assert response.status_code == 200
     payload = response.json()
     assert payload["header"]["chunk_id"] == backstage_case["chunks"][1]
+    assert payload["header"]["turn_label"] == "t.2"
     assert payload["correspondence"]["digest"] is None
+    assert payload["correspondence"]["digest_fresh"] is False
     assert payload["correspondence"]["exchanges"] == []
 
 
@@ -449,6 +555,13 @@ def test_empty_and_provisional_chunks_are_404(
     )
     assert missing.status_code == 404
     assert "Committed chunk" in missing.json()["detail"]
+
+    retrograde = client.get(
+        "/api/dev/backstage/4/turn",
+        params={"chunk_id": backstage_case["prologue"]},
+    )
+    assert retrograde.status_code == 404
+    assert "Committed chunk" in retrograde.json()["detail"]
 
 
 def test_empty_slot_is_404(
@@ -485,31 +598,78 @@ def test_backstage_gate_both_arms(
 
     import nexus.api.narrative as narrative
 
-    del backstage_case
-
     document = tomlkit.parse(Path("nexus.toml").read_text())
     document["orrery"]["dashboard"]["enabled"] = False  # type: ignore[index]
     off_path = tmp_path / "backstage_off.toml"
     off_path.write_text(tomlkit.dumps(document))
-    app_off = FastAPI()
-    narrative._include_backstage_router(app_off, load_settings(str(off_path)))
-    off_response = TestClient(app_off).get("/api/dev/backstage/4/turn")
-    assert off_response.status_code == 404
-    assert "correspondence" not in off_response.text
+    original_routes = list(narrative.app.router.routes)
+    try:
+        narrative.app.router.routes[:] = [
+            route
+            for route in original_routes
+            if not str(getattr(route, "path", "")).startswith("/api/dev/backstage")
+        ]
+        narrative._include_backstage_router(
+            narrative.app,
+            load_settings(str(off_path)),
+        )
+        gateway = TestClient(narrative.app)
+        off_health = gateway.get("/api/dev/backstage/health")
+        assert off_health.status_code == 503
+        off_turn = gateway.get("/api/dev/backstage/4/turn")
+        assert off_turn.status_code == 503
+        assert "correspondence" not in off_turn.text
 
-    document["orrery"]["dashboard"]["enabled"] = True  # type: ignore[index]
-    on_path = tmp_path / "backstage_on.toml"
-    on_path.write_text(tomlkit.dumps(document))
-    monkeypatch.setattr(
-        backstage_endpoints,
-        "get_slot_db_url",
-        lambda *, slot: f"postgresql://pythagor@localhost:5432/{disposable_db}",
-    )
-    app_on = FastAPI()
-    narrative._include_backstage_router(app_on, load_settings(str(on_path)))
-    on_response = TestClient(app_on).get("/api/dev/backstage/4/turn")
-    assert on_response.status_code == 200
-    assert "correspondence" in on_response.json()
+        catch_all = [
+            route
+            for route in narrative.app.router.routes
+            if str(getattr(route, "path", "")) == "/{full_path:path}"
+        ]
+        assert len(catch_all) == 1
+        narrative.app.router.routes[:] = [
+            route for route in narrative.app.router.routes if route not in catch_all
+        ]
+
+        document["orrery"]["dashboard"]["enabled"] = True  # type: ignore[index]
+        on_path = tmp_path / "backstage_on.toml"
+        on_path.write_text(tomlkit.dumps(document))
+        monkeypatch.setattr(
+            backstage_endpoints,
+            "get_slot_db_url",
+            lambda *, slot: f"postgresql://pythagor@localhost:5432/{disposable_db}",
+        )
+        enabled_settings = load_settings(str(on_path))
+        narrative._include_backstage_router(narrative.app, enabled_settings)
+        narrative.app.router.routes.extend(catch_all)
+
+        on_health = gateway.get("/api/dev/backstage/health")
+        assert on_health.status_code == 200
+        assert on_health.json() == {"ok": True}
+        on_response = gateway.get("/api/dev/backstage/4/turn")
+        assert on_response.status_code == 200
+        assert "correspondence" in on_response.json()
+
+        route_count = len(
+            [
+                route
+                for route in narrative.app.routes
+                if str(getattr(route, "path", "")).startswith("/api/dev/backstage")
+            ]
+        )
+        assert route_count == 2
+        narrative._include_backstage_router(narrative.app, enabled_settings)
+        assert (
+            len(
+                [
+                    route
+                    for route in narrative.app.routes
+                    if str(getattr(route, "path", "")).startswith("/api/dev/backstage")
+                ]
+            )
+            == route_count
+        )
+    finally:
+        narrative.app.router.routes[:] = original_routes
 
 
 def test_incubator_view_never_exposes_staged_correspondence(

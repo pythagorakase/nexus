@@ -12,8 +12,10 @@ export interface BackstageTurnResponse {
   correspondence: {
     digest: string | null;
     compacted_through_chunk_id: number | null;
+    digest_fresh: boolean;
     exchanges: Array<{
       chunk_id: number;
+      turn_label: string;
       letters: Array<{
         seat: "writer" | "gaia" | "single_pass";
         body: string;
@@ -24,6 +26,7 @@ export interface BackstageTurnResponse {
       actor_name: string | null;
       streak_length: number;
       start_tick: number;
+      start_turn_label: string;
     }>;
   };
   state_writes: {
