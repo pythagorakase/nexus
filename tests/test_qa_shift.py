@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
+import hashlib
 import json
 from pathlib import Path
 import shlex
@@ -18,6 +19,7 @@ from scripts.qa_shift import qa_shift
 
 
 NOW = datetime(2026, 7, 30, 4, 30, tzinfo=timezone.utc)
+FIXTURES = Path(__file__).parent / "fixtures"
 
 
 def _event(
@@ -146,6 +148,16 @@ def _state(config: qa_shift.ShiftConfig) -> dict[str, object]:
         "max_command_delta": 0,
         "config": qa_shift._config_payload(config),
     }
+
+
+def _validation_evidence() -> qa_shift.ValidationEvidence:
+    return qa_shift.ValidationEvidence(
+        probe_command="poetry run nexus regenerate --slot 4 --note malformed",
+        rejection_status=422,
+        rejection_evidence="/archive/regenerate-note-422.json",
+        rejection_evidence_sha256="a" * 64,
+        rejection_evidence_excerpt='{"detail":[{"type":"string_too_long"}]}',
+    )
 
 
 def test_tracked_config_encodes_bounded_completion_policy() -> None:
@@ -364,7 +376,7 @@ def test_post_call_check_reports_exact_delta_and_route() -> None:
         state=_state(config),
         usage_payload=_usage(total=421, events=[event]),
         jobs_payload=_jobs(),
-        expect_call=True,
+        mode=qa_shift.CheckMode.POST_CALL,
         now=NOW + timedelta(minutes=1),
     )
 
@@ -398,7 +410,7 @@ def test_post_call_check_fails_closed_on_missing_or_wrong_route() -> None:
         state=_state(config),
         usage_payload=_usage(total=100),
         jobs_payload=_jobs(),
-        expect_call=True,
+        mode=qa_shift.CheckMode.POST_CALL,
         now=NOW + timedelta(minutes=1),
     )
     wrong, _ = qa_shift.evaluate_check(
@@ -408,7 +420,7 @@ def test_post_call_check_fails_closed_on_missing_or_wrong_route() -> None:
             events=[_event(model="gpt-5.6-sol")],
         ),
         jobs_payload=_jobs(),
-        expect_call=True,
+        mode=qa_shift.CheckMode.POST_CALL,
         now=NOW + timedelta(minutes=1),
     )
 
@@ -416,6 +428,318 @@ def test_post_call_check_fails_closed_on_missing_or_wrong_route() -> None:
     assert "expected_usage_event_missing" in missing["reasons"]
     assert wrong["status"] == "stop"
     assert "unexpected_qa_model_route" in wrong["reasons"]
+
+
+@pytest.mark.parametrize(
+    ("fixture_name", "probe_command"),
+    (
+        (
+            "qa_shift_regenerate_note_too_long_422.json",
+            "poetry run nexus regenerate --slot 4 --note <501-character-note>",
+        ),
+        (
+            "qa_shift_invalid_model_422.json",
+            "curl -X POST http://127.0.0.1:8012/api/narrative/continue "
+            '-d \'{"slot":4,"model":"gpt-malformed"}\'',
+        ),
+    ),
+)
+def test_validation_only_check_persists_rejection_evidence_and_continues(
+    tmp_path: Path,
+    fixture_name: str,
+    probe_command: str,
+) -> None:
+    config = replace(qa_shift.load_shift_config(), archive_root=tmp_path)
+    begin = qa_shift.begin_shift(
+        config=config,
+        usage_reader=lambda _root, _day: _usage(total=100),
+        jobs_reader=_settled_jobs_reader,
+        bleed_uptake_reader=_empty_bleed_uptake_reader,
+        now=NOW,
+    )
+    archive = Path(begin["archive"])
+    evidence = archive / fixture_name
+    evidence.write_bytes((FIXTURES / fixture_name).read_bytes())
+
+    result = qa_shift.check_shift(
+        archive=archive,
+        mode=qa_shift.CheckMode.VALIDATION_ONLY,
+        probe_command=probe_command,
+        rejection_status=422,
+        rejection_evidence=evidence,
+        usage_reader=lambda _root, _day: _usage(total=100),
+        jobs_reader=_settled_jobs_reader,
+        now=NOW + timedelta(minutes=1),
+    )
+
+    state = json.loads((archive / "shift_state.json").read_text())
+    checks = [
+        json.loads(line)
+        for line in (archive / "usage_checks.jsonl").read_text().splitlines()
+    ]
+    record = checks[-1]
+    evidence_bytes = evidence.read_bytes()
+    evidence_text = evidence_bytes.decode("utf-8")
+    assert result["status"] == "continue"
+    assert result["reasons"] == []
+    assert record["kind"] == "validation_only"
+    assert record["probe_command"] == probe_command
+    assert record["rejection_status"] == 422
+    assert record["rejection_evidence"] == str(evidence.resolve())
+    assert (
+        record["rejection_evidence_sha256"]
+        == hashlib.sha256(evidence_bytes).hexdigest()
+    )
+    assert record["rejection_evidence_excerpt"] == evidence_text[:500]
+    assert len(record["rejection_evidence_excerpt"]) <= 500
+    assert record["observed_token_delta"] == 0
+    assert record["observed_new_usage_events"] == 0
+    assert record["observed_qa_usage_events"] == 0
+    assert record["disposition"] == "continue"
+    assert state["last_total"] == 100
+    assert state["last_event_count"] == 0
+    assert state["checks"] == 1
+
+
+def test_validation_only_stops_on_zero_token_event_outside_qa_slot(
+    tmp_path: Path,
+) -> None:
+    config = replace(qa_shift.load_shift_config(), archive_root=tmp_path)
+    poisoned_begin = qa_shift.begin_shift(
+        config=config,
+        usage_reader=lambda _root, _day: _usage(total=100),
+        jobs_reader=_settled_jobs_reader,
+        bleed_uptake_reader=_empty_bleed_uptake_reader,
+        now=NOW,
+    )
+    poisoned_archive = Path(poisoned_begin["archive"])
+    poisoned_evidence = poisoned_archive / "regenerate-note-422.json"
+    poisoned_evidence.write_bytes(
+        (FIXTURES / "qa_shift_regenerate_note_too_long_422.json").read_bytes()
+    )
+    other_slot_event = {
+        **_event(slot=3, total=10),
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+    }
+
+    poisoned = qa_shift.check_shift(
+        archive=poisoned_archive,
+        mode=qa_shift.CheckMode.VALIDATION_ONLY,
+        probe_command="poetry run nexus regenerate --slot 4 --note malformed",
+        rejection_status=422,
+        rejection_evidence=poisoned_evidence,
+        usage_reader=lambda _root, _day: _usage(
+            total=100,
+            events=[other_slot_event],
+        ),
+        jobs_reader=_settled_jobs_reader,
+        now=NOW + timedelta(minutes=1),
+    )
+
+    poisoned_record = json.loads(
+        (poisoned_archive / "usage_checks.jsonl").read_text().splitlines()[-1]
+    )
+    assert poisoned["status"] == "stop"
+    assert "usage_present_for_validation_only" in poisoned["reasons"]
+    assert poisoned_record["observed_new_usage_events"] == 1
+    assert poisoned_record["observed_qa_usage_events"] == 0
+    assert poisoned_record["observed_token_delta"] == 0
+    assert poisoned_record["disposition"] == "stop"
+
+    quiet_begin = qa_shift.begin_shift(
+        config=config,
+        usage_reader=lambda _root, _day: _usage(total=100),
+        jobs_reader=_settled_jobs_reader,
+        bleed_uptake_reader=_empty_bleed_uptake_reader,
+        now=NOW + timedelta(seconds=1),
+    )
+    quiet_archive = Path(quiet_begin["archive"])
+    quiet_evidence = quiet_archive / "regenerate-note-422.json"
+    quiet_evidence.write_bytes(poisoned_evidence.read_bytes())
+
+    quiet = qa_shift.check_shift(
+        archive=quiet_archive,
+        mode=qa_shift.CheckMode.VALIDATION_ONLY,
+        probe_command="poetry run nexus regenerate --slot 4 --note malformed",
+        rejection_status=422,
+        rejection_evidence=quiet_evidence,
+        usage_reader=lambda _root, _day: _usage(total=100),
+        jobs_reader=_settled_jobs_reader,
+        now=NOW + timedelta(minutes=1, seconds=1),
+    )
+
+    quiet_record = json.loads(
+        (quiet_archive / "usage_checks.jsonl").read_text().splitlines()[-1]
+    )
+    assert quiet["status"] == "continue"
+    assert quiet["reasons"] == []
+    assert quiet_record["observed_new_usage_events"] == 0
+    assert quiet_record["observed_qa_usage_events"] == 0
+    assert quiet_record["observed_token_delta"] == 0
+    assert quiet_record["disposition"] == "continue"
+
+
+def test_validation_only_check_stops_when_qa_usage_appears() -> None:
+    zero_token_event = {
+        **_event(total=10),
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+    }
+    result, _ = qa_shift.evaluate_check(
+        state=_state(qa_shift.load_shift_config()),
+        usage_payload=_usage(total=100, events=[zero_token_event]),
+        jobs_payload=_jobs(),
+        mode=qa_shift.CheckMode.VALIDATION_ONLY,
+        validation_evidence=_validation_evidence(),
+        now=NOW + timedelta(minutes=1),
+    )
+
+    assert result["status"] == "stop"
+    assert result["reasons"] == ["usage_present_for_validation_only"]
+    assert result["observed_token_delta"] == 0
+    assert result["observed_new_usage_events"] == 1
+    assert result["observed_qa_usage_events"] == 1
+    assert result["disposition"] == "stop"
+
+
+def test_validation_only_check_stops_on_nonzero_delta_without_qa_event() -> None:
+    result, _ = qa_shift.evaluate_check(
+        state=_state(qa_shift.load_shift_config()),
+        usage_payload=_usage(total=125),
+        jobs_payload=_jobs(),
+        mode=qa_shift.CheckMode.VALIDATION_ONLY,
+        validation_evidence=_validation_evidence(),
+        now=NOW + timedelta(minutes=1),
+    )
+
+    assert result["status"] == "stop"
+    assert result["reasons"] == ["usage_present_for_validation_only"]
+    assert result["observed_token_delta"] == 25
+    assert result["observed_qa_usage_events"] == 0
+
+
+def test_validation_only_pending_preserves_watermark_and_evidence(
+    tmp_path: Path,
+) -> None:
+    config = replace(qa_shift.load_shift_config(), archive_root=tmp_path)
+    begin = qa_shift.begin_shift(
+        config=config,
+        usage_reader=lambda _root, _day: _usage(total=100),
+        jobs_reader=_settled_jobs_reader,
+        bleed_uptake_reader=_empty_bleed_uptake_reader,
+        now=NOW,
+    )
+    archive = Path(begin["archive"])
+    evidence = archive / "regenerate-note-422.json"
+    evidence.write_bytes(
+        (FIXTURES / "qa_shift_regenerate_note_too_long_422.json").read_bytes()
+    )
+    state_before = (archive / "shift_state.json").read_bytes()
+
+    result = qa_shift.check_shift(
+        archive=archive,
+        mode=qa_shift.CheckMode.VALIDATION_ONLY,
+        probe_command="poetry run nexus regenerate --slot 4 --note malformed",
+        rejection_status=422,
+        rejection_evidence=evidence,
+        usage_reader=lambda _root, _day: _usage(total=125),
+        jobs_reader=lambda _root, _slot: _jobs(state="leased"),
+        now=NOW + timedelta(minutes=1),
+    )
+
+    state_after = (archive / "shift_state.json").read_bytes()
+    record = json.loads((archive / "usage_checks.jsonl").read_text().splitlines()[-1])
+    assert result["status"] == "pending"
+    assert result["reasons"] == []
+    assert result["openai_delta_since_last_check"] == 25
+    assert state_after == state_before
+    assert record["kind"] == "validation_only"
+    assert record["disposition"] == "pending"
+    assert record["observed_token_delta"] == 25
+    assert record["non_terminal_jobs"] == [_job("leased")]
+
+
+def test_missing_validation_evidence_is_loud_without_state_mutation(
+    tmp_path: Path,
+) -> None:
+    config = replace(qa_shift.load_shift_config(), archive_root=tmp_path)
+    begin = qa_shift.begin_shift(
+        config=config,
+        usage_reader=lambda _root, _day: _usage(total=100),
+        jobs_reader=_settled_jobs_reader,
+        bleed_uptake_reader=_empty_bleed_uptake_reader,
+        now=NOW,
+    )
+    archive = Path(begin["archive"])
+    state_before = (archive / "shift_state.json").read_bytes()
+    checks_before = (archive / "usage_checks.jsonl").read_bytes()
+
+    with pytest.raises(qa_shift.ShiftError, match="Cannot read rejection evidence"):
+        qa_shift.check_shift(
+            archive=archive,
+            mode=qa_shift.CheckMode.VALIDATION_ONLY,
+            probe_command="poetry run nexus regenerate --slot 4 --note malformed",
+            rejection_status=422,
+            rejection_evidence=archive / "missing-response.json",
+            usage_reader=lambda _root, _day: pytest.fail("usage reader was called"),
+            jobs_reader=lambda _root, _slot: pytest.fail("jobs reader was called"),
+            now=NOW + timedelta(minutes=1),
+        )
+
+    assert (archive / "shift_state.json").read_bytes() == state_before
+    assert (archive / "usage_checks.jsonl").read_bytes() == checks_before
+
+
+def test_validation_evidence_flags_without_mode_are_loud(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code = qa_shift.main(
+        [
+            "check",
+            str(tmp_path),
+            "--probe-command",
+            "poetry run nexus regenerate --slot 4 --note malformed",
+        ]
+    )
+
+    assert exit_code == 1
+    error = json.loads(capsys.readouterr().out)
+    assert error["status"] == "error"
+    assert "require --expect-validation-only" in error["error"]
+
+
+def test_validation_only_mode_requires_all_evidence_flags(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code = qa_shift.main(["check", str(tmp_path), "--expect-validation-only"])
+
+    assert exit_code == 1
+    error = json.loads(capsys.readouterr().out)
+    assert error["status"] == "error"
+    assert "requires --probe-command" in error["error"]
+
+
+def test_check_modes_are_mutually_exclusive_at_argparse_boundary(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        qa_shift.main(
+            [
+                "check",
+                str(tmp_path),
+                "--expect-call",
+                "--expect-validation-only",
+            ]
+        )
+
+    assert exc_info.value.code == 2
+    assert "not allowed with argument --expect-call" in capsys.readouterr().err
 
 
 def test_post_call_with_leased_job_is_pending_without_advancing_state() -> None:
@@ -427,7 +751,7 @@ def test_post_call_with_leased_job_is_pending_without_advancing_state() -> None:
         state=state,
         usage_payload=_usage(total=100),
         jobs_payload=_jobs(state="leased"),
-        expect_call=True,
+        mode=qa_shift.CheckMode.POST_CALL,
         now=NOW + timedelta(minutes=1),
     )
 
@@ -470,14 +794,14 @@ def test_pending_post_check_retains_late_usage_in_causal_command_delta(
 
     pre = qa_shift.check_shift(
         archive=archive,
-        expect_call=False,
+        mode=qa_shift.CheckMode.PRE_CALL,
         usage_reader=lambda _root, _day: _usage(total=100),
         jobs_reader=_settled_jobs_reader,
         now=NOW + timedelta(seconds=1),
     )
     pending = qa_shift.check_shift(
         archive=archive,
-        expect_call=True,
+        mode=qa_shift.CheckMode.POST_CALL,
         usage_reader=lambda _root, _day: _usage(total=400, events=sync_events),
         jobs_reader=lambda _root, _slot: _jobs(state="leased"),
         now=NOW + timedelta(seconds=2),
@@ -485,7 +809,7 @@ def test_pending_post_check_retains_late_usage_in_causal_command_delta(
     pending_state = json.loads((archive / "shift_state.json").read_text())
     settled = qa_shift.check_shift(
         archive=archive,
-        expect_call=True,
+        mode=qa_shift.CheckMode.POST_CALL,
         usage_reader=lambda _root, _day: _usage(
             total=450,
             events=[*sync_events, late_event],
@@ -546,7 +870,7 @@ def test_failure_during_pending_stops_after_settlement_with_full_delta(
 
     pending = qa_shift.check_shift(
         archive=archive,
-        expect_call=True,
+        mode=qa_shift.CheckMode.POST_CALL,
         usage_reader=lambda _root, _day: _usage(
             total=300,
             events=[synchronous_event],
@@ -560,7 +884,7 @@ def test_failure_during_pending_stops_after_settlement_with_full_delta(
     pending_state = json.loads((archive / "shift_state.json").read_text())
     settled = qa_shift.check_shift(
         archive=archive,
-        expect_call=True,
+        mode=qa_shift.CheckMode.POST_CALL,
         usage_reader=lambda _root, _day: _usage(
             total=350,
             events=[synchronous_event, late_event],
@@ -606,7 +930,7 @@ def test_check_reads_queue_before_usage_to_close_settlement_race(
 
     result = qa_shift.check_shift(
         archive=archive,
-        expect_call=False,
+        mode=qa_shift.CheckMode.PRE_CALL,
         jobs_reader=read_jobs,
         usage_reader=read_usage,
         now=NOW + timedelta(minutes=1),
@@ -637,7 +961,7 @@ def test_only_non_terminal_maturation_states_block_checks(
         state=shift_state,
         usage_payload=_usage(total=100),
         jobs_payload=_jobs(state=state, attempts=attempts),
-        expect_call=False,
+        mode=qa_shift.CheckMode.PRE_CALL,
         now=NOW + timedelta(minutes=1),
     )
 
@@ -649,7 +973,7 @@ def test_new_terminal_maturation_failure_stops_settled_check() -> None:
         state=_state(qa_shift.load_shift_config()),
         usage_payload=_usage(total=100),
         jobs_payload=_jobs(failed_jobs=1),
-        expect_call=False,
+        mode=qa_shift.CheckMode.PRE_CALL,
         now=NOW + timedelta(minutes=1),
     )
 
@@ -673,7 +997,7 @@ def test_preexisting_failed_jobs_become_shift_baseline(tmp_path: Path) -> None:
 
     check = qa_shift.check_shift(
         archive=archive,
-        expect_call=False,
+        mode=qa_shift.CheckMode.PRE_CALL,
         usage_reader=lambda _root, _day: _usage(total=100),
         jobs_reader=lambda _root, _slot: _jobs(failed_jobs=2),
         now=NOW + timedelta(minutes=1),
@@ -718,28 +1042,28 @@ def test_check_fails_closed_at_token_time_day_and_unknown_boundaries() -> None:
         state=state,
         usage_payload=_usage(total=9_000_000),
         jobs_payload=_jobs(),
-        expect_call=False,
+        mode=qa_shift.CheckMode.PRE_CALL,
         now=NOW + timedelta(minutes=1),
     )
     timed, _ = qa_shift.evaluate_check(
         state=state,
         usage_payload=_usage(total=100),
         jobs_payload=_jobs(),
-        expect_call=False,
+        mode=qa_shift.CheckMode.PRE_CALL,
         now=NOW + timedelta(minutes=60),
     )
     rolled, rolled_state = qa_shift.evaluate_check(
         state=state,
         usage_payload=_usage(total=100, day="2026-07-31"),
         jobs_payload=_jobs(),
-        expect_call=False,
+        mode=qa_shift.CheckMode.PRE_CALL,
         now=NOW + timedelta(minutes=1),
     )
     unknown, _ = qa_shift.evaluate_check(
         state=state,
         usage_payload=_usage(total=100, unknown=1),
         jobs_payload=_jobs(),
-        expect_call=False,
+        mode=qa_shift.CheckMode.PRE_CALL,
         now=NOW + timedelta(minutes=1),
     )
 
@@ -767,7 +1091,7 @@ def test_check_and_finish_persist_end_to_end_tally(tmp_path: Path) -> None:
 
     check = qa_shift.check_shift(
         archive=archive,
-        expect_call=True,
+        mode=qa_shift.CheckMode.POST_CALL,
         usage_reader=lambda _root, _day: _usage(total=300, events=[first_event]),
         jobs_reader=_settled_jobs_reader,
         now=NOW + timedelta(minutes=1),
@@ -945,7 +1269,7 @@ def test_finish_reads_original_quota_day_after_rollover(tmp_path: Path) -> None:
 
     rollover = qa_shift.check_shift(
         archive=archive,
-        expect_call=False,
+        mode=qa_shift.CheckMode.PRE_CALL,
         usage_reader=lambda _root, _day: _usage(
             total=40,
             day="2026-07-31",

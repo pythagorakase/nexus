@@ -11,6 +11,8 @@ from __future__ import annotations
 import argparse
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
+from enum import Enum
+import hashlib
 import json
 from pathlib import Path
 import shlex
@@ -35,6 +37,25 @@ PENDING_EXIT_CODE = 3
 
 class ShiftError(RuntimeError):
     """Raised when the QA shift cannot continue safely."""
+
+
+class CheckMode(str, Enum):
+    """Internal usage-check modes exposed through dedicated CLI flags."""
+
+    PRE_CALL = "pre_call"
+    POST_CALL = "post_call"
+    VALIDATION_ONLY = "validation_only"
+
+
+@dataclass(frozen=True)
+class ValidationEvidence:
+    """Filesystem-independent metadata proving a local validation rejection."""
+
+    probe_command: str
+    rejection_status: int
+    rejection_evidence: str
+    rejection_evidence_sha256: str
+    rejection_evidence_excerpt: str
 
 
 @dataclass(frozen=True)
@@ -701,15 +722,70 @@ def _load_state(archive: Path) -> dict[str, Any]:
     return state
 
 
+def _read_validation_evidence(
+    *,
+    mode: CheckMode,
+    probe_command: str | None,
+    rejection_status: int | None,
+    rejection_evidence: Path | None,
+) -> ValidationEvidence | None:
+    supplied = (
+        probe_command is not None,
+        rejection_status is not None,
+        rejection_evidence is not None,
+    )
+    if mode is not CheckMode.VALIDATION_ONLY:
+        if any(supplied):
+            raise ShiftError(
+                "Rejection evidence flags require --expect-validation-only"
+            )
+        return None
+
+    if not all(supplied):
+        raise ShiftError(
+            "--expect-validation-only requires --probe-command, "
+            "--rejection-status, and --rejection-evidence"
+        )
+    assert probe_command is not None
+    assert rejection_status is not None
+    assert rejection_evidence is not None
+    if not probe_command.strip():
+        raise ShiftError("--probe-command must be a non-empty string")
+    if isinstance(rejection_status, bool) or not isinstance(rejection_status, int):
+        raise ShiftError("--rejection-status must be an integer")
+
+    evidence_path = rejection_evidence.resolve()
+    try:
+        evidence_bytes = evidence_path.read_bytes()
+        evidence_text = evidence_bytes.decode("utf-8")
+    except (OSError, UnicodeError) as exc:
+        raise ShiftError(
+            f"Cannot read rejection evidence {evidence_path}: {exc}"
+        ) from exc
+    return ValidationEvidence(
+        probe_command=probe_command,
+        rejection_status=rejection_status,
+        rejection_evidence=str(evidence_path),
+        rejection_evidence_sha256=hashlib.sha256(evidence_bytes).hexdigest(),
+        rejection_evidence_excerpt=evidence_text[:500],
+    )
+
+
 def evaluate_check(
     *,
     state: Mapping[str, Any],
     usage_payload: Mapping[str, Any],
     jobs_payload: Mapping[str, Any],
-    expect_call: bool,
+    mode: CheckMode,
+    validation_evidence: ValidationEvidence | None = None,
     now: datetime,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Evaluate one pre/post-call usage check without filesystem access."""
+
+    if mode is CheckMode.VALIDATION_ONLY and validation_evidence is None:
+        raise ShiftError("Validation-only checks require rejection evidence metadata")
+    if mode is not CheckMode.VALIDATION_ONLY and validation_evidence is not None:
+        raise ShiftError("Rejection evidence metadata requires validation-only mode")
 
     usage = _usage_snapshot(usage_payload)
     config = state["config"]
@@ -769,6 +845,15 @@ def evaluate_check(
     jobs = _jobs_snapshot(jobs_payload, slot=slot)
     baseline_failed_jobs = int(state["baseline_failed_jobs"])
     current_failed_jobs = int(jobs["counts"]["failed"])
+    expect_call = mode is CheckMode.POST_CALL
+    validation_fields: dict[str, Any] = {}
+    if validation_evidence is not None:
+        validation_fields = {
+            **asdict(validation_evidence),
+            "observed_token_delta": delta,
+            "observed_new_usage_events": len(new_events),
+            "observed_qa_usage_events": len(qa_events),
+        }
     if jobs["non_terminal_jobs"]:
         return (
             {
@@ -806,6 +891,12 @@ def evaluate_check(
                 "non_terminal_jobs": jobs["non_terminal_jobs"],
                 "baseline_failed_jobs": baseline_failed_jobs,
                 "current_failed_jobs": current_failed_jobs,
+                **validation_fields,
+                **(
+                    {"disposition": "pending"}
+                    if validation_evidence is not None
+                    else {}
+                ),
             },
             dict(state),
         )
@@ -823,6 +914,10 @@ def evaluate_check(
         reasons.append("unexpected_qa_model_route")
     if expect_call and not expected_events:
         reasons.append("expected_usage_event_missing")
+    if mode is CheckMode.VALIDATION_ONLY and (
+        new_events or (delta is not None and delta != 0)
+    ):
+        reasons.append("usage_present_for_validation_only")
     if usage["unknown"] > 0:
         reasons.append("unknown_openai_usage")
 
@@ -856,8 +951,9 @@ def evaluate_check(
                 "rollover_day_total": usage["total"],
             }
         )
+    status = "stop" if reasons else "continue"
     result = {
-        "status": "stop" if reasons else "continue",
+        "status": status,
         "reasons": reasons,
         "quota_day": usage["day"],
         "daily_total": usage["total"],
@@ -889,6 +985,8 @@ def evaluate_check(
         "non_terminal_jobs": jobs["non_terminal_jobs"],
         "baseline_failed_jobs": baseline_failed_jobs,
         "current_failed_jobs": current_failed_jobs,
+        **validation_fields,
+        **({"disposition": status} if validation_evidence is not None else {}),
     }
     return result, updated
 
@@ -896,7 +994,10 @@ def evaluate_check(
 def check_shift(
     *,
     archive: Path,
-    expect_call: bool,
+    mode: CheckMode,
+    probe_command: str | None = None,
+    rejection_status: int | None = None,
+    rejection_evidence: Path | None = None,
     repo_root: Path = REPO_ROOT,
     usage_reader: UsageReader = _read_usage,
     jobs_reader: JobsReader = _read_jobs,
@@ -904,6 +1005,12 @@ def check_shift(
 ) -> dict[str, Any]:
     """Run and persist one fail-closed usage check."""
 
+    evidence = _read_validation_evidence(
+        mode=mode,
+        probe_command=probe_command,
+        rejection_status=rejection_status,
+        rejection_evidence=rejection_evidence,
+    )
     archive = archive.resolve()
     state = _load_state(archive)
     current_time = now or datetime.now(timezone.utc)
@@ -913,14 +1020,15 @@ def check_shift(
         state=state,
         usage_payload=usage_payload,
         jobs_payload=jobs_payload,
-        expect_call=expect_call,
+        mode=mode,
+        validation_evidence=evidence,
         now=current_time,
     )
     _atomic_write_json(archive / STATE_FILE, updated)
     _append_jsonl(
         archive / CHECKS_FILE,
         {
-            "kind": "post_call" if expect_call else "pre_call",
+            "kind": mode.value,
             "at": _utc_text(current_time),
             **result,
         },
@@ -1061,10 +1169,30 @@ def _parser() -> argparse.ArgumentParser:
 
     check_parser = subparsers.add_parser("check", help="Check the token fence")
     check_parser.add_argument("archive", type=Path, help="Run archive from begin")
-    check_parser.add_argument(
+    check_mode = check_parser.add_mutually_exclusive_group()
+    check_mode.add_argument(
         "--expect-call",
         action="store_true",
         help="Fail closed unless the QA slot recorded a target-model event",
+    )
+    check_mode.add_argument(
+        "--expect-validation-only",
+        action="store_true",
+        help="Fail closed if local validation rejection recorded any usage",
+    )
+    check_parser.add_argument(
+        "--probe-command",
+        help="Public command rejected before provider dispatch",
+    )
+    check_parser.add_argument(
+        "--rejection-status",
+        type=int,
+        help="HTTP status or CLI exit status of the validation rejection",
+    )
+    check_parser.add_argument(
+        "--rejection-evidence",
+        type=Path,
+        help="Saved complete local validation rejection response",
     )
 
     finish_parser = subparsers.add_parser("finish", help="Capture final usage")
@@ -1094,9 +1222,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         elif args.command == "begin":
             result = begin_shift(config=load_shift_config(args.config))
         elif args.command == "check":
+            if args.expect_validation_only:
+                mode = CheckMode.VALIDATION_ONLY
+            elif args.expect_call:
+                mode = CheckMode.POST_CALL
+            else:
+                mode = CheckMode.PRE_CALL
             result = check_shift(
                 archive=args.archive,
-                expect_call=args.expect_call,
+                mode=mode,
+                probe_command=args.probe_command,
+                rejection_status=args.rejection_status,
+                rejection_evidence=args.rejection_evidence,
             )
         elif args.command == "finish":
             result = finish_shift(

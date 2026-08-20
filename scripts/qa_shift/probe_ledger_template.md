@@ -13,6 +13,17 @@ unresolved anomaly is not a dry family.
 | # | Probe family | Public surface and adversarial variants | DB/log verification | Outcome | Issue |
 |---|---|---|---|---|---|
 
+## Validation-only disposition
+
+- Probe command:
+- Rejection status:
+- Rejection evidence file:
+- Rejection evidence SHA-256:
+- Rejection evidence excerpt:
+- Observed token delta:
+- Observed usage event count:
+- Disposition:
+
 ## Structured-output rejection ledger
 
 Use the current-run usage delta as the authoritative event set and the bounded
