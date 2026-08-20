@@ -405,6 +405,57 @@ def test_alias_collision_participates_in_ambiguity_filter(
     ] == ["presence prose mention ambiguous: harbor master candidate_ids=[31, 32]"]
 
 
+def test_longer_canonical_name_suppresses_contained_shorter_name() -> None:
+    """Pre-hydration attributes one span to its longest roster identity."""
+
+    roster = CharacterRosterRows(
+        characters=[
+            {"id": 41, "name": "Ann", "summary": None},
+            {"id": 42, "name": "Ann Lee", "summary": None},
+        ],
+        aliases=[],
+    )
+    wire = _wire("I ask Ann Lee to wait beside the launch.")
+
+    reconcile_prose_mentions(
+        wire,
+        presence_baseline=EMPTY_BASELINE,
+        roster_rows=roster,
+    )
+
+    assert wire.presence is not None
+    assert wire.presence.mentions == [
+        PresenceRef(kind="character", name="Ann Lee", id=42)
+    ]
+
+
+def test_longer_alias_suppresses_contained_shorter_alias() -> None:
+    """Alias spans participate in the same longest-match containment rule."""
+
+    roster = CharacterRosterRows(
+        characters=[
+            {"id": 51, "name": "Annalise North", "summary": None},
+            {"id": 52, "name": "The Archivist", "summary": None},
+        ],
+        aliases=[
+            {"character_id": 51, "alias": "Ann"},
+            {"character_id": 52, "alias": "Ann Lee"},
+        ],
+    )
+    wire = _wire("I ask Ann Lee to wait beside the launch.")
+
+    reconcile_prose_mentions(
+        wire,
+        presence_baseline=EMPTY_BASELINE,
+        roster_rows=roster,
+    )
+
+    assert wire.presence is not None
+    assert wire.presence.mentions == [
+        PresenceRef(kind="character", name="The Archivist", id=52)
+    ]
+
+
 def test_chunk_46_shape_adds_three_mentions_and_hydrates_reference_rows() -> None:
     """The issue's three off-scene names all become MENTIONED references."""
 

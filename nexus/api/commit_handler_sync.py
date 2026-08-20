@@ -51,6 +51,7 @@ from nexus.api.summary_triggers import (
 )
 from nexus.api.lore_adapter import compute_raw_text, split_staged_orrery_payload
 from nexus.api.presence_reconciliation import (
+    read_authored_exit_character_ids_from_connection,
     read_character_roster_from_connection,
     reconcile_declared_character_mentions,
     reconcile_public_prose_mentions_by_character_ids,
@@ -555,6 +556,11 @@ def commit_incubator_to_database_sync(
             character_refs = resolve_character_references_sync(
                 ref_entities.characters, conn
             )
+            authored_exit_ids = read_authored_exit_character_ids_from_connection(
+                conn,
+                int(incubator["parent_chunk_id"]),
+                staged_character_refs=character_refs,
+            )
             committed_prose_parts = [raw_text]
             if choice_object:
                 committed_prose_parts.extend(choice_object["presented"])
@@ -580,7 +586,8 @@ def commit_incubator_to_database_sync(
                 committed_prose_parts,
                 accounted_character_ids={
                     int(reference["character_id"]) for reference in character_refs
-                },
+                }
+                | authored_exit_ids,
                 roster_rows=roster_rows,
             )
             for mention in roster_mentions:

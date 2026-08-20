@@ -6,6 +6,7 @@ import asyncio
 from dataclasses import dataclass
 import logging
 import os
+import re
 from typing import Any, Collection, List, Literal, Mapping, Optional, Sequence
 
 import psycopg2
@@ -21,8 +22,7 @@ from nexus.agents.logon.skald_wire import (
     _deduplicate_presence,
     _presence_key,
 )
-from nexus.api.presence_audit import _character_only_detector
-from nexus.memory.entity_detector import HighSpecificityEntityDetector
+from nexus.memory.entity_detector import EntityMatch, HighSpecificityEntityDetector
 from nexus.util.log_safety import quote_log_value
 
 
@@ -46,6 +46,101 @@ class _DeclaredNameCollision:
     conflict_id: int
     conflict_name: str
     conflict_kind: Literal["canonical", "alias_of"]
+
+
+@dataclass(frozen=True)
+class _CharacterMatchSpan:
+    """One canonical-name or alias match in public prose."""
+
+    lookup_key: str
+    start: int
+    end: int
+
+
+class _LongestMatchCharacterDetector(HighSpecificityEntityDetector):
+    """Character detector that suppresses strictly contained shorter spans."""
+
+    def detect_entities(self, text: str) -> EntityMatch:
+        """Detect characters using longest-match-wins full containment."""
+
+        if not text:
+            return EntityMatch(characters=[], places=[], factions=[])
+
+        text_lower = text.lower()
+        candidates: List[_CharacterMatchSpan] = []
+        for lookup_key in self.character_lookup:
+            pattern = rf"\b{re.escape(lookup_key)}\b"
+            candidates.extend(
+                _CharacterMatchSpan(
+                    lookup_key=lookup_key,
+                    start=match.start(),
+                    end=match.end(),
+                )
+                for match in re.finditer(pattern, text_lower)
+            )
+
+        accepted_indices: set[int] = set()
+        by_descending_length = sorted(
+            range(len(candidates)),
+            key=lambda index: (
+                -(candidates[index].end - candidates[index].start),
+                candidates[index].start,
+                candidates[index].end,
+                candidates[index].lookup_key,
+            ),
+        )
+        for candidate_index in by_descending_length:
+            candidate = candidates[candidate_index]
+            if any(
+                candidates[accepted_index].start <= candidate.start
+                and candidate.end <= candidates[accepted_index].end
+                and (
+                    candidates[accepted_index].end - candidates[accepted_index].start
+                    > candidate.end - candidate.start
+                )
+                for accepted_index in accepted_indices
+            ):
+                continue
+            accepted_indices.add(candidate_index)
+
+        found_characters: dict[int, Any] = {}
+        for index, candidate in enumerate(candidates):
+            if index not in accepted_indices:
+                continue
+            character = self.character_lookup[candidate.lookup_key]
+            found_characters[int(character["id"])] = character
+
+        return EntityMatch(
+            characters=list(found_characters.values()),
+            places=[],
+            factions=[],
+        )
+
+
+def build_character_presence_detector(
+    character_rows: Sequence[Any],
+    alias_rows: Sequence[Any],
+) -> HighSpecificityEntityDetector:
+    """Build the shared longest-match character detector for presence paths."""
+
+    detector = _LongestMatchCharacterDetector(db_connection=None)
+    characters: dict[int, Any] = {}
+    for row in character_rows:
+        character_id = int(row["id"])
+        record = {
+            "id": character_id,
+            "name": row["name"],
+            "summary": (row["summary"] or "")[:100] or None,
+        }
+        characters[character_id] = record
+        detector.character_lookup[str(record["name"]).lower()] = record
+    for row in alias_rows:
+        character_id = int(row["character_id"])
+        if character_id in characters:
+            detector.character_lookup[str(row["alias"]).lower()] = characters[
+                character_id
+            ]
+    return detector
 
 
 def read_character_roster_from_connection(conn: Any) -> CharacterRosterRows:
@@ -100,6 +195,59 @@ async def read_character_roster_from_async_connection(
     )
 
 
+def _authored_exit_character_ids(
+    parent_present_character_ids: Collection[int],
+    staged_character_refs: Sequence[Mapping[str, Any]],
+) -> set[int]:
+    """Return parent-present IDs absent from the hydrated current roster."""
+
+    staged_present_ids = {
+        int(reference["character_id"])
+        for reference in staged_character_refs
+        if reference["reference"] == "present"
+    }
+    return set(parent_present_character_ids) - staged_present_ids
+
+
+def read_authored_exit_character_ids_from_connection(
+    conn: Any,
+    parent_chunk_id: int,
+    *,
+    staged_character_refs: Sequence[Mapping[str, Any]],
+) -> set[int]:
+    """Resolve authored exits from parent presence and hydrated staged refs."""
+
+    if parent_chunk_id == 0:
+        return set()
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT character_id FROM chunk_character_references "
+            "WHERE chunk_id = %s AND reference::text = 'present'",
+            (parent_chunk_id,),
+        )
+        parent_present_ids = {int(row[0]) for row in cur.fetchall()}
+    return _authored_exit_character_ids(parent_present_ids, staged_character_refs)
+
+
+async def read_authored_exit_character_ids_from_async_connection(
+    conn: Any,
+    parent_chunk_id: int,
+    *,
+    staged_character_refs: Sequence[Mapping[str, Any]],
+) -> set[int]:
+    """Resolve authored exits from async parent presence and staged refs."""
+
+    if parent_chunk_id == 0:
+        return set()
+    rows = await conn.fetch(
+        "SELECT character_id FROM chunk_character_references "
+        "WHERE chunk_id = $1 AND reference::text = 'present'",
+        parent_chunk_id,
+    )
+    parent_present_ids = {int(row["character_id"]) for row in rows}
+    return _authored_exit_character_ids(parent_present_ids, staged_character_refs)
+
+
 def _matches_character(character: Any, reference: PresenceRef) -> bool:
     """Match canonical identity by id when possible, otherwise by name."""
 
@@ -143,7 +291,10 @@ def _reconciliation_detector(
             sorted(ambiguous[key]),
         )
 
-    detector = _character_only_detector(roster_rows.characters, roster_rows.aliases)
+    detector = build_character_presence_detector(
+        roster_rows.characters,
+        roster_rows.aliases,
+    )
     for lookup_key in list(detector.character_lookup):
         if lookup_key.casefold() in ambiguous:
             del detector.character_lookup[lookup_key]

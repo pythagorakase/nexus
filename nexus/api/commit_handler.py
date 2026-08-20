@@ -51,6 +51,7 @@ from nexus.api.choice_handling import (
 )
 from nexus.api.lore_adapter import compute_raw_text, split_staged_orrery_payload
 from nexus.api.presence_reconciliation import (
+    read_authored_exit_character_ids_from_async_connection,
     read_character_roster_from_async_connection,
     reconcile_declared_character_mentions_async,
     reconcile_public_prose_mentions_by_character_ids,
@@ -757,6 +758,13 @@ async def commit_incubator_to_database(
             character_refs = await resolve_character_references(
                 ref_entities.characters, conn
             )
+            authored_exit_ids = (
+                await read_authored_exit_character_ids_from_async_connection(
+                    conn,
+                    int(incubator["parent_chunk_id"]),
+                    staged_character_refs=character_refs,
+                )
+            )
             committed_prose_parts = [raw_text]
             if choice_object:
                 committed_prose_parts.extend(choice_object["presented"])
@@ -782,7 +790,8 @@ async def commit_incubator_to_database(
                 committed_prose_parts,
                 accounted_character_ids={
                     int(reference["character_id"]) for reference in character_refs
-                },
+                }
+                | authored_exit_ids,
                 roster_rows=roster_rows,
             )
             for mention in roster_mentions:
