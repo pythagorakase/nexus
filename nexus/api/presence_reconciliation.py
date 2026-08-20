@@ -239,6 +239,31 @@ def reconcile_public_prose_mentions(
     return reconciled
 
 
+def reconcile_public_prose_mentions_by_character_ids(
+    prose_parts: Sequence[str],
+    *,
+    accounted_character_ids: Collection[int],
+    roster_rows: CharacterRosterRows,
+) -> List[PresenceRef]:
+    """Return prose mentions not already accounted for by character ID."""
+
+    accounted_ids = set(accounted_character_ids)
+    accounted_references = [
+        PresenceRef(
+            kind="character",
+            name=str(character["name"]),
+            id=int(character["id"]),
+        )
+        for character in roster_rows.characters
+        if int(character["id"]) in accounted_ids
+    ]
+    return reconcile_public_prose_mentions(
+        prose_parts,
+        accounted_references=accounted_references,
+        roster_rows=roster_rows,
+    )
+
+
 def _declared_character_names(
     declarations: Sequence[Mapping[str, Any]],
 ) -> List[str]:
@@ -408,6 +433,7 @@ def reconcile_declared_character_mentions(
     *,
     declarations: Sequence[Mapping[str, Any]],
     accounted_character_ids: Collection[int],
+    roster_rows: Optional[CharacterRosterRows] = None,
 ) -> List[PresenceRef]:
     """Reconcile same-turn declarations inside a psycopg2 commit transaction."""
 
@@ -418,7 +444,7 @@ def reconcile_declared_character_mentions(
         prose_parts,
         declared_names=declared_names,
         accounted_character_ids=accounted_character_ids,
-        roster_rows=read_character_roster_from_connection(conn),
+        roster_rows=roster_rows or read_character_roster_from_connection(conn),
     )
 
 
@@ -428,17 +454,21 @@ async def reconcile_declared_character_mentions_async(
     *,
     declarations: Sequence[Mapping[str, Any]],
     accounted_character_ids: Collection[int],
+    roster_rows: Optional[CharacterRosterRows] = None,
 ) -> List[PresenceRef]:
     """Reconcile same-turn declarations inside an asyncpg commit transaction."""
 
     declared_names = _declared_character_names(declarations)
     if not declared_names:
         return []
+    active_roster = roster_rows
+    if active_roster is None:
+        active_roster = await read_character_roster_from_async_connection(conn)
     return _reconcile_declared_character_mentions(
         prose_parts,
         declared_names=declared_names,
         accounted_character_ids=accounted_character_ids,
-        roster_rows=await read_character_roster_from_async_connection(conn),
+        roster_rows=active_roster,
     )
 
 
