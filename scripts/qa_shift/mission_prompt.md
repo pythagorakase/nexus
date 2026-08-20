@@ -125,6 +125,16 @@ command that can call a remote model:
 5. Record the returned per-command delta in the probe ledger. For a bounded
    concurrency family, record both public responses and treat the complete
    post-check delta as one request-group delta.
+6. If the command was rejected by local request validation before any
+   provider dispatch (an HTTP 4xx from schema or parameter validation, or a
+   CLI-side validation error), do not run `--expect-call`. Save the complete
+   rejection response to a file under the archive, then run
+   `poetry run python scripts/qa_shift/qa_shift.py check ARCHIVE
+   --expect-validation-only --probe-command "<command>"
+   --rejection-status <status> --rejection-evidence <file>`.
+   This check passes only when the ledger shows exactly zero new usage
+   events and a zero token delta; any recorded usage stops the shift. Record
+   the disposition in the probe ledger like any other probe.
 
 The post-call check fails closed when no matching slot/model event appears,
 when routing leaves the configured provider/model, when any OpenAI response has
@@ -134,6 +144,9 @@ command delta. The ledger is exact for NEXUS calls recorded by this checkout,
 not an organization-wide Platform meter. Count any known non-NEXUS API usage
 against the configured limit before starting. Read-only commands that cannot
 call a model do not need an `--expect-call` check.
+A validation-only check fails closed in the opposite direction: any new
+usage event or nonzero token delta stops the shift, because the
+validation-only claim itself was false.
 
 A check may also return `status=pending` (exit code 3). This means the QA slot
 still has non-terminal Retrograde maturation jobs (queued or leased), so
