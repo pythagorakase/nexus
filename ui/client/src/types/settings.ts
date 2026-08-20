@@ -49,6 +49,12 @@ export interface LocalModelsUiKnobs {
   delete_arm_ms?: number;
 }
 
+/** Mirrors `[orrery.dashboard]` (OrreryDashboardSettings). */
+export interface OrreryDashboardKnobs {
+  backstage_poll_busy_ms?: number;
+  backstage_poll_idle_ms?: number;
+}
+
 export interface SettingsPayload {
   ["Agent Settings"]?: {
     global?: {
@@ -73,6 +79,9 @@ export interface SettingsPayload {
       string,
       { is_active?: boolean; dimensions?: number; weight?: number }
     >;
+  };
+  orrery?: {
+    dashboard?: OrreryDashboardKnobs;
   };
   /** Mirrors `[ui]` in nexus.toml (UISettings in settings_models.py). */
   ui?: {

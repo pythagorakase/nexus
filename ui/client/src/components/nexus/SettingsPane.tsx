@@ -13,7 +13,7 @@
  * per section matching its rail name, no explanatory prose in persistent
  * chrome, no internal module names in UI copy.
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   Circle,
@@ -23,6 +23,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useDeveloperMode } from "@/contexts/DeveloperModeContext";
 import { KEEPERS, useFonts } from "@/contexts/FontContext";
 import { useSettingsMutation, useSettingsQuery } from "@/hooks/useSettings";
 import {
@@ -53,6 +54,7 @@ const SECTION_INDEX = [
   { id: "lore", label: "Context Length" },
   { id: "reveal", label: "Typewriter" },
   { id: "pwa", label: "App Icon" },
+  { id: "advanced", label: "Advanced" },
 ] as const;
 
 type SectionId = (typeof SECTION_INDEX)[number]["id"];
@@ -273,6 +275,34 @@ function TestModeSection({
           <span className="lever-tick r">TEST</span>
         </button>
       </div>
+    </SettingsCard>
+  );
+}
+
+function AdvancedSection() {
+  const { developerMode, setDeveloperMode } = useDeveloperMode();
+
+  return (
+    <SettingsCard id="advanced" label="ADVANCED">
+      <div className="lever-row nexus-dev-mode-row">
+        <span className="nexus-dev-mode-label">Developer mode</span>
+        <button
+          className={`lever ${developerMode ? "on" : ""}`}
+          onClick={() => setDeveloperMode(!developerMode)}
+          role="switch"
+          aria-checked={developerMode}
+          data-testid="lever-dev-mode"
+        >
+          <span className="lever-knob" />
+          <span className="lever-tick l">OFF</span>
+          <span className="lever-tick r">DEV</span>
+        </button>
+      </div>
+      <p className="nexus-dev-mode-explainer">
+        Exposes the story machinery — seat correspondence, state writes, Orrery
+        activity. Present only when the server gate is open
+        (NEXUS_DEV_DASHBOARD=1); this section does not ship.
+      </p>
     </SettingsCard>
   );
 }
@@ -674,15 +704,17 @@ function PwaSection() {
 function SectionRail({
   active,
   onPick,
+  sections,
 }: {
   active: SectionId;
   onPick: (id: SectionId) => void;
+  sections: ReadonlyArray<(typeof SECTION_INDEX)[number]>;
 }) {
   return (
     <aside className="set-rail">
       <div className="eyebrow brass-glow">SETTINGS</div>
       <ul>
-        {SECTION_INDEX.map((s) => (
+        {sections.map((s) => (
           <li key={s.id}>
             <button
               className={`set-rail-btn ${active === s.id ? "on" : ""}`}
@@ -725,7 +757,15 @@ export function SettingsPane() {
 
 function SettingsConsole({ settings }: { settings: SettingsPayload }) {
   const { theme, setTheme } = useTheme();
+  const { gateOpen } = useDeveloperMode();
   const mutation = useSettingsMutation();
+  const sections = useMemo(
+    () =>
+      gateOpen
+        ? SECTION_INDEX
+        : SECTION_INDEX.filter((section) => section.id !== "advanced"),
+    [gateOpen],
+  );
 
   const [active, setActive] = useState<SectionId>("theme");
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -744,7 +784,7 @@ function SettingsConsole({ settings }: { settings: SettingsPayload }) {
     const onScroll = () => {
       const top = root.scrollTop + 80;
       let current: SectionId = "theme";
-      for (const s of SECTION_INDEX) {
+      for (const s of sections) {
         const el = root.querySelector<HTMLElement>(`#set-${s.id}`);
         if (el && el.offsetTop <= top) current = s.id;
       }
@@ -752,13 +792,13 @@ function SettingsConsole({ settings }: { settings: SettingsPayload }) {
     };
     root.addEventListener("scroll", onScroll, { passive: true });
     return () => root.removeEventListener("scroll", onScroll);
-  }, []);
+  }, [sections]);
 
   const testMode = settings.global?.narrative?.test_mode ?? false;
 
   return (
     <div className="settings-pane-v2" data-testid="settings-pane">
-      <SectionRail active={active} onPick={jumpTo} />
+      <SectionRail active={active} onPick={jumpTo} sections={sections} />
       <div className="set-scroller" ref={scrollerRef}>
         {mutation.isError && (
           <div className="alert danger">
@@ -792,6 +832,7 @@ function SettingsConsole({ settings }: { settings: SettingsPayload }) {
           onCommit={(value) => mutation.mutate({ typewriter_ms_per_char: value })}
         />
         <PwaSection />
+        {gateOpen && <AdvancedSection />}
       </div>
     </div>
   );

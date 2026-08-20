@@ -2466,6 +2466,21 @@ class OrreryDashboardSettings(BaseModel):
             "flagged as a retrograde backfill epoch."
         ),
     )
+    backstage_poll_busy_ms: int = Field(
+        default=2000,
+        ge=250,
+        description=(
+            "Polling cadence for the open Backstage drawer while a narrative "
+            "generation is in flight."
+        ),
+    )
+    backstage_poll_idle_ms: int = Field(
+        default=8000,
+        ge=250,
+        description=(
+            "Polling cadence for the open Backstage drawer while the slot is idle."
+        ),
+    )
 
 
 class OrreryPromptSettings(BaseModel):

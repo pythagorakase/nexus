@@ -13,16 +13,25 @@ const RAIL_TABS: Array<{ id: NexusTab; label: string; Icon: typeof Book }> = [
   { id: "narrative", label: "Narrative", Icon: Book },
   { id: "map", label: "Map", Icon: Map },
   { id: "characters", label: "Characters", Icon: Users },
-  { id: "settings", label: "Settings", Icon: Settings },
 ];
 
 interface LeftRailProps {
   tab: NexusTab;
   onTabChange: (tab: NexusTab) => void;
   onHome: () => void;
+  showBackstage: boolean;
+  backstageOpen: boolean;
+  onBackstageToggle: () => void;
 }
 
-export function LeftRail({ tab, onTabChange, onHome }: LeftRailProps) {
+export function LeftRail({
+  tab,
+  onTabChange,
+  onHome,
+  showBackstage,
+  backstageOpen,
+  onBackstageToggle,
+}: LeftRailProps) {
   return (
     <nav className="rail-left" aria-label="Primary navigation">
       {/* No title attributes: the styled .rail-tip is the hover label, and
@@ -57,6 +66,32 @@ export function LeftRail({ tab, onTabChange, onHome }: LeftRailProps) {
           </span>
         </button>
       ))}
+      <span className="rail-spacer" />
+      {showBackstage && (
+        <button
+          className={`rail-btn nexus-backstage-sigil ${backstageOpen ? "on" : ""}`}
+          onClick={onBackstageToggle}
+          aria-label="Backstage"
+          aria-pressed={backstageOpen}
+          title="Backstage (`)"
+          data-testid="rail-backstage"
+        >
+          <span aria-hidden="true">⌬</span>
+          <span className="nexus-backstage-sigil-dot" aria-hidden="true" />
+        </button>
+      )}
+      <button
+        className={`rail-btn ${tab === "settings" ? "on" : ""}`}
+        onClick={() => onTabChange("settings")}
+        aria-label="Settings"
+        aria-pressed={tab === "settings"}
+        data-testid="rail-settings"
+      >
+        <Settings size={18} />
+        <span className="rail-tip" aria-hidden="true">
+          SETTINGS
+        </span>
+      </button>
     </nav>
   );
 }

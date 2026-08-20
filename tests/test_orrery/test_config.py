@@ -155,6 +155,8 @@ def test_orrery_settings_resolve_model_reference() -> None:
     )
     assert settings.orrery.dashboard.coverage_max_anchors == 50
     assert settings.orrery.dashboard.coverage_epoch_min_world_times == 10
+    assert settings.orrery.dashboard.backstage_poll_busy_ms == 2000
+    assert settings.orrery.dashboard.backstage_poll_idle_ms == 8000
     weird = settings.orrery.retrograde.weird
     assert weird.default_level == "medium"
     assert weird.dev.cli_flag == "--weird"
@@ -402,6 +404,8 @@ def test_orrery_dashboard_defaults_to_disabled() -> None:
     """Fresh checkouts must not expose the dev audit router implicitly."""
 
     assert OrreryDashboardSettings().enabled is False
+    assert OrreryDashboardSettings().backstage_poll_busy_ms == 2000
+    assert OrreryDashboardSettings().backstage_poll_idle_ms == 8000
 
 
 def test_orrery_bleed_accepts_deprecated_selection_keys() -> None:

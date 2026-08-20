@@ -576,6 +576,9 @@ enabled = false
 # world times written within one wall-clock second).
 coverage_max_anchors = 50
 coverage_epoch_min_world_times = 10
+# Backstage drawer polling while a generation is active and while it is idle.
+backstage_poll_busy_ms = 2000
+backstage_poll_idle_ms = 8000
 
 [orrery.route_graph]
 max_edges_per_query = 5000
