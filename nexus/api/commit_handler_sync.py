@@ -50,7 +50,11 @@ from nexus.api.summary_triggers import (
     schedule_summary_generation,
 )
 from nexus.api.lore_adapter import compute_raw_text, split_staged_orrery_payload
-from nexus.api.presence_reconciliation import reconcile_declared_character_mentions
+from nexus.api.presence_reconciliation import (
+    read_character_roster_from_connection,
+    reconcile_declared_character_mentions,
+    reconcile_public_prose_mentions_by_character_ids,
+)
 from nexus.memory.correspondence import (
     correspondence_settings,
     insert_digest_version,
@@ -442,10 +446,11 @@ def commit_incubator_to_database_sync(
             choice_text: Optional[str] = incubator.get("choice_text")
 
             if choice_object:
-                if not choice_text:
+                if not (choice_text or "").strip():
                     choice_text = selected_text_from_choice_object(choice_object)
                 choice_object = normalize_choice_object(choice_object)
 
+            enacted_text = (choice_text or "").strip()
             raw_text = compute_raw_text(storyteller_text, choice_object, choice_text)
 
             with conn.cursor() as cur:
@@ -554,6 +559,7 @@ def commit_incubator_to_database_sync(
             declared_prose_parts = [raw_text]
             if choice_object:
                 declared_prose_parts.extend(choice_object["presented"])
+            roster_rows = read_character_roster_from_connection(conn)
             declared_mentions = reconcile_declared_character_mentions(
                 conn,
                 declared_prose_parts,
@@ -561,11 +567,27 @@ def commit_incubator_to_database_sync(
                 accounted_character_ids={
                     int(reference["character_id"]) for reference in character_refs
                 },
+                roster_rows=roster_rows,
             )
             for mention in declared_mentions:
                 if mention.id is None:
                     raise RuntimeError(
                         "Declared-character reconciliation returned no character id"
+                    )
+                character_refs.append(
+                    {"character_id": mention.id, "reference": "mentioned"}
+                )
+            roster_mentions = reconcile_public_prose_mentions_by_character_ids(
+                [enacted_text],
+                accounted_character_ids={
+                    int(reference["character_id"]) for reference in character_refs
+                },
+                roster_rows=roster_rows,
+            )
+            for mention in roster_mentions:
+                if mention.id is None:
+                    raise RuntimeError(
+                        "Roster-character reconciliation returned no character id"
                     )
                 character_refs.append(
                     {"character_id": mention.id, "reference": "mentioned"}
