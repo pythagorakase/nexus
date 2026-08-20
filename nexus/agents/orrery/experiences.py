@@ -116,6 +116,22 @@ _ACQUISITION_CANDIDATES_SQL = """
     ORDER BY ca.id
     FOR UPDATE OF ca
 """
+_ENQUEUE_CANDIDATES_SQL = """
+    SELECT experience.id, experience.source_digest
+    FROM character_experiences experience
+    WHERE experience.anchor_chunk_id <= %s
+      AND experience.world_layer::text = %s
+      AND experience.invalidation_status = 'valid'
+      AND experience.experience_text IS NULL
+      AND (%s IS NULL OR experience.character_entity_id <> %s)
+      AND NOT EXISTS (
+          SELECT 1
+          FROM character_experience_jobs prior_job
+          WHERE prior_job.experience_ids @> ARRAY[experience.id]::bigint[]
+            AND prior_job.state IN ('queued', 'leased', 'failed')
+      )
+    ORDER BY experience.id
+"""
 
 
 class ExperienceRecollection(BaseModel):
@@ -905,22 +921,7 @@ def enqueue_scene_experience_job_sync(
                 f"world layer {world_layer!r}"
             )
         cur.execute(
-            """
-            SELECT experience.id, experience.source_digest
-            FROM character_experiences experience
-            WHERE experience.anchor_chunk_id <= %s
-              AND experience.world_layer::text = %s
-              AND experience.invalidation_status = 'valid'
-              AND experience.experience_text IS NULL
-              AND (%s IS NULL OR experience.character_entity_id <> %s)
-              AND NOT EXISTS (
-                  SELECT 1
-                  FROM character_experience_jobs prior_job
-                  WHERE experience.id = ANY(prior_job.experience_ids)
-                    AND prior_job.state IN ('queued', 'leased', 'failed')
-              )
-            ORDER BY experience.id
-            """,
+            _ENQUEUE_CANDIDATES_SQL,
             (
                 scene_end_chunk_id,
                 world_layer,

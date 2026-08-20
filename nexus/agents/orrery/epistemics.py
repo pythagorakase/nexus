@@ -41,6 +41,10 @@ CLAIM_BIRTH_ROLE_POLICY: Mapping[str, frozenset[str]] = MappingProxyType(
 )
 
 
+class EpistemicsValidationError(ValueError):
+    """An expected domain-validation failure safe to present to an operator."""
+
+
 @dataclass(frozen=True, slots=True)
 class EpistemicsPolicy:
     """Normalized runtime view of ``[orrery.epistemics]``."""
@@ -641,11 +645,24 @@ def record_revelation(
 
     source_tier = "told" if source_entity_id is not None else "granted"
     root_source_entity_id = None
+    cur.execute("SELECT scope FROM claims WHERE id = %s", (claim_id,))
+    claim_row = cur.fetchone()
+    if claim_row is None:
+        raise EpistemicsValidationError(f"Claim {claim_id} does not exist")
+
+    cur.execute("SELECT 1 FROM entities WHERE id = %s", (knower_entity_id,))
+    if cur.fetchone() is None:
+        raise EpistemicsValidationError(
+            f"Knower entity {knower_entity_id} does not exist"
+        )
+
     if source_entity_id is not None:
-        cur.execute("SELECT scope FROM claims WHERE id = %s", (claim_id,))
-        claim_row = cur.fetchone()
-        if claim_row is None:
-            raise ValueError(f"Claim {claim_id} does not exist")
+        cur.execute("SELECT 1 FROM entities WHERE id = %s", (source_entity_id,))
+        if cur.fetchone() is None:
+            raise EpistemicsValidationError(
+                f"Source entity {source_entity_id} does not exist"
+            )
+
         if str(_row_value(claim_row, "scope", 0)) == "common":
             root_source_entity_id = source_entity_id
         else:
@@ -659,13 +676,19 @@ def record_revelation(
             )
             source_awareness = cur.fetchone()
             if source_awareness is None:
-                raise ValueError(
+                raise EpistemicsValidationError(
                     f"Entity {source_entity_id} cannot reveal claim {claim_id}: "
                     "the teller does not possess it"
                 )
             inherited_root = _row_value(source_awareness, "root_source_entity_id", 0)
             root_source_entity_id = (
                 int(inherited_root) if inherited_root is not None else source_entity_id
+            )
+    if source_chunk_id is not None:
+        cur.execute("SELECT 1 FROM narrative_chunks WHERE id = %s", (source_chunk_id,))
+        if cur.fetchone() is None:
+            raise EpistemicsValidationError(
+                f"Source chunk {source_chunk_id} does not exist"
             )
     cur.execute(
         """

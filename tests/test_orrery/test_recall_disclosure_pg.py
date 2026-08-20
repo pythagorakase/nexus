@@ -6,6 +6,7 @@ import asyncio
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 import json
+import math
 import os
 from pathlib import Path
 from types import SimpleNamespace
@@ -18,7 +19,7 @@ from psycopg2.extras import RealDictCursor
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.engine import URL
 from sqlalchemy.orm import Session
 
@@ -30,17 +31,24 @@ from nexus.agents.memnon.utils.embedding_tables import (
 )
 from nexus.agents.orrery.audit import CognitionTraceInputError, cognition_trace
 from nexus.agents.orrery.events import commit_orrery_tick_sync
-from nexus.agents.orrery.knowledge_surfacing import build_knowledge_digest_sync
+from nexus.agents.orrery.knowledge_surfacing import (
+    _eligible_rows,
+    build_knowledge_digest_sync,
+)
 from nexus.agents.orrery.retrograde_markers import RETROGRADE_PROLOGUE_MARKER
 from nexus.agents.orrery.resolver import resolve_dry_run
 from nexus.agents.orrery.substrate import ALWAYS, Branch, DriveBand, Slot, Template
-from nexus.api import narrative, orrery_dev_endpoints
+from nexus.api import db_pool, narrative, orrery_dev_endpoints
 from nexus.config import load_settings_as_dict
+from scripts import new_story_setup
 
 
 pytestmark = pytest.mark.requires_postgres
 ROOT = Path(__file__).parents[2]
 MIGRATION = ROOT / "migrations" / "106_recall_trace.sql"
+RECALL_ELIGIBILITY_MIGRATION = (
+    ROOT / "migrations" / "112_character_experience_recall_eligibility.sql"
+)
 
 
 def _connect(dbname: str) -> Any:
@@ -55,31 +63,35 @@ def _connect(dbname: str) -> Any:
 
 @pytest.fixture(scope="module")
 def recall_database() -> Iterator[str]:
-    """Clone the template, apply migration 106 twice, and drop the clone."""
+    """Initialize a disposable database and reapply recall migrations."""
 
-    dbname = f"qa678_{uuid4().hex[:12]}"
+    dbname = f"qa_wt724_recall_{uuid4().hex[:12]}"
     source = os.environ.get("NEXUS_TEST_TEMPLATE_DB", "NEXUS_template")
-    assert source == "NEXUS_template" or source.startswith("qa678_")
+    assert source == "NEXUS_template" or source.startswith(("qa_wt724_", "qa_wt721_"))
     admin: Any = None
+    original_use_pool = new_story_setup.USE_POOL
     try:
         try:
             admin = _connect("postgres")
         except psycopg2.Error as exc:
             pytest.skip(f"PostgreSQL admin connection unavailable: {exc}")
         admin.autocommit = True
-        with admin.cursor() as cur:
-            cur.execute(
-                sql.SQL("CREATE DATABASE {} TEMPLATE {}").format(
-                    sql.Identifier(dbname), sql.Identifier(source)
-                )
-            )
+        new_story_setup.USE_POOL = False
+        new_story_setup.initialize_slot_database(dbname, source_db=source)
         with _connect(dbname) as conn:
             with conn.cursor() as cur:
                 migration_sql = MIGRATION.read_text()
                 cur.execute(migration_sql)
                 cur.execute(migration_sql)
+                recall_index_sql = RECALL_ELIGIBILITY_MIGRATION.read_text()
+                cur.execute(recall_index_sql)
+                cur.execute(recall_index_sql)
         yield dbname
     finally:
+        new_story_setup.USE_POOL = original_use_pool
+        pool = db_pool._pools.pop(dbname, None)
+        if pool is not None:
+            pool.closeall()
         if admin is not None:
             with admin.cursor() as cur:
                 cur.execute(
@@ -126,6 +138,7 @@ def _chunk(
     label: str,
     world_time: datetime,
     scene: int,
+    world_layer: str = "primary",
 ) -> int:
     chunk_id = int(
         session.execute(
@@ -144,10 +157,18 @@ def _chunk(
             """
             INSERT INTO chunk_metadata (
                 chunk_id, season, episode, scene, world_layer, world_time
-            ) VALUES (:chunk_id, 1, 1, :scene, 'primary', :world_time)
+            ) VALUES (
+                :chunk_id, 1, 1, :scene,
+                CAST(:world_layer AS world_layer_type), :world_time
+            )
             """
         ),
-        {"chunk_id": chunk_id, "scene": scene, "world_time": world_time},
+        {
+            "chunk_id": chunk_id,
+            "scene": scene,
+            "world_layer": world_layer,
+            "world_time": world_time,
+        },
     )
     session.execute(
         text(
@@ -345,6 +366,8 @@ def _experience(
     world_time: datetime,
     label: str,
     invalidated: bool = False,
+    rendered: bool = False,
+    world_layer: str = "primary",
 ) -> int:
     event_type = f"qa678_experience_{uuid4().hex[:8]}"
     session.execute(
@@ -364,8 +387,8 @@ def _experience(
                     event_type, tick_chunk_id, actor_entity_id, world_layer,
                     source, changed_fields, payload
                 ) VALUES (
-                    :event_type, :chunk_id, :owner_id, 'primary', 'authored',
-                    '{}', '{}'
+                    :event_type, :chunk_id, :owner_id,
+                    CAST(:world_layer AS world_layer_type), 'authored', '{}', '{}'
                 ) RETURNING id
                 """
             ),
@@ -373,6 +396,7 @@ def _experience(
                 "event_type": event_type,
                 "chunk_id": chunk_id,
                 "owner_id": owner_entity_id,
+                "world_layer": world_layer,
             },
         ).scalar_one()
     )
@@ -383,11 +407,15 @@ def _experience(
                 INSERT INTO character_experiences (
                     character_entity_id, anchor_chunk_id, world_event_ids,
                     basis, world_time, seed_summary, salience, source_digest,
-                    world_layer, invalidation_status, invalidated_at
+                    experience_text, render_model, renderer_version,
+                    render_generation_id, world_layer, invalidation_status,
+                    invalidated_at
                 ) VALUES (
                     :owner_id, :chunk_id, ARRAY[:event_id]::bigint[],
                     'participant', :world_time, :summary, 0.8, :digest,
-                    'primary',
+                    :experience_text, :render_model, :renderer_version,
+                    :render_generation_id,
+                    CAST(:world_layer AS world_layer_type),
                     CAST(:status AS character_experience_invalidation_status),
                     :invalidated_at
                 ) RETURNING id
@@ -400,6 +428,13 @@ def _experience(
                 "world_time": world_time,
                 "summary": f"Experience fixture {label}",
                 "digest": uuid4().hex,
+                "experience_text": (
+                    f"Rendered experience fixture {label}" if rendered else None
+                ),
+                "render_model": "TEST" if rendered else None,
+                "renderer_version": "test-v1" if rendered else None,
+                "render_generation_id": uuid4() if rendered else None,
+                "world_layer": world_layer,
                 "status": "invalidated" if invalidated else "valid",
                 "invalidated_at": datetime.now(timezone.utc) if invalidated else None,
             },
@@ -416,6 +451,7 @@ def _digest(
     max_entries: int = 12,
     recall: dict[str, Any] | None = None,
     query_embeddings: dict[str, list[float]] | None = None,
+    include_player_character: bool = True,
 ) -> list[dict[str, Any]]:
     return build_knowledge_digest_sync(
         session,
@@ -426,11 +462,140 @@ def _digest(
             "max_entries": max_entries,
             "recent_reveal_window_chunks": 3,
         },
-        include_player_character=True,
+        include_player_character=include_player_character,
         recall_settings=recall or {},
         disclosure_settings={},
         turn_id=turn_id,
         query_embeddings=query_embeddings,
+    )
+
+
+class _ExplainEligibilityCursor:
+    """Explain the production eligibility statement without returning candidates."""
+
+    description: list[Any] = []
+
+    def __init__(self, cursor: Any) -> None:
+        self._cursor = cursor
+        self.plan: dict[str, Any] | None = None
+
+    def execute(self, statement: str, parameters: Mapping[str, Any]) -> None:
+        """Run a JSON EXPLAIN for the exact statement supplied by production."""
+
+        self._cursor.execute(
+            "EXPLAIN (FORMAT JSON) " + statement,
+            dict(parameters),
+        )
+        row = self._cursor.fetchone()
+        if row is None:
+            raise RuntimeError("Eligibility EXPLAIN returned no plan")
+        self.plan = dict(row[0][0])
+
+    def fetchall(self) -> list[Any]:
+        """Return no candidates because this cursor exposes only a plan."""
+
+        return []
+
+
+def _plan_index_names(node: Mapping[str, Any]) -> set[str]:
+    """Return every index name in a PostgreSQL JSON plan tree."""
+
+    names = {str(node["Index Name"])} if node.get("Index Name") else set()
+    for child in node.get("Plans", []):
+        names.update(_plan_index_names(child))
+    return names
+
+
+@contextmanager
+def _capture_trace_statements(session: Session) -> Iterator[list[str]]:
+    """Capture real recall-trace upsert and retention executions."""
+
+    statements: list[str] = []
+    connection = session.connection()
+
+    def capture(
+        _connection: Any,
+        _cursor: Any,
+        statement: str,
+        _parameters: Any,
+        _context: Any,
+        _executemany: bool,
+    ) -> None:
+        if "INSERT INTO orrery_recall_trace" in statement:
+            statements.append("upsert")
+        elif "DELETE FROM orrery_recall_trace" in statement:
+            statements.append("retention")
+
+    event.listen(connection, "before_cursor_execute", capture)
+    try:
+        yield statements
+    finally:
+        event.remove(connection, "before_cursor_execute", capture)
+
+
+def _bulk_claims(
+    session: Session,
+    *,
+    owner_entity_id: int,
+    chunk_id: int,
+    acquired_at: datetime,
+    count: int,
+) -> None:
+    """Insert eligible claims set-wise for the trace round-trip proof."""
+
+    _, first_awareness_id = _claim(
+        session,
+        owner_entity_id=owner_entity_id,
+        chunk_id=chunk_id,
+        acquired_at=acquired_at,
+        label="round-trip-1",
+    )
+    assert first_awareness_id is not None
+    world_event_id = int(
+        session.execute(
+            text(
+                "SELECT claim.world_event_id "
+                "FROM claims claim "
+                "JOIN claim_awareness awareness ON awareness.claim_id = claim.id "
+                "WHERE awareness.id = :awareness_id"
+            ),
+            {"awareness_id": first_awareness_id},
+        ).scalar_one()
+    )
+    session.execute(
+        text(
+            """
+            WITH inserted AS (
+                INSERT INTO claims (
+                    world_event_id, summary, scope, source_chunk_id,
+                    account_label
+                )
+                SELECT
+                    :world_event_id,
+                    'Order 721 bulk claim ' || sequence_number,
+                    'bounded',
+                    :chunk_id,
+                    :label_prefix || sequence_number
+                FROM generate_series(2, :count) AS sequence_number
+                RETURNING id
+            )
+            INSERT INTO claim_awareness (
+                claim_id, knower_entity_id, source_tier,
+                acquired_at_world_time, source_chunk_id
+            )
+            SELECT
+                id, :owner_entity_id, 'participant', :acquired_at, :chunk_id
+            FROM inserted
+            """
+        ),
+        {
+            "world_event_id": world_event_id,
+            "chunk_id": chunk_id,
+            "label_prefix": f"qa_wt721-{uuid4().hex}-",
+            "count": count,
+            "owner_entity_id": owner_entity_id,
+            "acquired_at": acquired_at,
+        },
     )
 
 
@@ -1323,6 +1488,221 @@ def test_ownership_and_anchor_validity_are_hard_boundaries(session: Session) -> 
     assert cursor_digest == digest
 
 
+def test_experience_recall_index_preserves_all_eligibility_boundaries(
+    session: Session,
+) -> None:
+    """Recall keeps both render states while enforcing every indexed boundary."""
+
+    base = datetime(2078, 1, 2, tzinfo=timezone.utc)
+    source = _chunk(session, label="index source", world_time=base, scene=1)
+    wrong_layer_source = _chunk(
+        session,
+        label="index flashback source",
+        world_time=base,
+        scene=4,
+        world_layer="flashback",
+    )
+    anchor = _chunk(
+        session,
+        label="index anchor",
+        world_time=base + timedelta(hours=2),
+        scene=2,
+    )
+    future = _chunk(
+        session,
+        label="index future source",
+        world_time=base + timedelta(hours=4),
+        scene=3,
+    )
+    session.execute(
+        text(
+            "UPDATE chunk_metadata SET world_time = :world_time "
+            "WHERE chunk_id = :chunk_id"
+        ),
+        {"chunk_id": anchor, "world_time": base + timedelta(hours=2)},
+    )
+    player = _character(session, "index-player")
+    owner = _character(session, "index-owner")
+    _present(session, chunk_id=anchor, characters=[player, owner])
+    session.execute(
+        text(
+            "UPDATE global_variables SET user_character = :character_id "
+            "WHERE id = true"
+        ),
+        {"character_id": player[1]},
+    )
+
+    unrendered_id = _experience(
+        session,
+        owner_entity_id=owner[0],
+        chunk_id=source,
+        world_time=base,
+        label="eligible unrendered",
+    )
+    rendered_id = _experience(
+        session,
+        owner_entity_id=owner[0],
+        chunk_id=source,
+        world_time=base,
+        label="eligible rendered",
+        rendered=True,
+    )
+    player_id = _experience(
+        session,
+        owner_entity_id=player[0],
+        chunk_id=source,
+        world_time=base,
+        label="excluded player",
+    )
+    future_id = _experience(
+        session,
+        owner_entity_id=owner[0],
+        chunk_id=future,
+        world_time=base + timedelta(hours=4),
+        label="excluded future anchor",
+    )
+    wrong_layer_id = _experience(
+        session,
+        owner_entity_id=owner[0],
+        chunk_id=wrong_layer_source,
+        world_time=base,
+        label="excluded world layer",
+        world_layer="flashback",
+    )
+    invalidated_id = _experience(
+        session,
+        owner_entity_id=owner[0],
+        chunk_id=source,
+        world_time=base,
+        label="excluded invalidated",
+        invalidated=True,
+    )
+
+    digest = _digest(
+        session,
+        present=[player[0], owner[0]],
+        anchor=anchor,
+        turn_id="experience-index-boundaries",
+        include_player_character=False,
+    )
+    recalled_ids = {
+        int(entry["experience_id"])
+        for entry in digest
+        if entry.get("experience_id") is not None
+    }
+    assert recalled_ids == {unrendered_id, rendered_id}
+    assert {
+        player_id,
+        future_id,
+        wrong_layer_id,
+        invalidated_id,
+    }.isdisjoint(recalled_ids)
+
+
+def test_experience_recall_large_shape_uses_eligibility_index(
+    session: Session,
+) -> None:
+    """The natural 50k production eligibility plan uses migration 112's index."""
+
+    base = datetime(2078, 1, 3, tzinfo=timezone.utc)
+    source = _chunk(session, label="plan source", world_time=base, scene=1)
+    anchor = _chunk(
+        session,
+        label="plan anchor",
+        world_time=base + timedelta(hours=1),
+        scene=2,
+    )
+    raw_connection = session.connection().connection.driver_connection
+    assert raw_connection is not None
+    with raw_connection.cursor() as cursor:
+        cursor.execute(
+            "INSERT INTO entities (kind, is_active) "
+            "SELECT 'character', true "
+            "FROM generate_series(1, 1000) "
+            "RETURNING id"
+        )
+        owner_ids = [int(row[0]) for row in cursor.fetchall()]
+        cursor.execute(
+            "INSERT INTO characters (entity_id, name) "
+            "SELECT owner_id, 'q724_plan_' || ordinality "
+            "FROM unnest(%s::bigint[]) WITH ORDINALITY "
+            "AS owners(owner_id, ordinality)",
+            (owner_ids,),
+        )
+        cursor.execute(
+            "INSERT INTO event_types (type, category, severity, description) "
+            "VALUES ("
+            "'q724plan', 'social', 'moderate', "
+            "'Order 724 committed plan regression'"
+            ")"
+        )
+        cursor.execute(
+            """
+            WITH inserted_events AS (
+                INSERT INTO world_events (
+                    event_type, tick_chunk_id, actor_entity_id, world_layer,
+                    source, changed_fields, payload
+                )
+                SELECT 'q724plan', %s, owner_id, 'primary', 'authored',
+                       '{}'::text[], '{}'::jsonb
+                FROM unnest(%s::bigint[]) owner(owner_id)
+                CROSS JOIN generate_series(1, 50)
+                RETURNING id, actor_entity_id
+            )
+            INSERT INTO character_experiences (
+                character_entity_id, anchor_chunk_id, world_event_ids, basis,
+                seed_summary, experience_text, salience, render_model,
+                renderer_version, source_digest, render_generation_id,
+                world_layer, invalidation_status
+            )
+            SELECT actor_entity_id, %s, ARRAY[id], 'participant',
+                   'plan seed ' || id,
+                   CASE WHEN id %% 2 = 0 THEN 'plan rendered ' || id END,
+                   0.8,
+                   CASE WHEN id %% 2 = 0 THEN 'TEST' END,
+                   CASE WHEN id %% 2 = 0 THEN 'test-v1' END,
+                   md5(id::text),
+                   CASE WHEN id %% 2 = 0
+                        THEN '00000000-0000-0000-0000-000000000724'::uuid END,
+                   'primary', 'valid'
+            FROM inserted_events
+            """,
+            (source, owner_ids, source),
+        )
+        assert cursor.rowcount == 50_000
+        cursor.execute(
+            """
+            SELECT count(*), count(DISTINCT character_entity_id),
+                   count(*) FILTER (WHERE experience_text IS NULL),
+                   count(*) FILTER (WHERE experience_text IS NOT NULL)
+            FROM character_experiences
+            """
+        )
+        assert cursor.fetchone() == (50_000, 1_000, 25_000, 25_000)
+        for table_name in (
+            "character_experiences",
+            "world_events",
+            "characters",
+            "entities",
+        ):
+            cursor.execute(sql.SQL("ANALYZE {}").format(sql.Identifier(table_name)))
+
+        explaining_cursor = _ExplainEligibilityCursor(cursor)
+        eligible = _eligible_rows(
+            explaining_cursor,
+            present_entity_ids=owner_ids[:10],
+            anchor_chunk_id=anchor,
+            recent_reveal_window_chunks=3,
+            excluded_experience_owner_entity_id=None,
+        )
+
+    assert eligible == []
+    assert explaining_cursor.plan is not None
+    assert "ix_character_experiences_recall_eligibility" in _plan_index_names(
+        explaining_cursor.plan["Plan"]
+    )
+
+
 def test_critical_current_scene_account_bypasses_ranking(session: Session) -> None:
     base = datetime(2078, 2, 1, tzinfo=timezone.utc)
     old = _chunk(session, label="mandatory old", world_time=base, scene=1)
@@ -2004,3 +2384,264 @@ def test_trace_retention_prunes_oldest_rows_per_character(session: Session) -> N
         ).scalars()
     )
     assert retained_turns == ["retention-2", "retention-3"]
+
+
+def test_empty_candidate_set_executes_no_trace_statements(session: Session) -> None:
+    """An eligible audience with no owned knowledge performs no trace writes."""
+
+    base = datetime(2078, 7, 1, tzinfo=timezone.utc)
+    anchor = _chunk(session, label="empty trace anchor", world_time=base, scene=1)
+    alpha = _character(session, "empty-trace")
+    _present(session, chunk_id=anchor, characters=[alpha])
+
+    with _capture_trace_statements(session) as statements:
+        digest = _digest(
+            session,
+            present=[alpha[0]],
+            anchor=anchor,
+            turn_id="empty-trace",
+        )
+
+    assert digest == []
+    assert statements == []
+
+
+def test_batched_trace_rows_match_across_database_surfaces(session: Session) -> None:
+    """Mixed candidate rows preserve every persisted value on both DB APIs."""
+
+    base = datetime(2078, 7, 2, tzinfo=timezone.utc)
+    anchor = _chunk(session, label="mixed trace anchor", world_time=base, scene=1)
+    alpha = _character(session, "mixed-alpha")
+    beta = _character(session, "mixed-beta")
+    _present(session, chunk_id=anchor, characters=[alpha, beta])
+    alpha_claim, alpha_awareness = _claim(
+        session,
+        owner_entity_id=alpha[0],
+        chunk_id=anchor,
+        acquired_at=base,
+        label="mixed alpha claim",
+    )
+    beta_claim, beta_awareness = _claim(
+        session,
+        owner_entity_id=beta[0],
+        chunk_id=anchor,
+        acquired_at=base,
+        label="mixed beta claim",
+    )
+    alpha_experience = _experience(
+        session,
+        owner_entity_id=alpha[0],
+        chunk_id=anchor,
+        world_time=base,
+        label="mixed alpha experience",
+    )
+    beta_experience = _experience(
+        session,
+        owner_entity_id=beta[0],
+        chunk_id=anchor,
+        world_time=base,
+        label="mixed beta experience",
+    )
+
+    session_digest = _digest(
+        session,
+        present=[alpha[0], beta[0]],
+        anchor=anchor,
+        turn_id="mixed-trace-session",
+        recall={"trace_batch_size": 2},
+    )
+    raw_connection = session.connection().connection.driver_connection
+    assert raw_connection is not None
+    with raw_connection.cursor(cursor_factory=RealDictCursor) as cursor:
+        cursor_digest = build_knowledge_digest_sync(
+            cursor,
+            present_entity_ids=[alpha[0], beta[0]],
+            anchor_chunk_id=anchor,
+            settings={
+                "enabled": True,
+                "max_entries": 12,
+                "recent_reveal_window_chunks": 3,
+            },
+            include_player_character=True,
+            recall_settings={"trace_batch_size": 2},
+            disclosure_settings={},
+            turn_id="mixed-trace-cursor",
+        )
+    assert cursor_digest == session_digest
+
+    trace_rows = {
+        turn_id: [
+            dict(row)
+            for row in session.execute(
+                text(
+                    """
+                    SELECT
+                        anchor_chunk_id, character_entity_id, candidate_kind,
+                        candidate_id, claim_id, decision, reason, mandatory,
+                        score, score_components
+                    FROM orrery_recall_trace
+                    WHERE turn_id = :turn_id
+                    ORDER BY character_entity_id, candidate_kind, candidate_id
+                    """
+                ),
+                {"turn_id": turn_id},
+            ).mappings()
+        ]
+        for turn_id in ("mixed-trace-session", "mixed-trace-cursor")
+    }
+    assert trace_rows["mixed-trace-session"] == trace_rows["mixed-trace-cursor"]
+
+    expected_identities = {
+        (alpha[0], "claim", alpha_awareness, alpha_claim),
+        (alpha[0], "experience", alpha_experience, None),
+        (beta[0], "claim", beta_awareness, beta_claim),
+        (beta[0], "experience", beta_experience, None),
+    }
+    assert {
+        (
+            row["character_entity_id"],
+            row["candidate_kind"],
+            row["candidate_id"],
+            row["claim_id"],
+        )
+        for row in trace_rows["mixed-trace-session"]
+    } == expected_identities
+    for row in trace_rows["mixed-trace-session"]:
+        assert row["anchor_chunk_id"] == anchor
+        assert row["decision"] == "included"
+        assert row["reason"] == "disclosed"
+        assert row["mandatory"] is False
+        is_experience = row["candidate_kind"] == "experience"
+        assert row["score"] == pytest.approx(0.455 if is_experience else 0.375)
+        expected_components = {
+            "semantic_fit": None,
+            "semantic_status": (
+                "skipped_no_query_embedding"
+                if is_experience
+                else "not_applicable_claim"
+            ),
+            "event_severity": 0.5,
+            "actor_involvement": 1.0,
+            "emotional_salience": 0.8 if is_experience else 0.0,
+            "recency": 1.0,
+            "place_match": 0.0,
+            "age_world_hours": 0.0,
+            "raw_score": 0.455 if is_experience else 0.375,
+            "decay_modifier": 1.0,
+            "disclosure": {
+                "audience_count": 1,
+                "secrecy_marker": 0.0,
+                "relationship_valence": 0.0,
+                "status_edge_match": 0.0,
+                "role_obligation_risk": 0.0,
+                "score": 0.0,
+                "threshold": 0.0,
+            },
+        }
+        assert row["score_components"] == expected_components
+
+
+def test_same_turn_batched_trace_rerun_updates_without_duplicates(
+    session: Session,
+) -> None:
+    """A retry updates the authoritative conflict keys in place."""
+
+    base = datetime(2078, 7, 3, tzinfo=timezone.utc)
+    anchor = _chunk(session, label="trace retry anchor", world_time=base, scene=1)
+    alpha = _character(session, "trace-retry")
+    _present(session, chunk_id=anchor, characters=[alpha])
+    for index in range(2):
+        _claim(
+            session,
+            owner_entity_id=alpha[0],
+            chunk_id=anchor,
+            acquired_at=base,
+            label=f"trace retry {index}",
+        )
+
+    _digest(
+        session,
+        present=[alpha[0]],
+        anchor=anchor,
+        turn_id="trace-retry",
+        max_entries=1,
+        recall={
+            "per_character_max_entries": 1,
+            "mandatory_reserved_entries": 0,
+            "trace_batch_size": 1,
+        },
+    )
+    assert (
+        session.execute(
+            text(
+                "SELECT count(*) FROM orrery_recall_trace "
+                "WHERE turn_id = 'trace-retry' AND decision = 'excluded'"
+            )
+        ).scalar_one()
+        == 1
+    )
+
+    _digest(
+        session,
+        present=[alpha[0]],
+        anchor=anchor,
+        turn_id="trace-retry",
+        max_entries=2,
+        recall={
+            "per_character_max_entries": 2,
+            "mandatory_reserved_entries": 0,
+            "trace_batch_size": 1,
+        },
+    )
+    retry_rows = session.execute(
+        text(
+            "SELECT decision, reason FROM orrery_recall_trace "
+            "WHERE turn_id = 'trace-retry' ORDER BY candidate_id"
+        )
+    ).all()
+    assert retry_rows == [("included", "disclosed"), ("included", "disclosed")]
+
+
+def test_trace_round_trips_are_bounded_by_configured_batch_size(
+    session: Session,
+) -> None:
+    """One thousand real candidates use only ceil(N/batch) upserts plus delete."""
+
+    base = datetime(2078, 7, 4, tzinfo=timezone.utc)
+    anchor = _chunk(session, label="trace batching anchor", world_time=base, scene=1)
+    alpha = _character(session, "trace-batching")
+    _present(session, chunk_id=anchor, characters=[alpha])
+    _bulk_claims(
+        session,
+        owner_entity_id=alpha[0],
+        chunk_id=anchor,
+        acquired_at=base,
+        count=1_000,
+    )
+    batch_size = 128
+
+    with _capture_trace_statements(session) as statements:
+        _digest(
+            session,
+            present=[alpha[0]],
+            anchor=anchor,
+            turn_id="trace-batching",
+            max_entries=1_000,
+            recall={
+                "per_character_max_entries": 1_000,
+                "mandatory_reserved_entries": 0,
+                "trace_rows_per_character": 2_000,
+                "trace_batch_size": batch_size,
+            },
+        )
+
+    assert statements == ["upsert"] * math.ceil(1_000 / batch_size) + ["retention"]
+    assert (
+        session.execute(
+            text(
+                "SELECT count(*) FROM orrery_recall_trace "
+                "WHERE turn_id = 'trace-batching'"
+            )
+        ).scalar_one()
+        == 1_000
+    )

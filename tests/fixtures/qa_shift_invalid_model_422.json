@@ -1,0 +1,16 @@
+{
+  "detail": [
+    {
+      "type": "value_error",
+      "loc": [
+        "body",
+        "model"
+      ],
+      "msg": "Value error, Invalid model 'gpt-malformed'. Available: gpt-5.6-terra",
+      "input": "gpt-malformed",
+      "ctx": {
+        "error": "Invalid model 'gpt-malformed'"
+      }
+    }
+  ]
+}
