@@ -263,6 +263,8 @@ def explain_template(
     state: WorldState,
     bindings: Bindings,
     selection: Optional[BranchSelection] = None,
+    *,
+    digest: Optional[str] = None,
 ) -> TemplateExplanation:
     """Produce a full audit record for one template against one binding set.
 
@@ -273,6 +275,8 @@ def explain_template(
     considered, so the traces become exhaustive.
     """
 
+    if digest is None:
+        digest = binding_hash(bindings)
     gate_trace = trace_condition(template.package_gate, state, bindings)
     gate_passed = bool(template.package_gate(state, bindings))
 
@@ -283,7 +287,7 @@ def explain_template(
             template,
             state,
             bindings,
-            digest=binding_hash(bindings),
+            digest=digest,
             selection=selection,
         )
         chosen_branch = chosen.label if chosen is not None else None
@@ -349,7 +353,13 @@ def explain_template(
 
     # Source-of-truth cross-check against the production resolver. Any mismatch
     # means a predicate is non-deterministic or side-effecting; surface it.
-    truth: Resolution = evaluate(template, state, bindings, selection)
+    truth: Resolution = evaluate(
+        template,
+        state,
+        bindings,
+        selection,
+        digest=digest,
+    )
     if (
         truth.passes != (chosen_branch is not None)
         or truth.branch_label != chosen_branch
@@ -402,6 +412,7 @@ def explain_stack(
     """
 
     templates_tuple = tuple(templates)
+    digest = binding_hash(bindings)
     outcome = select_package(
         templates_tuple,
         state,
@@ -409,10 +420,18 @@ def explain_stack(
         selection,
         habituation,
         package_selection,
+        digest=digest,
     )
     ordered = stack_order(templates_tuple, state, bindings, habituation)
     explanations = tuple(
-        explain_template(template, state, bindings, selection) for template in ordered
+        explain_template(
+            template,
+            state,
+            bindings,
+            selection,
+            digest=digest,
+        )
+        for template in ordered
     )
     winner_id = outcome.winner.template_id if outcome.winner is not None else None
     serialized_bindings = {

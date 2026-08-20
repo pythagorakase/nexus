@@ -2842,10 +2842,13 @@ def evaluate(
     state: WorldState,
     bindings: Bindings,
     selection: Optional[BranchSelection] = None,
+    *,
+    digest: Optional[str] = None,
 ) -> Resolution:
     """Evaluate one template and binding set against world state."""
 
-    digest = binding_hash(bindings)
+    if digest is None:
+        digest = binding_hash(bindings)
     if not template.package_gate(state, bindings):
         return Resolution(
             template_id=template.id,
@@ -3048,6 +3051,8 @@ def select_package(
     branch_selection: Optional[BranchSelection] = None,
     habituation: Optional[HabituationPolicy] = None,
     package_selection: Optional[PackageSelection] = None,
+    *,
+    digest: Optional[str] = None,
 ) -> PackageSelectionOutcome:
     """Choose one firing package through the production/explain authority.
 
@@ -3064,6 +3069,8 @@ def select_package(
     branch-selection calibration.
     """
 
+    if digest is None:
+        digest = binding_hash(bindings)
     habituation_policy = habituation or HabituationPolicy()
     ordered = stack_order(templates, state, bindings, habituation_policy)
     stochastic = (
@@ -3079,7 +3086,13 @@ def select_package(
             assert package_selection is not None
             if effective_priority < peak - package_selection.window_points:
                 break  # ordered descending: nothing below the floor can win
-        resolution = evaluate(template, state, bindings, branch_selection)
+        resolution = evaluate(
+            template,
+            state,
+            bindings,
+            branch_selection,
+            digest=digest,
+        )
         if not resolution.passes:
             continue
         if not stochastic:
@@ -3120,7 +3133,6 @@ def select_package(
         math.exp((effective_priority - peak) / package_selection.temperature)
         for _template, _resolution, effective_priority in window
     ]
-    digest = binding_hash(bindings)
     rng = seeded_stochastic_rng(digest, state.current_tick, "package_selection")
     chosen = rng.choices(window, weights=weights, k=1)[0]
     return PackageSelectionOutcome(
@@ -3141,6 +3153,7 @@ def evaluate_stack(
 ) -> Optional[Resolution]:
     """Evaluate a stack through the shared package-selection authority."""
 
+    digest = binding_hash(bindings)
     return select_package(
         templates,
         state,
@@ -3148,6 +3161,7 @@ def evaluate_stack(
         selection,
         habituation,
         package_selection,
+        digest=digest,
     ).winner
 
 
