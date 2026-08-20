@@ -2199,6 +2199,7 @@ def run_record_revelation(
     """Record an explicit told or manual claim-awareness grant."""
 
     from nexus.agents.orrery.epistemics import (
+        EpistemicsValidationError,
         current_world_time_sync,
         record_revelation,
     )
@@ -2210,26 +2211,34 @@ def run_record_revelation(
         world_time = parse_record_revelation_world_time(args.world_time)
     dbname = slot_dbname(args.slot)
 
-    def apply(conn: Any) -> Any:
+    def apply(conn: Any) -> tuple[Optional[Any], Optional[str]]:
         with conn.cursor() as cur:
             resolved_world_time = world_time
             if resolved_world_time is None:
                 resolved_world_time = current_world_time_sync(cur)
-            return record_revelation(
-                cur,
-                claim_id=args.claim_id,
-                knower_entity_id=args.knower,
-                source_entity_id=args.source_entity_id,
-                channel=args.channel,
-                world_time=resolved_world_time,
-                source_chunk_id=args.source_chunk_id,
-            )
+            try:
+                revelation = record_revelation(
+                    cur,
+                    claim_id=args.claim_id,
+                    knower_entity_id=args.knower,
+                    source_entity_id=args.source_entity_id,
+                    channel=args.channel,
+                    world_time=resolved_world_time,
+                    source_chunk_id=args.source_chunk_id,
+                )
+            except EpistemicsValidationError as exc:
+                return None, str(exc)
+            return revelation, None
 
     if connection is None:
         with get_connection(dbname, dict_cursor=True) as conn:
-            revelation = apply(conn)
+            revelation, validation_error = apply(conn)
     else:
-        revelation = apply(connection)
+        revelation, validation_error = apply(connection)
+    if validation_error is not None:
+        return {"success": False, "error": validation_error}
+    if revelation is None:
+        raise RuntimeError("Record-revelation validation produced no result")
     message = (
         f"Granted awareness for claim {args.claim_id} "
         f"(tier: {revelation.source_tier})."
