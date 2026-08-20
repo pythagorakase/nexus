@@ -246,8 +246,12 @@ def load_accepted_correspondence(
     return context.render(max_tokens=max_tokens)
 
 
-def read_accepted_correspondence(cur: Any) -> CorrespondenceContext:
-    """Read the current digest and visible journal from an open DB cursor."""
+def read_accepted_correspondence(
+    cur: Any,
+    *,
+    through_chunk_id: Optional[int] = None,
+) -> CorrespondenceContext:
+    """Read the accepted digest and visible journal through an optional chunk."""
 
     cur.execute(
         """
@@ -255,9 +259,11 @@ def read_accepted_correspondence(cur: Any) -> CorrespondenceContext:
         FROM storyteller_correspondence_digest_versions AS d
         JOIN narrative_chunks AS accepting
           ON accepting.id = d.accepting_chunk_id
+        WHERE (%s IS NULL OR d.accepting_chunk_id <= %s)
         ORDER BY d.accepting_chunk_id DESC
         LIMIT 1
-        """
+        """,
+        (through_chunk_id, through_chunk_id),
     )
     digest_row = cur.fetchone()
     compacted_through = (
@@ -269,6 +275,7 @@ def read_accepted_correspondence(cur: Any) -> CorrespondenceContext:
         FROM storyteller_correspondence_letters AS l
         JOIN narrative_chunks AS nc ON nc.id = l.chunk_id
         WHERE (%s IS NULL OR l.chunk_id > %s)
+          AND (%s IS NULL OR l.chunk_id <= %s)
         ORDER BY l.chunk_id,
                  CASE l.seat
                     WHEN 'writer' THEN 1
@@ -277,7 +284,12 @@ def read_accepted_correspondence(cur: Any) -> CorrespondenceContext:
                  END,
                  l.id
         """,
-        (compacted_through, compacted_through),
+        (
+            compacted_through,
+            compacted_through,
+            through_chunk_id,
+            through_chunk_id,
+        ),
     )
     exchanges = _group_exchange_rows(cur.fetchall())
     return CorrespondenceContext(

@@ -159,6 +159,24 @@ def _include_orrery_dev_router(target_app: FastAPI, settings: Any = None) -> Non
 _include_orrery_dev_router(app)
 
 
+def _include_backstage_router(target_app: FastAPI, settings: Any = None) -> None:
+    """Register Backstage iff the shared Orrery dashboard gate is enabled."""
+
+    if settings is None:
+        from nexus.config import load_settings as _load_typed_settings
+
+        settings = _load_typed_settings()
+
+    orrery_settings = settings.orrery
+    if orrery_settings is not None and orrery_settings.dashboard.enabled:
+        from nexus.api.backstage_endpoints import router as backstage_router
+
+        target_app.include_router(backstage_router)
+
+
+_include_backstage_router(app)
+
+
 # WebSocket connection manager
 class ConnectionManager:
     def __init__(self):

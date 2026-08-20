@@ -8,6 +8,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { FontProvider } from "@/contexts/FontContext";
 import { ModelProvider } from "@/contexts/ModelContext";
+import { DeveloperModeProvider } from "@/contexts/DeveloperModeContext";
 import NotFound from "@/pages/not-found";
 import SplashPage from "@/pages/SplashPage";
 import NewStoryPage from "@/pages/NewStoryPage";
@@ -56,16 +57,18 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <FontProvider>
-          <ModelProvider>
-            <TooltipProvider>
-              <ErrorBoundary>
-                <Toaster />
-                <Router />
-              </ErrorBoundary>
-            </TooltipProvider>
-          </ModelProvider>
-        </FontProvider>
+        <DeveloperModeProvider>
+          <FontProvider>
+            <ModelProvider>
+              <TooltipProvider>
+                <ErrorBoundary>
+                  <Toaster />
+                  <Router />
+                </ErrorBoundary>
+              </TooltipProvider>
+            </ModelProvider>
+          </FontProvider>
+        </DeveloperModeProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );

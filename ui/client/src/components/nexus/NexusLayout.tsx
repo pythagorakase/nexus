@@ -15,6 +15,7 @@ import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useDeveloperMode } from "@/contexts/DeveloperModeContext";
 import { useNarrativeEngine } from "@/hooks/useNarrativeEngine";
 import { getUserCharacter } from "@/lib/narrative-api";
 import type { SettingsPayload } from "@/types/settings";
@@ -25,6 +26,7 @@ import { RightLedger } from "./RightLedger";
 import { CharactersPane } from "./CharactersPane";
 import { MapPane } from "./MapPane";
 import { SettingsPane } from "./SettingsPane";
+import { BackstageDrawer } from "./BackstageDrawer";
 import "./nexus-layout.css";
 
 const TABS: NexusTab[] = ["narrative", "map", "characters", "settings"];
@@ -53,7 +55,9 @@ function activeSlot(): number | null {
 export function NexusLayout() {
   const [, setLocation] = useLocation();
   const { isVector } = useTheme();
+  const { effectiveDeveloperMode } = useDeveloperMode();
   const [tab, setTab] = useState<NexusTab>(initialTab);
+  const [backstageOpen, setBackstageOpen] = useState(false);
   const [slot] = useState<number | null>(activeSlot);
   // Reading position: null = live frontier; a chunk id = historical
   // reading (read-only). Shared by the reader and the right-rail tree.
@@ -72,6 +76,33 @@ export function NexusLayout() {
   });
   const typewriterMsPerChar =
     settings?.ui?.typewriter_ms_per_char ?? DEFAULT_TYPEWRITER_MS;
+  const backstagePollBusyMs =
+    settings?.orrery?.dashboard?.backstage_poll_busy_ms ?? 2000;
+  const backstagePollIdleMs =
+    settings?.orrery?.dashboard?.backstage_poll_idle_ms ?? 8000;
+
+  useEffect(() => {
+    if (!effectiveDeveloperMode) setBackstageOpen(false);
+  }, [effectiveDeveloperMode]);
+
+  useEffect(() => {
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (["INPUT", "TEXTAREA"].includes(target.tagName) || target.isContentEditable)
+      ) {
+        return;
+      }
+      if (event.key === "Escape") {
+        setBackstageOpen(false);
+      } else if (event.key === "`" && effectiveDeveloperMode) {
+        setBackstageOpen((open) => !open);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [effectiveDeveloperMode]);
 
   // Keep ?tab= in the URL so deep links and refreshes restore the pane.
   useEffect(() => {
@@ -92,7 +123,14 @@ export function NexusLayout() {
         skaldStatus={engine.skaldStatus}
       />
       <div className={`nexus-main ${showLedger ? "" : "no-ledger"}`}>
-        <LeftRail tab={tab} onTabChange={setTab} onHome={() => setLocation("/")} />
+        <LeftRail
+          tab={tab}
+          onTabChange={setTab}
+          onHome={() => setLocation("/")}
+          showBackstage={effectiveDeveloperMode}
+          backstageOpen={backstageOpen}
+          onBackstageToggle={() => setBackstageOpen((open) => !open)}
+        />
         <main className="nexus-content">
           {tab === "narrative" &&
             (slot === null ? (
@@ -132,6 +170,14 @@ export function NexusLayout() {
             engine={engine}
             readingChunkId={readingChunkId}
             onNavigate={setReadingChunkId}
+          />
+        )}
+        {effectiveDeveloperMode && backstageOpen && slot !== null && (
+          <BackstageDrawer
+            slot={slot}
+            onClose={() => setBackstageOpen(false)}
+            pollBusyMs={backstagePollBusyMs}
+            pollIdleMs={backstagePollIdleMs}
           />
         )}
       </div>

@@ -1,8 +1,9 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { beforeEach, describe, expect, it } from "vitest";
 import { FontProvider, KEEPERS } from "@/contexts/FontContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
+import { DeveloperModeProvider } from "@/contexts/DeveloperModeContext";
 import {
   LOCAL_MODELS_DOWNLOAD_KEY,
   LOCAL_MODELS_STATUS_KEY,
@@ -38,24 +39,58 @@ const STATUSES: SecretStatus[] = [
   },
 ];
 
-function renderPane() {
+function renderPane(settings: SettingsPayload = SETTINGS) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
-  queryClient.setQueryData([...SETTINGS_QUERY_KEY], SETTINGS);
+  queryClient.setQueryData([...SETTINGS_QUERY_KEY], settings);
   queryClient.setQueryData([...SECRETS_QUERY_KEY], STATUSES);
 
   render(
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <FontProvider>
-          <SettingsPane />
-        </FontProvider>
+        <DeveloperModeProvider>
+          <FontProvider>
+            <SettingsPane />
+          </FontProvider>
+        </DeveloperModeProvider>
       </ThemeProvider>
     </QueryClientProvider>,
   );
   return queryClient;
 }
+
+beforeEach(() => {
+  localStorage.clear();
+});
+
+describe("SettingsPane developer mode", () => {
+  it("omits ADVANCED while the server gate is closed", () => {
+    renderPane();
+
+    expect(screen.queryByText(/ADVANCED/)).not.toBeInTheDocument();
+    expect(screen.queryByTestId("lever-dev-mode")).not.toBeInTheDocument();
+  });
+
+  it("persists the gate-visible developer lever locally", () => {
+    renderPane({
+      ...SETTINGS,
+      orrery: { dashboard: { enabled: true } },
+    });
+
+    const lever = screen.getByTestId("lever-dev-mode");
+    expect(screen.getByText(/ADVANCED/)).toBeInTheDocument();
+    expect(lever).toHaveAttribute("aria-checked", "false");
+    fireEvent.click(lever);
+    expect(lever).toHaveAttribute("aria-checked", "true");
+    expect(localStorage.getItem("nexus-developer-mode")).toBe("true");
+    expect(
+      screen.getByText(
+        /Exposes the story machinery — seat correspondence, state writes, Orrery activity/,
+      ),
+    ).toBeInTheDocument();
+  });
+});
 
 describe("SettingsPane API keys", () => {
   it("renders registry rows with masked status and no textual status labels", () => {
@@ -121,11 +156,13 @@ describe("SettingsPane model card local provider", () => {
 
     render(
       <QueryClientProvider client={queryClient}>
-        <ThemeProvider>
+      <ThemeProvider>
+        <DeveloperModeProvider>
           <FontProvider>
             <SettingsPane />
           </FontProvider>
-        </ThemeProvider>
+        </DeveloperModeProvider>
+      </ThemeProvider>
       </QueryClientProvider>,
     );
 
