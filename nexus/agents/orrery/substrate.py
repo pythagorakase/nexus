@@ -2842,48 +2842,66 @@ def evaluate(
     state: WorldState,
     bindings: Bindings,
     selection: Optional[BranchSelection] = None,
+    *,
+    digest: Optional[str] = None,
 ) -> Resolution:
-    """Evaluate one template and binding set against world state."""
+    """Evaluate one template and binding set against world state.
 
-    digest = binding_hash(bindings)
+    Package gates and branch predicates must treat ``bindings`` as immutable
+    for the whole evaluation operation. A direct caller that omits ``digest``
+    owns that operation and verifies the binding identity at completion. A
+    caller that supplies ``digest`` must perform the same verification at its
+    enclosing operation boundary, as :func:`select_package` does for stacks.
+    """
+
+    verify_at_completion = digest is None
+    if digest is None:
+        digest = binding_hash(bindings)
     if not template.package_gate(state, bindings):
-        return Resolution(
+        resolution = Resolution(
             template_id=template.id,
             priority=template.priority,
             binding_hash=digest,
             bindings=bindings,
             passes=False,
         )
-
-    branch, _considered = select_branch(
-        template, state, bindings, digest=digest, selection=selection
-    )
-    if branch is not None:
-        return Resolution(
-            template_id=template.id,
-            priority=template.priority,
-            binding_hash=digest,
-            bindings=bindings,
-            passes=True,
-            branch_label=branch.label,
-            narrative_stub=branch.narrative_stub,
-            state_delta=branch.state_delta,
-            event_type=branch.event_type,
-            changed_fields=branch.changed_fields,
-            magnitude=branch.magnitude,
-            scene_pressure_stub=branch.scene_pressure_stub,
-            signal_event_type=branch.signal_event_type,
-            promotable=branch.promotable,
-            binds_project_faction=template.binds_project_faction,
+    else:
+        branch, _considered = select_branch(
+            template, state, bindings, digest=digest, selection=selection
         )
+        if branch is not None:
+            resolution = Resolution(
+                template_id=template.id,
+                priority=template.priority,
+                binding_hash=digest,
+                bindings=bindings,
+                passes=True,
+                branch_label=branch.label,
+                narrative_stub=branch.narrative_stub,
+                state_delta=branch.state_delta,
+                event_type=branch.event_type,
+                changed_fields=branch.changed_fields,
+                magnitude=branch.magnitude,
+                scene_pressure_stub=branch.scene_pressure_stub,
+                signal_event_type=branch.signal_event_type,
+                promotable=branch.promotable,
+                binds_project_faction=template.binds_project_faction,
+            )
+        else:
+            resolution = Resolution(
+                template_id=template.id,
+                priority=template.priority,
+                binding_hash=digest,
+                bindings=bindings,
+                passes=False,
+            )
 
-    return Resolution(
-        template_id=template.id,
-        priority=template.priority,
-        binding_hash=digest,
-        bindings=bindings,
-        passes=False,
-    )
+    if verify_at_completion and binding_hash(bindings) != digest:
+        raise RuntimeError(
+            f"Bindings were mutated during template evaluation for "
+            f"{template.id!r}; this violates the substrate's pure-predicate contract"
+        )
+    return resolution
 
 
 @dataclass(frozen=True)
@@ -3048,6 +3066,8 @@ def select_package(
     branch_selection: Optional[BranchSelection] = None,
     habituation: Optional[HabituationPolicy] = None,
     package_selection: Optional[PackageSelection] = None,
+    *,
+    digest: Optional[str] = None,
 ) -> PackageSelectionOutcome:
     """Choose one firing package through the production/explain authority.
 
@@ -3061,9 +3081,13 @@ def select_package(
     preempts randomization for the whole stack. The softmax seed uses
     binding identity and the persisted tick plus a package-specific salt,
     so the same evaluation is replay-identical without sharing
-    branch-selection calibration.
+    branch-selection calibration. Package gates and branch predicates must
+    keep ``bindings`` immutable for the entire stack operation; this authority
+    rehashes once at completion and raises loudly if that contract is violated.
     """
 
+    if digest is None:
+        digest = binding_hash(bindings)
     habituation_policy = habituation or HabituationPolicy()
     ordered = stack_order(templates, state, bindings, habituation_policy)
     stochastic = (
@@ -3071,6 +3095,7 @@ def select_package(
     )
     window: list[tuple[Template, Resolution, float]] = []
     peak: Optional[float] = None
+    outcome: Optional[PackageSelectionOutcome] = None
     for template in ordered:
         effective_priority = habituation_policy.effective_priority(
             template, state, bindings
@@ -3079,56 +3104,77 @@ def select_package(
             assert package_selection is not None
             if effective_priority < peak - package_selection.window_points:
                 break  # ordered descending: nothing below the floor can win
-        resolution = evaluate(template, state, bindings, branch_selection)
+        resolution = evaluate(
+            template,
+            state,
+            bindings,
+            branch_selection,
+            digest=digest,
+        )
         if not resolution.passes:
             continue
         if not stochastic:
-            return PackageSelectionOutcome(
+            outcome = PackageSelectionOutcome(
                 winner=resolution,
                 window_template_ids=(template.id,),
                 reason="argmax",
             )
+            break
         if peak is None:
             peak = effective_priority
         window.append((template, resolution, effective_priority))
 
-    if not window:
-        return PackageSelectionOutcome(winner=None)
+    if outcome is None:
+        if not window:
+            outcome = PackageSelectionOutcome(winner=None)
+        else:
+            assert package_selection is not None
+            argmax = window[0]
+            if any(
+                template.drive_band.value in package_selection.exempt_bands
+                for template, _resolution, _priority in window
+            ):
+                outcome = PackageSelectionOutcome(
+                    winner=argmax[1],
+                    window_template_ids=(argmax[0].id,),
+                    reason="exempt_band_argmax",
+                )
+            else:
+                peak = argmax[2]
+                window_ids = tuple(
+                    template.id for template, _resolution, _priority in window
+                )
+                if len(window) == 1:
+                    outcome = PackageSelectionOutcome(
+                        winner=argmax[1],
+                        window_template_ids=window_ids,
+                        reason="single_candidate_window",
+                    )
+                else:
+                    weights = [
+                        math.exp(
+                            (effective_priority - peak) / package_selection.temperature
+                        )
+                        for _template, _resolution, effective_priority in window
+                    ]
+                    rng = seeded_stochastic_rng(
+                        digest, state.current_tick, "package_selection"
+                    )
+                    chosen = rng.choices(window, weights=weights, k=1)[0]
+                    outcome = PackageSelectionOutcome(
+                        winner=chosen[1],
+                        window_template_ids=window_ids,
+                        chosen_by_softmax=True,
+                        reason="window_softmax",
+                    )
 
-    assert package_selection is not None  # a non-empty window requires stochastic mode
-    argmax = window[0]
-    if any(
-        template.drive_band.value in package_selection.exempt_bands
-        for template, _resolution, _priority in window
-    ):
-        return PackageSelectionOutcome(
-            winner=argmax[1],
-            window_template_ids=(argmax[0].id,),
-            reason="exempt_band_argmax",
+    if binding_hash(bindings) != digest:
+        stack_context = ", ".join(template.id for template in ordered) or "<empty>"
+        raise RuntimeError(
+            "Bindings were mutated during stack evaluation for Orrery templates "
+            f"[{stack_context}]; this violates the substrate's pure-predicate contract"
         )
-
-    peak = argmax[2]
-    window_ids = tuple(template.id for template, _resolution, _priority in window)
-    if len(window) == 1:
-        return PackageSelectionOutcome(
-            winner=argmax[1],
-            window_template_ids=window_ids,
-            reason="single_candidate_window",
-        )
-
-    weights = [
-        math.exp((effective_priority - peak) / package_selection.temperature)
-        for _template, _resolution, effective_priority in window
-    ]
-    digest = binding_hash(bindings)
-    rng = seeded_stochastic_rng(digest, state.current_tick, "package_selection")
-    chosen = rng.choices(window, weights=weights, k=1)[0]
-    return PackageSelectionOutcome(
-        winner=chosen[1],
-        window_template_ids=window_ids,
-        chosen_by_softmax=True,
-        reason="window_softmax",
-    )
+    return outcome
 
 
 def evaluate_stack(
@@ -3139,8 +3185,14 @@ def evaluate_stack(
     habituation: Optional[HabituationPolicy] = None,
     package_selection: Optional[PackageSelection] = None,
 ) -> Optional[Resolution]:
-    """Evaluate a stack through the shared package-selection authority."""
+    """Evaluate a stack through the shared package-selection authority.
 
+    Bindings are immutable for the full stack operation. This entry point
+    captures their initial digest, and :func:`select_package` verifies that
+    identity once more at completion before returning a resolution.
+    """
+
+    digest = binding_hash(bindings)
     return select_package(
         templates,
         state,
@@ -3148,6 +3200,7 @@ def evaluate_stack(
         selection,
         habituation,
         package_selection,
+        digest=digest,
     ).winner
 
 
