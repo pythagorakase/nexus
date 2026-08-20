@@ -685,7 +685,7 @@ def test_cognition_trace_endpoint_rejects_invalid_identifiers(
     monkeypatch.setattr(orrery_dev_endpoints, "_slot_session", seeded_session)
 
     app = narrative.app
-    original_route_count = len(app.router.routes)
+    original_routes = list(app.router.routes)
     cognition_route_registered = any(
         getattr(route, "path", None) == "/api/dev/orrery/cognition/trace"
         and "POST" in (getattr(route, "methods", None) or set())
@@ -693,6 +693,22 @@ def test_cognition_trace_endpoint_rejects_invalid_identifiers(
     )
     if not cognition_route_registered:
         app.include_router(orrery_dev_endpoints.router)
+        # Restore mount_ui's registration-order invariant: the import-time
+        # catch-all (the SPA mount when ui/dist is built, the missing-build
+        # 503 route otherwise) must stay last, or it swallows the routes
+        # this test just registered (a built dist answers POSTs with 405).
+        catch_all = [
+            route
+            for route in app.router.routes
+            if str(getattr(route, "path", "")) == "/{full_path:path}"
+            or (
+                str(getattr(route, "path", "")) in ("", "/")
+                and getattr(route, "name", "") == "ui"
+            )
+        ]
+        for route in catch_all:
+            app.router.routes.remove(route)
+            app.router.routes.append(route)
 
     try:
         with TestClient(app, raise_server_exceptions=False) as client:
@@ -779,7 +795,7 @@ def test_cognition_trace_endpoint_rejects_invalid_identifiers(
             )
     finally:
         if not cognition_route_registered:
-            del app.router.routes[original_route_count:]
+            app.router.routes[:] = original_routes
 
     assert wrong_kind.status_code == 422
     assert wrong_kind.json() == {

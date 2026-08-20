@@ -702,16 +702,28 @@ def test_backstage_gate_both_arms(
             load_settings(str(off_path)),
         )
         gateway = TestClient(narrative.app)
+        assert not [
+            route
+            for route in narrative.app.router.routes
+            if str(getattr(route, "path", "")).startswith("/api/dev/backstage")
+        ]
+        # Which catch-all answers a gated-off path depends on the checkout:
+        # a built ui/dist mounts the SPA (real 404 for api/ paths), while a
+        # dist-less checkout registers the missing-build 503 route.
         off_health = gateway.get("/api/dev/backstage/health")
-        assert off_health.status_code == 503
+        assert off_health.status_code in (404, 503)
         off_turn = gateway.get("/api/dev/backstage/4/turn")
-        assert off_turn.status_code == 503
+        assert off_turn.status_code in (404, 503)
         assert "correspondence" not in off_turn.text
 
         catch_all = [
             route
             for route in narrative.app.router.routes
             if str(getattr(route, "path", "")) == "/{full_path:path}"
+            or (
+                str(getattr(route, "path", "")) in ("", "/")
+                and getattr(route, "name", "") == "ui"
+            )
         ]
         assert len(catch_all) == 1
         narrative.app.router.routes[:] = [
