@@ -321,7 +321,11 @@ def test_recall_and_disclosure_settings_validate_policy_bounds() -> None:
     recall = OrreryRecallSettings()
     assert recall.per_character_max_entries == 4
     assert recall.mandatory_reserved_entries == 2
+    assert recall.trace_batch_size == 500
+    assert load_settings("nexus.toml").orrery.recall.trace_batch_size == 500
     assert OrreryDisclosureSettings().private_claim_minimum_score == 0.20
+    with pytest.raises(ValidationError, match="greater than or equal to 1"):
+        OrreryRecallSettings(trace_batch_size=0)
     with pytest.raises(ValidationError, match="at least one recall component"):
         OrreryRecallSettings(
             semantic_fit_weight=0,
