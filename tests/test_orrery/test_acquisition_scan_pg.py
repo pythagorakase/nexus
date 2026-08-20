@@ -13,7 +13,10 @@ from psycopg2 import sql  # type: ignore[import-untyped]
 from psycopg2.extras import RealDictCursor
 import pytest
 
-from nexus.agents.orrery.experiences import seed_character_experiences_sync
+from nexus.agents.orrery.experiences import (
+    _ACQUISITION_CANDIDATES_SQL,
+    seed_character_experiences_sync,
+)
 from nexus.api import db_pool
 from nexus.config import load_settings_as_dict
 from scripts import new_story_setup
@@ -23,40 +26,6 @@ pytestmark = pytest.mark.requires_postgres
 
 ROOT = Path(__file__).parents[2]
 MIGRATION = ROOT / "migrations" / "113_acquisition_formation_indexes.sql"
-
-ACQUISITION_QUERY = """
-SELECT ca.id AS awareness_id, ca.claim_id, ca.knower_entity_id,
-       ca.source_tier, ca.acquired_at_world_time,
-       ca.source_chunk_id AS anchor_chunk_id,
-       c.summary AS claim_summary, c.account_label,
-       c.world_event_id AS incident_event_id,
-       character.name, character.summary, character.background,
-       character.personality,
-       delivery.id AS delivery_event_id,
-       incident.location_id,
-       metadata.world_time AS anchor_world_time,
-       metadata.world_layer::text AS anchor_world_layer
-FROM claim_awareness ca
-JOIN claims c ON c.id = ca.claim_id
-JOIN characters character ON character.entity_id = ca.knower_entity_id
-JOIN world_events incident ON incident.id = c.world_event_id
-JOIN chunk_metadata metadata ON metadata.chunk_id = ca.source_chunk_id
-LEFT JOIN LATERAL (
-    SELECT event.id
-    FROM world_events event
-    WHERE event.tick_chunk_id = ca.source_chunk_id
-      AND event.payload ->> 'awareness_id' = ca.id::text
-    ORDER BY event.id
-    LIMIT 1
-) delivery ON TRUE
-LEFT JOIN character_experiences existing
-  ON existing.claim_awareness_id = ca.id
-WHERE ca.source_chunk_id <= %s
-  AND ca.source_tier IN ('told', 'granted')
-  AND existing.id IS NULL
-ORDER BY ca.id
-FOR UPDATE OF ca
-"""
 
 
 def _connect(dbname: str) -> Any:
@@ -715,7 +684,7 @@ def test_representative_plan_uses_both_acquisition_indexes(
                 cur.execute(sql.SQL("ANALYZE {}").format(sql.Identifier(table)))
             representative_anchor = chunk_base + 150
             cur.execute(
-                "EXPLAIN (FORMAT JSON) " + ACQUISITION_QUERY,
+                "EXPLAIN (FORMAT JSON) " + _ACQUISITION_CANDIDATES_SQL,
                 (representative_anchor,),
             )
             plan = cur.fetchone()[0][0]["Plan"]
@@ -735,6 +704,17 @@ def test_representative_plan_uses_both_acquisition_indexes(
             comments = cur.fetchone()
             assert "anchor-bounded told/granted" in comments[0]
             assert "source chunk and durable claim-awareness" in comments[1]
+            cur.execute(
+                """
+                SELECT pg_get_expr(index.indpred, index.indrelid)
+                FROM pg_index index
+                WHERE index.indexrelid =
+                    'ix_world_events_awareness_delivery'::regclass
+                """
+            )
+            predicate = str(cur.fetchone()[0])
+            assert "payload ->> 'awareness_id'" in predicate
+            assert "IS NOT NULL" in predicate
     finally:
         conn.rollback()
         conn.close()

@@ -422,6 +422,7 @@ def test_acquisition_formation_migration_adds_measured_indexes() -> None:
     assert "ON world_events (tick_chunk_id, (payload ->> 'awareness_id'))" in (
         migration_sql
     )
+    assert "WHERE (payload ->> 'awareness_id') IS NOT NULL" in migration_sql
     assert migration_sql.count("COMMENT ON INDEX") == 2
 
 
