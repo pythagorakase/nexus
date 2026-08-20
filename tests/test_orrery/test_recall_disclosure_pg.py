@@ -6,6 +6,7 @@ import asyncio
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 import json
+import math
 import os
 from pathlib import Path
 from types import SimpleNamespace
@@ -18,7 +19,7 @@ from psycopg2.extras import RealDictCursor
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.engine import URL
 from sqlalchemy.orm import Session
 
@@ -37,7 +38,7 @@ from nexus.agents.orrery.knowledge_surfacing import (
 from nexus.agents.orrery.retrograde_markers import RETROGRADE_PROLOGUE_MARKER
 from nexus.agents.orrery.resolver import resolve_dry_run
 from nexus.agents.orrery.substrate import ALWAYS, Branch, DriveBand, Slot, Template
-from nexus.api import narrative, orrery_dev_endpoints
+from nexus.api import db_pool, narrative, orrery_dev_endpoints
 from nexus.config import load_settings_as_dict
 from scripts import new_story_setup
 
@@ -66,7 +67,7 @@ def recall_database() -> Iterator[str]:
 
     dbname = f"qa_wt724_recall_{uuid4().hex[:12]}"
     source = os.environ.get("NEXUS_TEST_TEMPLATE_DB", "NEXUS_template")
-    assert source == "NEXUS_template" or source.startswith("qa_wt724_")
+    assert source == "NEXUS_template" or source.startswith(("qa_wt724_", "qa_wt721_"))
     admin: Any = None
     original_use_pool = new_story_setup.USE_POOL
     try:
@@ -88,6 +89,9 @@ def recall_database() -> Iterator[str]:
         yield dbname
     finally:
         new_story_setup.USE_POOL = original_use_pool
+        pool = db_pool._pools.pop(dbname, None)
+        if pool is not None:
+            pool.closeall()
         if admin is not None:
             with admin.cursor() as cur:
                 cur.execute(
@@ -500,6 +504,99 @@ def _plan_index_names(node: Mapping[str, Any]) -> set[str]:
     for child in node.get("Plans", []):
         names.update(_plan_index_names(child))
     return names
+
+
+@contextmanager
+def _capture_trace_statements(session: Session) -> Iterator[list[str]]:
+    """Capture real recall-trace upsert and retention executions."""
+
+    statements: list[str] = []
+    connection = session.connection()
+
+    def capture(
+        _connection: Any,
+        _cursor: Any,
+        statement: str,
+        _parameters: Any,
+        _context: Any,
+        _executemany: bool,
+    ) -> None:
+        if "INSERT INTO orrery_recall_trace" in statement:
+            statements.append("upsert")
+        elif "DELETE FROM orrery_recall_trace" in statement:
+            statements.append("retention")
+
+    event.listen(connection, "before_cursor_execute", capture)
+    try:
+        yield statements
+    finally:
+        event.remove(connection, "before_cursor_execute", capture)
+
+
+def _bulk_claims(
+    session: Session,
+    *,
+    owner_entity_id: int,
+    chunk_id: int,
+    acquired_at: datetime,
+    count: int,
+) -> None:
+    """Insert eligible claims set-wise for the trace round-trip proof."""
+
+    _, first_awareness_id = _claim(
+        session,
+        owner_entity_id=owner_entity_id,
+        chunk_id=chunk_id,
+        acquired_at=acquired_at,
+        label="round-trip-1",
+    )
+    assert first_awareness_id is not None
+    world_event_id = int(
+        session.execute(
+            text(
+                "SELECT claim.world_event_id "
+                "FROM claims claim "
+                "JOIN claim_awareness awareness ON awareness.claim_id = claim.id "
+                "WHERE awareness.id = :awareness_id"
+            ),
+            {"awareness_id": first_awareness_id},
+        ).scalar_one()
+    )
+    session.execute(
+        text(
+            """
+            WITH inserted AS (
+                INSERT INTO claims (
+                    world_event_id, summary, scope, source_chunk_id,
+                    account_label
+                )
+                SELECT
+                    :world_event_id,
+                    'Order 721 bulk claim ' || sequence_number,
+                    'bounded',
+                    :chunk_id,
+                    :label_prefix || sequence_number
+                FROM generate_series(2, :count) AS sequence_number
+                RETURNING id
+            )
+            INSERT INTO claim_awareness (
+                claim_id, knower_entity_id, source_tier,
+                acquired_at_world_time, source_chunk_id
+            )
+            SELECT
+                id, :owner_entity_id, 'participant', :acquired_at, :chunk_id
+            FROM inserted
+            """
+        ),
+        {
+            "world_event_id": world_event_id,
+            "chunk_id": chunk_id,
+            "label_prefix": f"qa_wt721-{uuid4().hex}-",
+            "count": count,
+            "owner_entity_id": owner_entity_id,
+            "acquired_at": acquired_at,
+        },
+    )
 
 
 def test_cognition_trace_endpoint_rejects_invalid_identifiers(
@@ -2287,3 +2384,264 @@ def test_trace_retention_prunes_oldest_rows_per_character(session: Session) -> N
         ).scalars()
     )
     assert retained_turns == ["retention-2", "retention-3"]
+
+
+def test_empty_candidate_set_executes_no_trace_statements(session: Session) -> None:
+    """An eligible audience with no owned knowledge performs no trace writes."""
+
+    base = datetime(2078, 7, 1, tzinfo=timezone.utc)
+    anchor = _chunk(session, label="empty trace anchor", world_time=base, scene=1)
+    alpha = _character(session, "empty-trace")
+    _present(session, chunk_id=anchor, characters=[alpha])
+
+    with _capture_trace_statements(session) as statements:
+        digest = _digest(
+            session,
+            present=[alpha[0]],
+            anchor=anchor,
+            turn_id="empty-trace",
+        )
+
+    assert digest == []
+    assert statements == []
+
+
+def test_batched_trace_rows_match_across_database_surfaces(session: Session) -> None:
+    """Mixed candidate rows preserve every persisted value on both DB APIs."""
+
+    base = datetime(2078, 7, 2, tzinfo=timezone.utc)
+    anchor = _chunk(session, label="mixed trace anchor", world_time=base, scene=1)
+    alpha = _character(session, "mixed-alpha")
+    beta = _character(session, "mixed-beta")
+    _present(session, chunk_id=anchor, characters=[alpha, beta])
+    alpha_claim, alpha_awareness = _claim(
+        session,
+        owner_entity_id=alpha[0],
+        chunk_id=anchor,
+        acquired_at=base,
+        label="mixed alpha claim",
+    )
+    beta_claim, beta_awareness = _claim(
+        session,
+        owner_entity_id=beta[0],
+        chunk_id=anchor,
+        acquired_at=base,
+        label="mixed beta claim",
+    )
+    alpha_experience = _experience(
+        session,
+        owner_entity_id=alpha[0],
+        chunk_id=anchor,
+        world_time=base,
+        label="mixed alpha experience",
+    )
+    beta_experience = _experience(
+        session,
+        owner_entity_id=beta[0],
+        chunk_id=anchor,
+        world_time=base,
+        label="mixed beta experience",
+    )
+
+    session_digest = _digest(
+        session,
+        present=[alpha[0], beta[0]],
+        anchor=anchor,
+        turn_id="mixed-trace-session",
+        recall={"trace_batch_size": 2},
+    )
+    raw_connection = session.connection().connection.driver_connection
+    assert raw_connection is not None
+    with raw_connection.cursor(cursor_factory=RealDictCursor) as cursor:
+        cursor_digest = build_knowledge_digest_sync(
+            cursor,
+            present_entity_ids=[alpha[0], beta[0]],
+            anchor_chunk_id=anchor,
+            settings={
+                "enabled": True,
+                "max_entries": 12,
+                "recent_reveal_window_chunks": 3,
+            },
+            include_player_character=True,
+            recall_settings={"trace_batch_size": 2},
+            disclosure_settings={},
+            turn_id="mixed-trace-cursor",
+        )
+    assert cursor_digest == session_digest
+
+    trace_rows = {
+        turn_id: [
+            dict(row)
+            for row in session.execute(
+                text(
+                    """
+                    SELECT
+                        anchor_chunk_id, character_entity_id, candidate_kind,
+                        candidate_id, claim_id, decision, reason, mandatory,
+                        score, score_components
+                    FROM orrery_recall_trace
+                    WHERE turn_id = :turn_id
+                    ORDER BY character_entity_id, candidate_kind, candidate_id
+                    """
+                ),
+                {"turn_id": turn_id},
+            ).mappings()
+        ]
+        for turn_id in ("mixed-trace-session", "mixed-trace-cursor")
+    }
+    assert trace_rows["mixed-trace-session"] == trace_rows["mixed-trace-cursor"]
+
+    expected_identities = {
+        (alpha[0], "claim", alpha_awareness, alpha_claim),
+        (alpha[0], "experience", alpha_experience, None),
+        (beta[0], "claim", beta_awareness, beta_claim),
+        (beta[0], "experience", beta_experience, None),
+    }
+    assert {
+        (
+            row["character_entity_id"],
+            row["candidate_kind"],
+            row["candidate_id"],
+            row["claim_id"],
+        )
+        for row in trace_rows["mixed-trace-session"]
+    } == expected_identities
+    for row in trace_rows["mixed-trace-session"]:
+        assert row["anchor_chunk_id"] == anchor
+        assert row["decision"] == "included"
+        assert row["reason"] == "disclosed"
+        assert row["mandatory"] is False
+        is_experience = row["candidate_kind"] == "experience"
+        assert row["score"] == pytest.approx(0.455 if is_experience else 0.375)
+        expected_components = {
+            "semantic_fit": None,
+            "semantic_status": (
+                "skipped_no_query_embedding"
+                if is_experience
+                else "not_applicable_claim"
+            ),
+            "event_severity": 0.5,
+            "actor_involvement": 1.0,
+            "emotional_salience": 0.8 if is_experience else 0.0,
+            "recency": 1.0,
+            "place_match": 0.0,
+            "age_world_hours": 0.0,
+            "raw_score": 0.455 if is_experience else 0.375,
+            "decay_modifier": 1.0,
+            "disclosure": {
+                "audience_count": 1,
+                "secrecy_marker": 0.0,
+                "relationship_valence": 0.0,
+                "status_edge_match": 0.0,
+                "role_obligation_risk": 0.0,
+                "score": 0.0,
+                "threshold": 0.0,
+            },
+        }
+        assert row["score_components"] == expected_components
+
+
+def test_same_turn_batched_trace_rerun_updates_without_duplicates(
+    session: Session,
+) -> None:
+    """A retry updates the authoritative conflict keys in place."""
+
+    base = datetime(2078, 7, 3, tzinfo=timezone.utc)
+    anchor = _chunk(session, label="trace retry anchor", world_time=base, scene=1)
+    alpha = _character(session, "trace-retry")
+    _present(session, chunk_id=anchor, characters=[alpha])
+    for index in range(2):
+        _claim(
+            session,
+            owner_entity_id=alpha[0],
+            chunk_id=anchor,
+            acquired_at=base,
+            label=f"trace retry {index}",
+        )
+
+    _digest(
+        session,
+        present=[alpha[0]],
+        anchor=anchor,
+        turn_id="trace-retry",
+        max_entries=1,
+        recall={
+            "per_character_max_entries": 1,
+            "mandatory_reserved_entries": 0,
+            "trace_batch_size": 1,
+        },
+    )
+    assert (
+        session.execute(
+            text(
+                "SELECT count(*) FROM orrery_recall_trace "
+                "WHERE turn_id = 'trace-retry' AND decision = 'excluded'"
+            )
+        ).scalar_one()
+        == 1
+    )
+
+    _digest(
+        session,
+        present=[alpha[0]],
+        anchor=anchor,
+        turn_id="trace-retry",
+        max_entries=2,
+        recall={
+            "per_character_max_entries": 2,
+            "mandatory_reserved_entries": 0,
+            "trace_batch_size": 1,
+        },
+    )
+    retry_rows = session.execute(
+        text(
+            "SELECT decision, reason FROM orrery_recall_trace "
+            "WHERE turn_id = 'trace-retry' ORDER BY candidate_id"
+        )
+    ).all()
+    assert retry_rows == [("included", "disclosed"), ("included", "disclosed")]
+
+
+def test_trace_round_trips_are_bounded_by_configured_batch_size(
+    session: Session,
+) -> None:
+    """One thousand real candidates use only ceil(N/batch) upserts plus delete."""
+
+    base = datetime(2078, 7, 4, tzinfo=timezone.utc)
+    anchor = _chunk(session, label="trace batching anchor", world_time=base, scene=1)
+    alpha = _character(session, "trace-batching")
+    _present(session, chunk_id=anchor, characters=[alpha])
+    _bulk_claims(
+        session,
+        owner_entity_id=alpha[0],
+        chunk_id=anchor,
+        acquired_at=base,
+        count=1_000,
+    )
+    batch_size = 128
+
+    with _capture_trace_statements(session) as statements:
+        _digest(
+            session,
+            present=[alpha[0]],
+            anchor=anchor,
+            turn_id="trace-batching",
+            max_entries=1_000,
+            recall={
+                "per_character_max_entries": 1_000,
+                "mandatory_reserved_entries": 0,
+                "trace_rows_per_character": 2_000,
+                "trace_batch_size": batch_size,
+            },
+        )
+
+    assert statements == ["upsert"] * math.ceil(1_000 / batch_size) + ["retention"]
+    assert (
+        session.execute(
+            text(
+                "SELECT count(*) FROM orrery_recall_trace "
+                "WHERE turn_id = 'trace-batching'"
+            )
+        ).scalar_one()
+        == 1_000
+    )

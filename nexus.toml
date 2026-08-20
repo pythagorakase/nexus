@@ -469,6 +469,7 @@ missing_embedding_score = 0.0
 per_character_max_entries = 4
 mandatory_reserved_entries = 2
 trace_rows_per_character = 500
+trace_batch_size = 500
 
 [orrery.recall.severity_scores]
 minor = 0.25
