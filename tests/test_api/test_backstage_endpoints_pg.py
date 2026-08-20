@@ -42,6 +42,58 @@ def _connect(dbname: str) -> Any:
     )
 
 
+def _stage_incubator(
+    cur: Any,
+    *,
+    chunk_id: int,
+    parent_chunk_id: int,
+    session_id: str,
+    storyteller_text: str,
+    entity_updates: dict[str, Any],
+    writer_letter: str | None = None,
+    gaia_letter: str | None = None,
+) -> None:
+    """Stage one fixture turn for the genuine synchronous commit handler."""
+
+    cur.execute(
+        """
+        INSERT INTO incubator (
+            id, chunk_id, parent_chunk_id, user_text,
+            storyteller_text, metadata_updates, entity_updates,
+            reference_updates, correspondence_writer_letter,
+            correspondence_gaia_letter, session_id, llm_response_id,
+            status, generation_model, lore_pass_baseline,
+            orrery_adjudications, new_entities
+        ) VALUES (
+            TRUE, %s, %s, 'continue', %s, %s::jsonb, %s::jsonb,
+            %s::jsonb, %s, %s, %s, %s, 'provisional', 'TEST', %s::jsonb,
+            '[]'::jsonb, '[]'::jsonb
+        )
+        """,
+        (
+            chunk_id,
+            parent_chunk_id,
+            storyteller_text,
+            json.dumps(
+                {
+                    "chronology": {
+                        "episode_transition": "continue",
+                        "time_delta_hours": 1,
+                    },
+                    "world_layer": "primary",
+                }
+            ),
+            json.dumps(entity_updates),
+            json.dumps({"characters": [], "places": [], "factions": []}),
+            writer_letter,
+            gaia_letter,
+            session_id,
+            f"backstage-response-{chunk_id}",
+            json.dumps(empty_pass2_baseline({}).model_dump(mode="json")),
+        ),
+    )
+
+
 @pytest.fixture(scope="module")
 def disposable_db() -> Iterator[str]:
     """Yield a dump-initialized disposable slot and drop it afterward."""
@@ -207,71 +259,79 @@ def backstage_case(disposable_db: str) -> dict[str, Any]:
                     """,
                     (first_character,),
                 )
-                session_id = str(uuid.uuid4())
+                prior_session_id = str(uuid.uuid4())
                 parent_chunk_id = chunk_ids[-1]
-                cur.execute(
-                    """
-                    INSERT INTO incubator (
-                        id, chunk_id, parent_chunk_id, user_text,
-                        storyteller_text, metadata_updates, entity_updates,
-                        reference_updates, correspondence_writer_letter,
-                        correspondence_gaia_letter, session_id, llm_response_id,
-                        status, generation_model, lore_pass_baseline,
-                        orrery_adjudications, new_entities
-                    ) VALUES (
-                        TRUE, %s, %s, 'continue', 'Celia watches the Rootline.',
-                        %s::jsonb, %s::jsonb, %s::jsonb, %s, %s, %s,
-                        'backstage-response', 'provisional', 'TEST', %s::jsonb,
-                        '[]'::jsonb, '[]'::jsonb
-                    )
-                    """,
-                    (
-                        parent_chunk_id + 1,
-                        parent_chunk_id,
-                        json.dumps(
+                _stage_incubator(
+                    cur,
+                    chunk_id=parent_chunk_id + 1,
+                    parent_chunk_id=parent_chunk_id,
+                    session_id=prior_session_id,
+                    storyteller_text="Victor answers Celia's signal.",
+                    entity_updates={
+                        "characters": [],
+                        "relationships": [
                             {
-                                "chronology": {
-                                    "episode_transition": "continue",
-                                    "time_delta_hours": 1,
+                                "character1_id": second_character,
+                                "character1_name": "Victor",
+                                "character2_id": first_character,
+                                "character2_name": "Celia",
+                                "dynamic": "watchfulness becomes a shared habit",
+                                "recent_events": "Celia answered Victor's signal",
+                            }
+                        ],
+                        "locations": [],
+                        "factions": [],
+                    },
+                )
+
+        prior_relationship_chunk = (
+            commit_handler_sync.commit_incubator_to_database_sync(
+                conn,
+                prior_session_id,
+                slot=None,
+            )
+        )
+        chunk_ids.append(prior_relationship_chunk)
+        assert chunk_ids == [2, 3, 4]
+
+        session_id = str(uuid.uuid4())
+        with conn:
+            with conn.cursor() as cur:
+                _stage_incubator(
+                    cur,
+                    chunk_id=prior_relationship_chunk + 1,
+                    parent_chunk_id=prior_relationship_chunk,
+                    session_id=session_id,
+                    storyteller_text="Celia watches the Rootline.",
+                    entity_updates={
+                        "characters": [
+                            {
+                                "character_id": first_character,
+                                "character_name": "Celia",
+                                "current_activity": "watching the Rootline",
+                                "orrery_tags": {
+                                    "applied_tags": ["grieving"],
+                                    "tags_to_clear": ["grieving"],
                                 },
-                                "world_layer": "primary",
                             }
-                        ),
-                        json.dumps(
+                        ],
+                        "relationships": [
                             {
-                                "characters": [
-                                    {
-                                        "character_id": first_character,
-                                        "character_name": "Celia",
-                                        "current_activity": "watching the Rootline",
-                                        "orrery_tags": {
-                                            "applied_tags": ["grieving"],
-                                            "tags_to_clear": ["grieving"],
-                                        },
-                                    }
-                                ],
-                                "relationships": [
-                                    {
-                                        "character1_id": first_character,
-                                        "character1_name": "Celia",
-                                        "character2_id": second_character,
-                                        "character2_name": "Victor",
-                                        "relationship_type": "friend",
-                                        "emotional_valence": "+2|friendly",
-                                        "dynamic": "trust sharpened by shared danger",
-                                        "recent_events": "Victor kept watch",
-                                    }
-                                ],
-                                "locations": [],
-                                "factions": [],
+                                "character1_id": first_character,
+                                "character1_name": "Celia",
+                                "character2_id": second_character,
+                                "character2_name": "Victor",
+                                "relationship_type": "friend",
+                                "emotional_valence": "+2|friendly",
+                                "dynamic": "trust sharpened by shared danger",
+                                "recent_events": "Victor kept watch",
                             }
-                        ),
-                        json.dumps({"characters": [], "places": [], "factions": []}),
-                        "Keep Celia's suspicion beneath the prose.",
-                        "Acknowledged; the durable state remains quiet.",
-                        session_id,
-                        json.dumps(empty_pass2_baseline({}).model_dump(mode="json")),
-                    ),
+                        ],
+                        "locations": [],
+                        "factions": [],
+                    },
+                    writer_letter="Keep Celia's suspicion beneath the prose.",
+                    gaia_letter=("Acknowledged; the durable state remains quiet."),
                 )
 
         latest = commit_handler_sync.commit_incubator_to_database_sync(
@@ -280,7 +340,7 @@ def backstage_case(disposable_db: str) -> dict[str, Any]:
             slot=None,
         )
         chunk_ids.append(latest)
-        assert chunk_ids == [2, 3, 4]
+        assert chunk_ids == [2, 3, 4, 5]
 
         with conn:
             with conn.cursor() as cur:
@@ -389,6 +449,7 @@ def backstage_case(disposable_db: str) -> dict[str, Any]:
     return {
         "chunks": chunk_ids,
         "latest": chunk_ids[-1],
+        "prior_relationship_chunk": prior_relationship_chunk,
         "prologue": prologue_id,
         "provisional": provisional_id,
     }
@@ -423,8 +484,8 @@ def test_payload_assembles_every_committed_stream(
     assert payload["header"] == {
         "slot": 4,
         "chunk_id": backstage_case["latest"],
-        "chunk_label": "S01E01_003",
-        "turn_label": "t.3",
+        "chunk_label": "S01E01_004",
+        "turn_label": "t.4",
         "world_time": payload["header"]["world_time"],
         "skald_status": "idle",
     }
@@ -432,7 +493,7 @@ def test_payload_assembles_every_committed_stream(
     correspondence = payload["correspondence"]
     assert correspondence["digest"] == "Victor is cultivating Celia as an informant."
     assert correspondence["digest_fresh"] is True
-    assert correspondence["exchanges"][0]["turn_label"] == "t.3"
+    assert correspondence["exchanges"][0]["turn_label"] == "t.4"
     assert [letter["seat"] for letter in correspondence["exchanges"][0]["letters"]] == [
         "writer",
         "gaia",
@@ -443,7 +504,7 @@ def test_payload_assembles_every_committed_stream(
             "actor_name": "Celia",
             "streak_length": 1,
             "start_tick": backstage_case["latest"],
-            "start_turn_label": "t.3",
+            "start_turn_label": "t.4",
         }
     ]
 
@@ -494,16 +555,16 @@ def test_payload_assembles_every_committed_stream(
     )
     assert payload["state_writes"]["history"] == [
         {
-            "chunk_id": backstage_case["chunks"][1],
-            "turn_label": "t.2",
-            "writes": 0,
+            "chunk_id": backstage_case["prior_relationship_chunk"],
+            "turn_label": "t.3",
+            "writes": 2,
             "fired": None,
             "pressures": None,
             "events": None,
         },
         {
-            "chunk_id": backstage_case["chunks"][0],
-            "turn_label": "t.1",
+            "chunk_id": backstage_case["chunks"][1],
+            "turn_label": "t.2",
             "writes": 0,
             "fired": None,
             "pressures": None,
@@ -525,7 +586,34 @@ def test_payload_assembles_every_committed_stream(
             "drive_band": "crisis_constraint",
         }
     ]
-    assert [entry["turn_label"] for entry in orrery["history"]] == ["t.2", "t.1"]
+    assert [entry["turn_label"] for entry in orrery["history"]] == ["t.3", "t.2"]
+
+
+def test_history_counts_field_level_relationship_writes(
+    client: TestClient,
+    backstage_case: dict[str, Any],
+) -> None:
+    latest = client.get("/api/dev/backstage/4/turn").json()
+    prior_chunk_id = backstage_case["prior_relationship_chunk"]
+    prior = client.get(
+        "/api/dev/backstage/4/turn",
+        params={"chunk_id": prior_chunk_id},
+    )
+    assert prior.status_code == 200
+    prior_writes = prior.json()["state_writes"]["rows"]
+
+    assert {
+        (row["field"], row["old_value"], row["new_value"]) for row in prior_writes
+    } == {
+        ("dynamic", "quiet", "watchfulness becomes a shared habit"),
+        ("recent_events", "none", "Celia answered Victor's signal"),
+    }
+    history_line = next(
+        line
+        for line in latest["state_writes"]["history"]
+        if line["chunk_id"] == prior_chunk_id
+    )
+    assert history_line["writes"] == len(prior_writes) == 2
 
 
 def test_requested_chunk_is_historically_bounded(

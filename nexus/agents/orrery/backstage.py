@@ -493,27 +493,13 @@ def _tag_writes(session: Session, chunk_id: int) -> list[BackstageWrite]:
     ]
 
 
-def _write_count(session: Session, chunk_id: int) -> int:
-    return int(
-        session.execute(
-            text(
-                """
-                SELECT
-                    (SELECT count(*) FROM state_delta_log
-                     WHERE source_chunk_id = :chunk_id
-                       AND writer = 'skald_state_update') +
-                    (SELECT count(*) FROM relationship_versions
-                     WHERE source_chunk_id = :chunk_id) +
-                    (SELECT count(*) FROM entity_tags
-                     WHERE source_chunk_id = :chunk_id) +
-                    (SELECT count(*) FROM entity_pair_tags
-                     WHERE source_chunk_id = :chunk_id) +
-                    (SELECT count(*) FROM tag_clearance_log
-                     WHERE source_chunk_id = :chunk_id)
-                """
-            ),
-            {"chunk_id": chunk_id},
-        ).scalar_one()
+def _state_writes(session: Session, chunk_id: int) -> list[BackstageWrite]:
+    """Return every field-level write rendered for one committed chunk."""
+
+    return (
+        _scalar_writes(session, chunk_id)
+        + _relationship_writes(session, chunk_id)
+        + _tag_writes(session, chunk_id)
     )
 
 
@@ -645,16 +631,12 @@ def build_backstage_turn(
             )
         ).scalar_one()
     )
-    writes = (
-        _scalar_writes(session, selected_id)
-        + _relationship_writes(session, selected_id)
-        + _tag_writes(session, selected_id)
-    )
+    writes = _state_writes(session, selected_id)
     write_history = [
         BackstageHistoryLine(
             chunk_id=int(chunk["id"]),
             turn_label=f"t.{int(chunk['turn_number'])}",
-            writes=_write_count(session, int(chunk["id"])),
+            writes=len(_state_writes(session, int(chunk["id"]))),
         )
         for chunk in chunks[1:]
     ]
