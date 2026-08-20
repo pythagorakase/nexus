@@ -55,7 +55,6 @@ class AsyncCommitConnection:
         self.character_junctions = []
         self.place_junctions = []
         self.bleed_offers = []
-        self.parent_present_character_ids = []
         self.statements = []
         self.child_world_time_read = False
         self.child_world_time = datetime(2026, 8, 13, 19, 0, tzinfo=timezone.utc)
@@ -127,14 +126,6 @@ class AsyncCommitConnection:
             ]
         if normalized == "SELECT character_id, alias FROM character_aliases":
             return []
-        if normalized == (
-            "SELECT character_id FROM chunk_character_references "
-            "WHERE chunk_id = $1 AND reference::text = 'present'"
-        ):
-            return [
-                {"character_id": character_id}
-                for character_id in self.parent_present_character_ids
-            ]
         if "SELECT id FROM characters WHERE name" in normalized:
             entity_id = self.characters.get(args[0])
             return [{"id": entity_id}] if entity_id is not None else []

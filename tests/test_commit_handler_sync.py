@@ -125,15 +125,6 @@ class CommitCursor:
         elif normalized == "SELECT character_id, alias FROM character_aliases":
             self.rows = []
             self.result = None
-        elif normalized == (
-            "SELECT character_id FROM chunk_character_references "
-            "WHERE chunk_id = %s AND reference::text = 'present'"
-        ):
-            self.rows = [
-                (character_id,)
-                for character_id in self.connection.parent_present_character_ids
-            ]
-            self.result = None
         elif "SELECT id FROM characters WHERE name" in normalized:
             entity_id = self.connection.characters.get(params[0])
             self.result = (entity_id,) if entity_id is not None else None
@@ -195,7 +186,6 @@ class CommitConnection:
         self.character_junctions = []
         self.place_junctions = []
         self.bleed_offers = []
-        self.parent_present_character_ids = []
         self.statements = []
         self.rollback_called = False
         self.child_world_time_read = False

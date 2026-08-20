@@ -51,7 +51,6 @@ from nexus.api.summary_triggers import (
 )
 from nexus.api.lore_adapter import compute_raw_text, split_staged_orrery_payload
 from nexus.api.presence_reconciliation import (
-    read_authored_exit_character_ids_from_connection,
     read_character_roster_from_connection,
     reconcile_declared_character_mentions,
     reconcile_public_prose_mentions_by_character_ids,
@@ -447,10 +446,11 @@ def commit_incubator_to_database_sync(
             choice_text: Optional[str] = incubator.get("choice_text")
 
             if choice_object:
-                if not choice_text:
+                if not (choice_text or "").strip():
                     choice_text = selected_text_from_choice_object(choice_object)
                 choice_object = normalize_choice_object(choice_object)
 
+            enacted_text = (choice_text or "").strip()
             raw_text = compute_raw_text(storyteller_text, choice_object, choice_text)
 
             with conn.cursor() as cur:
@@ -556,18 +556,13 @@ def commit_incubator_to_database_sync(
             character_refs = resolve_character_references_sync(
                 ref_entities.characters, conn
             )
-            authored_exit_ids = read_authored_exit_character_ids_from_connection(
-                conn,
-                int(incubator["parent_chunk_id"]),
-                staged_character_refs=character_refs,
-            )
-            committed_prose_parts = [raw_text]
+            declared_prose_parts = [raw_text]
             if choice_object:
-                committed_prose_parts.extend(choice_object["presented"])
+                declared_prose_parts.extend(choice_object["presented"])
             roster_rows = read_character_roster_from_connection(conn)
             declared_mentions = reconcile_declared_character_mentions(
                 conn,
-                committed_prose_parts,
+                declared_prose_parts,
                 declarations=declarations,
                 accounted_character_ids={
                     int(reference["character_id"]) for reference in character_refs
@@ -583,11 +578,10 @@ def commit_incubator_to_database_sync(
                     {"character_id": mention.id, "reference": "mentioned"}
                 )
             roster_mentions = reconcile_public_prose_mentions_by_character_ids(
-                committed_prose_parts,
+                [enacted_text],
                 accounted_character_ids={
                     int(reference["character_id"]) for reference in character_refs
-                }
-                | authored_exit_ids,
+                },
                 roster_rows=roster_rows,
             )
             for mention in roster_mentions:

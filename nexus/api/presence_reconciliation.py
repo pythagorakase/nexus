@@ -195,59 +195,6 @@ async def read_character_roster_from_async_connection(
     )
 
 
-def _authored_exit_character_ids(
-    parent_present_character_ids: Collection[int],
-    staged_character_refs: Sequence[Mapping[str, Any]],
-) -> set[int]:
-    """Return parent-present IDs absent from the hydrated current roster."""
-
-    staged_present_ids = {
-        int(reference["character_id"])
-        for reference in staged_character_refs
-        if reference["reference"] == "present"
-    }
-    return set(parent_present_character_ids) - staged_present_ids
-
-
-def read_authored_exit_character_ids_from_connection(
-    conn: Any,
-    parent_chunk_id: int,
-    *,
-    staged_character_refs: Sequence[Mapping[str, Any]],
-) -> set[int]:
-    """Resolve authored exits from parent presence and hydrated staged refs."""
-
-    if parent_chunk_id == 0:
-        return set()
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT character_id FROM chunk_character_references "
-            "WHERE chunk_id = %s AND reference::text = 'present'",
-            (parent_chunk_id,),
-        )
-        parent_present_ids = {int(row[0]) for row in cur.fetchall()}
-    return _authored_exit_character_ids(parent_present_ids, staged_character_refs)
-
-
-async def read_authored_exit_character_ids_from_async_connection(
-    conn: Any,
-    parent_chunk_id: int,
-    *,
-    staged_character_refs: Sequence[Mapping[str, Any]],
-) -> set[int]:
-    """Resolve authored exits from async parent presence and staged refs."""
-
-    if parent_chunk_id == 0:
-        return set()
-    rows = await conn.fetch(
-        "SELECT character_id FROM chunk_character_references "
-        "WHERE chunk_id = $1 AND reference::text = 'present'",
-        parent_chunk_id,
-    )
-    parent_present_ids = {int(row["character_id"]) for row in rows}
-    return _authored_exit_character_ids(parent_present_ids, staged_character_refs)
-
-
 def _matches_character(character: Any, reference: PresenceRef) -> bool:
     """Match canonical identity by id when possible, otherwise by name."""
 

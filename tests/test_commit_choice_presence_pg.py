@@ -15,8 +15,10 @@ import pytest
 
 from nexus.agents.logon.skald_wire import (
     CharacterRef,
+    PlaceRef,
     PresenceBaseline,
     PresenceDelta,
+    SceneReset,
     SkaldTurnWire,
     hydrate_skald_turn,
 )
@@ -237,7 +239,43 @@ def _stage_choice_turn(
     return session_id, character_id
 
 
-def _stage_authored_exit_turn(dbname: str) -> tuple[str, int, int]:
+def _insert_present_parent(cur: Any, character_id: int) -> int:
+    """Insert one parent chunk where the roster character is present."""
+
+    cur.execute(
+        "INSERT INTO narrative_chunks (raw_text, storyteller_text) "
+        "VALUES (%s, %s) RETURNING id",
+        (
+            "Len Aster waits on the platform.",
+            "Len Aster waits on the platform.",
+        ),
+    )
+    parent_chunk_id = int(cur.fetchone()[0])
+    cur.execute(
+        """
+        INSERT INTO chunk_metadata (
+            chunk_id, season, episode, scene, world_layer, slug
+        ) VALUES (%s, 1, 1, 1, 'primary', 'S01E01_001')
+        """,
+        (parent_chunk_id,),
+    )
+    cur.execute(
+        """
+        INSERT INTO chunk_character_references (
+            chunk_id, character_id, reference
+        ) VALUES (%s, %s, 'present')
+        """,
+        (parent_chunk_id, character_id),
+    )
+    return parent_chunk_id
+
+
+def _stage_authored_exit_turn(
+    dbname: str,
+    *,
+    enacted_choice_text: str | None = None,
+    name_in_unselected_option: bool = False,
+) -> tuple[str, int, int]:
     """Stage the exact empty-reference shape produced by hydrated presence.exit."""
 
     session_id = str(uuid4())
@@ -245,31 +283,7 @@ def _stage_authored_exit_turn(dbname: str) -> tuple[str, int, int]:
         with conn.cursor() as cur:
             character_ids = _reset_world(cur, [ROSTER_CHARACTER])
             character_id = character_ids[ROSTER_CHARACTER]
-            cur.execute(
-                "INSERT INTO narrative_chunks (raw_text, storyteller_text) "
-                "VALUES (%s, %s) RETURNING id",
-                (
-                    "Len Aster waits on the platform.",
-                    "Len Aster waits on the platform.",
-                ),
-            )
-            parent_chunk_id = int(cur.fetchone()[0])
-            cur.execute(
-                """
-                INSERT INTO chunk_metadata (
-                    chunk_id, season, episode, scene, world_layer, slug
-                ) VALUES (%s, 1, 1, 1, 'primary', 'S01E01_001')
-                """,
-                (parent_chunk_id,),
-            )
-            cur.execute(
-                """
-                INSERT INTO chunk_character_references (
-                    chunk_id, character_id, reference
-                ) VALUES (%s, %s, 'present')
-                """,
-                (parent_chunk_id, character_id),
-            )
+            parent_chunk_id = _insert_present_parent(cur, character_id)
 
             baseline = PresenceBaseline(
                 present=[
@@ -280,9 +294,21 @@ def _stage_authored_exit_turn(dbname: str) -> tuple[str, int, int]:
                     )
                 ]
             )
+            choices = [
+                (
+                    "Ask Len Aster to return to the platform."
+                    if name_in_unselected_option
+                    else "Follow the departing train."
+                ),
+                "Wait beneath the clock.",
+            ]
             wire = SkaldTurnWire(
-                narrative="Len Aster leaves the rain-dark platform behind.",
-                choices=["Follow the departing train.", "Wait beneath the clock."],
+                narrative=(
+                    "The departing train slips beyond the rain-dark platform."
+                    if name_in_unselected_option
+                    else "Len Aster leaves the rain-dark platform behind."
+                ),
+                choices=choices,
                 presence=PresenceDelta(
                     exit=[
                         CharacterRef(
@@ -318,13 +344,98 @@ def _stage_authored_exit_turn(dbname: str) -> tuple[str, int, int]:
                 lore_pass_baseline=empty_pass2_baseline({}),
             )
             assert payload["reference_updates"]["characters"] == []
+            choice_object = payload["choice_object"]
+            if name_in_unselected_option:
+                assert choice_object is not None
+                choice_object["selected"] = 2
+            _insert_staged_turn(
+                cur,
+                session_id=session_id,
+                parent_chunk_id=parent_chunk_id,
+                storyteller_text=payload["storyteller_text"],
+                choice_object=choice_object,
+                choice_text=enacted_choice_text,
+                metadata_updates=payload["metadata_updates"],
+                entity_updates=payload["entity_updates"],
+                reference_updates=payload["reference_updates"],
+                new_entities=payload["new_entities"],
+            )
+    return session_id, character_id, parent_chunk_id
+
+
+def _stage_scene_reset_choice_turn(dbname: str) -> tuple[str, int, int]:
+    """Stage a hydrated scene reset followed by a dropped-character choice."""
+
+    session_id = str(uuid4())
+    with _connect(dbname) as conn:
+        with conn.cursor() as cur:
+            character_ids = _reset_world(cur, [ROSTER_CHARACTER])
+            character_id = character_ids[ROSTER_CHARACTER]
+            parent_chunk_id = _insert_present_parent(cur, character_id)
+            cur.execute("INSERT INTO entities (kind) VALUES ('place') RETURNING id")
+            place_entity_id = int(cur.fetchone()[0])
+            place_name = f"Reset Platform {uuid4().hex}"
+            cur.execute(
+                """
+                INSERT INTO places (name, type, entity_id)
+                VALUES (%s, 'fixed_location', %s)
+                RETURNING id
+                """,
+                (place_name, place_entity_id),
+            )
+            place_id = int(cur.fetchone()[0])
+
+            baseline = PresenceBaseline(
+                present=[
+                    CharacterRef(
+                        kind="character",
+                        name=ROSTER_CHARACTER,
+                        id=character_id,
+                    )
+                ]
+            )
+            wire = SkaldTurnWire(
+                narrative="The train crosses into a silent terminus.",
+                choices=["Study the departure board.", "Wait beside the tracks."],
+                presence=PresenceDelta(
+                    scene_reset=SceneReset(
+                        place=PlaceRef(kind="place", name=place_name, id=place_id),
+                        present=[],
+                    )
+                ),
+                letter="Reset the scene without carrying the old roster forward.",
+            )
+            reconcile_prose_mentions(
+                wire,
+                presence_baseline=baseline,
+                roster_rows=CharacterRosterRows(
+                    characters=[
+                        {
+                            "id": character_id,
+                            "name": ROSTER_CHARACTER,
+                            "summary": None,
+                        }
+                    ],
+                    aliases=[],
+                ),
+            )
+            hydrated = hydrate_skald_turn(wire, presence_baseline=baseline)
+            hydrated.generation_model = "TEST"
+            payload = response_to_incubator(
+                hydrated,
+                parent_chunk_id=parent_chunk_id,
+                user_text="Continue.",
+                session_id=session_id,
+                lore_pass_baseline=empty_pass2_baseline({}),
+            )
+            assert payload["reference_updates"]["characters"] == []
             _insert_staged_turn(
                 cur,
                 session_id=session_id,
                 parent_chunk_id=parent_chunk_id,
                 storyteller_text=payload["storyteller_text"],
                 choice_object=payload["choice_object"],
-                choice_text=payload["choice_text"],
+                choice_text="I ask Len Aster to meet me at the new terminus.",
                 metadata_updates=payload["metadata_updates"],
                 entity_updates=payload["entity_updates"],
                 reference_updates=payload["reference_updates"],
@@ -537,6 +648,138 @@ def test_sync_commit_preserves_hydrated_authored_exit(
         conn.close()
 
 
+def test_sync_commit_reconciles_scene_reset_drop_named_in_enacted_choice(
+    choice_presence_database: str,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A scene-reset drop remains eligible for sync enacted-choice mention."""
+
+    session_id, character_id, parent_chunk_id = _stage_scene_reset_choice_turn(
+        choice_presence_database
+    )
+    conn = _connect(choice_presence_database)
+    try:
+        with caplog.at_level(logging.WARNING):
+            chunk_id = commit_handler_sync.commit_incubator_to_database_sync(
+                conn,
+                session_id,
+                slot=None,
+            )
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT raw_text FROM narrative_chunks WHERE id = %s",
+                    (chunk_id,),
+                )
+                raw_text = str(cur.fetchone()[0])
+            findings = presence_audit.audit_chunk_presence(
+                conn,
+                chunk_id,
+                raw_text,
+                parent_chunk_id=parent_chunk_id,
+            )
+
+        _assert_reference_row(
+            conn,
+            chunk_id=chunk_id,
+            character_id=character_id,
+            expected_reference="mentioned",
+        )
+        assert findings == []
+        _assert_no_audit_warning(caplog)
+    finally:
+        conn.close()
+
+
+def test_sync_commit_reconciles_authored_exit_named_in_enacted_choice(
+    choice_presence_database: str,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """An exited character named by the player gains a sync mentioned row."""
+
+    session_id, character_id, parent_chunk_id = _stage_authored_exit_turn(
+        choice_presence_database,
+        enacted_choice_text="I call after Len Aster before the train departs.",
+    )
+    conn = _connect(choice_presence_database)
+    try:
+        with caplog.at_level(logging.WARNING):
+            chunk_id = commit_handler_sync.commit_incubator_to_database_sync(
+                conn,
+                session_id,
+                slot=None,
+            )
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT raw_text FROM narrative_chunks WHERE id = %s",
+                    (chunk_id,),
+                )
+                raw_text = str(cur.fetchone()[0])
+            findings = presence_audit.audit_chunk_presence(
+                conn,
+                chunk_id,
+                raw_text,
+                parent_chunk_id=parent_chunk_id,
+            )
+
+        _assert_reference_row(
+            conn,
+            chunk_id=chunk_id,
+            character_id=character_id,
+            expected_reference="mentioned",
+        )
+        assert findings == []
+        _assert_no_audit_warning(caplog)
+    finally:
+        conn.close()
+
+
+def test_sync_commit_ignores_character_named_only_in_unselected_option(
+    choice_presence_database: str,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The sync roster pass does not rescan an unselected presented option."""
+
+    session_id, character_id, parent_chunk_id = _stage_authored_exit_turn(
+        choice_presence_database,
+        name_in_unselected_option=True,
+    )
+    conn = _connect(choice_presence_database)
+    try:
+        with caplog.at_level(logging.WARNING):
+            chunk_id = commit_handler_sync.commit_incubator_to_database_sync(
+                conn,
+                session_id,
+                slot=None,
+            )
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT raw_text, choice_text "
+                    "FROM narrative_chunks WHERE id = %s",
+                    (chunk_id,),
+                )
+                raw_text, choice_text = (str(value) for value in cur.fetchone())
+                cur.execute(
+                    "SELECT reference::text FROM chunk_character_references "
+                    "WHERE chunk_id = %s AND character_id = %s",
+                    (chunk_id, character_id),
+                )
+                rows = cur.fetchall()
+            findings = presence_audit.audit_chunk_presence(
+                conn,
+                chunk_id,
+                raw_text,
+                parent_chunk_id=parent_chunk_id,
+            )
+
+        assert ROSTER_CHARACTER not in choice_text
+        assert ROSTER_CHARACTER not in raw_text
+        assert rows == []
+        assert findings == []
+        _assert_no_audit_warning(caplog)
+    finally:
+        conn.close()
+
+
 @pytest.mark.parametrize(
     ("choice_text", "expected_character"),
     [
@@ -708,6 +951,146 @@ async def test_async_commit_preserves_hydrated_authored_exit(
             )
 
         assert ROSTER_CHARACTER in raw_text
+        assert rows == []
+        assert findings == []
+        _assert_no_audit_warning(caplog)
+    finally:
+        await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_async_commit_reconciles_scene_reset_drop_named_in_enacted_choice(
+    choice_presence_database: str,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A scene-reset drop remains eligible for async enacted-choice mention."""
+
+    session_id, character_id, parent_chunk_id = _stage_scene_reset_choice_turn(
+        choice_presence_database
+    )
+    conn = await _connect_async(choice_presence_database)
+    try:
+        with caplog.at_level(logging.WARNING):
+            chunk_id = await commit_handler.commit_incubator_to_database(
+                conn,
+                session_id,
+                slot=None,
+            )
+            raw_text = str(
+                await conn.fetchval(
+                    "SELECT raw_text FROM narrative_chunks WHERE id = $1",
+                    chunk_id,
+                )
+            )
+            findings = await presence_audit.audit_chunk_presence_async(
+                conn,
+                chunk_id,
+                raw_text,
+                parent_chunk_id=parent_chunk_id,
+            )
+        rows = await conn.fetch(
+            "SELECT reference::text AS reference "
+            "FROM chunk_character_references "
+            "WHERE chunk_id = $1 AND character_id = $2",
+            chunk_id,
+            character_id,
+        )
+
+        assert [row["reference"] for row in rows] == ["mentioned"]
+        assert findings == []
+        _assert_no_audit_warning(caplog)
+    finally:
+        await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_async_commit_reconciles_authored_exit_named_in_enacted_choice(
+    choice_presence_database: str,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """An exited character named by the player gains an async mentioned row."""
+
+    session_id, character_id, parent_chunk_id = _stage_authored_exit_turn(
+        choice_presence_database,
+        enacted_choice_text="I call after Len Aster before the train departs.",
+    )
+    conn = await _connect_async(choice_presence_database)
+    try:
+        with caplog.at_level(logging.WARNING):
+            chunk_id = await commit_handler.commit_incubator_to_database(
+                conn,
+                session_id,
+                slot=None,
+            )
+            raw_text = str(
+                await conn.fetchval(
+                    "SELECT raw_text FROM narrative_chunks WHERE id = $1",
+                    chunk_id,
+                )
+            )
+            findings = await presence_audit.audit_chunk_presence_async(
+                conn,
+                chunk_id,
+                raw_text,
+                parent_chunk_id=parent_chunk_id,
+            )
+        rows = await conn.fetch(
+            "SELECT reference::text AS reference "
+            "FROM chunk_character_references "
+            "WHERE chunk_id = $1 AND character_id = $2",
+            chunk_id,
+            character_id,
+        )
+
+        assert [row["reference"] for row in rows] == ["mentioned"]
+        assert findings == []
+        _assert_no_audit_warning(caplog)
+    finally:
+        await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_async_commit_ignores_character_named_only_in_unselected_option(
+    choice_presence_database: str,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The async roster pass does not rescan an unselected presented option."""
+
+    session_id, character_id, parent_chunk_id = _stage_authored_exit_turn(
+        choice_presence_database,
+        name_in_unselected_option=True,
+    )
+    conn = await _connect_async(choice_presence_database)
+    try:
+        with caplog.at_level(logging.WARNING):
+            chunk_id = await commit_handler.commit_incubator_to_database(
+                conn,
+                session_id,
+                slot=None,
+            )
+            row = await conn.fetchrow(
+                "SELECT raw_text, choice_text " "FROM narrative_chunks WHERE id = $1",
+                chunk_id,
+            )
+            assert row is not None
+            raw_text = str(row["raw_text"])
+            choice_text = str(row["choice_text"])
+            rows = await conn.fetch(
+                "SELECT reference::text AS reference "
+                "FROM chunk_character_references "
+                "WHERE chunk_id = $1 AND character_id = $2",
+                chunk_id,
+                character_id,
+            )
+            findings = await presence_audit.audit_chunk_presence_async(
+                conn,
+                chunk_id,
+                raw_text,
+                parent_chunk_id=parent_chunk_id,
+            )
+
+        assert ROSTER_CHARACTER not in choice_text
+        assert ROSTER_CHARACTER not in raw_text
         assert rows == []
         assert findings == []
         _assert_no_audit_warning(caplog)
