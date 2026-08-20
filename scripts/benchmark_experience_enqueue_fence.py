@@ -6,17 +6,21 @@ from __future__ import annotations
 import os
 from pathlib import Path
 from statistics import median
+import sys
 from typing import Any
 from uuid import uuid4
 
 import psycopg2
 from psycopg2 import sql
 
-from nexus.agents.orrery.experiences import _ENQUEUE_CANDIDATES_SQL
-from scripts import new_story_setup
-
-
+# Benchmark this checkout, not whichever installed copy sys.path resolves.
 ROOT = Path(__file__).parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from nexus.agents.orrery.experiences import _ENQUEUE_CANDIDATES_SQL  # noqa: E402
+from scripts import new_story_setup  # noqa: E402
+
 MIGRATION = ROOT / "migrations" / "111_experience_job_enqueue_gin_fence.sql"
 INDEX_NAME = "ix_character_experience_jobs_pending_experience_ids"
 OLD_MEMBERSHIP = "experience.id = ANY(prior_job.experience_ids)"
