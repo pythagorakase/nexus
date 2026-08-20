@@ -30,7 +30,10 @@ from nexus.agents.memnon.utils.embedding_tables import (
 )
 from nexus.agents.orrery.audit import CognitionTraceInputError, cognition_trace
 from nexus.agents.orrery.events import commit_orrery_tick_sync
-from nexus.agents.orrery.knowledge_surfacing import build_knowledge_digest_sync
+from nexus.agents.orrery.knowledge_surfacing import (
+    _eligible_rows,
+    build_knowledge_digest_sync,
+)
 from nexus.agents.orrery.retrograde_markers import RETROGRADE_PROLOGUE_MARKER
 from nexus.agents.orrery.resolver import resolve_dry_run
 from nexus.agents.orrery.substrate import ALWAYS, Branch, DriveBand, Slot, Template
@@ -461,6 +464,42 @@ def _digest(
         turn_id=turn_id,
         query_embeddings=query_embeddings,
     )
+
+
+class _ExplainEligibilityCursor:
+    """Explain the production eligibility statement without returning candidates."""
+
+    description: list[Any] = []
+
+    def __init__(self, cursor: Any) -> None:
+        self._cursor = cursor
+        self.plan: dict[str, Any] | None = None
+
+    def execute(self, statement: str, parameters: Mapping[str, Any]) -> None:
+        """Run a JSON EXPLAIN for the exact statement supplied by production."""
+
+        self._cursor.execute(
+            "EXPLAIN (FORMAT JSON) " + statement,
+            dict(parameters),
+        )
+        row = self._cursor.fetchone()
+        if row is None:
+            raise RuntimeError("Eligibility EXPLAIN returned no plan")
+        self.plan = dict(row[0][0])
+
+    def fetchall(self) -> list[Any]:
+        """Return no candidates because this cursor exposes only a plan."""
+
+        return []
+
+
+def _plan_index_names(node: Mapping[str, Any]) -> set[str]:
+    """Return every index name in a PostgreSQL JSON plan tree."""
+
+    names = {str(node["Index Name"])} if node.get("Index Name") else set()
+    for child in node.get("Plans", []):
+        names.update(_plan_index_names(child))
+    return names
 
 
 def test_cognition_trace_endpoint_rejects_invalid_identifiers(
@@ -1461,6 +1500,110 @@ def test_experience_recall_index_preserves_all_eligibility_boundaries(
         wrong_layer_id,
         invalidated_id,
     }.isdisjoint(recalled_ids)
+
+
+def test_experience_recall_large_shape_uses_eligibility_index(
+    session: Session,
+) -> None:
+    """The natural 50k production eligibility plan uses migration 112's index."""
+
+    base = datetime(2078, 1, 3, tzinfo=timezone.utc)
+    source = _chunk(session, label="plan source", world_time=base, scene=1)
+    anchor = _chunk(
+        session,
+        label="plan anchor",
+        world_time=base + timedelta(hours=1),
+        scene=2,
+    )
+    raw_connection = session.connection().connection.driver_connection
+    assert raw_connection is not None
+    with raw_connection.cursor() as cursor:
+        cursor.execute(
+            "INSERT INTO entities (kind, is_active) "
+            "SELECT 'character', true "
+            "FROM generate_series(1, 1000) "
+            "RETURNING id"
+        )
+        owner_ids = [int(row[0]) for row in cursor.fetchall()]
+        cursor.execute(
+            "INSERT INTO characters (entity_id, name) "
+            "SELECT owner_id, 'q724_plan_' || ordinality "
+            "FROM unnest(%s::bigint[]) WITH ORDINALITY "
+            "AS owners(owner_id, ordinality)",
+            (owner_ids,),
+        )
+        cursor.execute(
+            "INSERT INTO event_types (type, category, severity, description) "
+            "VALUES ("
+            "'q724plan', 'social', 'moderate', "
+            "'Order 724 committed plan regression'"
+            ")"
+        )
+        cursor.execute(
+            """
+            WITH inserted_events AS (
+                INSERT INTO world_events (
+                    event_type, tick_chunk_id, actor_entity_id, world_layer,
+                    source, changed_fields, payload
+                )
+                SELECT 'q724plan', %s, owner_id, 'primary', 'authored',
+                       '{}'::text[], '{}'::jsonb
+                FROM unnest(%s::bigint[]) owner(owner_id)
+                CROSS JOIN generate_series(1, 50)
+                RETURNING id, actor_entity_id
+            )
+            INSERT INTO character_experiences (
+                character_entity_id, anchor_chunk_id, world_event_ids, basis,
+                seed_summary, experience_text, salience, render_model,
+                renderer_version, source_digest, render_generation_id,
+                world_layer, invalidation_status
+            )
+            SELECT actor_entity_id, %s, ARRAY[id], 'participant',
+                   'plan seed ' || id,
+                   CASE WHEN id %% 2 = 0 THEN 'plan rendered ' || id END,
+                   0.8,
+                   CASE WHEN id %% 2 = 0 THEN 'TEST' END,
+                   CASE WHEN id %% 2 = 0 THEN 'test-v1' END,
+                   md5(id::text),
+                   CASE WHEN id %% 2 = 0
+                        THEN '00000000-0000-0000-0000-000000000724'::uuid END,
+                   'primary', 'valid'
+            FROM inserted_events
+            """,
+            (source, owner_ids, source),
+        )
+        assert cursor.rowcount == 50_000
+        cursor.execute(
+            """
+            SELECT count(*), count(DISTINCT character_entity_id),
+                   count(*) FILTER (WHERE experience_text IS NULL),
+                   count(*) FILTER (WHERE experience_text IS NOT NULL)
+            FROM character_experiences
+            """
+        )
+        assert cursor.fetchone() == (50_000, 1_000, 25_000, 25_000)
+        for table_name in (
+            "character_experiences",
+            "world_events",
+            "characters",
+            "entities",
+        ):
+            cursor.execute(sql.SQL("ANALYZE {}").format(sql.Identifier(table_name)))
+
+        explaining_cursor = _ExplainEligibilityCursor(cursor)
+        eligible = _eligible_rows(
+            explaining_cursor,
+            present_entity_ids=owner_ids[:10],
+            anchor_chunk_id=anchor,
+            recent_reveal_window_chunks=3,
+            excluded_experience_owner_entity_id=None,
+        )
+
+    assert eligible == []
+    assert explaining_cursor.plan is not None
+    assert "ix_character_experiences_recall_eligibility" in _plan_index_names(
+        explaining_cursor.plan["Plan"]
+    )
 
 
 def test_critical_current_scene_account_bypasses_ranking(session: Session) -> None:
