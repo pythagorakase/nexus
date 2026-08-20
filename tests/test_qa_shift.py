@@ -501,6 +501,86 @@ def test_validation_only_check_persists_rejection_evidence_and_continues(
     assert state["checks"] == 1
 
 
+def test_validation_only_stops_on_zero_token_event_outside_qa_slot(
+    tmp_path: Path,
+) -> None:
+    config = replace(qa_shift.load_shift_config(), archive_root=tmp_path)
+    poisoned_begin = qa_shift.begin_shift(
+        config=config,
+        usage_reader=lambda _root, _day: _usage(total=100),
+        jobs_reader=_settled_jobs_reader,
+        bleed_uptake_reader=_empty_bleed_uptake_reader,
+        now=NOW,
+    )
+    poisoned_archive = Path(poisoned_begin["archive"])
+    poisoned_evidence = poisoned_archive / "regenerate-note-422.json"
+    poisoned_evidence.write_bytes(
+        (FIXTURES / "qa_shift_regenerate_note_too_long_422.json").read_bytes()
+    )
+    other_slot_event = {
+        **_event(slot=3, total=10),
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+    }
+
+    poisoned = qa_shift.check_shift(
+        archive=poisoned_archive,
+        mode=qa_shift.CheckMode.VALIDATION_ONLY,
+        probe_command="poetry run nexus regenerate --slot 4 --note malformed",
+        rejection_status=422,
+        rejection_evidence=poisoned_evidence,
+        usage_reader=lambda _root, _day: _usage(
+            total=100,
+            events=[other_slot_event],
+        ),
+        jobs_reader=_settled_jobs_reader,
+        now=NOW + timedelta(minutes=1),
+    )
+
+    poisoned_record = json.loads(
+        (poisoned_archive / "usage_checks.jsonl").read_text().splitlines()[-1]
+    )
+    assert poisoned["status"] == "stop"
+    assert "usage_present_for_validation_only" in poisoned["reasons"]
+    assert poisoned_record["observed_new_usage_events"] == 1
+    assert poisoned_record["observed_qa_usage_events"] == 0
+    assert poisoned_record["observed_token_delta"] == 0
+    assert poisoned_record["disposition"] == "stop"
+
+    quiet_begin = qa_shift.begin_shift(
+        config=config,
+        usage_reader=lambda _root, _day: _usage(total=100),
+        jobs_reader=_settled_jobs_reader,
+        bleed_uptake_reader=_empty_bleed_uptake_reader,
+        now=NOW + timedelta(seconds=1),
+    )
+    quiet_archive = Path(quiet_begin["archive"])
+    quiet_evidence = quiet_archive / "regenerate-note-422.json"
+    quiet_evidence.write_bytes(poisoned_evidence.read_bytes())
+
+    quiet = qa_shift.check_shift(
+        archive=quiet_archive,
+        mode=qa_shift.CheckMode.VALIDATION_ONLY,
+        probe_command="poetry run nexus regenerate --slot 4 --note malformed",
+        rejection_status=422,
+        rejection_evidence=quiet_evidence,
+        usage_reader=lambda _root, _day: _usage(total=100),
+        jobs_reader=_settled_jobs_reader,
+        now=NOW + timedelta(minutes=1, seconds=1),
+    )
+
+    quiet_record = json.loads(
+        (quiet_archive / "usage_checks.jsonl").read_text().splitlines()[-1]
+    )
+    assert quiet["status"] == "continue"
+    assert quiet["reasons"] == []
+    assert quiet_record["observed_new_usage_events"] == 0
+    assert quiet_record["observed_qa_usage_events"] == 0
+    assert quiet_record["observed_token_delta"] == 0
+    assert quiet_record["disposition"] == "continue"
+
+
 def test_validation_only_check_stops_when_qa_usage_appears() -> None:
     zero_token_event = {
         **_event(total=10),

@@ -915,7 +915,7 @@ def evaluate_check(
     if expect_call and not expected_events:
         reasons.append("expected_usage_event_missing")
     if mode is CheckMode.VALIDATION_ONLY and (
-        qa_events or (delta is not None and delta != 0)
+        new_events or (delta is not None and delta != 0)
     ):
         reasons.append("usage_present_for_validation_only")
     if usage["unknown"] > 0:
