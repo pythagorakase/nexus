@@ -36,11 +36,15 @@ from nexus.agents.orrery.resolver import resolve_dry_run
 from nexus.agents.orrery.substrate import ALWAYS, Branch, DriveBand, Slot, Template
 from nexus.api import narrative, orrery_dev_endpoints
 from nexus.config import load_settings_as_dict
+from scripts import new_story_setup
 
 
 pytestmark = pytest.mark.requires_postgres
 ROOT = Path(__file__).parents[2]
 MIGRATION = ROOT / "migrations" / "106_recall_trace.sql"
+RECALL_ELIGIBILITY_MIGRATION = (
+    ROOT / "migrations" / "112_character_experience_recall_eligibility.sql"
+)
 
 
 def _connect(dbname: str) -> Any:
@@ -55,31 +59,32 @@ def _connect(dbname: str) -> Any:
 
 @pytest.fixture(scope="module")
 def recall_database() -> Iterator[str]:
-    """Clone the template, apply migration 106 twice, and drop the clone."""
+    """Initialize a disposable database and reapply recall migrations."""
 
-    dbname = f"qa678_{uuid4().hex[:12]}"
+    dbname = f"qa_wt724_recall_{uuid4().hex[:12]}"
     source = os.environ.get("NEXUS_TEST_TEMPLATE_DB", "NEXUS_template")
-    assert source == "NEXUS_template" or source.startswith("qa678_")
+    assert source == "NEXUS_template" or source.startswith("qa_wt724_")
     admin: Any = None
+    original_use_pool = new_story_setup.USE_POOL
     try:
         try:
             admin = _connect("postgres")
         except psycopg2.Error as exc:
             pytest.skip(f"PostgreSQL admin connection unavailable: {exc}")
         admin.autocommit = True
-        with admin.cursor() as cur:
-            cur.execute(
-                sql.SQL("CREATE DATABASE {} TEMPLATE {}").format(
-                    sql.Identifier(dbname), sql.Identifier(source)
-                )
-            )
+        new_story_setup.USE_POOL = False
+        new_story_setup.initialize_slot_database(dbname, source_db=source)
         with _connect(dbname) as conn:
             with conn.cursor() as cur:
                 migration_sql = MIGRATION.read_text()
                 cur.execute(migration_sql)
                 cur.execute(migration_sql)
+                recall_index_sql = RECALL_ELIGIBILITY_MIGRATION.read_text()
+                cur.execute(recall_index_sql)
+                cur.execute(recall_index_sql)
         yield dbname
     finally:
+        new_story_setup.USE_POOL = original_use_pool
         if admin is not None:
             with admin.cursor() as cur:
                 cur.execute(
@@ -126,6 +131,7 @@ def _chunk(
     label: str,
     world_time: datetime,
     scene: int,
+    world_layer: str = "primary",
 ) -> int:
     chunk_id = int(
         session.execute(
@@ -144,10 +150,18 @@ def _chunk(
             """
             INSERT INTO chunk_metadata (
                 chunk_id, season, episode, scene, world_layer, world_time
-            ) VALUES (:chunk_id, 1, 1, :scene, 'primary', :world_time)
+            ) VALUES (
+                :chunk_id, 1, 1, :scene,
+                CAST(:world_layer AS world_layer_type), :world_time
+            )
             """
         ),
-        {"chunk_id": chunk_id, "scene": scene, "world_time": world_time},
+        {
+            "chunk_id": chunk_id,
+            "scene": scene,
+            "world_layer": world_layer,
+            "world_time": world_time,
+        },
     )
     session.execute(
         text(
@@ -345,6 +359,8 @@ def _experience(
     world_time: datetime,
     label: str,
     invalidated: bool = False,
+    rendered: bool = False,
+    world_layer: str = "primary",
 ) -> int:
     event_type = f"qa678_experience_{uuid4().hex[:8]}"
     session.execute(
@@ -364,8 +380,8 @@ def _experience(
                     event_type, tick_chunk_id, actor_entity_id, world_layer,
                     source, changed_fields, payload
                 ) VALUES (
-                    :event_type, :chunk_id, :owner_id, 'primary', 'authored',
-                    '{}', '{}'
+                    :event_type, :chunk_id, :owner_id,
+                    CAST(:world_layer AS world_layer_type), 'authored', '{}', '{}'
                 ) RETURNING id
                 """
             ),
@@ -373,6 +389,7 @@ def _experience(
                 "event_type": event_type,
                 "chunk_id": chunk_id,
                 "owner_id": owner_entity_id,
+                "world_layer": world_layer,
             },
         ).scalar_one()
     )
@@ -383,11 +400,15 @@ def _experience(
                 INSERT INTO character_experiences (
                     character_entity_id, anchor_chunk_id, world_event_ids,
                     basis, world_time, seed_summary, salience, source_digest,
-                    world_layer, invalidation_status, invalidated_at
+                    experience_text, render_model, renderer_version,
+                    render_generation_id, world_layer, invalidation_status,
+                    invalidated_at
                 ) VALUES (
                     :owner_id, :chunk_id, ARRAY[:event_id]::bigint[],
                     'participant', :world_time, :summary, 0.8, :digest,
-                    'primary',
+                    :experience_text, :render_model, :renderer_version,
+                    :render_generation_id,
+                    CAST(:world_layer AS world_layer_type),
                     CAST(:status AS character_experience_invalidation_status),
                     :invalidated_at
                 ) RETURNING id
@@ -400,6 +421,13 @@ def _experience(
                 "world_time": world_time,
                 "summary": f"Experience fixture {label}",
                 "digest": uuid4().hex,
+                "experience_text": (
+                    f"Rendered experience fixture {label}" if rendered else None
+                ),
+                "render_model": "TEST" if rendered else None,
+                "renderer_version": "test-v1" if rendered else None,
+                "render_generation_id": uuid4() if rendered else None,
+                "world_layer": world_layer,
                 "status": "invalidated" if invalidated else "valid",
                 "invalidated_at": datetime.now(timezone.utc) if invalidated else None,
             },
@@ -416,6 +444,7 @@ def _digest(
     max_entries: int = 12,
     recall: dict[str, Any] | None = None,
     query_embeddings: dict[str, list[float]] | None = None,
+    include_player_character: bool = True,
 ) -> list[dict[str, Any]]:
     return build_knowledge_digest_sync(
         session,
@@ -426,7 +455,7 @@ def _digest(
             "max_entries": max_entries,
             "recent_reveal_window_chunks": 3,
         },
-        include_player_character=True,
+        include_player_character=include_player_character,
         recall_settings=recall or {},
         disclosure_settings={},
         turn_id=turn_id,
@@ -1321,6 +1350,117 @@ def test_ownership_and_anchor_validity_are_hard_boundaries(session: Session) -> 
             turn_id="ownership-boundary-cursor",
         )
     assert cursor_digest == digest
+
+
+def test_experience_recall_index_preserves_all_eligibility_boundaries(
+    session: Session,
+) -> None:
+    """Recall keeps both render states while enforcing every indexed boundary."""
+
+    base = datetime(2078, 1, 2, tzinfo=timezone.utc)
+    source = _chunk(session, label="index source", world_time=base, scene=1)
+    wrong_layer_source = _chunk(
+        session,
+        label="index flashback source",
+        world_time=base,
+        scene=4,
+        world_layer="flashback",
+    )
+    anchor = _chunk(
+        session,
+        label="index anchor",
+        world_time=base + timedelta(hours=2),
+        scene=2,
+    )
+    future = _chunk(
+        session,
+        label="index future source",
+        world_time=base + timedelta(hours=4),
+        scene=3,
+    )
+    session.execute(
+        text(
+            "UPDATE chunk_metadata SET world_time = :world_time "
+            "WHERE chunk_id = :chunk_id"
+        ),
+        {"chunk_id": anchor, "world_time": base + timedelta(hours=2)},
+    )
+    player = _character(session, "index-player")
+    owner = _character(session, "index-owner")
+    _present(session, chunk_id=anchor, characters=[player, owner])
+    session.execute(
+        text(
+            "UPDATE global_variables SET user_character = :character_id "
+            "WHERE id = true"
+        ),
+        {"character_id": player[1]},
+    )
+
+    unrendered_id = _experience(
+        session,
+        owner_entity_id=owner[0],
+        chunk_id=source,
+        world_time=base,
+        label="eligible unrendered",
+    )
+    rendered_id = _experience(
+        session,
+        owner_entity_id=owner[0],
+        chunk_id=source,
+        world_time=base,
+        label="eligible rendered",
+        rendered=True,
+    )
+    player_id = _experience(
+        session,
+        owner_entity_id=player[0],
+        chunk_id=source,
+        world_time=base,
+        label="excluded player",
+    )
+    future_id = _experience(
+        session,
+        owner_entity_id=owner[0],
+        chunk_id=future,
+        world_time=base + timedelta(hours=4),
+        label="excluded future anchor",
+    )
+    wrong_layer_id = _experience(
+        session,
+        owner_entity_id=owner[0],
+        chunk_id=wrong_layer_source,
+        world_time=base,
+        label="excluded world layer",
+        world_layer="flashback",
+    )
+    invalidated_id = _experience(
+        session,
+        owner_entity_id=owner[0],
+        chunk_id=source,
+        world_time=base,
+        label="excluded invalidated",
+        invalidated=True,
+    )
+
+    digest = _digest(
+        session,
+        present=[player[0], owner[0]],
+        anchor=anchor,
+        turn_id="experience-index-boundaries",
+        include_player_character=False,
+    )
+    recalled_ids = {
+        int(entry["experience_id"])
+        for entry in digest
+        if entry.get("experience_id") is not None
+    }
+    assert recalled_ids == {unrendered_id, rendered_id}
+    assert {
+        player_id,
+        future_id,
+        wrong_layer_id,
+        invalidated_id,
+    }.isdisjoint(recalled_ids)
 
 
 def test_critical_current_scene_account_bypasses_ranking(session: Session) -> None:
