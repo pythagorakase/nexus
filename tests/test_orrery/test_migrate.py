@@ -402,6 +402,30 @@ def test_claim_awareness_knower_index_supports_per_turn_digest() -> None:
     assert "per-turn Storyteller knowledge digest" in migration_sql
 
 
+def test_acquisition_formation_migration_adds_measured_indexes() -> None:
+    """Migration 113 installs the two measured acquisition-plan indexes."""
+
+    migration_sql = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "113_acquisition_formation_indexes.sql"
+    ).read_text()
+
+    assert "CREATE INDEX IF NOT EXISTS ix_claim_awareness_acquisition_sweep" in (
+        migration_sql
+    )
+    assert "ON claim_awareness (source_chunk_id, id)" in migration_sql
+    assert "WHERE source_tier IN ('told', 'granted')" in migration_sql
+    assert "CREATE INDEX IF NOT EXISTS ix_world_events_awareness_delivery" in (
+        migration_sql
+    )
+    assert "ON world_events (tick_chunk_id, (payload ->> 'awareness_id'))" in (
+        migration_sql
+    )
+    assert "WHERE (payload ->> 'awareness_id') IS NOT NULL" in migration_sql
+    assert migration_sql.count("COMMENT ON INDEX") == 2
+
+
 def test_scene_weather_migration_adds_closed_override_contract() -> None:
     """Migration 094 stores only the ruled five-value weather vocabulary."""
 

@@ -83,6 +83,39 @@ _ACQUISITION_WITNESS = re.compile(
     r"\b(?:saw|watched|witnessed|observed|looked on|was there)\b",
     re.IGNORECASE,
 )
+_ACQUISITION_CANDIDATES_SQL = """
+    SELECT ca.id AS awareness_id, ca.claim_id, ca.knower_entity_id,
+           ca.source_tier, ca.acquired_at_world_time,
+           ca.source_chunk_id AS anchor_chunk_id,
+           c.summary AS claim_summary, c.account_label,
+           c.world_event_id AS incident_event_id,
+           character.name, character.summary, character.background,
+           character.personality,
+           delivery.id AS delivery_event_id,
+           incident.location_id,
+           metadata.world_time AS anchor_world_time,
+           metadata.world_layer::text AS anchor_world_layer
+    FROM claim_awareness ca
+    JOIN claims c ON c.id = ca.claim_id
+    JOIN characters character ON character.entity_id = ca.knower_entity_id
+    JOIN world_events incident ON incident.id = c.world_event_id
+    JOIN chunk_metadata metadata ON metadata.chunk_id = ca.source_chunk_id
+    LEFT JOIN LATERAL (
+        SELECT event.id
+        FROM world_events event
+        WHERE event.tick_chunk_id = ca.source_chunk_id
+          AND event.payload ->> 'awareness_id' = ca.id::text
+        ORDER BY event.id
+        LIMIT 1
+    ) delivery ON TRUE
+    LEFT JOIN character_experiences existing
+      ON existing.claim_awareness_id = ca.id
+    WHERE ca.source_chunk_id <= %s
+      AND ca.source_tier IN ('told', 'granted')
+      AND existing.id IS NULL
+    ORDER BY ca.id
+    FOR UPDATE OF ca
+"""
 _ENQUEUE_CANDIDATES_SQL = """
     SELECT experience.id, experience.source_digest
     FROM character_experiences experience
@@ -765,39 +798,7 @@ def seed_character_experiences_sync(
             )
 
         cur.execute(
-            """
-            SELECT ca.id AS awareness_id, ca.claim_id, ca.knower_entity_id,
-                   ca.source_tier, ca.acquired_at_world_time,
-                   ca.source_chunk_id AS anchor_chunk_id,
-                   c.summary AS claim_summary, c.account_label,
-                   c.world_event_id AS incident_event_id,
-                   character.name, character.summary, character.background,
-                   character.personality,
-                   delivery.id AS delivery_event_id,
-                   incident.location_id,
-                   metadata.world_time AS anchor_world_time,
-                   metadata.world_layer::text AS anchor_world_layer
-            FROM claim_awareness ca
-            JOIN claims c ON c.id = ca.claim_id
-            JOIN characters character ON character.entity_id = ca.knower_entity_id
-            JOIN world_events incident ON incident.id = c.world_event_id
-            JOIN chunk_metadata metadata ON metadata.chunk_id = ca.source_chunk_id
-            LEFT JOIN LATERAL (
-                SELECT event.id
-                FROM world_events event
-                WHERE event.tick_chunk_id = ca.source_chunk_id
-                  AND event.payload ->> 'awareness_id' = ca.id::text
-                ORDER BY event.id
-                LIMIT 1
-            ) delivery ON TRUE
-            LEFT JOIN character_experiences existing
-              ON existing.claim_awareness_id = ca.id
-            WHERE ca.source_chunk_id <= %s
-              AND ca.source_tier IN ('told', 'granted')
-              AND existing.id IS NULL
-            ORDER BY ca.id
-            FOR UPDATE OF ca
-            """,
+            _ACQUISITION_CANDIDATES_SQL,
             (anchor_chunk_id,),
         )
         for acquisition in (dict(row) for row in cur.fetchall()):
