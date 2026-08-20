@@ -417,7 +417,9 @@ def explain_stack(
     authority while retaining the full audit record for every template, so
     the dashboard can render the winner, near-tie window, and shadowed
     packages. Ordering routes through :func:`stack_order`, so habituation
-    dampening shows up here exactly as it does in production.
+    dampening shows up here exactly as it does in production. Because the
+    exhaustive explanation pass executes predicates after package selection,
+    this operation rechecks binding identity at its own completion boundary.
     """
 
     templates_tuple = tuple(templates)
@@ -442,6 +444,12 @@ def explain_stack(
         )
         for template in ordered
     )
+    if binding_hash(bindings) != digest:
+        stack_context = ", ".join(template.id for template in ordered) or "<empty>"
+        raise RuntimeError(
+            "Bindings were mutated during stack evaluation for Orrery templates "
+            f"[{stack_context}]; this violates the substrate's pure-predicate contract"
+        )
     winner_id = outcome.winner.template_id if outcome.winner is not None else None
     serialized_bindings = {
         slot.value if isinstance(slot, Slot) else str(slot): value

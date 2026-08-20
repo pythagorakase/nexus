@@ -182,6 +182,54 @@ def test_mutating_package_gate_fails_loudly_at_stack_completion(path: str) -> No
             )
 
 
+def test_explain_stack_rejects_shadowed_mutating_gate() -> None:
+    """Exhaustive explain verifies again after selection short-circuits."""
+
+    from nexus.agents.orrery.explain import explain_stack
+
+    gate_calls = 0
+
+    def shadowed_mutating_gate(state: WorldState, bindings: dict[Any, Any]) -> bool:
+        nonlocal gate_calls
+        gate_calls += 1
+        bindings[Slot.ACTOR] = 8
+        return True
+
+    shadowed_mutating_gate.__name__ = "ALWAYS"
+    stable = _template("stable_winner", 50, DriveBand.PROJECT_IDENTITY)
+    shadowed = Template(
+        id="shadowed_mutator",
+        priority=40,
+        drive_band=DriveBand.ANCHORED_ROUTINE,
+        blurb="Mutates only when exhaustive explanation reaches it.",
+        required_slots=(Slot.ACTOR,),
+        package_gate=shadowed_mutating_gate,
+        branches=(Branch("mutate", ALWAYS, "{actor} mutates."),),
+    )
+    state = WorldState(current_tick=722)
+    production_bindings = {Slot.ACTOR: 7}
+
+    production = evaluate_stack((shadowed, stable), state, production_bindings)
+
+    assert production is not None
+    assert production.template_id == "stable_winner"
+    assert production.bindings == production_bindings == {Slot.ACTOR: 7}
+    assert gate_calls == 0
+
+    explain_bindings = {Slot.ACTOR: 7}
+    with pytest.raises(
+        RuntimeError,
+        match=(
+            r"Bindings were mutated during stack evaluation for Orrery templates "
+            r"\[stable_winner, shadowed_mutator\].*pure-predicate contract"
+        ),
+    ):
+        explain_stack((shadowed, stable), state, explain_bindings)
+
+    assert gate_calls > 0
+    assert explain_bindings == {Slot.ACTOR: 8}
+
+
 def test_seeded_hash_reuse_keeps_production_and_explain_lockstep() -> None:
     """Pin the pre-#722 winner, audit reason/window, and production draft."""
 
