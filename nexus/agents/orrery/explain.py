@@ -272,9 +272,12 @@ def explain_template(
     the production resolver uses, so stochastic sampling stays in lockstep
     (the seed is derived from persisted values, making both sides
     deterministic for a given state). In stochastic mode every branch is
-    considered, so the traces become exhaustive.
+    considered, so the traces become exhaustive. A direct call owns and
+    verifies its binding digest; :func:`explain_stack` supplies the digest and
+    routes completion verification through :func:`select_package` instead.
     """
 
+    verify_at_completion = digest is None
     if digest is None:
         digest = binding_hash(bindings)
     gate_trace = trace_condition(template.package_gate, state, bindings)
@@ -370,7 +373,7 @@ def explain_template(
             f"{truth.branch_label!r} (passes={truth.passes})"
         )
 
-    return TemplateExplanation(
+    explanation = TemplateExplanation(
         template_id=template.id,
         priority=template.priority,
         drive_band=template.drive_band.value,
@@ -392,6 +395,12 @@ def explain_template(
         changed_fields=truth.changed_fields,
         scene_pressure_stub=truth.scene_pressure_stub,
     )
+    if verify_at_completion and binding_hash(bindings) != digest:
+        raise RuntimeError(
+            f"Bindings were mutated during template explanation for "
+            f"{template.id!r}; this violates the substrate's pure-predicate contract"
+        )
+    return explanation
 
 
 def explain_stack(

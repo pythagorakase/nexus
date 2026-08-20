@@ -107,10 +107,10 @@ def test_same_inputs_choose_same_package_across_evaluations() -> None:
     assert second.template_id == first.template_id
 
 
-def test_evaluate_stack_hashes_bindings_once_for_multi_template_window(
+def test_evaluate_stack_hashes_only_at_operation_boundaries(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """One stack operation hashes once even when several templates evaluate."""
+    """One stack operation hashes at its boundaries, never per template."""
 
     calls = 0
     original = substrate.binding_hash
@@ -134,7 +134,52 @@ def test_evaluate_stack_hashes_bindings_once_for_multi_template_window(
     )
 
     assert winner is not None
-    assert calls == 1
+    assert calls == 2
+
+
+@pytest.mark.parametrize("path", ("production", "explain"))
+def test_mutating_package_gate_fails_loudly_at_stack_completion(path: str) -> None:
+    """Production and explain reject predicates that mutate stack bindings."""
+
+    from nexus.agents.orrery.explain import explain_stack
+
+    def mutating_gate(state: WorldState, bindings: dict[Any, Any]) -> bool:
+        bindings[Slot.TARGET] = 99
+        return True
+
+    mutating = Template(
+        id="mutating_gate",
+        priority=50,
+        drive_band=DriveBand.PROJECT_IDENTITY,
+        blurb="Deliberately violates the pure-predicate contract.",
+        required_slots=(Slot.ACTOR,),
+        package_gate=mutating_gate,
+        branches=(Branch("mutate", ALWAYS, "{actor} mutates."),),
+    )
+    stable = _template("stable", 49, DriveBand.ANCHORED_ROUTINE)
+    bindings = {Slot.ACTOR: 7}
+
+    with pytest.raises(
+        RuntimeError,
+        match=(
+            r"Bindings were mutated during stack evaluation for Orrery templates "
+            r"\[mutating_gate, stable\].*pure-predicate contract"
+        ),
+    ):
+        if path == "production":
+            evaluate_stack(
+                (stable, mutating),
+                WorldState(current_tick=722),
+                bindings,
+                package_selection=_stochastic(),
+            )
+        else:
+            explain_stack(
+                (stable, mutating),
+                WorldState(current_tick=722),
+                bindings,
+                package_selection=_stochastic(),
+            )
 
 
 def test_seeded_hash_reuse_keeps_production_and_explain_lockstep() -> None:
