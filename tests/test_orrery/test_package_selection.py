@@ -2,18 +2,26 @@
 
 from __future__ import annotations
 
+from typing import Any
+
+import pytest
+
+import nexus.agents.orrery.substrate as substrate
 from nexus.agents.orrery.substrate import (
     ALWAYS,
     Branch,
+    BranchSelection,
     DriveBand,
     HabituationPolicy,
     PackageSelection,
     Slot,
     Template,
     WorldState,
+    binding_hash,
     evaluate_stack,
     select_package,
 )
+from tests.test_orrery.test_resolver import FakeSession
 
 BINDINGS = {Slot.ACTOR: 7}
 
@@ -97,6 +105,223 @@ def test_same_inputs_choose_same_package_across_evaluations() -> None:
     assert first is not None
     assert second is not None
     assert second.template_id == first.template_id
+
+
+def test_evaluate_stack_hashes_only_at_operation_boundaries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """One stack operation hashes at its boundaries, never per template."""
+
+    calls = 0
+    original = substrate.binding_hash
+
+    def counted(bindings: dict[Any, Any]) -> str:
+        nonlocal calls
+        calls += 1
+        return original(bindings)
+
+    monkeypatch.setattr(substrate, "binding_hash", counted)
+    templates = tuple(
+        _template(f"candidate_{index}", 50 - index, DriveBand.PROJECT_IDENTITY)
+        for index in range(4)
+    )
+
+    winner = evaluate_stack(
+        templates,
+        WorldState(current_tick=722),
+        BINDINGS,
+        package_selection=_stochastic(window_points=6.0),
+    )
+
+    assert winner is not None
+    assert calls == 2
+
+
+@pytest.mark.parametrize("path", ("production", "explain"))
+def test_mutating_package_gate_fails_loudly_at_stack_completion(path: str) -> None:
+    """Production and explain reject predicates that mutate stack bindings."""
+
+    from nexus.agents.orrery.explain import explain_stack
+
+    def mutating_gate(state: WorldState, bindings: dict[Any, Any]) -> bool:
+        bindings[Slot.TARGET] = 99
+        return True
+
+    mutating = Template(
+        id="mutating_gate",
+        priority=50,
+        drive_band=DriveBand.PROJECT_IDENTITY,
+        blurb="Deliberately violates the pure-predicate contract.",
+        required_slots=(Slot.ACTOR,),
+        package_gate=mutating_gate,
+        branches=(Branch("mutate", ALWAYS, "{actor} mutates."),),
+    )
+    stable = _template("stable", 49, DriveBand.ANCHORED_ROUTINE)
+    bindings = {Slot.ACTOR: 7}
+
+    with pytest.raises(
+        RuntimeError,
+        match=(
+            r"Bindings were mutated during stack evaluation for Orrery templates "
+            r"\[mutating_gate, stable\].*pure-predicate contract"
+        ),
+    ):
+        if path == "production":
+            evaluate_stack(
+                (stable, mutating),
+                WorldState(current_tick=722),
+                bindings,
+                package_selection=_stochastic(),
+            )
+        else:
+            explain_stack(
+                (stable, mutating),
+                WorldState(current_tick=722),
+                bindings,
+                package_selection=_stochastic(),
+            )
+
+
+def test_explain_stack_rejects_shadowed_mutating_gate() -> None:
+    """Exhaustive explain verifies again after selection short-circuits."""
+
+    from nexus.agents.orrery.explain import explain_stack
+
+    gate_calls = 0
+
+    def shadowed_mutating_gate(state: WorldState, bindings: dict[Any, Any]) -> bool:
+        nonlocal gate_calls
+        gate_calls += 1
+        bindings[Slot.ACTOR] = 8
+        return True
+
+    shadowed_mutating_gate.__name__ = "ALWAYS"
+    stable = _template("stable_winner", 50, DriveBand.PROJECT_IDENTITY)
+    shadowed = Template(
+        id="shadowed_mutator",
+        priority=40,
+        drive_band=DriveBand.ANCHORED_ROUTINE,
+        blurb="Mutates only when exhaustive explanation reaches it.",
+        required_slots=(Slot.ACTOR,),
+        package_gate=shadowed_mutating_gate,
+        branches=(Branch("mutate", ALWAYS, "{actor} mutates."),),
+    )
+    state = WorldState(current_tick=722)
+    production_bindings = {Slot.ACTOR: 7}
+
+    production = evaluate_stack((shadowed, stable), state, production_bindings)
+
+    assert production is not None
+    assert production.template_id == "stable_winner"
+    assert production.bindings == production_bindings == {Slot.ACTOR: 7}
+    assert gate_calls == 0
+
+    explain_bindings = {Slot.ACTOR: 7}
+    with pytest.raises(
+        RuntimeError,
+        match=(
+            r"Bindings were mutated during stack evaluation for Orrery templates "
+            r"\[stable_winner, shadowed_mutator\].*pure-predicate contract"
+        ),
+    ):
+        explain_stack((shadowed, stable), state, explain_bindings)
+
+    assert gate_calls > 0
+    assert explain_bindings == {Slot.ACTOR: 8}
+
+
+def test_seeded_hash_reuse_keeps_production_and_explain_lockstep() -> None:
+    """Pin the pre-#722 winner, audit reason/window, and production draft."""
+
+    from nexus.agents.orrery.explain import explain_stack
+    from nexus.agents.orrery.resolver import resolve_dry_run
+
+    high = _template("high", 50, DriveBand.PROJECT_IDENTITY)
+    near = _template("near", 46, DriveBand.ANCHORED_ROUTINE)
+    templates = (near, high)
+    branch_selection = BranchSelection(
+        mode="stochastic",
+        temperature=0.25,
+        seed_salt="order-722",
+    )
+    package_selection = _stochastic()
+    state = WorldState(
+        current_tick=4242,
+        win_history={(7, "high"): 1},
+    )
+    habituation = HabituationPolicy(
+        enabled=True,
+        penalty_per_win=1.0,
+        max_penalty=10.0,
+        window_ticks=40,
+    )
+    expected_digest = "495ac0c75eac17d5b3108287f5c354dda89553f1e667e19a3e3406e1e96393b5"
+
+    direct = select_package(
+        templates,
+        state,
+        BINDINGS,
+        branch_selection,
+        habituation,
+        package_selection,
+    )
+    production = evaluate_stack(
+        templates,
+        state,
+        BINDINGS,
+        branch_selection,
+        habituation,
+        package_selection,
+    )
+    explained = explain_stack(
+        templates,
+        state,
+        BINDINGS,
+        branch_selection,
+        habituation,
+        package_selection,
+    )
+    proposal = resolve_dry_run(
+        FakeSession(
+            active_entity_rows=[{"id": 7}],
+            chunk_ref_actor_rows=[{"entity_id": 7}],
+            location_rows=[{"entity_id": 7, "current_location": 10}],
+            activity_rows=[{"entity_id": 7, "current_activity": "idle"}],
+            entity_name_rows=[{"id": 7, "name": "Seven"}],
+            max_chunk_id=4242,
+        ),
+        templates,
+        anchor_chunk_id=4242,
+        window_chunks=30,
+        selection_settings=branch_selection,
+        package_selection_settings=package_selection,
+        epistemics_settings={},
+    )
+
+    assert binding_hash(BINDINGS) == expected_digest
+    assert direct.winner == production
+    assert direct.reason == explained.selection_reason == "window_softmax"
+    assert (
+        direct.window_template_ids
+        == explained.selection_window_ids
+        == (
+            "high",
+            "near",
+        )
+    )
+    assert direct.chosen_by_softmax is explained.chosen_by_softmax is True
+    assert production is not None
+    assert production.template_id == explained.winner_id == "high"
+    assert production.binding_hash == expected_digest
+    assert [
+        (
+            draft.template_id,
+            draft.branch_label,
+            draft.binding_hash,
+            draft.bindings,
+        )
+        for draft in proposal.resolutions
+    ] == [("high", "act", expected_digest, {"actor": 7})]
 
 
 def test_configured_exempt_band_disables_randomization() -> None:

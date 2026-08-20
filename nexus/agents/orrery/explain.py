@@ -263,6 +263,8 @@ def explain_template(
     state: WorldState,
     bindings: Bindings,
     selection: Optional[BranchSelection] = None,
+    *,
+    digest: Optional[str] = None,
 ) -> TemplateExplanation:
     """Produce a full audit record for one template against one binding set.
 
@@ -270,9 +272,14 @@ def explain_template(
     the production resolver uses, so stochastic sampling stays in lockstep
     (the seed is derived from persisted values, making both sides
     deterministic for a given state). In stochastic mode every branch is
-    considered, so the traces become exhaustive.
+    considered, so the traces become exhaustive. A direct call owns and
+    verifies its binding digest; :func:`explain_stack` supplies the digest and
+    routes completion verification through :func:`select_package` instead.
     """
 
+    verify_at_completion = digest is None
+    if digest is None:
+        digest = binding_hash(bindings)
     gate_trace = trace_condition(template.package_gate, state, bindings)
     gate_passed = bool(template.package_gate(state, bindings))
 
@@ -283,7 +290,7 @@ def explain_template(
             template,
             state,
             bindings,
-            digest=binding_hash(bindings),
+            digest=digest,
             selection=selection,
         )
         chosen_branch = chosen.label if chosen is not None else None
@@ -349,7 +356,13 @@ def explain_template(
 
     # Source-of-truth cross-check against the production resolver. Any mismatch
     # means a predicate is non-deterministic or side-effecting; surface it.
-    truth: Resolution = evaluate(template, state, bindings, selection)
+    truth: Resolution = evaluate(
+        template,
+        state,
+        bindings,
+        selection,
+        digest=digest,
+    )
     if (
         truth.passes != (chosen_branch is not None)
         or truth.branch_label != chosen_branch
@@ -360,7 +373,7 @@ def explain_template(
             f"{truth.branch_label!r} (passes={truth.passes})"
         )
 
-    return TemplateExplanation(
+    explanation = TemplateExplanation(
         template_id=template.id,
         priority=template.priority,
         drive_band=template.drive_band.value,
@@ -382,6 +395,12 @@ def explain_template(
         changed_fields=truth.changed_fields,
         scene_pressure_stub=truth.scene_pressure_stub,
     )
+    if verify_at_completion and binding_hash(bindings) != digest:
+        raise RuntimeError(
+            f"Bindings were mutated during template explanation for "
+            f"{template.id!r}; this violates the substrate's pure-predicate contract"
+        )
+    return explanation
 
 
 def explain_stack(
@@ -398,10 +417,13 @@ def explain_stack(
     authority while retaining the full audit record for every template, so
     the dashboard can render the winner, near-tie window, and shadowed
     packages. Ordering routes through :func:`stack_order`, so habituation
-    dampening shows up here exactly as it does in production.
+    dampening shows up here exactly as it does in production. Because the
+    exhaustive explanation pass executes predicates after package selection,
+    this operation rechecks binding identity at its own completion boundary.
     """
 
     templates_tuple = tuple(templates)
+    digest = binding_hash(bindings)
     outcome = select_package(
         templates_tuple,
         state,
@@ -409,11 +431,25 @@ def explain_stack(
         selection,
         habituation,
         package_selection,
+        digest=digest,
     )
     ordered = stack_order(templates_tuple, state, bindings, habituation)
     explanations = tuple(
-        explain_template(template, state, bindings, selection) for template in ordered
+        explain_template(
+            template,
+            state,
+            bindings,
+            selection,
+            digest=digest,
+        )
+        for template in ordered
     )
+    if binding_hash(bindings) != digest:
+        stack_context = ", ".join(template.id for template in ordered) or "<empty>"
+        raise RuntimeError(
+            "Bindings were mutated during stack evaluation for Orrery templates "
+            f"[{stack_context}]; this violates the substrate's pure-predicate contract"
+        )
     winner_id = outcome.winner.template_id if outcome.winner is not None else None
     serialized_bindings = {
         slot.value if isinstance(slot, Slot) else str(slot): value

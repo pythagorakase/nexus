@@ -48,22 +48,9 @@ def _character_only_detector(
     audit only diffs characters, so loading and regex-scanning them would be
     pure waste on every commit (both orchestrators share this builder).
     """
-    detector = HighSpecificityEntityDetector(db_connection=None)
-    characters: Dict[int, Dict[str, Any]] = {}
-    for row in character_rows:
-        record = {
-            "id": row["id"],
-            "name": row["name"],
-            "summary": (row["summary"] or "")[:100] or None,
-        }
-        characters[record["id"]] = record
-        detector.character_lookup[record["name"].lower()] = record
-    for row in alias_rows:
-        if row["character_id"] in characters:
-            detector.character_lookup[row["alias"].lower()] = characters[
-                row["character_id"]
-            ]
-    return detector
+    from nexus.api.presence_reconciliation import build_character_presence_detector
+
+    return build_character_presence_detector(character_rows, alias_rows)
 
 
 def diff_presence(
