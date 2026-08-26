@@ -7,7 +7,7 @@ do not run `codex exec`, launch another Codex task, or delegate the mission.
 Issue publication is explicitly authorized. Source changes, commits, pushes,
 and pull requests are not authorized during this QA mission.
 
-## Objective and exit policy
+## Objective and Exit Policy
 
 Publish up to the configured verified-issue budget, stopping at the first of:
 
@@ -29,7 +29,7 @@ family; resolve it or report it as a blocker.
 Read `scripts/qa_shift/qa_shift.toml` for the authoritative slot, lane, model,
 issue, dry-well, wall-clock, and token settings.
 
-## Hard boundaries
+## Hard Boundaries
 
 - Use only the configured disposable slot and gateway port. Never stop, query,
   or mutate another slot or the normal port-8002 runtime.
@@ -42,7 +42,7 @@ issue, dry-well, wall-clock, and token settings.
 - Preserve evidence under the run archive in ignored `temp/`.
 - Do not weaken, bypass, estimate around, or continue past the usage guard.
 
-## Preflight and run initialization
+## Preflight and Run Initialization
 
 1. Confirm `git status --short --branch` is clean and on `main`.
 2. Run `git fetch origin`. If it fails only because a stale HTTPS credential
@@ -106,7 +106,7 @@ issue, dry-well, wall-clock, and token settings.
 If any preflight step fails, write the blocker into the mission report, perform
 the applicable teardown, and stop.
 
-## Exact usage protocol
+## Exact Usage Protocol
 
 The guard reads the provider-reported ledger added in PR #627. Around every
 command that can call a remote model:
@@ -149,19 +149,17 @@ usage event or nonzero token delta stops the shift, because the
 validation-only claim itself was false.
 
 A check may also return `status=pending` (exit code 3). This means the QA slot
-still has non-terminal Retrograde maturation jobs (queued or leased), so
-provider-capable work caused by an earlier command has not settled. A pending
-check does not advance the usage watermark and does not authorize any remote
-request. When you see pending: wait roughly ten seconds, then re-run the same
-check with the same flags. Repeat until it returns continue or stop. The late
-maturation usage then lands in the same command delta as the command that
-caused it. If pending persists for more than twenty minutes with no state
-change in the reported jobs, stop probing, run the finish step, and record the
-stalled job ids in the mission report.
-A check instead returns stop with reason `maturation_job_failed` when any
-maturation job newly reaches the failed state during the shift: usage
-accounting can no longer be proven complete, so end the shift and record the
-job's last_error from the archive in the mission report.
+still has queued or leased Retrograde maturation or experience-render jobs, so
+provider-capable work caused by an earlier command has not settled. Pending
+does not advance the usage watermark or authorize another remote request.
+Re-run the same check until it continues or stops; late usage remains in the
+causal command's delta. Stop and report jobs that do not change for twenty
+minutes.
+
+`maturation_job_failed` and `experience_job_failed` mean a queue's failed
+count grew during the shift. `job_requeued:<queue>:<id>` means a non-terminal
+job exceeded the configured normal lease count. Stop and report its
+`last_error`.
 
 Never detach a request or restart/kill the gateway while a provider response is
 unaccounted for. Gateway-restart interruption probes may run only between
@@ -169,7 +167,7 @@ settled operations until the provider ledger can prove usage across process
 termination. If a concurrency group cannot be reconciled exactly, stop under
 the existing unknown-usage rule rather than estimating around it.
 
-## Probe-family standard
+## Probe-Family Standard
 
 Behave like an unhinged, unpredictable, but honest user. Vary malformed,
 contradictory, free-text, adversarial, concurrency, undo/regenerate, and
@@ -242,7 +240,7 @@ GitHub app otherwise. Then re-read the published issue and verify its URL,
 body, labels/state if used, and signature. Update the ledger only after
 publication succeeds.
 
-## Teardown and report
+## Teardown and Report
 
 Always complete teardown, including early exits:
 

@@ -1,4 +1,4 @@
-# NEXUS adversarial QA shift
+# NEXUS Adversarial QA Shift
 
 This tracked utility turns the previous one-off `temp/qa_shift` experiment into
 a repeatable native Codex Scheduled task. The operator remains Codex itself;
@@ -8,7 +8,7 @@ wrapper.
 Run evidence still belongs in ignored `temp/qa_night_*` archives. The durable
 policy, usage guard, configuration, and templates live here in version control.
 
-## Schedule it in Codex
+## Schedule It in Codex
 
 Create a recurring standalone task that uses the local project at
 `/Users/pythagor/nexus`. A nightly 11:30 PM `America/Chicago` start leaves the
@@ -28,7 +28,7 @@ task must have the shell, local-filesystem, network, PostgreSQL, Keychain, and
 GitHub access needed by the mission. Run the prompt once manually before
 enabling recurrence.
 
-## Completion policy
+## Completion Policy
 
 Defaults in `qa_shift.toml` deliberately combine independent bounds:
 
@@ -74,7 +74,7 @@ For novelty preflight, a prior archive counts as completed only when its
 archives, or every qualifying archive when fewer than two exist. Zero prior
 archives is valid and contributes an empty coverage history.
 
-## Usage guard
+## Usage Guard
 
 Run the helper through Poetry:
 
@@ -115,6 +115,12 @@ a trustworthy reading, which is also a stop. Checks are appended to
 shift, `finish` explicitly re-reads the archived quota day rather than mixing
 the new day’s cumulative total with the old baseline.
 
+The guard covers both provider-capable durable queues: Retrograde maturation
+and experience rendering. Queued or leased work returns `pending` without
+moving the usage watermark. `job_requeued:<queue>:<id>` stops the shift when a
+non-terminal job exceeds the configured normal lease count; inspect its
+reported `last_error` before continuing.
+
 Normal model-generating probes run one public command between checks. A bounded
 concurrency probe may launch at most two public requests from one recorded shell
 invocation, wait for both, and reconcile their complete request-group delta in
@@ -138,7 +144,7 @@ a rejection came from an unexpected provider, because those events do not share
 a trustworthy OpenAI denominator. Preserve the attempts and token evidence, and
 report the helper's explicit unavailability reasons instead of estimating.
 
-## Safety boundary
+## Safety Boundary
 
 The configured lane is disposable slot 4 on port 8012. The mission prompt
 forbids touching the normal port-8002 runtime, changing tracked source, or

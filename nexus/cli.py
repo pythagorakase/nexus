@@ -7,7 +7,7 @@ Commands:
     nexus undo --slot N         Revert the last action
     nexus regenerate --slot N   Regenerate the last storyteller turn
     nexus model --slot N        Get or set the model for a slot
-    nexus jobs --slot N         Show durable Retrograde maturation jobs
+    nexus jobs --slot N         Show provider-capable durable Orrery jobs
     nexus trait-audit --slot N  Dry-run new-story trait compiler audit
     nexus retrograde-packet --slot N  Build dry-run Retrograde seed packet
     nexus retrograde-seed-candidates  Call Skald for non-mutating seed candidates
@@ -915,6 +915,10 @@ def emit_output(payload: Dict[str, Any], as_json: bool, truncate: bool = False) 
 
     if payload.get("usage"):
         _print_usage(payload)
+        return
+
+    if payload.get("queues") is not None:
+        _print_jobs(payload)
         return
 
     # Display message/storyteller text
@@ -3059,16 +3063,14 @@ def run_usage(args: argparse.Namespace) -> Dict[str, Any]:
 
 
 def run_jobs(args: argparse.Namespace) -> Dict[str, Any]:
-    """Return the durable Retrograde maturation queue for one slot."""
+    """Return every provider-capable durable Orrery queue for one slot."""
 
-    from nexus.agents.orrery.retrograde_maturation import (
-        load_maturation_status_for_slot_sync,
-    )
+    from nexus.agents.orrery.job_queues import load_job_queues_for_slot_sync
 
     return {
         "success": True,
         "slot": args.slot,
-        **load_maturation_status_for_slot_sync(args.slot),
+        **load_job_queues_for_slot_sync(args.slot),
     }
 
 
@@ -3137,6 +3139,21 @@ def _print_usage(payload: Dict[str, Any]) -> None:
                 + "  ".join(
                     str(cell).ljust(widths[index]) for index, cell in enumerate(row)
                 )
+            )
+
+
+def _print_jobs(payload: Dict[str, Any]) -> None:
+    """Render every provider-capable durable Orrery queue."""
+
+    print(f"Durable Orrery jobs for slot {payload['slot']}:")
+    for queue_kind, queue in payload["queues"].items():
+        counts = queue["counts"]
+        count_text = ", ".join(f"{state}={count}" for state, count in counts.items())
+        print(f"  {queue_kind}: {count_text}")
+        for job in queue["non_terminal_jobs"]:
+            print(
+                f"    id={job['id']} state={job['state']} "
+                f"attempts={job['attempts']} last_error={job['last_error']!r}"
             )
 
 
@@ -3281,7 +3298,7 @@ Examples:
 
     jobs_parser = subparsers.add_parser(
         "jobs",
-        help="Show durable Retrograde maturation job state for one slot",
+        help="Show provider-capable durable Orrery job state for one slot",
     )
     jobs_parser.add_argument(
         "--slot", type=int, required=True, help="Slot number (1-5)"

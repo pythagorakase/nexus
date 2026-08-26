@@ -1211,13 +1211,15 @@ def load_maturation_status_sync(cur: Any) -> dict[str, Any]:
                 jsonb_agg(
                     jsonb_build_object(
                         'id', id,
+                        'queue', 'retrograde_maturation',
                         'state', state::text,
                         'entity_kind', entity_kind,
                         'entity_name', entity_name,
                         'requesting_chunk_id', requesting_chunk_id,
                         'attempts', attempts,
                         'available_at', available_at,
-                        'lease_until', lease_until
+                        'lease_until', lease_until,
+                        'last_error', last_error
                     ) ORDER BY id
                 ) FILTER (WHERE state IN ('queued', 'leased')),
                 '[]'::jsonb

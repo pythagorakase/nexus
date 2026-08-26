@@ -33,6 +33,17 @@ STATE_FILE = "shift_state.json"
 CHECKS_FILE = "usage_checks.jsonl"
 STOP_EXIT_CODE = 2
 PENDING_EXIT_CODE = 3
+QUEUE_STATES: Mapping[str, tuple[str, ...]] = {
+    "retrograde_maturation": ("queued", "leased", "succeeded", "failed"),
+    "experience_render": (
+        "queued",
+        "leased",
+        "succeeded",
+        "failed",
+        "stale_rejected",
+    ),
+}
+SHARED_QUEUE_STATES = ("queued", "leased", "succeeded", "failed")
 
 
 class ShiftError(RuntimeError):
@@ -69,6 +80,7 @@ class ShiftConfig:
     minimum_probe_families: int
     dry_well_families: int
     wall_clock_minutes: int
+    max_non_terminal_attempts: int
     archive_root: Path
     daily_token_limit: int
     reserve_tokens: int
@@ -120,6 +132,7 @@ def load_shift_config(path: Path = DEFAULT_CONFIG_PATH) -> ShiftConfig:
         minimum_probe_families=_required_int(shift, "minimum_probe_families"),
         dry_well_families=_required_int(shift, "dry_well_families"),
         wall_clock_minutes=_required_int(shift, "wall_clock_minutes"),
+        max_non_terminal_attempts=_required_int(shift, "max_non_terminal_attempts"),
         archive_root=Path(_required_str(shift, "archive_root")),
         daily_token_limit=_required_int(usage, "daily_token_limit"),
         reserve_tokens=_required_int(usage, "reserve_tokens"),
@@ -136,6 +149,7 @@ def load_shift_config(path: Path = DEFAULT_CONFIG_PATH) -> ShiftConfig:
         "minimum_probe_families",
         "dry_well_families",
         "wall_clock_minutes",
+        "max_non_terminal_attempts",
         "daily_token_limit",
         "reserve_tokens",
     ):
@@ -317,7 +331,7 @@ def _usage_snapshot(payload: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _jobs_snapshot(payload: Mapping[str, Any], *, slot: int) -> dict[str, Any]:
-    """Validate one public maturation-jobs payload for the configured slot."""
+    """Validate all public provider-capable queues for the configured slot."""
 
     payload_slot = payload.get("slot")
     if isinstance(payload_slot, bool) or not isinstance(payload_slot, int):
@@ -328,45 +342,191 @@ def _jobs_snapshot(payload: Mapping[str, Any], *, slot: int) -> dict[str, Any]:
         )
     raw_counts = payload.get("counts")
     raw_jobs = payload.get("non_terminal_jobs")
+    raw_queues = payload.get("queues")
     if not isinstance(raw_counts, dict):
         raise ShiftError("Jobs payload has no object at .counts")
     if not isinstance(raw_jobs, list):
         raise ShiftError("Jobs payload has no list at .non_terminal_jobs")
+    if not isinstance(raw_queues, dict):
+        raise ShiftError("Jobs payload has no object at .queues")
+    if set(raw_queues) != set(QUEUE_STATES):
+        raise ShiftError(
+            "Jobs payload queue kinds must be exactly "
+            f"{sorted(QUEUE_STATES)}; received {sorted(raw_queues)}"
+        )
 
     counts: dict[str, int] = {}
-    for state in ("queued", "leased", "succeeded", "failed"):
+    if set(raw_counts) != set(SHARED_QUEUE_STATES):
+        raise ShiftError(
+            "Jobs payload top-level counts must contain exactly the shared states"
+        )
+    for state in SHARED_QUEUE_STATES:
         value = raw_counts.get(state)
         if isinstance(value, bool) or not isinstance(value, int) or value < 0:
             raise ShiftError(f"Jobs payload count for {state!r} is invalid")
         counts[state] = value
 
-    jobs: list[dict[str, Any]] = []
-    required_fields = (
+    common_fields = (
         "id",
+        "queue",
         "state",
-        "entity_kind",
-        "entity_name",
-        "requesting_chunk_id",
         "attempts",
         "available_at",
         "lease_until",
+        "last_error",
     )
-    for index, raw_job in enumerate(raw_jobs):
+    queue_fields = {
+        "retrograde_maturation": (
+            "entity_kind",
+            "entity_name",
+            "requesting_chunk_id",
+        ),
+        "experience_render": (
+            "boundary_chunk_id",
+            "scene_end_chunk_id",
+            "batch_ordinal",
+            "experience_ids",
+        ),
+    }
+
+    def validate_job(raw_job: Any, *, queue_kind: str, location: str) -> dict[str, Any]:
         if not isinstance(raw_job, dict):
-            raise ShiftError(f"Jobs payload row {index} is not an object")
+            raise ShiftError(f"Jobs payload row {location} is not an object")
+        required_fields = common_fields + queue_fields[queue_kind]
         missing = [field for field in required_fields if field not in raw_job]
         if missing:
-            raise ShiftError(f"Jobs payload row {index} is missing fields: {missing}")
+            raise ShiftError(
+                f"Jobs payload row {location} is missing fields: {missing}"
+            )
+        if raw_job["queue"] != queue_kind:
+            raise ShiftError(
+                f"Jobs payload row {location} has queue {raw_job['queue']!r}, "
+                f"expected {queue_kind!r}"
+            )
         if raw_job["state"] not in ("queued", "leased"):
             raise ShiftError(
-                f"Jobs payload row {index} has terminal state " f"{raw_job['state']!r}"
+                f"Jobs payload row {location} has terminal state "
+                f"{raw_job['state']!r}"
             )
-        jobs.append({field: raw_job[field] for field in required_fields})
+        for field in ("id", "attempts"):
+            value = raw_job[field]
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                raise ShiftError(f"Jobs payload row {location} has invalid {field!r}")
+        if not isinstance(raw_job["available_at"], str):
+            raise ShiftError(f"Jobs payload row {location} has invalid 'available_at'")
+        for field in ("lease_until", "last_error"):
+            if raw_job[field] is not None and not isinstance(raw_job[field], str):
+                raise ShiftError(f"Jobs payload row {location} has invalid {field!r}")
+        if queue_kind == "retrograde_maturation":
+            for field in ("entity_kind", "entity_name"):
+                if not isinstance(raw_job[field], str) or not raw_job[field]:
+                    raise ShiftError(
+                        f"Jobs payload row {location} has invalid {field!r}"
+                    )
+            value = raw_job["requesting_chunk_id"]
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise ShiftError(
+                    f"Jobs payload row {location} has invalid " "'requesting_chunk_id'"
+                )
+        else:
+            for field in (
+                "boundary_chunk_id",
+                "scene_end_chunk_id",
+                "batch_ordinal",
+            ):
+                value = raw_job[field]
+                if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                    raise ShiftError(
+                        f"Jobs payload row {location} has invalid {field!r}"
+                    )
+            experience_ids = raw_job["experience_ids"]
+            if not isinstance(experience_ids, list) or not experience_ids:
+                raise ShiftError(
+                    f"Jobs payload row {location} has invalid 'experience_ids'"
+                )
+            if any(
+                isinstance(value, bool) or not isinstance(value, int)
+                for value in experience_ids
+            ):
+                raise ShiftError(
+                    f"Jobs payload row {location} has invalid 'experience_ids'"
+                )
+        return {field: raw_job[field] for field in required_fields}
+
+    queues: dict[str, dict[str, Any]] = {}
+    jobs: list[dict[str, Any]] = []
+    for queue_kind in sorted(QUEUE_STATES):
+        raw_queue = raw_queues[queue_kind]
+        if not isinstance(raw_queue, dict):
+            raise ShiftError(f"Jobs payload queue {queue_kind!r} is not an object")
+        raw_queue_counts = raw_queue.get("counts")
+        raw_queue_jobs = raw_queue.get("non_terminal_jobs")
+        if not isinstance(raw_queue_counts, dict):
+            raise ShiftError(
+                f"Jobs payload queue {queue_kind!r} has no object at .counts"
+            )
+        if set(raw_queue_counts) != set(QUEUE_STATES[queue_kind]):
+            raise ShiftError(
+                f"Jobs payload queue {queue_kind!r} counts have unknown or "
+                "missing states"
+            )
+        queue_counts: dict[str, int] = {}
+        for state in QUEUE_STATES[queue_kind]:
+            value = raw_queue_counts[state]
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                raise ShiftError(
+                    f"Jobs payload queue {queue_kind!r} count for "
+                    f"{state!r} is invalid"
+                )
+            queue_counts[state] = value
+        if not isinstance(raw_queue_jobs, list):
+            raise ShiftError(
+                f"Jobs payload queue {queue_kind!r} has no list at "
+                ".non_terminal_jobs"
+            )
+        queue_jobs = [
+            validate_job(
+                raw_job,
+                queue_kind=queue_kind,
+                location=f"queues.{queue_kind}.non_terminal_jobs[{index}]",
+            )
+            for index, raw_job in enumerate(raw_queue_jobs)
+        ]
+        if queue_counts["queued"] + queue_counts["leased"] != len(queue_jobs):
+            raise ShiftError(
+                f"Jobs payload queue {queue_kind!r} non-terminal counts do not "
+                "match its diagnostic list"
+            )
+        if queue_jobs != sorted(queue_jobs, key=lambda job: int(job["id"])):
+            raise ShiftError(
+                f"Jobs payload queue {queue_kind!r} rows are not ordered by id"
+            )
+        queues[queue_kind] = {
+            "counts": queue_counts,
+            "non_terminal_jobs": queue_jobs,
+        }
+        jobs.extend(queue_jobs)
+
+    aggregate_counts = {
+        state: sum(queue["counts"][state] for queue in queues.values())
+        for state in SHARED_QUEUE_STATES
+    }
+    if counts != aggregate_counts:
+        raise ShiftError("Jobs payload aggregate counts do not match its queues")
+    if raw_jobs != jobs:
+        raise ShiftError(
+            "Jobs payload top-level non-terminal rows do not match its queues"
+        )
     if counts["queued"] + counts["leased"] != len(jobs):
         raise ShiftError(
             "Jobs payload non-terminal counts do not match its diagnostic list"
         )
-    return {"slot": slot, "counts": counts, "non_terminal_jobs": jobs}
+    return {
+        "slot": slot,
+        "queues": queues,
+        "counts": counts,
+        "non_terminal_jobs": jobs,
+    }
 
 
 def _rejection_ledger(
@@ -624,8 +784,10 @@ def begin_shift(
     current_time = now or datetime.now(timezone.utc)
     jobs = _jobs_snapshot(jobs_reader(repo_root, config.slot), slot=config.slot)
     if jobs["non_terminal_jobs"]:
+        dirty_queues = sorted({str(job["queue"]) for job in jobs["non_terminal_jobs"]})
         raise ShiftError(
-            "QA shift cannot begin with non-terminal maturation jobs: "
+            "QA shift cannot begin with non-terminal jobs in queue(s) "
+            f"{', '.join(dirty_queues)}: "
             + json.dumps(jobs["non_terminal_jobs"], sort_keys=True)
         )
     usage_payload = usage_reader(repo_root, None)
@@ -679,7 +841,10 @@ def begin_shift(
         "baseline_event_count": len(usage["events"]),
         "last_event_count": len(usage["events"]),
         "last_unknown_usage_events": usage["unknown"],
-        "baseline_failed_jobs": jobs["counts"]["failed"],
+        "baseline_failed_jobs": {
+            queue_kind: queue["counts"]["failed"]
+            for queue_kind, queue in jobs["queues"].items()
+        },
         "baseline_bleed_offered_count": baseline_bleed_offered,
         "baseline_bleed_used_count": baseline_bleed_used,
         "checks": 0,
@@ -843,8 +1008,25 @@ def evaluate_check(
     started_at = _parse_utc(str(state["started_at"]))
     elapsed_minutes = (now.astimezone(timezone.utc) - started_at).total_seconds() / 60
     jobs = _jobs_snapshot(jobs_payload, slot=slot)
-    baseline_failed_jobs = int(state["baseline_failed_jobs"])
-    current_failed_jobs = int(jobs["counts"]["failed"])
+    raw_baseline_failed_jobs = state["baseline_failed_jobs"]
+    if not isinstance(raw_baseline_failed_jobs, Mapping) or set(
+        raw_baseline_failed_jobs
+    ) != set(QUEUE_STATES):
+        raise ShiftError("Shift state has invalid per-queue failed-job baselines")
+    baseline_failed_jobs = {
+        queue_kind: int(raw_baseline_failed_jobs[queue_kind])
+        for queue_kind in QUEUE_STATES
+    }
+    current_failed_jobs = {
+        queue_kind: int(jobs["queues"][queue_kind]["counts"]["failed"])
+        for queue_kind in QUEUE_STATES
+    }
+    max_non_terminal_attempts = int(config["max_non_terminal_attempts"])
+    requeued_jobs = [
+        job
+        for job in jobs["non_terminal_jobs"]
+        if int(job["attempts"]) > max_non_terminal_attempts
+    ]
     expect_call = mode is CheckMode.POST_CALL
     validation_fields: dict[str, Any] = {}
     if validation_evidence is not None:
@@ -854,7 +1036,7 @@ def evaluate_check(
             "observed_new_usage_events": len(new_events),
             "observed_qa_usage_events": len(qa_events),
         }
-    if jobs["non_terminal_jobs"]:
+    if jobs["non_terminal_jobs"] and not requeued_jobs:
         return (
             {
                 "status": "pending",
@@ -901,15 +1083,20 @@ def evaluate_check(
             dict(state),
         )
 
-    reasons: list[str] = []
+    reasons = [f"job_requeued:{job['queue']}:{job['id']}" for job in requeued_jobs]
     if not same_quota_day:
         reasons.append("quota_day_changed")
     if raw_delta is not None and raw_delta < 0:
         reasons.append("daily_total_decreased")
     if same_quota_day and len(usage["events"]) < previous_events:
         reasons.append("event_count_decreased")
-    if current_failed_jobs > baseline_failed_jobs:
-        reasons.append("maturation_job_failed")
+    failure_reasons = {
+        "retrograde_maturation": "maturation_job_failed",
+        "experience_render": "experience_job_failed",
+    }
+    for queue_kind, reason in failure_reasons.items():
+        if current_failed_jobs[queue_kind] > baseline_failed_jobs[queue_kind]:
+            reasons.append(reason)
     if unexpected_routes:
         reasons.append("unexpected_qa_model_route")
     if expect_call and not expected_events:
@@ -1054,10 +1241,22 @@ def finish_shift(
     quota_day = str(state["quota_day"])
     slot = int(state["config"]["slot"])
     jobs = _jobs_snapshot(jobs_reader(repo_root, slot), slot=slot)
-    baseline_failed_jobs = int(state["baseline_failed_jobs"])
-    current_failed_jobs = int(jobs["counts"]["failed"])
-    usage_settled = (
-        not jobs["non_terminal_jobs"] and current_failed_jobs <= baseline_failed_jobs
+    raw_baseline_failed_jobs = state["baseline_failed_jobs"]
+    if not isinstance(raw_baseline_failed_jobs, Mapping) or set(
+        raw_baseline_failed_jobs
+    ) != set(QUEUE_STATES):
+        raise ShiftError("Shift state has invalid per-queue failed-job baselines")
+    baseline_failed_jobs = {
+        queue_kind: int(raw_baseline_failed_jobs[queue_kind])
+        for queue_kind in QUEUE_STATES
+    }
+    current_failed_jobs = {
+        queue_kind: int(jobs["queues"][queue_kind]["counts"]["failed"])
+        for queue_kind in QUEUE_STATES
+    }
+    usage_settled = not jobs["non_terminal_jobs"] and all(
+        current_failed_jobs[queue_kind] <= baseline_failed_jobs[queue_kind]
+        for queue_kind in QUEUE_STATES
     )
     usage_payload = usage_reader(repo_root, quota_day)
     usage = _usage_snapshot(usage_payload)
