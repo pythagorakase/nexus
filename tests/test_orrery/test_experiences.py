@@ -158,6 +158,53 @@ def test_renderer_validator_rejects_sentence_initial_novel_name() -> None:
     assert "Zorblax" in validation.rejected[41]
 
 
+def test_repeated_sentence_initial_invented_name_is_still_rejected() -> None:
+    """A hallucinated name that opens two sentences must not vouch for itself."""
+    batch = ExperienceRenderBatch(
+        recollections=[
+            ExperienceRecollection(
+                experience_id=41,
+                experience_text=(
+                    "Zorblax warned me to leave. Zorblax told me I should run."
+                ),
+            )
+        ]
+    )
+
+    validation = validate_render_batch(
+        [_seed_row()],
+        batch,
+        names_by_experience={41: ({"Mara", "Orrin"}, {"Mara", "Orrin"})},
+    )
+
+    assert 41 in validation.rejected
+    assert "Zorblax" in validation.rejected[41]
+
+
+def test_lowercase_occurrence_in_text_exempts_a_sentence_start() -> None:
+    """A lowercase use elsewhere vouches for an ordinary sentence-start word."""
+    batch = ExperienceRenderBatch(
+        recollections=[
+            ExperienceRecollection(
+                experience_id=41,
+                experience_text=(
+                    "Silence held the corridor while I waited for Orrin. "
+                    "I remember the silence more than the door."
+                ),
+            )
+        ]
+    )
+
+    validation = validate_render_batch(
+        [_seed_row()],
+        batch,
+        names_by_experience={41: ({"Mara", "Orrin"}, {"Mara", "Orrin"})},
+    )
+
+    assert validation.rejected == {}
+    assert 41 in validation.validated
+
+
 def test_acquisition_validator_requires_telling_perspective() -> None:
     """Acquisitions remember receiving an account, never seeing its incident."""
     row = {**_seed_row(), "basis": "acquisition"}

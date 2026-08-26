@@ -1254,11 +1254,12 @@ def _token_occurs_outside_match(
     end: int,
     source_context: str,
 ) -> bool:
-    token_pattern = re.compile(rf"(?<!\w){re.escape(token.casefold())}(?!\w)")
+    # The exemption needs a genuinely LOWERCASE occurrence: a hallucinated name
+    # that opens two sentences must not vouch for itself (Codex review, PR #739).
+    token_pattern = re.compile(rf"(?<!\w){re.escape(token.lower())}(?!\w)")
     outside_match = text[:start] + (" " * (end - start)) + text[end:]
     return bool(
-        token_pattern.search(outside_match.casefold())
-        or token_pattern.search(source_context.casefold())
+        token_pattern.search(outside_match) or token_pattern.search(source_context)
     )
 
 
