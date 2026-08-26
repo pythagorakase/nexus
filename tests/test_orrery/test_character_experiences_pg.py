@@ -630,13 +630,13 @@ class _TimelineDriftingProvider(_SceneProvider):
         return super().get_structured_completion(prompt, schema)
 
 
-def _enqueue_two_seed_render_job(
-    conn: Any, *, settings: dict[str, Any], label: str
+def _enqueue_render_job(
+    conn: Any, *, settings: dict[str, Any], label: str, seed_count: int = 2
 ) -> list[int]:
     with conn:
         with conn.cursor() as cur:
             scene_end_chunk_id = _insert_chunk(cur, f"{label} scene")
-            for ordinal in range(2):
+            for ordinal in range(seed_count):
                 _character_id, entity_id = _insert_character(
                     cur,
                     f"{label} Actor {ordinal}",
@@ -669,7 +669,7 @@ def _enqueue_two_seed_render_job(
             anchor_chunk_id=scene_end_chunk_id,
             settings=settings,
         )
-        == 2
+        == seed_count
     )
     with conn:
         with conn.cursor() as cur:
@@ -3428,6 +3428,77 @@ def test_real_commit_forms_verified_seeds_and_boundary_batch(
             conn.close()
 
 
+def test_fresh_duplicate_render_job_is_stale_rejected() -> None:
+    """A new job cannot claim success from another job's rendered seed."""
+    settings = load_settings_as_dict()
+    settings["orrery"]["experiences"]["max_jobs_per_drain"] = 1
+    with _disposable_database() as dbname:
+        conn = _connect(dbname)
+        try:
+            seed_ids = _enqueue_render_job(
+                conn,
+                settings=settings,
+                label="Duplicate Render Job",
+                seed_count=1,
+            )
+            with conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        INSERT INTO character_experience_jobs (
+                            boundary_chunk_id, scene_end_chunk_id, world_layer,
+                            boundary_season, boundary_episode, boundary_scene,
+                            scene_end_season, scene_end_episode, scene_end_scene,
+                            batch_ordinal, experience_ids, slot, state, attempts,
+                            requested_model, source_digest
+                        )
+                        SELECT boundary_chunk_id, scene_end_chunk_id, world_layer,
+                               boundary_season, boundary_episode, boundary_scene,
+                               scene_end_season, scene_end_episode, scene_end_scene,
+                               batch_ordinal + 1, experience_ids, slot,
+                               'queued', 0, requested_model, source_digest
+                        FROM character_experience_jobs
+                        WHERE experience_ids = %s::bigint[]
+                        RETURNING id
+                        """,
+                        (seed_ids,),
+                    )
+                    duplicate_job_id = int(cur.fetchone()[0])
+
+            first_provider = _RecordingSceneProvider()
+            assert drain_experience_render_jobs_sync(
+                slot=736,
+                settings=settings,
+                conn=conn,
+                provider=first_provider,
+            ) == (1, 0)
+            assert first_provider.rendered_batches == [seed_ids]
+
+            duplicate_provider = _ForbiddenSceneProvider()
+            assert drain_experience_render_jobs_sync(
+                slot=736,
+                settings=settings,
+                conn=conn,
+                provider=duplicate_provider,
+            ) == (0, 1)
+            assert duplicate_provider.calls == 0
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    """
+                    SELECT state::text AS state, attempts, last_error
+                    FROM character_experience_jobs
+                    WHERE id = %s
+                    """,
+                    (duplicate_job_id,),
+                )
+                duplicate = dict(cur.fetchone())
+            assert duplicate["state"] == "stale_rejected"
+            assert duplicate["attempts"] == 1
+            assert str(seed_ids[0]) in duplicate["last_error"]
+        finally:
+            conn.close()
+
+
 def test_render_validation_persists_siblings_and_retries_only_rejections() -> None:
     """Content failures isolate persistence, retries, billing, and exhaustion."""
     settings = load_settings_as_dict()
@@ -3437,7 +3508,7 @@ def test_render_validation_persists_siblings_and_retries_only_rejections() -> No
     with _disposable_database() as dbname:
         conn = _connect(dbname)
         try:
-            first_ids = _enqueue_two_seed_render_job(
+            first_ids = _enqueue_render_job(
                 conn, settings=settings, label="Partial Persistence"
             )
             first_provider = _RejectLastSceneProvider()
@@ -3498,20 +3569,61 @@ def test_render_validation_persists_siblings_and_retries_only_rejections() -> No
                 completed = dict(cur.fetchone())
                 cur.execute(
                     """
-                    SELECT count(*) AS count
+                    SELECT id, experience_text
                     FROM character_experiences
-                    WHERE id = ANY(%s) AND experience_text IS NOT NULL
+                    WHERE id = ANY(%s)
+                    ORDER BY id
                     """,
                     (first_ids,),
                 )
-                assert int(cur.fetchone()["count"]) == 2
+                completed_text = {
+                    int(row["id"]): row["experience_text"] for row in cur.fetchall()
+                }
             assert completed == {
                 "state": "succeeded",
                 "attempts": 2,
                 "last_error": None,
             }
+            assert all(completed_text.values())
+            assert completed_text[first_ids[0]] == first_text[first_ids[0]]
 
-            exhausted_ids = _enqueue_two_seed_render_job(
+            with conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        UPDATE character_experience_jobs
+                        SET state = 'queued', available_at = clock_timestamp(),
+                            last_error = 'retry after persisted siblings'
+                        WHERE experience_ids = %s::bigint[]
+                        """,
+                        (first_ids,),
+                    )
+                    assert cur.rowcount == 1
+            persisted_retry_provider = _ForbiddenSceneProvider()
+            assert drain_experience_render_jobs_sync(
+                slot=736,
+                settings=settings,
+                conn=conn,
+                provider=persisted_retry_provider,
+            ) == (0, 0)
+            assert persisted_retry_provider.calls == 0
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    """
+                    SELECT state::text AS state, attempts, last_error
+                    FROM character_experience_jobs
+                    WHERE experience_ids = %s::bigint[]
+                    """,
+                    (first_ids,),
+                )
+                persisted_retry = dict(cur.fetchone())
+            assert persisted_retry == {
+                "state": "succeeded",
+                "attempts": 3,
+                "last_error": None,
+            }
+
+            exhausted_ids = _enqueue_render_job(
                 conn, settings=settings, label="Partial Exhaustion"
             )
             exhausted_provider = _RejectLastSceneProvider()

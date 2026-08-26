@@ -25,6 +25,8 @@ from nexus.agents.orrery.epistemics import CLAIM_BIRTH_ROLE_POLICY
 from nexus.agents.orrery.experiences import (
     ExperienceRecollection,
     ExperienceRenderBatch,
+    _is_sentence_initial,
+    _proper_noun_candidates,
     validate_render_batch,
 )
 from nexus.api.lore_adapter import response_to_incubator
@@ -287,6 +289,42 @@ def test_renderer_validator_accepts_complete_first_person_batch() -> None:
     assert validation.rejected == {}
 
 
+def test_renderer_validator_counts_sentences_after_masking_allowed_names() -> None:
+    """Periods inside allowed names do not inflate the recollection sentence count."""
+    text = (
+        "I watched Dr. Sera Vey enter. I heard Dr. Sera Vey speak. " "I left quietly."
+    )
+    batch = ExperienceRenderBatch(
+        recollections=[ExperienceRecollection(experience_id=41, experience_text=text)]
+    )
+
+    validation = validate_render_batch(
+        [_seed_row()],
+        batch,
+        names_by_experience={41: ({"Mara", "Orrin", "Dr. Sera Vey"}, {"Dr. Sera Vey"})},
+    )
+
+    assert validation.validated == {41: text}
+    assert validation.rejected == {}
+
+
+@pytest.mark.parametrize(
+    ("text", "token"),
+    [
+        ("—Sitting still, I listened. I left.", "Sitting"),
+        ("…“Sitting still, I listened.” I left.", "Sitting"),
+        ("(Nothing moved.) I waited for Orrin.", "Nothing"),
+        ("I told Orrin: Nothing moves tonight.", "Nothing"),
+    ],
+)
+def test_sentence_initial_detection_handles_punctuation_boundaries(
+    text: str, token: str
+) -> None:
+    """Dashes, delimiters, and tight quotes preserve positional sentence starts."""
+    assert _is_sentence_initial(text, text.index(token))
+    assert _proper_noun_candidates(text, allowed_names={"Orrin"}) == set()
+
+
 @pytest.mark.parametrize(
     ("text", "allowed"),
     [
@@ -311,7 +349,10 @@ def test_renderer_validator_accepts_names_and_ordinary_sentence_starts(
     """Punctuation and sentence position do not invent source-scene entities."""
     row = {
         **_seed_row(),
-        "seed_summary": "Mara was sitting still while Orrin watched the door.",
+        "seed_summary": (
+            "Mara was sitting still while Orrin watched the door, and she told "
+            "me to run."
+        ),
     }
     batch = ExperienceRenderBatch(
         recollections=[ExperienceRecollection(experience_id=41, experience_text=text)]
@@ -324,6 +365,52 @@ def test_renderer_validator_accepts_names_and_ordinary_sentence_starts(
 
     assert validation.validated == {41: text}
     assert validation.rejected == {}
+
+
+def test_sentence_initial_run_requires_lowercase_source_occurrence() -> None:
+    """An unvouched capitalized Run remains an invented entity candidate."""
+    text = "Run warned me. I watched Orrin."
+    batch = ExperienceRenderBatch(
+        recollections=[ExperienceRecollection(experience_id=41, experience_text=text)]
+    )
+
+    validation = validate_render_batch(
+        [_seed_row()],
+        batch,
+        names_by_experience={41: ({"Mara", "Orrin"}, {"Mara", "Orrin"})},
+    )
+
+    assert validation.validated == {}
+    assert "Run" in validation.rejected[41]
+
+
+@pytest.mark.parametrize(
+    ("text", "known", "offender"),
+    [
+        ("I saw Zorblax there. I left.", {"Mara", "Orrin"}, "Zorblax"),
+        (
+            "I watched Mara Kell cross the room. I left.",
+            {"Mara", "Mara Kell", "Orrin"},
+            "Mara Kell",
+        ),
+    ],
+)
+def test_noninitial_unallowed_names_remain_rejected(
+    text: str, known: set[str], offender: str
+) -> None:
+    """Positional exemptions do not admit invented or disallowed mid-sentence names."""
+    batch = ExperienceRenderBatch(
+        recollections=[ExperienceRecollection(experience_id=41, experience_text=text)]
+    )
+
+    validation = validate_render_batch(
+        [_seed_row()],
+        batch,
+        names_by_experience={41: (known, {"Mara", "Orrin"})},
+    )
+
+    assert validation.validated == {}
+    assert offender in validation.rejected[41]
 
 
 def test_renderer_validator_rejects_genuinely_invented_mid_sentence_name() -> None:

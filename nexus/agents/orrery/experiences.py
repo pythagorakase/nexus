@@ -127,7 +127,6 @@ _SENTENCE_INITIAL_ALLOWLIST = frozenset(
         "please",
         "quite",
         "rather",
-        "run",
         "she",
         "since",
         "some",
@@ -1230,20 +1229,23 @@ def _mask_allowed_names(text: str, allowed_names: Iterable[str]) -> str:
 
 def _is_sentence_initial(text: str, start: int) -> bool:
     prefix = text[:start]
-    if not prefix.strip():
+    prefix = prefix.rstrip()
+    opener_peeled = False
+    while prefix and prefix[-1] in {'"', "“", "‘", "'", "(", "[", "{"}:
+        opener_peeled = True
+        prefix = prefix[:-1]
+    if opener_peeled and (
+        not prefix
+        or prefix[-1].isspace()
+        or prefix[-1] in {",", ":", ";", "—", "–", "(", "["}
+    ):
         return True
-    if re.search(r"[.!?…][\"'”’\)\]\}]*\s+$", prefix):
+    prefix = prefix.rstrip()
+    if not prefix or prefix[-1] in {".", "!", "?", "…", ":", "—", "–"}:
         return True
-    if re.search(r":\s+$", prefix):
-        return True
-    if prefix[-1:] in {'"', "“", "‘", "'"}:
-        quote_start = len(prefix) - 1
-        return (
-            quote_start == 0
-            or prefix[quote_start - 1].isspace()
-            or prefix[quote_start - 1] in {",", ":", "("}
-        )
-    return False
+    while prefix and prefix[-1] in {'"', "”", "’", "'", ")", "]", "}"}:
+        prefix = prefix[:-1].rstrip()
+    return bool(prefix and prefix[-1] in {".", "!", "?", "…"})
 
 
 def _token_occurs_outside_match(
@@ -1340,7 +1342,15 @@ def validate_render_batch(
     for recollection in batch.recollections:
         experience_id = recollection.experience_id
         text = recollection.experience_text.strip()
-        sentences = [part.strip() for part in _SENTENCE.split(text) if part.strip()]
+        known, allowed = (
+            names_by_experience.get(experience_id, (set(), set()))
+            if names_by_experience is not None
+            else (set(), set())
+        )
+        masked_text = _mask_allowed_names(text, allowed)
+        sentences = [
+            part.strip() for part in _SENTENCE.split(masked_text) if part.strip()
+        ]
         if not 2 <= len(sentences) <= 4:
             rejected[experience_id] = (
                 f"Experience {experience_id} must contain 2-4 sentences"
@@ -1363,11 +1373,6 @@ def validate_render_batch(
                     "must not describe witnessing the underlying event"
                 )
                 continue
-        known, allowed = (
-            names_by_experience.get(experience_id, (set(), set()))
-            if names_by_experience is not None
-            else (set(), set())
-        )
         disallowed_known = sorted(
             name for name in known - allowed if _entity_name_pattern(name).search(text)
         )
@@ -1788,20 +1793,84 @@ def drain_experience_render_jobs_sync(
                     failed_count += 1
                     continue
                 if not render_ids:
+                    nonce = str(uuid4())
+                    cur.execute(
+                        """
+                        UPDATE character_experience_jobs
+                        SET state = 'leased',
+                            lease_until = clock_timestamp()
+                                + (%s * interval '1 second'),
+                            locked_by = %s, lease_nonce = %s,
+                            attempts = attempts + 1, updated_at = now()
+                        WHERE id = %s
+                        """,
+                        (cfg.lease_duration_seconds, owner, nonce, job["job_id"]),
+                    )
+                    if cur.rowcount != 1:
+                        raise RuntimeError(
+                            "Failed to lease already-rendered experience job "
+                            f"{job['job_id']}"
+                        )
+                    job["locked_by"] = owner
+                    job["lease_nonce"] = nonce
+                    if int(job["attempts"]) == 0:
+                        error = (
+                            f"Experience job {job['job_id']} is stale because "
+                            "seeds were already rendered: "
+                            f"{sorted(already_rendered_ids)}"
+                        )
+                        _reject_stale_source(cur, job=job, error=error)
+                        failed_count += 1
+                        continue
+                    cur.execute(
+                        """
+                        SELECT id, source_digest,
+                               invalidation_status::text AS invalidation_status
+                        FROM character_experiences
+                        WHERE id = ANY(%s)
+                        ORDER BY id
+                        FOR UPDATE
+                        """,
+                        (job["experience_ids"],),
+                    )
+                    current_rows = [dict(row) for row in cur.fetchall()]
+                    expected_ids = {
+                        int(experience_id) for experience_id in job["experience_ids"]
+                    }
+                    if (
+                        {int(row["id"]) for row in current_rows} != expected_ids
+                        or _batch_digest(current_rows) != job["source_digest"]
+                        or any(
+                            row["invalidation_status"] != "valid"
+                            for row in current_rows
+                        )
+                    ):
+                        _reject_stale_source(
+                            cur,
+                            job=job,
+                            error=(
+                                f"Experience job {job['job_id']} "
+                                "already-rendered seed batch is stale"
+                            ),
+                        )
+                        failed_count += 1
+                        continue
                     cur.execute(
                         """
                         UPDATE character_experience_jobs
                         SET state = 'succeeded', lease_until = NULL,
                             locked_by = NULL, lease_nonce = NULL,
                             last_error = NULL, updated_at = now()
-                        WHERE id = %s
+                        WHERE id = %s AND state = 'leased' AND locked_by = %s
+                          AND lease_nonce = %s
+                          AND lease_until >= clock_timestamp()
                         """,
-                        (job["job_id"],),
+                        (job["job_id"], job["locked_by"], job["lease_nonce"]),
                     )
                     if cur.rowcount != 1:
-                        raise RuntimeError(
-                            "Failed to complete already-rendered experience job "
-                            f"{job['job_id']}"
+                        raise ExperienceLeaseLostError(
+                            f"Experience job {job['job_id']} lost its lease "
+                            "while completing already-rendered seeds"
                         )
                     continue
                 if excluded_ids:
