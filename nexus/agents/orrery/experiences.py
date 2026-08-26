@@ -1426,6 +1426,54 @@ def _reject_stale_source(
         )
 
 
+def load_experience_status_sync(cur: Any) -> dict[str, Any]:
+    """Return experience-render queue counts and non-terminal jobs."""
+
+    cur.execute(
+        """
+        SELECT
+            jsonb_build_object(
+                'queued', count(*) FILTER (WHERE state = 'queued'),
+                'leased', count(*) FILTER (WHERE state = 'leased'),
+                'succeeded', count(*) FILTER (WHERE state = 'succeeded'),
+                'failed', count(*) FILTER (WHERE state = 'failed'),
+                'stale_rejected', count(*) FILTER (WHERE state = 'stale_rejected')
+            ) AS counts,
+            COALESCE(
+                jsonb_agg(
+                    jsonb_build_object(
+                        'id', id,
+                        'queue', 'experience_render',
+                        'state', state::text,
+                        'attempts', attempts,
+                        'available_at', available_at,
+                        'lease_until', lease_until,
+                        'last_error', last_error,
+                        'boundary_chunk_id', boundary_chunk_id,
+                        'scene_end_chunk_id', scene_end_chunk_id,
+                        'batch_ordinal', batch_ordinal,
+                        'experience_ids', experience_ids
+                    ) ORDER BY id
+                ) FILTER (WHERE state IN ('queued', 'leased')),
+                '[]'::jsonb
+            ) AS non_terminal_jobs
+        FROM character_experience_jobs
+        """
+    )
+    row = cur.fetchone()
+    if row is None:
+        raise RuntimeError("Experience status query returned no row")
+    raw_counts = _row_value(row, "counts", 0)
+    raw_jobs = _row_value(row, "non_terminal_jobs", 1)
+    if not isinstance(raw_counts, Mapping) or not isinstance(raw_jobs, list):
+        raise RuntimeError("Experience status query returned an invalid shape")
+    counts = {
+        state: int(raw_counts.get(state, 0))
+        for state in ("queued", "leased", "succeeded", "failed", "stale_rejected")
+    }
+    return {"counts": counts, "non_terminal_jobs": raw_jobs}
+
+
 def drain_experience_render_jobs_sync(
     *,
     slot: Optional[int],

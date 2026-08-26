@@ -10,6 +10,9 @@ issue_budget = 5
 minimum_probe_families = 5
 dry_well_families = 3
 wall_clock_minutes = 60
+# One lease is expected. A queued or leased job above this count has re-entered
+# the provider-capable queue and stops the shift for diagnosis.
+max_non_terminal_attempts = 1
 
 # Run artifacts remain intentionally transient even though this utility is
 # tracked. Paths are resolved from the repository root.

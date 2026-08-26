@@ -76,17 +76,42 @@ def _usage(
     }
 
 
-def _job(state: str, *, attempts: int = 1) -> dict[str, object]:
-    return {
+def _job(
+    state: str,
+    *,
+    attempts: int = 1,
+    queue: str = "retrograde_maturation",
+    last_error: str | None = None,
+) -> dict[str, object]:
+    job: dict[str, object] = {
         "id": 17,
+        "queue": queue,
         "state": state,
-        "entity_kind": "character",
-        "entity_name": "Nika Rel",
-        "requesting_chunk_id": 47,
         "attempts": attempts,
         "available_at": "2026-07-30T04:31:00+00:00",
         "lease_until": ("2026-07-30T04:36:00+00:00" if state == "leased" else None),
+        "last_error": last_error,
     }
+    if queue == "retrograde_maturation":
+        job.update(
+            {
+                "entity_kind": "character",
+                "entity_name": "Nika Rel",
+                "requesting_chunk_id": 47,
+            }
+        )
+    elif queue == "experience_render":
+        job.update(
+            {
+                "boundary_chunk_id": 48,
+                "scene_end_chunk_id": 47,
+                "batch_ordinal": 0,
+                "experience_ids": [81, 82],
+            }
+        )
+    else:
+        raise ValueError(f"Unsupported fixture queue: {queue}")
+    return job
 
 
 def _jobs(
@@ -94,23 +119,65 @@ def _jobs(
     state: str | None = None,
     attempts: int = 1,
     failed_jobs: int = 0,
+    experience_failed_jobs: int = 0,
+    queue: str = "retrograde_maturation",
+    last_error: str | None = None,
 ) -> dict[str, object]:
-    counts = {
+    maturation_counts = {
         "queued": 0,
         "leased": 0,
         "succeeded": 0,
         "failed": failed_jobs,
     }
+    experience_counts = {
+        "queued": 0,
+        "leased": 0,
+        "succeeded": 0,
+        "failed": experience_failed_jobs,
+        "stale_rejected": 0,
+    }
+    queue_counts = (
+        maturation_counts if queue == "retrograde_maturation" else experience_counts
+    )
     non_terminal_jobs: list[dict[str, object]] = []
     if state is not None:
-        counts[state] += 1
+        queue_counts[state] += 1
         if state in ("queued", "leased"):
-            non_terminal_jobs.append(_job(state, attempts=attempts))
+            non_terminal_jobs.append(
+                _job(
+                    state,
+                    attempts=attempts,
+                    queue=queue,
+                    last_error=last_error,
+                )
+            )
+    queues = {
+        "retrograde_maturation": {
+            "counts": maturation_counts,
+            "non_terminal_jobs": (
+                non_terminal_jobs if queue == "retrograde_maturation" else []
+            ),
+        },
+        "experience_render": {
+            "counts": experience_counts,
+            "non_terminal_jobs": (
+                non_terminal_jobs if queue == "experience_render" else []
+            ),
+        },
+    }
+    counts = {
+        shared_state: maturation_counts[shared_state] + experience_counts[shared_state]
+        for shared_state in ("queued", "leased", "succeeded", "failed")
+    }
     return {
         "success": True,
         "slot": 4,
+        "queues": queues,
         "counts": counts,
-        "non_terminal_jobs": non_terminal_jobs,
+        "non_terminal_jobs": sorted(
+            non_terminal_jobs,
+            key=lambda job: (str(job["queue"]), int(cast(int, job["id"]))),
+        ),
     }
 
 
@@ -143,7 +210,10 @@ def _state(config: qa_shift.ShiftConfig) -> dict[str, object]:
         "baseline_event_count": 0,
         "last_event_count": 0,
         "last_unknown_usage_events": 0,
-        "baseline_failed_jobs": 0,
+        "baseline_failed_jobs": {
+            "retrograde_maturation": 0,
+            "experience_render": 0,
+        },
         "checks": 0,
         "max_command_delta": 0,
         "config": qa_shift._config_payload(config),
@@ -742,7 +812,7 @@ def test_check_modes_are_mutually_exclusive_at_argparse_boundary(
     assert "not allowed with argument --expect-call" in capsys.readouterr().err
 
 
-def test_post_call_with_leased_job_is_pending_without_advancing_state() -> None:
+def test_queued_experience_job_is_pending_without_advancing_state() -> None:
     config = qa_shift.load_shift_config()
     state = _state(config)
     state["max_command_delta"] = 77
@@ -750,7 +820,7 @@ def test_post_call_with_leased_job_is_pending_without_advancing_state() -> None:
     result, updated = qa_shift.evaluate_check(
         state=state,
         usage_payload=_usage(total=100),
-        jobs_payload=_jobs(state="leased"),
+        jobs_payload=_jobs(state="queued", queue="experience_render"),
         mode=qa_shift.CheckMode.POST_CALL,
         now=NOW + timedelta(minutes=1),
     )
@@ -758,7 +828,7 @@ def test_post_call_with_leased_job_is_pending_without_advancing_state() -> None:
     assert result["status"] == "pending"
     assert result["reasons"] == []
     assert "expected_usage_event_missing" not in result["reasons"]
-    assert result["non_terminal_jobs"] == [_job("leased")]
+    assert result["non_terminal_jobs"] == [_job("queued", queue="experience_render")]
     assert result["max_command_delta"] == 77
     assert updated == state
     assert updated["last_total"] == 100
@@ -782,14 +852,14 @@ def test_pending_post_check_retains_late_usage_in_causal_command_delta(
         {**_event(total=200), "seat": "skald_writer", "request_id": "writer"},
         {
             **_event(total=100),
-            "seat": "retrograde_seed_selection",
-            "request_id": "seed-selection",
+            "seat": "experience_seed_formation",
+            "request_id": "experience-formation",
         },
     ]
     late_event = {
         **_event(total=50),
-        "seat": "retrograde_expansion",
-        "request_id": "late-expansion",
+        "seat": "experience_renderer",
+        "request_id": "late-experience-renderer",
     }
 
     pre = qa_shift.check_shift(
@@ -803,7 +873,9 @@ def test_pending_post_check_retains_late_usage_in_causal_command_delta(
         archive=archive,
         mode=qa_shift.CheckMode.POST_CALL,
         usage_reader=lambda _root, _day: _usage(total=400, events=sync_events),
-        jobs_reader=lambda _root, _slot: _jobs(state="leased"),
+        jobs_reader=lambda _root, _slot: _jobs(
+            state="leased", queue="experience_render"
+        ),
         now=NOW + timedelta(seconds=2),
     )
     pending_state = json.loads((archive / "shift_state.json").read_text())
@@ -831,8 +903,8 @@ def test_pending_post_check_retains_late_usage_in_causal_command_delta(
     assert settled["max_command_delta"] == 350
     assert {call["seat"] for call in settled["qa_api_calls"]} == {
         "skald_writer",
-        "retrograde_seed_selection",
-        "retrograde_expansion",
+        "experience_seed_formation",
+        "experience_renderer",
     }
     assert final_state["last_total"] == 450
     assert final_state["last_event_count"] == 3
@@ -842,7 +914,7 @@ def test_pending_post_check_retains_late_usage_in_causal_command_delta(
         for line in (archive / "usage_checks.jsonl").read_text().splitlines()
     ]
     assert checks[2]["status"] == "pending"
-    assert checks[2]["non_terminal_jobs"] == [_job("leased")]
+    assert checks[2]["non_terminal_jobs"] == [_job("leased", queue="experience_render")]
 
 
 def test_failure_during_pending_stops_after_settlement_with_full_delta(
@@ -895,7 +967,10 @@ def test_failure_during_pending_stops_after_settlement_with_full_delta(
 
     assert pending["status"] == "pending"
     assert pending["reasons"] == []
-    assert pending["current_failed_jobs"] == 1
+    assert pending["current_failed_jobs"] == {
+        "retrograde_maturation": 1,
+        "experience_render": 0,
+    }
     assert pending_state["last_total"] == 100
     assert pending_state["last_event_count"] == 0
     assert pending_state["max_command_delta"] == 0
@@ -943,7 +1018,7 @@ def test_check_reads_queue_before_usage_to_close_settlement_race(
 @pytest.mark.parametrize(
     ("state", "attempts", "expected_status"),
     (
-        ("queued", 2, "pending"),
+        ("queued", 1, "pending"),
         ("leased", 1, "pending"),
         ("succeeded", 1, "continue"),
         ("failed", 3, "continue"),
@@ -956,7 +1031,10 @@ def test_only_non_terminal_maturation_states_block_checks(
 ) -> None:
     shift_state = _state(qa_shift.load_shift_config())
     if state == "failed":
-        shift_state["baseline_failed_jobs"] = 1
+        shift_state["baseline_failed_jobs"] = {
+            "retrograde_maturation": 1,
+            "experience_render": 0,
+        }
     result, _ = qa_shift.evaluate_check(
         state=shift_state,
         usage_payload=_usage(total=100),
@@ -966,6 +1044,73 @@ def test_only_non_terminal_maturation_states_block_checks(
     )
 
     assert result["status"] == expected_status
+
+
+def test_requeued_experience_job_stops_with_last_error() -> None:
+    state = _state(qa_shift.load_shift_config())
+    result, updated = qa_shift.evaluate_check(
+        state=state,
+        usage_payload=_usage(total=100),
+        jobs_payload=_jobs(
+            state="queued",
+            attempts=2,
+            queue="experience_render",
+            last_error="invented entity: Sitting",
+        ),
+        mode=qa_shift.CheckMode.PRE_CALL,
+        now=NOW + timedelta(minutes=1),
+    )
+
+    assert result["status"] == "stop"
+    assert result["reasons"] == ["job_requeued:experience_render:17"]
+    assert result["non_terminal_jobs"][0]["last_error"] == ("invented entity: Sitting")
+    # Sol review (PR #738): a stop records the watermark like every other stop.
+    assert updated["last_total"] == 100
+    assert updated["last_event_count"] == 0
+    assert updated["checks"] == int(state["checks"]) + 1
+
+
+def test_leased_retry_stays_pending_until_its_call_settles() -> None:
+    """A leased retry may be inside its provider call; it must hold pending."""
+    state = _state(qa_shift.load_shift_config())
+    state["max_command_delta"] = 77
+    result, updated = qa_shift.evaluate_check(
+        state=state,
+        usage_payload=_usage(total=100),
+        jobs_payload=_jobs(
+            state="leased",
+            attempts=2,
+            queue="experience_render",
+            last_error="invented entity: Sitting",
+        ),
+        mode=qa_shift.CheckMode.PRE_CALL,
+        now=NOW + timedelta(minutes=1),
+    )
+
+    assert result["status"] == "pending"
+    assert result["reasons"] == []
+    assert result["requeued_jobs"] == []
+    assert result["max_command_delta"] == 77
+    assert updated == state
+
+
+def test_unknown_queue_kind_fails_closed() -> None:
+    payload = json.loads(json.dumps(_jobs()))
+    payload["queues"]["unknown_provider_queue"] = {
+        "counts": {},
+        "non_terminal_jobs": [],
+    }
+
+    with pytest.raises(qa_shift.ShiftError, match="queue kinds must be exactly"):
+        qa_shift._jobs_snapshot(payload, slot=4)
+
+
+def test_aggregate_and_per_queue_mismatch_fails_closed() -> None:
+    payload = json.loads(json.dumps(_jobs()))
+    payload["counts"]["queued"] = 1
+
+    with pytest.raises(qa_shift.ShiftError, match="aggregate counts"):
+        qa_shift._jobs_snapshot(payload, slot=4)
 
 
 def test_new_terminal_maturation_failure_stops_settled_check() -> None:
@@ -979,8 +1124,27 @@ def test_new_terminal_maturation_failure_stops_settled_check() -> None:
 
     assert result["status"] == "stop"
     assert "maturation_job_failed" in result["reasons"]
-    assert result["baseline_failed_jobs"] == 0
-    assert result["current_failed_jobs"] == 1
+    assert result["baseline_failed_jobs"] == {
+        "retrograde_maturation": 0,
+        "experience_render": 0,
+    }
+    assert result["current_failed_jobs"] == {
+        "retrograde_maturation": 1,
+        "experience_render": 0,
+    }
+
+
+def test_new_terminal_experience_failure_stops_settled_check() -> None:
+    result, _ = qa_shift.evaluate_check(
+        state=_state(qa_shift.load_shift_config()),
+        usage_payload=_usage(total=100),
+        jobs_payload=_jobs(experience_failed_jobs=1),
+        mode=qa_shift.CheckMode.PRE_CALL,
+        now=NOW + timedelta(minutes=1),
+    )
+
+    assert result["status"] == "stop"
+    assert "experience_job_failed" in result["reasons"]
 
 
 def test_preexisting_failed_jobs_become_shift_baseline(tmp_path: Path) -> None:
@@ -1003,11 +1167,20 @@ def test_preexisting_failed_jobs_become_shift_baseline(tmp_path: Path) -> None:
         now=NOW + timedelta(minutes=1),
     )
 
-    assert state["baseline_failed_jobs"] == 2
+    assert state["baseline_failed_jobs"] == {
+        "retrograde_maturation": 2,
+        "experience_render": 0,
+    }
     assert check["status"] == "continue"
     assert "maturation_job_failed" not in check["reasons"]
-    assert check["baseline_failed_jobs"] == 2
-    assert check["current_failed_jobs"] == 2
+    assert check["baseline_failed_jobs"] == {
+        "retrograde_maturation": 2,
+        "experience_render": 0,
+    }
+    assert check["current_failed_jobs"] == {
+        "retrograde_maturation": 2,
+        "experience_render": 0,
+    }
 
 
 def test_begin_refuses_dirty_maturation_queue(tmp_path: Path) -> None:
@@ -1032,6 +1205,23 @@ def test_begin_refuses_dirty_maturation_queue(tmp_path: Path) -> None:
 
     assert usage_read is False
     assert list(tmp_path.iterdir()) == []
+
+
+def test_begin_refuses_dirty_experience_queue(tmp_path: Path) -> None:
+    config = replace(qa_shift.load_shift_config(), archive_root=tmp_path)
+
+    with pytest.raises(
+        qa_shift.ShiftError,
+        match=r"cannot begin.*experience_render",
+    ):
+        qa_shift.begin_shift(
+            config=config,
+            usage_reader=lambda _root, _day: pytest.fail("usage reader was called"),
+            jobs_reader=lambda _root, _slot: _jobs(
+                state="queued", queue="experience_render"
+            ),
+            now=NOW,
+        )
 
 
 def test_check_fails_closed_at_token_time_day_and_unknown_boundaries() -> None:
@@ -1361,8 +1551,43 @@ def test_finish_marks_new_maturation_failure_unsettled(tmp_path: Path) -> None:
 
     assert finish["status"] == "finished"
     assert finish["usage_settled"] is False
-    assert finish["baseline_failed_jobs"] == 1
-    assert finish["current_failed_jobs"] == 2
+    assert finish["baseline_failed_jobs"] == {
+        "retrograde_maturation": 1,
+        "experience_render": 0,
+    }
+    assert finish["current_failed_jobs"] == {
+        "retrograde_maturation": 2,
+        "experience_render": 0,
+    }
+
+
+def test_finish_reports_usage_unsettled_for_experience_queue(
+    tmp_path: Path,
+) -> None:
+    config = replace(qa_shift.load_shift_config(), archive_root=tmp_path)
+    begin = qa_shift.begin_shift(
+        config=config,
+        usage_reader=lambda _root, _day: _usage(total=100),
+        jobs_reader=_settled_jobs_reader,
+        bleed_uptake_reader=_empty_bleed_uptake_reader,
+        now=NOW,
+    )
+
+    finish = qa_shift.finish_shift(
+        archive=Path(begin["archive"]),
+        exit_condition="blocked",
+        usage_reader=lambda _root, _day: _usage(total=125),
+        jobs_reader=lambda _root, _slot: _jobs(
+            state="leased", queue="experience_render"
+        ),
+        bleed_uptake_reader=_bleed_uptake_reader,
+        now=NOW + timedelta(minutes=1),
+    )
+
+    assert finish["usage_settled"] is False
+    assert finish["jobs"]["non_terminal_jobs"] == [
+        _job("leased", queue="experience_render")
+    ]
 
 
 def test_pending_check_exit_code_contract(
