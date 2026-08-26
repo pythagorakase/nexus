@@ -207,6 +207,78 @@ def test_lowercase_occurrence_in_text_exempts_a_sentence_start() -> None:
     assert 41 in validation.validated
 
 
+def test_short_suffix_does_not_exempt_a_sentence_initial_name() -> None:
+    """ "Molly" ends in -ly but is a name; the suffix floor keeps it a candidate."""
+    batch = ExperienceRenderBatch(
+        recollections=[
+            ExperienceRecollection(
+                experience_id=41,
+                experience_text="Molly walked past me. I did not recognize her.",
+            )
+        ]
+    )
+
+    validation = validate_render_batch(
+        [_seed_row()],
+        batch,
+        names_by_experience={41: ({"Mara", "Orrin"}, {"Mara", "Orrin"})},
+    )
+
+    assert 41 in validation.rejected
+    assert "Molly" in validation.rejected[41]
+
+
+def test_common_short_adverb_opener_is_not_a_candidate() -> None:
+    """Five-letter adverbs below the suffix floor are allowlisted explicitly."""
+    batch = ExperienceRenderBatch(
+        recollections=[
+            ExperienceRecollection(
+                experience_id=41,
+                experience_text=(
+                    "Sadly, I watched Orrin leave. Early light found me alone."
+                ),
+            )
+        ]
+    )
+
+    validation = validate_render_batch(
+        [_seed_row()],
+        batch,
+        names_by_experience={41: ({"Mara", "Orrin"}, {"Mara", "Orrin"})},
+    )
+
+    assert validation.rejected == {}
+
+
+def test_lowercase_exemption_is_scoped_to_the_experience_seed() -> None:
+    """A sibling's seed must not vouch for a word in an unrelated recollection."""
+    vouched = {**_seed_row(), "id": 41, "seed_summary": "Mara noted the silence."}
+    unvouched = {**_seed_row(), "id": 42, "seed_summary": "Mara watched Orrin."}
+    batch = ExperienceRenderBatch(
+        recollections=[
+            ExperienceRecollection(
+                experience_id=41,
+                experience_text="Silence held the hall. I waited for Orrin.",
+            ),
+            ExperienceRecollection(
+                experience_id=42,
+                experience_text="Silence held the hall. I waited for Orrin.",
+            ),
+        ]
+    )
+
+    names = {"Mara", "Orrin"}
+    validation = validate_render_batch(
+        [vouched, unvouched],
+        batch,
+        names_by_experience={41: (names, names), 42: (names, names)},
+    )
+
+    assert 41 in validation.validated
+    assert 42 in validation.rejected
+    assert "Silence" in validation.rejected[42]
+
+
 def test_acquisition_validator_requires_telling_perspective() -> None:
     """Acquisitions remember receiving an account, never seeing its incident."""
     row = {**_seed_row(), "basis": "acquisition"}

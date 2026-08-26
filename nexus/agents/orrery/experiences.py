@@ -73,6 +73,7 @@ _SENTENCE_INITIAL_ALLOWLIST = frozenset(
         "down",
         "during",
         "each",
+        "early",
         "either",
         "even",
         "evening",
@@ -157,6 +158,11 @@ _SENTENCE_INITIAL_ALLOWLIST = frozenset(
         "under",
         "up",
         "upon",
+        "badly",
+        "being",
+        "oddly",
+        "sadly",
+        "truly",
         "very",
         "we",
         "well",
@@ -177,10 +183,13 @@ _SENTENCE_INITIAL_ALLOWLIST = frozenset(
         "yet",
     }
 )
-_NON_NAME_SUFFIXES = (
-    "ing",
-    "ed",
-    "ly",
+# Short inflectional suffixes exempt a sentence-initial token only when the
+# token is long enough that the suffix is a real inflection: "Sitting" and
+# "Finally" are ordinary words, "Molly", "Ned", and "King" are names
+# (automated Claude review on PR #739).
+_SHORT_NON_NAME_SUFFIXES = ("ing", "ed", "ly")
+_SHORT_SUFFIX_MIN_LENGTH = 6
+_LONG_NON_NAME_SUFFIXES = (
     "tion",
     "sion",
     "ness",
@@ -193,6 +202,14 @@ _NON_NAME_SUFFIXES = (
     "body",
     "one",
 )
+
+
+def _has_non_name_suffix(token: str) -> bool:
+    if token.endswith(_SHORT_NON_NAME_SUFFIXES):
+        return len(token) >= _SHORT_SUFFIX_MIN_LENGTH
+    return token.endswith(_LONG_NON_NAME_SUFFIXES)
+
+
 _CONTRACTION_SUFFIX = re.compile(r"['’](?:d|ll|m|re|s|ve)\b", re.IGNORECASE)
 _FIRST_PERSON = re.compile(r"\b(?:I|me|my|mine|we|us|our|ours)\b", re.IGNORECASE)
 _SENTENCE = re.compile(r"(?<=[.!?])(?:[\"']?\s+|$)")
@@ -1296,7 +1313,7 @@ def _proper_noun_candidates(
         first_end = first_start + first.end()
         if (
             first_lower not in _SENTENCE_INITIAL_ALLOWLIST
-            and not first_lower.endswith(_NON_NAME_SUFFIXES)
+            and not _has_non_name_suffix(first_lower)
             and not _token_occurs_outside_match(
                 first_token,
                 text=text,
@@ -1327,16 +1344,6 @@ def validate_render_batch(
             f"actual={sorted(actual)}"
         )
     rows_by_id = {int(row["id"]): row for row in rows}
-    source_context = " ".join(
-        str(value)
-        for row in rows
-        for value in (
-            row.get("seed_summary"),
-            row.get("character_name"),
-            row.get("location_name"),
-        )
-        if value
-    )
     validated: dict[int, str] = {}
     rejected: dict[int, str] = {}
     for recollection in batch.recollections:
@@ -1375,6 +1382,18 @@ def validate_render_batch(
                 continue
         disallowed_known = sorted(
             name for name in known - allowed if _entity_name_pattern(name).search(text)
+        )
+        # The lowercase-occurrence exemption is scoped to THIS experience's
+        # seed: a sibling's seed must not vouch for an unrelated scene
+        # (automated Claude review on PR #739).
+        source_context = " ".join(
+            str(value)
+            for value in (
+                source_row.get("seed_summary"),
+                source_row.get("character_name"),
+                source_row.get("location_name"),
+            )
+            if value
         )
         invented = sorted(
             _proper_noun_candidates(
