@@ -6,6 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Install dependencies: `poetry install`
 - Register pre-commit hooks (once per checkout): `poetry run pre-commit install`
 - Run tests: `poetry run pytest`
+- Run the full gate (PostgreSQL-backed tests included): `NEXUS_RUN_POSTGRES=1 poetry run pytest`, with `NEXUS_GATEWAY_PORT` and `NEXUS_API_URL` unset. A summary with hundreds of skips is not a passing gate.
 - Run specific test: `poetry run pytest tests/path/to/test.py::test_name`
 - Format code: `poetry run black .`
 - Typecheck: `poetry run mypy .`

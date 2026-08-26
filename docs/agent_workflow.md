@@ -12,6 +12,10 @@ more specific instructions.
   unstaged when pausing or handing off.
 - Open a ready-for-review PR autonomously when the branch is validated. Use a
   draft PR only when the user explicitly asks for one.
+- Validate against the full gate before opening or merging a PR:
+  `NEXUS_RUN_POSTGRES=1 poetry run pytest` with `NEXUS_GATEWAY_PORT` and
+  `NEXUS_API_URL` unset. The PostgreSQL-gated tests are where fixture debt
+  accumulates; a run that skips them is not the gate.
 - Include a concise PR summary, validation commands, and any schema,
   configuration, or data-impact notes.
 
