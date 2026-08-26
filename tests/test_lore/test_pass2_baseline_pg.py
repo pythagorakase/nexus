@@ -11,7 +11,7 @@ from types import SimpleNamespace
 from typing import Any, Iterator
 from uuid import uuid4
 
-import asyncpg
+import asyncpg  # type: ignore[import-untyped]
 import psycopg2
 import pytest
 from psycopg2 import sql
@@ -21,7 +21,7 @@ from sqlalchemy.orm import sessionmaker
 from nexus.agents.lore.logon_utility import LogonUtility
 from nexus.agents.lore.lore import LORE
 from nexus.agents.logon.apex_schema import StorytellerResponseStandard
-from nexus.api import commit_handler, commit_handler_sync
+from nexus.api import commit_handler, commit_handler_sync, db_pool
 from nexus.api.commit_handler_sync import commit_incubator_to_database_sync
 from nexus.api.lore_adapter import response_to_incubator
 from nexus.api.narrative_generation import generate_narrative_async, write_to_incubator
@@ -32,7 +32,7 @@ from nexus.memory.manager import (
     MissingPass2BaselineError,
     empty_pass2_baseline,
 )
-from scripts import stamp_lore_pass_baseline
+from scripts import new_story_setup, stamp_lore_pass_baseline
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -49,32 +49,66 @@ def _connect(dbname: str) -> Any:
     )
 
 
+def _seed_protagonist(dbname: str) -> None:
+    """Bind the disposable save to a canonical player character."""
+
+    with _connect(dbname) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE global_variables SET base_timestamp = %s WHERE id = true",
+                ("2100-01-01T00:00:00+00:00",),
+            )
+            assert cur.rowcount == 1
+            cur.execute(
+                "INSERT INTO entities (kind, is_active) "
+                "VALUES ('character', true) RETURNING id"
+            )
+            entity_id = int(cur.fetchone()[0])
+            cur.execute(
+                """
+                INSERT INTO characters (name, summary, entity_id)
+                VALUES ('Pass Two Fixture Player', %s, %s)
+                RETURNING id
+                """,
+                ("Canonical player for Pass-2 lifecycle coverage.", entity_id),
+            )
+            character_id = int(cur.fetchone()[0])
+            cur.execute(
+                "UPDATE global_variables SET user_character = %s WHERE id = true",
+                (character_id,),
+            )
+            assert cur.rowcount == 1
+
+
 @pytest.fixture()
 def pass2_database() -> Iterator[str]:
-    """Clone the template, apply migration 107, and always drop the clone."""
+    """Initialize the template, reapply migration 107, and drop the clone."""
 
     dbname = f"nexus_test_pass2_{uuid4().hex[:12]}"
     source_db = os.environ.get("NEXUS_TEST_TEMPLATE_DB", "NEXUS_template")
     admin = _connect("postgres")
     admin.autocommit = True
+    original_use_pool = new_story_setup.USE_POOL
     try:
-        with admin.cursor() as cur:
-            cur.execute(
-                sql.SQL("CREATE DATABASE {} TEMPLATE {}").format(
-                    sql.Identifier(dbname),
-                    sql.Identifier(source_db),
-                )
-            )
+        new_story_setup.USE_POOL = False
+        new_story_setup.initialize_slot_database(dbname, source_db=source_db)
         migration = MIGRATION.read_text()
         with _connect(dbname) as conn:
             with conn.cursor() as cur:
+                # Migration 107 remains deliberately double-applied to prove
+                # idempotency against the current, fully migrated template.
                 cur.execute(migration)
                 cur.execute(migration)
                 cur.execute("DELETE FROM incubator")
                 cur.execute("DELETE FROM narrative_generation_lease")
                 cur.execute("DELETE FROM narrative_generation_sessions")
+        _seed_protagonist(dbname)
         yield dbname
     finally:
+        new_story_setup.USE_POOL = original_use_pool
+        pool = db_pool._pools.pop(dbname, None)
+        if pool is not None:
+            pool.closeall()
         with admin.cursor() as cur:
             cur.execute(
                 "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
@@ -186,7 +220,7 @@ class _RouteProvider:
     async def get_structured_completion_async(
         self,
         prompt: str,
-        schema_model: type,
+        schema_model: Any,
         **kwargs: Any,
     ) -> tuple[Any, object]:
         """Validate the queued payload through LOGON's selected wire schema."""
@@ -859,7 +893,12 @@ def test_missing_tail_error_and_admin_stamp_boundary(
             "load_settings_as_dict",
             _settings,
         )
-        assert stamp_lore_pass_baseline.stamp_slot_tail(5) == tail_chunk_id
+        stamped_chunk_id, tail_stamped, incubator_stamped = (
+            stamp_lore_pass_baseline.stamp_slot_tail(5)
+        )
+        assert stamped_chunk_id == tail_chunk_id
+        assert tail_stamped is True
+        assert incubator_stamped is False
 
         fresh = ContextMemoryManager(_settings(), memnon=_DatabaseMemnon(engine))
         restored = fresh.restore_pass2_baseline(tail_chunk_id)

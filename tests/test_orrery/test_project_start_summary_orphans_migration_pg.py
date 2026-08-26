@@ -13,7 +13,8 @@ from psycopg2 import sql
 import pytest
 
 from nexus.agents.orrery.retrograde_persistence import PROJECT_STARTED_EVENT_TYPES
-from scripts import migrate
+from nexus.api import db_pool
+from scripts import migrate, new_story_setup
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -36,27 +37,31 @@ def _connect(dbname: str) -> Any:
 
 @pytest.fixture()
 def disposable_retrograde_hygiene_db() -> Iterator[str]:
-    """Yield a unique template clone and remove it after the regression."""
+    """Yield an initialized pre-101 test state and remove it afterward."""
 
     dbname = f"qa672_{uuid.uuid4().hex[:12]}"
     source_db = os.environ.get("NEXUS_TEST_TEMPLATE_DB", "NEXUS_template")
     assert source_db == "NEXUS_template" or source_db.startswith("qa672_")
     admin: Any = None
+    original_use_pool = new_story_setup.USE_POOL
     try:
         try:
             admin = _connect("postgres")
         except psycopg2.Error as exc:
             pytest.skip(f"PostgreSQL admin connection unavailable: {exc}")
         admin.autocommit = True
-        with admin.cursor() as cur:
-            cur.execute(
-                sql.SQL("CREATE DATABASE {} TEMPLATE {}").format(
-                    sql.Identifier(dbname),
-                    sql.Identifier(source_db),
-                )
-            )
+        new_story_setup.USE_POOL = False
+        new_story_setup.initialize_slot_database(dbname, source_db=source_db)
+        with _connect(dbname) as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM schema_migrations WHERE version = '101'")
+                assert cur.rowcount == 1
         yield dbname
     finally:
+        new_story_setup.USE_POOL = original_use_pool
+        pool = db_pool._pools.pop(dbname, None)
+        if pool is not None:
+            pool.closeall()
         if admin is not None:
             with admin.cursor() as cur:
                 cur.execute(

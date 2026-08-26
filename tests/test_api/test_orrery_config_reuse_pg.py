@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import os
 import uuid
-from pathlib import Path
 from typing import Any, Iterator
 
 import asyncpg  # type: ignore[import-untyped]
@@ -14,8 +13,9 @@ import pytest
 from psycopg2 import sql
 
 import nexus.config as config_module
-from nexus.api import commit_handler, commit_handler_sync
+from nexus.api import commit_handler, commit_handler_sync, db_pool
 from nexus.memory.manager import empty_pass2_baseline
+from scripts import new_story_setup
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -34,26 +34,58 @@ def _connect(dbname: str) -> Any:
     )
 
 
+def _seed_protagonist(dbname: str) -> None:
+    """Bind the disposable save to a canonical player character."""
+
+    with _connect(dbname) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE global_variables SET base_timestamp = %s WHERE id = true",
+                ("2100-01-01T00:00:00+00:00",),
+            )
+            assert cur.rowcount == 1
+            cur.execute(
+                "INSERT INTO entities (kind, is_active) "
+                "VALUES ('character', true) RETURNING id"
+            )
+            entity_id = int(cur.fetchone()[0])
+            cur.execute(
+                """
+                INSERT INTO characters (name, summary, entity_id)
+                VALUES ('Orrery Config Fixture Player', %s, %s)
+                RETURNING id
+                """,
+                ("Canonical player for accepted-chunk coverage.", entity_id),
+            )
+            character_id = int(cur.fetchone()[0])
+            cur.execute(
+                "UPDATE global_variables SET user_character = %s WHERE id = true",
+                (character_id,),
+            )
+            assert cur.rowcount == 1
+
+
 @pytest.fixture()
 def qa654_db() -> Iterator[str]:
-    """Clone NEXUS_template into a qa654 database and drop it after the test."""
+    """Initialize a complete qa654 database and drop it after the test."""
 
     dbname = f"qa654_{uuid.uuid4().hex[:12]}"
     admin = _connect("postgres")
     admin.autocommit = True
+    original_use_pool = new_story_setup.USE_POOL
     try:
-        with admin.cursor() as cur:
-            cur.execute(
-                sql.SQL("CREATE DATABASE {} TEMPLATE {}").format(
-                    sql.Identifier(dbname),
-                    sql.Identifier("NEXUS_template"),
-                )
-            )
-        with _connect(dbname) as conn:
-            with conn.cursor() as cur:
-                cur.execute(Path("migrations/107_lore_pass_baselines.sql").read_text())
+        new_story_setup.USE_POOL = False
+        new_story_setup.initialize_slot_database(
+            dbname,
+            source_db="NEXUS_template",
+        )
+        _seed_protagonist(dbname)
         yield dbname
     finally:
+        new_story_setup.USE_POOL = original_use_pool
+        pool = db_pool._pools.pop(dbname, None)
+        if pool is not None:
+            pool.closeall()
         with admin.cursor() as cur:
             cur.execute(
                 "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
