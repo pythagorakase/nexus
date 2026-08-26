@@ -3,11 +3,13 @@
 from datetime import datetime, timedelta, timezone
 from dataclasses import replace
 import json
-from pathlib import Path
+import os
+from typing import Any, Iterator
 import uuid
 
 import asyncpg
 import psycopg2
+from psycopg2 import sql
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
@@ -40,36 +42,72 @@ from nexus.agents.orrery.substrate import (
     validate_mood_affinities,
     validate_no_mood_in_entry_gates,
 )
-from nexus.api.slot_utils import get_slot_db_url
+from nexus.api import db_pool
+from scripts import new_story_setup
 
 
 pytestmark = pytest.mark.requires_postgres
 NOW = datetime(2073, 5, 3, 12, tzinfo=timezone.utc)
 
 
-def _migration_sql() -> str:
+def _database_url(dbname: str) -> str:
     return (
-        Path(__file__).parents[2] / "migrations" / "095_mood_vocabulary.sql"
-    ).read_text()
+        f"postgresql://{os.environ.get('PGUSER', 'pythagor')}@"
+        f"{os.environ.get('PGHOST', 'localhost')}:"
+        f"{os.environ.get('PGPORT', '5432')}/{dbname}"
+    )
+
+
+@pytest.fixture(scope="module")
+def mood_database() -> Iterator[str]:
+    """Yield a migrated NEXUS_template clone and always drop it afterward."""
+
+    dbname = f"qa735_mood_{uuid.uuid4().hex[:12]}"
+    admin: Any = None
+    original_use_pool = new_story_setup.USE_POOL
+    try:
+        try:
+            admin = psycopg2.connect(
+                dbname="postgres",
+                user=os.environ.get("PGUSER", "pythagor"),
+                host=os.environ.get("PGHOST", "localhost"),
+                port=os.environ.get("PGPORT", "5432"),
+            )
+        except psycopg2.Error as exc:
+            pytest.skip(f"PostgreSQL admin connection unavailable: {exc}")
+        admin.autocommit = True
+        new_story_setup.USE_POOL = False
+        new_story_setup.initialize_slot_database(
+            dbname,
+            source_db="NEXUS_template",
+        )
+        yield dbname
+    finally:
+        new_story_setup.USE_POOL = original_use_pool
+        pool = db_pool._pools.pop(dbname, None)
+        if pool is not None:
+            pool.closeall()
+        if admin is not None:
+            with admin.cursor() as cur:
+                cur.execute(
+                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+                    "WHERE datname = %s AND pid <> pg_backend_pid()",
+                    (dbname,),
+                )
+                cur.execute(
+                    sql.SQL("DROP DATABASE IF EXISTS {}").format(sql.Identifier(dbname))
+                )
+            admin.close()
 
 
 def _schema_sql() -> str:
     return """
-        CREATE TABLE tag_category_registry (
-            category text NOT NULL, entity_kind entity_kind NOT NULL,
-            prompt_order integer NOT NULL, description text,
-            deprecated boolean NOT NULL DEFAULT false,
-            replacement_categories text[], PRIMARY KEY (category, entity_kind)
-        );
-        CREATE TABLE tags (
-            id bigserial PRIMARY KEY, tag text UNIQUE NOT NULL,
-            category text NOT NULL, is_ephemeral boolean NOT NULL DEFAULT false,
-            clearance_kind entity_tag_clearance_kind,
-            reapplication_policy entity_tag_reapplication_policy,
-            clear_on jsonb, synonym_for bigint,
-            deprecated boolean NOT NULL DEFAULT false, description text,
-            CHECK (is_ephemeral = (clearance_kind IS NOT NULL))
-        );
+        CREATE TABLE tag_category_registry
+            (LIKE public.tag_category_registry INCLUDING ALL);
+        INSERT INTO tag_category_registry
+        SELECT * FROM public.tag_category_registry WHERE category = 'mood';
+        CREATE TABLE tags (LIKE public.tags INCLUDING ALL);
+        INSERT INTO tags SELECT * FROM public.tags WHERE category = 'mood';
         CREATE TABLE entity_tags (
             id bigserial PRIMARY KEY, entity_id bigint NOT NULL,
             tag_id bigint NOT NULL REFERENCES tags(id),
@@ -116,7 +154,7 @@ def _draft(mood: str, *, hours: float | None = None) -> OrreryResolutionDraft:
     )
 
 
-def _apply_sync(cur: object, draft: OrreryResolutionDraft, chunk_id: int) -> int:
+def _apply_sync(cur: Any, draft: OrreryResolutionDraft, chunk_id: int) -> int:
     cur.execute(
         """
         INSERT INTO orrery_resolutions (
@@ -125,7 +163,9 @@ def _apply_sync(cur: object, draft: OrreryResolutionDraft, chunk_id: int) -> int
         """,
         (chunk_id, json.dumps(dict(draft.state_delta))),
     )
-    resolution_id = cur.fetchone()[0]
+    resolution_row = cur.fetchone()
+    assert resolution_row is not None
+    resolution_id = resolution_row[0]
     return _apply_state_delta_sync(
         cur,
         draft,
@@ -139,15 +179,14 @@ def _apply_sync(cur: object, draft: OrreryResolutionDraft, chunk_id: int) -> int
     )
 
 
-def test_set_displace_expire_snapshot_and_replay() -> None:
-    conn = psycopg2.connect(get_slot_db_url(slot=5))
+def test_set_displace_expire_snapshot_and_replay(mood_database: str) -> None:
+    conn = psycopg2.connect(_database_url(mood_database))
     schema = f"mood_live_{uuid.uuid4().hex}"
     try:
         with conn.cursor() as cur:
             cur.execute(f'CREATE SCHEMA "{schema}"')
             cur.execute(f'SET LOCAL search_path = "{schema}", public')
             cur.execute(_schema_sql())
-            cur.execute(_migration_sql())
             cur.execute(
                 "INSERT INTO chunk_metadata VALUES (1, %s), (2, %s)",
                 (NOW, NOW + timedelta(hours=1)),
@@ -174,7 +213,9 @@ def test_set_displace_expire_snapshot_and_replay() -> None:
                 FROM orrery_resolutions WHERE tick_chunk_id = 2
                 """
             )
-            applied = cur.fetchone()[0]
+            applied_row = cur.fetchone()
+            assert applied_row is not None
+            applied = applied_row[0]
             assert applied["mood"] == "elated"
             assert applied["displaced_mood"] == "sour"
             assert (
@@ -183,7 +224,9 @@ def test_set_displace_expire_snapshot_and_replay() -> None:
             )
             assert applied["entity_tag"]["source_chunk_id"] == 2
             cur.execute("SELECT count(*) FROM tag_clearance_log")
-            assert cur.fetchone()[0] == 1
+            clearance_count = cur.fetchone()
+            assert clearance_count is not None
+            assert clearance_count[0] == 1
 
             replayer = _Replayer.__new__(_Replayer)
             replayer.cur = cur
@@ -216,8 +259,8 @@ def test_set_displace_expire_snapshot_and_replay() -> None:
 
 
 @pytest.mark.asyncio
-async def test_async_writer_and_disabled_snapshot() -> None:
-    conn = await asyncpg.connect(get_slot_db_url(slot=5))
+async def test_async_writer_and_disabled_snapshot(mood_database: str) -> None:
+    conn = await asyncpg.connect(_database_url(mood_database))
     transaction = conn.transaction()
     await transaction.start()
     schema = f"mood_async_{uuid.uuid4().hex}"
@@ -225,7 +268,6 @@ async def test_async_writer_and_disabled_snapshot() -> None:
         await conn.execute(f'CREATE SCHEMA "{schema}"')
         await conn.execute(f'SET LOCAL search_path = "{schema}", public')
         await conn.execute(_schema_sql())
-        await conn.execute(_migration_sql())
         await conn.execute(
             "INSERT INTO chunk_metadata VALUES (1, $1), (2, $2)",
             NOW,
@@ -271,8 +313,10 @@ async def test_async_writer_and_disabled_snapshot() -> None:
         await conn.close()
 
 
-def test_expired_unswept_mood_does_not_hydrate_or_bias() -> None:
-    engine = create_engine(get_slot_db_url(slot=5), future=True)
+def test_expired_unswept_mood_does_not_hydrate_or_bias(
+    mood_database: str,
+) -> None:
+    engine = create_engine(_database_url(mood_database), future=True)
     connection = engine.connect()
     transaction = connection.begin()
     schema = f"mood_hydration_{uuid.uuid4().hex}"
@@ -355,10 +399,12 @@ def test_expired_unswept_mood_does_not_hydrate_or_bias() -> None:
         engine.dispose()
 
 
-def test_expired_unswept_tag_does_not_source_actor_binding() -> None:
+def test_expired_unswept_tag_does_not_source_actor_binding(
+    mood_database: str,
+) -> None:
     """An expired ephemeral tag cannot make an otherwise irrelevant actor run."""
 
-    engine = create_engine(get_slot_db_url(slot=5), future=True)
+    engine = create_engine(_database_url(mood_database), future=True)
     connection = engine.connect()
     transaction = connection.begin()
     schema = f"mood_binding_{uuid.uuid4().hex}"

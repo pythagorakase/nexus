@@ -1,21 +1,45 @@
 """Integration test for LogonUtility → mock server routing."""
 
+import os
 from pathlib import Path
+import socket
+import subprocess
+import sys
+import time
 from types import SimpleNamespace
+from typing import Any, Iterator
+import uuid
 
 import psycopg2
+from psycopg2 import sql
 import pytest
+import requests  # type: ignore[import-untyped]
 
+from nexus.agents.logon.skald_wire import SkaldTurnWire
 from nexus.agents.lore.logon_utility import LogonUtility
+from nexus.api import db_pool
 from nexus.telemetry.usage import summarize_usage
 from scripts.api_openai import OpenAIProvider
-from nexus.agents.logon.skald_wire import SkaldTurnWire
+from scripts import new_story_setup
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _connect(dbname: str) -> psycopg2.extensions.connection:
+    return psycopg2.connect(
+        host=os.environ.get("PGHOST", "localhost"),
+        port=os.environ.get("PGPORT", "5432"),
+        database=dbname,
+        user=os.environ.get("PGUSER", "pythagor"),
+    )
 
 
 def get_slot_model(dbname: str) -> str | None:
     """Query slot model directly from global_variables."""
-    conn = psycopg2.connect(host="localhost", database=dbname, user="pythagor")
+    conn = _connect(dbname)
     try:
+        conn.set_session(readonly=True)
         with conn.cursor() as cur:
             cur.execute("SELECT model FROM global_variables WHERE id = TRUE")
             result = cur.fetchone()
@@ -24,50 +48,130 @@ def get_slot_model(dbname: str) -> str | None:
         conn.close()
 
 
-@pytest.mark.requires_postgres
-def test_slot_model_detection():
-    """Test that we can detect TEST model from slot config."""
-    conn = psycopg2.connect(host="localhost", database="save_05", user="pythagor")
-    original_model = None
+@pytest.fixture(scope="module")
+def slot_model_database() -> Iterator[str]:
+    """Yield a TEST-configured NEXUS_template clone without mutating a save."""
+
+    dbname = f"qa735_slot_model_{uuid.uuid4().hex[:12]}"
+    admin: Any = None
+    original_use_pool = new_story_setup.USE_POOL
     try:
-        with conn.cursor() as cur:
-            cur.execute("SELECT model FROM global_variables WHERE id = TRUE")
-            row = cur.fetchone()
-            original_model = row[0] if row else None
-
-            if original_model != "TEST":
-                cur.execute(
-                    "UPDATE global_variables SET model = %s WHERE id = TRUE", ("TEST",)
-                )
-                conn.commit()
-
-        model = get_slot_model("save_05")
-        assert model == "TEST", f"Expected TEST, got {model}"
-    finally:
         try:
-            if original_model is not None and original_model != "TEST":
-                with conn.cursor() as cur:
-                    cur.execute(
-                        "UPDATE global_variables SET model = %s WHERE id = TRUE",
-                        (original_model,),
+            admin = _connect("postgres")
+        except psycopg2.Error as exc:
+            pytest.skip(f"PostgreSQL admin connection unavailable: {exc}")
+        admin.autocommit = True
+        new_story_setup.USE_POOL = False
+        new_story_setup.initialize_slot_database(
+            dbname,
+            source_db="NEXUS_template",
+        )
+        with _connect(dbname) as conn, conn.cursor() as cur:
+            cur.execute("UPDATE global_variables SET model = 'TEST' WHERE id = TRUE")
+        yield dbname
+    finally:
+        new_story_setup.USE_POOL = original_use_pool
+        pool = db_pool._pools.pop(dbname, None)
+        if pool is not None:
+            pool.closeall()
+        if admin is not None:
+            with admin.cursor() as cur:
+                cur.execute(
+                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+                    "WHERE datname = %s AND pid <> pg_backend_pid()",
+                    (dbname,),
+                )
+                cur.execute(
+                    sql.SQL("DROP DATABASE IF EXISTS {}").format(sql.Identifier(dbname))
+                )
+            admin.close()
+
+
+def _free_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+        listener.bind(("127.0.0.1", 0))
+        return int(listener.getsockname()[1])
+
+
+@pytest.fixture
+def mock_openai_server(tmp_path: Path) -> Iterator[str]:
+    """Spawn the repository mock on a free port and tear it down reliably."""
+
+    port = _free_port()
+    base_url = f"http://127.0.0.1:{port}"
+    log_path = tmp_path / "mock_openai.log"
+    env = dict(os.environ)
+    env.pop("NEXUS_GATEWAY_PORT", None)
+    env.pop("NEXUS_API_URL", None)
+    env["PYTHONPATH"] = str(REPO_ROOT)
+    with log_path.open("wb") as log:
+        process = subprocess.Popen(
+            [
+                sys.executable,
+                "-m",
+                "uvicorn",
+                "nexus.api.mock_openai:app",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                str(port),
+            ],
+            cwd=REPO_ROOT,
+            env=env,
+            stdout=log,
+            stderr=subprocess.STDOUT,
+        )
+        try:
+            deadline = time.monotonic() + 20
+            while True:
+                if process.poll() is not None:
+                    log.flush()
+                    raise RuntimeError(
+                        "mock_openai exited before readiness:\n"
+                        f"{log_path.read_text(errors='replace')}"
                     )
-                    conn.commit()
+                try:
+                    response = requests.get(f"{base_url}/health", timeout=0.5)
+                    if response.status_code == 200:
+                        break
+                except requests.RequestException:
+                    pass
+                if time.monotonic() >= deadline:
+                    log.flush()
+                    raise TimeoutError(
+                        "mock_openai did not become ready:\n"
+                        f"{log_path.read_text(errors='replace')}"
+                    )
+                time.sleep(0.1)
+            yield f"{base_url}/v1"
         finally:
-            conn.close()
+            process.terminate()
+            try:
+                process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=10)
 
 
 @pytest.mark.requires_postgres
-def test_provider_routes_to_mock_server():
+def test_slot_model_detection(slot_model_database: str):
+    """Test that we can detect TEST model from slot config."""
+    model = get_slot_model(slot_model_database)
+    assert model == "TEST", f"Expected TEST, got {model}"
+
+
+@pytest.mark.requires_postgres
+def test_provider_routes_to_mock_server(mock_openai_server: str):
     """Test OpenAI provider routes TEST model to mock server."""
     provider = OpenAIProvider(
         model="TEST",
-        base_url="http://localhost:5102/v1",
+        base_url=mock_openai_server,
         api_key="test-dummy-key",
         system_prompt="Test system prompt",
     )
 
     assert provider.model == "TEST"
-    assert provider.base_url == "http://localhost:5102/v1"
+    assert provider.base_url == mock_openai_server
 
     # Initialize and call mock server
     provider.initialize()
@@ -103,7 +207,7 @@ def test_logon_real_entrypoint_records_registry_provider_and_single_pass_seat(
         },
         model_override="registry-test-model",
     )
-    endpoint = {
+    endpoint: dict[str, Any] = {
         "base_url": "http://127.0.0.1:5102/v1",
         "api_key": "test-dummy-key",
         "structured_transport": "responses",

@@ -521,7 +521,7 @@ def test_contextual_library_save_05_completeness_and_size() -> None:
     reason="Set NEXUS_RUN_POSTGRES=1 for the read-only save_05 namespace proof.",
 )
 def test_contextual_library_save_05_kosi_uses_character_entity_id() -> None:
-    """Kosi's row ID must not select the unrelated canonical entity's tags."""
+    """A skewed character row ID must not select another entity's tags."""
 
     conn = tag_library._connect("save_05")
     try:
@@ -529,16 +529,22 @@ def test_contextual_library_save_05_kosi_uses_character_entity_id() -> None:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT id, entity_id
+                SELECT id, entity_id, name
                 FROM characters
-                WHERE name = 'Kosi'
+                WHERE id <> entity_id
+                ORDER BY id
+                LIMIT 1
                 """
             )
-            kosi = cur.fetchone()
-            assert kosi is not None, "save_05 must contain Kosi"
-            row_id = int(kosi["id"])
-            entity_id = int(kosi["entity_id"])
-            assert row_id != entity_id, "Kosi must retain a skewed ID namespace"
+            character = cur.fetchone()
+            if character is None:
+                pytest.skip(
+                    "save_05 has no character whose characters.id differs from "
+                    "characters.entity_id; cannot exercise namespace translation"
+                )
+            row_id = int(character["id"])
+            entity_id = int(character["entity_id"])
+            character_name = str(character["name"])
 
             cur.execute(
                 """
@@ -569,14 +575,19 @@ def test_contextual_library_save_05_kosi_uses_character_entity_id() -> None:
                 )
                 return {str(row["tag"]) for row in cur.fetchall()}
 
-            kosi_tags = active_tags(entity_id)
+            character_tags = active_tags(entity_id)
             wrong_entity_tags = active_tags(row_id)
     finally:
         conn.close()
 
-    wrong_only_tags = wrong_entity_tags - kosi_tags
-    assert kosi_tags, "Kosi must have active tags for the namespace proof"
-    assert wrong_only_tags, "entity 9 must have a discriminating active tag"
+    wrong_only_tags = wrong_entity_tags - character_tags
+    assert character_tags, (
+        f"{character_name} (entity {entity_id}) must have active tags for the "
+        "namespace proof"
+    )
+    assert (
+        wrong_only_tags
+    ), f"canonical entity {row_id} must have a tag not active on {character_name}"
 
     rendered = tag_library.format_contextual_tag_library(
         "save_05",
@@ -590,7 +601,7 @@ def test_contextual_library_save_05_kosi_uses_character_entity_id() -> None:
     relevant = rendered.split("### Scene-Relevant Tags", 1)[1]
     rendered_names = set(re.findall(r"`([^`]+)`", relevant))
 
-    assert kosi_tags <= rendered_names
+    assert character_tags <= rendered_names
     assert wrong_only_tags.isdisjoint(rendered_names)
 
 
