@@ -505,6 +505,39 @@ class _RecordingSceneProvider(_SceneProvider):
         return super().get_structured_completion(prompt, schema)
 
 
+class _RejectLastSceneProvider:
+    """Return valid recollections except for the last requested seed."""
+
+    def __init__(self) -> None:
+        self.rendered_batches: list[list[int]] = []
+
+    def get_structured_completion(
+        self, prompt: str, _schema: type[ExperienceRenderBatch]
+    ) -> tuple[ExperienceRenderBatch, None]:
+        ids = [int(value) for value in re.findall(r'"experience_id": (\d+)', prompt)]
+        self.rendered_batches.append(ids)
+        return (
+            ExperienceRenderBatch(
+                recollections=[
+                    ExperienceRecollection(
+                        experience_id=experience_id,
+                        experience_text=(
+                            "I remembered the accepted event clearly. "
+                            "I saw Zorblax waiting nearby."
+                            if experience_id == ids[-1]
+                            else (
+                                "I remembered the accepted event clearly. "
+                                "I felt watchful after it ended."
+                            )
+                        ),
+                    )
+                    for experience_id in ids
+                ]
+            ),
+            None,
+        )
+
+
 class _FailingSceneProvider:
     """Provider double proving failures leave deterministic seeds untouched."""
 
@@ -595,6 +628,73 @@ class _TimelineDriftingProvider(_SceneProvider):
         finally:
             conn.close()
         return super().get_structured_completion(prompt, schema)
+
+
+def _enqueue_two_seed_render_job(
+    conn: Any, *, settings: dict[str, Any], label: str
+) -> list[int]:
+    with conn:
+        with conn.cursor() as cur:
+            scene_end_chunk_id = _insert_chunk(cur, f"{label} scene")
+            for ordinal in range(2):
+                _character_id, entity_id = _insert_character(
+                    cur,
+                    f"{label} Actor {ordinal}",
+                    summary=f"{label} actor {ordinal} has a complete dossier.",
+                    background="Present for a verified event role.",
+                )
+                cur.execute(
+                    """
+                    INSERT INTO world_events (
+                        event_type, tick_chunk_id, actor_entity_id,
+                        world_layer, source, changed_fields, payload
+                    ) VALUES (
+                        'slept', %s, %s, 'primary', 'resolver',
+                        '{}', '{}'::jsonb
+                    ) RETURNING id
+                    """,
+                    (scene_end_chunk_id, entity_id),
+                )
+                event_id = int(cur.fetchone()[0])
+                cur.execute(
+                    """
+                    INSERT INTO world_event_entities (event_id, entity_id, role)
+                    VALUES (%s, %s, 'actor')
+                    """,
+                    (event_id, entity_id),
+                )
+    assert (
+        seed_character_experiences_sync(
+            conn,
+            anchor_chunk_id=scene_end_chunk_id,
+            settings=settings,
+        )
+        == 2
+    )
+    with conn:
+        with conn.cursor() as cur:
+            boundary_chunk_id = _insert_chunk(cur, f"{label} boundary")
+        assert (
+            enqueue_scene_experience_job_sync(
+                conn,
+                boundary_chunk_id=boundary_chunk_id,
+                scene_end_chunk_id=scene_end_chunk_id,
+                world_layer="primary",
+                slot=736,
+                settings=settings,
+            )
+            == 1
+        )
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            SELECT experience_ids
+            FROM character_experience_jobs
+            WHERE boundary_chunk_id = %s
+            """,
+            (boundary_chunk_id,),
+        )
+        return [int(value) for value in cur.fetchone()["experience_ids"]]
 
 
 def test_owner_complete_backfill_and_owner_aware_sweep(
@@ -3328,6 +3428,143 @@ def test_real_commit_forms_verified_seeds_and_boundary_batch(
             conn.close()
 
 
+def test_render_validation_persists_siblings_and_retries_only_rejections() -> None:
+    """Content failures isolate persistence, retries, billing, and exhaustion."""
+    settings = load_settings_as_dict()
+    settings["orrery"]["experiences"]["max_attempts"] = 2
+    settings["orrery"]["experiences"]["retry_delay_seconds"] = 0
+    settings["orrery"]["experiences"]["max_jobs_per_drain"] = 1
+    with _disposable_database() as dbname:
+        conn = _connect(dbname)
+        try:
+            first_ids = _enqueue_two_seed_render_job(
+                conn, settings=settings, label="Partial Persistence"
+            )
+            first_provider = _RejectLastSceneProvider()
+
+            assert drain_experience_render_jobs_sync(
+                slot=736,
+                settings=settings,
+                conn=conn,
+                provider=first_provider,
+            ) == (1, 1)
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    """
+                    SELECT state::text AS state, attempts, last_error
+                    FROM character_experience_jobs
+                    WHERE experience_ids = %s::bigint[]
+                    """,
+                    (first_ids,),
+                )
+                first_attempt = dict(cur.fetchone())
+                cur.execute(
+                    """
+                    SELECT id, experience_text
+                    FROM character_experiences
+                    WHERE id = ANY(%s)
+                    ORDER BY id
+                    """,
+                    (first_ids,),
+                )
+                first_text = {
+                    int(row["id"]): row["experience_text"] for row in cur.fetchall()
+                }
+            assert first_provider.rendered_batches == [first_ids]
+            assert first_attempt["state"] == "queued"
+            assert first_attempt["attempts"] == 1
+            assert str(first_ids[-1]) in first_attempt["last_error"]
+            assert "Zorblax" in first_attempt["last_error"]
+            assert first_text[first_ids[0]] is not None
+            assert first_text[first_ids[-1]] is None
+
+            retry_provider = _RecordingSceneProvider()
+            assert drain_experience_render_jobs_sync(
+                slot=736,
+                settings=settings,
+                conn=conn,
+                provider=retry_provider,
+            ) == (1, 0)
+            assert retry_provider.rendered_batches == [[first_ids[-1]]]
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    """
+                    SELECT state::text AS state, attempts, last_error
+                    FROM character_experience_jobs
+                    WHERE experience_ids = %s::bigint[]
+                    """,
+                    (first_ids,),
+                )
+                completed = dict(cur.fetchone())
+                cur.execute(
+                    """
+                    SELECT count(*) AS count
+                    FROM character_experiences
+                    WHERE id = ANY(%s) AND experience_text IS NOT NULL
+                    """,
+                    (first_ids,),
+                )
+                assert int(cur.fetchone()["count"]) == 2
+            assert completed == {
+                "state": "succeeded",
+                "attempts": 2,
+                "last_error": None,
+            }
+
+            exhausted_ids = _enqueue_two_seed_render_job(
+                conn, settings=settings, label="Partial Exhaustion"
+            )
+            exhausted_provider = _RejectLastSceneProvider()
+            assert drain_experience_render_jobs_sync(
+                slot=736,
+                settings=settings,
+                conn=conn,
+                provider=exhausted_provider,
+            ) == (1, 1)
+            assert drain_experience_render_jobs_sync(
+                slot=736,
+                settings=settings,
+                conn=conn,
+                provider=exhausted_provider,
+            ) == (0, 1)
+            assert exhausted_provider.rendered_batches == [
+                exhausted_ids,
+                [exhausted_ids[-1]],
+            ]
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    """
+                    SELECT state::text AS state, attempts, last_error
+                    FROM character_experience_jobs
+                    WHERE experience_ids = %s::bigint[]
+                    """,
+                    (exhausted_ids,),
+                )
+                exhausted = dict(cur.fetchone())
+                cur.execute(
+                    """
+                    SELECT id, experience_text
+                    FROM character_experiences
+                    WHERE id = ANY(%s)
+                    ORDER BY id
+                    """,
+                    (exhausted_ids,),
+                )
+                exhausted_text = {
+                    int(row["id"]): row["experience_text"] for row in cur.fetchall()
+                }
+            assert exhausted["state"] == "failed"
+            assert (
+                exhausted["attempts"]
+                == settings["orrery"]["experiences"]["max_attempts"]
+            )
+            assert str(exhausted_ids[-1]) in exhausted["last_error"]
+            assert exhausted_text[exhausted_ids[0]] is not None
+            assert exhausted_text[exhausted_ids[-1]] is None
+        finally:
+            conn.close()
+
+
 def test_private_hunt_seeds_only_verified_actor_receipt() -> None:
     """Present bystanders and a hidden target do not witness a private hunt."""
     settings = load_settings_as_dict()
@@ -3617,16 +3854,17 @@ def test_acquisition_requires_told_or_granted_delivered_account() -> None:
                         )
                     ]
                 )
-                with pytest.raises(
-                    ValueError, match="absent from its source scene.*Dorian Pike"
-                ):
-                    validate_render_batch(
-                        [acquisition_scope_row],
-                        invented_incident_witnessing,
-                        names_by_experience={
-                            int(acquisition_scope_row["id"]): (known, allowed)
-                        },
-                    )
+                validation = validate_render_batch(
+                    [acquisition_scope_row],
+                    invented_incident_witnessing,
+                    names_by_experience={
+                        int(acquisition_scope_row["id"]): (known, allowed)
+                    },
+                )
+                assert (
+                    "Dorian Pike"
+                    in validation.rejected[int(acquisition_scope_row["id"])]
+                )
                 with conn.cursor() as cur:
                     boundary_chunk_id = _insert_chunk(cur, "Acquisition boundary")
                 assert enqueue_scene_experience_job_sync(
