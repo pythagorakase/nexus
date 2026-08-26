@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import hashlib
 import json
 import logging
@@ -38,40 +39,178 @@ _CAPITALIZED_SEQUENCE = re.compile(r"\b[A-Z][A-Za-z0-9]*(?:[ '-][A-Z][A-Za-z0-9]
 _SENTENCE_INITIAL_ALLOWLIST = frozenset(
     {
         "a",
+        "above",
+        "across",
         "after",
+        "afternoon",
+        "again",
+        "against",
+        "all",
+        "almost",
+        "along",
+        "already",
+        "although",
+        "always",
+        "among",
         "an",
         "and",
+        "around",
         "as",
         "at",
+        "away",
+        "back",
         "before",
+        "behind",
+        "below",
+        "beside",
+        "between",
+        "beyond",
+        "because",
+        "both",
         "but",
         "by",
+        "despite",
+        "down",
+        "during",
+        "each",
+        "early",
+        "either",
+        "even",
+        "evening",
+        "ever",
+        "every",
+        "everything",
+        "except",
+        "first",
         "for",
         "from",
         "he",
+        "here",
+        "how",
         "i",
+        "if",
         "in",
+        "inside",
+        "instead",
+        "into",
         "it",
+        "just",
+        "last",
+        "later",
+        "less",
+        "like",
+        "maybe",
+        "more",
+        "morning",
+        "much",
         "my",
+        "near",
+        "nearly",
+        "neither",
+        "never",
+        "next",
+        "night",
+        "no",
+        "none",
+        "not",
+        "nothing",
+        "now",
         "once",
+        "of",
+        "often",
+        "on",
+        "only",
+        "out",
+        "outside",
+        "over",
         "our",
+        "perhaps",
+        "please",
+        "quite",
+        "rather",
         "she",
+        "since",
+        "some",
+        "someone",
+        "something",
+        "sometimes",
+        "soon",
         "so",
+        "still",
         "that",
         "the",
+        "there",
         "then",
         "they",
         "this",
+        "though",
         "through",
+        "throughout",
+        "today",
+        "tomorrow",
+        "tonight",
         "to",
+        "too",
+        "toward",
+        "towards",
         "until",
+        "unless",
+        "under",
+        "up",
+        "upon",
+        "badly",
+        "being",
+        "oddly",
+        "sadly",
+        "truly",
+        "very",
         "we",
+        "well",
+        "what",
         "when",
+        "whenever",
+        "where",
+        "wherever",
+        "whether",
         "while",
+        "who",
+        "why",
+        "within",
         "with",
         "without",
+        "yes",
+        "yesterday",
+        "yet",
     }
 )
+# Short inflectional suffixes exempt a sentence-initial token only when the
+# token is long enough that the suffix is a real inflection: "Sitting" and
+# "Finally" are ordinary words, "Molly", "Ned", and "King" are names
+# (automated Claude review on PR #739).
+_SHORT_NON_NAME_SUFFIXES = ("ing", "ed", "ly")
+_SHORT_SUFFIX_MIN_LENGTH = 6
+_LONG_NON_NAME_SUFFIXES = (
+    "tion",
+    "sion",
+    "ness",
+    "ment",
+    "ward",
+    "wards",
+    "ever",
+    "where",
+    "thing",
+    "body",
+    "one",
+)
+
+
+def _has_non_name_suffix(token: str) -> bool:
+    if token.endswith(_SHORT_NON_NAME_SUFFIXES):
+        return len(token) >= _SHORT_SUFFIX_MIN_LENGTH
+    return token.endswith(_LONG_NON_NAME_SUFFIXES)
+
+
+_CONTRACTION_SUFFIX = re.compile(r"['’](?:d|ll|m|re|s|ve)\b", re.IGNORECASE)
 _FIRST_PERSON = re.compile(r"\b(?:I|me|my|mine|we|us|our|ours)\b", re.IGNORECASE)
 _SENTENCE = re.compile(r"(?<=[.!?])(?:[\"']?\s+|$)")
 _ACQUISITION_RECEIPT = re.compile(
@@ -149,6 +288,14 @@ class ExperienceRenderBatch(BaseModel):
     recollections: list[ExperienceRecollection] = Field(min_length=1)
 
     model_config = ConfigDict(extra="forbid")
+
+
+@dataclass(frozen=True)
+class RenderValidation:
+    """Per-experience content validation outcome for one structured batch."""
+
+    validated: dict[int, str]
+    rejected: dict[int, str]
 
 
 class ExperienceLeaseLostError(RuntimeError):
@@ -1081,19 +1228,101 @@ def _known_and_allowed_names(
     return known, allowed
 
 
-def _proper_noun_candidates(text: str) -> set[str]:
+def _entity_name_pattern(name: str) -> re.Pattern[str]:
+    possessive = r"(?:['’]s|')?" if name.casefold().endswith("s") else r"(?:['’]s)?"
+    return re.compile(rf"(?<!\w){re.escape(name)}{possessive}(?!\w)")
+
+
+def _mask_allowed_names(text: str, allowed_names: Iterable[str]) -> str:
+    masked = text
+    for name in sorted(
+        {name for name in allowed_names if name}, key=lambda item: (-len(item), item)
+    ):
+        masked = _entity_name_pattern(name).sub(
+            lambda match: "x" * len(match.group(0)), masked
+        )
+    return masked
+
+
+def _is_sentence_initial(text: str, start: int) -> bool:
+    prefix = text[:start]
+    prefix = prefix.rstrip()
+    opener_peeled = False
+    while prefix and prefix[-1] in {'"', "“", "‘", "'", "(", "[", "{"}:
+        opener_peeled = True
+        prefix = prefix[:-1]
+    if opener_peeled and (
+        not prefix
+        or prefix[-1].isspace()
+        or prefix[-1] in {",", ":", ";", "—", "–", "(", "["}
+    ):
+        return True
+    prefix = prefix.rstrip()
+    if not prefix or prefix[-1] in {".", "!", "?", "…", ":", "—", "–"}:
+        return True
+    while prefix and prefix[-1] in {'"', "”", "’", "'", ")", "]", "}"}:
+        prefix = prefix[:-1].rstrip()
+    return bool(prefix and prefix[-1] in {".", "!", "?", "…"})
+
+
+def _token_occurs_outside_match(
+    token: str,
+    *,
+    text: str,
+    start: int,
+    end: int,
+    source_context: str,
+) -> bool:
+    # The exemption needs a genuinely LOWERCASE occurrence: a hallucinated name
+    # that opens two sentences must not vouch for itself (Codex review, PR #739).
+    token_pattern = re.compile(rf"(?<!\w){re.escape(token.lower())}(?!\w)")
+    outside_match = text[:start] + (" " * (end - start)) + text[end:]
+    return bool(
+        token_pattern.search(outside_match) or token_pattern.search(source_context)
+    )
+
+
+def _proper_noun_candidates(
+    text: str,
+    *,
+    allowed_names: Iterable[str] = (),
+    source_context: str = "",
+) -> set[str]:
+    masked_text = _mask_allowed_names(text, allowed_names)
     candidates: set[str] = set()
-    for match in _CAPITALIZED_SEQUENCE.finditer(text):
+    for match in _CAPITALIZED_SEQUENCE.finditer(masked_text):
         candidate = match.group(0).strip()
-        while candidate:
-            first = re.match(r"^[A-Za-z0-9]+", candidate)
-            if first is None or first.group(0).casefold() not in (
-                _SENTENCE_INITIAL_ALLOWLIST
-            ):
-                break
-            candidate = candidate[first.end() :].lstrip(" '-")
-        if candidate:
+        if candidate == "I":
+            continue
+        if candidate in {"I", "We"} and _CONTRACTION_SUFFIX.match(
+            masked_text, match.end()
+        ):
+            continue
+        if not _is_sentence_initial(masked_text, match.start()):
             candidates.add(candidate)
+            continue
+        first = re.match(r"^[A-Za-z0-9]+", candidate)
+        if first is None:
+            continue
+        first_token = first.group(0)
+        remainder = candidate[first.end() :].lstrip(" '-")
+        if remainder:
+            candidates.add(remainder)
+        first_lower = first_token.casefold()
+        first_start = match.start()
+        first_end = first_start + first.end()
+        if (
+            first_lower not in _SENTENCE_INITIAL_ALLOWLIST
+            and not _has_non_name_suffix(first_lower)
+            and not _token_occurs_outside_match(
+                first_token,
+                text=text,
+                start=first_start,
+                end=first_end,
+                source_context=source_context,
+            )
+        ):
+            candidates.add(first_token)
     return candidates
 
 
@@ -1102,7 +1331,7 @@ def validate_render_batch(
     batch: ExperienceRenderBatch,
     *,
     names_by_experience: Optional[Mapping[int, tuple[set[str], set[str]]]] = None,
-) -> dict[int, str]:
+) -> RenderValidation:
     """Validate completeness, perspective, length, and source-scene entities."""
 
     expected = {int(row["id"]) for row in rows}
@@ -1114,55 +1343,74 @@ def validate_render_batch(
             f"Experience renderer ids mismatch; expected={sorted(expected)}, "
             f"actual={sorted(actual)}"
         )
+    rows_by_id = {int(row["id"]): row for row in rows}
     validated: dict[int, str] = {}
+    rejected: dict[int, str] = {}
     for recollection in batch.recollections:
+        experience_id = recollection.experience_id
         text = recollection.experience_text.strip()
-        sentences = [part.strip() for part in _SENTENCE.split(text) if part.strip()]
-        if not 2 <= len(sentences) <= 4:
-            raise ValueError(
-                f"Experience {recollection.experience_id} must contain 2-4 sentences"
-            )
-        if _FIRST_PERSON.search(text) is None:
-            raise ValueError(
-                f"Experience {recollection.experience_id} is not first person"
-            )
-        source_row = next(
-            row for row in rows if int(row["id"]) == recollection.experience_id
-        )
-        if source_row.get("basis") == "acquisition":
-            if _ACQUISITION_RECEIPT.search(text) is None:
-                raise ValueError(
-                    f"Acquisition experience {recollection.experience_id} must "
-                    "describe receiving or learning the account"
-                )
-            if _ACQUISITION_WITNESS.search(text) is not None:
-                raise ValueError(
-                    f"Acquisition experience {recollection.experience_id} "
-                    "must not describe witnessing the underlying event"
-                )
         known, allowed = (
-            names_by_experience.get(recollection.experience_id, (set(), set()))
+            names_by_experience.get(experience_id, (set(), set()))
             if names_by_experience is not None
             else (set(), set())
         )
+        masked_text = _mask_allowed_names(text, allowed)
+        sentences = [
+            part.strip() for part in _SENTENCE.split(masked_text) if part.strip()
+        ]
+        if not 2 <= len(sentences) <= 4:
+            rejected[experience_id] = (
+                f"Experience {experience_id} must contain 2-4 sentences"
+            )
+            continue
+        if _FIRST_PERSON.search(text) is None:
+            rejected[experience_id] = f"Experience {experience_id} is not first person"
+            continue
+        source_row = rows_by_id[experience_id]
+        if source_row.get("basis") == "acquisition":
+            if _ACQUISITION_RECEIPT.search(text) is None:
+                rejected[experience_id] = (
+                    f"Acquisition experience {experience_id} must "
+                    "describe receiving or learning the account"
+                )
+                continue
+            if _ACQUISITION_WITNESS.search(text) is not None:
+                rejected[experience_id] = (
+                    f"Acquisition experience {experience_id} "
+                    "must not describe witnessing the underlying event"
+                )
+                continue
         disallowed_known = sorted(
-            name
-            for name in known - allowed
-            if re.search(rf"\b{re.escape(name)}\b", text, re.IGNORECASE)
+            name for name in known - allowed if _entity_name_pattern(name).search(text)
         )
-        allowed_casefold = {name.casefold() for name in allowed}
-        capitalized = _proper_noun_candidates(text)
+        # The lowercase-occurrence exemption is scoped to THIS experience's
+        # seed: a sibling's seed must not vouch for an unrelated scene
+        # (automated Claude review on PR #739).
+        source_context = " ".join(
+            str(value)
+            for value in (
+                source_row.get("seed_summary"),
+                source_row.get("character_name"),
+                source_row.get("location_name"),
+            )
+            if value
+        )
         invented = sorted(
-            name for name in capitalized if name.casefold() not in allowed_casefold
+            _proper_noun_candidates(
+                text,
+                allowed_names=allowed,
+                source_context=source_context,
+            )
         )
         if disallowed_known or invented:
             offenders = sorted(set(disallowed_known + invented))
-            raise ValueError(
-                f"Experience {recollection.experience_id} names entities absent "
+            rejected[experience_id] = (
+                f"Experience {experience_id} names entities absent "
                 f"from its source scene: {offenders}"
             )
-        validated[recollection.experience_id] = text
-    return validated
+            continue
+        validated[experience_id] = text
+    return RenderValidation(validated=validated, rejected=rejected)
 
 
 def _render_prompt(rows: Sequence[Mapping[str, Any]]) -> str:
@@ -1216,9 +1464,10 @@ def _complete_render(
     *,
     job: Mapping[str, Any],
     source_rows: Sequence[Mapping[str, Any]],
-    rendered: Mapping[int, str],
+    validation: RenderValidation,
     render_model: str,
-) -> None:
+    cfg: OrreryExperienceSettings,
+) -> bool:
     cur.execute(
         """
         SELECT state::text AS state, locked_by, lease_nonce,
@@ -1305,27 +1554,41 @@ def _complete_render(
         (job["experience_ids"],),
     )
     current_rows = [dict(row) for row in cur.fetchall()]
-    if (
-        len(current_rows) != len(source_rows)
-        or _batch_digest(current_rows) != job["source_digest"]
-        or any(row["experience_text"] is not None for row in current_rows)
-        or any(row["invalidation_status"] != "valid" for row in current_rows)
-        or any(row["world_layer"] != job["world_layer"] for row in current_rows)
-    ):
-        raise ExperienceSourceStaleError(
-            f"Experience job {job['job_id']} seed batch is stale"
-        )
-    generation_id = str(uuid4())
     rows_by_id = {int(row["id"]): row for row in current_rows}
     expected_render_ids = {
         int(experience_id) for experience_id in job["render_experience_ids"]
     }
-    if set(rendered) != expected_render_ids:
+    renderable_ids = {
+        int(experience_id) for experience_id in job["renderable_experience_ids"]
+    }
+    completion_ids = set(validation.validated) | set(validation.rejected)
+    if (
+        len(current_rows) != len(source_rows)
+        or _batch_digest(current_rows) != job["source_digest"]
+        or any(row["invalidation_status"] != "valid" for row in current_rows)
+        or any(row["world_layer"] != job["world_layer"] for row in current_rows)
+        or any(
+            rows_by_id[experience_id]["experience_text"] is not None
+            for experience_id in expected_render_ids
+        )
+        or any(
+            rows_by_id[experience_id]["experience_text"] is None
+            for experience_id in renderable_ids - expected_render_ids
+        )
+    ):
+        raise ExperienceSourceStaleError(
+            f"Experience job {job['job_id']} seed batch is stale"
+        )
+    if completion_ids != expected_render_ids or set(validation.validated) & set(
+        validation.rejected
+    ):
         raise ExperienceSourceStaleError(
             f"Experience job {job['job_id']} completion ids changed; "
-            f"expected={sorted(expected_render_ids)}, actual={sorted(rendered)}"
+            f"expected={sorted(expected_render_ids)}, "
+            f"actual={sorted(completion_ids)}"
         )
-    for experience_id, experience_text in rendered.items():
+    generation_id = str(uuid4())
+    for experience_id, experience_text in validation.validated.items():
         row = rows_by_id[experience_id]
         cur.execute(
             """
@@ -1352,6 +1615,13 @@ def _complete_render(
             raise ExperienceSourceStaleError(
                 f"Experience {experience_id} changed during fenced completion"
             )
+    if validation.rejected:
+        error = "Experience render validation rejected: " + "; ".join(
+            f"{experience_id}: {reason}"
+            for experience_id, reason in sorted(validation.rejected.items())
+        )
+        _fail_render(cur, job=job, error=error, cfg=cfg)
+        return False
     cur.execute(
         """
         UPDATE character_experience_jobs
@@ -1366,6 +1636,7 @@ def _complete_render(
         raise ExperienceLeaseLostError(
             f"Experience job {job['job_id']} lost its lease at completion"
         )
+    return True
 
 
 def _fail_render(
@@ -1518,7 +1789,14 @@ def drain_experience_render_jobs_sync(
                            WHERE experience.id = ANY(job.experience_ids)
                              AND experience.character_entity_id = %s
                            ORDER BY experience.id
-                       ) AS excluded_player_experience_ids
+                       ) AS excluded_player_experience_ids,
+                       ARRAY(
+                           SELECT experience.id
+                           FROM character_experiences experience
+                           WHERE experience.id = ANY(job.experience_ids)
+                             AND experience.experience_text IS NOT NULL
+                           ORDER BY experience.id
+                       ) AS rendered_experience_ids
                 FROM character_experience_jobs job
                 WHERE (
                     (job.state = 'queued'
@@ -1544,12 +1822,20 @@ def drain_experience_render_jobs_sync(
                 excluded_ids = [
                     int(value) for value in job.pop("excluded_player_experience_ids")
                 ]
-                render_ids = [
+                already_rendered_ids = {
+                    int(value) for value in job.pop("rendered_experience_ids")
+                }
+                renderable_ids = [
                     int(value)
                     for value in job["experience_ids"]
                     if int(value) not in set(excluded_ids)
                 ]
-                if excluded_ids and not render_ids:
+                render_ids = [
+                    experience_id
+                    for experience_id in renderable_ids
+                    if experience_id not in already_rendered_ids
+                ]
+                if excluded_ids and not renderable_ids:
                     cur.execute(
                         """
                         UPDATE character_experience_jobs
@@ -1573,6 +1859,87 @@ def drain_experience_render_jobs_sync(
                     )
                     failed_count += 1
                     continue
+                if not render_ids:
+                    nonce = str(uuid4())
+                    cur.execute(
+                        """
+                        UPDATE character_experience_jobs
+                        SET state = 'leased',
+                            lease_until = clock_timestamp()
+                                + (%s * interval '1 second'),
+                            locked_by = %s, lease_nonce = %s,
+                            attempts = attempts + 1, updated_at = now()
+                        WHERE id = %s
+                        """,
+                        (cfg.lease_duration_seconds, owner, nonce, job["job_id"]),
+                    )
+                    if cur.rowcount != 1:
+                        raise RuntimeError(
+                            "Failed to lease already-rendered experience job "
+                            f"{job['job_id']}"
+                        )
+                    job["locked_by"] = owner
+                    job["lease_nonce"] = nonce
+                    if int(job["attempts"]) == 0:
+                        error = (
+                            f"Experience job {job['job_id']} is stale because "
+                            "seeds were already rendered: "
+                            f"{sorted(already_rendered_ids)}"
+                        )
+                        _reject_stale_source(cur, job=job, error=error)
+                        failed_count += 1
+                        continue
+                    cur.execute(
+                        """
+                        SELECT id, source_digest,
+                               invalidation_status::text AS invalidation_status
+                        FROM character_experiences
+                        WHERE id = ANY(%s)
+                        ORDER BY id
+                        FOR UPDATE
+                        """,
+                        (job["experience_ids"],),
+                    )
+                    current_rows = [dict(row) for row in cur.fetchall()]
+                    expected_ids = {
+                        int(experience_id) for experience_id in job["experience_ids"]
+                    }
+                    if (
+                        {int(row["id"]) for row in current_rows} != expected_ids
+                        or _batch_digest(current_rows) != job["source_digest"]
+                        or any(
+                            row["invalidation_status"] != "valid"
+                            for row in current_rows
+                        )
+                    ):
+                        _reject_stale_source(
+                            cur,
+                            job=job,
+                            error=(
+                                f"Experience job {job['job_id']} "
+                                "already-rendered seed batch is stale"
+                            ),
+                        )
+                        failed_count += 1
+                        continue
+                    cur.execute(
+                        """
+                        UPDATE character_experience_jobs
+                        SET state = 'succeeded', lease_until = NULL,
+                            locked_by = NULL, lease_nonce = NULL,
+                            last_error = NULL, updated_at = now()
+                        WHERE id = %s AND state = 'leased' AND locked_by = %s
+                          AND lease_nonce = %s
+                          AND lease_until >= clock_timestamp()
+                        """,
+                        (job["job_id"], job["locked_by"], job["lease_nonce"]),
+                    )
+                    if cur.rowcount != 1:
+                        raise ExperienceLeaseLostError(
+                            f"Experience job {job['job_id']} lost its lease "
+                            "while completing already-rendered seeds"
+                        )
+                    continue
                 if excluded_ids:
                     logger.warning(
                         "Filtered player-owned experience seeds %s from job %s; "
@@ -1581,6 +1948,7 @@ def drain_experience_render_jobs_sync(
                         job["job_id"],
                         render_ids,
                     )
+                job["renderable_experience_ids"] = renderable_ids
                 job["render_experience_ids"] = render_ids
                 renderable_jobs.append(job)
             if renderable_jobs:
@@ -1657,17 +2025,29 @@ def drain_experience_render_jobs_sync(
             batch = response[0] if isinstance(response, tuple) else response
             if not isinstance(batch, ExperienceRenderBatch):
                 batch = ExperienceRenderBatch.model_validate(batch)
-            validated = validate_render_batch(rows, batch, names_by_experience=names)
+            validation = validate_render_batch(rows, batch, names_by_experience=names)
+            if validation.rejected:
+                logger.warning(
+                    "Experience render job %s rejected recollections: %s",
+                    job["job_id"],
+                    "; ".join(
+                        f"{experience_id}: {reason}"
+                        for experience_id, reason in sorted(validation.rejected.items())
+                    ),
+                )
             with conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                    _complete_render(
+                    completed = _complete_render(
                         cur,
                         job=job,
                         source_rows=source_rows,
-                        rendered=validated,
+                        validation=validation,
                         render_model=cfg.model,
+                        cfg=cfg,
                     )
-            rendered_count += len(rows)
+            rendered_count += len(validation.validated)
+            if not completed:
+                failed_count += 1
         except ExperienceLeaseLostError:
             failed_count += 1
             logger.exception("Rejected stale experience render job %s", job["job_id"])

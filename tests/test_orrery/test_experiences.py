@@ -25,6 +25,8 @@ from nexus.agents.orrery.epistemics import CLAIM_BIRTH_ROLE_POLICY
 from nexus.agents.orrery.experiences import (
     ExperienceRecollection,
     ExperienceRenderBatch,
+    _is_sentence_initial,
+    _proper_noun_candidates,
     validate_render_batch,
 )
 from nexus.api.lore_adapter import response_to_incubator
@@ -125,12 +127,14 @@ def test_renderer_validator_rejects_entity_invention() -> None:
         ]
     )
 
-    with pytest.raises(ValueError, match="absent from its source scene.*Selene"):
-        validate_render_batch(
-            [_seed_row()],
-            batch,
-            names_by_experience={41: ({"Mara", "Orrin", "Selene"}, {"Mara", "Orrin"})},
-        )
+    validation = validate_render_batch(
+        [_seed_row()],
+        batch,
+        names_by_experience={41: ({"Mara", "Orrin", "Selene"}, {"Mara", "Orrin"})},
+    )
+
+    assert validation.validated == {}
+    assert "Selene" in validation.rejected[41]
 
 
 def test_renderer_validator_rejects_sentence_initial_novel_name() -> None:
@@ -146,12 +150,133 @@ def test_renderer_validator_rejects_sentence_initial_novel_name() -> None:
         ]
     )
 
-    with pytest.raises(ValueError, match="absent from its source scene.*Zorblax"):
-        validate_render_batch(
-            [_seed_row()],
-            batch,
-            names_by_experience={41: ({"Mara", "Orrin"}, {"Mara", "Orrin"})},
-        )
+    validation = validate_render_batch(
+        [_seed_row()],
+        batch,
+        names_by_experience={41: ({"Mara", "Orrin"}, {"Mara", "Orrin"})},
+    )
+
+    assert validation.validated == {}
+    assert "Zorblax" in validation.rejected[41]
+
+
+def test_repeated_sentence_initial_invented_name_is_still_rejected() -> None:
+    """A hallucinated name that opens two sentences must not vouch for itself."""
+    batch = ExperienceRenderBatch(
+        recollections=[
+            ExperienceRecollection(
+                experience_id=41,
+                experience_text=(
+                    "Zorblax warned me to leave. Zorblax told me I should run."
+                ),
+            )
+        ]
+    )
+
+    validation = validate_render_batch(
+        [_seed_row()],
+        batch,
+        names_by_experience={41: ({"Mara", "Orrin"}, {"Mara", "Orrin"})},
+    )
+
+    assert 41 in validation.rejected
+    assert "Zorblax" in validation.rejected[41]
+
+
+def test_lowercase_occurrence_in_text_exempts_a_sentence_start() -> None:
+    """A lowercase use elsewhere vouches for an ordinary sentence-start word."""
+    batch = ExperienceRenderBatch(
+        recollections=[
+            ExperienceRecollection(
+                experience_id=41,
+                experience_text=(
+                    "Silence held the corridor while I waited for Orrin. "
+                    "I remember the silence more than the door."
+                ),
+            )
+        ]
+    )
+
+    validation = validate_render_batch(
+        [_seed_row()],
+        batch,
+        names_by_experience={41: ({"Mara", "Orrin"}, {"Mara", "Orrin"})},
+    )
+
+    assert validation.rejected == {}
+    assert 41 in validation.validated
+
+
+def test_short_suffix_does_not_exempt_a_sentence_initial_name() -> None:
+    """ "Molly" ends in -ly but is a name; the suffix floor keeps it a candidate."""
+    batch = ExperienceRenderBatch(
+        recollections=[
+            ExperienceRecollection(
+                experience_id=41,
+                experience_text="Molly walked past me. I did not recognize her.",
+            )
+        ]
+    )
+
+    validation = validate_render_batch(
+        [_seed_row()],
+        batch,
+        names_by_experience={41: ({"Mara", "Orrin"}, {"Mara", "Orrin"})},
+    )
+
+    assert 41 in validation.rejected
+    assert "Molly" in validation.rejected[41]
+
+
+def test_common_short_adverb_opener_is_not_a_candidate() -> None:
+    """Five-letter adverbs below the suffix floor are allowlisted explicitly."""
+    batch = ExperienceRenderBatch(
+        recollections=[
+            ExperienceRecollection(
+                experience_id=41,
+                experience_text=(
+                    "Sadly, I watched Orrin leave. Early light found me alone."
+                ),
+            )
+        ]
+    )
+
+    validation = validate_render_batch(
+        [_seed_row()],
+        batch,
+        names_by_experience={41: ({"Mara", "Orrin"}, {"Mara", "Orrin"})},
+    )
+
+    assert validation.rejected == {}
+
+
+def test_lowercase_exemption_is_scoped_to_the_experience_seed() -> None:
+    """A sibling's seed must not vouch for a word in an unrelated recollection."""
+    vouched = {**_seed_row(), "id": 41, "seed_summary": "Mara noted the silence."}
+    unvouched = {**_seed_row(), "id": 42, "seed_summary": "Mara watched Orrin."}
+    batch = ExperienceRenderBatch(
+        recollections=[
+            ExperienceRecollection(
+                experience_id=41,
+                experience_text="Silence held the hall. I waited for Orrin.",
+            ),
+            ExperienceRecollection(
+                experience_id=42,
+                experience_text="Silence held the hall. I waited for Orrin.",
+            ),
+        ]
+    )
+
+    names = {"Mara", "Orrin"}
+    validation = validate_render_batch(
+        [vouched, unvouched],
+        batch,
+        names_by_experience={41: (names, names), 42: (names, names)},
+    )
+
+    assert 41 in validation.validated
+    assert 42 in validation.rejected
+    assert "Silence" in validation.rejected[42]
 
 
 def test_acquisition_validator_requires_telling_perspective() -> None:
@@ -178,10 +303,11 @@ def test_acquisition_validator_requires_telling_perspective() -> None:
         ]
     )
 
-    with pytest.raises(ValueError, match="must not describe witnessing"):
-        validate_render_batch([row], witnessing)
-    with pytest.raises(ValueError, match="receiving or learning"):
-        validate_render_batch([row], no_receipt)
+    witnessing_validation = validate_render_batch([row], witnessing)
+    receipt_validation = validate_render_batch([row], no_receipt)
+
+    assert "must not describe witnessing" in witnessing_validation.rejected[41]
+    assert "receiving or learning" in receipt_validation.rejected[41]
 
 
 def test_acquisition_validator_accepts_delivered_account_perspective() -> None:
@@ -198,11 +324,16 @@ def test_acquisition_validator_accepts_delivered_account_perspective() -> None:
         ]
     )
 
-    assert validate_render_batch(
+    validation = validate_render_batch(
         [row],
         batch,
         names_by_experience={41: ({"Mara", "Orrin"}, {"Mara", "Orrin"})},
-    ) == {41: "I heard Orrin tell me about the door. I doubted his account."}
+    )
+
+    assert validation.validated == {
+        41: "I heard Orrin tell me about the door. I doubted his account."
+    }
+    assert validation.rejected == {}
 
 
 def test_renderer_validator_accepts_complete_first_person_batch() -> None:
@@ -218,11 +349,212 @@ def test_renderer_validator_accepts_complete_first_person_batch() -> None:
         ]
     )
 
-    assert validate_render_batch(
+    validation = validate_render_batch(
         [_seed_row()],
         batch,
         names_by_experience={41: ({"Mara", "Orrin"}, {"Mara", "Orrin"})},
-    ) == {41: "I watched Orrin open the door. I felt the cold air reach me."}
+    )
+
+    assert validation.validated == {
+        41: "I watched Orrin open the door. I felt the cold air reach me."
+    }
+    assert validation.rejected == {}
+
+
+def test_renderer_validator_counts_sentences_after_masking_allowed_names() -> None:
+    """Periods inside allowed names do not inflate the recollection sentence count."""
+    text = (
+        "I watched Dr. Sera Vey enter. I heard Dr. Sera Vey speak. " "I left quietly."
+    )
+    batch = ExperienceRenderBatch(
+        recollections=[ExperienceRecollection(experience_id=41, experience_text=text)]
+    )
+
+    validation = validate_render_batch(
+        [_seed_row()],
+        batch,
+        names_by_experience={41: ({"Mara", "Orrin", "Dr. Sera Vey"}, {"Dr. Sera Vey"})},
+    )
+
+    assert validation.validated == {41: text}
+    assert validation.rejected == {}
+
+
+@pytest.mark.parametrize(
+    ("text", "token"),
+    [
+        ("—Sitting still, I listened. I left.", "Sitting"),
+        ("…“Sitting still, I listened.” I left.", "Sitting"),
+        ("(Nothing moved.) I waited for Orrin.", "Nothing"),
+        ("I told Orrin: Nothing moves tonight.", "Nothing"),
+    ],
+)
+def test_sentence_initial_detection_handles_punctuation_boundaries(
+    text: str, token: str
+) -> None:
+    """Dashes, delimiters, and tight quotes preserve positional sentence starts."""
+    assert _is_sentence_initial(text, text.index(token))
+    assert _proper_noun_candidates(text, allowed_names={"Orrin"}) == set()
+
+
+@pytest.mark.parametrize(
+    ("text", "allowed"),
+    [
+        (
+            "I watched Dr. Sera Vey cross the room. I kept close behind her.",
+            {"Dr. Sera Vey"},
+        ),
+        (
+            "Sitting still, I watched Orrin open the door. I waited for him.",
+            {"Orrin"},
+        ),
+        ('"Nothing," I said. "Run." I stayed near Orrin.', {"Orrin"}),
+        ("I'd waited by the door. We're safer beside Orrin now.", {"Orrin"}),
+        ("I followed Mira-Kell through the arch. I trusted her pace.", {"Mira-Kell"}),
+        ("I caught Orrin's hand. I pulled him away from the door.", {"Orrin"}),
+        ("I heard Orrin speak. Nothing Orrin said surprised me.", {"Orrin"}),
+    ],
+)
+def test_renderer_validator_accepts_names_and_ordinary_sentence_starts(
+    text: str, allowed: set[str]
+) -> None:
+    """Punctuation and sentence position do not invent source-scene entities."""
+    row = {
+        **_seed_row(),
+        "seed_summary": (
+            "Mara was sitting still while Orrin watched the door, and she told "
+            "me to run."
+        ),
+    }
+    batch = ExperienceRenderBatch(
+        recollections=[ExperienceRecollection(experience_id=41, experience_text=text)]
+    )
+    known = {"Mara", "Orrin", "Dr. Sera Vey", "Mira-Kell"}
+
+    validation = validate_render_batch(
+        [row], batch, names_by_experience={41: (known, {"Mara", *allowed})}
+    )
+
+    assert validation.validated == {41: text}
+    assert validation.rejected == {}
+
+
+def test_sentence_initial_run_requires_lowercase_source_occurrence() -> None:
+    """An unvouched capitalized Run remains an invented entity candidate."""
+    text = "Run warned me. I watched Orrin."
+    batch = ExperienceRenderBatch(
+        recollections=[ExperienceRecollection(experience_id=41, experience_text=text)]
+    )
+
+    validation = validate_render_batch(
+        [_seed_row()],
+        batch,
+        names_by_experience={41: ({"Mara", "Orrin"}, {"Mara", "Orrin"})},
+    )
+
+    assert validation.validated == {}
+    assert "Run" in validation.rejected[41]
+
+
+@pytest.mark.parametrize(
+    ("text", "known", "offender"),
+    [
+        ("I saw Zorblax there. I left.", {"Mara", "Orrin"}, "Zorblax"),
+        (
+            "I watched Mara Kell cross the room. I left.",
+            {"Mara", "Mara Kell", "Orrin"},
+            "Mara Kell",
+        ),
+    ],
+)
+def test_noninitial_unallowed_names_remain_rejected(
+    text: str, known: set[str], offender: str
+) -> None:
+    """Positional exemptions do not admit invented or disallowed mid-sentence names."""
+    batch = ExperienceRenderBatch(
+        recollections=[ExperienceRecollection(experience_id=41, experience_text=text)]
+    )
+
+    validation = validate_render_batch(
+        [_seed_row()],
+        batch,
+        names_by_experience={41: (known, {"Mara", "Orrin"})},
+    )
+
+    assert validation.validated == {}
+    assert offender in validation.rejected[41]
+
+
+def test_renderer_validator_rejects_genuinely_invented_mid_sentence_name() -> None:
+    """An unknown capitalized person remains invalid away from a sentence edge."""
+    text = "I watched Orrin open the door. Then I saw Selene cross the room."
+    batch = ExperienceRenderBatch(
+        recollections=[ExperienceRecollection(experience_id=41, experience_text=text)]
+    )
+
+    validation = validate_render_batch(
+        [_seed_row()],
+        batch,
+        names_by_experience={41: ({"Mara", "Orrin"}, {"Mara", "Orrin"})},
+    )
+
+    assert "Selene" in validation.rejected[41]
+
+
+def test_renderer_validator_matches_disallowed_known_name_case_sensitively() -> None:
+    """A proper-name Dawn is rejected without colliding with lowercase dawn."""
+    known = {"Mara", "Orrin", "Dawn"}
+    allowed = {"Mara", "Orrin"}
+    exact = ExperienceRenderBatch(
+        recollections=[
+            ExperienceRecollection(
+                experience_id=41,
+                experience_text="I watched Dawn cross the room. I stayed by Orrin.",
+            )
+        ]
+    )
+    homograph = ExperienceRenderBatch(
+        recollections=[
+            ExperienceRecollection(
+                experience_id=41,
+                experience_text="I watched the dawn through glass. I stayed by Orrin.",
+            )
+        ]
+    )
+
+    rejected = validate_render_batch(
+        [_seed_row()], exact, names_by_experience={41: (known, allowed)}
+    )
+    accepted = validate_render_batch(
+        [_seed_row()], homograph, names_by_experience={41: (known, allowed)}
+    )
+
+    assert "Dawn" in rejected.rejected[41]
+    assert accepted.validated == {41: homograph.recollections[0].experience_text}
+
+
+def test_renderer_validator_isolates_content_errors_within_batch() -> None:
+    """One invalid recollection does not hide a valid batch sibling."""
+    rows = [_seed_row(), {**_seed_row(), "id": 42}]
+    valid_text = "I watched Orrin open the door. I remembered the cold air."
+    batch = ExperienceRenderBatch(
+        recollections=[
+            ExperienceRecollection(experience_id=41, experience_text=valid_text),
+            ExperienceRecollection(
+                experience_id=42,
+                experience_text="I watched Orrin open the door. Selene followed me.",
+            ),
+        ]
+    )
+    names = {
+        experience_id: ({"Mara", "Orrin"}, {"Mara", "Orrin"})
+        for experience_id in (41, 42)
+    }
+
+    validation = validate_render_batch(rows, batch, names_by_experience=names)
+
+    assert validation.validated == {41: valid_text}
+    assert "Selene" in validation.rejected[42]
 
 
 class _EmbeddingCursor:
