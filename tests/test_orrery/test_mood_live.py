@@ -3,12 +3,10 @@
 from datetime import datetime, timedelta, timezone
 from dataclasses import replace
 import json
-import os
 from typing import Any, Iterator
 import uuid
 
 import asyncpg  # type: ignore[import-untyped]
-import psycopg2
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
@@ -41,19 +39,12 @@ from nexus.agents.orrery.substrate import (
     validate_mood_affinities,
     validate_no_mood_in_entry_gates,
 )
+from tests import pg_fixtures
 from tests.pg_fixtures import disposable_slot_database
 
 
 pytestmark = pytest.mark.requires_postgres
 NOW = datetime(2073, 5, 3, 12, tzinfo=timezone.utc)
-
-
-def _database_url(dbname: str) -> str:
-    return (
-        f"postgresql://{os.environ.get('PGUSER', 'pythagor')}@"
-        f"{os.environ.get('PGHOST', 'localhost')}:"
-        f"{os.environ.get('PGPORT', '5432')}/{dbname}"
-    )
 
 
 @pytest.fixture(scope="module")
@@ -144,7 +135,7 @@ def _apply_sync(cur: Any, draft: OrreryResolutionDraft, chunk_id: int) -> int:
 
 
 def test_set_displace_expire_snapshot_and_replay(mood_database: str) -> None:
-    conn = psycopg2.connect(_database_url(mood_database))
+    conn = pg_fixtures.connect(mood_database)
     schema = f"mood_live_{uuid.uuid4().hex}"
     try:
         with conn.cursor() as cur:
@@ -224,7 +215,7 @@ def test_set_displace_expire_snapshot_and_replay(mood_database: str) -> None:
 
 @pytest.mark.asyncio
 async def test_async_writer_and_disabled_snapshot(mood_database: str) -> None:
-    conn = await asyncpg.connect(_database_url(mood_database))
+    conn = await asyncpg.connect(**pg_fixtures.asyncpg_kwargs(mood_database))
     transaction = conn.transaction()
     await transaction.start()
     schema = f"mood_async_{uuid.uuid4().hex}"
@@ -280,7 +271,7 @@ async def test_async_writer_and_disabled_snapshot(mood_database: str) -> None:
 def test_expired_unswept_mood_does_not_hydrate_or_bias(
     mood_database: str,
 ) -> None:
-    engine = create_engine(_database_url(mood_database), future=True)
+    engine = create_engine(pg_fixtures.sqlalchemy_url(mood_database), future=True)
     connection = engine.connect()
     transaction = connection.begin()
     schema = f"mood_hydration_{uuid.uuid4().hex}"
@@ -368,7 +359,7 @@ def test_expired_unswept_tag_does_not_source_actor_binding(
 ) -> None:
     """An expired ephemeral tag cannot make an otherwise irrelevant actor run."""
 
-    engine = create_engine(_database_url(mood_database), future=True)
+    engine = create_engine(pg_fixtures.sqlalchemy_url(mood_database), future=True)
     connection = engine.connect()
     transaction = connection.begin()
     schema = f"mood_binding_{uuid.uuid4().hex}"

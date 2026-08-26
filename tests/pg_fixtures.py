@@ -9,22 +9,62 @@ from contextlib import contextmanager
 from typing import Any
 
 import psycopg2
-import pytest
 from psycopg2 import sql
+from sqlalchemy.engine import URL
 
 from nexus.api import db_pool
 from scripts import new_story_setup
 
 
-def _connect(dbname: str) -> Any:
-    """Open a direct PostgreSQL connection for fixture setup and cleanup."""
+def connection_parameters() -> dict[str, str]:
+    """Return the PG* environment as keyword parameters, never a hand-built URI.
 
-    return psycopg2.connect(
-        dbname=dbname,
-        user=os.environ.get("PGUSER", "pythagor"),
-        host=os.environ.get("PGHOST", "localhost"),
-        port=os.environ.get("PGPORT", "5432"),
+    Keyword parameters survive Unix-socket directories (`PGHOST=/var/run/...`)
+    and IPv6 hosts (`::1`) that break naive URI interpolation.
+    """
+
+    return {
+        "user": os.environ.get("PGUSER", "pythagor"),
+        "host": os.environ.get("PGHOST", "localhost"),
+        "port": os.environ.get("PGPORT", "5432"),
+    }
+
+
+def connect(dbname: str, *, cursor_factory: Any = None) -> Any:
+    """Open a direct psycopg2 connection to ``dbname``."""
+
+    kwargs: dict[str, Any] = {"dbname": dbname, **connection_parameters()}
+    if cursor_factory is not None:
+        kwargs["cursor_factory"] = cursor_factory
+    return psycopg2.connect(**kwargs)
+
+
+def asyncpg_kwargs(dbname: str) -> dict[str, Any]:
+    """Return keyword arguments for ``asyncpg.connect`` targeting ``dbname``."""
+
+    params = connection_parameters()
+    return {
+        "database": dbname,
+        "user": params["user"],
+        "host": params["host"],
+        "port": int(params["port"]),
+    }
+
+
+def sqlalchemy_url(dbname: str) -> URL:
+    """Return a SQLAlchemy URL for ``dbname`` built through ``URL.create``."""
+
+    params = connection_parameters()
+    return URL.create(
+        "postgresql",
+        username=params["user"],
+        host=params["host"],
+        port=int(params["port"]),
+        database=dbname,
     )
+
+
+_connect = connect
 
 
 @contextmanager
@@ -33,16 +73,21 @@ def disposable_slot_database(
     *,
     source_db: str = "NEXUS_template",
 ) -> Iterator[str]:
-    """Yield a uniquely named template clone and always remove it afterward."""
+    """Yield a uniquely named template clone and always remove it afterward.
+
+    Fails loudly when the admin connection is unavailable; opting into the
+    PostgreSQL gate means PostgreSQL is required.
+    """
 
     dbname = f"{prefix}_{uuid.uuid4().hex[:12]}"
     admin: Any = None
     original_use_pool = new_story_setup.USE_POOL
     try:
-        try:
-            admin = _connect("postgres")
-        except psycopg2.Error as exc:
-            pytest.skip(f"PostgreSQL admin connection unavailable: {exc}")
+        # NEXUS_RUN_POSTGRES=1 asserts PostgreSQL is required: an unreachable
+        # or misconfigured server is a failure, never a skip (a skipped gate is
+        # how issue #735's debt hid for two months). The requires_postgres
+        # marker already skips when the gate is not opted in.
+        admin = _connect("postgres")
         admin.autocommit = True
         new_story_setup.USE_POOL = False
         new_story_setup.initialize_slot_database(dbname, source_db=source_db)

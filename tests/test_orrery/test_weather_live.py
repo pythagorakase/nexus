@@ -1,13 +1,11 @@
 """Rollback-only live coverage for localized weather and Skald persistence."""
 
 from datetime import datetime, timezone
-import os
 from pathlib import Path
 from typing import Iterator
 import uuid
 
 import asyncpg  # type: ignore[import-untyped]
-import psycopg2
 import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
@@ -29,18 +27,11 @@ from nexus.agents.orrery.templates import STROLL
 from nexus.api.commit_handler import insert_chunk_metadata
 from nexus.api.commit_handler_sync import insert_chunk_metadata_sync
 from nexus.config import load_settings_as_dict
+from tests import pg_fixtures
 from tests.pg_fixtures import disposable_slot_database
 
 
 pytestmark = pytest.mark.requires_postgres
-
-
-def _database_url(dbname: str) -> str:
-    return (
-        f"postgresql://{os.environ.get('PGUSER', 'pythagor')}@"
-        f"{os.environ.get('PGHOST', 'localhost')}:"
-        f"{os.environ.get('PGPORT', '5432')}/{dbname}"
-    )
 
 
 @pytest.fixture(scope="module")
@@ -119,7 +110,7 @@ def test_warm_arm_fires_from_local_weather() -> None:
 
 
 def test_live_anchor_override_and_disabled_mode(weather_database: str) -> None:
-    engine = create_engine(_database_url(weather_database), future=True)
+    engine = create_engine(pg_fixtures.sqlalchemy_url(weather_database), future=True)
     connection = engine.connect()
     transaction = connection.begin()
     try:
@@ -308,7 +299,7 @@ def test_live_anchor_override_and_disabled_mode(weather_database: str) -> None:
 
 
 def test_sync_commit_stack_persists_scene_weather(weather_database: str) -> None:
-    conn = psycopg2.connect(_database_url(weather_database))
+    conn = pg_fixtures.connect(weather_database)
     schema = f"weather_sync_{uuid.uuid4().hex}"
     try:
         with conn.cursor() as cur:
@@ -342,7 +333,7 @@ def test_sync_commit_stack_persists_scene_weather(weather_database: str) -> None
 async def test_async_commit_stack_persists_scene_weather(
     weather_database: str,
 ) -> None:
-    conn = await asyncpg.connect(_database_url(weather_database))
+    conn = await asyncpg.connect(**pg_fixtures.asyncpg_kwargs(weather_database))
     transaction = conn.transaction()
     await transaction.start()
     schema = f"weather_async_{uuid.uuid4().hex}"
