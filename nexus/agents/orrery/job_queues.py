@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-import os
 from typing import Any
 
-import psycopg2
 from psycopg2.extras import RealDictCursor
 
 from nexus.agents.orrery.experiences import load_experience_status_sync
-from nexus.agents.orrery.retrograde_maturation import load_maturation_status_sync
+from nexus.agents.orrery.retrograde_maturation import (
+    _connect_for_slot,
+    load_maturation_status_sync,
+)
 
 
 _SHARED_STATES = ("queued", "leased", "succeeded", "failed")
@@ -18,15 +19,7 @@ _SHARED_STATES = ("queued", "leased", "succeeded", "failed")
 def load_job_queues_for_slot_sync(slot: int) -> dict[str, Any]:
     """Return every provider-capable durable queue for one save slot."""
 
-    from nexus.api.slot_utils import require_slot_dbname
-
-    dbname = require_slot_dbname(slot=slot)
-    conn = psycopg2.connect(
-        host=os.environ.get("PGHOST", "localhost"),
-        database=dbname,
-        user=os.environ.get("PGUSER", "pythagor"),
-        port=os.environ.get("PGPORT", "5432"),
-    )
+    conn = _connect_for_slot(slot)
     try:
         with conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:

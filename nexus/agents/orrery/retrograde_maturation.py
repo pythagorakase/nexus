@@ -1241,18 +1241,6 @@ def load_maturation_status_sync(cur: Any) -> dict[str, Any]:
     return {"counts": counts, "non_terminal_jobs": raw_jobs}
 
 
-def load_maturation_status_for_slot_sync(slot: int) -> dict[str, Any]:
-    """Return the durable maturation queue snapshot for one save slot."""
-
-    conn = _connect_for_slot(slot)
-    try:
-        with conn:
-            with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                return load_maturation_status_sync(cur)
-    finally:
-        conn.close()
-
-
 # ============================================================================
 # Internal Helpers
 # ============================================================================
