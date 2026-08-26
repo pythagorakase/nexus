@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import argparse
 from contextlib import contextmanager
+from dataclasses import replace
+from datetime import datetime, timedelta, timezone
+import json
 import os
+from pathlib import Path
 from typing import Any, Iterator
 import uuid
 
@@ -14,6 +18,7 @@ import pytest
 
 from nexus import cli
 from nexus.api import slot_utils
+from scripts.qa_shift import qa_shift
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -68,6 +73,7 @@ def _disposable_jobs_db() -> Iterator[str]:
 def test_jobs_cli_reports_counts_and_non_terminal_rows(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
 ) -> None:
     """The CLI combines every provider-capable queue in one public payload."""
 
@@ -312,3 +318,67 @@ def test_jobs_cli_reports_counts_and_non_terminal_rows(
         human_output = capsys.readouterr().out
         assert "retrograde_maturation" in human_output
         assert "experience_render" in human_output
+
+        # Sol review (PR #738): push the REAL payload through the CLI's JSON
+        # encoder and the guard's public entry points, so a serialization or
+        # ordering mismatch cannot hide behind the fixture-based suites.
+        cli.emit_output(payload, as_json=True)
+        rendered = json.loads(capsys.readouterr().out)
+        snapshot = qa_shift._jobs_snapshot(rendered, slot=4)
+        assert [row["queue"] for row in snapshot["non_terminal_jobs"]] == [
+            "experience_render",
+            "experience_render",
+            "retrograde_maturation",
+            "retrograde_maturation",
+        ]
+        assert snapshot["counts"] == rendered["counts"]
+
+        settled = json.loads(json.dumps(rendered))
+        for queue in settled["queues"].values():
+            queue["counts"] = {state: 0 for state in queue["counts"]}
+            queue["non_terminal_jobs"] = []
+        settled["counts"] = {state: 0 for state in settled["counts"]}
+        settled["non_terminal_jobs"] = []
+
+        now = datetime(2026, 7, 30, 4, 30, tzinfo=timezone.utc)
+
+        def _usage_payload(_root: Path, _day: str | None) -> dict[str, Any]:
+            return {
+                "success": True,
+                "usage": {
+                    "day": "2026-07-30",
+                    "events": [],
+                    "providers": {},
+                    "seats": {},
+                    "openai_day_total": {
+                        "total_tokens": 100,
+                        "unknown_usage_events": 0,
+                    },
+                    "allowance": {},
+                },
+            }
+
+        config = replace(qa_shift.load_shift_config(), archive_root=tmp_path, slot=4)
+        begun = qa_shift.begin_shift(
+            config=config,
+            usage_reader=_usage_payload,
+            jobs_reader=lambda _root, _slot: settled,
+            bleed_uptake_reader=lambda _root, _slot: {
+                "offered_count": 0,
+                "used_count": 0,
+            },
+            now=now,
+        )
+        check = qa_shift.check_shift(
+            archive=Path(begun["archive"]),
+            mode=qa_shift.CheckMode.PRE_CALL,
+            usage_reader=_usage_payload,
+            jobs_reader=lambda _root, _slot: rendered,
+            now=now + timedelta(seconds=1),
+        )
+        assert check["status"] == "pending"
+        assert len(check["non_terminal_jobs"]) == 4
+        assert {row["queue"] for row in check["non_terminal_jobs"]} == {
+            "experience_render",
+            "retrograde_maturation",
+        }

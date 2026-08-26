@@ -1048,7 +1048,7 @@ def test_only_non_terminal_maturation_states_block_checks(
 
 def test_requeued_experience_job_stops_with_last_error() -> None:
     state = _state(qa_shift.load_shift_config())
-    result, _ = qa_shift.evaluate_check(
+    result, updated = qa_shift.evaluate_check(
         state=state,
         usage_payload=_usage(total=100),
         jobs_payload=_jobs(
@@ -1064,6 +1064,10 @@ def test_requeued_experience_job_stops_with_last_error() -> None:
     assert result["status"] == "stop"
     assert result["reasons"] == ["job_requeued:experience_render:17"]
     assert result["non_terminal_jobs"][0]["last_error"] == ("invented entity: Sitting")
+    # Sol review (PR #738): a stop records the watermark like every other stop.
+    assert updated["last_total"] == 100
+    assert updated["last_event_count"] == 0
+    assert updated["checks"] == int(state["checks"]) + 1
 
 
 def test_leased_retry_stays_pending_until_its_call_settles() -> None:
