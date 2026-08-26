@@ -21,6 +21,7 @@ from psycopg2.extras import Json, RealDictCursor
 from nexus.agents.logon.apex_schema import StorytellerResponseMinimal
 from nexus.api import (
     chunk_workflow,
+    db_pool,
     narrative,
     narrative_generation,
     narrative_lease,
@@ -30,6 +31,11 @@ from nexus.api import (
 )
 from nexus.api.slot_state import NarrativeState, SlotState, WizardState
 from nexus.config import get_available_api_models
+from nexus.memory.manager import empty_pass2_baseline
+from scripts import new_story_setup
+
+
+TEST_BASELINE_PAYLOAD = empty_pass2_baseline({}).model_dump(mode="json")
 
 
 @pytest.fixture(autouse=True)
@@ -384,36 +390,61 @@ def _connect(dbname: str, *, dict_cursor: bool = False) -> Any:
     )
 
 
+def _seed_protagonist(dbname: str) -> None:
+    """Bind the disposable save to a canonical player character."""
+
+    with _connect(dbname) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE global_variables SET base_timestamp = %s WHERE id = true",
+                ("2100-01-01T00:00:00+00:00",),
+            )
+            assert cur.rowcount == 1
+            cur.execute(
+                "INSERT INTO entities (kind, is_active) "
+                "VALUES ('character', true) RETURNING id"
+            )
+            entity_id = int(cur.fetchone()[0])
+            cur.execute(
+                """
+                INSERT INTO characters (name, summary, entity_id)
+                VALUES ('Continue Fixture Player', %s, %s)
+                RETURNING id
+                """,
+                ("Canonical player for narrative continue coverage.", entity_id),
+            )
+            character_id = int(cur.fetchone()[0])
+            cur.execute(
+                "UPDATE global_variables SET user_character = %s WHERE id = true",
+                (character_id,),
+            )
+            assert cur.rowcount == 1
+
+
 @pytest.fixture()
 def disposable_narrative_db() -> Iterator[str]:
-    """Yield an isolated NEXUS_template clone and drop it afterward."""
+    """Yield an initialized disposable save and drop it afterward."""
     dbname = f"nexus_test_continue_{uuid.uuid4().hex[:12]}"
-    admin = None
+    admin: Any = None
+    original_use_pool = new_story_setup.USE_POOL
     try:
         try:
             admin = _connect("postgres")
         except psycopg2.Error as exc:
             pytest.skip(f"PostgreSQL admin connection unavailable: {exc}")
         admin.autocommit = True
-        with admin.cursor() as cur:
-            cur.execute(
-                sql.SQL("CREATE DATABASE {} TEMPLATE {}").format(
-                    sql.Identifier(dbname),
-                    sql.Identifier("NEXUS_template"),
-                )
-            )
-        migration_sql = "\n".join(
-            Path(path).read_text()
-            for path in (
-                "migrations/098_narrative_generation_lease.sql",
-                "migrations/099_storyteller_correspondence.sql",
-            )
+        new_story_setup.USE_POOL = False
+        new_story_setup.initialize_slot_database(
+            dbname,
+            source_db="NEXUS_template",
         )
-        with _connect(dbname) as migration_conn:
-            with migration_conn.cursor() as cur:
-                cur.execute(migration_sql)
+        _seed_protagonist(dbname)
         yield dbname
     finally:
+        new_story_setup.USE_POOL = original_use_pool
+        pool = db_pool._pools.pop(dbname, None)
+        if pool is not None:
+            pool.closeall()
         if admin is not None:
             with admin.cursor() as cur:
                 cur.execute(
@@ -494,7 +525,11 @@ class ImmediateLore:
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         self.settings_path = Path("test-settings.toml")
-        self.turn_context = SimpleNamespace(error_log=[], orrery_proposal=None)
+        self.turn_context = SimpleNamespace(
+            error_log=[],
+            memory_state={"lore_pass_baseline": TEST_BASELINE_PAYLOAD},
+            orrery_proposal=None,
+        )
 
     async def process_turn(
         self,
@@ -533,6 +568,7 @@ def test_concurrent_continues_have_one_owner_and_truthful_result(
             self.settings_path = Path("test-settings.toml")
             self.turn_context = SimpleNamespace(
                 error_log=[],
+                memory_state={"lore_pass_baseline": TEST_BASELINE_PAYLOAD},
                 orrery_proposal=None,
             )
 
@@ -871,10 +907,10 @@ def test_pending_incubator_session_mismatch_is_409(
                     generation_model, choice_object, choice_text,
                     metadata_updates, entity_updates, reference_updates,
                     orrery_proposal, orrery_adjudications, new_entities,
-                    session_id, llm_response_id, status
+                    lore_pass_baseline, session_id, llm_response_id, status
                 ) VALUES (
                     TRUE, %s, %s, %s, %s, %s, %s, NULL,
-                    %s, %s, %s, NULL, %s, %s, %s, %s, 'provisional'
+                    %s, %s, %s, NULL, %s, %s, %s, %s, %s, 'provisional'
                 )
                 """,
                 (
@@ -889,6 +925,7 @@ def test_pending_incubator_session_mismatch_is_409(
                     Json({"characters": [], "places": [], "factions": []}),
                     Json([]),
                     Json([]),
+                    Json(TEST_BASELINE_PAYLOAD),
                     expected_session_id,
                     "session-mismatch-fixture",
                 ),
@@ -976,10 +1013,10 @@ def test_pending_choice_rolls_back_when_auto_approval_validation_fails(
                     generation_model, choice_object, choice_text,
                     metadata_updates, entity_updates, reference_updates,
                     orrery_proposal, orrery_adjudications, new_entities,
-                    session_id, llm_response_id, status
+                    lore_pass_baseline, session_id, llm_response_id, status
                 ) VALUES (
                     TRUE, %s, %s, %s, %s, %s, %s, NULL,
-                    %s, %s, %s, NULL, %s, %s, %s, %s, 'provisional'
+                    %s, %s, %s, NULL, %s, %s, %s, %s, %s, 'provisional'
                 )
                 """,
                 (
@@ -999,6 +1036,7 @@ def test_pending_choice_rolls_back_when_auto_approval_validation_fails(
                     Json({"characters": [], "places": [], "factions": []}),
                     Json([]),
                     Json([]),
+                    Json(TEST_BASELINE_PAYLOAD),
                     pending_session_id,
                     "invalid-approval-fixture",
                 ),

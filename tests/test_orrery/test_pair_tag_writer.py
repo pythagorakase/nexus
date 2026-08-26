@@ -1,49 +1,40 @@
 """Real-DB integration tests for the entity_pair_tags writer.
 
-Exercises ``apply_pair_tag_bestowal`` and ``clear_pair_tag`` against a live
-slot database (``save_05`` by default). Verifies that the migration-042
+Exercises ``apply_pair_tag_bestowal`` and ``clear_pair_tag`` against a
+disposable clone of the canonical template. Verifies that the migration-042
 substrate works end-to-end: insert, idempotent re-insert, kind validation,
 self-loop rejection, clear-then-reinsert cycle, polymorphic acceptance.
 
 These tests are guarded by the ``requires_postgres`` marker; activate with
 ``NEXUS_RUN_POSTGRES=1`` to run them.
 
-**Cleanup scoping (data-safety guarantee):** the fixture snapshots the IDs of
-all ``entity_pair_tags`` rows that already exist for the chosen test entity
-pair before the test runs, then on teardown deletes only rows whose IDs are
-NOT in that snapshot. This preserves any legitimate pre-existing relations
-between the chosen entities — the fixture only removes rows that the test
-itself created.
-
-**Entity selection:** the fixture queries ``entities`` at setup time for
-character/faction IDs rather than hardcoding sentinel values. If insufficient
-characters exist (e.g., a freshly reset save_05), the test is skipped rather
-than failing on FK violations.
+Each test receives a fresh database and fixture-owned character/faction
+entities, so no save-slot data is read or mutated.
 """
 
 from __future__ import annotations
 
-from typing import Generator, Optional
+import os
+from typing import Any, Generator, Optional
+import uuid
 
 import psycopg2
 import pytest
+from psycopg2 import sql
 
 from nexus.agents.orrery.tag_writer import (
     apply_pair_tag_bestowal,
     clear_pair_tag,
 )
-from nexus.api.slot_utils import get_slot_db_url
+from nexus.api import db_pool
+from scripts import new_story_setup
 
 
 pytestmark = pytest.mark.requires_postgres
 
 
-TEST_DBNAME = "save_05"
-
-
 class _TestEntities:
-    """Container for resolved test entity IDs and the row-ID snapshots used for
-    surgical cleanup."""
+    """Container for fixture-owned entity IDs."""
 
     def __init__(
         self,
@@ -51,104 +42,114 @@ class _TestEntities:
         char_a: int,
         char_b: int,
         faction: Optional[int],
-        preexisting_ids: set[int],
     ):
         self.char_a = char_a
         self.char_b = char_b
         self.faction = faction
-        self.preexisting_ids = preexisting_ids
+
+
+def _connect(dbname: str) -> Any:
+    """Open a direct connection to a disposable database."""
+
+    return psycopg2.connect(
+        dbname=dbname,
+        user=os.environ.get("PGUSER", "pythagor"),
+        host=os.environ.get("PGHOST", "localhost"),
+        port=os.environ.get("PGPORT", "5432"),
+    )
 
 
 @pytest.fixture
 def slot_connection() -> Generator[psycopg2.extensions.connection, None, None]:
-    """Yield a save_05 connection (no entity setup; resolved by `test_entities`)."""
+    """Yield a fresh canonical database and always drop it afterward."""
 
-    conn = psycopg2.connect(get_slot_db_url(dbname=TEST_DBNAME))
+    dbname = f"qa735_pair_tags_{uuid.uuid4().hex[:12]}"
+    admin: Any = None
+    conn: Any = None
+    original_use_pool = new_story_setup.USE_POOL
     try:
+        admin = _connect("postgres")
+        admin.autocommit = True
+        new_story_setup.USE_POOL = False
+        new_story_setup.initialize_slot_database(
+            dbname,
+            source_db="NEXUS_template",
+        )
+        conn = _connect(dbname)
         yield conn
     finally:
-        conn.close()
+        new_story_setup.USE_POOL = original_use_pool
+        if conn is not None:
+            conn.close()
+        pool = db_pool._pools.pop(dbname, None)
+        if pool is not None:
+            pool.closeall()
+        if admin is not None:
+            with admin.cursor() as cur:
+                cur.execute(
+                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+                    "WHERE datname = %s AND pid <> pg_backend_pid()",
+                    (dbname,),
+                )
+                cur.execute(
+                    sql.SQL("DROP DATABASE IF EXISTS {}").format(sql.Identifier(dbname))
+                )
+            admin.close()
 
 
 @pytest.fixture
 def test_entities(
     slot_connection: psycopg2.extensions.connection,
 ) -> Generator[_TestEntities, None, None]:
-    """Resolve two character entity IDs (and optionally a faction) for the test
-    suite, snapshot any pre-existing pair_tags rows between them, yield, then
-    on teardown remove only rows the test created."""
+    """Seed two characters, one faction, and a canonical player identity."""
 
     with slot_connection.cursor() as cur:
         cur.execute(
-            "SELECT id FROM entities WHERE kind = 'character' ORDER BY id LIMIT 2"
+            "UPDATE global_variables SET base_timestamp = %s WHERE id = true",
+            ("2100-01-01T00:00:00+00:00",),
         )
-        char_rows = cur.fetchall()
-        if len(char_rows) < 2:
-            pytest.skip(
-                f"{TEST_DBNAME} has fewer than 2 character entities; "
-                "cannot exercise pair-tag writer."
+        assert cur.rowcount == 1
+        characters: list[tuple[int, int]] = []
+        for index in range(2):
+            cur.execute("INSERT INTO entities (kind) VALUES ('character') RETURNING id")
+            entity_row = cur.fetchone()
+            assert entity_row is not None
+            entity_id = int(entity_row[0])
+            cur.execute(
+                """
+                INSERT INTO characters (name, summary, entity_id)
+                VALUES (%s, 'Fixture-owned pair-tag character.', %s)
+                RETURNING id
+                """,
+                (f"Pair Tag Character {index + 1}", entity_id),
             )
-        char_a, char_b = char_rows[0][0], char_rows[1][0]
-
-        cur.execute(
-            "SELECT id FROM entities WHERE kind = 'faction' ORDER BY id LIMIT 1"
-        )
+            character_row = cur.fetchone()
+            assert character_row is not None
+            characters.append((entity_id, int(character_row[0])))
+        cur.execute("INSERT INTO entities (kind) VALUES ('faction') RETURNING id")
         faction_row = cur.fetchone()
-        faction = faction_row[0] if faction_row else None
-
-        # Snapshot pre-existing row IDs between the chosen entities so cleanup
-        # can be surgical (delete only test-created rows).
-        ids_in_scope = [char_a, char_b]
-        if faction is not None:
-            ids_in_scope.append(faction)
+        assert faction_row is not None
+        faction = int(faction_row[0])
         cur.execute(
             """
-            SELECT id FROM entity_pair_tags
-            WHERE subject_entity_id = ANY(%s) AND object_entity_id = ANY(%s)
+            INSERT INTO factions (id, name, summary, entity_id)
+            VALUES (%s, 'Pair Tag Faction', 'Fixture-owned faction.', %s)
             """,
-            (ids_in_scope, ids_in_scope),
+            (faction, faction),
         )
-        preexisting_ids = {row[0] for row in cur.fetchall()}
+        cur.execute(
+            "UPDATE global_variables SET user_character = %s WHERE id = true",
+            (characters[0][1],),
+        )
+        assert cur.rowcount == 1
+    slot_connection.commit()
 
     entities = _TestEntities(
-        char_a=char_a,
-        char_b=char_b,
+        char_a=characters[0][0],
+        char_b=characters[1][0],
         faction=faction,
-        preexisting_ids=preexisting_ids,
     )
-
-    try:
-        yield entities
-    finally:
-        with slot_connection:
-            with slot_connection.cursor() as cur:
-                ids_in_scope = [char_a, char_b]
-                if faction is not None:
-                    ids_in_scope.append(faction)
-                # tag_clearance_log references entity_pair_tags without
-                # ON DELETE CASCADE (migration 064); purge log rows for the
-                # test-created pair rows first or their DELETE FK-fails.
-                cur.execute(
-                    """
-                    DELETE FROM tag_clearance_log
-                    WHERE entity_pair_tag_id IN (
-                        SELECT id FROM entity_pair_tags
-                        WHERE subject_entity_id = ANY(%s)
-                          AND object_entity_id = ANY(%s)
-                          AND NOT (id = ANY(%s))
-                    )
-                    """,
-                    (ids_in_scope, ids_in_scope, list(entities.preexisting_ids)),
-                )
-                cur.execute(
-                    """
-                    DELETE FROM entity_pair_tags
-                    WHERE subject_entity_id = ANY(%s)
-                      AND object_entity_id = ANY(%s)
-                      AND NOT (id = ANY(%s))
-                    """,
-                    (ids_in_scope, ids_in_scope, list(entities.preexisting_ids)),
-                )
+    yield entities
 
 
 def _count_active_pair_tags(
@@ -171,7 +172,9 @@ def _count_active_pair_tags(
             """,
             (subject_id, object_id, tag),
         )
-        return cur.fetchone()[0]
+        row = cur.fetchone()
+        assert row is not None
+        return int(row[0])
 
 
 def test_insert_durable_pair_tag(
@@ -430,14 +433,10 @@ def test_polymorphic_object_kind_faction_path(
 
     ``obligation`` allows ``character|faction`` on both ends — this case
     exercises the faction object path that the character-only test above does
-    not. Skipped if save_05 has no faction entities.
+    not.
     """
 
-    if test_entities.faction is None:
-        pytest.skip(
-            f"{TEST_DBNAME} has no faction entities; "
-            "skipping faction polymorphism case."
-        )
+    assert test_entities.faction is not None
 
     active_before = _count_active_pair_tags(
         slot_connection,

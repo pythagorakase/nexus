@@ -7,6 +7,7 @@ from typing import Any, Iterator
 
 import psycopg2
 import pytest
+from psycopg2 import sql
 
 from nexus.agents.logon.apex_schema import NewEntityDeclaration
 from nexus.agents.orrery.retrograde_maturation import (
@@ -16,8 +17,9 @@ from nexus.agents.orrery.retrograde_maturation import (
 from nexus.agents.orrery.retrograde_persistence import (
     _insert_place_stub as insert_retrograde_place_stub,
 )
+from nexus.api import db_pool
 from nexus.api.trait_compiler import _insert_place_stub as insert_trait_place_stub
-from nexus.api.slot_utils import get_slot_db_url
+from scripts import new_story_setup
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -25,59 +27,95 @@ pytestmark = pytest.mark.requires_postgres
 
 @pytest.fixture()
 def stub_cur() -> Iterator[Any]:
-    conn = psycopg2.connect(get_slot_db_url(slot=5))
-    schema = f"gis_stubs_{uuid.uuid4().hex}"
+    """Yield a cursor backed by a canonical disposable slot image."""
+
+    dbname = f"qa735_gis_stubs_{uuid.uuid4().hex[:12]}"
+    admin: Any = None
+    conn: Any = None
+    original_use_pool = new_story_setup.USE_POOL
     try:
+        admin = psycopg2.connect(dbname="postgres", user="pythagor")
+        admin.autocommit = True
+        new_story_setup.USE_POOL = False
+        new_story_setup.initialize_slot_database(
+            dbname,
+            source_db="NEXUS_template",
+        )
+        conn = psycopg2.connect(dbname=dbname, user="pythagor")
         with conn.cursor() as cur:
-            cur.execute(f'CREATE SCHEMA "{schema}"')
-            cur.execute(f'SET LOCAL search_path = "{schema}", public')
+            cur.execute(
+                "UPDATE global_variables SET base_timestamp = %s WHERE id = true",
+                ("2100-01-01T00:00:00+00:00",),
+            )
+            assert cur.rowcount == 1
             cur.execute(
                 """
-                CREATE TABLE zones (
-                    id bigint PRIMARY KEY,
-                    name text NOT NULL,
-                    boundary geometry(MultiPolygon, 4326)
-                );
-                CREATE TABLE places (
-                    id bigserial PRIMARY KEY,
-                    entity_id bigserial NOT NULL,
-                    name text NOT NULL,
-                    type public.place_type NOT NULL,
-                    zone bigint,
-                    summary text,
-                    current_status text,
-                    extra_data jsonb,
-                    coordinates geography(PointZM, 4326)
-                );
-                CREATE TABLE characters (
-                    id bigint PRIMARY KEY,
-                    current_location bigint
-                );
-                CREATE TABLE global_variables (
-                    id boolean PRIMARY KEY,
-                    user_character bigint
-                );
-                INSERT INTO zones (id, name, boundary)
+                INSERT INTO layers (name) VALUES ('GIS Stub Layer') RETURNING id
+                """
+            )
+            layer_id = int(cur.fetchone()[0])
+            cur.execute(
+                """
+                INSERT INTO zones (id, name, boundary, layer)
                 VALUES (
                     10,
                     'Story Zone',
-                    ST_Multi(ST_MakeEnvelope(-2, -2, 2, 2, 4326))
+                    ST_Multi(ST_MakeEnvelope(-2, -2, 2, 2, 4326)),
+                    %s
                 ), (
                     20,
                     'Remote Zone',
-                    ST_Multi(ST_MakeEnvelope(48, 48, 52, 52, 4326))
-                );
-                INSERT INTO places (id, entity_id, name, type, zone)
-                VALUES (100, 100, 'Story Place', 'fixed_location', 10);
-                INSERT INTO characters (id, current_location) VALUES (1, 100);
-                INSERT INTO global_variables (id, user_character)
-                VALUES (true, 1)
-                """
+                    ST_Multi(ST_MakeEnvelope(48, 48, 52, 52, 4326)),
+                    %s
+                )
+                """,
+                (layer_id, layer_id),
             )
+            cur.execute("INSERT INTO entities (kind) VALUES ('place') RETURNING id")
+            place_entity_id = int(cur.fetchone()[0])
+            cur.execute(
+                """
+                INSERT INTO places (id, entity_id, name, type, zone)
+                VALUES (100, %s, 'Story Place', 'fixed_location', 10)
+                """,
+                (place_entity_id,),
+            )
+            cur.execute("INSERT INTO entities (kind) VALUES ('character') RETURNING id")
+            character_entity_id = int(cur.fetchone()[0])
+            cur.execute(
+                """
+                INSERT INTO characters (
+                    id, name, summary, current_location, entity_id
+                ) VALUES (
+                    1, 'GIS Stub Player', 'Canonical fixture player.', 100, %s
+                )
+                """,
+                (character_entity_id,),
+            )
+            cur.execute(
+                "UPDATE global_variables SET user_character = 1 WHERE id = true"
+            )
+            assert cur.rowcount == 1
             yield cur
     finally:
-        conn.rollback()
-        conn.close()
+        new_story_setup.USE_POOL = original_use_pool
+        if conn is not None:
+            conn.rollback()
+            conn.close()
+        pool = db_pool._pools.pop(dbname, None)
+        if pool is not None:
+            pool.closeall()
+        if admin is not None:
+            with admin.cursor() as cur:
+                cur.execute(
+                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+                    "WHERE datname = %s AND pid <> pg_backend_pid()",
+                    (dbname,),
+                )
+                cur.execute(
+                    sql.SQL("DROP DATABASE IF EXISTS {}").format(sql.Identifier(dbname))
+                )
+            admin.close()
 
 
 def _place_row(cur: Any, name: str) -> tuple[Any, ...]:
