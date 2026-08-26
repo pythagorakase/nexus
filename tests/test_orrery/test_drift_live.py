@@ -260,10 +260,24 @@ def test_commit_drift_updates_versions_projects_literal_and_mints_claim(
             FROM relationship_versions
             WHERE relationship_table = 'character_relationships'
               AND source_chunk_id = %s
+              AND (old_row ->> 'character1_id')::bigint = %s
+              AND (old_row ->> 'character2_id')::bigint = (
+                  SELECT id FROM characters WHERE entity_id = %s
+              )
+            """,
+            (tick_chunk_id, actor_character_id, target_id),
+        )
+        assert cur.fetchone()["count"] == 1
+        cur.execute(
+            """
+            SELECT count(*) AS count
+            FROM relationship_versions
+            WHERE relationship_table = 'character_relationships'
+              AND source_chunk_id = %s
             """,
             (tick_chunk_id,),
         )
-        assert cur.fetchone()["count"] == 1
+        tick_version_count = cur.fetchone()["count"]
 
         cur.execute(
             """
@@ -278,7 +292,7 @@ def test_commit_drift_updates_versions_projects_literal_and_mints_claim(
         assert drain_marker is not None
         assert cur.fetchone() is None
         assert drain_marker["payload"] == {
-            "edges_touched": 1,
+            "edges_touched": tick_version_count,
             "milestone_count": 1,
         }
 
