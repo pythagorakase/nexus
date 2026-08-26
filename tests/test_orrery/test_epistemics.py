@@ -209,7 +209,7 @@ def test_two_similar_actors_are_separated_only_by_awareness(save_02_conn: Any) -
 
 @pytest.mark.requires_postgres
 def test_retrograde_producer_mints_role_correct_awareness(save_02_conn: Any) -> None:
-    """Configured Retrograde events mint; beneficiary and other types do not."""
+    """PR #697 birth policy mints only actor/target but keeps the full roster."""
 
     with save_02_conn.cursor(cursor_factory=RealDictCursor) as cur:
         anchor, characters = _anchor_and_characters(cur, 4)
@@ -274,6 +274,14 @@ def test_retrograde_producer_mints_role_correct_awareness(save_02_conn: Any) -> 
         configured = plan("threat_issued")
         assert configured["claim_id"] is not None
         cur.execute(
+            "SELECT summary FROM claims WHERE id = %s",
+            (configured["claim_id"],),
+        )
+        assert cur.fetchone()["summary"] == (
+            f"Threat issued: actor {records[0].name}, target {records[1].name}, "
+            f"witness {records[2].name}, beneficiary {records[3].name}."
+        )
+        cur.execute(
             """
             SELECT knower_entity_id, source_tier
             FROM claim_awareness
@@ -285,10 +293,10 @@ def test_retrograde_producer_mints_role_correct_awareness(save_02_conn: Any) -> 
         awareness = {
             int(row["knower_entity_id"]): row["source_tier"] for row in cur.fetchall()
         }
+        # PR #697: CLAIM_BIRTH_ROLE_POLICY filters threat_issued at the mint boundary.
         assert awareness == {
             records[0].entity_id: "participant",
             records[1].entity_id: "participant",
-            records[2].entity_id: "witness",
         }
 
         unconfigured = plan("surveillance_performed")
@@ -304,7 +312,7 @@ def test_retrograde_producer_mints_role_correct_awareness(save_02_conn: Any) -> 
 def test_retrograde_faction_actor_mints_faction_awareness(
     save_02_conn: Any,
 ) -> None:
-    """A faction participant receives the same role-based awareness as others."""
+    """PR #697 birth roles apply equally when the actor entity is a faction."""
 
     with save_02_conn.cursor(cursor_factory=RealDictCursor) as cur:
         anchor, characters = _anchor_and_characters(cur, 2)
@@ -398,10 +406,10 @@ def test_retrograde_faction_actor_mints_faction_awareness(
             f"witness {records[2].name}."
         )
         awareness = {int(row["knower_entity_id"]): row["source_tier"] for row in rows}
+        # Entity kind does not alter PR #697's CLAIM_BIRTH_ROLE_POLICY filter.
         assert awareness == {
             records[0].entity_id: "participant",
             records[1].entity_id: "participant",
-            records[2].entity_id: "witness",
         }
         cur.execute(
             "SELECT world_time FROM chunk_metadata WHERE chunk_id = %s",

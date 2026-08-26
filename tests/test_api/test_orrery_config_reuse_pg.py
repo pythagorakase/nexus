@@ -4,18 +4,16 @@ from __future__ import annotations
 
 import json
 import os
-import uuid
 from typing import Any, Iterator
 
 import asyncpg  # type: ignore[import-untyped]
 import psycopg2
 import pytest
-from psycopg2 import sql
 
 import nexus.config as config_module
-from nexus.api import commit_handler, commit_handler_sync, db_pool
+from nexus.api import commit_handler, commit_handler_sync
 from nexus.memory.manager import empty_pass2_baseline
-from scripts import new_story_setup
+from tests.pg_fixtures import disposable_slot_database, seed_protagonist
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -34,68 +32,17 @@ def _connect(dbname: str) -> Any:
     )
 
 
-def _seed_protagonist(dbname: str) -> None:
-    """Bind the disposable save to a canonical player character."""
-
-    with _connect(dbname) as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "UPDATE global_variables SET base_timestamp = %s WHERE id = true",
-                ("2100-01-01T00:00:00+00:00",),
-            )
-            assert cur.rowcount == 1
-            cur.execute(
-                "INSERT INTO entities (kind, is_active) "
-                "VALUES ('character', true) RETURNING id"
-            )
-            entity_id = int(cur.fetchone()[0])
-            cur.execute(
-                """
-                INSERT INTO characters (name, summary, entity_id)
-                VALUES ('Orrery Config Fixture Player', %s, %s)
-                RETURNING id
-                """,
-                ("Canonical player for accepted-chunk coverage.", entity_id),
-            )
-            character_id = int(cur.fetchone()[0])
-            cur.execute(
-                "UPDATE global_variables SET user_character = %s WHERE id = true",
-                (character_id,),
-            )
-            assert cur.rowcount == 1
-
-
 @pytest.fixture()
 def qa654_db() -> Iterator[str]:
     """Initialize a complete qa654 database and drop it after the test."""
 
-    dbname = f"qa654_{uuid.uuid4().hex[:12]}"
-    admin = _connect("postgres")
-    admin.autocommit = True
-    original_use_pool = new_story_setup.USE_POOL
-    try:
-        new_story_setup.USE_POOL = False
-        new_story_setup.initialize_slot_database(
+    with disposable_slot_database("qa654") as dbname:
+        seed_protagonist(
             dbname,
-            source_db="NEXUS_template",
+            name="Orrery Config Fixture Player",
+            summary="Canonical player for accepted-chunk coverage.",
         )
-        _seed_protagonist(dbname)
         yield dbname
-    finally:
-        new_story_setup.USE_POOL = original_use_pool
-        pool = db_pool._pools.pop(dbname, None)
-        if pool is not None:
-            pool.closeall()
-        with admin.cursor() as cur:
-            cur.execute(
-                "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
-                "WHERE datname = %s AND pid <> pg_backend_pid()",
-                (dbname,),
-            )
-            cur.execute(
-                sql.SQL("DROP DATABASE IF EXISTS {}").format(sql.Identifier(dbname))
-            )
-        admin.close()
 
 
 def _seed_commit(dbname: str, session_id: str) -> int:

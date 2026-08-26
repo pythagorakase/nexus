@@ -20,7 +20,7 @@ import time
 from pathlib import Path
 
 import pytest
-import requests
+import requests  # type: ignore[import-untyped]
 import tomlkit
 
 from nexus.config import load_settings
@@ -77,6 +77,13 @@ def _cli(
     env_extra: dict | None = None,
 ) -> dict:
     env = dict(os.environ)
+    for name in (
+        "NEXUS_API_URL",
+        "NEXUS_GATEWAY_PORT",
+        "NEXUS_SLOT",
+        RUNTIME_CONFIG_ENV,
+    ):
+        env.pop(name, None)
     env["PYTHONPATH"] = str(REPO_ROOT)
     if env_extra:
         env.update(env_extra)

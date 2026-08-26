@@ -2,10 +2,10 @@
 
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Iterator
 import uuid
 
-import asyncpg
-import psycopg2
+import asyncpg  # type: ignore[import-untyped]
 import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
@@ -26,11 +26,20 @@ from nexus.agents.orrery.substrate import (
 from nexus.agents.orrery.templates import STROLL
 from nexus.api.commit_handler import insert_chunk_metadata
 from nexus.api.commit_handler_sync import insert_chunk_metadata_sync
-from nexus.api.slot_utils import get_slot_db_url
 from nexus.config import load_settings_as_dict
+from tests import pg_fixtures
+from tests.pg_fixtures import disposable_slot_database
 
 
 pytestmark = pytest.mark.requires_postgres
+
+
+@pytest.fixture(scope="module")
+def weather_database() -> Iterator[str]:
+    """Yield a migrated NEXUS_template clone and always drop it afterward."""
+
+    with disposable_slot_database("qa735_weather") as dbname:
+        yield dbname
 
 
 def _migration_sql() -> str:
@@ -100,26 +109,110 @@ def test_warm_arm_fires_from_local_weather() -> None:
     assert result.branch_label == "Walk under open sky"
 
 
-def test_live_anchor_override_and_disabled_mode() -> None:
-    engine = create_engine(get_slot_db_url(slot=5), future=True)
+def test_live_anchor_override_and_disabled_mode(weather_database: str) -> None:
+    engine = create_engine(pg_fixtures.sqlalchemy_url(weather_database), future=True)
     connection = engine.connect()
     transaction = connection.begin()
     try:
-        has_column = connection.execute(
+        world_time = datetime(2088, 6, 1, 12, tzinfo=timezone.utc)
+        connection.execute(
             text(
-                """
-                SELECT EXISTS (
-                    SELECT 1
-                    FROM information_schema.columns
-                    WHERE table_schema = current_schema()
-                      AND table_name = 'chunk_metadata'
-                      AND column_name = 'scene_weather'
+                "UPDATE global_variables SET base_timestamp = :world_time "
+                "WHERE id = true"
+            ),
+            {"world_time": world_time},
+        )
+        layer_id = int(
+            connection.execute(
+                text(
+                    "INSERT INTO layers (name, type) "
+                    "VALUES ('Issue 735 Weather Layer', 'planet') RETURNING id"
                 )
-                """
+            ).scalar_one()
+        )
+        zone_id = int(
+            connection.execute(
+                text(
+                    "INSERT INTO zones (name, layer) "
+                    "VALUES ('Issue 735 Weather Zone', :layer_id) RETURNING id"
+                ),
+                {"layer_id": layer_id},
+            ).scalar_one()
+        )
+        entity_ids = [
+            int(row[0])
+            for row in connection.execute(
+                text(
+                    "INSERT INTO entities (kind) VALUES "
+                    "('place'), ('place'), ('character'), ('character') "
+                    "RETURNING id"
+                )
             )
-        ).scalar_one()
-        if not has_column:
-            connection.exec_driver_sql(_migration_sql())
+        ]
+        anchor_place_id = int(
+            connection.execute(
+                text(
+                    "INSERT INTO places (name, type, zone, entity_id) "
+                    "VALUES ('Issue 735 Anchor', 'fixed_location', :zone_id, "
+                    ":entity_id) RETURNING id"
+                ),
+                {"zone_id": zone_id, "entity_id": entity_ids[0]},
+            ).scalar_one()
+        )
+        remote_place_id = int(
+            connection.execute(
+                text(
+                    "INSERT INTO places (name, type, zone, entity_id) "
+                    "VALUES ('Issue 735 Remote', 'fixed_location', :zone_id, "
+                    ":entity_id) RETURNING id"
+                ),
+                {"zone_id": zone_id, "entity_id": entity_ids[1]},
+            ).scalar_one()
+        )
+        protagonist_id = int(
+            connection.execute(
+                text(
+                    "INSERT INTO characters (name, current_location, entity_id) "
+                    "VALUES ('Issue 735 Protagonist', :place_id, :entity_id) "
+                    "RETURNING id"
+                ),
+                {"place_id": anchor_place_id, "entity_id": entity_ids[2]},
+            ).scalar_one()
+        )
+        connection.execute(
+            text(
+                "INSERT INTO characters (name, current_location, entity_id) "
+                "VALUES ('Issue 735 Remote Actor', :place_id, :entity_id)"
+            ),
+            {"place_id": remote_place_id, "entity_id": entity_ids[3]},
+        )
+        chunk_id = int(
+            connection.execute(
+                text(
+                    "INSERT INTO narrative_chunks (raw_text) "
+                    "VALUES ('Issue 735 weather anchor.') RETURNING id"
+                )
+            ).scalar_one()
+        )
+        connection.execute(
+            text(
+                "INSERT INTO chunk_metadata (chunk_id, world_time) "
+                "VALUES (:chunk_id, :world_time)"
+            ),
+            {
+                "chunk_id": chunk_id,
+                "world_time": world_time,
+            },
+        )
+        connection.execute(
+            text(
+                "UPDATE global_variables "
+                "SET user_character = :protagonist_id, "
+                'setting = \'{"story_seed": {"weather": "rain"}}\'::jsonb '
+                "WHERE id = true"
+            ),
+            {"protagonist_id": protagonist_id},
+        )
         anchor = (
             connection.execute(
                 text(
@@ -141,8 +234,7 @@ def test_live_anchor_override_and_disabled_mode() -> None:
             .mappings()
             .first()
         )
-        if anchor is None:
-            pytest.skip("save_05 needs a timed anchor with a zoned setting place")
+        assert anchor is not None
         connection.execute(
             text(
                 "UPDATE chunk_metadata SET scene_weather = 'warm' "
@@ -206,8 +298,8 @@ def test_live_anchor_override_and_disabled_mode() -> None:
         engine.dispose()
 
 
-def test_sync_commit_stack_persists_scene_weather() -> None:
-    conn = psycopg2.connect(get_slot_db_url(slot=5))
+def test_sync_commit_stack_persists_scene_weather(weather_database: str) -> None:
+    conn = pg_fixtures.connect(weather_database)
     schema = f"weather_sync_{uuid.uuid4().hex}"
     try:
         with conn.cursor() as cur:
@@ -229,15 +321,19 @@ def test_sync_commit_stack_persists_scene_weather() -> None:
                 scene_weather="fog",
             )
             cur.execute("SELECT scene_weather FROM chunk_metadata WHERE chunk_id = 1")
-            assert cur.fetchone()[0] == "fog"
+            weather_row = cur.fetchone()
+            assert weather_row is not None
+            assert weather_row[0] == "fog"
     finally:
         conn.rollback()
         conn.close()
 
 
 @pytest.mark.asyncio
-async def test_async_commit_stack_persists_scene_weather() -> None:
-    conn = await asyncpg.connect(get_slot_db_url(slot=5))
+async def test_async_commit_stack_persists_scene_weather(
+    weather_database: str,
+) -> None:
+    conn = await asyncpg.connect(**pg_fixtures.asyncpg_kwargs(weather_database))
     transaction = conn.transaction()
     await transaction.start()
     schema = f"weather_async_{uuid.uuid4().hex}"

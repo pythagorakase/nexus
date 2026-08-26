@@ -104,6 +104,8 @@ def test_skald_state_updates_are_ledgered() -> None:
         with conn.cursor() as cur:
             cur.execute("SELECT max(id) FROM narrative_chunks")
             chunk_id = cur.fetchone()[0]
+            cur.execute("SELECT COALESCE(max(id), 0) FROM state_delta_log")
+            state_delta_baseline = cur.fetchone()[0]
             cur.execute(
                 """
                 SELECT c.id, c.entity_id FROM characters c
@@ -142,9 +144,10 @@ def test_skald_state_updates_are_ledgered() -> None:
                 SELECT field, entity_id, new_value
                 FROM state_delta_log
                 WHERE source_chunk_id = %s AND writer = 'skald_state_update'
+                  AND id > %s
                 ORDER BY id
                 """,
-                (chunk_id,),
+                (chunk_id, state_delta_baseline),
             )
             rows = cur.fetchall()
         by_field = {row[0]: row for row in rows}

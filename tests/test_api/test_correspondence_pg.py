@@ -7,17 +7,15 @@ import json
 import os
 import threading
 import time
-import uuid
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Iterator
 
 import psycopg2
 import pytest
-from psycopg2 import sql
 from psycopg2.extras import RealDictCursor
 
 from nexus.agents.orrery.events import CommitOrreryTickResult
-from nexus.api import commit_handler_sync, db_pool, narrative
+from nexus.api import commit_handler_sync, narrative
 from nexus.api.narrative_generation import write_to_incubator
 from nexus.memory.correspondence import (
     persist_staged_correspondence,
@@ -25,8 +23,8 @@ from nexus.memory.correspondence import (
     read_accepted_correspondence,
 )
 from nexus.memory.manager import empty_pass2_baseline
-from scripts import new_story_setup
 from scripts.replay_state import _verify_correspondence_provenance
+from tests.pg_fixtures import disposable_slot_database, seed_protagonist
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -44,68 +42,17 @@ def _connect(dbname: str, *, dict_cursor: bool = False) -> Any:
     )
 
 
-def _seed_protagonist(dbname: str) -> None:
-    """Bind the disposable save to a canonical player character."""
-
-    with _connect(dbname) as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "UPDATE global_variables SET base_timestamp = %s WHERE id = true",
-                ("2100-01-01T00:00:00+00:00",),
-            )
-            assert cur.rowcount == 1
-            cur.execute(
-                "INSERT INTO entities (kind, is_active) "
-                "VALUES ('character', true) RETURNING id"
-            )
-            entity_id = int(cur.fetchone()[0])
-            cur.execute(
-                """
-                INSERT INTO characters (name, summary, entity_id)
-                VALUES ('Correspondence Fixture Player', %s, %s)
-                RETURNING id
-                """,
-                ("Canonical player for correspondence commit coverage.", entity_id),
-            )
-            character_id = int(cur.fetchone()[0])
-            cur.execute(
-                "UPDATE global_variables SET user_character = %s WHERE id = true",
-                (character_id,),
-            )
-            assert cur.rowcount == 1
-
-
 @pytest.fixture()
 def disposable_correspondence_db() -> Iterator[str]:
     """Initialize a complete disposable save and drop it after the test."""
 
-    dbname = f"nexus_test_correspondence_{uuid.uuid4().hex[:12]}"
-    admin = _connect("postgres")
-    admin.autocommit = True
-    original_use_pool = new_story_setup.USE_POOL
-    try:
-        new_story_setup.USE_POOL = False
-        new_story_setup.initialize_slot_database(
+    with disposable_slot_database("nexus_test_correspondence") as dbname:
+        seed_protagonist(
             dbname,
-            source_db="NEXUS_template",
+            name="Correspondence Fixture Player",
+            summary="Canonical player for correspondence commit coverage.",
         )
-        _seed_protagonist(dbname)
         yield dbname
-    finally:
-        new_story_setup.USE_POOL = original_use_pool
-        pool = db_pool._pools.pop(dbname, None)
-        if pool is not None:
-            pool.closeall()
-        with admin.cursor() as cur:
-            cur.execute(
-                "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
-                "WHERE datname = %s AND pid <> pg_backend_pid()",
-                (dbname,),
-            )
-            cur.execute(
-                sql.SQL("DROP DATABASE IF EXISTS {}").format(sql.Identifier(dbname))
-            )
-        admin.close()
 
 
 def _seed_chunks(cur: Any, count: int) -> list[int]:
