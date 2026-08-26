@@ -157,8 +157,9 @@ causal command's delta. Stop and report jobs that do not change for twenty
 minutes.
 
 `maturation_job_failed` and `experience_job_failed` mean a queue's failed
-count grew during the shift. `job_requeued:<queue>:<id>` means a non-terminal
-job exceeded the configured normal lease count. Stop and report its
+count grew during the shift. `job_requeued:<queue>:<id>` means a re-queued job
+(back in `queued`) exceeded the configured normal lease count; a leased retry
+stays pending until its call settles. Stop and report its
 `last_error`.
 
 Never detach a request or restart/kill the gateway while a provider response is

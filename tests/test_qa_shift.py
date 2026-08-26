@@ -1066,6 +1066,30 @@ def test_requeued_experience_job_stops_with_last_error() -> None:
     assert result["non_terminal_jobs"][0]["last_error"] == ("invented entity: Sitting")
 
 
+def test_leased_retry_stays_pending_until_its_call_settles() -> None:
+    """A leased retry may be inside its provider call; it must hold pending."""
+    state = _state(qa_shift.load_shift_config())
+    state["max_command_delta"] = 77
+    result, updated = qa_shift.evaluate_check(
+        state=state,
+        usage_payload=_usage(total=100),
+        jobs_payload=_jobs(
+            state="leased",
+            attempts=2,
+            queue="experience_render",
+            last_error="invented entity: Sitting",
+        ),
+        mode=qa_shift.CheckMode.PRE_CALL,
+        now=NOW + timedelta(minutes=1),
+    )
+
+    assert result["status"] == "pending"
+    assert result["reasons"] == []
+    assert result["requeued_jobs"] == []
+    assert result["max_command_delta"] == 77
+    assert updated == state
+
+
 def test_unknown_queue_kind_fails_closed() -> None:
     payload = json.loads(json.dumps(_jobs()))
     payload["queues"]["unknown_provider_queue"] = {

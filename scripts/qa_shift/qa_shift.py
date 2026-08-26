@@ -1022,10 +1022,14 @@ def evaluate_check(
         for queue_kind in QUEUE_STATES
     }
     max_non_terminal_attempts = int(config["max_non_terminal_attempts"])
+    leased_jobs = [job for job in jobs["non_terminal_jobs"] if job["state"] == "leased"]
+    # A re-queued retry is diagnosable only once it is back in `queued`. While
+    # a job is `leased` its provider call may be in flight, so the check holds
+    # `pending` regardless of attempts (Codex review on PR #738).
     requeued_jobs = [
         job
         for job in jobs["non_terminal_jobs"]
-        if int(job["attempts"]) > max_non_terminal_attempts
+        if job["state"] == "queued" and int(job["attempts"]) > max_non_terminal_attempts
     ]
     expect_call = mode is CheckMode.POST_CALL
     validation_fields: dict[str, Any] = {}
@@ -1036,7 +1040,7 @@ def evaluate_check(
             "observed_new_usage_events": len(new_events),
             "observed_qa_usage_events": len(qa_events),
         }
-    if jobs["non_terminal_jobs"] and not requeued_jobs:
+    if jobs["non_terminal_jobs"] and (leased_jobs or not requeued_jobs):
         return (
             {
                 "status": "pending",
@@ -1071,6 +1075,7 @@ def evaluate_check(
                 "expect_call": expect_call,
                 "jobs": jobs,
                 "non_terminal_jobs": jobs["non_terminal_jobs"],
+                "requeued_jobs": requeued_jobs,
                 "baseline_failed_jobs": baseline_failed_jobs,
                 "current_failed_jobs": current_failed_jobs,
                 **validation_fields,

@@ -118,7 +118,8 @@ the new day’s cumulative total with the old baseline.
 The guard covers both provider-capable durable queues: Retrograde maturation
 and experience rendering. Queued or leased work returns `pending` without
 moving the usage watermark. `job_requeued:<queue>:<id>` stops the shift when a
-non-terminal job exceeds the configured normal lease count; inspect its
+re-queued job exceeds the configured normal lease count (a leased retry stays
+pending until its call settles); inspect its
 reported `last_error` before continuing.
 
 Normal model-generating probes run one public command between checks. A bounded
