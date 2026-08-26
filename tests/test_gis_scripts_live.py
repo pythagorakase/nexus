@@ -2,16 +2,12 @@
 
 from __future__ import annotations
 
-import uuid
 from typing import Any, Iterator
 
 import psycopg2
 import pytest
-from psycopg2 import sql
 from psycopg2.extras import RealDictCursor
 
-from nexus.api import db_pool
-from scripts import new_story_setup
 from scripts.gis_backfill import (
     apply_backfill,
     format_dry_run,
@@ -20,6 +16,7 @@ from scripts.gis_backfill import (
     main as backfill_main,
 )
 from scripts.gis_hygiene import audit_slot, format_slot_report
+from tests.pg_fixtures import disposable_slot_database
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -29,156 +26,134 @@ pytestmark = pytest.mark.requires_postgres
 def script_conn() -> Iterator[Any]:
     """Yield a canonical disposable slot seeded for GIS script coverage."""
 
-    dbname = f"qa735_gis_scripts_{uuid.uuid4().hex[:12]}"
-    admin: Any = None
-    conn: Any = None
-    original_use_pool = new_story_setup.USE_POOL
-    try:
-        admin = psycopg2.connect(dbname="postgres", user="pythagor")
-        admin.autocommit = True
-        new_story_setup.USE_POOL = False
-        new_story_setup.initialize_slot_database(
-            dbname,
-            source_db="NEXUS_template",
-        )
-        conn = psycopg2.connect(
+    with disposable_slot_database("qa735_gis_scripts") as dbname:
+        conn: Any = psycopg2.connect(
             dbname=dbname,
             user="pythagor",
             cursor_factory=RealDictCursor,
         )
-        with conn.cursor() as cur:
-            cur.execute(
-                "UPDATE global_variables SET base_timestamp = %s WHERE id = true",
-                ("2100-01-01T00:00:00+00:00",),
-            )
-            assert cur.rowcount == 1
-            cur.execute(
-                """
-                INSERT INTO layers (name) VALUES ('GIS Script Layer') RETURNING id
-                """
-            )
-            layer_id = int(cur.fetchone()["id"])
-            cur.execute(
-                """
-                INSERT INTO zones (id, name, summary, boundary, layer)
-                VALUES (
-                    10,
-                    'Story Zone',
-                    'The active story region.',
-                    ST_Multi(ST_MakeEnvelope(-2, -2, 2, 2, 4326)),
-                    %s
-                ), (
-                    20,
-                    'Boundary Gap',
-                    'A deliberately boundary-less audit row.',
-                    NULL,
-                    %s
-                ), (
-                    30,
-                    'Far Zone',
-                    'A remote region far from the protagonist.',
-                    ST_Multi(ST_MakeEnvelope(48, 48, 52, 52, 4326)),
-                    %s
-                )
-                """,
-                (layer_id, layer_id, layer_id),
-            )
-            place_entity_ids: list[int] = []
-            for _index in range(4):
-                cur.execute("INSERT INTO entities (kind) VALUES ('place') RETURNING id")
-                place_entity_ids.append(int(cur.fetchone()["id"]))
-            cur.execute(
-                """
-                INSERT INTO places (
-                    id, entity_id, name, summary, type, zone, coordinates
-                ) VALUES (
-                    100,
-                    %s,
-                    'Story Place',
-                    'The protagonist location.',
-                    'fixed_location',
-                    10,
-                    ST_SetSRID(ST_MakePoint(0, 0, 0, 0), 4326)::geography
-                ), (
-                    101,
-                    %s,
-                    'Missing Point',
-                    'A physical place awaiting coordinates.',
-                    'fixed_location',
-                    NULL,
-                    NULL
-                ), (
-                    102,
-                    %s,
-                    'Virtual Forum',
-                    'A virtual place exempt from coordinates.',
-                    'virtual',
-                    NULL,
-                    NULL
-                ), (
-                    103,
-                    %s,
-                    'Far Coordinated Place',
-                    'A mapped physical place whose zone was lost.',
-                    'fixed_location',
-                    NULL,
-                    ST_SetSRID(
-                        ST_MakePoint(50, 50, 0, 0), 4326
-                    )::geography
-                )
-                """,
-                tuple(place_entity_ids),
-            )
-            character_entity_ids: list[int] = []
-            for _index in range(2):
+        try:
+            with conn.cursor() as cur:
                 cur.execute(
-                    "INSERT INTO entities (kind) VALUES ('character') RETURNING id"
+                    "UPDATE global_variables SET base_timestamp = %s WHERE id = true",
+                    ("2100-01-01T00:00:00+00:00",),
                 )
-                character_entity_ids.append(int(cur.fetchone()["id"]))
-            cur.execute(
-                """
-                INSERT INTO characters (
-                    id, name, current_location, extra_data, entity_id
-                ) VALUES (
-                    1,
-                    'Protagonist',
-                    100,
-                    '{"source": "wizard"}'::jsonb,
-                    %s
-                ), (
-                    2,
-                    'Placeless Witness',
-                    NULL,
-                    '{"source": "retrograde"}'::jsonb,
-                    %s
+                assert cur.rowcount == 1
+                cur.execute(
+                    """
+                    INSERT INTO layers (name)
+                    VALUES ('GIS Script Layer') RETURNING id
+                    """
                 )
-                """,
-                tuple(character_entity_ids),
-            )
-            cur.execute(
-                "UPDATE global_variables SET user_character = 1 WHERE id = true"
-            )
-            assert cur.rowcount == 1
-        yield conn
-    finally:
-        new_story_setup.USE_POOL = original_use_pool
-        if conn is not None:
+                layer_id = int(cur.fetchone()["id"])
+                cur.execute(
+                    """
+                    INSERT INTO zones (id, name, summary, boundary, layer)
+                    VALUES (
+                        10,
+                        'Story Zone',
+                        'The active story region.',
+                        ST_Multi(ST_MakeEnvelope(-2, -2, 2, 2, 4326)),
+                        %s
+                    ), (
+                        20,
+                        'Boundary Gap',
+                        'A deliberately boundary-less audit row.',
+                        NULL,
+                        %s
+                    ), (
+                        30,
+                        'Far Zone',
+                        'A remote region far from the protagonist.',
+                        ST_Multi(ST_MakeEnvelope(48, 48, 52, 52, 4326)),
+                        %s
+                    )
+                    """,
+                    (layer_id, layer_id, layer_id),
+                )
+                place_entity_ids: list[int] = []
+                for _index in range(4):
+                    cur.execute(
+                        "INSERT INTO entities (kind) VALUES ('place') RETURNING id"
+                    )
+                    place_entity_ids.append(int(cur.fetchone()["id"]))
+                cur.execute(
+                    """
+                    INSERT INTO places (
+                        id, entity_id, name, summary, type, zone, coordinates
+                    ) VALUES (
+                        100,
+                        %s,
+                        'Story Place',
+                        'The protagonist location.',
+                        'fixed_location',
+                        10,
+                        ST_SetSRID(ST_MakePoint(0, 0, 0, 0), 4326)::geography
+                    ), (
+                        101,
+                        %s,
+                        'Missing Point',
+                        'A physical place awaiting coordinates.',
+                        'fixed_location',
+                        NULL,
+                        NULL
+                    ), (
+                        102,
+                        %s,
+                        'Virtual Forum',
+                        'A virtual place exempt from coordinates.',
+                        'virtual',
+                        NULL,
+                        NULL
+                    ), (
+                        103,
+                        %s,
+                        'Far Coordinated Place',
+                        'A mapped physical place whose zone was lost.',
+                        'fixed_location',
+                        NULL,
+                        ST_SetSRID(
+                            ST_MakePoint(50, 50, 0, 0), 4326
+                        )::geography
+                    )
+                    """,
+                    tuple(place_entity_ids),
+                )
+                character_entity_ids: list[int] = []
+                for _index in range(2):
+                    cur.execute(
+                        "INSERT INTO entities (kind) "
+                        "VALUES ('character') RETURNING id"
+                    )
+                    character_entity_ids.append(int(cur.fetchone()["id"]))
+                cur.execute(
+                    """
+                    INSERT INTO characters (
+                        id, name, current_location, extra_data, entity_id
+                    ) VALUES (
+                        1,
+                        'Protagonist',
+                        100,
+                        '{"source": "wizard"}'::jsonb,
+                        %s
+                    ), (
+                        2,
+                        'Placeless Witness',
+                        NULL,
+                        '{"source": "retrograde"}'::jsonb,
+                        %s
+                    )
+                    """,
+                    tuple(character_entity_ids),
+                )
+                cur.execute(
+                    "UPDATE global_variables SET user_character = 1 WHERE id = true"
+                )
+                assert cur.rowcount == 1
+            yield conn
+        finally:
             conn.rollback()
             conn.close()
-        pool = db_pool._pools.pop(dbname, None)
-        if pool is not None:
-            pool.closeall()
-        if admin is not None:
-            with admin.cursor() as cur:
-                cur.execute(
-                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
-                    "WHERE datname = %s AND pid <> pg_backend_pid()",
-                    (dbname,),
-                )
-                cur.execute(
-                    sql.SQL("DROP DATABASE IF EXISTS {}").format(sql.Identifier(dbname))
-                )
-            admin.close()
 
 
 def test_gis_hygiene_plain_table_output_contract(script_conn: Any) -> None:

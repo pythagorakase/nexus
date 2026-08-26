@@ -14,14 +14,13 @@ from uuid import uuid4
 import asyncpg  # type: ignore[import-untyped]
 import psycopg2
 import pytest
-from psycopg2 import sql
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 from nexus.agents.lore.logon_utility import LogonUtility
 from nexus.agents.lore.lore import LORE
 from nexus.agents.logon.apex_schema import StorytellerResponseStandard
-from nexus.api import commit_handler, commit_handler_sync, db_pool
+from nexus.api import commit_handler, commit_handler_sync
 from nexus.api.commit_handler_sync import commit_incubator_to_database_sync
 from nexus.api.lore_adapter import response_to_incubator
 from nexus.api.narrative_generation import generate_narrative_async, write_to_incubator
@@ -32,7 +31,8 @@ from nexus.memory.manager import (
     MissingPass2BaselineError,
     empty_pass2_baseline,
 )
-from scripts import new_story_setup, stamp_lore_pass_baseline
+from scripts import stamp_lore_pass_baseline
+from tests.pg_fixtures import disposable_slot_database, seed_protagonist
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -49,49 +49,12 @@ def _connect(dbname: str) -> Any:
     )
 
 
-def _seed_protagonist(dbname: str) -> None:
-    """Bind the disposable save to a canonical player character."""
-
-    with _connect(dbname) as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "UPDATE global_variables SET base_timestamp = %s WHERE id = true",
-                ("2100-01-01T00:00:00+00:00",),
-            )
-            assert cur.rowcount == 1
-            cur.execute(
-                "INSERT INTO entities (kind, is_active) "
-                "VALUES ('character', true) RETURNING id"
-            )
-            entity_id = int(cur.fetchone()[0])
-            cur.execute(
-                """
-                INSERT INTO characters (name, summary, entity_id)
-                VALUES ('Pass Two Fixture Player', %s, %s)
-                RETURNING id
-                """,
-                ("Canonical player for Pass-2 lifecycle coverage.", entity_id),
-            )
-            character_id = int(cur.fetchone()[0])
-            cur.execute(
-                "UPDATE global_variables SET user_character = %s WHERE id = true",
-                (character_id,),
-            )
-            assert cur.rowcount == 1
-
-
 @pytest.fixture()
 def pass2_database() -> Iterator[str]:
     """Initialize the template, reapply migration 107, and drop the clone."""
 
-    dbname = f"nexus_test_pass2_{uuid4().hex[:12]}"
     source_db = os.environ.get("NEXUS_TEST_TEMPLATE_DB", "NEXUS_template")
-    admin = _connect("postgres")
-    admin.autocommit = True
-    original_use_pool = new_story_setup.USE_POOL
-    try:
-        new_story_setup.USE_POOL = False
-        new_story_setup.initialize_slot_database(dbname, source_db=source_db)
+    with disposable_slot_database("nexus_test_pass2", source_db=source_db) as dbname:
         migration = MIGRATION.read_text()
         with _connect(dbname) as conn:
             with conn.cursor() as cur:
@@ -102,23 +65,12 @@ def pass2_database() -> Iterator[str]:
                 cur.execute("DELETE FROM incubator")
                 cur.execute("DELETE FROM narrative_generation_lease")
                 cur.execute("DELETE FROM narrative_generation_sessions")
-        _seed_protagonist(dbname)
+        seed_protagonist(
+            dbname,
+            name="Pass Two Fixture Player",
+            summary="Canonical player for Pass-2 lifecycle coverage.",
+        )
         yield dbname
-    finally:
-        new_story_setup.USE_POOL = original_use_pool
-        pool = db_pool._pools.pop(dbname, None)
-        if pool is not None:
-            pool.closeall()
-        with admin.cursor() as cur:
-            cur.execute(
-                "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
-                "WHERE datname = %s AND pid <> pg_backend_pid()",
-                (dbname,),
-            )
-            cur.execute(
-                sql.SQL("DROP DATABASE IF EXISTS {}").format(sql.Identifier(dbname))
-            )
-        admin.close()
 
 
 def _settings() -> dict[str, Any]:

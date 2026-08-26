@@ -3,12 +3,11 @@
 from datetime import datetime, timezone
 import os
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Iterator
 import uuid
 
-import asyncpg
+import asyncpg  # type: ignore[import-untyped]
 import psycopg2
-from psycopg2 import sql
 import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
@@ -29,9 +28,8 @@ from nexus.agents.orrery.substrate import (
 from nexus.agents.orrery.templates import STROLL
 from nexus.api.commit_handler import insert_chunk_metadata
 from nexus.api.commit_handler_sync import insert_chunk_metadata_sync
-from nexus.api import db_pool
 from nexus.config import load_settings_as_dict
-from scripts import new_story_setup
+from tests.pg_fixtures import disposable_slot_database
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -49,42 +47,8 @@ def _database_url(dbname: str) -> str:
 def weather_database() -> Iterator[str]:
     """Yield a migrated NEXUS_template clone and always drop it afterward."""
 
-    dbname = f"qa735_weather_{uuid.uuid4().hex[:12]}"
-    admin: Any = None
-    original_use_pool = new_story_setup.USE_POOL
-    try:
-        try:
-            admin = psycopg2.connect(
-                dbname="postgres",
-                user=os.environ.get("PGUSER", "pythagor"),
-                host=os.environ.get("PGHOST", "localhost"),
-                port=os.environ.get("PGPORT", "5432"),
-            )
-        except psycopg2.Error as exc:
-            pytest.skip(f"PostgreSQL admin connection unavailable: {exc}")
-        admin.autocommit = True
-        new_story_setup.USE_POOL = False
-        new_story_setup.initialize_slot_database(
-            dbname,
-            source_db="NEXUS_template",
-        )
+    with disposable_slot_database("qa735_weather") as dbname:
         yield dbname
-    finally:
-        new_story_setup.USE_POOL = original_use_pool
-        pool = db_pool._pools.pop(dbname, None)
-        if pool is not None:
-            pool.closeall()
-        if admin is not None:
-            with admin.cursor() as cur:
-                cur.execute(
-                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
-                    "WHERE datname = %s AND pid <> pg_backend_pid()",
-                    (dbname,),
-                )
-                cur.execute(
-                    sql.SQL("DROP DATABASE IF EXISTS {}").format(sql.Identifier(dbname))
-                )
-            admin.close()
 
 
 def _migration_sql() -> str:

@@ -16,18 +16,15 @@ from __future__ import annotations
 
 import os
 from typing import Any, Generator, Optional
-import uuid
 
 import psycopg2
 import pytest
-from psycopg2 import sql
 
 from nexus.agents.orrery.tag_writer import (
     apply_pair_tag_bestowal,
     clear_pair_tag,
 )
-from nexus.api import db_pool
-from scripts import new_story_setup
+from tests.pg_fixtures import disposable_slot_database
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -63,38 +60,12 @@ def _connect(dbname: str) -> Any:
 def slot_connection() -> Generator[psycopg2.extensions.connection, None, None]:
     """Yield a fresh canonical database and always drop it afterward."""
 
-    dbname = f"qa735_pair_tags_{uuid.uuid4().hex[:12]}"
-    admin: Any = None
-    conn: Any = None
-    original_use_pool = new_story_setup.USE_POOL
-    try:
-        admin = _connect("postgres")
-        admin.autocommit = True
-        new_story_setup.USE_POOL = False
-        new_story_setup.initialize_slot_database(
-            dbname,
-            source_db="NEXUS_template",
-        )
+    with disposable_slot_database("qa735_pair_tags") as dbname:
         conn = _connect(dbname)
-        yield conn
-    finally:
-        new_story_setup.USE_POOL = original_use_pool
-        if conn is not None:
+        try:
+            yield conn
+        finally:
             conn.close()
-        pool = db_pool._pools.pop(dbname, None)
-        if pool is not None:
-            pool.closeall()
-        if admin is not None:
-            with admin.cursor() as cur:
-                cur.execute(
-                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
-                    "WHERE datname = %s AND pid <> pg_backend_pid()",
-                    (dbname,),
-                )
-                cur.execute(
-                    sql.SQL("DROP DATABASE IF EXISTS {}").format(sql.Identifier(dbname))
-                )
-            admin.close()
 
 
 @pytest.fixture

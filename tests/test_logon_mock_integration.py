@@ -8,19 +8,16 @@ import sys
 import time
 from types import SimpleNamespace
 from typing import Any, Iterator
-import uuid
 
 import psycopg2
-from psycopg2 import sql
 import pytest
 import requests  # type: ignore[import-untyped]
 
 from nexus.agents.logon.skald_wire import SkaldTurnWire
 from nexus.agents.lore.logon_utility import LogonUtility
-from nexus.api import db_pool
 from nexus.telemetry.usage import summarize_usage
 from scripts.api_openai import OpenAIProvider
-from scripts import new_story_setup
+from tests.pg_fixtures import disposable_slot_database
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -52,39 +49,10 @@ def get_slot_model(dbname: str) -> str | None:
 def slot_model_database() -> Iterator[str]:
     """Yield a TEST-configured NEXUS_template clone without mutating a save."""
 
-    dbname = f"qa735_slot_model_{uuid.uuid4().hex[:12]}"
-    admin: Any = None
-    original_use_pool = new_story_setup.USE_POOL
-    try:
-        try:
-            admin = _connect("postgres")
-        except psycopg2.Error as exc:
-            pytest.skip(f"PostgreSQL admin connection unavailable: {exc}")
-        admin.autocommit = True
-        new_story_setup.USE_POOL = False
-        new_story_setup.initialize_slot_database(
-            dbname,
-            source_db="NEXUS_template",
-        )
+    with disposable_slot_database("qa735_slot_model") as dbname:
         with _connect(dbname) as conn, conn.cursor() as cur:
             cur.execute("UPDATE global_variables SET model = 'TEST' WHERE id = TRUE")
         yield dbname
-    finally:
-        new_story_setup.USE_POOL = original_use_pool
-        pool = db_pool._pools.pop(dbname, None)
-        if pool is not None:
-            pool.closeall()
-        if admin is not None:
-            with admin.cursor() as cur:
-                cur.execute(
-                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
-                    "WHERE datname = %s AND pid <> pg_backend_pid()",
-                    (dbname,),
-                )
-                cur.execute(
-                    sql.SQL("DROP DATABASE IF EXISTS {}").format(sql.Identifier(dbname))
-                )
-            admin.close()
 
 
 def _free_port() -> int:
