@@ -55,17 +55,38 @@ def slot_model_database() -> Iterator[str]:
         yield dbname
 
 
-def _free_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+# Ports the application and the agent test lane own; a kernel-assigned
+# ephemeral port never lands on a live listener, but a free one of these must
+# not be occupied by the mock either (Sol review on PR #741).
+_PROTECTED_PORTS = frozenset({5102, 5133, 8002, 8012, 8032, 8034, 8036})
+
+
+def _bound_listener() -> socket.socket:
+    """Bind and listen on a kernel-assigned loopback port, keeping it bound.
+
+    The socket itself is handed to Uvicorn through ``--fd``, so there is no
+    release-then-rebind window for another process to claim the port.
+    """
+
+    for _ in range(16):
+        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         listener.bind(("127.0.0.1", 0))
-        return int(listener.getsockname()[1])
+        if int(listener.getsockname()[1]) in _PROTECTED_PORTS:
+            listener.close()
+            continue
+        listener.listen(128)
+        listener.set_inheritable(True)
+        return listener
+    raise RuntimeError("could not obtain an unprotected loopback port for the mock")
 
 
 @pytest.fixture
 def mock_openai_server(tmp_path: Path) -> Iterator[str]:
     """Spawn the repository mock on a free port and tear it down reliably."""
 
-    port = _free_port()
+    listener = _bound_listener()
+    port = int(listener.getsockname()[1])
     base_url = f"http://127.0.0.1:{port}"
     log_path = tmp_path / "mock_openai.log"
     env = dict(os.environ)
@@ -79,15 +100,14 @@ def mock_openai_server(tmp_path: Path) -> Iterator[str]:
                 "-m",
                 "uvicorn",
                 "nexus.api.mock_openai:app",
-                "--host",
-                "127.0.0.1",
-                "--port",
-                str(port),
+                "--fd",
+                str(listener.fileno()),
             ],
             cwd=REPO_ROOT,
             env=env,
             stdout=log,
             stderr=subprocess.STDOUT,
+            pass_fds=(listener.fileno(),),
         )
         try:
             deadline = time.monotonic() + 20
@@ -119,6 +139,7 @@ def mock_openai_server(tmp_path: Path) -> Iterator[str]:
             except subprocess.TimeoutExpired:
                 process.kill()
                 process.wait(timeout=10)
+            listener.close()
 
 
 @pytest.mark.requires_postgres
