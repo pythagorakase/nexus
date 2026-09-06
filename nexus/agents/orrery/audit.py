@@ -1120,7 +1120,7 @@ def build_catalog(
                 set(entry["consumed_by_gate"] + entry["consumed_by_branch"])
             )
             raise ValueError(
-                f"Event gate {event_type!r} has no template emitter or registered "
+                f"Event {event_type!r} has no template emitter or registered "
                 f"exogenous producer (consumers: {', '.join(consumers)})"
             )
         entry["exogenous_only"] = consumed and not entry["emitted_by"]

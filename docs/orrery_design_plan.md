@@ -29,7 +29,7 @@ This is the shape: the world ticks for everyone, the dramatic salience filter is
 ## Terminology
 
 - **LORE Phase N**: a phase of `LORE.process_turn()` (`turn_context.py:12-21`). Phases: USER_INPUT, WARM_ANALYSIS, ENTITY_STATE, DEEP_QUERIES, ORRERY_RESOLVE (4.5), PAYLOAD_ASSEMBLY, APEX_GENERATION, INTEGRATION.
-- **Orrery Stage N**: a stage of the off-screen pipeline (Resolve / Commit / Clear / Promote / Narrate / Bleed). "Phase" is reserved for LORE; "Stage" is Orrery, avoiding the historical Phase 7 / Stage 7 ambiguity.
+- **Orrery Stage N**: a stage of the off-screen pipeline (Resolve / Commit / Clear / Promote / Record / Bleed). "Phase" is reserved for LORE; "Stage" is Orrery, avoiding the historical Phase 7 / Stage 7 ambiguity.
 
 ---
 
@@ -643,7 +643,7 @@ Verification uses live NEXUS flows where the feature touches LORE, LOGON, MEMNON
 - **Substrate tests** (`tests/test_orrery/`): template loading, gate predicates, branch evaluation, ALWAYS-fallback invariant, gate-cooldown coverage.
 - **Resolver tests**: hydration shape, binding composition (actor-only and actor-target), `evaluate_stack` semantics, dry-run against fixture `WorldState`.
 - **Integration tests**: idempotency (UNIQUE key fires on regeneration), incubator-rejection rollback (Step 8.5 writes get reverted), warm-slice contamination (none), deterministic promotion behavior, async-worker state transitions (`queued → leased → succeeded|failed`).
-- **Bleed tests**: apt-bleed (ambient peripheral surfaces in payload), null-bleed (no candidates produces empty menu and no inference call), chronology/surfacing boundary (only accepted prior narrated resolutions are eligible).
+- **Bleed tests**: apt-bleed (ambient peripheral surfaces in payload), null-bleed (no candidates produces empty menu and no inference call), chronology/surfacing boundary (only accepted prior promoted resolutions are eligible).
 - **Live dry-runs** against mature-state slots (typically slot 2) to validate package behavior against canonical narrative content; see `scripts/orrery_sample.py` for the harness. The harness supports `--world-time` and `--override-location CHARACTER=PLACE` so routine cycles can be probed without making Skald API calls or permanently moving test-slot characters.
 - **Trait compiler audits**: `poetry run nexus trait-audit --slot N` for opt-in wizard-cache inspection, plus `--fail-on-remainders` when a test loop should fail on any prose-only fallback.
 
