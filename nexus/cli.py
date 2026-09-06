@@ -1150,6 +1150,125 @@ def _generation_timeout_seconds() -> int:
     return load_settings().apex.generation_timeout_seconds
 
 
+def _wait_for_narrative_result(slot: int, session_id: str) -> Dict[str, Any]:
+    """Wait on one scheduled generation and load its matching narrative result."""
+
+    def failure(status: str, detail: str) -> Dict[str, Any]:
+        return {
+            "success": False,
+            "error": detail,
+            "session_id": session_id,
+            "generation_error": {"status": status, "detail": detail},
+            "recovery_command": f"nexus load --slot {slot}",
+        }
+
+    try:
+        deadline = time.monotonic() + _generation_timeout_seconds()
+        while (remaining := deadline - time.monotonic()) > 0:
+            response = _api_get(
+                f"{get_api_url()}/api/narrative/status/{session_id}",
+                params={"slot": slot},
+                timeout=remaining,
+            )
+            response.raise_for_status()
+            status = response.json()
+            if status.get("status") == "error":
+                return failure("error", status.get("error") or "Generation failed")
+            if _is_terminal_generation_status(status.get("status")):
+                response = _api_get(
+                    f"{get_api_url()}/api/slot/{slot}/state", timeout=30
+                )
+                response.raise_for_status()
+                state = response.json()
+                chunk_id = status.get("chunk_id")
+                message = state.get("storyteller_text")
+                if (
+                    not chunk_id
+                    or state.get("current_chunk_id") != chunk_id
+                    or state.get("is_empty")
+                    or state.get("is_wizard_mode")
+                    or (
+                        state.get("has_pending")
+                        and state.get("session_id") != session_id
+                    )
+                ):
+                    return failure(
+                        "result_unavailable",
+                        "Completed generation no longer matches the slot's narrative.",
+                    )
+                if not isinstance(message, str) or not message.strip():
+                    return failure(
+                        "result_unavailable",
+                        "Completed generation has no narrative text available.",
+                    )
+                return {
+                    "success": True,
+                    "message": message,
+                    "choices": state.get("choices", []),
+                    "chunk_id": chunk_id,
+                    "session_id": session_id,
+                }
+            time.sleep(min(1, max(0, deadline - time.monotonic())))
+        return failure("timeout", "Generation timed out")
+    except KeyboardInterrupt:
+        return failure(
+            "interrupted", "Waiting for narrative generation was interrupted"
+        )
+    except requests.exceptions.RequestException as exc:
+        return failure("http_error", f"Could not load narrative generation: {exc}")
+
+
+def _bootstrap_seed_narrative(
+    *, result: Dict[str, Any], slot: int, model: Optional[str]
+) -> Dict[str, Any]:
+    """Preserve the saved seed while scheduling and awaiting its opening turn."""
+
+    result["phase"] = None  # The successful transition has left wizard mode.
+    result["narrative_bootstrap"] = False
+    payload: Dict[str, Any] = {"slot": slot, "user_text": ""}
+    if model:
+        payload["model"] = model
+    try:
+        response = _api_post(
+            f"{get_api_url()}/api/narrative/continue", json=payload, timeout=120
+        )
+        response.raise_for_status()
+        session_id = response.json().get("session_id")
+        if not isinstance(session_id, str) or not session_id:
+            raise ValueError("Opening generation returned no session ID")
+        completion = _wait_for_narrative_result(slot, session_id)
+    except KeyboardInterrupt:
+        completion = {
+            "success": False,
+            "error": "Scheduling the opening narrative was interrupted",
+        }
+    except (requests.exceptions.RequestException, ValueError) as exc:
+        completion = {"success": False, "error": str(exc)}
+
+    if not completion["success"]:
+        result.update(completion)
+        result["bootstrap_error"] = {
+            "detail": completion["error"],
+            "session_id": completion.get("session_id"),
+        }
+        result["recovery_command"] = f"nexus load --slot {slot}"
+        result["error"] = (
+            "The seed was saved and the story initialized, but the opening "
+            f"narrative could not be loaded: {completion['error']}. "
+            f"Inspect with: {result['recovery_command']}"
+        )
+        return result
+
+    result.update(
+        narrative_bootstrap=True,
+        next_phase_intro=completion["message"],
+        choices=completion["choices"],
+        chunk_id=completion["chunk_id"],
+        session_id=completion["session_id"],
+    )
+    return result
+
+
 def _seed_transition_failure(
     *,
     result: Dict[str, Any],
@@ -1518,23 +1637,9 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                         result["retrograde"] = transition_response.json().get(
                             "retrograde"
                         )
-                        # Bootstrap narrative by calling continue endpoint
-                        continue_url = f"{get_api_url()}/api/narrative/continue"
-                        continue_payload = {"slot": args.slot, "user_text": ""}
-                        if model_to_use:
-                            continue_payload["model"] = model_to_use
-                        narrative_response = _api_post(
-                            continue_url, json=continue_payload, timeout=120
+                        return _bootstrap_seed_narrative(
+                            result=result, slot=args.slot, model=model_to_use
                         )
-                        if narrative_response.ok:
-                            narrative_data = narrative_response.json()
-                            result["narrative_bootstrap"] = True
-                            result["next_phase_intro"] = narrative_data.get(
-                                "storyteller_text"
-                            )
-                            result["choices"] = narrative_data.get("choices", [])
-                            result["chunk_id"] = narrative_data.get("chunk_id")
-                            result["phase"] = None  # Clear wizard phase
 
                 return result
 
@@ -1565,38 +1670,10 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
             # Wait for generation to complete and fetch result
             session_id = data.get("session_id")
             if session_id:
-                # Poll for completion; websocket is intentionally not used here.
-                # Bounded by elapsed wall time, not iteration count — local
-                # 70B-class turns legitimately exceed a fixed 240s.
-                poll_deadline = time.monotonic() + _generation_timeout_seconds()
-                while time.monotonic() < poll_deadline:
-                    status_url = f"{get_api_url()}/api/narrative/status/{session_id}"
-                    status_response = _api_get(
-                        status_url,
-                        params={"slot": args.slot},
-                        timeout=_generation_timeout_seconds(),
-                    )
-                    if status_response.ok:
-                        status = status_response.json()
-                        if _is_terminal_generation_status(status.get("status")):
-                            # Fetch incubator for result
-                            load_result = run_load(args)
-                            terminal_result = {
-                                "success": True,
-                                "message": load_result.get("message"),
-                                "choices": load_result.get("choices", []),
-                                "chunk_id": status.get("chunk_id"),
-                            }
-                            if retrograde_info:
-                                terminal_result["retrograde"] = retrograde_info
-                            return terminal_result
-                        elif status.get("status") == "error":
-                            return {
-                                "success": False,
-                                "error": status.get("error", "Generation failed"),
-                            }
-                    time.sleep(1)
-                return {"success": False, "error": "Generation timed out"}
+                terminal_result = _wait_for_narrative_result(args.slot, session_id)
+                if retrograde_info:
+                    terminal_result["retrograde"] = retrograde_info
+                return terminal_result
 
             no_session_result = {
                 "success": True,
@@ -3967,7 +4044,10 @@ def main() -> int:
 
     # Check for errors (consistent format: success=False with error message)
     if not result.get("success", True) or result.get("error"):
-        if args.json and result.get("transition_error"):
+        if args.json and any(
+            result.get(key)
+            for key in ("transition_error", "bootstrap_error", "generation_error")
+        ):
             print(json.dumps(result, indent=2, sort_keys=True), file=sys.stderr)
         else:
             emit_error(result.get("error", "Unknown error"), args.json)
