@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "Initial inventory at 77f854c7 plus the reachability checker; unclassified legacy modules are findings, not approved deletions.",
+  "reason": "Record the merged explicit-slot mutation helper and declare the PostgreSQL event-source proof dynamic writer.",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -220,6 +220,7 @@
     "nexus/api/settings_endpoints.py",
     "nexus/api/setup_endpoints.py",
     "nexus/api/slot_endpoints.py",
+    "nexus/api/slot_mutations.py",
     "nexus/api/slot_state.py",
     "nexus/api/slot_utils.py",
     "nexus/api/static_ui.py",

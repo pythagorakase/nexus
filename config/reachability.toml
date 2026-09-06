@@ -74,6 +74,11 @@ reason = "Application modules must not depend on the test suite."
 # No tombstones are inferred from this graph. Future entries require an exact
 # path/symbol/scoped literal/TOML key and an explicit retirement decision.
 
+[[dynamic_edges]]
+source = "tests/test_orrery/test_event_sources_pg.py:test_registered_retrograde_source_reaches_retained_gate"
+target = "nexus/agents/orrery/retrograde_persistence.py"
+reason = "The event-source PostgreSQL proof resolves the registered Retrograde producer entrypoint itself so stale writer names fail the contract test."
+
 [[import_search_paths]]
 source = "scripts/*.py"
 paths = ["scripts"]
