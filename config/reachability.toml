@@ -1,0 +1,84 @@
+# Module-import reachability, not a function-call or HTTP-routing proof.
+version = 1
+maintained = ["nexus/**/*.py", "scripts/**/*.py", "ir_eval/**/*.py", "migrations/*.py", "*.py"]
+baseline = "config/reachability_baseline.json"
+
+[production]
+project_config = "pyproject.toml"
+runtime_config = "nexus.toml"
+
+[pytest]
+config = "pytest.ini"
+
+[migrations]
+loader = "scripts/migrate.py:_load_python_migration"
+pattern = "migrations/[0-9][0-9][0-9]_*.py"
+symbol = "run"
+script_only_versions = ["008"]
+reason = "scripts/migrate.py discovers managed Python migrations and invokes run(conn); SQL migrations contain no Python imports."
+
+[[operators]]
+target = "scripts/migrate.py:main"
+reason = "CLAUDE.md schema migration workflow."
+[[operators]]
+target = "scripts/new_story_setup.py:main"
+reason = "CLAUDE.md slot initialization workflow."
+[[operators]]
+target = "scripts/qa_shift/qa_shift.py:main"
+reason = "Authorized Night QA entry point; scripts/qa_shift/mission_prompt.md."
+[[operators]]
+target = "nexus/agents/orrery/worker.py:main"
+reason = "README.md and docs/orrery_design_plan.md background worker."
+[[operators]]
+target = "nexus/agents/orrery/catalog.py:main"
+reason = ".pre-commit-config.yaml catalog regeneration."
+[[operators]]
+target = "scripts/validate_config_commit.py:main"
+reason = ".pre-commit-config.yaml config validation."
+[[operators]]
+target = "scripts/check_model_drift.py:main"
+reason = ".github/workflows/model-drift-check.yml and config validation."
+[[operators]]
+target = "scripts/check_reachability.py:main"
+reason = "This static gate's CLI and CI entry point."
+[[operators]]
+target = "scripts/stamp_lore_pass_baseline.py:main"
+reason = "Explicit Pass-2 baseline repair operator, covered by PostgreSQL lifecycle tests."
+[[operators]]
+target = "scripts/replay_state.py:main"
+reason = "Explicit canonical state replay operator."
+[[operators]]
+target = "scripts/orrery_sample.py:main"
+reason = "docs/orrery_design_plan.md deterministic sampling harness."
+[[operators]]
+target = "scripts/generate_app_icons.py:main"
+reason = "pyproject.toml documents this maintained asset-generation tool."
+[[operators]]
+target = "run_memnon_interactive.py:main"
+reason = "Explicit standalone MEMNON interactive executable."
+[[operators]]
+target = "migrations/008_populate_mock_database.py:main"
+reason = "SCRIPT_ONLY_MIGRATIONS explicitly identifies 008 as the manual seed executable."
+
+[[import_aliases]]
+source = "nexus/agents/lore/lore.py"
+prefix = "utils"
+target = "nexus.agents.lore.utils"
+reason = "lore.py explicitly prepends its own directory to sys.path before importing utils."
+
+[[forbidden_dependencies]]
+source = "nexus/*"
+target = "tests/*"
+reason = "Application modules must not depend on the test suite."
+
+# No tombstones are inferred from this graph. Future entries require an exact
+# path/symbol/scoped literal/TOML key and an explicit retirement decision.
+
+[[import_search_paths]]
+source = "scripts/*.py"
+paths = ["scripts"]
+reason = "Standalone scripts resolve sibling api_openai/api_batch helpers from their executable directory."
+[[import_search_paths]]
+source = "ir_eval/*.py"
+paths = ["ir_eval", "ir_eval/scripts", "scripts"]
+reason = "Legacy IR tools explicitly prepend ir_eval and its scripts directory to sys.path; repo scripts supplies api_openai. These edges do not promote tools to supported roots."

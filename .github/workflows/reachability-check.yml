@@ -1,0 +1,30 @@
+name: Python reachability check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  reachability:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Check static import reachability
+        run: python -S scripts/check_reachability.py --report reachability-report.json
+      - name: Save graph evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-reachability
+          path: reachability-report.json
+          if-no-files-found: ignore
