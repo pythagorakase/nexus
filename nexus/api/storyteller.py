@@ -4,11 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from fastapi import (
-    BackgroundTasks,
     Depends,
     FastAPI,
     HTTPException,
@@ -20,15 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from nexus.api.session_manager import SessionManager, SessionNotFoundError, SessionTurn
-from nexus.agents.logon.apex_schema import (
-    StoryTurnResponse,
-    StorytellerResponseBootstrap,
-    StorytellerResponseMinimal,
-    StorytellerResponseStandard,
-    StorytellerResponseExtended,
-    create_minimal_response,
-    validate_story_turn_response,
-)
+from nexus.agents.logon.apex_schema import StoryTurnResponse
 from nexus.api.new_story_flow import (
     start_setup as start_new_story_setup,
     resume_setup as resume_new_story_setup,
@@ -46,13 +37,6 @@ else:
     LORE = Any
 
 logger = logging.getLogger("nexus.api.storyteller")
-
-_STORY_RESPONSE_TYPES = (
-    StorytellerResponseExtended,
-    StorytellerResponseStandard,
-    StorytellerResponseMinimal,
-    StorytellerResponseBootstrap,
-)
 
 ORIGINS = [
     "http://localhost:3000",
@@ -217,16 +201,6 @@ def _format_error(error: str, detail: str, session_id: Optional[str]) -> Dict[st
     """Build the standard error response shape."""
 
     return {"error": error, "detail": detail, "session_id": session_id}
-
-
-def _coerce_story_response(payload: Any) -> StoryTurnResponse:
-    """Coerce arbitrary payloads into a StoryTurnResponse."""
-
-    if isinstance(payload, _STORY_RESPONSE_TYPES):
-        return payload
-    if isinstance(payload, dict):
-        return validate_story_turn_response(payload)
-    return create_minimal_response(str(payload))
 
 
 def _to_turn_record(turn: SessionTurn) -> TurnRecord:
@@ -459,230 +433,28 @@ async def get_context(
 
 
 @app.post("/api/story/turn", response_model=StoryTurnResponse)
-async def story_turn(
-    request: StoryTurnRequest,
-    background_tasks: BackgroundTasks,
-    manager: SessionManager = Depends(get_session_manager),
-    lore: "LORE" = Depends(get_lore),
-) -> StoryTurnResponse:
-    """Execute a full story turn and persist the results."""
-
-    try:
-        await manager.update_metadata(
-            request.session_id,
-            current_phase="processing",
-            last_accessed=datetime.now(timezone.utc),
-        )
-    except SessionNotFoundError as exc:
-        raise HTTPException(
-            status_code=404,
-            detail=_format_error("not_found", str(exc), request.session_id),
-        ) from exc
-
-    await stream_manager.broadcast(
-        request.session_id,
-        {
-            "event": "phase",
-            "phase": "processing",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        },
+async def story_turn(request: StoryTurnRequest) -> StoryTurnResponse:
+    """Reject legacy generation without a durable attempt identity."""
+    raise HTTPException(
+        status_code=410,
+        detail=(
+            "Legacy story generation is retired. Use POST /api/narrative/continue "
+            "with an explicit slot to create a durable generation session."
+        ),
     )
-
-    try:
-        # Process the turn with LORE - it returns a StoryTurnResponse or string on error
-        result = await lore.process_turn(request.user_input)
-    except Exception as exc:
-        await manager.update_metadata(request.session_id, current_phase="error")
-        await stream_manager.broadcast(
-            request.session_id,
-            {
-                "event": "error",
-                "detail": str(exc),
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-            },
-        )
-        raise HTTPException(
-            status_code=500,
-            detail=_format_error("turn_failed", str(exc), request.session_id),
-        ) from exc
-
-    # Handle the response based on type
-    story_response: StoryTurnResponse
-    if isinstance(result, str):
-        # Error or fallback case - create minimal response
-        story_response = create_minimal_response(result)
-    elif isinstance(result, _STORY_RESPONSE_TYPES):
-        # Full structured response from Storyteller
-        story_response = result
-    else:
-        # Unexpected type - try to coerce it
-        story_response = _coerce_story_response(result)
-
-    # Extract turn context from LORE if available
-    context_payload: Dict[str, Any] = {}
-    turn_context = getattr(lore, "turn_context", None)
-    if turn_context is not None:
-        # Build context payload from LORE's turn context
-        context_dict = {}
-
-        # Add phase states if available
-        if hasattr(turn_context, "phase_states"):
-            context_dict["phase_states"] = turn_context.phase_states
-
-        # Add warm slice if available
-        if hasattr(turn_context, "warm_slice"):
-            context_dict["warm_slice"] = turn_context.warm_slice
-
-        # Add entity data if available
-        if hasattr(turn_context, "entity_data"):
-            context_dict["entity_data"] = turn_context.entity_data
-
-        # Add retrieved passages if available
-        if hasattr(turn_context, "retrieved_passages"):
-            context_dict["retrieved_passages"] = turn_context.retrieved_passages
-
-        # Add context payload if available
-        if hasattr(turn_context, "context_payload"):
-            context_dict["context_payload"] = turn_context.context_payload
-
-        # Add memory state if available
-        if hasattr(turn_context, "memory_state"):
-            context_dict["memory_state"] = turn_context.memory_state
-
-        # Add token counts if available
-        if hasattr(turn_context, "token_counts"):
-            context_dict["token_counts"] = turn_context.token_counts
-
-        context_payload = context_dict
-
-    await manager.append_turn(
-        request.session_id,
-        user_input=request.user_input,
-        response=story_response.model_dump(),
-        options=request.options,
-        context_payload=context_payload,
-    )
-
-    background_tasks.add_task(manager.finalize_turn, request.session_id)
-
-    await stream_manager.broadcast(
-        request.session_id,
-        {
-            "event": "complete",
-            "turn": story_response.model_dump(),
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        },
-    )
-
-    return story_response
 
 
 @app.post("/api/story/regenerate", response_model=StoryTurnResponse)
-async def regenerate_turn(
-    request: RegenerateRequest,
-    background_tasks: BackgroundTasks,
-    manager: SessionManager = Depends(get_session_manager),
-    lore: "LORE" = Depends(get_lore),
-) -> StoryTurnResponse:
-    """Regenerate the last turn with updated options."""
-
-    try:
-        last_turn = await manager.get_last_turn(request.session_id)
-    except (SessionNotFoundError, ValueError) as exc:
-        raise HTTPException(
-            status_code=404,
-            detail=_format_error("not_found", str(exc), request.session_id),
-        ) from exc
-
-    await manager.update_metadata(request.session_id, current_phase="regenerating")
-    await stream_manager.broadcast(
-        request.session_id,
-        {
-            "event": "phase",
-            "phase": "regenerating",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        },
+async def regenerate_turn(request: RegenerateRequest) -> StoryTurnResponse:
+    """Reject legacy regeneration before any session or provider work."""
+    raise HTTPException(
+        status_code=410,
+        detail=(
+            "Legacy story regeneration is retired. Use POST "
+            "/api/narrative/regenerate with an explicit slot to create a "
+            "durable generation session."
+        ),
     )
-
-    try:
-        # Regenerate with LORE - it returns a StoryTurnResponse or string on error
-        result = await lore.process_turn(last_turn.user_input)
-    except Exception as exc:
-        await manager.update_metadata(request.session_id, current_phase="error")
-        raise HTTPException(
-            status_code=500,
-            detail=_format_error("regenerate_failed", str(exc), request.session_id),
-        ) from exc
-
-    # Handle the response based on type
-    story_response: StoryTurnResponse
-    if isinstance(result, str):
-        # Error or fallback case - create minimal response
-        story_response = create_minimal_response(result)
-    elif isinstance(result, _STORY_RESPONSE_TYPES):
-        # Full structured response from Storyteller
-        story_response = result
-    else:
-        # Unexpected type - try to coerce it
-        story_response = _coerce_story_response(result)
-
-    # Extract turn context from LORE if available
-    context_payload: Dict[str, Any] = {}
-    turn_context = getattr(lore, "turn_context", None)
-    if turn_context is not None:
-        # Build context payload from LORE's turn context
-        context_dict = {}
-
-        # Add phase states if available
-        if hasattr(turn_context, "phase_states"):
-            context_dict["phase_states"] = turn_context.phase_states
-
-        # Add warm slice if available
-        if hasattr(turn_context, "warm_slice"):
-            context_dict["warm_slice"] = turn_context.warm_slice
-
-        # Add entity data if available
-        if hasattr(turn_context, "entity_data"):
-            context_dict["entity_data"] = turn_context.entity_data
-
-        # Add retrieved passages if available
-        if hasattr(turn_context, "retrieved_passages"):
-            context_dict["retrieved_passages"] = turn_context.retrieved_passages
-
-        # Add context payload if available
-        if hasattr(turn_context, "context_payload"):
-            context_dict["context_payload"] = turn_context.context_payload
-
-        # Add memory state if available
-        if hasattr(turn_context, "memory_state"):
-            context_dict["memory_state"] = turn_context.memory_state
-
-        # Add token counts if available
-        if hasattr(turn_context, "token_counts"):
-            context_dict["token_counts"] = turn_context.token_counts
-
-        context_payload = context_dict
-
-    await manager.replace_last_turn(
-        request.session_id,
-        user_input=last_turn.user_input,
-        response=story_response.model_dump(),
-        options=request.options or last_turn.options,
-        context_payload=context_payload,
-    )
-
-    background_tasks.add_task(manager.finalize_turn, request.session_id)
-
-    await stream_manager.broadcast(
-        request.session_id,
-        {
-            "event": "complete",
-            "turn": story_response.model_dump(),
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        },
-    )
-
-    return story_response
 
 
 @app.delete("/api/story/session/{session_id}", response_model=DeleteSessionResponse)

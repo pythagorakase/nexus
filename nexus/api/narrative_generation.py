@@ -223,7 +223,10 @@ async def generate_narrative_async(
                 # narrative)
                 try:
                     response = await lore.process_turn(
-                        user_text, parent_chunk_id=parent_chunk_id, note=note
+                        user_text,
+                        parent_chunk_id=parent_chunk_id,
+                        note=note,
+                        attempt_id=session_id,
                     )
                     logger.info(f"LORE response received for session {session_id}")
                 except Exception as e:

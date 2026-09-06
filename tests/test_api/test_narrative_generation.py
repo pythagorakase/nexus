@@ -100,6 +100,8 @@ async def test_lore_phase_failure_is_reported_before_adapter_coercion(
             user_text: str,
             parent_chunk_id: int,
             note: str | None = None,
+            *,
+            attempt_id: str,
         ) -> str:
             """Return the legacy failure string from LORE.process_turn."""
             return "Error processing turn: FATAL: No warm slice chunks retrieved."
@@ -181,6 +183,8 @@ async def test_continuation_threads_logon_model_into_incubator(
             user_text: str,
             parent_chunk_id: int,
             note: str | None = None,
+            *,
+            attempt_id: str,
         ) -> StorytellerResponseMinimal:
             self.calls.append((user_text, parent_chunk_id, note))
             return StorytellerResponseMinimal(

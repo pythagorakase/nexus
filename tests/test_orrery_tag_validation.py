@@ -1633,6 +1633,8 @@ async def test_exhausted_declaration_validation_never_reaches_incubator(
             _user_text: str,
             parent_chunk_id: int,
             note: Optional[str] = None,
+            *,
+            attempt_id: str,
         ) -> Any:
             del parent_chunk_id, note
             return await storyteller_validator(

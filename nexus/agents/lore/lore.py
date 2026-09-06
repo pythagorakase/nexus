@@ -39,10 +39,12 @@ import sys
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
+from uuid import UUID
 
 # Import NEXUS configuration loader
 from nexus.config import load_settings_as_dict
 from nexus.config.loader import RUNTIME_CONFIG_ENV
+from nexus.telemetry.usage import usage_context
 
 # Support legacy top-level ``utils`` imports when the module is run directly.
 current_dir = Path(__file__).parent
@@ -376,6 +378,8 @@ class LORE:
         user_input: str,
         parent_chunk_id: Optional[int] = None,
         note: Optional[str] = None,
+        *,
+        attempt_id: str,
     ):
         """
         Process a complete turn cycle.
@@ -385,17 +389,22 @@ class LORE:
             parent_chunk_id: Optional chunk id that should be continued
             note: Optional soft author's note to nudge the storyteller (used by regenerate
                 for meta-hints like "darker, plz" or continuity corrections; out-of-character).
+            attempt_id: Caller-owned canonical UUID. The narrative gateway passes
+                its durable generation-session UUID; standalone diagnostics must
+                supply a distinct explicit UUID for each attempt.
 
         Returns:
             StoryTurnResponse with narrative and metadata, or string on error
         """
+        if not isinstance(attempt_id, str) or str(UUID(attempt_id)) != attempt_id:
+            raise ValueError("LORE requires a caller-supplied canonical attempt UUID")
         logger.info(f"Starting turn cycle with input: {user_input[:100]}...")
         if note:
             logger.info(f"Author's note: {note[:200]}")
 
         # Initialize turn context
         self.turn_context = TurnContext(
-            turn_id=f"turn_{int(time.time())}",
+            turn_id=attempt_id,
             user_input=user_input,
             start_time=time.time(),
             target_chunk_id=parent_chunk_id,
@@ -757,6 +766,11 @@ async def main():
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     parser.add_argument("--settings", help="Path to nexus.toml")
     parser.add_argument("--test", action="store_true", help="Run test turn cycle")
+    parser.add_argument(
+        "--attempt-id",
+        type=UUID,
+        help="Explicit UUID for one standalone diagnostic attempt (not a saved session)",
+    )
     parser.add_argument("--status", action="store_true", help="Show component status")
     parser.add_argument("--qa", help="(Deprecated) Use positional argument instead")
     parser.add_argument(
@@ -765,6 +779,8 @@ async def main():
         help="Deprecated no-op; contextual retrieval no longer loads a local model",
     )
     args = parser.parse_args()
+    if args.test and args.attempt_id is None:
+        parser.error("--test requires --attempt-id with a unique diagnostic UUID")
 
     # Configure logging
     logging.basicConfig(
@@ -866,7 +882,10 @@ async def main():
         test_input = "I examine the neural implant carefully, looking for any markings."
         logger.info(f"Running test turn with input: {test_input}")
 
-        response = await lore.process_turn(test_input)
+        with usage_context(run_id=str(args.attempt_id)):
+            response = await lore.process_turn(
+                test_input, attempt_id=str(args.attempt_id)
+            )
 
         print("\n" + "=" * 60)
         print("LORE TEST RESULTS")
@@ -897,7 +916,14 @@ async def main():
                 elif not user_input:
                     continue
 
-                response = await lore.process_turn(user_input)
+                diagnostic_id = args.attempt_id
+                if diagnostic_id is None:
+                    diagnostic_id = UUID(input("Diagnostic attempt UUID: ").strip())
+                args.attempt_id = None  # Never reuse an identity for the next turn.
+                with usage_context(run_id=str(diagnostic_id)):
+                    response = await lore.process_turn(
+                        user_input, attempt_id=str(diagnostic_id)
+                    )
                 print(f"\nLORE: {response}")
 
             except KeyboardInterrupt:
