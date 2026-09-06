@@ -9,11 +9,13 @@ no mocks, no database.
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import replace
 import json
 
 import pytest
 
 from nexus.agents.orrery.audit import (
+    EXOGENOUS_EVENT_PRODUCERS,
     NOT_APPLICABLE_REASON,
     _cognition_effective_config,
     build_catalog,
@@ -27,6 +29,10 @@ from nexus.agents.orrery.substrate import (
     INTIMACY_SUPPRESSOR_TAGS,
     PUBLIC_MOBILITY_TAGS,
     PUBLIC_PLACE_CLASSES,
+    Condition,
+    count_recent_events_at_least,
+    knows_recent_event,
+    recent_event,
 )
 from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
 from nexus.config import load_settings_as_dict
@@ -96,8 +102,7 @@ def test_catalog_surfaces_priority_ties_in_tuple_order() -> None:
 
 
 def test_catalog_flags_exogenous_only_event_types() -> None:
-    """Only faction_realignment remains a dead gate arm: the other three
-    former dead arms gained real signal emitters (live event chains)."""
+    """External history is a named producer, not an inferred dead gate arm."""
 
     catalog = _catalog()
     exogenous = {
@@ -117,6 +122,63 @@ def test_catalog_flags_exogenous_only_event_types() -> None:
     )
     for event_type in exogenous:
         assert not catalog["event_map"][event_type]["emitted_by"]
+        producers = catalog["event_map"][event_type]["exogenous_producers"]
+        assert producers
+        assert producers[0]["producer"] == "retrograde"
+        assert producers[0]["source_kind"] == "retrograde"
+        assert producers[0]["entrypoint"] == (
+            EXOGENOUS_EVENT_PRODUCERS[event_type][0].entrypoint
+        )
+
+
+def test_catalog_covers_counted_event_consumers() -> None:
+    """Accumulated chores can activate relocation and need source contracts."""
+
+    events = _catalog()["event_map"]
+    for event_type in ("upkeep_done", "errands_run"):
+        assert "start_relocation_plan" in events[event_type]["consumed_by_gate"]
+
+
+@pytest.mark.parametrize(
+    "condition",
+    (
+        recent_event("unproduced_gate_event"),
+        knows_recent_event("unproduced_gate_event"),
+        count_recent_events_at_least(
+            "unproduced_gate_event", within_ticks=5, min_count=2
+        ),
+    ),
+    ids=("recent", "known", "counted"),
+)
+@pytest.mark.parametrize("consumer", ("gate", "branch"))
+def test_catalog_rejects_unregistered_event_consumers(
+    condition: Condition, consumer: str
+) -> None:
+    """New package or branch arms cannot inherit an unnamed external source."""
+
+    template = BUILTIN_TEMPLATES[0]
+    if consumer == "gate":
+        template = replace(template, id="orphan_probe", package_gate=condition)
+    else:
+        branch = replace(template.branches[0], conditions=condition)
+        template = replace(template, id="orphan_probe", branches=(branch,))
+    with pytest.raises(
+        ValueError,
+        match="unproduced_gate_event.*no template emitter.*orphan_probe",
+    ):
+        build_catalog((*BUILTIN_TEMPLATES, template))
+
+
+def test_catalog_rejects_removal_of_a_required_internal_emitter() -> None:
+    """Deleting the informant producer must not silently kill its debt gate."""
+
+    templates = tuple(
+        template
+        for template in BUILTIN_TEMPLATES
+        if template.id != "cultivate_informant"
+    )
+    with pytest.raises(ValueError, match="encoded_message.*honor_debt"):
+        build_catalog(templates)
 
 
 def test_catalog_event_map_includes_genuinely_emitted_types() -> None:

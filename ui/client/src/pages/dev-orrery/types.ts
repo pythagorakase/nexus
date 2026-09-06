@@ -213,6 +213,11 @@ export interface CatalogPayload {
       consumed_by_gate: string[];
       consumed_by_branch: string[];
       emitted_by: string[];
+      exogenous_producers: {
+        producer: string;
+        source_kind: string;
+        entrypoint: string;
+      }[];
       exogenous_only: boolean;
     }
   >;

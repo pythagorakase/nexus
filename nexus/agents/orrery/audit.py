@@ -115,6 +115,30 @@ _ACTOR_TARGET_FACTION_SLOTS: Tuple[Slot, ...] = (
 NOT_APPLICABLE_REASON = "no_target_bound"
 
 
+@dataclass(frozen=True, slots=True)
+class ExogenousEventProducer:
+    """A named canonical writer supporting an event outside template branches."""
+
+    producer: str
+    source_kind: str
+    entrypoint: str
+
+
+# Explicit contracts, not a blanket exemption for every registered event type.
+# Retrograde validates the slot's vocabulary before its event writer persists
+# source='retrograde'. Its genesis and maturation histories already supply this
+# gate; an institutional emitter would be an additional, separate producer.
+EXOGENOUS_EVENT_PRODUCERS: Mapping[str, Tuple[ExogenousEventProducer, ...]] = {
+    "faction_realignment": (
+        ExogenousEventProducer(
+            producer="retrograde",
+            source_kind="retrograde",
+            entrypoint="nexus.agents.orrery.retrograde_persistence._plan_event_row",
+        ),
+    ),
+}
+
+
 class CognitionTraceInputError(ValueError):
     """A cognition trace identifier failed database-backed validation."""
 
@@ -971,13 +995,12 @@ _TAG_FAMILY_TAG_SETS: Mapping[str, frozenset[str]] = {
     if spec["kind"] == "tags"
 }
 
-# Same event-consumption grammar the catalog's vocabulary collector matches
-# against predicate __name__s (catalog._VOCAB_PATTERNS); the wildcard
-# `recent_event(*)` form is deliberately excluded — it consumes no specific
-# event type.
+# Include every event predicate, including actor-relative knowledge and counted
+# events. Wildcard predicates consume no specific event type.
 _EVENT_CONSUMER_PATTERNS: Tuple[re.Pattern[str], ...] = (
-    re.compile(r"recent_event\(([^,*()]+),"),
-    re.compile(r"since_last_event_at_least\(([^,()]+),"),
+    re.compile(r"^(?:knows_)?recent_event\(([^,*()]+),"),
+    re.compile(r"^since_last_event_at_least\(([^,()]+),"),
+    re.compile(r"^count_recent_events_at_least\(([^,()]+),"),
 )
 
 
@@ -1010,9 +1033,9 @@ def build_catalog(
     need_tuning = coerce_need_tuning(sunhelm_settings)
 
     template_payloads: list[dict[str, Any]] = []
-    event_map: dict[str, dict[str, list[str]]] = {}
+    event_map: dict[str, dict[str, Any]] = {}
 
-    def _event_entry(event_type: str) -> dict[str, list[str]]:
+    def _event_entry(event_type: str) -> dict[str, Any]:
         return event_map.setdefault(
             event_type,
             {"consumed_by_gate": [], "consumed_by_branch": [], "emitted_by": []},
@@ -1086,11 +1109,21 @@ def build_catalog(
         for band, rank in sorted(DRIVE_BAND_ORDER.items(), key=lambda item: item[1])
     ]
 
-    for entry in event_map.values():
-        entry_any: dict[str, Any] = entry  # widen for the derived flag
-        entry_any["exogenous_only"] = not entry["emitted_by"] and bool(
-            entry["consumed_by_gate"] or entry["consumed_by_branch"]
-        )
+    for event_type, entry in event_map.items():
+        entry["exogenous_producers"] = [
+            asdict(producer)
+            for producer in EXOGENOUS_EVENT_PRODUCERS.get(event_type, ())
+        ]
+        consumed = bool(entry["consumed_by_gate"] or entry["consumed_by_branch"])
+        if consumed and not (entry["emitted_by"] or entry["exogenous_producers"]):
+            consumers = sorted(
+                set(entry["consumed_by_gate"] + entry["consumed_by_branch"])
+            )
+            raise ValueError(
+                f"Event gate {event_type!r} has no template emitter or registered "
+                f"exogenous producer (consumers: {', '.join(consumers)})"
+            )
+        entry["exogenous_only"] = consumed and not entry["emitted_by"]
 
     pseudo_templates = [
         {
