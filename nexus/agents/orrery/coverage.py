@@ -480,7 +480,7 @@ def analyze_coverage(
             "consumed_by_branch": entry["consumed_by_branch"],
         }
         for event_type, entry in sorted(catalog["event_map"].items())
-        if entry["exogenous_only"]
+        if entry["exogenous_only"] and not entry["exogenous_producers"]
     }
 
     return {

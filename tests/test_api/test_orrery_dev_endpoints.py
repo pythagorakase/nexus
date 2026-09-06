@@ -795,8 +795,9 @@ def test_coverage_report_is_internally_consistent(
     for gap in payload["gap_actors"]:
         assert 0 < gap["gapped_anchors"] <= gap["seen_anchors"]
 
-    # Post-signal-emissions, only faction_realignment lacks an emitter.
-    assert set(payload["dead_gate_arms"]) == {"faction_realignment"}
+    # Retrograde is the registered source for faction_realignment; every
+    # retained gate has either an internal emitter or an exogenous producer.
+    assert payload["dead_gate_arms"] == {}
     assert set(payload["hydration_honesty"]) == {
         "rewound_to_anchor",
         "current_projection",

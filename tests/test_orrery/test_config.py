@@ -43,8 +43,8 @@ def test_dev_dashboard_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
     assert settings.orrery.dashboard.enabled is True
 
 
-def test_orrery_settings_resolve_model_reference() -> None:
-    """Orrery narration config resolves provider role references at load time."""
+def test_orrery_settings_load_queue_and_resolution_defaults() -> None:
+    """Orrery loads deterministic queue settings and resolution defaults."""
 
     settings = load_settings("nexus.toml")
 
@@ -67,8 +67,8 @@ def test_orrery_settings_resolve_model_reference() -> None:
     assert settings.orrery.distortion.enabled is True
     assert settings.orrery.mood.enabled is True
     assert settings.orrery.mood.duration_hours == 12.0
-    expected_model = settings.global_.model.api_models["anthropic"].roles["default"]
-    assert settings.orrery.narration.model_ref == expected_model
+    assert settings.orrery.narration.max_jobs_per_drain == 5
+    assert "model_ref" not in type(settings.orrery.narration).model_fields
     assert settings.orrery.promote.provider is None
     assert settings.orrery.promote.priority_threshold == 30.0
     assert settings.orrery.promote.magnitude_threshold == 0.35

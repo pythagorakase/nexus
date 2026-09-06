@@ -552,54 +552,24 @@ def test_native_provider_rejects_base_url():
         Settings(**raw)
 
 
-def test_configured_param_rejected_when_model_declares_it_unsupported():
-    """[orrery.narration] temperature on a temperature-rejecting model fails load.
-
-    This is the #401 proving instance: the narration model resolves to a model
-    whose registry entry lists 'temperature' in unsupported_params, so setting
-    temperature in nexus.toml must be refused at config load, not at request
-    time.
-    """
+@pytest.mark.parametrize(
+    "key,value",
+    [
+        ("provider", "anthropic"),
+        ("model_ref", "@anthropic.default"),
+        ("temperature", 0.4),
+        ("max_output_tokens", 1200),
+        ("mode", "async"),
+    ],
+)
+def test_offscreen_queue_rejects_retired_provider_settings(
+    key: str, value: str | float | int
+) -> None:
+    """A stale provider setting fails visibly instead of implying an active seat."""
     raw = _nexus_toml_dict()
-    narration_model = Settings(**raw).orrery.narration.model_ref
-    assert "temperature" in {
-        p
-        for provider in Settings(**raw).global_.model.api_models.values()
-        for entry in provider.models
-        if entry.id == narration_model
-        for p in entry.unsupported_params
-    }, f"expected nexus.toml to declare temperature unsupported for {narration_model}"
-
-    raw["orrery"]["narration"]["temperature"] = 0.4
-    with pytest.raises(ValidationError, match="declares 'temperature' unsupported"):
+    raw["orrery"]["narration"][key] = value
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
         Settings(**raw)
-
-
-def test_configured_param_allowed_when_model_supports_it():
-    """A registry model without a temperature restriction accepts one.
-
-    Uses a synthetic registry entry: whether any REAL shipped model still
-    accepts temperature is a roster fact that changes with every version
-    bump — this test guards the validator, not the roster.
-    """
-    raw = _nexus_toml_dict()
-    raw["global"]["model"]["api_models"]["anthropic"]["models"].append(
-        {
-            "id": "synthetic-temperature-model",
-            "label": "Synthetic (test only)",
-            "native_structured_output": True,
-        }
-    )
-    raw["orrery"]["narration"]["model_ref"] = "synthetic-temperature-model"
-    raw["orrery"]["narration"]["temperature"] = 0.4
-    settings = Settings(**raw)
-    assert settings.orrery.narration.temperature == 0.4
-
-
-def test_narration_temperature_unset_by_default():
-    """Shipped config omits narration temperature so the param is never sent."""
-    settings = load_settings("nexus.toml")
-    assert settings.orrery.narration.temperature is None
 
 
 def test_get_openai_compatible_endpoint_routing():

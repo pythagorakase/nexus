@@ -271,8 +271,8 @@ def test_begin_creates_archive_and_pins_every_openai_role(
     assert set(roles) >= {"default", "gaia"}
     assert all(value == "gpt-5.6-terra" for value in roles.values())
     assert document["wizard"]["fallback_model"] == "@openai.default"
-    assert document["orrery"]["narration"]["provider"] == "openai"
-    assert document["orrery"]["narration"]["model_ref"] == "@openai.default"
+    assert "provider" not in document["orrery"]["narration"]
+    assert "model_ref" not in document["orrery"]["narration"]
     assert document["usage"]["daily_allowance"]["openai"] == 10_000_000
     assert (archive / "runtime_env.sh").exists()
     assert (archive / "probe_ledger.md").exists()
@@ -317,7 +317,7 @@ def test_generated_runtime_environment_selects_qa_config(
     assert supervisor.config_path == (archive / "nexus.qa.toml").resolve()
 
 
-@pytest.mark.parametrize("missing_table", ("roles", "daily_allowance", "narration"))
+@pytest.mark.parametrize("missing_table", ("roles", "daily_allowance"))
 def test_runtime_config_shape_errors_are_clean_shift_errors(
     tmp_path: Path,
     missing_table: str,
@@ -332,8 +332,6 @@ def test_runtime_config_shape_errors_are_clean_shift_errors(
     )
     if missing_table == "roles":
         del document["global"]["model"]["api_models"]["openai"]["roles"]
-    elif missing_table == "narration":
-        del document["orrery"]["narration"]
     else:
         del document["usage"]["daily_allowance"]
     (repo / "nexus.toml").write_text(tomlkit.dumps(document))
@@ -359,7 +357,6 @@ MODEL_ROUTE_KEYS = {
 
 DIRECTLY_PINNED_ROUTES = {
     "global.model.default_slot_model",
-    "orrery.narration.model_ref",
     "wizard.fallback_model",
 }
 

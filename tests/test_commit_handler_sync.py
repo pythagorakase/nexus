@@ -389,7 +389,7 @@ def test_sync_commit_measures_seeded_bleed_offer_uptake(
         if getattr(record, "event", None) == "orrery_bleed_uptake"
     )
     assert getattr(uptake_record, "name_matched") is name_present
-    overlap_ratio = float(getattr(uptake_record, "four_gram_overlap_ratio"))
+    overlap_ratio = float(getattr(uptake_record, "descriptor_four_gram_overlap_ratio"))
     if name_present:
         assert overlap_ratio == 1.0
     else:

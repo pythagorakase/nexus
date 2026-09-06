@@ -824,6 +824,7 @@ _VOCAB_PATTERNS: List[Tuple[str, re.Pattern]] = [
     ("event_type", re.compile(r"recent_event\(([^,*()]+),")),
     ("event_type", re.compile(r"knows_recent_event\(([^,*()]+),")),
     ("event_type", re.compile(r"since_last_event_at_least\(([^,()]+),")),
+    ("event_type", re.compile(r"count_recent_events_at_least\(([^,()]+),")),
     ("place_class", re.compile(r"in_location_class\(([^@()]+)@")),
     ("place_class_list", re.compile(r"has_location_class_destination\(([^@()]+)@")),
     ("relationship", re.compile(r"has_relationship_of_type\(([^,()]+),")),

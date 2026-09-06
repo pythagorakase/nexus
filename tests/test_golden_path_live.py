@@ -425,8 +425,6 @@ def _configure_model_override(tmp_path_factory: pytest.TempPathFactory) -> None:
     document["apex"]["provider"] = provider
     document["apex"]["model"] = model_ref
     if "orrery" in document:
-        document["orrery"]["narration"]["provider"] = provider
-        document["orrery"]["narration"]["model_ref"] = model_ref
         document["orrery"]["retrograde"]["maturation"]["model_ref"] = model_ref
 
     path = tmp_path_factory.mktemp("golden_config") / "nexus.toml"

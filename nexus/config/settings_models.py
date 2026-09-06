@@ -1242,27 +1242,10 @@ class OrreryRouteGraphSettings(BaseModel):
 
 
 class OrreryNarrationSettings(BaseModel):
-    """Frontier narration settings for promoted Orrery resolutions."""
+    """Durable queue settings for deterministic off-screen descriptor records."""
 
     model_config = ConfigDict(extra="forbid")
 
-    mode: Literal["async", "sync"] = "async"
-    provider: str = "anthropic"
-    model_ref: str = Field(..., description="Model ID or @provider.role reference")
-    temperature: Optional[float] = Field(
-        default=None,
-        ge=0.0,
-        le=2.0,
-        description=(
-            "Sampling temperature for narration calls. Unset means the "
-            "parameter is omitted entirely (API default). Configuring it for "
-            "a model that lists 'temperature' in unsupported_params is a "
-            "config-load error."
-        ),
-    )
-    max_output_tokens: int = Field(
-        default=1200, ge=1, description="Output-token ceiling for narration calls"
-    )
     max_attempts: int = Field(
         default=3, ge=1, description="Narration job attempts before marked failed"
     )
@@ -3612,7 +3595,6 @@ class Settings(BaseModel):
             (self.wizard, "fallback_model", True),
         ]
         if self.orrery is not None:
-            targets.append((self.orrery.narration, "model_ref", False))
             targets.append((self.orrery.experiences, "model", False))
             targets.append((self.orrery.retrograde.maturation, "model_ref", True))
         if self.ir_eval is not None and self.ir_eval.judgment is not None:
@@ -3653,46 +3635,6 @@ class Settings(BaseModel):
             # Owner decision (2026-07-14): never choose a silently-cheaper
             # summarizer. Provider routing is shared across every registry model.
             self.summaries.model = self.apex.model
-        return self
-
-    @model_validator(mode="after")
-    def _validate_param_capabilities(self) -> "Settings":
-        """Refuse configured request params that the resolved model rejects.
-
-        This is the enforcement boundary for Orrery narration sampling
-        capability (issue #401): [orrery.narration] may only configure a
-        sampling parameter when its resolved model does not list it in
-        `unsupported_params`. Request builders send only explicitly configured
-        params, so passing this validator guarantees Orrery never sends a
-        narration parameter its provider rejects.
-
-        Runs after ``_resolve_model_references`` (Pydantic executes model
-        validators in definition order), so every model field holds a concrete
-        registry ID by the time this checks it.
-        """
-        # Each tuple: (concrete model id, {param name: configured value}, source)
-        checks: List[Tuple[str, Dict[str, Any], str]] = []
-        if self.orrery is not None:
-            checks.append(
-                (
-                    self.orrery.narration.model_ref,
-                    {"temperature": self.orrery.narration.temperature},
-                    "[orrery.narration]",
-                )
-            )
-
-        for model_id, params, source in checks:
-            entry = self.model_entry(model_id)
-            for param, value in params.items():
-                if value is None:
-                    continue
-                if param in entry.unsupported_params:
-                    raise ValueError(
-                        f"{source} configures {param}={value!r}, but model "
-                        f"'{model_id}' declares '{param}' unsupported "
-                        f"(unsupported_params in [global.model.api_models]). "
-                        f"Remove the setting or choose a model that accepts it."
-                    )
         return self
 
     @model_validator(mode="after")

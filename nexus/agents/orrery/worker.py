@@ -1,4 +1,8 @@
-"""Post-commit Orrery promotion and narration worker."""
+"""Post-commit Orrery promotion and deterministic off-screen record worker.
+
+Historical narration names remain the durable queue/table contract. New records
+contain source-linked descriptors; generating unused off-screen prose is retired.
+"""
 
 from __future__ import annotations
 
@@ -13,14 +17,13 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 from pydantic import BaseModel, Field
 
+from nexus.agents.orrery.experiences import drain_experience_render_jobs_sync
 from nexus.agents.orrery.retrograde_maturation import (
     drain_maturation_jobs_sync,
     load_maturation_status_sync,
 )
-from nexus.agents.orrery.experiences import drain_experience_render_jobs_sync
 from nexus.config import load_settings_as_dict
 from nexus.config.settings_models import OrreryNarrationSettings, OrreryPromoteSettings
-from nexus.telemetry.usage import usage_context
 
 logger = logging.getLogger("nexus.orrery.worker")
 
@@ -29,12 +32,6 @@ DEFAULT_SEMANTIC_CLEARANCE_LIMIT = 20
 DEFAULT_SEMANTIC_CLEARANCE_RECENT_CHUNKS = 10
 DEFAULT_SEMANTIC_CLEARANCE_EVIDENCE_CHUNKS = 5
 DEFAULT_SEMANTIC_CLEARANCE_EVIDENCE_EVENTS = 6
-
-NARRATION_SYSTEM_PROMPT = (
-    "You write concise off-screen narrative records for NEXUS. The prose is "
-    "canonical but not directly shown to the player. Keep it specific, sensory "
-    "where useful, and free of second-person address."
-)
 
 
 class PromotionVerdict(BaseModel):
@@ -111,7 +108,6 @@ def process_orrery_outbox_sync(
         DEFAULT_SEMANTIC_CLEARANCE_EVIDENCE_EVENTS
     ),
     settings: Optional[Mapping[str, Any]] = None,
-    narration_provider: Optional[Any] = None,
     maturation_limit: Optional[int] = None,
     experience_limit: Optional[int] = None,
     experience_provider: Optional[Any] = None,
@@ -127,7 +123,6 @@ def process_orrery_outbox_sync(
         slot,
         limit=narration_limit,
         settings=settings,
-        narration_provider=narration_provider,
     )
     semantically_cleared = clear_semantic_tags_sync(
         slot,
@@ -233,7 +228,7 @@ def promote_pending_resolutions_sync(
                 for row in rows:
                     verdict = _promotion_verdict(row, promotion_settings)
                     if verdict.promote:
-                        _mark_promoted(cur, row, verdict, slot_label, settings_dict)
+                        _mark_promoted(cur, row, verdict, slot_label)
                         promoted += 1
                     else:
                         _mark_skipped(cur, row, verdict)
@@ -249,10 +244,13 @@ def drain_narration_outbox_sync(
     *,
     limit: Optional[int] = None,
     settings: Optional[Mapping[str, Any]] = None,
-    narration_provider: Optional[Any] = None,
     conn: Optional[Any] = None,
 ) -> tuple[int, int]:
-    """Generate off-screen narrations for queued or expired Orrery jobs."""
+    """Persist deterministic descriptors for queued or expired Orrery jobs.
+
+    Existing provider-era jobs use the same lease and anchor fences. Their
+    provider/model provenance is retained, but never used to make a call.
+    """
 
     settings_dict = dict(settings or load_settings_as_dict())
     narration_settings = _narration_settings(settings_dict)
@@ -320,7 +318,6 @@ def drain_narration_outbox_sync(
                 if not rows:
                     return (0, 0)
 
-                provider = narration_provider or _narration_provider(settings_dict)
                 leased_rows = []
                 for selected_row in rows:
                     row = dict(selected_row)
@@ -351,12 +348,6 @@ def drain_narration_outbox_sync(
         failed = 0
         for row in leased_rows:
             try:
-                with usage_context(
-                    seat="orrery_narration",
-                    slot=(int(row["slot"]) if row.get("slot") is not None else None),
-                    run_id=str(row["job_id"]),
-                ):
-                    narration_text = _generate_narration(provider, row)
                 descriptor = _perceptual_descriptor(row)
                 completion_error = None
                 with conn:
@@ -364,7 +355,6 @@ def drain_narration_outbox_sync(
                         completion_error = _mark_narration_succeeded(
                             cur,
                             row=row,
-                            narration_text=narration_text,
                             descriptor=descriptor,
                         )
                 if completion_error is not None:
@@ -536,7 +526,6 @@ def _mark_narration_succeeded(
     cur: Any,
     *,
     row: Mapping[str, Any],
-    narration_text: str,
     descriptor: Mapping[str, Any],
 ) -> Optional[NarrationCompletionRejectedError]:
     cur.execute(
@@ -644,7 +633,7 @@ def _mark_narration_succeeded(
             row["resolution_id"],
             row["tick_chunk_id"],
             row["world_layer"],
-            narration_text,
+            json.dumps(descriptor, sort_keys=True, ensure_ascii=False),
             json.dumps(descriptor),
         ),
     )
@@ -815,11 +804,7 @@ def _mark_promoted(
     row: Mapping[str, Any],
     verdict: PromotionVerdict,
     slot_label: str,
-    settings: Mapping[str, Any],
 ) -> None:
-    narration_settings = (settings.get("orrery") or {}).get("narration") or {}
-    provider = narration_settings.get("provider")
-    model_ref = narration_settings.get("model_ref")
     cur.execute(
         """
         UPDATE orrery_resolutions
@@ -833,18 +818,18 @@ def _mark_promoted(
     cur.execute(
         """
         INSERT INTO orrery_narration_jobs (
-            resolution_id, slot, provider, model_ref,
+            resolution_id, slot,
             anchor_tick_chunk_id, anchor_world_layer
         )
         SELECT
-            r.id, %s, %s, %s, r.tick_chunk_id,
+            r.id, %s, r.tick_chunk_id,
             COALESCE(cm.world_layer, 'primary'::world_layer_type)
         FROM orrery_resolutions AS r
         LEFT JOIN chunk_metadata AS cm ON cm.chunk_id = r.tick_chunk_id
         WHERE r.id = %s
         ON CONFLICT (resolution_id) WHERE superseded_at IS NULL DO NOTHING
         """,
-        (slot_label, provider, model_ref, row["id"]),
+        (slot_label, row["id"]),
     )
 
 
@@ -874,29 +859,12 @@ def _numeric_or_zero(value: Any) -> float:
         return 0.0
 
 
-def _generate_narration(provider: Any, row: Mapping[str, Any]) -> str:
-    prompt = (
-        "Write one concise off-screen narration record.\n\n"
-        f"Template: {row['template_id']}\n"
-        f"Actor: {row.get('actor_name') or row.get('actor_entity_id')}\n"
-        f"Brief: {row.get('brief')}\n"
-        "Promotion verdict: "
-        f"{json.dumps(row.get('promotion_verdict') or {}, sort_keys=True)}\n"
-        f"State delta: {json.dumps(row.get('state_delta') or {}, sort_keys=True)}\n\n"
-        "Length: 80-180 words. Do not address the player."
-    )
-    response = provider.get_completion(prompt)
-    text = response.content.strip()
-    if not text:
-        raise ValueError("Orrery narration provider returned empty text")
-    return text
-
-
 def _perceptual_descriptor(row: Mapping[str, Any]) -> dict[str, Any]:
     verdict = row.get("promotion_verdict") or {}
     if isinstance(verdict, str):
         verdict = json.loads(verdict)
     return {
+        "record_kind": "deterministic_descriptor",
         "channel": verdict.get("perceptual_channel"),
         "summary": verdict.get("perceptual_summary"),
         "brief": row.get("brief"),
@@ -908,58 +876,6 @@ def _narration_settings(settings: Mapping[str, Any]) -> OrreryNarrationSettings:
     if isinstance(raw_settings, OrreryNarrationSettings):
         return raw_settings
     return OrreryNarrationSettings.model_validate(raw_settings)
-
-
-def _narration_provider(settings: Mapping[str, Any]) -> Any:
-    from nexus.config import get_openai_compatible_endpoint
-    from nexus.config.loader import get_provider_for_model
-    from scripts.api_anthropic import AnthropicProvider
-    from scripts.api_openai import OpenAIProvider
-
-    narration = _narration_settings(settings)
-    model = narration.model_ref
-    provider_name = narration.provider or get_provider_for_model(model)
-
-    # Sampling params come from [orrery.narration]; anything left unset is
-    # omitted from the request entirely. Config load already rejected any
-    # configured param the model declares unsupported (#401), so nothing sent
-    # here can be refused by the provider.
-    if provider_name == "anthropic":
-        return AnthropicProvider(
-            model=model,
-            temperature=narration.temperature,
-            max_tokens=narration.max_output_tokens,
-            system_prompt=NARRATION_SYSTEM_PROMPT,
-            usage_provider_name=provider_name,
-            usage_seat="orrery_narration",
-        )
-    if provider_name == "openai":
-        return OpenAIProvider(
-            model=model,
-            temperature=narration.temperature,
-            max_output_tokens=narration.max_output_tokens,
-            system_prompt=NARRATION_SYSTEM_PROMPT,
-            usage_provider_name=provider_name,
-            usage_seat="orrery_narration",
-        )
-    # Any other provider must be the model's own registry provider with an
-    # OpenAI-compatible base_url (mock TEST server, Ollama, vLLM, ...).
-    endpoint = get_openai_compatible_endpoint(model)
-    if endpoint and get_provider_for_model(model) == provider_name:
-        return OpenAIProvider(
-            model=model,
-            temperature=narration.temperature,
-            max_output_tokens=narration.max_output_tokens,
-            system_prompt=NARRATION_SYSTEM_PROMPT,
-            base_url=endpoint["base_url"],
-            api_key=endpoint["api_key"],
-            structured_transport=endpoint["structured_transport"],
-            request_timeout=endpoint["request_timeout_seconds"],
-            request_params=endpoint.get("request_params"),
-            usage_provider_name=provider_name,
-            usage_seat="orrery_narration",
-        )
-    raise ValueError(f"Unsupported Orrery narration provider: {provider_name}")
 
 
 def _narration_retry_settings(settings: Mapping[str, Any]) -> tuple[int, int]:
@@ -1033,7 +949,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         type=int,
         default=None,
         help=(
-            "Maximum narration jobs to drain, capped by "
+            "Maximum deterministic off-screen records to drain, capped by "
             "orrery.narration.max_jobs_per_drain."
         ),
     )
