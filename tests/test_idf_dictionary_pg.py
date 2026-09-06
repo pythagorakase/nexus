@@ -363,3 +363,82 @@ def test_fresh_slot_from_migrated_source_has_empty_own_state(idf_slot: str) -> N
     source_reader = IDFDictionary(_url(idf_slot))
     assert "dragon" in source_reader.build_dictionary()
     assert "starship" not in source_reader.idf_dict
+
+
+@pytest.mark.parametrize("lookup_kind", ("query", "batch", "single", "high_terms"))
+def test_shared_reader_scores_its_own_snapshot(
+    idf_slot: str, monkeypatch: pytest.MonkeyPatch, lookup_kind: str
+) -> None:
+    """A later lookup cannot replace an in-flight request's older weights."""
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event, current_thread
+
+    with closing(connect(idf_slot)) as conn, conn, conn.cursor() as cur:
+        first = _insert(cur, "Alpha")
+        second = _insert(cur, "Beta")
+        third = _insert(cur, "Beta")
+    reader = IDFDictionary(_url(idf_slot))
+    original_read = reader._read
+    owner = current_thread()
+    read_complete = Event()
+    release_read = Event()
+
+    def pause_after_read(*args: Any, **kwargs: Any) -> Any:
+        result = original_read(*args, **kwargs)
+        if current_thread() is not owner:
+            read_complete.set()
+            if not release_read.wait(timeout=10):
+                raise TimeoutError("Main thread did not release the first read")
+        return result
+
+    def lookup() -> Any:
+        if lookup_kind == "query":
+            return reader.generate_weighted_query("alpha beta", max_terms=1)
+        if lookup_kind == "batch":
+            return reader.get_idfs(["alpha", "beta"])
+        if lookup_kind == "single":
+            return reader.get_idf("alpha")
+        return reader.get_high_idf_terms("alpha beta", threshold=0.5)
+
+    monkeypatch.setattr(reader, "_read", pause_after_read)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(lookup)
+        try:
+            assert read_complete.wait(timeout=10)
+            with closing(connect(idf_slot)) as conn, conn, conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE narrative_chunks SET raw_text='Beta' WHERE id=%s", (first,)
+                )
+                cur.execute(
+                    "UPDATE narrative_chunks SET raw_text='Alpha' WHERE id=ANY(%s)",
+                    ([second, third],),
+                )
+            later = lookup()
+        finally:
+            release_read.set()
+        earlier = future.result(timeout=10)
+    if lookup_kind == "query":
+        assert earlier == "'alpha'" and later == "'beta'"
+    elif lookup_kind == "batch":
+        assert earlier == {"alpha": math.log(2), "beta": math.log(4 / 3)}
+        assert later == {"alpha": math.log(4 / 3), "beta": math.log(2)}
+    elif lookup_kind == "single":
+        assert earlier == math.log(2) and later == math.log(4 / 3)
+    else:
+        assert earlier == ["alpha"] and later == ["beta"]
+
+
+def test_idf_columns_carry_database_documentation(idf_slot: str) -> None:
+    with closing(connect(idf_slot)) as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT c.relname, a.attname FROM pg_class c
+            JOIN pg_namespace n ON n.oid=c.relnamespace
+            JOIN pg_attribute a ON a.attrelid=c.oid
+            WHERE n.nspname='public' AND c.relname = ANY(%s)
+                AND a.attnum > 0 AND NOT a.attisdropped
+                AND NULLIF(col_description(c.oid, a.attnum), '') IS NULL
+            """,
+            (["memory_idf_corpora", "memory_idf_documents", "memory_idf_lexemes"],),
+        )
+        assert cur.fetchall() == []

@@ -46,6 +46,8 @@ def run(conn: Any) -> None:
 
             COMMENT ON TABLE memory_idf_corpora IS
                 'Database-local IDF corpus identity and transactional watermark. Narrative membership uses the canonical playable predicate plus chunk_metadata presence; persisted Retrograde summaries are text-ready. No finalized-state filter applies.';
+            COMMENT ON COLUMN memory_idf_corpora.corpus_kind IS
+                'Canonical searchable corpus identity inside this save database: narrative or retrograde_summary. Frequencies never cross corpus kinds.';
             COMMENT ON COLUMN memory_idf_corpora.analyzer_version IS
                 'PostgreSQL pg_catalog.english analyzer contract and exact server version. Analyzer or membership-contract changes require an explicit transactional rebuild; readers reject a version mismatch.';
             COMMENT ON COLUMN memory_idf_corpora.corpus_epoch IS
@@ -54,8 +56,20 @@ def run(conn: Any) -> None:
                 'Number of searchable documents, including documents whose text has no lexemes.';
             COMMENT ON TABLE memory_idf_documents IS
                 'Trigger-owned projection used for reversible document-frequency deltas. Unique lexemes come from the same pg_catalog.english to_tsvector analyzer used in retrieval.';
+            COMMENT ON COLUMN memory_idf_documents.corpus_kind IS
+                'Owning corpus identity; paired with document_id so unrelated source-table IDs cannot collide.';
+            COMMENT ON COLUMN memory_idf_documents.document_id IS
+                'Source narrative_chunks.id or retrograde_summaries.id, selected by corpus_kind. Membership is maintained by source-table triggers.';
+            COMMENT ON COLUMN memory_idf_documents.lexemes IS
+                'Unique PostgreSQL English lexemes for this document, retained to subtract its exact contribution on edits and removal.';
             COMMENT ON COLUMN memory_idf_documents.content_digest IS
                 'MD5 of source text detects edits even when the resulting lexeme set is unchanged; this is an invalidation marker, not a security hash.';
+            COMMENT ON COLUMN memory_idf_lexemes.corpus_kind IS
+                'Corpus whose searchable documents contribute to this lexeme frequency.';
+            COMMENT ON COLUMN memory_idf_lexemes.lexeme IS
+                'One PostgreSQL English full-text-search lexeme, never a client-side stem or tokenizer approximation.';
+            COMMENT ON COLUMN memory_idf_lexemes.document_frequency IS
+                'Number of searchable documents in this corpus containing this lexeme at least once; repeated occurrences within one document count once.';
             COMMENT ON TABLE memory_idf_lexemes IS
                 'Trigger-owned document counts by corpus and PostgreSQL lexeme. Counts and corpus epoch commit atomically with source writes; no process or filesystem cache is authoritative.';
             """

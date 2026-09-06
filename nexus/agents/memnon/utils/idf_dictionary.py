@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from contextlib import closing, contextmanager
+from dataclasses import dataclass
 import math
-from typing import Any, Iterator, Sequence
+from types import MappingProxyType
+from typing import Any, Iterator, Mapping, Sequence
 
 import psycopg2
 from psycopg2.extensions import parse_dsn
@@ -12,6 +14,21 @@ from psycopg2.extensions import parse_dsn
 
 class IDFStateError(RuntimeError):
     """The requested slot/corpus/analyzer state cannot safely supply weights."""
+
+
+@dataclass(frozen=True)
+class IDFSnapshot:
+    """Immutable weights and provenance owned by one database read."""
+
+    corpus_kind: str
+    analyzer_version: str
+    corpus_epoch: int
+    total_docs: int
+    weights: Mapping[str, float]
+
+    def score(self, lexeme: str) -> float:
+        """Score a lexeme, including a corpus-specific df=0 for unseen terms."""
+        return self.weights.get(lexeme, math.log(self.total_docs + 1))
 
 
 class IDFDictionary:
@@ -68,7 +85,9 @@ class IDFDictionary:
                 "apply the IDF migration or repair the database state"
             ) from exc
 
-    def _read(self, query_text: str = "", *, connection: Any = None) -> list[str]:
+    def _read(
+        self, query_text: str = "", *, connection: Any = None
+    ) -> tuple[IDFSnapshot, list[str]]:
         with self._cursor(connection) as cursor:
             # One statement binds the epoch, document count, frequencies and
             # query analysis to exactly the same PostgreSQL snapshot.
@@ -99,14 +118,25 @@ class IDFDictionary:
             or any(not 0 < frequency <= total for frequency in frequencies.values())
         ):
             raise IDFStateError(f"Invalid IDF counts for corpus {self.corpus_kind}")
-        self.total_docs = total
-        self.corpus_epoch = epoch
-        self.analyzer_version = analyzer
-        self.idf_dict = {
-            term: math.log((total + 1) / (frequency + 1))
-            for term, frequency in frequencies.items()
-        }
-        return lexemes
+        snapshot = IDFSnapshot(
+            corpus_kind=kind,
+            analyzer_version=analyzer,
+            corpus_epoch=epoch,
+            total_docs=total,
+            weights=MappingProxyType(
+                {
+                    term: math.log((total + 1) / (frequency + 1))
+                    for term, frequency in frequencies.items()
+                }
+            ),
+        )
+        # Diagnostics are last-observed only. Callers must score from the local
+        # immutable snapshot, because another thread may publish newer state.
+        self.total_docs = snapshot.total_docs
+        self.corpus_epoch = snapshot.corpus_epoch
+        self.analyzer_version = snapshot.analyzer_version
+        self.idf_dict = dict(snapshot.weights)
+        return snapshot, lexemes
 
     def build_dictionary(self, force_rebuild: bool = False) -> dict[str, float]:
         """Read current database-owned counts; every call refreshes the snapshot.
@@ -114,12 +144,8 @@ class IDFDictionary:
         ``force_rebuild`` remains accepted for existing diagnostic callers. It
         does not mutate trigger-owned state or bypass its version checks.
         """
-        self._read()
-        return self.idf_dict
-
-    def _score(self, lexeme: str) -> float:
-        # An unseen lexeme has df=0 in this corpus, not an arbitrary default.
-        return self.idf_dict.get(lexeme, math.log(self.total_docs + 1))
+        snapshot, _ = self._read()
+        return dict(snapshot.weights)
 
     @staticmethod
     def _weight_class(idf: float) -> str:
@@ -133,20 +159,20 @@ class IDFDictionary:
 
     def get_idf(self, term: str) -> float:
         """Return the highest IDF among PostgreSQL's lexemes for the term."""
-        lexemes = self._read(term)
-        return max((self._score(lexeme) for lexeme in lexemes), default=0.0)
+        snapshot, lexemes = self._read(term)
+        return max((snapshot.score(lexeme) for lexeme in lexemes), default=0.0)
 
     def get_idfs(self, terms: Sequence[str]) -> dict[str, float]:
         """Score many source terms against one snapshot and one connection."""
         with self._cursor() as cursor:
-            self._read(connection=cursor.connection)
+            snapshot, _ = self._read(connection=cursor.connection)
             cursor.execute(
                 "SELECT term, tsvector_to_array(to_tsvector('pg_catalog.english', term)) "
                 "FROM unnest(%s::text[]) AS term",
                 (list(terms),),
             )
             return {
-                term: max((self._score(lexeme) for lexeme in lexemes), default=0.0)
+                term: max((snapshot.score(lexeme) for lexeme in lexemes), default=0.0)
                 for term, lexemes in cursor.fetchall()
             }
 
@@ -169,10 +195,10 @@ class IDFDictionary:
             )
         if max_terms < 1:
             raise ValueError("max_terms must be positive")
-        lexemes = self._read(query_text, connection=connection)
-        ranked = sorted(lexemes, key=lambda term: (-self._score(term), term))
-        if any(self._score(term) > 3.0 for term in ranked):
-            ranked = [term for term in ranked if self._score(term) >= 2.0]
+        snapshot, lexemes = self._read(query_text, connection=connection)
+        ranked = sorted(lexemes, key=lambda term: (-snapshot.score(term), term))
+        if any(snapshot.score(term) > 3.0 for term in ranked):
+            ranked = [term for term in ranked if snapshot.score(term) >= 2.0]
             max_terms = min(max_terms, 5)
         # Quoting keeps compound words, apostrophes and tsquery operators data.
         return " | ".join(
@@ -187,9 +213,9 @@ class IDFDictionary:
         stopwords: Sequence[str] = (),
     ) -> list[str]:
         """Return unique lexemes meeting the threshold in the current corpus."""
-        lexemes = self._read(query_text)
+        snapshot, lexemes = self._read(query_text)
         return [
             term
             for term in lexemes
-            if term not in stopwords and self._score(term) >= threshold
+            if term not in stopwords and snapshot.score(term) >= threshold
         ]

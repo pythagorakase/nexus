@@ -28,7 +28,10 @@ and stored analyzer version; missing state, invalid counts, and version
 mismatches raise `IDFStateError` through retrieval callers. Every lookup reads
 current state. Production hybrid retrieval uses one read-only repeatable-read
 transaction for IDF selection and both corpus searches, so concurrent commits
-cannot mix query weights with a different retrieval snapshot.
+cannot mix query weights with a different retrieval snapshot. Query scoring uses
+an immutable snapshot local to the request, so overlapping calls on the same
+MEMNON instance cannot replace each other's weights. Diagnostic fields remain
+last-observed values and are not used to score queries.
 
 IDF is `log((document_count + 1) / (document_frequency + 1))`, including
 `document_frequency = 0` for unseen lexemes. Empty or stopword-only terms score
