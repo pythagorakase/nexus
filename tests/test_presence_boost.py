@@ -50,17 +50,24 @@ class _IDFCursor:
     def __exit__(self, *_args: Any) -> None:
         return None
 
-    def execute(self, statement: str) -> None:
+    def execute(self, statement: str, parameters: Any) -> None:
         self.statement = statement
 
-    def fetchone(self) -> tuple[int]:
-        return (1,)
+    def fetchone(self) -> tuple[Any, ...]:
+        return ("narrative", "analyzer", 1, 1, "analyzer", {"fixture": 1}, [])
 
     def fetchall(self) -> list[tuple[str, int]]:
         return [("fixture", 0)]
 
 
 class _IDFConnection:
+    def set_session(self, *, readonly: bool, isolation_level: str) -> None:
+        assert readonly
+        assert isolation_level == "REPEATABLE READ"
+
+    def close(self) -> None:
+        pass
+
     def __enter__(self) -> "_IDFConnection":
         return self
 

@@ -12,6 +12,8 @@ from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
 
 from nexus.memory.context_state import is_retrograde_summary
 
+from .idf_dictionary import IDFStateError
+
 # Set up logging
 logger = logging.getLogger("nexus.memnon.continuous_temporal_search")
 
@@ -437,6 +439,8 @@ def execute_time_aware_search(
         # Return only the requested number of results
         return time_boosted_results[:top_k]
 
+    except IDFStateError:
+        raise
     except Exception as e:
         logger.error(f"Error in continuous time-aware search: {e}")
         import traceback
@@ -620,6 +624,8 @@ def execute_multi_model_time_aware_search(
         # Return only the requested number of results
         return time_boosted_results[:top_k]
 
+    except IDFStateError:
+        raise
     except Exception as e:
         logger.error(f"Error in multi-model time-aware search: {e}")
         import traceback

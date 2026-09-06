@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, NamedTuple, cast
+from typing import Any, Dict, Iterator, NamedTuple, cast
 
 import pytest
 import tomlkit
@@ -14,11 +14,25 @@ from nexus.agents.lore.logon_utility import LogonUtility
 from nexus.config import load_settings
 from nexus.config.loader import RUNTIME_CONFIG_ENV
 from nexus.config.settings_models import Settings
+from nexus.api.slot_utils import VALID_DBNAMES
+from tests.pg_fixtures import disposable_slot_database, seed_protagonist
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 REPO_CONFIG = REPO_ROOT / "nexus.toml"
 
 pytestmark = pytest.mark.requires_postgres
+
+
+@pytest.fixture()
+def runtime_database() -> Iterator[str]:
+    """Isolate LORE construction and model routing from native save slots."""
+    with disposable_slot_database("qa_runtime_config") as dbname:
+        seed_protagonist(dbname)
+        VALID_DBNAMES.add(dbname)
+        try:
+            yield dbname
+        finally:
+            VALID_DBNAMES.discard(dbname)
 
 
 class AlternateConfig(NamedTuple):
@@ -83,6 +97,7 @@ def _write_alternate_config(tmp_path: Path) -> AlternateConfig:
 def test_lore_honors_runtime_config_for_both_storyteller_seats(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    runtime_database: str,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """The managed-runtime config reaches LORE and LOGON without a paid turn."""
@@ -90,8 +105,9 @@ def test_lore_honors_runtime_config_for_both_storyteller_seats(
     monkeypatch.setenv(RUNTIME_CONFIG_ENV, str(alternate.path))
     caplog.set_level(logging.INFO, logger="nexus.lore")
 
-    lore = LORE(enable_logon=False, slot=1)
+    lore = LORE(enable_logon=False, dbname=runtime_database)
     try:
+        assert lore.memnon is not None
         apex = lore.settings["API Settings"]["apex"]
         assert lore.settings_path == alternate.path.resolve()
         assert apex["model"] == alternate.writer_model
@@ -99,7 +115,7 @@ def test_lore_honors_runtime_config_for_both_storyteller_seats(
 
         routing = LogonUtility(
             lore.settings,
-            dbname="save_01",
+            dbname=runtime_database,
             model_override=alternate.writer_value,
             settings_path=lore.settings_path,
         )
@@ -119,14 +135,18 @@ def test_lore_honors_runtime_config_for_both_storyteller_seats(
 def test_explicit_lore_settings_path_beats_runtime_environment(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    runtime_database: str,
 ) -> None:
     """An explicit caller path remains authoritative over the runtime env var."""
     alternate = _write_alternate_config(tmp_path)
     missing_runtime_config = tmp_path / "missing-runtime.toml"
     monkeypatch.setenv(RUNTIME_CONFIG_ENV, str(missing_runtime_config))
 
-    lore = LORE(settings_path=str(alternate.path), enable_logon=True, slot=1)
+    lore = LORE(
+        settings_path=str(alternate.path), enable_logon=True, dbname=runtime_database
+    )
     try:
+        assert lore.memnon is not None
         apex = lore.settings["API Settings"]["apex"]
         assert lore.settings_path == alternate.path.resolve()
         assert apex["model"] == alternate.writer_model
@@ -144,14 +164,16 @@ def test_explicit_lore_settings_path_beats_runtime_environment(
 def test_lore_without_runtime_environment_falls_back_to_repo_root(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    runtime_database: str,
 ) -> None:
     """The no-env fallback is repository-root nexus.toml, independent of cwd."""
     monkeypatch.delenv(RUNTIME_CONFIG_ENV, raising=False)
     monkeypatch.chdir(tmp_path)
     repository_settings = load_settings(REPO_CONFIG)
 
-    lore = LORE(enable_logon=False, slot=1)
+    lore = LORE(enable_logon=False, dbname=runtime_database)
     try:
+        assert lore.memnon is not None
         apex = lore.settings["API Settings"]["apex"]
         assert lore.settings_path == REPO_CONFIG.resolve()
         assert apex["model"] == repository_settings.apex.model

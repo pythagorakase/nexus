@@ -239,7 +239,38 @@ def initialize_slot_database(
             "Migration runner not available - run 'python scripts/migrate.py' manually"
         )
 
+    _initialize_empty_idf_corpora(target_db)
     LOG.info("Database %s ready", target_db)
+
+
+def _initialize_empty_idf_corpora(dbname: str) -> None:
+    """Seed fresh corpus identities without copying a source story's counters."""
+    with _connect(dbname) as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT EXISTS(SELECT 1 FROM narrative_chunks) "
+            "OR EXISTS(SELECT 1 FROM retrograde_summaries)"
+        )
+        if cur.fetchone()[0]:
+            raise RuntimeError("Fresh-slot IDF initialization requires empty corpora")
+        cur.execute(
+            """
+            INSERT INTO memory_idf_corpora (corpus_kind, analyzer_version)
+            SELECT kind, 'pg_catalog.english/v1/' || current_setting('server_version_num')
+            FROM unnest(ARRAY['narrative', 'retrograde_summary']) AS kind
+            ON CONFLICT (corpus_kind) DO NOTHING
+            """
+        )
+        cur.execute(
+            """
+            SELECT count(*) FROM memory_idf_corpora
+            WHERE document_count <> 0 OR analyzer_version <>
+                'pg_catalog.english/v1/' || current_setting('server_version_num')
+            """
+        )
+        if cur.fetchone()[0]:
+            raise RuntimeError(
+                "Fresh-slot IDF state has nonempty or mismatched corpora"
+            )
 
 
 # The template's canonical seed image: the only tables whose ROWS are copied
