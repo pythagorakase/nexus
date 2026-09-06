@@ -9,11 +9,11 @@ Orrery's shape borrows openly from two reference points:
 - **Bethesda's Radiant AI** (Skyrim, Fallout): NPCs have schedules, dispositions, and faction-affiliated routines that run independent of player presence. Off-screen state isn't fiction; it's the canonical answer to "what is this NPC doing right now?"
 - **Dwarf Fortress**: autonomous agents with needs, relationships, and emergent off-screen events that produce historical record. The world simulates regardless of where attention is currently pointed.
 
-What distinguishes Orrery from either of those is LLM-native integration: deterministic resolution feeds Skald a structured proposal stream, Skald retains full authorial authority over current-tick proposals, and accepted off-screen outcomes can later feed narration plus a *curated bleed menu*. The deterministic substrate creates pressure and defaults; Skald decides what becomes canonical for the visible story.
+What distinguishes Orrery from either of those is LLM-native integration: deterministic resolution feeds Skald a structured proposal stream, Skald retains full authorial authority over current-tick proposals, and accepted off-screen outcomes can later feed a *curated bleed menu*. The deterministic substrate creates pressure and defaults; Skald decides what becomes canonical for the visible story.
 
 ## Motivating Example
 
-An NPC the player interrogated fifty chunks ago protested that their life was over. Behind the scenes, packages on that NPC tick through fifty chunks of deterministic state resolution. Eventually a high-magnitude branch fires — say, the NPC's retaliation against the player's faction. Orrery surfaces the proposal to Skald as imminent activity; if Skald ignores it, the proposal is ratified and committed. Prose is generated, persisted into `offscreen_narrations`, never directly surfaced. Two chunks later the player is in an intimacy scene in an entirely different part of the city, and the storyteller has the option of having a character hear distant sirens. If they do, MEMNON has substrate for retrieval and the moment connects to the long-ago interrogation. If they don't, the dramatic irony lives quietly in the database, available for any future scene that wants it.
+An NPC the player interrogated fifty chunks ago protested that their life was over. Behind the scenes, packages on that NPC tick through fifty chunks of deterministic state resolution. Eventually a high-magnitude branch fires — say, the NPC's retaliation against the player's faction. Orrery surfaces the proposal to Skald as imminent activity; if Skald ignores it, the proposal is ratified and committed. A deterministic perceptual descriptor is persisted into `offscreen_narrations`; Skald authors the visible prose. Two chunks later the player is in an intimacy scene in an entirely different part of the city, and the storyteller has the option of having a character hear distant sirens. If they do, the accepted player-visible chunk becomes MEMNON retrieval substrate and the moment connects to the long-ago interrogation. If they don't, the dramatic irony lives quietly in the database, available for any future scene that wants it.
 
 This is the shape: the world ticks for everyone, the dramatic salience filter is deterministic, the authorial choice is LLM-authored.
 
@@ -41,10 +41,10 @@ This is the shape: the world ticks for everyone, the dramatic salience filter is
 | **Commit** (Stage 2) | Free (SQL) | Stamp `tick_chunk_id`, materialize the proposal into canonical tables, enqueue narration jobs | Inside the accepted-chunk commit transaction |
 | **Clear** (Stage 3) | Deterministic | Event-based clearance and scheduled-expiry sweeps run in the commit transaction; semantic clearance currently no-op | Commit (event/time-driven) |
 | **Promote** (Stage 4) | Deterministic | Decide which resolutions deserve frontier prose | Post-commit |
-| **Narrate** (Stage 5) | Frontier LLM, async via durable outbox | Generate prose for promoted resolutions; persist into `offscreen_narrations` | Async after commit; durable across process restart |
-| **Bleed** (Stage 6) | Deterministic, storyteller-time | Offer a bounded menu from already-filtered succeeded narrations | LORE Phase 5 (`payload_assembly`), each player turn |
+| **Record** (Stage 5; legacy Narrate name) | Deterministic, async via durable outbox | Persist perceptual descriptors for promoted resolutions into `offscreen_narrations` | Async after commit; durable across process restart |
+| **Bleed** (Stage 6) | Deterministic, storyteller-time | Offer a bounded menu from succeeded descriptor records | LORE Phase 5 (`payload_assembly`), each player turn |
 
-**Cost shape (load-bearing):** Resolve is free and runs at full breadth. Each downstream stage is more expensive per call but operates on a smaller surface. Frontier prose only generates for resolutions that survive promotion. Skald adjudication happens inside the ordinary storyteller call; there is no separate local-LLM adjudicator. The only Orrery-owned frontier call is Narrate; Promote and Bleed are deterministic.
+**Cost shape (load-bearing):** Resolve, Promote, off-screen record creation, and Bleed are deterministic. Skald adjudication happens inside the ordinary storyteller call. The unused off-screen prose provider call was retired in #846; experience rendering and retrograde maturation retain their separate provider routes.
 
 ---
 
@@ -422,15 +422,17 @@ CREATE TABLE offscreen_narrations (
 );
 ```
 
-`narrative_chunks` is always player-visible; `offscreen_narrations` never is. MEMNON's retrieval logic queries both tables with explicit semantic intent: warm-slice → `narrative_chunks` only; off-screen retrieval → both, with `offscreen_narrations` clearly labeled. `narrative_view.world_time` does NOT count off-screen narrations toward chronological advancement.
+`narrative_chunks` is player-visible; `offscreen_narrations` never is. MEMNON excludes `offscreen_narrations` from its warm slice, text search, and vector collections. `narrative_view.world_time` does not count off-screen records toward chronological advancement.
 
-**Embedding path is deliberately deferred (decided 2026-06, M6).** `embedding_status` stays at its `'pending'` default and no processor drains it. Rationale: no off-screen retrieval surface exists yet — `tests/test_orrery/test_retrieval_boundaries.py` deliberately excludes `offscreen_narrations` from every MEMNON surface (warm slice, text search, vector collections), and Bleed reads narrations relationally, not semantically. Embedding rows today would burn tokens for vectors nothing may query, and wiring them into the existing `narrative_chunks` collection would violate the boundary tests. The durable `'pending'` backlog (visible via `python -m nexus.agents.orrery.worker --status`) is the designed re-entry point: when a labeled off-screen retrieval surface lands (post-1.0), a processor can drain the backlog without schema changes.
+**Provider retirement (#846).** New records contain deterministic JSON text of the existing perceptual descriptor, with `record_kind = "deterministic_descriptor"` in the descriptor. The resolution/tick foreign keys preserve their canonical source. The original channel, summary, and brief remain unchanged. Existing generated prose and its descriptor stay untouched as legacy audit material; absence of the marker identifies pre-retirement/unclassified records, not player-visible canon. New jobs leave provider/model provenance NULL. Existing jobs retain their provenance and all owner, nonce, lease, anchor, and uniqueness fences; active leases are never forcibly completed.
+
+**Embedding remains deferred (decided 2026-06, M6).** `embedding_status` retains its `'pending'` default and no processor drains it. There is no off-screen retrieval consumer requiring prose. A future labeled retrieval surface must build from canonical resolutions, events, and descriptors, distinguish legacy records, and establish its own entitlement contract before embedding or serving this backlog. The presence of pending rows does not authorize prose generation or automatic indexing. See [the retirement audit](offscreen_narration_retirement.md).
 
 ### Bleed Selector — Cross-Turn Ambient Surfacing
 
-**Bleed handles cross-turn grace, not current-tick proposals.** Current-tick proposals flow through the authority model above — Skald sees them directly in `orrery_imminent_activity` and adjudicates. Bleed's role is narrower: surfacing *prior-turn* narrated events that weren't included in any chunk yet but remain eligible to bleed through within a temporal grace window.
+**Bleed handles cross-turn grace, not current-tick proposals.** Current-tick proposals flow through the authority model above — Skald sees them directly in `orrery_imminent_activity` and adjudicates. Bleed's role is narrower: surfacing *prior-turn* promoted events that weren't included in any chunk yet but remain eligible to bleed through within a temporal grace window.
 
-Storyteller-time Bleed chooses deterministically from these eligible narrated events. Output is a bounded list (typically N ≤ 3), each annotated with a sensory channel (auditory, news fragment, secondhand mention, faction graffiti) and a thin perceptual descriptor — not the narrator's full prose.
+Storyteller-time Bleed chooses deterministically from these eligible promoted events. Output is a bounded list (typically N ≤ 3), each annotated with a sensory channel (auditory, news fragment, secondhand mention, faction graffiti) and a thin perceptual descriptor.
 
 **Hook point**: runs at the start of LORE Phase 5 (`assemble_context_payload`, `turn_cycle.py:489`). Its output populates `turn_context.bleed_menu`, which `assemble_context_payload` then reads when building the payload.
 
@@ -451,7 +453,7 @@ Storyteller-time Bleed chooses deterministically from these eligible narrated ev
 - **Clear (time)** sweeps open `entity_tags` rows whose `expires_at_world_time` is at or before the accepted tick's world time, recording `tag_clearance_log` rows with mechanism `time`.
 - **Clear (semantic)** is currently a conservative no-op until a non-local clearance signal exists.
 - **Promote** runs post-commit, deterministically, batched per tick.
-- **Narrate** is async via durable outbox. Bleed reads only `state='succeeded'` narrations + deterministic briefs.
+- **Record** is async via the existing durable outbox. Bleed reads only succeeded records and deterministic briefs.
 - **Bleed** runs synchronously at storyteller-time without inference.
 
 ### World Time Denormalization
@@ -556,9 +558,9 @@ enabled = true
 window_chunks = 30
 
 [orrery.narration]
-mode = "async"                                  # "async" | "sync"
-provider = "anthropic"
-model_ref = "@anthropic.default"                # resolved via [global.model.api_models]
+# Historical name: deterministic off-screen record queue, no provider settings.
+lease_duration_seconds = 300
+max_jobs_per_drain = 5
 
 [orrery.bleed]
 max_candidates = 3

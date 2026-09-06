@@ -121,37 +121,10 @@ class WorkerConn:
         self.closed = True
 
 
-class FakeProviderResponse:
-    """Provider response stand-in."""
-
-    content = "Mara disappears below the platform, leaving only static behind."
-
-
-class FakeNarrationProvider:
-    """Frontier provider stand-in."""
-
-    def __init__(self):
-        self.prompts = []
-
-    def get_completion(self, prompt):
-        self.prompts.append(prompt)
-        return FakeProviderResponse()
-
-
-class FailingNarrationProvider:
-    """Provider stand-in that raises while generating narration."""
-
-    def get_completion(self, _prompt):
-        raise TimeoutError("temporary provider failure")
-
-
 def _settings():
     return {
         "orrery": {
-            "narration": {
-                "provider": "anthropic",
-                "model_ref": "claude-sonnet-4-6",
-            },
+            "narration": {},
             "promote": {
                 "priority_threshold": 50.0,
                 "magnitude_threshold": 0.5,
@@ -347,12 +320,10 @@ def test_drain_narration_outbox_persists_offscreen_narration() -> None:
     """Queued narration jobs persist into offscreen_narrations."""
 
     cursor = WorkerCursor(job_rows=[_job_row()])
-    provider = FakeNarrationProvider()
 
     narrated, failed = drain_narration_outbox_sync(
         slot=5,
         settings=_settings(),
-        narration_provider=provider,
         conn=WorkerConn(cursor),
     )
 
@@ -360,7 +331,6 @@ def test_drain_narration_outbox_persists_offscreen_narration() -> None:
 
     assert narrated == 1
     assert failed == 0
-    assert provider.prompts
     assert "FOR UPDATE OF j SKIP LOCKED" in statements
     assert "/* orrery:narration:anchor_fence */" in statements
     assert "FOR SHARE" in statements
@@ -372,12 +342,14 @@ def test_drain_narration_outbox_persists_offscreen_narration() -> None:
     assert "state = 'succeeded'" in statements
 
 
-def test_drain_narration_outbox_does_not_lease_before_provider_ready() -> None:
-    """Provider setup failures leave queued jobs available for a later drain."""
+def test_drain_narration_outbox_rejects_retired_provider_config_before_leasing() -> (
+    None
+):
+    """Retired provider settings fail before a worker takes custody."""
 
     cursor = WorkerCursor(job_rows=[_job_row()])
 
-    with pytest.raises(ValueError, match="Unsupported Orrery narration provider"):
+    with pytest.raises(ValueError, match="Extra inputs are not permitted"):
         drain_narration_outbox_sync(
             slot=5,
             settings={
@@ -397,12 +369,11 @@ def test_drain_narration_outbox_does_not_lease_before_provider_ready() -> None:
 def test_drain_narration_outbox_requeues_transient_failures() -> None:
     """Narration attempts retry with backoff before becoming terminal."""
 
-    cursor = WorkerCursor(job_rows=[_job_row()])
+    cursor = WorkerCursor(job_rows=[dict(_job_row(), promotion_verdict="invalid")])
 
     narrated, failed = drain_narration_outbox_sync(
         slot=5,
         settings=_settings(),
-        narration_provider=FailingNarrationProvider(),
         conn=WorkerConn(cursor),
     )
 
@@ -420,13 +391,12 @@ def test_drain_narration_outbox_requeues_transient_failures() -> None:
 def test_drain_narration_outbox_marks_terminal_after_max_attempts() -> None:
     """Retries stop once the configured max attempts is reached."""
 
-    job = dict(_job_row(), attempts=2)
+    job = dict(_job_row(), attempts=2, promotion_verdict="invalid")
     cursor = WorkerCursor(job_rows=[job])
 
     narrated, failed = drain_narration_outbox_sync(
         slot=5,
         settings=_settings(),
-        narration_provider=FailingNarrationProvider(),
         conn=WorkerConn(cursor),
     )
 

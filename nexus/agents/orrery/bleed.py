@@ -1,4 +1,4 @@
-"""Storyteller-time Bleed selector for narrated Orrery resolutions."""
+"""Storyteller-time Bleed selector for promoted Orrery resolutions."""
 
 from __future__ import annotations
 
@@ -111,7 +111,7 @@ class BleedProximityGraph:
 
 
 class BleedCandidate(BaseModel):
-    """One narrated off-screen resolution eligible for Storyteller-time Bleed."""
+    """One promoted off-screen resolution eligible for Storyteller-time Bleed."""
 
     resolution_id: int
     narration_id: int
@@ -124,7 +124,6 @@ class BleedCandidate(BaseModel):
     channel: Optional[str] = None
     summary: Optional[str] = None
     brief: Optional[str] = None
-    text: str
     magnitude: Optional[float] = None
     distance: Optional[int] = None
 
@@ -224,7 +223,7 @@ def load_bleed_candidates(
     limit: Optional[int],
     pacing_allowed: Optional[bool] = None,
 ) -> list[BleedCandidate]:
-    """Load narrated Orrery candidates that are eligible before the anchor."""
+    """Load descriptor-backed Orrery candidates that are eligible before the anchor."""
 
     if limit is not None and limit <= 0:
         return []
@@ -250,7 +249,6 @@ def load_bleed_candidates(
                 r.actor_entity_id,
                 r.brief,
                 r.magnitude,
-                n.text,
                 n.perceptual_descriptor,
                 actor.name AS actor_name,
                 target.name AS target_name,
@@ -455,7 +453,9 @@ def record_bleed_uptake_sync(
         cur.execute(
             """
             /* orrery:bleed_uptake_candidates */
-            SELECT r.id, actor.name AS actor_name, n.text AS stub_text
+            SELECT r.id, actor.name AS actor_name,
+                   COALESCE(NULLIF(n.perceptual_descriptor->>'summary', ''),
+                            r.brief, n.perceptual_descriptor->>'brief', '') AS stub_text
             FROM orrery_resolutions r
             JOIN offscreen_narrations n ON n.id = r.narration_chunk_id
             LEFT JOIN entity_names_v actor ON actor.id = r.actor_entity_id
@@ -481,7 +481,7 @@ def record_bleed_uptake_sync(
                 "accepted_chunk_id": accepted_chunk_id,
                 "actor_name": actor_name,
                 "name_matched": name_matched,
-                "four_gram_overlap_ratio": overlap_ratio,
+                "descriptor_four_gram_overlap_ratio": overlap_ratio,
             },
         )
         if not name_matched:
@@ -516,7 +516,9 @@ async def record_bleed_uptake_async(
     rows = await conn.fetch(
         """
         /* orrery:bleed_uptake_candidates */
-        SELECT r.id, actor.name AS actor_name, n.text AS stub_text
+        SELECT r.id, actor.name AS actor_name,
+                   COALESCE(NULLIF(n.perceptual_descriptor->>'summary', ''),
+                            r.brief, n.perceptual_descriptor->>'brief', '') AS stub_text
         FROM orrery_resolutions r
         JOIN offscreen_narrations n ON n.id = r.narration_chunk_id
         LEFT JOIN entity_names_v actor ON actor.id = r.actor_entity_id
@@ -541,7 +543,7 @@ async def record_bleed_uptake_async(
                 "accepted_chunk_id": accepted_chunk_id,
                 "actor_name": actor_name,
                 "name_matched": name_matched,
-                "four_gram_overlap_ratio": overlap_ratio,
+                "descriptor_four_gram_overlap_ratio": overlap_ratio,
             },
         )
         if not name_matched:
@@ -594,7 +596,6 @@ def _candidate_from_row(row: Mapping[str, Any]) -> BleedCandidate:
         channel=descriptor.get("channel"),
         summary=descriptor.get("summary"),
         brief=row.get("brief") or descriptor.get("brief"),
-        text=str(row.get("text") or ""),
         magnitude=_float_or_none(row.get("magnitude")),
     )
 

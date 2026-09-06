@@ -1,8 +1,8 @@
 """Live Orrery cycle integration test on slot 2.
 
 Exercises Resolve -> Commit (with Clear's expiry sweep) -> Promote ->
-Narrate -> Bleed against the real ``save_02`` database with a real frontier
-narration call. Skipped unless both ``NEXUS_RUN_LIVE_LLM=1`` and
+Record -> Bleed against the real ``save_02`` database. The off-screen
+record stage is deterministic; this legacy live-slot test remains explicitly gated. Skipped unless both ``NEXUS_RUN_LIVE_LLM=1`` and
 ``NEXUS_RUN_POSTGRES=1`` are set.
 
 The test commits one synthetic high-salience resolution (real entity, valid
@@ -10,11 +10,12 @@ template) so Promote is guaranteed a row above the configured thresholds
 regardless of current story state, then cleans up every row it created.
 Resolve runs read-only against live world state. Narration drains are
 bounded to at most ten single-job iterations so ambient outbox backlog
-cannot turn the test into an unbounded API spend.
+cannot turn the test into an unbounded drain.
 """
 
 from __future__ import annotations
 
+import json
 import os
 import uuid
 from typing import Any
@@ -209,8 +210,8 @@ def test_live_orrery_cycle_resolve_commit_promote_narrate_bleed() -> None:
         assert promoted_row["narration_status"] == "queued"
         assert "Deterministic promotion" in promoted_row["reason"]
 
-        # Stage 5 - Narrate: real frontier call via the durable outbox.
-        # Single-job drains keep total API spend bounded by the attempt cap
+        # Stage 5 - Record: deterministic descriptor via the durable outbox.
+        # Single-job drains keep total work bounded by the attempt cap
         # even when the outbox holds unrelated queued jobs; assertions are
         # scoped to the synthetic row, not global drain counters.
         narration = None
@@ -225,7 +226,8 @@ def test_live_orrery_cycle_resolve_commit_promote_narrate_bleed() -> None:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
                     cur.execute(
                         """
-                        SELECT text, embedding_status FROM offscreen_narrations
+                        SELECT text, perceptual_descriptor, embedding_status
+                        FROM offscreen_narrations
                         WHERE resolution_id = %s
                         """,
                         (resolution_id,),
@@ -239,7 +241,11 @@ def test_live_orrery_cycle_resolve_commit_promote_narrate_bleed() -> None:
             "Narration outbox drained without producing a narration for the "
             f"synthetic resolution {resolution_id}"
         )
-        assert len(narration["text"].strip()) > 40
+        assert json.loads(narration["text"]) == narration["perceptual_descriptor"]
+        assert (
+            narration["perceptual_descriptor"]["record_kind"]
+            == "deterministic_descriptor"
+        )
         assert narration["embedding_status"] == "pending"
 
         # Stage 6 - Bleed: the synthetic narrated resolution must propagate

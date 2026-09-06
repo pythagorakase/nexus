@@ -2,9 +2,6 @@
 
 These tests make REAL calls:
 
-- the Orrery narration provider built from shipped nexus.toml settings must
-  succeed against the configured Anthropic narration model (the golden-gate
-  failure case was ``temperature=0.4`` hardcoded into the request);
 - the rejection itself is reproduced live, proving the registry's
   ``unsupported_params`` declaration matches provider behavior;
 - an ``@openai.default`` role call still works through the OpenAI provider;
@@ -40,29 +37,6 @@ def _nexus_toml_dict() -> dict:
         return tomllib.load(handle)
 
 
-def test_narration_provider_succeeds_against_configured_anthropic_model():
-    """The exact failing call from issue #401, rebuilt from shipped config.
-
-    ``_narration_provider`` previously hardcoded ``temperature=0.4``, which the
-    Anthropic model selected in commit 2a1f15d4 rejects with a 400. With
-    sampling params sourced from [orrery.narration] (unset by default), the
-    real call must succeed.
-    """
-    from nexus.agents.orrery.worker import _narration_provider
-
-    settings = load_settings(REPO_ROOT / "nexus.toml")
-    narration = settings.orrery.narration.model_copy(
-        update={"max_output_tokens": 64}  # keep the live call cheap
-    )
-    provider = _narration_provider({"orrery": {"narration": narration}})
-
-    response = provider.get_completion(
-        "Write one sentence describing a courier crossing a rainy plaza."
-    )
-    assert response.content.strip(), "narration provider returned empty text"
-    assert provider.temperature is None, "no temperature configured, none sent"
-
-
 def test_temperature_rejected_live_matches_registry_declaration():
     """Prove unsupported_params is true: temperature really 400s on the model."""
     import anthropic
@@ -70,7 +44,7 @@ def test_temperature_rejected_live_matches_registry_declaration():
     from scripts.api_anthropic import AnthropicProvider
 
     settings = load_settings(REPO_ROOT / "nexus.toml")
-    model = settings.orrery.narration.model_ref
+    model = settings.resolve_model_ref("@anthropic.default")
     assert "temperature" in settings.model_entry(model).unsupported_params
 
     provider = AnthropicProvider(model=model, temperature=0.4, max_tokens=16)
