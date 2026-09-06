@@ -797,7 +797,7 @@ def test_coverage_report_is_internally_consistent(
 
     # Retrograde is the registered source for faction_realignment; every
     # retained gate has either an internal emitter or an exogenous producer.
-    assert payload["dead_gate_arms"] == []
+    assert payload["dead_gate_arms"] == {}
     assert set(payload["hydration_honesty"]) == {
         "rewound_to_anchor",
         "current_projection",
