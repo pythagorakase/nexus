@@ -1,293 +1,195 @@
+"""Commit-current document frequencies owned by the selected PostgreSQL slot."""
+
+from __future__ import annotations
+
+from contextlib import closing, contextmanager
 import math
-import logging
-import pickle
-import re
-import time
-from pathlib import Path
-from typing import Dict, Any, Iterable, List, Tuple
+from typing import Any, Iterator, Sequence
 
 import psycopg2
+from psycopg2.extensions import parse_dsn
 
-try:
-    import snowballstemmer
-    STEMMER = snowballstemmer.stemmer('english')
-except ImportError:
-    STEMMER = None
 
-logger = logging.getLogger("nexus.memnon.idf_dictionary")
-
-STOPWORDS = {
-    "a",
-    "an",
-    "and",
-    "are",
-    "as",
-    "at",
-    "be",
-    "but",
-    "by",
-    "for",
-    "from",
-    "has",
-    "have",
-    "in",
-    "into",
-    "is",
-    "it",
-    "of",
-    "on",
-    "or",
-    "that",
-    "the",
-    "their",
-    "this",
-    "to",
-    "with",
-}
+class IDFStateError(RuntimeError):
+    """The requested slot/corpus/analyzer state cannot safely supply weights."""
 
 
 class IDFDictionary:
-    """Manages inverse document frequency calculations for text search."""
-    
-    def __init__(self, db_url: str, cache_path: str = None):
+    """Read transactionally maintained IDF state for one database and corpus.
+
+    Public lookups read committed database state on each call. A caller-owned
+    repeatable-read connection can pin query selection to its retrieval snapshot.
+    ``idf_dict`` is only the most recently inspected snapshot, never a cache.
+    """
+
+    CORPUS_KINDS = frozenset({"narrative", "retrograde_summary"})
+
+    def __init__(self, db_url: str, *, corpus_kind: str = "narrative") -> None:
+        if corpus_kind not in self.CORPUS_KINDS:
+            raise IDFStateError(f"Unsupported IDF corpus kind: {corpus_kind!r}")
         self.db_url = db_url
-        self.cache_path = cache_path or Path.home() / ".cache" / "nexus" / "idf_cache.pkl"
-        # Create directory if it doesn't exist
-        if not self.cache_path.parent.exists():
-            try:
-                self.cache_path.parent.mkdir(parents=True, exist_ok=True)
-                logger.info(f"Created cache directory: {self.cache_path.parent}")
-            except Exception as e:
-                logger.warning(f"Could not create cache directory: {e}")
-                # Fall back to local directory
-                self.cache_path = Path("idf_cache.pkl")
-
-        self.idf_dict = {}
+        self.corpus_kind = corpus_kind
+        self._dsn = parse_dsn(db_url)
+        self._database = self._dsn.get("dbname")
+        if not self._database:
+            raise IDFStateError("IDF requires an explicit slot database")
+        self.idf_dict: dict[str, float] = {}
         self.total_docs = 0
-        self.last_updated = 0
-        
-    def build_dictionary(self, force_rebuild: bool = False) -> Dict[str, float]:
-        """Build or load the IDF dictionary."""
-        # Check for cached dictionary
-        if not force_rebuild and self._load_from_cache():
-            return self.idf_dict
-            
-        logger.info("Building IDF dictionary from database...")
-        try:
-            with psycopg2.connect(self.db_url) as conn:
-                with conn.cursor() as cursor:
-                    # Get total document count
-                    cursor.execute("SELECT COUNT(*) FROM narrative_chunks")
-                    self.total_docs = cursor.fetchone()[0]
-                    
-                    # Get term frequencies
-                    cursor.execute("""
-                    SELECT word, ndoc FROM ts_stat(
-                        'SELECT to_tsvector(''english'', raw_text) FROM narrative_chunks'
-                    )
-                    """)
-                    
-                    # Calculate IDF for each term
-                    self.idf_dict = {}
-                    for word, ndoc in cursor.fetchall():
-                        # Standard IDF formula: log(N/df)
-                        idf = math.log(self.total_docs / (ndoc + 1))
-                        self.idf_dict[word] = idf
-                    
-                    logger.info(f"Built IDF dictionary with {len(self.idf_dict)} terms")
-                    
-                    # Save to cache
-                    self._save_to_cache()
-                    return self.idf_dict
-                    
-        except Exception as e:
-            logger.error(f"Error building IDF dictionary: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
-            return {}
-    
-    def _load_from_cache(self) -> bool:
-        """Load IDF dictionary from cache file if it exists and is recent."""
-        try:
-            cache_path = Path(self.cache_path)
-            if not cache_path.exists():
-                return False
-                
-            # Check if cache is less than a day old
-            cache_age = time.time() - cache_path.stat().st_mtime
-            if cache_age > 86400:  # 24 hours
-                logger.info("Cache is older than 24 hours, rebuilding")
-                return False
-                
-            with open(cache_path, 'rb') as f:
-                cache_data = pickle.load(f)
-                self.idf_dict = cache_data['idf_dict']
-                self.total_docs = cache_data['total_docs']
-                self.last_updated = cache_data['timestamp']
-                
-            logger.info(f"Loaded IDF dictionary from cache with {len(self.idf_dict)} terms")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error loading IDF cache: {e}")
-            return False
-    
-    def _save_to_cache(self) -> bool:
-        """Save IDF dictionary to cache file."""
-        try:
-            cache_data = {
-                'idf_dict': self.idf_dict,
-                'total_docs': self.total_docs,
-                'timestamp': time.time()
-            }
-            
-            with open(self.cache_path, 'wb') as f:
-                pickle.dump(cache_data, f)
-                
-            logger.info(f"Saved IDF dictionary to cache at {self.cache_path}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error saving IDF cache: {e}")
-            return False
-    
-    def get_weight_class(self, term: str) -> str:
-        """Get weight class (A, B, C, D) for a term based on its IDF."""
-        # Apply English stemming to match PostgreSQL's behavior
-        lookup_term = term.lower()
-        if STEMMER:
-            lookup_term = STEMMER.stemWord(lookup_term)
+        self.corpus_epoch: int | None = None
+        self.analyzer_version: str | None = None
 
-        # Get IDF value
-        idf = self.idf_dict.get(lookup_term, 1.0)
-        
-        # Assign weight class based on IDF
-        if idf > 2.5:      # Very rare terms
-            return "A"     # Highest weight
-        elif idf > 2.0:    # Rare terms
-            return "B"     # High weight
-        elif idf > 1.0:    # Uncommon terms
-            return "C"     # Medium weight
-        else:              # Common terms
-            return "D"     # Low weight
-    
-    def _tokenize(self, query_text: str) -> Iterable[str]:
-        """Tokenize text into searchable lexemes compatible with to_tsquery."""
+    def for_corpus(self, corpus_kind: str) -> IDFDictionary:
+        """Return an independently scoped reader for another supported corpus."""
+        return type(self)(self.db_url, corpus_kind=corpus_kind)
 
-        tokens = re.findall(r"[a-z0-9]+", query_text.lower())
-        for token in tokens:
-            if len(token) < 2:
-                continue
-            # Apply English stemming to match PostgreSQL's behavior
-            if STEMMER:
-                stemmed = STEMMER.stemWord(token)
-                yield stemmed
+    @contextmanager
+    def _cursor(self, connection: Any = None) -> Iterator[Any]:
+        try:
+            if connection is None:
+                with closing(psycopg2.connect(self.db_url)) as conn:
+                    conn.set_session(readonly=True, isolation_level="REPEATABLE READ")
+                    with conn, conn.cursor() as cursor:
+                        yield cursor
             else:
-                yield token
+                if connection.info.dbname != self._database or any(
+                    connection.info.dsn_parameters.get(key) != self._dsn[key]
+                    for key in ("host", "hostaddr", "port")
+                    if key in self._dsn
+                ):
+                    raise IDFStateError(
+                        "IDF slot mismatch: requested "
+                        f"{self._database!r}, received {connection.info.dbname!r}"
+                    )
+                with connection.cursor() as cursor:
+                    yield cursor
+        except psycopg2.Error as exc:
+            raise IDFStateError(
+                f"Cannot read IDF state for {self._database}/{self.corpus_kind}; "
+                "apply the IDF migration or repair the database state"
+            ) from exc
 
-    def _select_terms(self, tokens: Iterable[str]) -> List[Tuple[str, str, float]]:
-        """Select unique tokens with their weight class and IDF score."""
+    def _read(self, query_text: str = "", *, connection: Any = None) -> list[str]:
+        with self._cursor(connection) as cursor:
+            # One statement binds the epoch, document count, frequencies and
+            # query analysis to exactly the same PostgreSQL snapshot.
+            cursor.execute(
+                """
+                SELECT c.corpus_kind, c.analyzer_version, c.corpus_epoch,
+                    c.document_count,
+                    'pg_catalog.english/v1/' || current_setting('server_version_num'),
+                    COALESCE((SELECT jsonb_object_agg(lexeme, document_frequency)
+                        FROM memory_idf_lexemes l
+                        WHERE l.corpus_kind = c.corpus_kind), '{}'::jsonb),
+                    tsvector_to_array(to_tsvector('pg_catalog.english', %s))
+                FROM memory_idf_corpora c WHERE c.corpus_kind = %s
+                """,
+                (query_text, self.corpus_kind),
+            )
+            row = cursor.fetchone()
+        if row is None:
+            raise IDFStateError(f"Missing IDF corpus state: {self.corpus_kind}")
+        kind, analyzer, epoch, total, expected_analyzer, frequencies, lexemes = row
+        if kind != self.corpus_kind or analyzer != expected_analyzer:
+            raise IDFStateError(
+                f"IDF corpus/analyzer mismatch for {self.corpus_kind}; rebuild required"
+            )
+        if (
+            total < 0
+            or epoch < 0
+            or any(not 0 < frequency <= total for frequency in frequencies.values())
+        ):
+            raise IDFStateError(f"Invalid IDF counts for corpus {self.corpus_kind}")
+        self.total_docs = total
+        self.corpus_epoch = epoch
+        self.analyzer_version = analyzer
+        self.idf_dict = {
+            term: math.log((total + 1) / (frequency + 1))
+            for term, frequency in frequencies.items()
+        }
+        return lexemes
 
-        seen = set()
-        selected: List[Tuple[str, str, float]] = []
+    def build_dictionary(self, force_rebuild: bool = False) -> dict[str, float]:
+        """Read current database-owned counts; every call refreshes the snapshot.
 
-        for token in tokens:
-            if token in seen:
-                continue
-            seen.add(token)
+        ``force_rebuild`` remains accepted for existing diagnostic callers. It
+        does not mutate trigger-owned state or bypass its version checks.
+        """
+        self._read()
+        return self.idf_dict
 
-            idf = self.get_idf(token)
-            weight_class = self.get_weight_class(token)
-            selected.append((token, weight_class, idf))
+    def _score(self, lexeme: str) -> float:
+        # An unseen lexeme has df=0 in this corpus, not an arbitrary default.
+        return self.idf_dict.get(lexeme, math.log(self.total_docs + 1))
 
-        # Sort by IDF descending so rare terms appear first
-        selected.sort(key=lambda item: item[2], reverse=True)
-        return selected
+    @staticmethod
+    def _weight_class(idf: float) -> str:
+        if idf > 2.5:
+            return "A"
+        if idf > 2.0:
+            return "B"
+        if idf > 1.0:
+            return "C"
+        return "D"
 
-    def generate_weighted_query(self, query_text: str, max_terms: int = 12) -> str:
-        """Generate a weighted OR tsquery string prioritizing rare keywords."""
-
-        tokens = list(self._tokenize(query_text))
-        if not tokens:
-            return ""
-
-        ranked_terms = self._select_terms(tokens)
-        if not ranked_terms:
-            return ""
-
-        # Check if we have very rare terms (IDF > 3.0)
-        very_rare_terms = [t for t in ranked_terms if t[2] > 3.0]
-
-        # If we have very rare terms, be more selective
-        if very_rare_terms:
-            # Only include the very rare terms plus a few high-value terms
-            high_value = [t for t in ranked_terms if t[2] >= 2.0]
-            ordered_terms = high_value[:min(5, len(high_value))]
-        else:
-            # Normal behavior: separate high-value and fallback terms
-            high_value: List[Tuple[str, str, float]] = []
-            fallback: List[Tuple[str, str, float]] = []
-
-            for term, weight_class, idf in ranked_terms:
-                # Treat IDF >= 1.5 as meaningful enough to prioritize
-                if idf >= 1.5:
-                    high_value.append((term, weight_class, idf))
-                else:
-                    fallback.append((term, weight_class, idf))
-
-            ordered_terms: List[Tuple[str, str, float]] = []
-            ordered_terms.extend(high_value[:max_terms])
-
-            if len(ordered_terms) < max_terms:
-                remaining = max_terms - len(ordered_terms)
-                ordered_terms.extend(fallback[:remaining])
-
-        if not ordered_terms:
-            # As an ultimate fallback, keep the first available term
-            ordered_terms = ranked_terms[:1]
-
-        # Note: PostgreSQL's to_tsquery doesn't support weight class syntax (term:A)
-        # Weights must be applied via setweight() in to_tsvector, not in the query
-        # So we just use the stemmed terms without weight modifiers
-        terms_only = [term for term, weight_class, _ in ordered_terms]
-
-        return " | ".join(terms_only)
-        
     def get_idf(self, term: str) -> float:
-        """Get IDF value for a specific term."""
-        lookup_term = term.lower()
-        if STEMMER:
-            lookup_term = STEMMER.stemWord(lookup_term)
-        return self.idf_dict.get(lookup_term, 1.0)
+        """Return the highest IDF among PostgreSQL's lexemes for the term."""
+        lexemes = self._read(term)
+        return max((self._score(lexeme) for lexeme in lexemes), default=0.0)
+
+    def get_idfs(self, terms: Sequence[str]) -> dict[str, float]:
+        """Score many source terms against one snapshot and one connection."""
+        with self._cursor() as cursor:
+            self._read(connection=cursor.connection)
+            cursor.execute(
+                "SELECT term, tsvector_to_array(to_tsvector('pg_catalog.english', term)) "
+                "FROM unnest(%s::text[]) AS term",
+                (list(terms),),
+            )
+            return {
+                term: max((self._score(lexeme) for lexeme in lexemes), default=0.0)
+                for term, lexemes in cursor.fetchall()
+            }
+
+    def get_weight_class(self, term: str) -> str:
+        """Return the diagnostic rarity class for a PostgreSQL-analyzed term."""
+        return self._weight_class(self.get_idf(term))
+
+    def generate_weighted_query(
+        self,
+        query_text: str,
+        max_terms: int = 12,
+        *,
+        connection: Any = None,
+        corpus_kind: str | None = None,
+    ) -> str:
+        """Select rare lexemes and return a safely quoted OR tsquery expression."""
+        if corpus_kind is not None and corpus_kind != self.corpus_kind:
+            raise IDFStateError(
+                f"IDF corpus mismatch: {self.corpus_kind!r} != {corpus_kind!r}"
+            )
+        if max_terms < 1:
+            raise ValueError("max_terms must be positive")
+        lexemes = self._read(query_text, connection=connection)
+        ranked = sorted(lexemes, key=lambda term: (-self._score(term), term))
+        if any(self._score(term) > 3.0 for term in ranked):
+            ranked = [term for term in ranked if self._score(term) >= 2.0]
+            max_terms = min(max_terms, 5)
+        # Quoting keeps compound words, apostrophes and tsquery operators data.
+        return " | ".join(
+            "'" + term.replace("\\", "\\\\").replace("'", "''") + "'"
+            for term in ranked[:max_terms]
+        )
 
     def get_high_idf_terms(
         self,
         query_text: str,
         threshold: float = 2.0,
-        stopwords: Iterable[str] = STOPWORDS,
-    ) -> List[str]:
-        """Return unique high-IDF terms present in the query text."""
-
-        if not query_text:
-            return []
-
-        tokens = re.findall(r"[A-Za-z0-9']+", query_text.lower())
-        high_idf_terms: List[str] = []
-
-        for token in tokens:
-            # Normalize possessives like "alex's" -> "alex"
-            if token.endswith("'s"):
-                token = token[:-2]
-
-            normalized = token.strip("'")
-            if not normalized or normalized in stopwords:
-                continue
-
-            # Apply English stemming to match PostgreSQL's behavior
-            if STEMMER:
-                normalized = STEMMER.stemWord(normalized)
-
-            if self.get_idf(normalized) >= threshold and normalized not in high_idf_terms:
-                high_idf_terms.append(normalized)
-
-        return high_idf_terms
+        stopwords: Sequence[str] = (),
+    ) -> list[str]:
+        """Return unique lexemes meeting the threshold in the current corpus."""
+        lexemes = self._read(query_text)
+        return [
+            term
+            for term in lexemes
+            if term not in stopwords and self._score(term) >= threshold
+        ]

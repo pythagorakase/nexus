@@ -86,6 +86,15 @@ def template_db() -> Generator[str, None, None]:
                         id BIGSERIAL PRIMARY KEY,
                         raw_text TEXT
                     );
+                    CREATE TABLE public.retrograde_summaries (
+                        id BIGSERIAL PRIMARY KEY, summary_text TEXT
+                    );
+                    CREATE TABLE public.memory_idf_corpora (
+                        corpus_kind TEXT PRIMARY KEY,
+                        analyzer_version TEXT NOT NULL,
+                        corpus_epoch BIGINT NOT NULL DEFAULT 0,
+                        document_count BIGINT NOT NULL DEFAULT 0
+                    );
                     """
                 )
                 cur.executemany(

@@ -41,7 +41,7 @@ from .utils.continuous_temporal_search import (
     execute_time_aware_search,
     analyze_temporal_intent,
 )
-from .utils.idf_dictionary import IDFDictionary
+from .utils.idf_dictionary import IDFDictionary, IDFStateError
 from .utils.query_analysis import QueryAnalyzer
 from .utils.db_schema import DatabaseManager
 from .utils.embedding_tables import list_embedding_tables
@@ -277,13 +277,8 @@ class MEMNON:
         # Initialize IDF dictionary
         logger.info("Initializing IDF dictionary for term weighting...")
         self.idf_dictionary = IDFDictionary(self.db_url)
-        result = self.idf_dictionary.build_dictionary()  # Build/load on startup
-        if result:
-            logger.info(f"IDF dictionary initialized with {len(result)} terms")
-        else:
-            logger.warning(
-                "IDF dictionary initialization failed or returned empty dictionary"
-            )
+        result = self.idf_dictionary.build_dictionary()
+        logger.info(f"IDF dictionary initialized with {len(result)} terms")
 
         # Get model weights from settings
         model_weights = {}
@@ -894,6 +889,8 @@ class MEMNON:
             logger.info(f"Multi-model hybrid search returned {len(results)} results")
             return results
 
+        except IDFStateError:
+            raise
         except Exception as e:
             logger.error(f"Error in hybrid search: {e}")
             import traceback
@@ -986,6 +983,8 @@ class MEMNON:
             logger.info(f"Multi-model vector search returned {len(results)} results")
             return results
 
+        except IDFStateError:
+            raise
         except Exception as e:
             logger.error(f"Error in vector search: {e}")
             import traceback
@@ -1299,6 +1298,8 @@ class MEMNON:
             # Return raw results as JSON
             return search_results
 
+        except IDFStateError:
+            raise
         except Exception as e:
             logger.error(f"Error processing message: {e}")
             import traceback
@@ -1549,6 +1550,8 @@ class MEMNON:
 
                 results += "\n"
 
+            except IDFStateError:
+                raise
             except Exception as e:
                 results += f"Error running query: {str(e)}\n\n"
 
@@ -1881,6 +1884,8 @@ class MEMNON:
                 else:
                     logger.warning(f"Unknown search strategy: {strategy_type}")
 
+            except IDFStateError:
+                raise
             except Exception as e:
                 logger.error(f"Error in {strategy_type}: {e}")
                 import traceback

@@ -20,6 +20,8 @@ from .embedding_tables import (
     supports_pgvector_ann_index,
 )
 
+from .idf_dictionary import IDFDictionary, IDFStateError
+
 # Set up logging
 logger = logging.getLogger("nexus.memnon.db_access")
 
@@ -752,7 +754,10 @@ def execute_multi_model_hybrid_search(
             password=password,
             database=database,
         )
-        conn.set_session(readonly=True)
+        if isinstance(idf_dict, IDFDictionary):
+            conn.set_session(readonly=True, isolation_level="REPEATABLE READ")
+        else:
+            conn.set_session(readonly=True)
 
         results = {}  # Will hold all results by chunk_id
 
@@ -830,7 +835,11 @@ def execute_multi_model_hybrid_search(
                 text_query_value = ""
 
                 weighted_query = ""
-                if idf_dict and hasattr(idf_dict, "generate_weighted_query"):
+                if isinstance(idf_dict, IDFDictionary):
+                    weighted_query = idf_dict.generate_weighted_query(
+                        query_text, connection=conn, corpus_kind="narrative"
+                    )
+                elif idf_dict and hasattr(idf_dict, "generate_weighted_query"):
                     weighted_query = idf_dict.generate_weighted_query(query_text)
 
                 if weighted_query:
@@ -907,17 +916,25 @@ def execute_multi_model_hybrid_search(
                     else:
                         results[chunk_id]["raw_text_score"] = text_score
 
-                # Search the dedicated summary corpus with the same query form
-                # and normalize it in the same score population. No corpus
-                # multiplier is applied before ranking.
+                # Summaries use their own corpus frequencies, with both corpora
+                # pinned to this retrieval transaction's snapshot.
+                summary_query_value = text_query_value
+                summary_query_kind = text_query_kind
                 if (
                     text_query_value
                     and _retrograde_summaries_allowed(filters)
                     and _retrograde_summaries_exist(cursor)
                 ):
+                    if isinstance(idf_dict, IDFDictionary):
+                        summary_query_value = idf_dict.for_corpus(
+                            "retrograde_summary"
+                        ).generate_weighted_query(
+                            query_text, connection=conn, corpus_kind="retrograde_summary"
+                        )
+                        summary_query_kind = "to_tsquery"
                     summary_query_function = (
                         "websearch_to_tsquery"
-                        if text_query_kind == "websearch_to_tsquery"
+                        if summary_query_kind == "websearch_to_tsquery"
                         else "to_tsquery"
                     )
                     cursor.execute(
@@ -939,7 +956,7 @@ def execute_multi_model_hybrid_search(
                         ORDER BY text_score DESC
                         LIMIT %s
                         """,
-                        (text_query_value, text_query_value, top_k * 3),
+                        (summary_query_value, summary_query_value, top_k * 3),
                     )
                     for row in cursor.fetchall():
                         (
@@ -1132,10 +1149,10 @@ def execute_multi_model_hybrid_search(
                                     continue
 
                                 calculated_text_score = 0.0
-                                if text_query_value:
+                                if summary_query_value:
                                     summary_query_function = (
                                         "websearch_to_tsquery"
-                                        if text_query_kind == "websearch_to_tsquery"
+                                        if summary_query_kind == "websearch_to_tsquery"
                                         else "to_tsquery"
                                     )
                                     cursor.execute(
@@ -1145,7 +1162,7 @@ def execute_multi_model_hybrid_search(
                                             {summary_query_function}('english', %s)
                                         )
                                         """,
-                                        (summary_text, text_query_value),
+                                        (summary_text, summary_query_value),
                                     )
                                     fetched = cursor.fetchone()
                                     calculated_text_score = (
@@ -1347,6 +1364,8 @@ def execute_multi_model_hybrid_search(
         finally:
             conn.close()
 
+    except IDFStateError:
+        raise
     except Exception as e:
         logger.error(f"Error in multi-model hybrid search: {e}")
         import traceback

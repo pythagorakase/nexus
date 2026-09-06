@@ -1,100 +1,58 @@
-# IDF Dictionary for Enhanced Text Search
+# PostgreSQL-owned IDF
 
-## Overview
+MEMNON selects rare query lexemes using document frequencies owned by the
+selected save database. Migration 114 installs `memory_idf_corpora`,
+`memory_idf_documents`, `memory_idf_lexemes`, and transaction-local accounting
+triggers. There is no shared pickle or TTL cache.
 
-The IDF (Inverse Document Frequency) Dictionary enhances MEMNON's text search capabilities by weighting terms based on their rarity across the document collection. This enables rare terms like "gender" to have higher importance than common terms like character names when searching.
+The narrative corpus contains the rows admitted by the canonical
+`playable_narrative_predicate` and the production text search's
+`chunk_metadata` join. This excludes the synthetic Retrograde prologue and
+rows that have not acquired their retrieval metadata. It deliberately does
+not require `state = 'finalized'`: accepted legacy rows also belong. The
+separate `retrograde_summary` corpus contains persisted summaries, whose
+nonempty text is available to production text search independently of their
+embedding readiness. Actor-owned experience recall does not use this IDF
+path and is not mixed into either corpus.
 
-## How It Works
+Each source insertion, text edit, membership change, deletion, or truncation
+updates document counts, unique lexeme frequencies, and a corpus epoch in the
+same transaction. Rolled-back edits roll back all accounting. A text edit
+advances the epoch even if its lexeme set and highest document ID stay the
+same. Per-corpus row locks serialize concurrent accounting. Migration
+backfill holds source-table locks until counts and triggers are installed.
 
-1. **Term Frequency Analysis**: The system analyzes all narrative chunks to count how often each term appears
-2. **IDF Calculation**: For each term, calculates IDF score using the formula: `log(total_documents / documents_containing_term)`
-3. **Weight Classification**: Terms are assigned weight classes (A-D) based on their IDF values:
-   - Class A (IDF > 2.5): Very rare terms
-   - Class B (IDF > 2.0): Rare terms
-   - Class C (IDF > 1.0): Uncommon terms
-   - Class D (IDF ≤ 1.0): Common terms
-4. **Weighted Queries**: Search queries are transformed into weighted PostgreSQL queries using these classifications
+Both source documents and query terms use PostgreSQL's `pg_catalog.english`
+analyzer. Runtime readers validate the corpus kind, explicit database endpoint,
+and stored analyzer version; missing state, invalid counts, and version
+mismatches raise `IDFStateError` through retrieval callers. Every lookup reads
+current state. Production hybrid retrieval uses one read-only repeatable-read
+transaction for IDF selection and both corpus searches, so concurrent commits
+cannot mix query weights with a different retrieval snapshot.
 
-## Key Benefits
+IDF is `log((document_count + 1) / (document_frequency + 1))`, including
+`document_frequency = 0` for unseen lexemes. Empty or stopword-only terms score
+zero. Query selection retains the existing rare-term thresholds and maximum
+term budget, producing safely quoted OR expressions; it does not attach weight
+letters to tsquery terms. `get_idfs` scores source keywords in one connection
+and snapshot. The diagnostic `build_dictionary(force_rebuild=True)` reads all
+current counts but does not repair or mutate them.
 
-1. **Improved Relevance**: Rare but important terms have higher impact on search results
-2. **Better Context Understanding**: Terms related to narrative themes and events are prioritized over common names
-3. **Reduced Noise**: Common terms (like frequently mentioned character names) don't overwhelm search results
+The analyzer identity includes the exact PostgreSQL version and membership
+contract version. An analyzer upgrade or a change to searchable membership
+requires an explicit migration that locks the source tables, rebuilds the
+projection and counts, and advances the epoch before updating the version.
+It must not be repaired implicitly by a retrieval request. Fresh schema-only slot creation initializes empty corpus identities instead
+of copying the source story's counts. Existing pickle
+files are ignored and can be removed separately.
 
-## Implementation Details
+Validate with:
 
-The IDF Dictionary is implemented as a standalone module with caching for performance:
-
-1. On initialization, the system either:
-   - Loads the dictionary from cache if less than 24 hours old
-   - Rebuilds the dictionary from the database if cache is stale or missing
-   
-2. For queries, the system:
-   - Processes each term in the query
-   - Assigns weight classes (A-D) to each term
-   - Constructs a weighted tsquery string (e.g., "gender:A & alex:D")
-   - Uses this weighted query with PostgreSQL's text search
-
-3. Performance considerations:
-   - Dictionary is cached to disk and only rebuilt when necessary
-   - Only executed once during initialization
-   - Minimal memory footprint with efficient key-value storage
-
-## Example
-
-For a query "gender identity neural implant alex":
-
-```
-Original query: "gender identity neural implant alex"
-Weighted query: "gender:A & identity:B & neural:B & implant:B & alex:D"
-```
-
-The PostgreSQL text search engine will now give higher weight to matches containing the rare terms "gender", "identity", "neural", and "implant" than to matches containing just the common character name "alex".
-
-## Testing
-
-You can test the IDF dictionary with the provided test script:
-
-```bash
-python test_idf_dictionary.py --query "gender identity neural implant alex" --terms gender alex
+```sh
+NEXUS_RUN_POSTGRES=1 poetry run pytest tests/test_idf_dictionary_pg.py tests/test_presence_boost.py
 ```
 
-This will show the IDF values for specific terms and demonstrate the query weighting process.
-
-## Integration with Hybrid Search
-
-The IDF dictionary seamlessly integrates with MEMNON's hybrid search system:
-
-1. During MEMNON initialization, the IDF dictionary is created and loaded
-2. When performing hybrid searches, the dictionary is passed to the search function
-3. The search function uses the weighted query format when available
-4. Both text search and vector similarity scores are combined for final ranking
-
-With this feature, MEMNON's search capabilities are significantly enhanced for narrative contexts where rare terms often carry more meaningful information than frequently mentioned names or common words.
-
----
-
-## Note for ClaudeCode
-
-The IDF Dictionary implementation has been completed with the following files:
-
-1. `nexus/agents/memnon/utils/idf_dictionary.py` - The core implementation
-2. `nexus/agents/memnon/test_idf_dictionary.py` - Test script for validation
-3. Updates to `memnon.py` and `db_access.py` for integration
-
-The implementation uses PostgreSQL's `ts_stat` function to efficiently calculate term frequencies across all narrative chunks. The dictionary is cached to a file (in `~/.cache/nexus/` by default) to avoid recalculation on every startup.
-
-Key implementation decisions:
-- Using weight classes (A-D) to leverage PostgreSQL's built-in weighting system
-- Using `&` (AND) operator in weighted queries for precision instead of `|` (OR)
-- Smart fallback to standard OR-based search when IDF dictionary isn't available
-- Cache refreshes after 24 hours to account for corpus changes
-
-Potential improvements:
-1. Add stemming to normalize similar terms (using a library like NLTK or Snowball)
-2. Tune weight class thresholds based on corpus statistics
-3. Add specialized domain-specific stopwords list
-4. Consider query expansion for rare terms with few results
-5. Add option to preserve the original query structure (AND/OR logic)
-
-Let me know if you have any feedback on the implementation! 
+These tests create disposable databases through the shared slot factory; they
+exercise migration backfill, cross-slot separation, corpus separation,
+concurrent commits, rollback, metadata/prologue membership, edits, deletion,
+truncation, analyzer mismatches, production retrieval and PostgreSQL lexemes.

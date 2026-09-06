@@ -26,7 +26,7 @@ from .continuous_temporal_search import (
     execute_multi_model_time_aware_search,
     analyze_temporal_intent,
 )
-from .idf_dictionary import IDFDictionary
+from .idf_dictionary import IDFDictionary, IDFStateError
 from .embedding_manager import EmbeddingManager
 from .query_analysis import QueryAnalyzer
 
@@ -270,6 +270,8 @@ class SearchManager:
             logger.info(f"Multi-model hybrid search returned {len(results)} results")
             return results
 
+        except IDFStateError:
+            raise
         except Exception as e:
             logger.error(f"Error in hybrid search: {e}")
             import traceback
@@ -360,6 +362,8 @@ class SearchManager:
             logger.info(f"Multi-model vector search returned {len(results)} results")
             return results
 
+        except IDFStateError:
+            raise
         except Exception as e:
             logger.error(f"Error in vector search: {e}")
             import traceback

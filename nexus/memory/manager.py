@@ -1237,11 +1237,9 @@ class ContextMemoryManager:
         token_counts = Counter(filtered_tokens)
         if self.idf_dictionary and token_counts:
             scored = []
+            idf_scores = self.idf_dictionary.get_idfs(list(token_counts))
             for word, count in token_counts.items():
-                try:
-                    idf = self.idf_dictionary.get_idf(word)
-                except Exception:  # pragma: no cover - defensive
-                    idf = 1.0
+                idf = idf_scores[word]
                 scored.append((word, count * idf, count, idf))
             scored.sort(key=lambda item: (-item[1], -item[2], item[0]))
             keywords = [word for word, *_ in scored[:8]]
