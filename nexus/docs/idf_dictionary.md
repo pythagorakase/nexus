@@ -32,15 +32,18 @@ current state. Production hybrid retrieval uses one read-only repeatable-read
 transaction for IDF selection and both corpus searches, so concurrent commits
 cannot mix query weights with a different retrieval snapshot. Query scoring uses
 an immutable snapshot local to the request, so overlapping calls on the same
-MEMNON instance cannot replace each other's weights. Diagnostic fields remain
-last-observed values and are not used to score queries.
+MEMNON instance cannot replace each other's weights. Query-time reads fetch corpus
+frequencies only for the PostgreSQL-analyzed input lexemes; unrelated
+vocabulary is neither aggregated nor transferred. Diagnostic fields contain the
+last-observed weights (a query subset for lookups) and are not used to score queries.
 
 IDF is `log((document_count + 1) / (document_frequency + 1))`, including
 `document_frequency = 0` for unseen lexemes. Empty or stopword-only terms score
 zero. Query selection retains the existing rare-term thresholds and maximum
 term budget, producing safely quoted OR expressions; it does not attach weight
-letters to tsquery terms. `get_idfs` scores source keywords in one connection
-and snapshot. The diagnostic `build_dictionary(force_rebuild=True)` reads all
+letters to tsquery terms. `get_idfs` analyzes each source keyword independently
+and reads the union of its lexemes in one statement and snapshot. The diagnostic
+`build_dictionary(force_rebuild=True)` reads all
 current counts but does not repair or mutate them.
 
 The analyzer identity includes the exact PostgreSQL version and membership
@@ -61,3 +64,5 @@ These tests create disposable databases through the shared slot factory; they
 exercise migration backfill, cross-slot separation, corpus separation,
 concurrent commits, rollback, metadata/prologue membership, edits, deletion,
 truncation, analyzer mismatches, production retrieval and PostgreSQL lexemes.
+Vocabulary-growth regressions preserve query scores while bounding actual
+database output and examined frequency rows by the analyzed input size.

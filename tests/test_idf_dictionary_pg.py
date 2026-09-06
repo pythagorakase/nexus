@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 import pytest
+from psycopg2.extensions import cursor as PostgreSQLCursor
 
 from nexus.agents.memnon.utils.db_access import execute_multi_model_hybrid_search
 from nexus.agents.memnon.utils.idf_dictionary import IDFDictionary, IDFStateError
@@ -234,6 +235,34 @@ def test_mismatched_state_fails_through_production_search(idf_slot: str) -> None
         conn.rollback()
 
 
+def test_empty_and_unseen_inputs_still_require_valid_corpus_state(
+    idf_slot: str,
+) -> None:
+    """A bounded lookup cannot mistake missing/versioned state for zero frequency."""
+    reader = IDFDictionary(_url(idf_slot))
+    for mutation, error in (
+        (
+            "UPDATE memory_idf_corpora SET analyzer_version='stale' "
+            "WHERE corpus_kind='narrative'",
+            "analyzer mismatch",
+        ),
+        (
+            "DELETE FROM memory_idf_corpora WHERE corpus_kind='narrative'",
+            "Missing IDF corpus state",
+        ),
+    ):
+        with closing(connect(idf_slot)) as conn, conn, conn.cursor() as cur:
+            cur.execute(mutation)
+        for lookup in (
+            lambda: reader.get_idfs([]),
+            lambda: reader.get_idfs(["the", "quartz"]),
+            lambda: reader.get_idf("the"),
+            lambda: reader.generate_weighted_query(""),
+        ):
+            with pytest.raises(IDFStateError, match=error):
+                lookup()
+
+
 def test_truncation_clears_counts(idf_slot: str) -> None:
     with closing(connect(idf_slot)) as conn, conn, conn.cursor() as cur:
         _insert(cur, "Truncatable aurora")
@@ -342,6 +371,125 @@ def test_concurrent_writers_preserve_document_frequencies(idf_slot: str) -> None
         "the": 0.0,
     }
     _assert_exact_counts(idf_slot)
+
+
+@pytest.mark.parametrize("corpus", ("narrative", "retrograde_summary"))
+def test_query_reads_stay_bounded_when_unrelated_vocabulary_grows(
+    idf_slot: str, monkeypatch: pytest.MonkeyPatch, corpus: str
+) -> None:
+    """Vocabulary growth cannot expand query transfers, weights, or examined rows."""
+    import psycopg2
+
+    with closing(connect(idf_slot)) as conn, conn, conn.cursor() as cur:
+        if corpus == "narrative":
+            first = _insert(cur, "Alpha")
+            _insert(cur, "Beta")
+            _insert(cur, "Beta")
+        else:
+            anchor = _insert(cur, "Summary anchor")
+            first = _summary(cur, anchor, "Alpha")
+            _summary(cur, anchor, "Beta")
+            _summary(cur, anchor, "Beta")
+    reader = IDFDictionary(_url(idf_slot), corpus_kind=corpus)
+    original_connect = psycopg2.connect
+    captured: list[tuple[bytes, dict[str, int]]] = []
+
+    class CapturingCursor(PostgreSQLCursor):
+        def fetchone(self) -> Any:
+            row = super().fetchone()
+            # Observe actual database output before the reader can trim it.
+            captured.append((self.query, row[5]))
+            return row
+
+    def capture_connect(*args: Any, **kwargs: Any) -> Any:
+        return original_connect(*args, **kwargs, cursor_factory=CapturingCursor)
+
+    def check_lookups() -> list[tuple[bytes, set[str]]]:
+        calls = [
+            (
+                lambda: reader.generate_weighted_query("ALPHAS beta quartz the"),
+                "'quartz' | 'alpha' | 'beta'",
+                {"alpha", "beta", "quartz"},
+            ),
+            (lambda: reader.get_idf("ALPHAS beta"), math.log(2), {"alpha", "beta"}),
+            (
+                lambda: reader.get_idfs(
+                    ["ALPHAS", "beta", "quartz", "the", "ALPHAS beta", "ALPHAS"]
+                ),
+                {
+                    "ALPHAS": math.log(2),
+                    "beta": math.log(4 / 3),
+                    "quartz": math.log(4),
+                    "the": 0.0,
+                    "ALPHAS beta": math.log(2),
+                },
+                {"alpha", "beta", "quartz"},
+            ),
+            (
+                lambda: reader.get_high_idf_terms("ALPHAS beta quartz", threshold=0.5),
+                ["alpha", "quartz"],
+                {"alpha", "beta", "quartz"},
+            ),
+            (lambda: reader.get_weight_class("quartz"), "C", {"quartz"}),
+            (lambda: reader.get_idfs([]), {}, set()),
+        ]
+        queries = []
+        with monkeypatch.context() as patch:
+            patch.setattr(psycopg2, "connect", capture_connect)
+            for lookup, expected, lexemes in calls:
+                captured.clear()
+                assert lookup() == expected
+                assert set(reader.idf_dict) <= lexemes
+                assert captured
+                for query, frequencies in captured:
+                    assert set(frequencies) <= lexemes
+                    queries.append((query, lexemes))
+        return queries
+
+    check_lookups()
+    with closing(connect(idf_slot)) as conn, conn, conn.cursor() as cur:
+        # Preserve document count and alpha/beta frequencies while growing the
+        # corpus through the actual source writer and its accounting triggers.
+        text = "Alpha " + " ".join(f"unrelated{i:04d}" for i in range(4096))
+        if corpus == "narrative":
+            cur.execute(
+                "UPDATE narrative_chunks SET raw_text=%s WHERE id=%s", (text, first)
+            )
+        else:
+            cur.execute(
+                "UPDATE retrograde_summaries SET summary_text=%s WHERE id=%s",
+                (text, first),
+            )
+        cur.execute("ANALYZE memory_idf_lexemes")
+    assert len(reader.build_dictionary()) > 4000
+    assert reader.total_docs == 3
+    queries = check_lookups()
+
+    def examined_lexeme_rows(plan: dict[str, Any]) -> int:
+        examined = 0
+        if plan.get("Relation Name") == "memory_idf_lexemes":
+            examined = (
+                sum(
+                    plan.get(field, 0)
+                    for field in (
+                        "Actual Rows",
+                        "Rows Removed by Filter",
+                        "Rows Removed by Index Recheck",
+                    )
+                )
+                * plan["Actual Loops"]
+            )
+        return examined + sum(
+            examined_lexeme_rows(child) for child in plan.get("Plans", [])
+        )
+
+    with closing(connect(idf_slot)) as conn, conn.cursor() as cur:
+        for query, lexemes in queries:
+            # Replay the actual lookup SQL: trimming a full read in Python or
+            # filtering after a full database scan cannot satisfy this bound.
+            cur.execute(b"EXPLAIN (ANALYZE, FORMAT JSON, TIMING OFF) " + query)
+            plan = cur.fetchone()[0][0]["Plan"]
+            assert examined_lexeme_rows(plan) <= 2 * len(lexemes), plan
 
 
 def test_fresh_slot_from_migrated_source_has_empty_own_state(idf_slot: str) -> None:

@@ -36,7 +36,7 @@ class IDFDictionary:
 
     Public lookups read committed database state on each call. A caller-owned
     repeatable-read connection can pin query selection to its retrieval snapshot.
-    ``idf_dict`` is only the most recently inspected snapshot, never a cache.
+    ``idf_dict`` contains only the most recently inspected weights, never a cache.
     """
 
     CORPUS_KINDS = frozenset({"narrative", "retrograde_summary"})
@@ -81,33 +81,59 @@ class IDFDictionary:
                     yield cursor
         except psycopg2.Error as exc:
             raise IDFStateError(
-                f"Cannot read IDF state for {self._database}/{self.corpus_kind}; "
-                "apply the IDF migration or repair the database state"
+                f"Database error reading IDF state for {self._database}/{self.corpus_kind}"
             ) from exc
 
     def _read(
-        self, query_text: str = "", *, connection: Any = None
-    ) -> tuple[IDFSnapshot, list[str]]:
+        self,
+        terms: Sequence[str] = (),
+        *,
+        connection: Any = None,
+        full_vocabulary: bool = False,
+    ) -> tuple[IDFSnapshot, dict[str, list[str]]]:
+        if full_vocabulary:
+            frequencies_query = """
+                SELECT jsonb_object_agg(l.lexeme, l.document_frequency)
+                FROM memory_idf_lexemes l WHERE l.corpus_kind = c.corpus_kind
+            """
+        else:
+            # A scalar lookup per input lexeme retains the primary-key access
+            # path; an ordinary join can instead scan the complete vocabulary.
+            # Unseen lexemes have no row and retain snapshot.score's df=0 rule.
+            frequencies_query = """
+                SELECT jsonb_strip_nulls(jsonb_object_agg(q.lexeme, (
+                    SELECT l.document_frequency FROM memory_idf_lexemes l
+                    WHERE l.corpus_kind = c.corpus_kind AND l.lexeme = q.lexeme
+                ))) FROM query_lexemes q
+            """
         with self._cursor(connection) as cursor:
             # One statement binds the epoch, document count, frequencies and
-            # query analysis to exactly the same PostgreSQL snapshot.
+            # each input's analysis to exactly the same PostgreSQL snapshot.
+            # Only explicit diagnostics aggregate the complete vocabulary.
             cursor.execute(
-                """
+                f"""
+                WITH input_terms AS MATERIALIZED (
+                    SELECT DISTINCT term,
+                        tsvector_to_array(to_tsvector('pg_catalog.english', term))
+                            AS lexemes
+                    FROM unnest(%s::text[]) AS term
+                ), query_lexemes AS (
+                    SELECT DISTINCT unnest(lexemes) AS lexeme FROM input_terms
+                )
                 SELECT c.corpus_kind, c.analyzer_version, c.corpus_epoch,
                     c.document_count,
                     'pg_catalog.english/v1/' || current_setting('server_version_num'),
-                    COALESCE((SELECT jsonb_object_agg(lexeme, document_frequency)
-                        FROM memory_idf_lexemes l
-                        WHERE l.corpus_kind = c.corpus_kind), '{}'::jsonb),
-                    tsvector_to_array(to_tsvector('pg_catalog.english', %s))
+                    COALESCE(({frequencies_query}), '{{}}'::jsonb),
+                    COALESCE((SELECT jsonb_object_agg(term, lexemes)
+                        FROM input_terms), '{{}}'::jsonb)
                 FROM memory_idf_corpora c WHERE c.corpus_kind = %s
                 """,
-                (query_text, self.corpus_kind),
+                (list(terms), self.corpus_kind),
             )
             row = cursor.fetchone()
         if row is None:
             raise IDFStateError(f"Missing IDF corpus state: {self.corpus_kind}")
-        kind, analyzer, epoch, total, expected_analyzer, frequencies, lexemes = row
+        kind, analyzer, epoch, total, expected_analyzer, frequencies, analyzed = row
         if kind != self.corpus_kind or analyzer != expected_analyzer:
             raise IDFStateError(
                 f"IDF corpus/analyzer mismatch for {self.corpus_kind}; rebuild required"
@@ -136,7 +162,7 @@ class IDFDictionary:
         self.corpus_epoch = snapshot.corpus_epoch
         self.analyzer_version = snapshot.analyzer_version
         self.idf_dict = dict(snapshot.weights)
-        return snapshot, lexemes
+        return snapshot, analyzed
 
     def build_dictionary(self, force_rebuild: bool = False) -> dict[str, float]:
         """Read current database-owned counts; every call refreshes the snapshot.
@@ -144,7 +170,7 @@ class IDFDictionary:
         ``force_rebuild`` remains accepted for existing diagnostic callers. It
         does not mutate trigger-owned state or bypass its version checks.
         """
-        snapshot, _ = self._read()
+        snapshot, _ = self._read(full_vocabulary=True)
         return dict(snapshot.weights)
 
     @staticmethod
@@ -159,22 +185,18 @@ class IDFDictionary:
 
     def get_idf(self, term: str) -> float:
         """Return the highest IDF among PostgreSQL's lexemes for the term."""
-        snapshot, lexemes = self._read(term)
-        return max((snapshot.score(lexeme) for lexeme in lexemes), default=0.0)
+        snapshot, analyzed = self._read([term])
+        return max((snapshot.score(lexeme) for lexeme in analyzed[term]), default=0.0)
 
     def get_idfs(self, terms: Sequence[str]) -> dict[str, float]:
         """Score many source terms against one snapshot and one connection."""
-        with self._cursor() as cursor:
-            snapshot, _ = self._read(connection=cursor.connection)
-            cursor.execute(
-                "SELECT term, tsvector_to_array(to_tsvector('pg_catalog.english', term)) "
-                "FROM unnest(%s::text[]) AS term",
-                (list(terms),),
+        snapshot, analyzed = self._read(terms)
+        return {
+            term: max(
+                (snapshot.score(lexeme) for lexeme in analyzed[term]), default=0.0
             )
-            return {
-                term: max((snapshot.score(lexeme) for lexeme in lexemes), default=0.0)
-                for term, lexemes in cursor.fetchall()
-            }
+            for term in terms
+        }
 
     def get_weight_class(self, term: str) -> str:
         """Return the diagnostic rarity class for a PostgreSQL-analyzed term."""
@@ -195,7 +217,8 @@ class IDFDictionary:
             )
         if max_terms < 1:
             raise ValueError("max_terms must be positive")
-        snapshot, lexemes = self._read(query_text, connection=connection)
+        snapshot, analyzed = self._read([query_text], connection=connection)
+        lexemes = analyzed[query_text]
         ranked = sorted(lexemes, key=lambda term: (-snapshot.score(term), term))
         if any(snapshot.score(term) > 3.0 for term in ranked):
             ranked = [term for term in ranked if snapshot.score(term) >= 2.0]
@@ -213,9 +236,9 @@ class IDFDictionary:
         stopwords: Sequence[str] = (),
     ) -> list[str]:
         """Return unique lexemes meeting the threshold in the current corpus."""
-        snapshot, lexemes = self._read(query_text)
+        snapshot, analyzed = self._read([query_text])
         return [
             term
-            for term in lexemes
+            for term in analyzed[query_text]
             if term not in stopwords and snapshot.score(term) >= threshold
         ]
