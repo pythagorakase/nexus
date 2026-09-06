@@ -23,6 +23,7 @@ from nexus.api.narrative_schemas import (
     SlotLockResponse,
     TraitMenuItemResponse,
 )
+from nexus.api.slot_mutations import require_writable_slot
 from nexus.api.slot_utils import slot_dbname
 
 logger = logging.getLogger("nexus.api.slot_endpoints")
@@ -134,6 +135,7 @@ async def slot_undo_endpoint(slot: int):
 
     Single-depth undo only - no multi-step rewind.
     """
+    require_writable_slot(slot)
     from nexus.api.slot_state import get_slot_state
     from nexus.api.new_story_cache import clear_seed_phase, clear_character_phase, clear_setting_phase
 
@@ -291,6 +293,7 @@ async def get_slot_model_endpoint(slot: int):
 @router.post("/{slot}/model", response_model=SlotModelResponse)
 async def set_slot_model_endpoint(slot: int, request: SlotModelRequest):
     """Set model for a slot."""
+    require_writable_slot(slot)
     from nexus.config import get_available_api_models
 
     if slot < 1 or slot > 5:

@@ -19,16 +19,15 @@ def test_health():
     print(f"Response: {response.json()}")
     return response.status_code == 200
 
-def test_continue_narrative(chunk_id: int = 1425, user_text: str = "Continue."):
+
+def test_continue_narrative(
+    slot: int, chunk_id: int | None = None, user_text: str = "Continue."
+):
     """Test narrative continuation endpoint"""
     print(f"\nTesting /api/narrative/continue endpoint...")
     print(f"Chunk ID: {chunk_id}, User text: '{user_text}'")
 
-    payload = {
-        "chunk_id": chunk_id,
-        "user_text": user_text,
-        "test_mode": True
-    }
+    payload = {"chunk_id": chunk_id, "user_text": user_text, "slot": slot}
 
     response = requests.post(
         f"{API_BASE}/api/narrative/continue",
@@ -47,13 +46,16 @@ def test_continue_narrative(chunk_id: int = 1425, user_text: str = "Continue."):
         print(f"Error: {response.text}")
         return None
 
-def test_status(session_id: str):
+
+def test_status(session_id: str, slot: int):
     """Test status endpoint"""
     print(f"\nTesting /api/narrative/status/{session_id} endpoint...")
 
     # Poll for completion
     for i in range(10):
-        response = requests.get(f"{API_BASE}/api/narrative/status/{session_id}")
+        response = requests.get(
+            f"{API_BASE}/api/narrative/status/{session_id}", params={"slot": slot}
+        )
 
         if response.status_code == 200:
             data = response.json()
@@ -75,11 +77,14 @@ def test_status(session_id: str):
     print("Timeout waiting for completion")
     return False
 
-def test_incubator():
+
+def test_incubator(slot: int):
     """Test incubator view endpoint"""
     print("\nTesting /api/narrative/incubator endpoint...")
 
-    response = requests.get(f"{API_BASE}/api/narrative/incubator")
+    response = requests.get(
+        f"{API_BASE}/api/narrative/incubator", params={"slot": slot}
+    )
 
     print(f"Status: {response.status_code}")
 
@@ -100,11 +105,14 @@ def test_incubator():
         print(f"Error: {response.text}")
         return False
 
-def test_clear_incubator():
+
+def test_clear_incubator(slot: int):
     """Test incubator clear endpoint"""
     print("\nTesting DELETE /api/narrative/incubator endpoint...")
 
-    response = requests.delete(f"{API_BASE}/api/narrative/incubator")
+    response = requests.delete(
+        f"{API_BASE}/api/narrative/incubator", params={"slot": slot}
+    )
 
     print(f"Status: {response.status_code}")
 
@@ -116,8 +124,15 @@ def test_clear_incubator():
         print(f"Error: {response.text}")
         return False
 
+
 def main():
     parser = argparse.ArgumentParser(description="Test narrative API endpoints")
+    parser.add_argument(
+        "--slot",
+        type=int,
+        choices=range(1, 6),
+        help="Explicit target save slot (required except for --health)",
+    )
     parser.add_argument("--full", action="store_true",
                        help="Run full test sequence")
     parser.add_argument("--health", action="store_true",
@@ -128,8 +143,9 @@ def main():
                        help="View incubator contents")
     parser.add_argument("--clear", action="store_true",
                        help="Clear incubator")
-    parser.add_argument("--chunk-id", type=int, default=1425,
-                       help="Chunk ID to continue from")
+    parser.add_argument(
+        "--chunk-id", type=int, default=None, help="Chunk ID to continue from"
+    )
     parser.add_argument("--user-text", type=str, default="Continue.",
                        help="User text for continuation")
 
@@ -139,6 +155,11 @@ def main():
     if not any([args.health, args.continue_narrative, args.incubator, args.clear]):
         args.full = True
 
+    if (
+        args.full or args.continue_narrative or args.incubator or args.clear
+    ) and args.slot is None:
+        parser.error("--slot is required for story operations")
+
     try:
         if args.health or args.full:
             if not test_health():
@@ -147,17 +168,19 @@ def main():
                 return
 
         if args.clear:
-            test_clear_incubator()
+            test_clear_incubator(args.slot)
 
         if args.continue_narrative or args.full:
-            session_id = test_continue_narrative(args.chunk_id, args.user_text)
+            session_id = test_continue_narrative(
+                args.slot, args.chunk_id, args.user_text
+            )
             if session_id and args.full:
                 # Wait for completion and check status
                 time.sleep(2)
-                test_status(session_id)
+                test_status(session_id, args.slot)
 
         if args.incubator or args.full:
-            test_incubator()
+            test_incubator(args.slot)
 
         print("\n✅ API tests completed!")
 

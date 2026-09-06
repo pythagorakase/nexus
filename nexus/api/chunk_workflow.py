@@ -22,7 +22,7 @@ import subprocess
 import re
 
 import psycopg2
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from nexus.agents.orrery.reconstruction import playable_narrative_predicate
 from nexus.api.db_pool import get_connection
@@ -97,13 +97,6 @@ class ChunkState(str, Enum):
     FINALIZED = "finalized"  # User accepted, chunk is locked
 
 
-class ChunkAcceptRequest(BaseModel):
-    """Request to accept a Storyteller chunk."""
-
-    chunk_id: int = Field(..., description="ID of the chunk to accept")
-    session_id: str = Field(..., description="Session ID for context")
-
-
 class ChunkAcceptResponse(BaseModel):
     """Response after accepting a chunk."""
 
@@ -111,18 +104,6 @@ class ChunkAcceptResponse(BaseModel):
     state: ChunkState
     previous_chunk_embedded: bool
     embedding_job_id: Optional[str] = None
-
-
-class ChunkRejectRequest(BaseModel):
-    """Request to reject a Storyteller chunk."""
-
-    chunk_id: int = Field(..., description="ID of the chunk to reject")
-    session_id: str = Field(..., description="Session ID for context")
-    action: str = Field(
-        ...,
-        pattern="^(regenerate|edit_previous)$",
-        description="Action to take: regenerate or edit_previous",
-    )
 
 
 class ChunkRejectResponse(BaseModel):
@@ -133,14 +114,6 @@ class ChunkRejectResponse(BaseModel):
     action_taken: str
     regeneration_count: Optional[int] = None
     edit_enabled: bool = False
-
-
-class EditPreviousRequest(BaseModel):
-    """Request to edit the user's previous input."""
-
-    chunk_id: int = Field(..., description="Current chunk ID")
-    new_user_input: str = Field(..., min_length=1, description="New user input text")
-    session_id: str = Field(..., description="Session ID for context")
 
 
 class EditPreviousResponse(BaseModel):
