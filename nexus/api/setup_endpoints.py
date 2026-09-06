@@ -138,7 +138,10 @@ async def reset_setup_endpoint(request: ResetSetupRequest):
 
 @router.post("/slot/select")
 async def select_slot_endpoint(request: SelectSlotRequest):
-    """Activate a slot"""
+    """Select a slot through the nonmutating compatibility activation path."""
+    # activate_slot only calls clear_active and upsert_slot(is_active=...),
+    # both no-ops. Locked stories remain selectable; setup writes are guarded
+    # by their own endpoints before starting any work.
     try:
         results = activate_slot(request.slot)
         return {"status": "activated", "results": results}
