@@ -33,9 +33,9 @@ BODY_MUTATIONS = [
 
 
 @pytest.mark.parametrize("path,body", BODY_MUTATIONS)
-@pytest.mark.parametrize("slot", [None, 0, 6])
+@pytest.mark.parametrize("slot", [None, 0, 6, True, False, 1.0, "1"])
 def test_mutating_bodies_require_a_valid_explicit_slot(
-    path: str, body: dict[str, object], slot: int | None
+    path: str, body: dict[str, object], slot: object
 ) -> None:
     """Omitting a target never selects an environment or default database."""
     payload = dict(body)

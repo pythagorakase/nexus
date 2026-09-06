@@ -8,7 +8,7 @@ serialization of API requests and responses.
 from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, StrictInt, field_validator, model_validator
 
 # Re-export ChoiceSelection from shared module for backward compatibility
 from nexus.api.choice_handling import ChoiceSelection
@@ -33,7 +33,7 @@ class ContinueNarrativeRequest(BaseModel):
     accept_fate: bool = Field(
         default=False, description="Auto-advance by selecting the first choice"
     )
-    slot: int = Field(ge=1, le=5, description="Explicit target save slot")
+    slot: StrictInt = Field(ge=1, le=5, description="Explicit target save slot")
     model: Optional[str] = Field(
         default=None, description="Override model for this request"
     )
@@ -82,7 +82,7 @@ class GenerationLeaseConflictResponse(BaseModel):
 class RegenerateNarrativeRequest(BaseModel):
     """Request to regenerate the storyteller turn currently in the incubator."""
 
-    slot: int = Field(ge=1, le=5, description="Explicit target save slot")
+    slot: StrictInt = Field(ge=1, le=5, description="Explicit target save slot")
     note: Optional[str] = Field(
         default=None,
         max_length=500,
@@ -103,14 +103,14 @@ class ApproveNarrativeRequest(BaseModel):
     session_id: Optional[str] = Field(
         default=None, description="Session ID of the narrative to approve"
     )
-    slot: int = Field(ge=1, le=5, description="Explicit target save slot")
+    slot: StrictInt = Field(ge=1, le=5, description="Explicit target save slot")
     commit: bool = Field(default=True, description="Whether to commit to database")
 
 
 class ApproveNarrativeByIdRequest(BaseModel):
     """Approval options when the session is in the path and slot may be in the query."""
 
-    slot: Optional[int] = Field(default=None, ge=1, le=5)
+    slot: Optional[StrictInt] = Field(default=None, ge=1, le=5)
     commit: bool = True
 
 
@@ -130,7 +130,7 @@ class SelectChoiceRequest(BaseModel):
 
     chunk_id: int = Field(description="The narrative chunk ID")
     selection: ChoiceSelection = Field(description="The user's choice selection")
-    slot: int = Field(ge=1, le=5, description="Explicit target save slot")
+    slot: StrictInt = Field(ge=1, le=5, description="Explicit target save slot")
 
 
 class SelectChoiceResponse(BaseModel):
@@ -147,12 +147,12 @@ class SelectChoiceResponse(BaseModel):
 
 
 class StartSetupRequest(BaseModel):
-    slot: int = Field(ge=1, le=5)
+    slot: StrictInt = Field(ge=1, le=5)
     model: Optional[str] = None
 
 
 class RecordDraftRequest(BaseModel):
-    slot: int = Field(ge=1, le=5)
+    slot: StrictInt = Field(ge=1, le=5)
     setting: Optional[Dict] = None
     character: Optional[Dict] = None
     seed: Optional[Dict] = None
@@ -161,11 +161,11 @@ class RecordDraftRequest(BaseModel):
 
 
 class ResetSetupRequest(BaseModel):
-    slot: int = Field(ge=1, le=5)
+    slot: StrictInt = Field(ge=1, le=5)
 
 
 class SelectSlotRequest(BaseModel):
-    slot: int = Field(ge=1, le=5)
+    slot: StrictInt = Field(ge=1, le=5)
 
 
 # =============================================================================
@@ -282,7 +282,7 @@ class SlotLockResponse(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    slot: int = Field(ge=1, le=5)
+    slot: StrictInt = Field(ge=1, le=5)
     message: str
     # thread_id and current_phase are optional - resolved from slot state if not provided
     thread_id: Optional[str] = None
@@ -337,7 +337,7 @@ class ChatRequest(BaseModel):
 class TransitionRequest(BaseModel):
     """Request to transition from wizard setup to narrative mode."""
 
-    slot: int = Field(..., ge=1, le=5, description="Save slot number (1-5)")
+    slot: StrictInt = Field(..., ge=1, le=5, description="Save slot number (1-5)")
 
 
 class TransitionResponse(BaseModel):
