@@ -19,15 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from nexus.api.session_manager import SessionManager, SessionNotFoundError, SessionTurn
-from nexus.agents.logon.apex_schema import (
-    StoryTurnResponse,
-    StorytellerResponseBootstrap,
-    StorytellerResponseMinimal,
-    StorytellerResponseStandard,
-    StorytellerResponseExtended,
-    create_minimal_response,
-    validate_story_turn_response,
-)
+from nexus.agents.logon.apex_schema import StoryTurnResponse
 from nexus.api.new_story_flow import (
     start_setup as start_new_story_setup,
     resume_setup as resume_new_story_setup,
@@ -45,13 +37,6 @@ else:
     LORE = Any
 
 logger = logging.getLogger("nexus.api.storyteller")
-
-_STORY_RESPONSE_TYPES = (
-    StorytellerResponseExtended,
-    StorytellerResponseStandard,
-    StorytellerResponseMinimal,
-    StorytellerResponseBootstrap,
-)
 
 ORIGINS = [
     "http://localhost:3000",
@@ -216,16 +201,6 @@ def _format_error(error: str, detail: str, session_id: Optional[str]) -> Dict[st
     """Build the standard error response shape."""
 
     return {"error": error, "detail": detail, "session_id": session_id}
-
-
-def _coerce_story_response(payload: Any) -> StoryTurnResponse:
-    """Coerce arbitrary payloads into a StoryTurnResponse."""
-
-    if isinstance(payload, _STORY_RESPONSE_TYPES):
-        return payload
-    if isinstance(payload, dict):
-        return validate_story_turn_response(payload)
-    return create_minimal_response(str(payload))
 
 
 def _to_turn_record(turn: SessionTurn) -> TurnRecord:

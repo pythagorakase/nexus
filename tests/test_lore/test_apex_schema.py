@@ -14,7 +14,6 @@ from nexus.agents.logon.apex_schema import (
     StorytellerResponseBootstrap,
     create_minimal_response,
 )
-from nexus.api.storyteller import _coerce_story_response
 
 
 def test_world_layer_type_uses_atemporal_clock_semantics() -> None:
@@ -127,47 +126,3 @@ def test_entity_references_require_id_or_name(reference_model, payload) -> None:
 
     with pytest.raises(ValidationError, match="Must provide either"):
         reference_model(**payload)
-
-
-@pytest.mark.parametrize(
-    ("collection", "name_field", "legacy_field"),
-    [
-        ("characters", "character_name", "new_character"),
-        ("places", "place_name", "new_place"),
-        ("factions", "faction_name", "new_faction"),
-    ],
-)
-def test_api_coercion_rejects_legacy_inline_dossiers_in_extended_payloads(
-    collection: str,
-    name_field: str,
-    legacy_field: str,
-) -> None:
-    """Full legacy responses raise instead of silently degrading to Minimal."""
-
-    referenced_entities: dict[str, list[dict[str, object]]] = {
-        "characters": [],
-        "places": [],
-        "factions": [],
-    }
-    reference: dict[str, object] = {
-        name_field: "Legacy Inline Entity",
-        legacy_field: {"name": "Legacy Inline Entity"},
-    }
-    if collection == "places":
-        reference["reference_type"] = "setting"
-    referenced_entities[collection] = [reference]
-
-    with pytest.raises(ValidationError):
-        _coerce_story_response(
-            {
-                "narrative": "A legacy entity steps into view.",
-                "choices": ["Continue.", "Wait."],
-                "chunk_metadata": {},
-                "referenced_entities": referenced_entities,
-                "state_updates": {},
-                "operations": {},
-                "orrery_adjudications": [],
-                "new_entities": [],
-                "reasoning": "The inline dossier should be rejected.",
-            }
-        )
