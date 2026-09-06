@@ -72,8 +72,8 @@ def test_file_not_found_raises(tmp_path):
 
 def test_preserves_multiline_arrays(tmp_path):
     """Verify multiline array format is preserved."""
-    content = """[lore.context.entity_inclusion]
-active_event_statuses = [
+    content = """[example]
+values = [
     "open",
     "active",
 ]
@@ -83,7 +83,7 @@ active_event_statuses = [
 
     save_settings(
         {
-            "lore.context.entity_inclusion.active_event_statuses": [
+            "example.values": [
                 "open",
                 "active",
                 "latent",

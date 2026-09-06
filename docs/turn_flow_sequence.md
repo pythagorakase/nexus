@@ -9,19 +9,17 @@
 3. Phase metadata records chunk ids; no local LLM analysis runs here.
 
 # 03 World State Report - Programmatic Entity Queries
-1. `LORE` executes programmatic database queries to retrieve entity states based on `entity_inclusion` settings in settings.json.
-2. Queries characters referenced in warm slice chunks via `chunk_character_references` table.
-3. Queries relationships between identified characters via `character_relationships` table.
-4. Queries active events and threats using configurable status filters (e.g., "active", "ongoing", "escalating").
-5. Queries locations from character current_location fields.
-6. All limits are configurable:
-	   - `max_characters_from_warm_slice`: Maximum characters to include (default: 25)
-	   - `max_locations_from_warm_slice`: Maximum locations (default: 10)
-	   - `include_all_relationships`: Include all relationships between identified characters
-	   - `include_all_active_events`: Include all events matching active_event_statuses
-	   - `include_all_active_threats`: Include all threats matching active_threat_statuses
-	   - `active_event_statuses`: Status values to consider active (default: ["active", "ongoing", "escalating"])
-	   - `active_threat_statuses`: Threat status values to consider active (default: ["active", "imminent"])
+1. `LORE` queries character, location, and faction baselines and featured dossiers
+   using `[lore.entity_inclusion]` in `nexus.toml`.
+2. Warm-slice references select featured characters; the canonical player is
+   always featured.
+3. Relationships between featured characters are included when configured.
+4. Featured-character locations receive their location dossiers.
+5. Limits include `warm_slice_lookback_chunks`, `max_characters_from_warm_slice`,
+   and `max_locations_from_warm_slice`; `include_all_relationships` controls the
+   relationship query. Provider overrides retain the existing budget behavior.
+6. The nonexistent legacy `events` and `threats` tables are no longer queried.
+   Canonical Orrery `world_events` remain on their existing dedicated paths.
 
 # 04 Deep Queries
 1. The full target/latest chunk text is used as the first retrieval query when available.

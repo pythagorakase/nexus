@@ -490,8 +490,6 @@ class TurnCycleManager:
                 "locations": {"baseline": [], "featured": []},
                 "factions": {"baseline": [], "featured": []},
                 "relationships": [],
-                "events": [],
-                "threats": [],
             }
             return
 
@@ -514,9 +512,6 @@ class TurnCycleManager:
                 self.settings, provider_wire_type=None, provider_name=None
             )
         include_relationships = entity_settings.include_all_relationships
-        include_events = entity_settings.include_all_active_events
-        include_threats = entity_settings.include_all_active_threats
-        event_statuses = entity_settings.active_event_statuses
 
         # Get chunk IDs from warm slice for featured entity queries
         warm_chunk_ids = _narrative_chunk_ids(turn_context.warm_slice)[
@@ -651,71 +646,12 @@ class TurnCycleManager:
             except Exception as e:
                 logger.error(f"Failed to query relationships: {e}")
 
-        # Query all active events
-        events = []
-        if include_events:
-            try:
-                max_events = entity_settings.max_total_events
-                with self.lore.memnon.Session() as session:
-                    event_query = text(
-                        """
-                        SELECT *
-                        FROM events
-                        WHERE status = ANY(:statuses)
-                        ORDER BY id DESC
-                        LIMIT :max_events
-                    """
-                    )
-                    result = session.execute(
-                        event_query,
-                        {"statuses": event_statuses, "max_events": max_events},
-                    )
-                    for row in result:
-                        events.append(dict(row._mapping))
-                logger.info(f"Found {len(events)} active events")
-            except Exception as e:
-                # Events table doesn't exist yet - this is non-fatal
-                if "does not exist" in str(e):
-                    logger.debug(f"Events table not available: {e}")
-                else:
-                    logger.error(f"Failed to query active events: {e}")
-
-        # Query all active threats
-        threats = []
-        if include_threats:
-            try:
-                max_threats = entity_settings.max_total_threats
-                with self.lore.memnon.Session() as session:
-                    # Note: threats table uses is_active boolean, not status enum
-                    # Lifecycle stages: inception, developing, active, resolved, dormant
-                    threat_query = text(
-                        """
-                        SELECT *
-                        FROM threats
-                        WHERE is_active = true
-                        ORDER BY id DESC
-                        LIMIT :max_threats
-                    """
-                    )
-                    result = session.execute(threat_query, {"max_threats": max_threats})
-                    for row in result:
-                        threats.append(dict(row._mapping))
-                logger.info(f"Found {len(threats)} active threats")
-            except Exception as e:
-                # Handle schema mismatches gracefully
-                if "does not exist" in str(e):
-                    logger.debug(f"Threats table or column not available: {e}")
-                else:
-                    logger.error(f"Failed to query active threats: {e}")
-
         # Store hierarchical entity data
         turn_context.entity_data = {
             "characters": characters_data,
             "locations": places_data,
             "factions": factions_data,
             "relationships": relationships,
-            "events": events,
-            "threats": threats,
         }
 
         turn_context.phase_states["entity_state"] = {
@@ -726,8 +662,6 @@ class TurnCycleManager:
             "factions_baseline": len(factions_data.get("baseline", [])),
             "factions_featured": len(factions_data.get("featured", [])),
             "relationships_found": len(relationships),
-            "events_found": len(events),
-            "threats_found": len(threats),
             "method": "hierarchical_baseline_featured",
         }
 
@@ -739,7 +673,7 @@ class TurnCycleManager:
             f"{len(places_data.get('featured', []))}, "
             f"factions {len(factions_data.get('baseline', []))}+"
             f"{len(factions_data.get('featured', []))}, "
-            f"{len(relationships)} rels, {len(events)} events, {len(threats)} threats"
+            f"{len(relationships)} rels"
         )
 
     async def execute_deep_queries(self, turn_context: TurnContext):
