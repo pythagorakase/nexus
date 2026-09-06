@@ -22,10 +22,11 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 
 from nexus.api.db_pool import get_connection
 from nexus.api.reader_endpoints import resolve_dbname
+from nexus.api.slot_mutations import require_writable_slot
 
 logger = logging.getLogger("nexus.api.asset_endpoints")
 
@@ -298,9 +299,10 @@ async def get_character_images(
 async def upload_character_images(
     character_id: int,
     images: List[UploadFile] = File(...),
-    slot: Optional[int] = None,
+    slot: int = Query(..., ge=1, le=5),
 ) -> Dict[str, Any]:
     """Upload portrait files for a character (multipart field: images)."""
+    require_writable_slot(slot)
     dbname = resolve_dbname(slot)
     return await _handle_upload(
         dbname,
@@ -315,9 +317,10 @@ async def upload_character_images(
 
 @router.put("/api/characters/{character_id}/images/{image_id}/main")
 async def set_main_character_image(
-    character_id: int, image_id: int, slot: Optional[int] = None
+    character_id: int, image_id: int, slot: int = Query(..., ge=1, le=5)
 ) -> Dict[str, Any]:
     """Mark one image as the character's main portrait."""
+    require_writable_slot(slot)
     dbname = resolve_dbname(slot)
     _set_main_image(
         dbname, "assets.character_images", "character_id", character_id, image_id
@@ -327,9 +330,10 @@ async def set_main_character_image(
 
 @router.delete("/api/characters/{character_id}/images/{image_id}")
 async def delete_character_image(
-    character_id: int, image_id: int, slot: Optional[int] = None
+    character_id: int, image_id: int, slot: int = Query(..., ge=1, le=5)
 ) -> Dict[str, Any]:
     """Delete a character image (file and row)."""
+    require_writable_slot(slot)
     dbname = resolve_dbname(slot)
     return _delete_image(
         dbname, "assets.character_images", "character_id", character_id, image_id
@@ -355,9 +359,10 @@ async def get_place_images(
 async def upload_place_images(
     place_id: int,
     images: List[UploadFile] = File(...),
-    slot: Optional[int] = None,
+    slot: int = Query(..., ge=1, le=5),
 ) -> Dict[str, Any]:
     """Upload image files for a place (multipart field: images)."""
+    require_writable_slot(slot)
     dbname = resolve_dbname(slot)
     return await _handle_upload(
         dbname,
@@ -372,9 +377,10 @@ async def upload_place_images(
 
 @router.put("/api/places/{place_id}/images/{image_id}/main")
 async def set_main_place_image(
-    place_id: int, image_id: int, slot: Optional[int] = None
+    place_id: int, image_id: int, slot: int = Query(..., ge=1, le=5)
 ) -> Dict[str, Any]:
     """Mark one image as the place's main image."""
+    require_writable_slot(slot)
     dbname = resolve_dbname(slot)
     _set_main_image(dbname, "assets.place_images", "place_id", place_id, image_id)
     return {"success": True}
@@ -382,8 +388,9 @@ async def set_main_place_image(
 
 @router.delete("/api/places/{place_id}/images/{image_id}")
 async def delete_place_image(
-    place_id: int, image_id: int, slot: Optional[int] = None
+    place_id: int, image_id: int, slot: int = Query(..., ge=1, le=5)
 ) -> Dict[str, Any]:
     """Delete a place image (file and row)."""
+    require_writable_slot(slot)
     dbname = resolve_dbname(slot)
     return _delete_image(dbname, "assets.place_images", "place_id", place_id, image_id)

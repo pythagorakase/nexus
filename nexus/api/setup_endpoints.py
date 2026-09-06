@@ -31,6 +31,7 @@ from nexus.api.new_story_flow import (
 )
 from nexus.api.new_story_cache import write_wizard_choices
 from nexus.api.save_slots import get_slot_model
+from nexus.api.slot_mutations import require_writable_slot
 from nexus.api.slot_utils import slot_dbname
 
 logger = logging.getLogger("nexus.api.setup_endpoints")
@@ -41,6 +42,7 @@ router = APIRouter(prefix="/api/story/new", tags=["setup"])
 @router.post("/setup/start")
 async def start_setup_endpoint(request: StartSetupRequest) -> Dict[str, Any]:
     """Start a new setup conversation"""
+    require_writable_slot(request.slot)
     try:
         # The core resolves and persists the setup model. Passing the raw
         # request keeps omitted client values distinct from explicit
@@ -106,6 +108,7 @@ async def resume_setup_endpoint(slot: int):
 @router.post("/setup/record")
 async def record_drafts_endpoint(request: RecordDraftRequest):
     """Record draft data for a slot"""
+    require_writable_slot(request.slot)
     try:
         record_drafts(
             request.slot,
@@ -124,6 +127,7 @@ async def record_drafts_endpoint(request: RecordDraftRequest):
 @router.post("/setup/reset")
 async def reset_setup_endpoint(request: ResetSetupRequest):
     """Reset setup for a slot"""
+    require_writable_slot(request.slot)
     try:
         reset_setup(request.slot)
         return {"status": "reset", "slot": request.slot}

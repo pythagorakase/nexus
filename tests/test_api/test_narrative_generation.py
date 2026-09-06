@@ -31,6 +31,9 @@ def _unit_route_generation_lease(
 ) -> None:
     """Keep orchestration doubles focused on task argument threading."""
     monkeypatch.setattr(
+        narrative, "require_writable_slot", lambda slot: f"save_{slot:02d}"
+    )
+    monkeypatch.setattr(
         narrative,
         "_acquire_generation_owner",
         lambda **_kwargs: None,
@@ -386,9 +389,16 @@ async def test_continue_route_threads_parent_into_generation_task(
         lambda _slot=None: ChoiceFreeConnection(),
     )
 
+    from nexus.api import slot_state
+
+    monkeypatch.setattr(
+        slot_state,
+        "get_slot_state",
+        lambda _slot: SimpleNamespace(is_wizard_mode=False),
+    )
     background_tasks = BackgroundTasks()
     await narrative.continue_narrative(
-        ContinueNarrativeRequest(chunk_id=17, user_text=""),
+        ContinueNarrativeRequest(slot=5, chunk_id=17, user_text=""),
         background_tasks,
     )
 

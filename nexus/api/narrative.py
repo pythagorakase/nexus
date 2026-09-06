@@ -17,6 +17,7 @@ from fastapi import (
     FastAPI,
     HTTPException,
     Request,
+    Query,
     WebSocket,
     WebSocketDisconnect,
     BackgroundTasks,
@@ -46,10 +47,6 @@ from nexus.api.choice_handling import (
 )
 from nexus.api.chunk_workflow import (
     ChunkWorkflow,
-    ChunkAcceptRequest,
-    ChunkRejectRequest,
-    EditPreviousRequest,
-    build_embedding_scheduler,
     get_default_workflow,
 )
 from nexus.api.conversations import ConversationsClient
@@ -60,6 +57,7 @@ from nexus.api.new_story_flow import (
     reset_setup,
     activate_slot,
 )
+from nexus.api.slot_mutations import require_writable_slot
 from nexus.api.slot_utils import all_slots, slot_dbname, require_slot_dbname
 from nexus.api.db_pool import get_connection
 from nexus.api.narrative_generation import (
@@ -258,6 +256,7 @@ from nexus.api.narrative_schemas import (
     GenerationLeaseConflictResponse,
     RegenerateNarrativeRequest,
     ApproveNarrativeRequest,
+    ApproveNarrativeByIdRequest,
     NarrativeStatus,
     ChoiceSelection,
     SelectChoiceRequest,
@@ -804,6 +803,7 @@ async def continue_narrative(
 
     Initiates async generation and returns session_id for tracking.
     """
+    require_writable_slot(request.slot)
     if request.choice is not None and request.accept_fate:
         raise HTTPException(
             status_code=400,
@@ -1057,6 +1057,7 @@ async def regenerate_narrative(
     generation session. The CLI/UI polls
     /api/narrative/status/{session_id} for completion.
     """
+    require_writable_slot(request.slot)
     conn = get_db_connection(request.slot)
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -1165,6 +1166,7 @@ async def approve_narrative_unified(request: ApproveNarrativeRequest):
 
     If session_id is not provided, resolves from the most recent incubator entry for the slot.
     """
+    require_writable_slot(request.slot)
     session_id = request.session_id
     slot = request.slot
 
@@ -1200,14 +1202,24 @@ async def approve_narrative_unified(request: ApproveNarrativeRequest):
 @app.post("/api/narrative/approve/{session_id}")
 async def approve_narrative(
     session_id: str,
-    request: Optional[ApproveNarrativeRequest] = None,
+    request: Optional[ApproveNarrativeByIdRequest] = None,
     slot: Optional[int] = None,
 ):
     """
     Approve narrative and optionally commit to database (path-based for backward compatibility).
     """
     should_commit = request.commit if request else True
-    effective_slot = request.slot if request and request.slot else slot
+    if (
+        request is not None
+        and request.slot is not None
+        and slot is not None
+        and request.slot != slot
+    ):
+        raise HTTPException(status_code=422, detail="Body and query slots disagree")
+    effective_slot = (
+        request.slot if request is not None and request.slot is not None else slot
+    )
+    require_writable_slot(effective_slot)
     return await _approve_narrative_impl(session_id, should_commit, effective_slot)
 
 
@@ -1364,6 +1376,7 @@ async def select_choice(request: SelectChoiceRequest):
 
     Supports both committed chunks (narrative_chunks) and incubator chunks.
     """
+    require_writable_slot(request.slot)
     conn = get_db_connection(request.slot)
     is_incubator = False
     try:
@@ -1519,8 +1532,9 @@ async def get_incubator_contents(slot: Optional[int] = None):
 
 
 @app.delete("/api/narrative/incubator")
-async def clear_incubator(slot: Optional[int] = None):
+async def clear_incubator(slot: int = Query(..., ge=1, le=5)):
     """Clear the incubator table"""
+    require_writable_slot(slot)
     conn = get_db_connection(slot)
     try:
         with conn.cursor() as cur:
@@ -1529,58 +1543,6 @@ async def clear_incubator(slot: Optional[int] = None):
         return {"message": "Incubator cleared"}
     finally:
         conn.close()
-
-
-# Chunk Workflow Endpoints
-@app.post("/api/chunks/accept")
-async def accept_chunk_endpoint(
-    request: ChunkAcceptRequest, background_tasks: BackgroundTasks
-):
-    """Accept a chunk and trigger embedding generation"""
-    try:
-        workflow = get_default_workflow()
-        return workflow.accept_chunk(
-            request.chunk_id,
-            request.session_id,
-            embedding_scheduler=build_embedding_scheduler(
-                workflow, background_tasks.add_task
-            ),
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        logger.error(f"Error accepting chunk: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/api/chunks/reject")
-async def reject_chunk_endpoint(request: ChunkRejectRequest):
-    """Reject a chunk and either regenerate or edit previous"""
-    try:
-        return get_default_workflow().reject_chunk(
-            request.chunk_id, request.session_id, request.action
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        logger.error(f"Error rejecting chunk: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/api/chunks/{chunk_id}/edit-user-input")
-async def edit_chunk_input_endpoint(chunk_id: int, request: EditPreviousRequest):
-    """Edit previous user input"""
-    if chunk_id != request.chunk_id:
-        raise HTTPException(status_code=400, detail="Chunk ID mismatch")
-    try:
-        return get_default_workflow().edit_previous_input(
-            request.chunk_id, request.new_user_input, request.session_id
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        logger.error(f"Error editing chunk input: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/chunks/states")

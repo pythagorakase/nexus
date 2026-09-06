@@ -37,13 +37,6 @@ from nexus.api.new_story_flow import (
     activate_slot as activate_new_story_slot,
 )
 from nexus.api.chunk_workflow import (
-    ChunkAcceptRequest,
-    ChunkAcceptResponse,
-    ChunkRejectRequest,
-    ChunkRejectResponse,
-    EditPreviousRequest,
-    EditPreviousResponse,
-    build_embedding_scheduler,
     get_default_workflow,
 )
 
@@ -780,78 +773,6 @@ async def stream_turns(websocket: WebSocket, session_id: str) -> None:
     except Exception as exc:  # pragma: no cover - defensive logging
         logger.debug("Websocket error: %s", exc)
         await stream_manager.disconnect(session_id, websocket)
-
-
-# Chunk Acceptance Workflow Endpoints
-@app.post("/api/chunks/accept", response_model=ChunkAcceptResponse)
-def accept_chunk(
-    request: ChunkAcceptRequest, background_tasks: BackgroundTasks
-) -> ChunkAcceptResponse:
-    """
-    Accept a Storyteller chunk and trigger embedding for the previous chunk.
-
-    This marks the acceptance boundary - the previous chunk becomes immutable and
-    embeddings are generated for it.
-    """
-    try:
-        workflow = get_default_workflow()
-        return workflow.accept_chunk(
-            request.chunk_id,
-            request.session_id,
-            embedding_scheduler=build_embedding_scheduler(
-                workflow, background_tasks.add_task
-            ),
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        logger.error(f"Error accepting chunk: {e}")
-        raise HTTPException(status_code=500, detail="Failed to accept chunk")
-
-
-@app.post("/api/chunks/reject", response_model=ChunkRejectResponse)
-def reject_chunk(request: ChunkRejectRequest) -> ChunkRejectResponse:
-    """
-    Reject a Storyteller chunk with specified action.
-
-    Actions:
-    - regenerate: Generate new Storyteller text with same context
-    - edit_previous: Enable editing of the user's previous input
-    """
-    try:
-        return get_default_workflow().reject_chunk(
-            request.chunk_id, request.session_id, request.action
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        logger.error(f"Error rejecting chunk: {e}")
-        raise HTTPException(status_code=500, detail="Failed to reject chunk")
-
-
-@app.post("/api/chunks/{chunk_id}/edit-user-input", response_model=EditPreviousResponse)
-def edit_previous_input(
-    chunk_id: int, request: EditPreviousRequest
-) -> EditPreviousResponse:
-    """
-    Edit the user's input from the previous chunk.
-
-    Only available when the current Storyteller chunk has been rejected.
-    Updates the user's text and triggers regeneration of the Storyteller response.
-    """
-    try:
-        # Validate chunk_id matches request
-        if chunk_id != request.chunk_id:
-            raise ValueError("Chunk ID mismatch")
-
-        return get_default_workflow().edit_previous_input(
-            chunk_id, request.new_user_input, request.session_id
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        logger.error(f"Error editing previous input: {e}")
-        raise HTTPException(status_code=500, detail="Failed to edit previous input")
 
 
 @app.get("/api/chunks/states")

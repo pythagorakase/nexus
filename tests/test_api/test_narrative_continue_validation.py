@@ -45,6 +45,9 @@ def _unit_route_generation_lease(
     if request.node.get_closest_marker("requires_postgres") is not None:
         return
     monkeypatch.setattr(
+        narrative, "require_writable_slot", lambda slot: f"save_{slot:02d}"
+    )
+    monkeypatch.setattr(
         narrative,
         "_acquire_generation_owner",
         lambda **_kwargs: None,
@@ -309,11 +312,16 @@ def test_choice_free_empty_continue_persists_override_and_starts_generation(
     assert generation_args[1:4] == (17, "", 3)
 
 
-def test_explicit_slotless_chunk_with_unresolved_choices_requires_input(
+def test_explicit_chunk_with_unresolved_choices_requires_input(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """An explicitly addressed chunk cannot bypass the unresolved-choice guard."""
     choices = ["Open the door.", "Wait in silence."]
+    monkeypatch.setattr(
+        slot_state,
+        "get_slot_state",
+        lambda _slot: SimpleNamespace(is_wizard_mode=False),
+    )
     connection = ChoiceConnection(
         {
             "id": 17,
@@ -327,7 +335,7 @@ def test_explicit_slotless_chunk_with_unresolved_choices_requires_input(
 
     response = TestClient(narrative.app).post(
         "/api/narrative/continue",
-        json={"chunk_id": 17},
+        json={"slot": 3, "chunk_id": 17},
     )
 
     assert response.status_code == 400
@@ -339,10 +347,15 @@ def test_explicit_slotless_chunk_with_unresolved_choices_requires_input(
     assert connection.updates == []
 
 
-def test_explicit_slotless_choice_free_chunk_keeps_empty_continue(
+def test_explicit_choice_free_chunk_keeps_empty_continue(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A choice-free explicitly addressed chunk retains empty-input continuation."""
+    monkeypatch.setattr(
+        slot_state,
+        "get_slot_state",
+        lambda _slot: SimpleNamespace(is_wizard_mode=False),
+    )
     connection = ChoiceConnection(
         {
             "id": 17,
@@ -367,7 +380,7 @@ def test_explicit_slotless_choice_free_chunk_keeps_empty_continue(
 
     response = TestClient(narrative.app).post(
         "/api/narrative/continue",
-        json={"chunk_id": 17},
+        json={"slot": 3, "chunk_id": 17},
     )
 
     assert response.status_code == 200

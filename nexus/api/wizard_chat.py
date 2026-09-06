@@ -56,6 +56,7 @@ from nexus.api.pydantic_ai_utils import (
     build_message_history,
     build_pydantic_ai_model_with_provider,
 )
+from nexus.api.slot_mutations import require_writable_slot
 from nexus.api.slot_utils import slot_dbname
 from nexus.api.wizard_agent import (
     WizardContext,
@@ -261,6 +262,7 @@ async def _handle_accept_fate_traits(
 @router.post("/chat")
 async def new_story_chat_endpoint(request: ChatRequest):
     """Handle chat for new story wizard with tool calling."""
+    require_writable_slot(request.slot)
     try:
         from nexus.api.slot_state import get_slot_state
 
@@ -681,6 +683,7 @@ async def new_story_chat_endpoint(request: ChatRequest):
 @router.post("/chat/stream")
 async def new_story_chat_stream_endpoint(request: ChatRequest):
     """Stream wizard responses for progressive UI updates."""
+    require_writable_slot(request.slot)
     if not get_wizard_streaming_enabled():
         raise HTTPException(status_code=404, detail="Wizard streaming is disabled.")
     if request.trait_choice is not None:
@@ -996,6 +999,7 @@ async def transition_to_narrative_endpoint(request: TransitionRequest):
     3. Sets new_story=false to enable narrative mode
     4. Clears the setup cache
     """
+    require_writable_slot(request.slot)
     dbname = slot_dbname(request.slot)
 
     # Read the setup cache

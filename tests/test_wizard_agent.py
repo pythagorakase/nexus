@@ -517,7 +517,8 @@ async def test_transition_rejects_missing_diegetic_timestamp(monkeypatch) -> Non
         def get_initial_location(self) -> dict[str, str]:
             return {"name": "Stormwatch"}
 
-    monkeypatch.setattr(wizard_chat, "slot_dbname", lambda _slot: "save_01")
+    monkeypatch.setattr(wizard_chat, "require_writable_slot", lambda _slot: "save_05")
+    monkeypatch.setattr(wizard_chat, "slot_dbname", lambda _slot: "save_05")
     monkeypatch.setattr(
         wizard_chat,
         "read_cache",
@@ -525,7 +526,7 @@ async def test_transition_rejects_missing_diegetic_timestamp(monkeypatch) -> Non
     )
 
     with pytest.raises(HTTPException) as exc_info:
-        await wizard_chat.transition_to_narrative_endpoint(TransitionRequest(slot=1))
+        await wizard_chat.transition_to_narrative_endpoint(TransitionRequest(slot=5))
 
     assert exc_info.value.status_code == 422
     assert exc_info.value.detail == "Incomplete setup data. Missing: base_timestamp"
