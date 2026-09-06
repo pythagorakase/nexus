@@ -7,7 +7,7 @@ retrograde_summaries. The shared factory clones NEXUS_template and cleans up.
 from __future__ import annotations
 
 from contextlib import closing
-import importlib.util
+from importlib import import_module
 import math
 from pathlib import Path
 from typing import Any, Iterator
@@ -21,11 +21,7 @@ from tests.pg_fixtures import connect, disposable_slot_database, sqlalchemy_url
 
 pytestmark = pytest.mark.requires_postgres
 
-MIGRATION_PATH = Path(__file__).parents[1] / "migrations/114_slot_scoped_idf.py"
-spec = importlib.util.spec_from_file_location("idf_migration", MIGRATION_PATH)
-assert spec is not None and spec.loader is not None
-migration = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(migration)
+migration = import_module("migrations.114_slot_scoped_idf")
 
 
 def _url(dbname: str) -> str:
