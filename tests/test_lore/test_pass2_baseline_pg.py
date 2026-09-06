@@ -31,6 +31,7 @@ from nexus.memory.manager import (
     MissingPass2BaselineError,
     empty_pass2_baseline,
 )
+from nexus.telemetry.usage import current_usage_context
 from scripts import stamp_lore_pass_baseline
 from tests.pg_fixtures import disposable_slot_database, seed_protagonist
 
@@ -178,7 +179,12 @@ class _RouteProvider:
         """Validate the queued payload through LOGON's selected wire schema."""
 
         self.calls.append(
-            {"prompt": prompt, "schema_model": schema_model, "kwargs": kwargs}
+            {
+                "prompt": prompt,
+                "schema_model": schema_model,
+                "kwargs": kwargs,
+                "usage_context": current_usage_context(),
+            }
         )
         if not self.outputs:
             raise AssertionError("Provider stub exhausted")
@@ -458,6 +464,12 @@ def test_real_continuation_route_restores_pass2_baseline_in_fresh_lore(
         )
         assert first_progress.statuses[-1] == "complete"
         assert len(lore_instances) == 1
+        assert lore_instances[0].turn_context.turn_id == first_session
+        assert (
+            lore_instances[0].turn_context.context_payload["metadata"]["turn_id"]
+            == first_session
+        )
+        assert providers[0].calls[0]["usage_context"][1:] == (5, first_session)
         assert (
             lore_instances[0].turn_context.memory_state["pass2"]["baseline_available"]
             is True
@@ -490,6 +502,12 @@ def test_real_continuation_route_restores_pass2_baseline_in_fresh_lore(
         assert second_progress.statuses[-1] == "complete"
         assert len(lore_instances) == 2
         assert lore_instances[0] is not lore_instances[1]
+        assert lore_instances[1].turn_context.turn_id == second_session
+        assert (
+            lore_instances[1].turn_context.context_payload["metadata"]["turn_id"]
+            == second_session
+        )
+        assert providers[1].calls[0]["usage_context"][1:] == (5, second_session)
         pass2_state = lore_instances[1].turn_context.memory_state["pass2"]
         assert pass2_state["baseline_available"] is True
         assert pass2_state["retrieved_memory_ids"] == [new_retrieval_id]
@@ -498,6 +516,18 @@ def test_real_continuation_route_restores_pass2_baseline_in_fresh_lore(
         assert sum(len(provider.calls) for provider in providers) == 2
 
         with conn.cursor() as cur:
+            cur.execute(
+                "SELECT turn_id FROM retrieval_coverage_log "
+                "WHERE turn_id = ANY(%s) ORDER BY id",
+                ([first_session, second_session],),
+            )
+            assert cur.fetchall() == [(first_session,), (second_session,)]
+            cur.execute(
+                "SELECT session_id::text FROM narrative_generation_sessions "
+                "WHERE session_id = ANY(%s::uuid[]) ORDER BY created_at",
+                ([first_session, second_session],),
+            )
+            assert cur.fetchall() == [(first_session,), (second_session,)]
             cur.execute(
                 "SELECT lore_pass_baseline FROM incubator WHERE session_id = %s",
                 (second_session,),

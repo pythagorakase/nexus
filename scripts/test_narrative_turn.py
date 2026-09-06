@@ -25,6 +25,7 @@ from nexus.agents.logon.apex_schema import (
     ChronologyUpdate,
     ChunkMetadataUpdate,
 )
+from nexus.telemetry.usage import usage_context
 
 # Configure logging
 logging.basicConfig(
@@ -44,7 +45,7 @@ def load_settings():
 class NarrativeTurnTester:
     """Test harness for live narrative turns"""
 
-    def __init__(self, dry_run: bool = False):
+    def __init__(self, dry_run: bool = False, *, attempt_id: Optional[str] = None):
         """
         Initialize the test harness
 
@@ -52,7 +53,7 @@ class NarrativeTurnTester:
             dry_run: If True, don't write to database, just log what would happen
         """
         self.dry_run = dry_run
-        self.session_id = str(uuid.uuid4())
+        self.session_id = str(uuid.UUID(attempt_id)) if attempt_id is not None else None
 
         # Load settings
         settings = load_settings()
@@ -136,7 +137,10 @@ class NarrativeTurnTester:
 
         # Call LORE's process_turn method which handles the complete pipeline
         try:
-            response = await lore.process_turn(user_text)
+            if self.session_id is None:
+                raise ValueError("A standalone narrative attempt requires --attempt-id")
+            with usage_context(run_id=self.session_id):
+                response = await lore.process_turn(user_text, attempt_id=self.session_id)
             logger.info(f"LORE returned response type: {type(response)}")
 
             # Print the response to see what we're working with
@@ -387,11 +391,18 @@ async def main():
                        help="User text to complete the chunk with (default: 'Continue.')")
     parser.add_argument("--view", action="store_true",
                        help="View current incubator contents")
+    parser.add_argument("--attempt-id", type=uuid.UUID,
+                       help="Explicit diagnostic attempt UUID; required unless --view")
 
     args = parser.parse_args()
+    if not args.view and args.attempt_id is None:
+        parser.error("A diagnostic narrative turn requires --attempt-id")
 
     try:
-        tester = NarrativeTurnTester(dry_run=args.dry_run)
+        tester = NarrativeTurnTester(
+            dry_run=args.dry_run,
+            attempt_id=str(args.attempt_id) if args.attempt_id is not None else None,
+        )
 
         if args.view:
             tester.view_incubator()

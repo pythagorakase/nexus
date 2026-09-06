@@ -491,6 +491,8 @@ class ImmediateLore:
         user_text: str,
         parent_chunk_id: int,
         note: str | None = None,
+        *,
+        attempt_id: str,
     ) -> StorytellerResponseMinimal:
         return StorytellerResponseMinimal(
             generation_model="route-lease-fixture",
@@ -532,6 +534,8 @@ def test_concurrent_continues_have_one_owner_and_truthful_result(
             user_text: str,
             parent_chunk_id: int,
             note: str | None = None,
+            *,
+            attempt_id: str,
         ) -> StorytellerResponseMinimal:
             entered_generation.set()
             released = await asyncio.to_thread(release_generation.wait, 10)
