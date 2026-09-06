@@ -17,12 +17,14 @@ from __future__ import annotations
 
 import gc
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Iterator
 
 import pytest
 
 from nexus.agents.memnon.utils import embedding_manager as em
 from nexus.config import load_settings_as_dict
+from nexus.api.slot_utils import VALID_DBNAMES
+from tests.pg_fixtures import disposable_slot_database, seed_protagonist, sqlalchemy_url
 
 
 def _bge_large_path() -> Path:
@@ -51,6 +53,18 @@ def isolated_model_cache(monkeypatch: pytest.MonkeyPatch):
     yield
     em._MODEL_CACHE.clear()
     gc.collect()
+
+
+@pytest.fixture()
+def model_database() -> Iterator[str]:
+    """Give native MEMNON/LORE construction a migrated, disposable empty slot."""
+    with disposable_slot_database("qa_model_cache") as dbname:
+        seed_protagonist(dbname)
+        VALID_DBNAMES.add(dbname)
+        try:
+            yield dbname
+        finally:
+            VALID_DBNAMES.discard(dbname)
 
 
 def _settings() -> Dict[str, Any]:
@@ -116,7 +130,9 @@ def test_cached_model_survives_manager_teardown() -> None:
 
 
 @pytest.mark.requires_postgres
-def test_memnon_close_disposes_engine(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_memnon_close_disposes_engine(
+    monkeypatch: pytest.MonkeyPatch, model_database: str
+) -> None:
     """MEMNON.close() must return its pooled Postgres connections.
 
     Pre-fix, each per-turn MEMNON's SQLAlchemy engine sat in cyclic garbage
@@ -131,7 +147,7 @@ def test_memnon_close_disposes_engine(monkeypatch: pytest.MonkeyPatch) -> None:
 
     instance = memnon_module.MEMNON(
         interface=None,
-        db_url="postgresql://pythagor@localhost:5432/save_05",
+        db_url=sqlalchemy_url(model_database).render_as_string(hide_password=False),
     )
     session = instance.db_manager.create_session()
     session.execute(sa.text("SELECT 1"))
@@ -149,6 +165,7 @@ def test_memnon_close_disposes_engine(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.mark.requires_postgres
 def test_per_turn_lore_stacks_share_embedder_and_close(
     monkeypatch: pytest.MonkeyPatch,
+    model_database: str,
 ) -> None:
     """Successive per-turn LORE stacks reuse ONE embedder and tear down cleanly.
 
@@ -162,7 +179,7 @@ def test_per_turn_lore_stacks_share_embedder_and_close(
 
     from nexus.agents.lore.lore import LORE
 
-    first = LORE(enable_logon=False, debug=False, slot=5)
+    first = LORE(enable_logon=False, debug=False, dbname=model_database)
     first.logon = object()
     first._logon_initialized = True
     first_model = first.memnon.embedding_manager.models["bge-large"]
@@ -171,7 +188,7 @@ def test_per_turn_lore_stacks_share_embedder_and_close(
     assert first.logon is None
     assert not first._logon_initialized
 
-    second = LORE(enable_logon=False, debug=False, slot=5)
+    second = LORE(enable_logon=False, debug=False, dbname=model_database)
     try:
         assert second.memnon.embedding_manager.models["bge-large"] is first_model
     finally:

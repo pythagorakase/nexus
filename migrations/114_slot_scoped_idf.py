@@ -138,6 +138,18 @@ def run(conn: Any) -> None:
             END;
             $body$;
 
+            CREATE FUNCTION lock_memory_idf_corpora() RETURNS trigger
+            LANGUAGE plpgsql AS $body$
+            BEGIN
+                -- Acquire ownership before any source row is changed. Clock
+                -- refresh rewrites all metadata, and narrative/summary writers
+                -- may touch both corpora in either order within a transaction.
+                PERFORM 1 FROM memory_idf_corpora
+                ORDER BY corpus_kind FOR UPDATE;
+                RETURN NULL;
+            END;
+            $body$;
+
             CREATE FUNCTION maintain_memory_idf() RETURNS trigger
             LANGUAGE plpgsql AS $body$
             DECLARE
@@ -168,6 +180,8 @@ def run(conn: Any) -> None:
             $body$;
             COMMENT ON FUNCTION sync_memory_idf_document(text, bigint) IS
                 'Serialize per-corpus deltas under the corpus row lock, then reread canonical membership and text. A source write and all IDF accounting share one transaction.';
+            COMMENT ON FUNCTION lock_memory_idf_corpora() IS
+                'Acquire both corpus owners in fixed order before source row mutation. Prevent source/corpus inversion during global world-time refresh and cross-corpus writes; row-level delta accounting reuses these transaction locks.';
             COMMENT ON FUNCTION maintain_memory_idf() IS
                 'Account for source insert/update/delete/truncate, including metadata arrival/removal and changes to the synthetic prologue marker.';
             """.replace(
@@ -182,6 +196,9 @@ def run(conn: Any) -> None:
             # All identifiers are migration-owned constants.
             cur.execute(
                 f"""
+                CREATE TRIGGER acquire_idf_corpus_ownership
+                BEFORE INSERT OR UPDATE OR DELETE OR TRUNCATE ON {table}
+                FOR EACH STATEMENT EXECUTE FUNCTION lock_memory_idf_corpora();
                 CREATE TRIGGER maintain_idf_row
                 AFTER INSERT OR UPDATE OR DELETE ON {table}
                 FOR EACH ROW EXECUTE FUNCTION maintain_memory_idf('{kind}', '{id_column}');

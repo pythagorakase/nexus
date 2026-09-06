@@ -101,6 +101,7 @@ def test_slot_and_corpus_isolation(
         with closing(connect(other)) as conn, conn:
             with conn.cursor() as cur:
                 cur.execute("DROP FUNCTION maintain_memory_idf() CASCADE")
+                cur.execute("DROP FUNCTION lock_memory_idf_corpora() CASCADE")
                 cur.execute("DROP FUNCTION sync_memory_idf_document(text, bigint)")
                 cur.execute(
                     "DROP TABLE memory_idf_lexemes, memory_idf_documents, memory_idf_corpora"
@@ -442,3 +443,107 @@ def test_idf_columns_carry_database_documentation(idf_slot: str) -> None:
             (["memory_idf_corpora", "memory_idf_documents", "memory_idf_lexemes"],),
         )
         assert cur.fetchall() == []
+
+
+def test_source_lock_precedes_world_time_refresh(idf_slot: str) -> None:
+    """A metadata writer must wait before holding a row needed by clock refresh."""
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+    from time import monotonic
+
+    with closing(connect(idf_slot)) as conn, conn, conn.cursor() as cur:
+        first = _insert(cur, "Clock source alpha")
+        second = _insert(cur, "Clock source beta")
+    with (
+        closing(connect(idf_slot)) as owner,
+        closing(connect(idf_slot)) as waiter,
+        closing(connect(idf_slot)) as observer,
+    ):
+        owner_pid = owner.get_backend_pid()
+        waiter_pid = waiter.get_backend_pid()
+        with owner.cursor() as cur:
+            cur.execute("SET lock_timeout='5s'")
+            cur.execute(
+                "UPDATE narrative_chunks SET raw_text='Changed clock alpha' WHERE id=%s",
+                (first,),
+            )
+
+        def change_other_metadata() -> None:
+            with waiter, waiter.cursor() as cur:
+                cur.execute("SET lock_timeout='5s'")
+                cur.execute(
+                    "UPDATE chunk_metadata SET scene=scene+1 WHERE chunk_id=%s",
+                    (second,),
+                )
+
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(change_other_metadata)
+            try:
+                deadline = monotonic() + 5
+                while True:
+                    with observer.cursor() as cur:
+                        cur.execute("SELECT pg_blocking_pids(%s)", (waiter_pid,))
+                        if owner_pid in cur.fetchone()[0]:
+                            break
+                    assert (
+                        monotonic() < deadline
+                    ), "Metadata writer did not reach corpus lock"
+                    Event().wait(0.01)
+                # This production trigger updates every chunk_metadata row.
+                # If the waiter already owns B, owner->B->corpus->owner deadlocks.
+                with owner.cursor() as cur:
+                    cur.execute(
+                        "UPDATE chunk_metadata SET time_delta=time_delta+interval '1 second' WHERE chunk_id=%s",
+                        (first,),
+                    )
+                owner.commit()
+                future.result(timeout=10)
+            finally:
+                owner.rollback()
+    _assert_exact_counts(idf_slot)
+
+
+def test_data_clone_migrates_without_unlocking_source(idf_slot: str) -> None:
+    """A read-only pre-IDF corpus is migrated only in its new disposable clone."""
+    from psycopg2 import sql
+
+    with closing(connect(idf_slot)) as conn, conn, conn.cursor() as cur:
+        chunk = _insert(cur, "Protected dragon corpus")
+        cur.execute("DROP FUNCTION maintain_memory_idf() CASCADE")
+        cur.execute("DROP FUNCTION lock_memory_idf_corpora() CASCADE")
+        cur.execute("DROP FUNCTION sync_memory_idf_document(text, bigint)")
+        cur.execute(
+            "DROP TABLE memory_idf_lexemes, memory_idf_documents, memory_idf_corpora"
+        )
+        cur.execute("DELETE FROM schema_migrations WHERE version='114'")
+    with closing(connect("postgres")) as admin:
+        admin.autocommit = True
+        with admin.cursor() as cur:
+            cur.execute(
+                sql.SQL(
+                    "ALTER DATABASE {} SET default_transaction_read_only=on"
+                ).format(sql.Identifier(idf_slot))
+            )
+    with disposable_slot_database(
+        "qa762_corpus_copy", source_db=idf_slot, include_data=True
+    ) as copied:
+        reader = IDFDictionary(_url(copied))
+        assert "dragon" in reader.build_dictionary()
+        assert reader.total_docs == 1
+        with closing(connect(copied)) as conn, conn, conn.cursor() as cur:
+            cur.execute(
+                "UPDATE narrative_chunks SET raw_text='Independent starship' WHERE id=%s",
+                (chunk,),
+            )
+        assert "dragon" not in reader.build_dictionary()
+    with closing(connect(idf_slot)) as conn, conn.cursor() as cur:
+        cur.execute("SHOW default_transaction_read_only")
+        assert cur.fetchone()[0] == "on"
+        cur.execute("SELECT to_regclass('public.memory_idf_corpora')")
+        assert cur.fetchone()[0] is None
+        cur.execute("SELECT raw_text FROM narrative_chunks WHERE id=%s", (chunk,))
+        assert cur.fetchone()[0] == "Protected dragon corpus"
+        cur.execute(
+            "SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version='114')"
+        )
+        assert not cur.fetchone()[0]

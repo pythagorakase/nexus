@@ -19,7 +19,9 @@ Each source insertion, text edit, membership change, deletion, or truncation
 updates document counts, unique lexeme frequencies, and a corpus epoch in the
 same transaction. Rolled-back edits roll back all accounting. A text edit
 advances the epoch even if its lexeme set and highest document ID stay the
-same. Per-corpus row locks serialize concurrent accounting. Migration
+same. Before each source statement, both corpus owners are locked in a fixed order,
+then row triggers account for changes. This prevents lock-order inversion with
+global world-time refresh and transactions writing both corpus kinds. Migration
 backfill holds source-table locks until counts and triggers are installed.
 
 Both source documents and query terms use PostgreSQL's `pg_catalog.english`

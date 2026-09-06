@@ -21,6 +21,8 @@ from nexus.agents.lore.logon_utility import LogonUtility
 from nexus.agents.lore.utils.turn_context import TurnContext
 from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
 from nexus.memory import ContextMemoryManager
+from nexus.api.slot_utils import VALID_DBNAMES
+from tests.pg_fixtures import disposable_slot_database, seed_protagonist
 
 
 class _DummyResponse:
@@ -359,13 +361,23 @@ def test_sync_generation_rejects_mid_turn_route_drift(
 def test_lore_keeps_logon_lazy(patched_provider: Dict[str, int]) -> None:
     """LORE should construct LOGON without eagerly constructing its provider."""
 
-    lore = LORE(debug=True, enable_logon=True)
-    assert patched_provider["count"] == 0
-    assert lore.logon is None
-    lore.ensure_logon()
-    assert lore.logon is not None
-    assert lore.logon.provider is None
-    assert patched_provider["count"] == 0
+    with disposable_slot_database("qa_lazy_logon") as dbname:
+        seed_protagonist(dbname)
+        VALID_DBNAMES.add(dbname)
+        lore = None
+        try:
+            lore = LORE(debug=True, enable_logon=True, dbname=dbname)
+            assert lore.memnon is not None
+            assert patched_provider["count"] == 0
+            assert lore.logon is None
+            lore.ensure_logon()
+            assert lore.logon is not None
+            assert lore.logon.provider is None
+            assert patched_provider["count"] == 0
+        finally:
+            if lore is not None:
+                lore.close()
+            VALID_DBNAMES.discard(dbname)
 
 
 def test_logon_initializes_provider_on_first_generation(

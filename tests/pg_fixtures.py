@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import subprocess
+import tempfile
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -10,10 +12,11 @@ from typing import Any
 
 import psycopg2
 from psycopg2 import sql
+from psycopg2.extensions import make_dsn
 from sqlalchemy.engine import URL
 
 from nexus.api import db_pool
-from scripts import new_story_setup
+from scripts import migrate, new_story_setup
 
 
 def connection_parameters() -> dict[str, str]:
@@ -72,8 +75,14 @@ def disposable_slot_database(
     prefix: str,
     *,
     source_db: str = "NEXUS_template",
+    include_data: bool = False,
 ) -> Iterator[str]:
     """Yield a uniquely named template clone and always remove it afterward.
+
+    ``include_data`` snapshots a source corpus with pg_dump, restores it into
+    the disposable target, and migrates only that clone. It never disconnects,
+    unlocks, or changes the source database. Default cloning copies seed data
+    only, suitable for tests that create their own stories.
 
     Fails loudly when the admin connection is unavailable; opting into the
     PostgreSQL gate means PostgreSQL is required.
@@ -90,7 +99,49 @@ def disposable_slot_database(
         admin = _connect("postgres")
         admin.autocommit = True
         new_story_setup.USE_POOL = False
-        new_story_setup.initialize_slot_database(dbname, source_db=source_db)
+        if include_data:
+            with admin.cursor() as cur:
+                cur.execute(
+                    sql.SQL("CREATE DATABASE {} TEMPLATE template0").format(
+                        sql.Identifier(dbname)
+                    )
+                )
+            with tempfile.TemporaryDirectory(prefix="nexus-pg-corpus-") as archive_dir:
+                archive_path = os.path.join(archive_dir, "corpus.dump")
+                subprocess.run(
+                    [
+                        "pg_dump",
+                        "--format=custom",
+                        "--file",
+                        archive_path,
+                        "--dbname",
+                        make_dsn(dbname=source_db, **connection_parameters()),
+                    ],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                subprocess.run(
+                    [
+                        "pg_restore",
+                        "--exit-on-error",
+                        "--no-owner",
+                        "--no-acl",
+                        "--dbname",
+                        make_dsn(dbname=dbname, **connection_parameters()),
+                        archive_path,
+                    ],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+            _, failed = migrate.migrate_database(dbname, skip_locked=False)
+            if failed:
+                raise RuntimeError(
+                    f"Corpus clone {dbname} has {failed} failed migrations"
+                )
+        else:
+            new_story_setup.initialize_slot_database(dbname, source_db=source_db)
         yield dbname
     finally:
         new_story_setup.USE_POOL = original_use_pool

@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Dict, List
+from typing import Dict, Iterator, List
 
 import pytest
 from sqlalchemy import text
@@ -13,6 +13,8 @@ from sqlalchemy import text
 from nexus.agents.lore.lore import LORE
 from nexus.agents.lore.utils.turn_context import TurnContext
 from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
+from nexus.api.slot_utils import VALID_DBNAMES
+from tests.pg_fixtures import disposable_slot_database
 
 KARAOKE_CHUNK_ID = 1369
 KARAOKE_DEEP_CUT_RANGE = range(743, 770)
@@ -31,8 +33,23 @@ def _strip_user_section(full_text: str) -> str:
 
 
 @pytest.fixture(scope="module")
-def lore_agent() -> LORE:
-    return LORE(debug=True, enable_logon=False)
+def lore_agent() -> Iterator[LORE]:
+    """Run the corpus-backed regression on a migrated snapshot of the golden slot."""
+    with disposable_slot_database(
+        "qa_pass2_corpus", source_db="save_01", include_data=True
+    ) as dbname:
+        VALID_DBNAMES.add(dbname)
+        lore = None
+        try:
+            lore = LORE(debug=True, enable_logon=False, dbname=dbname)
+            assert (
+                lore.memnon is not None
+            ), "MEMNON failed to initialize on corpus clone"
+            yield lore
+        finally:
+            if lore is not None:
+                lore.close()
+            VALID_DBNAMES.discard(dbname)
 
 
 def _build_warm_slice(
