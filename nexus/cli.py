@@ -1172,6 +1172,16 @@ def _wait_for_narrative_result(slot: int, session_id: str) -> Dict[str, Any]:
             )
             response.raise_for_status()
             status = response.json()
+            if (
+                not isinstance(status, dict)
+                or not isinstance(status.get("status"), str)
+                or not status["status"].strip()
+            ):
+                raise ValueError(
+                    "Generation status must be an object with a non-empty status string"
+                )
+            if status.get("error") is not None and not isinstance(status["error"], str):
+                raise ValueError("Generation status error must be a string or null")
             if status.get("status") == "error":
                 return failure("error", status.get("error") or "Generation failed")
             if _is_terminal_generation_status(status.get("status")):
@@ -1180,7 +1190,30 @@ def _wait_for_narrative_result(slot: int, session_id: str) -> Dict[str, Any]:
                 )
                 response.raise_for_status()
                 state = response.json()
+                if not isinstance(state, dict):
+                    raise ValueError("Narrative slot state must be an object")
+                for flag in ("is_empty", "is_wizard_mode", "has_pending"):
+                    if flag in state and not isinstance(state[flag], bool):
+                        raise ValueError(
+                            f"Narrative slot state {flag} must be a boolean"
+                        )
                 chunk_id = status.get("chunk_id")
+                for label, value in (
+                    ("Generation status chunk_id", chunk_id),
+                    (
+                        "Narrative slot state current_chunk_id",
+                        state.get("current_chunk_id"),
+                    ),
+                ):
+                    if value is not None and type(value) is not int:
+                        raise ValueError(f"{label} must be an integer or null")
+                choices = state.get("choices", [])
+                if not isinstance(choices, list) or any(
+                    not isinstance(choice, str) for choice in choices
+                ):
+                    raise ValueError(
+                        "Narrative slot state choices must be a list of strings"
+                    )
                 message = state.get("storyteller_text")
                 if (
                     not chunk_id
@@ -1204,7 +1237,7 @@ def _wait_for_narrative_result(slot: int, session_id: str) -> Dict[str, Any]:
                 return {
                     "success": True,
                     "message": message,
-                    "choices": state.get("choices", []),
+                    "choices": choices,
                     "chunk_id": chunk_id,
                     "session_id": session_id,
                 }
@@ -1213,6 +1246,12 @@ def _wait_for_narrative_result(slot: int, session_id: str) -> Dict[str, Any]:
     except KeyboardInterrupt:
         return failure(
             "interrupted", "Waiting for narrative generation was interrupted"
+        )
+    except requests.exceptions.Timeout:
+        return failure("timeout", "Generation timed out")
+    except ValueError as exc:
+        return failure(
+            "invalid_response", f"Invalid narrative generation response: {exc}"
         )
     except requests.exceptions.RequestException as exc:
         return failure("http_error", f"Could not load narrative generation: {exc}")

@@ -39,13 +39,18 @@ class GenerationScenario:
     state_reads: int = 0
     requests: list[tuple[str, str, dict[str, Any]]] = field(default_factory=list)
     waiting: Event = field(default_factory=Event)
+    release_response: Event = field(default_factory=Event)
+    status_body: bytes | None = None
+    state_body: bytes | None = None
 
 
 @contextmanager
 def _gateway(scenario: GenerationScenario) -> Iterator[str]:
     class Handler(BaseHTTPRequestHandler):
         def _respond(self, payload: dict[str, Any], status: int = 200) -> None:
-            body = json.dumps(payload).encode()
+            self._respond_body(json.dumps(payload).encode(), status)
+
+        def _respond_body(self, body: bytes, status: int = 200) -> None:
             self.send_response(status)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
@@ -102,6 +107,13 @@ def _gateway(scenario: GenerationScenario) -> Iterator[str]:
                 if scenario.result == "status_error":
                     self._respond({"detail": "Status unavailable"}, 503)
                     return
+                if scenario.result == "response_timeout":
+                    # Hold the real HTTP response until the CLI's own deadline
+                    # expires; teardown releases the handler after process exit.
+                    scenario.release_response.wait(timeout=10)
+                if scenario.status_body is not None:
+                    self._respond_body(scenario.status_body)
+                    return
                 status = "processing"
                 if scenario.result not in {"timeout", "interrupted"}:
                     status = (
@@ -130,6 +142,8 @@ def _gateway(scenario: GenerationScenario) -> Iterator[str]:
                     )
                 elif scenario.result == "load_error":
                     self._respond({"detail": "Completed state unavailable"}, 503)
+                elif scenario.state_body is not None:
+                    self._respond_body(scenario.state_body)
                 else:
                     self._respond(
                         {
@@ -163,6 +177,7 @@ def _gateway(scenario: GenerationScenario) -> Iterator[str]:
         host, port = server.server_address
         yield f"http://{host}:{port}"
     finally:
+        scenario.release_response.set()
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)
@@ -173,7 +188,7 @@ def _run_cli(scenario: GenerationScenario, tmp_path: Path) -> tuple[int, str, st
 
     config = tomlkit.parse((ROOT / "nexus.toml").read_text())
     config["apex"]["generation_timeout_seconds"] = (
-        1 if scenario.result == "timeout" else 5
+        1 if scenario.result in {"timeout", "response_timeout"} else 5
     )
     config_path = tmp_path / "nexus.toml"
     config_path.write_text(tomlkit.dumps(config))
@@ -286,3 +301,74 @@ def test_seed_bootstrap_failure_preserves_partial_work(
         )
         == 1
     )
+
+
+@pytest.mark.parametrize("seed", [True, False], ids=["seed", "continuation"])
+@pytest.mark.parametrize(
+    ("result", "endpoint", "body", "expected_status"),
+    [
+        ("response_timeout", "status", None, "timeout"),
+        ("complete", "status", b'{"status":', "invalid_response"),
+        ("complete", "status", b"[]", "invalid_response"),
+        ("complete", "status", b'{"status": []}', "invalid_response"),
+        ("complete", "status", b"{}", "invalid_response"),
+        ("complete", "state", b'{"storyteller_text":', "invalid_response"),
+        ("complete", "state", b"null", "invalid_response"),
+        ("complete", "state", b'{"has_pending": "false"}', "invalid_response"),
+        ("complete", "state", b'{"current_chunk_id": true}', "invalid_response"),
+        ("complete", "state", b'{"choices": "Enter the gate."}', "invalid_response"),
+    ],
+    ids=[
+        "http-timeout",
+        "status-json",
+        "status-array",
+        "status-value",
+        "missing-status",
+        "state-json",
+        "state-null",
+        "state-flag",
+        "state-chunk",
+        "state-choices",
+    ],
+)
+def test_generation_response_failures_keep_session_recovery(
+    tmp_path: Path,
+    seed: bool,
+    result: str,
+    endpoint: str,
+    body: bytes | None,
+    expected_status: str,
+) -> None:
+    """Transport and payload failures retain one session on both CLI paths."""
+
+    scenario = GenerationScenario(result=result, seed=seed)
+    setattr(scenario, f"{endpoint}_body", body)
+    code, stdout, stderr = _run_cli(scenario, tmp_path)
+    assert code == 1, (stdout, stderr)
+    assert stdout == ""
+    assert "Traceback" not in stderr
+    payload = json.loads(stderr)
+    assert payload["success"] is False
+    assert payload["session_id"] == SESSION_ID
+    assert payload["generation_error"]["status"] == expected_status
+    assert payload["generation_error"]["detail"]
+    assert payload["recovery_command"] == "nexus load --slot 5"
+    assert scenario.status_reads == (2 if endpoint == "state" else 1)
+    assert scenario.state_reads == (2 if endpoint == "state" else 1)
+    assert (
+        sum(
+            request[:2] == ("POST", "/api/narrative/continue")
+            for request in scenario.requests
+        )
+        == 1
+    )
+    if seed:
+        assert payload["artifact_data"] == {"title": "The Glass Orchard"}
+        assert payload["retrograde"] == {"status": "complete"}
+        assert payload["narrative_bootstrap"] is False
+        assert payload["bootstrap_error"]["session_id"] == SESSION_ID
+        assert (
+            payload["bootstrap_error"]["detail"]
+            == payload["generation_error"]["detail"]
+        )
+        assert "next_phase_intro" not in payload
