@@ -28,8 +28,6 @@ def test_local_entity_inclusion_resolves_shipped_overrides(
 ) -> None:
     """Local routing applies four overrides and inherits every absent field."""
     settings = load_settings_as_dict()
-    base = _base(settings)
-
     with caplog.at_level(logging.DEBUG, logger="nexus.lore.entity_inclusion"):
         resolved = resolve_entity_inclusion(
             settings, provider_wire_type="local", provider_name="local"
@@ -39,10 +37,6 @@ def test_local_entity_inclusion_resolves_shipped_overrides(
     assert resolved.max_characters_from_warm_slice == 12
     assert resolved.max_locations_from_warm_slice == 6
     assert resolved.include_all_relationships is False
-    assert resolved.include_all_active_events == base.include_all_active_events
-    assert resolved.include_all_active_threats == base.include_all_active_threats
-    assert resolved.active_event_statuses == base.active_event_statuses
-    assert resolved.max_total_events == base.max_total_events
 
     override_records = [
         record

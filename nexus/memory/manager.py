@@ -26,7 +26,7 @@ from .context_state import (
     memory_identity,
 )
 from .correspondence import correspondence_settings, load_accepted_correspondence
-from .divergence import DivergenceDetector, DivergenceResult
+from .divergence import DivergenceResult
 from .entity_detector import EntityMatch, HighSpecificityEntityDetector
 from .incremental import IncrementalRetriever
 from .query_memory import QueryMemory
@@ -359,9 +359,6 @@ class ContextMemoryManager:
             )
 
         self.entity_detector = HighSpecificityEntityDetector(db_connection)
-        self.divergence_detector = DivergenceDetector(
-            threshold=self.divergence_threshold
-        )
         logger.info(
             "Using entity-based divergence detector (threshold=%.2f)",
             self.divergence_threshold,

@@ -441,6 +441,9 @@ def test_continue_posts_choice_to_backend_without_preapproving(
                     "has_pending": True,
                     "choices": ["Cross the street.", "Stay hidden."],
                     "model": None,
+                    "current_chunk_id": 2,
+                    "session_id": "session-2",
+                    "storyteller_text": "Next chunk",
                 }
             )
         if "/api/narrative/status/" in url:
@@ -457,11 +460,6 @@ def test_continue_posts_choice_to_backend_without_preapproving(
 
     monkeypatch.setattr(cli.requests, "get", fake_get)
     monkeypatch.setattr(cli.requests, "post", fake_post)
-    monkeypatch.setattr(
-        cli,
-        "run_load",
-        lambda args: {"message": "Next chunk", "choices": ["Continue."]},
-    )
 
     result = cli.run_continue(
         Namespace(
@@ -682,8 +680,24 @@ def _stub_seed_completion_requests(
 ) -> None:
     """Stub the gateway boundary for a public seed-completion CLI command."""
 
+    scheduled = False
+
     def fake_get(url: str, **kwargs: Any) -> DummyResponse:
+        if "/api/narrative/status/" in url:
+            return DummyResponse({"status": "complete", "chunk_id": 1})
         assert url.endswith("/api/slot/5/state")
+        if scheduled:
+            return DummyResponse(
+                {
+                    "is_empty": False,
+                    "is_wizard_mode": False,
+                    "has_pending": True,
+                    "session_id": "opening-session",
+                    "current_chunk_id": 1,
+                    "storyteller_text": "Rain needles the orchard glass.",
+                    "choices": ["Enter the gate."],
+                }
+            )
         return DummyResponse(
             {
                 "is_empty": False,
@@ -694,6 +708,7 @@ def _stub_seed_completion_requests(
         )
 
     def fake_post(url: str, json: dict[str, Any], **kwargs: Any) -> DummyResponse:
+        nonlocal scheduled
         if url.endswith("/api/story/new/chat"):
             assert json["message"] == "Commit the final seed."
             return DummyResponse(
@@ -710,11 +725,12 @@ def _stub_seed_completion_requests(
                 raise transition_response
             return transition_response
         if url.endswith("/api/narrative/continue"):
+            scheduled = True
             return DummyResponse(
                 {
-                    "storyteller_text": "Rain needles the orchard glass.",
-                    "choices": ["Enter the gate."],
-                    "chunk_id": 1,
+                    "session_id": "opening-session",
+                    "status": "generating",
+                    "message": "Narrative generation started",
                 }
             )
         raise AssertionError(f"Unexpected POST {url}")

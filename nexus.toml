@@ -270,23 +270,15 @@ min = 5   # Minimum % for warm slice
 max = 15  # Maximum % for warm slice
 
 [lore.entity_inclusion]
-# Controls which entities/events are included in context payload
+# Controls which entities are included in context payload
 warm_slice_lookback_chunks = 20          # How many recent chunks to scan for entities
 max_characters_from_warm_slice = 25      # Max characters to extract from warm slice
 max_locations_from_warm_slice = 10       # Max locations to extract from warm slice
 include_all_relationships = true         # Include all relationships for featured characters
-include_all_active_events = true         # Include all active story events
-include_all_active_threats = true        # Include all active threats
-
-# Event statuses that count as "active"
-active_event_statuses = ["active", "ongoing", "escalating"]
-active_threat_statuses = ["active", "imminent"]
 
 # Hard caps on total entities in payload
 max_total_characters = 30
 max_total_relationships = 100
-max_total_events = 15
-max_total_threats = 10
 
 [lore.entity_inclusion.provider_overrides.local]
 # Initial estimates measured against the 32K local window; calibrated by

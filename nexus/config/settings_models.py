@@ -775,8 +775,6 @@ class EntityInclusionProviderOverride(BaseModel):
     max_characters_from_warm_slice: Optional[int] = Field(default=None, ge=1)
     max_locations_from_warm_slice: Optional[int] = Field(default=None, ge=1)
     include_all_relationships: Optional[bool] = None
-    include_all_active_events: Optional[bool] = None
-    include_all_active_threats: Optional[bool] = None
 
 
 class EntityInclusionConfig(BaseModel):
@@ -788,14 +786,8 @@ class EntityInclusionConfig(BaseModel):
     max_characters_from_warm_slice: int = Field(..., ge=1)
     max_locations_from_warm_slice: int = Field(..., ge=1)
     include_all_relationships: bool
-    include_all_active_events: bool
-    include_all_active_threats: bool
-    active_event_statuses: List[str]
-    active_threat_statuses: List[str]
     max_total_characters: int = Field(..., ge=1)
     max_total_relationships: int = Field(..., ge=1)
-    max_total_events: int = Field(..., ge=1)
-    max_total_threats: int = Field(..., ge=1)
     provider_overrides: Dict[str, EntityInclusionProviderOverride] = Field(
         default_factory=dict,
         description=(
