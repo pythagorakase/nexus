@@ -12,6 +12,7 @@ config = "pytest.ini"
 
 [migrations]
 loader = "scripts/migrate.py:_load_python_migration"
+loader_expression = "importlib.util.spec_from_file_location(module_name, path)"
 pattern = "migrations/[0-9][0-9][0-9]_*.py"
 symbol = "run"
 script_only_versions = ["008"]
@@ -76,6 +77,7 @@ reason = "Application modules must not depend on the test suite."
 
 [[dynamic_edges]]
 source = "tests/test_orrery/test_event_sources_pg.py:test_registered_retrograde_source_reaches_retained_gate"
+expression = "import_module(module_name)"
 target = "nexus/agents/orrery/retrograde_persistence.py"
 reason = "The event-source PostgreSQL proof resolves the registered Retrograde producer entrypoint itself so stale writer names fail the contract test."
 

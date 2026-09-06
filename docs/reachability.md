@@ -35,9 +35,13 @@ outside this gate.
 - **Migrations:** the exact loader symbol and each managed migration's `run` symbol.
   Script-only exclusions must match the loader's literal `SCRIPT_ONLY_MIGRATIONS` list;
   the manual 008 seed executable is registered separately as an operator.
-- **Tests:** statically discovered test functions/class methods and conftest fixtures,
-  hooks, and literal `pytest_plugins` declarations, constrained by `pytest.ini`. This is
-  the configured AST discovery model, not execution of pytest plugins or collection hooks.
+- **Tests:** initialization of matching test modules, explicitly configured test files,
+  and their conftests (including ancestors up to the repository/configuration root).
+  These discovery-only `<module>` roots include import-only setup and imported tests;
+  they cannot be used as broad operator or production roots. Named test functions/class
+  methods, conftest fixtures/hooks, and literal `pytest_plugins` declarations add explicit
+  symbol evidence. Plugin declarations may be assigned or annotated in any collected
+  module. This follows the configured AST discovery model, without running collection.
 
 The checker verifies that each entry symbol exists in the parsed module. Importing a
 package does not establish every child module as reachable. Explicit import aliases and
@@ -77,10 +81,19 @@ Ordinary and relative imports, package initialization, deferred imports, and lit
 names resolve against a literal package or the source module's `__package__`. Computed
 package/name expressions and file-location loaders remain visible as dynamic sites.
 
-An explicit dynamic edge must name the exact source scope (`path:function`, including
-nested symbols, or `path:<module>` for initialization), target Python file, and reason.
-It supplies a potential dependency without turning either endpoint into a root. The
-registered migration loader is handled through its managed migration inventory.
+An explicit dynamic edge names the exact source scope (`path:function`, including nested
+symbols, or `path:<module>` for initialization), target Python file, and reason. Each
+declaration must identify exactly one computed call. `expression` selects a Python call
+using its normalized AST spelling; optional one-based `line` and zero-based `column`
+disambiguate identical calls. A scope-only declaration is accepted only when that scope
+contains exactly one dynamic site. Stale or ambiguous selectors fail, and other calls in
+the same scope remain unregistered. Multiple target edges may describe one selected call.
+
+For example, `expression = "import_module(module_name)"` pins the Retrograde event-source
+test's declaration without depending on changing line numbers. Declarations supply
+potential dependencies without turning either endpoint into a root. The migration
+loader uses the same selection rules (`loader_expression`, optionally `loader_line` and
+`loader_column`); its selected call is backed by the managed migration inventory.
 
 Dependency direction is checked independently: application modules cannot import tests.
 Optional tombstones can prohibit an exact path, Python symbol, literal within one Python

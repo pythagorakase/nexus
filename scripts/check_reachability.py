@@ -93,6 +93,7 @@ def _reachable(roots: Iterable[str], adjacency: dict[str, set[str]]) -> set[str]
 
 def analyze_repository(root: Path, config: dict[str, Any]) -> dict[str, Any]:
     """Build a deterministic graph from source text and declared discovery rules."""
+    root = root.resolve()
     if config.get("version") != 1:
         raise ValueError("Unsupported reachability config version")
     for section in (
@@ -121,16 +122,38 @@ def analyze_repository(root: Path, config: dict[str, Any]) -> dict[str, Any]:
     ignored = pytest_section.get("norecursedirs", "").split()
     class_patterns = pytest_section.get("python_classes", "Test*").split()
     function_patterns = pytest_section.get("python_functions", "test_*").split()
+    explicit_test_files = {
+        (root / testpath).relative_to(root).as_posix()
+        for testpath in testpaths
+        if (root / testpath).is_file() and (root / testpath).suffix == ".py"
+    }
     test_files = {
         path.relative_to(root).as_posix()
         for testpath in testpaths
-        for path in (root / testpath).rglob("*.py")
-        if not any(
-            fnmatch.fnmatch(part, pattern)
-            for part in path.relative_to(root).parts
-            for pattern in ignored
+        for target in [root / testpath]
+        for path in ([target] if target.is_file() else target.rglob("*.py"))
+        if path.suffix == ".py"
+        and (
+            path.relative_to(root).as_posix() in explicit_test_files
+            or not any(
+                fnmatch.fnmatch(part, pattern)
+                for part in path.relative_to(root).parts
+                for pattern in ignored
+            )
         )
     }
+    # Pytest also loads conftests above its configured test paths, up to the
+    # repository/configuration root. Their initialization can consist only of
+    # imports, so function discovery alone does not establish these roots.
+    for testpath in testpaths:
+        directory = root / testpath
+        if directory.is_file():
+            directory = directory.parent
+        while directory.is_relative_to(root):
+            conftest = directory / "conftest.py"
+            if conftest.is_file():
+                test_files.add(conftest.relative_to(root).as_posix())
+            directory = directory.parent
     paths = sorted(maintained | test_files)
     trees = {
         path: ast.parse((root / path).read_text(encoding="utf-8-sig"), filename=path)
@@ -147,7 +170,12 @@ def analyze_repository(root: Path, config: dict[str, Any]) -> dict[str, Any]:
     external_names: set[str] = set()
 
     def entry(
-        target: str, kind: str, reason: str, *, module_target: bool = False
+        target: str,
+        kind: str,
+        reason: str,
+        *,
+        module_target: bool = False,
+        discovery_initialization: bool = False,
     ) -> None:
         path, separator, symbol = target.partition(":")
         if module_target:
@@ -156,7 +184,12 @@ def analyze_repository(root: Path, config: dict[str, Any]) -> dict[str, Any]:
             not separator
             or not symbol
             or path not in symbols
-            or symbol not in symbols[path]
+            or (
+                symbol not in symbols[path]
+                and not (
+                    discovery_initialization and kind == "test" and symbol == "<module>"
+                )
+            )
         ):
             raise ValueError(f"Missing exact {kind} entry point {target!r}: {reason}")
         roots.append(EntryPoint(path, symbol, kind, reason))
@@ -206,10 +239,28 @@ def analyze_repository(root: Path, config: dict[str, Any]) -> dict[str, Any]:
 
     for path in sorted(test_files):
         is_conftest = Path(path).name == "conftest.py"
-        if not is_conftest and not any(
-            fnmatch.fnmatch(Path(path).name, pattern) for pattern in patterns
+        if (
+            not is_conftest
+            and path not in explicit_test_files
+            and not any(
+                fnmatch.fnmatch(Path(path).name, pattern) for pattern in patterns
+            )
         ):
             continue
+        entry(
+            f"{path}:<module>",
+            "test",
+            (
+                "pytest conftest initialization"
+                if is_conftest
+                else (
+                    "pytest.ini explicit file collection"
+                    if path in explicit_test_files
+                    else "pytest.ini matching module collection"
+                )
+            ),
+            discovery_initialization=True,
+        )
         for node in trees[path].body:
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 decorators = [
@@ -248,16 +299,22 @@ def analyze_repository(root: Path, config: dict[str, Any]) -> dict[str, Any]:
                             "pytest.ini class discovery; no collection/import executed",
                         )
             elif (
-                is_conftest
-                and isinstance(node, ast.Assign)
+                isinstance(node, (ast.Assign, ast.AnnAssign))
+                and node.value is not None
                 and any(
                     isinstance(target, ast.Name) and target.id == "pytest_plugins"
-                    for target in node.targets
+                    for target in (
+                        node.targets if isinstance(node, ast.Assign) else [node.target]
+                    )
                 )
             ):
                 entry(f"{path}:pytest_plugins", "test", "pytest plugin declaration")
                 plugins = ast.literal_eval(node.value)
-                for name in [plugins] if isinstance(plugins, str) else plugins:
+                if plugins is None:
+                    plugins = []
+                elif isinstance(plugins, str):
+                    plugins = plugins.split(",") if plugins else []
+                for name in plugins:
                     if name in modules:
                         edges.add(
                             ImportEdge(
@@ -413,8 +470,10 @@ def analyze_repository(root: Path, config: dict[str, Any]) -> dict[str, Any]:
                         {
                             "source": self.source,
                             "line": node.lineno,
+                            "column": node.col_offset,
                             "scope": ".".join(self.scope) or "<module>",
                             "call": name,
+                            "expression": ast.unparse(node),
                         }
                     )
             elif name.endswith("spec_from_file_location"):
@@ -422,8 +481,10 @@ def analyze_repository(root: Path, config: dict[str, Any]) -> dict[str, Any]:
                     {
                         "source": self.source,
                         "line": node.lineno,
+                        "column": node.col_offset,
                         "scope": ".".join(self.scope) or "<module>",
                         "call": name,
+                        "expression": ast.unparse(node),
                     }
                 )
             self.generic_visit(node)
@@ -476,6 +537,54 @@ def analyze_repository(root: Path, config: dict[str, Any]) -> dict[str, Any]:
             if target and Path(target).name == "__init__.py":
                 edges.add(ImportEdge(source, target, 0, "package_initialization"))
             package.pop()
+    for site in dynamic_calls:
+        site["registered_discovery_root"] = False
+
+    def select_dynamic_site(declaration: dict[str, Any]) -> dict[str, Any]:
+        """Require each declaration to identify one call, including in shared scopes."""
+        candidates = [
+            site
+            for site in dynamic_calls
+            if f"{site['source']}:{site['scope']}" == declaration["source"]
+        ]
+        if "expression" in declaration:
+            expression = ast.parse(declaration["expression"], mode="eval").body
+            if not isinstance(expression, ast.Call):
+                raise ValueError("A dynamic expression selector must be a Python call")
+            candidates = [
+                site
+                for site in candidates
+                if site["expression"] == ast.unparse(expression)
+            ]
+        for coordinate in ("line", "column"):
+            if coordinate in declaration:
+                candidates = [
+                    site
+                    for site in candidates
+                    if site[coordinate] == declaration[coordinate]
+                ]
+        if len(candidates) != 1:
+            raise ValueError(
+                "Dynamic import declaration must match exactly one call site: "
+                f"{declaration}; matched {len(candidates)}"
+            )
+        return candidates[0]
+
+    loader_sites = [
+        site
+        for site in dynamic_calls
+        if f"{site['source']}:{site['scope']}" == migration["loader"]
+    ]
+    loader_selector = {
+        coordinate: migration[f"loader_{coordinate}"]
+        for coordinate in ("expression", "line", "column")
+        if f"loader_{coordinate}" in migration
+    }
+    if loader_sites or loader_selector:
+        select_dynamic_site({"source": migration["loader"], **loader_selector})[
+            "registered_discovery_root"
+        ] = True
+
     for declaration in config.get("dynamic_edges", []):
         source, _, symbol = declaration["source"].partition(":")
         target = declaration["target"]
@@ -485,7 +594,11 @@ def analyze_repository(root: Path, config: dict[str, Any]) -> dict[str, Any]:
             or target not in trees
         ):
             raise ValueError(f"Invalid declared dynamic edge: {declaration}")
-        edges.add(ImportEdge(source, target, 0, "declared_dynamic_import", symbol))
+        site = select_dynamic_site(declaration)
+        site["registered_discovery_root"] = True
+        edges.add(
+            ImportEdge(source, target, site["line"], "declared_dynamic_import", symbol)
+        )
 
     adjacency: dict[str, set[str]] = defaultdict(set)
     for edge in edges:
@@ -535,12 +648,6 @@ def analyze_repository(root: Path, config: dict[str, Any]) -> dict[str, Any]:
             raise ValueError(f"Unknown tombstone kind: {kind}")
         if present:
             tombstones.append(target)
-    for site in dynamic_calls:
-        source_symbol = f"{site['source']}:{site['scope']}"
-        site["registered_discovery_root"] = source_symbol == migration["loader"] or any(
-            declaration["source"] == source_symbol
-            for declaration in config.get("dynamic_edges", [])
-        )
     return {
         "schema_version": 1,
         "declared_import_search_paths": config.get("import_search_paths", []),
@@ -584,7 +691,8 @@ def analyze_repository(root: Path, config: dict[str, Any]) -> dict[str, Any]:
         ),
         "external_or_unresolved_top_level_names": sorted(external_names),
         "dynamic_import_sites": sorted(
-            dynamic_calls, key=lambda item: (item["source"], item["line"])
+            dynamic_calls,
+            key=lambda item: (item["source"], item["line"], item["column"]),
         ),
         "forbidden_dependencies": sorted(
             forbidden, key=lambda item: (item["source"], item["target"], item["line"])
