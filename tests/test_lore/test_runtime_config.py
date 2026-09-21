@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, Iterator, NamedTuple, cast
+from typing import Any, Iterator, NamedTuple, cast
 
 import pytest
 import tomlkit
@@ -13,7 +13,6 @@ from nexus.agents.lore.lore import LORE
 from nexus.agents.lore.logon_utility import LogonUtility
 from nexus.config import load_settings
 from nexus.config.loader import RUNTIME_CONFIG_ENV
-from nexus.config.settings_models import Settings
 from nexus.api.slot_utils import VALID_DBNAMES
 from tests.pg_fixtures import disposable_slot_database, seed_protagonist
 
@@ -45,19 +44,9 @@ class AlternateConfig(NamedTuple):
     gaia_model: str
 
 
-def _role_refs_by_target(settings: Settings) -> Dict[str, str]:
-    """Return real registry role references keyed by their resolved model IDs."""
-    refs: Dict[str, str] = {}
-    for provider_name, provider in settings.global_.model.api_models.items():
-        for role_name, model_id in provider.roles.items():
-            refs.setdefault(model_id, f"@{provider_name}.{role_name}")
-    return refs
-
-
 def _write_alternate_config(tmp_path: Path) -> AlternateConfig:
     """Write a real config using any two distinct registry models."""
     repository_settings = load_settings(REPO_CONFIG)
-    role_refs = _role_refs_by_target(repository_settings)
     distinct_models: list[str] = []
     seen_models: set[str] = set()
     for provider in repository_settings.global_.model.api_models.values():
@@ -67,13 +56,8 @@ def _write_alternate_config(tmp_path: Path) -> AlternateConfig:
                 distinct_models.append(model.id)
     if len(distinct_models) < 2:
         pytest.skip("runtime-config precedence needs two distinct registry models")
-    config_values = [
-        (model_id, role_refs.get(model_id, model_id)) for model_id in distinct_models
-    ]
-    # Exercise role resolution when roles exist, while remaining valid for a
-    # future registry whose model entries do not all have named roles.
-    config_values.sort(key=lambda item: (not item[1].startswith("@"), item[0]))
-    (writer_model, writer_value), (gaia_model, gaia_value) = config_values[:2]
+    (writer_model, gaia_model) = sorted(distinct_models)[:2]
+    writer_value, gaia_value = writer_model, gaia_model
 
     document = tomlkit.parse(REPO_CONFIG.read_text(encoding="utf-8"))
     apex = cast(Any, document["apex"])

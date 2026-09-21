@@ -104,7 +104,7 @@ def _plant_shape(cur: Any) -> int:
         )
         SELECT %s, %s, 'primary', 1, 1, 2, 1, 1, 1,
                grouped.batch_ordinal, grouped.experience_ids,
-               'qa_wt720', 'queued', '@openai.gaia',
+               'qa_wt720', 'queued', 'TEST',
                'qa-wt720-benchmark-job-' || grouped.batch_ordinal::text
         FROM (
             SELECT ((numbered.ordinal - 1) / 10)::integer AS batch_ordinal,

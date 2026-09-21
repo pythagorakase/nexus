@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+
 import pytest
 import requests
 
 from nexus.agents.logon.apex_schema import StorytellerResponseBootstrap
 from nexus.config import get_openai_compatible_endpoint, resolve_model_ref
 from scripts.api_openai import OpenAIProvider
+from tests.model_registry_helpers import registry_model
 
 pytestmark = pytest.mark.live_llm
 
@@ -34,7 +36,7 @@ def _require_local_model(base_url: str, model: str) -> None:
 
 def test_local_bootstrap_structured_completion_live() -> None:
     """Generate and validate the Bootstrap schema through Chat Completions."""
-    model = resolve_model_ref("@local.default")
+    model = resolve_model_ref(registry_model("local"))
     endpoint = get_openai_compatible_endpoint(model)
     assert endpoint is not None
     _require_local_model(endpoint["base_url"], model)

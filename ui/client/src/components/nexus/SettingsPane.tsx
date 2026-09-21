@@ -309,9 +309,9 @@ function AdvancedSection() {
 
 // ──────────────────────────────────────────────────────────────────────────
 // 4. Model - one picker; selection binds both narrative turns and the
-// new-story wizard to the same @provider.role reference in nexus.toml.
+// new-story wizard to the same registry model in nexus.toml.
 // The local provider group renders catalog-driven family rows with a
-// per-quant manager (LocalModelRows) instead of its registry role row.
+// per-quant manager (LocalModelRows) instead of its registry model row.
 // ──────────────────────────────────────────────────────────────────────────
 
 function ModelSection({
@@ -322,9 +322,9 @@ function ModelSection({
   onPick: (ref: string) => void;
 }) {
   const meta = settings.settings_meta;
-  const roles = meta?.model_roles ?? [];
+  const models = meta?.models ?? [];
   const apexAllowed = new Set(meta?.apex_allowed_providers ?? []);
-  const options = roles.filter((r) => apexAllowed.has(r.provider));
+  const options = models.filter((r) => apexAllowed.has(r.provider));
   const providers = Array.from(new Set(options.map((r) => r.provider)));
   const current = settings.apex?.model ?? "";
 
@@ -332,9 +332,9 @@ function ModelSection({
     <SettingsCard id="model" label="MODEL">
       <ul className="model-providers">
         {providers.map((provider) => {
-          const localRole =
+          const localModel =
             provider === LOCAL_PROVIDER
-              ? options.find((r) => r.provider === LOCAL_PROVIDER)
+              ? options.find((r) => r.id === settings.local_models?.model)
               : undefined;
           return (
             <li key={provider} className="model-provider open">
@@ -342,28 +342,28 @@ function ModelSection({
                 <span className="model-provider-name">{provider}</span>
               </div>
               <ul className="model-list">
-                {localRole ? (
+                {localModel ? (
                   <LocalModelRows
-                    selected={localRole.ref === current}
-                    onPickLocal={() => onPick(localRole.ref)}
+                    selected={localModel.id === current}
+                    onPickLocal={() => onPick(localModel.id)}
                     knobs={settings.ui?.local_models}
                   />
                 ) : (
                   options
                     .filter((r) => r.provider === provider)
-                    .map((role) => {
-                      const on = role.ref === current;
+                    .map((model) => {
+                      const on = model.id === current;
                       return (
                         <li
-                          key={role.ref}
+                          key={model.id}
                           className={`model-row ${on ? "on" : ""}`}
-                          onClick={() => onPick(role.ref)}
-                          data-testid={`model-${role.provider}-${role.role}`}
+                          onClick={() => onPick(model.id)}
+                          data-testid={`model-${model.provider}-${model.id}`}
                         >
                           <span className="model-radio">
                             {on ? <CircleDot size={12} /> : <Circle size={12} />}
                           </span>
-                          <span className="model-name">{role.label}</span>
+                          <span className="model-name">{model.label}</span>
                         </li>
                       );
                     })
@@ -819,7 +819,7 @@ function SettingsConsole({ settings }: { settings: SettingsPayload }) {
         <ModelSection
           settings={settings}
           onPick={(ref) =>
-            mutation.mutate({ apex_model_ref: ref, wizard_model_ref: ref })
+            mutation.mutate({ apex_model_id: ref, wizard_model_id: ref })
           }
         />
         <KeysSection />

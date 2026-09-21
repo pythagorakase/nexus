@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+
 import json
 import os
 from pathlib import Path
@@ -22,6 +23,7 @@ from nexus.api.pydantic_ai_utils import build_pydantic_ai_model
 from nexus.api.slot_utils import slot_dbname
 from nexus.api.wizard_agent import WizardContext, get_wizard_agent
 from nexus.config import load_settings, resolve_model_ref
+from tests.model_registry_helpers import registry_model
 
 SLOT = int(os.environ.get("NEXUS_ISSUE_601_TEST_SLOT", "0"))
 DBNAME = slot_dbname(SLOT) if SLOT in {1, 2, 3, 4} else ""
@@ -55,7 +57,7 @@ async def test_live_trait_confirmation_persists_and_threads_constraint() -> None
             Path(__file__).parent / "fixtures" / "slot3_midnight_qa_wizard_cache.json"
         ).read_text()
     )
-    model_ref = os.environ.get("NEXUS_ISSUE_601_MODEL", "@openai.default")
+    model_ref = os.environ.get("NEXUS_ISSUE_601_MODEL", registry_model("openai"))
     model_name = resolve_model_ref(model_ref)
 
     create_slot_schema_only(SLOT, source_db="NEXUS_template", force=True)

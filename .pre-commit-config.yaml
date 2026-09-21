@@ -29,7 +29,7 @@ repos:
         files: (^nexus\.toml$|\.py$)
         description: >
           Makes model-roster edits safe to commit: loads nexus.toml through
-          the Pydantic models (dangling @provider.role refs abort here, not
-          at the next boot), enforces the dev-dashboard ship-off invariant,
+          the Pydantic models (invalid model selections and roster uses
+          abort here, not at the next boot), enforces the dev-dashboard ship-off invariant,
           and runs the model-ID drift scan for stale literals lacking a
           "# pin:" comment.

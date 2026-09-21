@@ -1,7 +1,6 @@
 /**
  * Shapes for the GET/PATCH /api/settings surface (FastAPI, proxied by
- * Express). GET serves raw nexus.toml (role references like
- * "@openai.default" left unresolved) plus legacy "Agent Settings" aliases
+ * Express). GET serves concrete model selections plus legacy "Agent Settings" aliases
  * and a derived `settings_meta` block. Single source of truth for the
  * client - extend here, not locally.
  */
@@ -17,18 +16,16 @@ export interface FontSlots {
 
 export type FontMatrix = Record<ThemeId, FontSlots>;
 
-/** One selectable @provider.role binding from [global.model.api_models]. */
-export interface ModelRoleOption {
-  ref: string;
+/** One selectable model from [global.model.api_models]. */
+export interface ModelOption {
+  id: string;
   provider: string;
-  role: string;
-  model_id: string;
   label: string;
 }
 
 /** Derived metadata so the client never hardcodes config semantics. */
 export interface SettingsMeta {
-  model_roles: ModelRoleOption[];
+  models: ModelOption[];
   /** Providers APEXSettings.provider accepts (the wizard accepts all). */
   apex_allowed_providers: string[];
   typewriter: { min: number; max: number };
@@ -65,8 +62,9 @@ export interface SettingsPayload {
   global?: {
     narrative?: { test_mode?: boolean; test_database_suffix?: string };
   };
-  /** Raw role reference (e.g. "@openai.default"), not a resolved model ID. */
+  /** Concrete model ID supplied by the roster. */
   apex?: { provider?: string; model?: string };
+  local_models?: { model?: string };
   wizard?: { default_model?: string; fallback_model?: string };
   lore?: {
     token_budget?: {
@@ -100,7 +98,7 @@ export interface SettingsPatch {
   fonts?: Partial<Record<ThemeId, Partial<FontSlots>>>;
   typewriter_ms_per_char?: number;
   test_mode?: boolean;
-  apex_model_ref?: string;
-  wizard_model_ref?: string;
+  apex_model_id?: string;
+  wizard_model_id?: string;
   apex_context_window?: number;
 }

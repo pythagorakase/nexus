@@ -11,6 +11,7 @@ Or quick validation:
     python tests/test_wizard_live.py
 """
 
+
 import asyncio
 import logging
 import os
@@ -28,6 +29,7 @@ from nexus.api.wizard_agent import (
 from nexus.api.new_story_schemas import WizardResponse
 from nexus.api.pydantic_ai_utils import build_pydantic_ai_model
 from nexus.config import resolve_model_ref
+from tests.model_registry_helpers import registry_model
 
 logger = logging.getLogger(__name__)
 
@@ -143,16 +145,16 @@ PHASE_CONFIGS: Dict[str, Dict[str, Any]] = {
     },
 }
 
-# Model role references to test (resolved against the nexus.toml registry at
+# Registered model IDs to test (resolved against the nexus.toml registry at
 # run time so this file never drifts from the live model lineup).
 TEST_MODEL_REFS = [
-    "@openai.default",
-    "@anthropic.default",
+    registry_model("openai"),
+    registry_model("anthropic"),
 ]
 
 
 def _build_model_for_ref(model_ref: str):
-    """Resolve a role reference and build the Pydantic AI model for it."""
+    """Validate a model ID and build the Pydantic AI model for it."""
     return build_pydantic_ai_model(resolve_model_ref(model_ref))
 
 
@@ -284,7 +286,7 @@ async def test_normal_flow_allows_wizard_response(phase_name: str, mock_db_funct
     )
 
     agent = get_wizard_agent(context)
-    model = _build_model_for_ref("@openai.default")
+    model = _build_model_for_ref(registry_model("openai"))
 
     logger.info(f"Testing {phase_name} phase with accept_fate=False")
 
@@ -347,7 +349,7 @@ async def test_seed_date_conflict_uses_bounded_live_repair(
             "10:48 a.m. in civil hearing room 2B."
         ),
     }
-    model_name = resolve_model_ref("@openai.default")
+    model_name = resolve_model_ref(registry_model("openai"))
     context_data = {
         "setting": setting,
         "character": {"name": "Morgan Hale", "archetype": "Civil litigant"},

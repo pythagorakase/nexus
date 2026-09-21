@@ -9,7 +9,7 @@ import {
   LOCAL_MODELS_STATUS_KEY,
 } from "@/hooks/useLocalModels";
 import { SECRETS_QUERY_KEY } from "@/hooks/useSecrets";
-import { SETTINGS_QUERY_KEY } from "@/hooks/useSettings";
+import { applySettingsPatch, SETTINGS_QUERY_KEY } from "@/hooks/useSettings";
 import type { LocalModelsStatus } from "@/types/localModels";
 import type { SecretStatus } from "@/types/secrets";
 import type { SettingsPayload } from "@/types/settings";
@@ -23,7 +23,7 @@ const SETTINGS: SettingsPayload = {
     typewriter_ms_per_char: 20,
   },
   settings_meta: {
-    model_roles: [],
+    models: [],
     apex_allowed_providers: [],
     typewriter: { min: 1, max: 500 },
   },
@@ -131,20 +131,19 @@ describe("SettingsPane model card local provider", () => {
     active: null,
   };
 
-  it("renders catalog family rows instead of the registry role row", () => {
+  it("renders catalog family rows instead of the registry model row", () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false, staleTime: Infinity } },
     });
     queryClient.setQueryData([...SETTINGS_QUERY_KEY], {
       ...SETTINGS,
+      local_models: { model: "nousresearch/hermes-4-70b" },
       settings_meta: {
         typewriter: { min: 1, max: 500 },
-        model_roles: [
+        models: [
           {
-            ref: "@local.default",
             provider: "local",
-            role: "default",
-            model_id: "nousresearch/hermes-4-70b",
+            id: "nousresearch/hermes-4-70b",
             label: "Hermes 4 70B (Local)",
           },
         ],
@@ -169,7 +168,39 @@ describe("SettingsPane model card local provider", () => {
 
     expect(screen.getByTestId("model-local-hermes-4.3-36b")).toBeInTheDocument();
     expect(screen.getByText("Hermes 4.3 36B")).toBeInTheDocument();
-    // The registry role row is replaced by the family rows.
+    // The registry model row is replaced by the family rows.
     expect(screen.queryByText("Hermes 4 70B (Local)")).not.toBeInTheDocument();
+  });
+});
+
+
+describe("SettingsPane model IDs", () => {
+  const settings: SettingsPayload = {
+    ...SETTINGS,
+    apex: { model: "frontier-2.1", provider: "openai" },
+    settings_meta: {
+      ...SETTINGS.settings_meta!,
+      models: [
+        { id: "frontier-2.1", label: "Frontier 2.1", provider: "openai" },
+        { id: "vendor/model-next", label: "Model Next", provider: "openrouter" },
+      ],
+      apex_allowed_providers: ["openai", "openrouter"],
+    },
+  };
+
+  it("shows every registered option without a role declaration", () => {
+    renderPane(settings);
+    expect(screen.getByTestId("model-openai-frontier-2.1")).toHaveClass("on");
+    expect(screen.getByTestId("model-openrouter-vendor/model-next")).not.toHaveClass("on");
+  });
+
+  it("takes provider routing from the roster when projecting a model choice", () => {
+    const patched = applySettingsPatch(settings, {
+      apex_model_id: "vendor/model-next",
+      wizard_model_id: "vendor/model-next",
+    });
+    expect(patched.apex).toEqual({ model: "vendor/model-next", provider: "local" });
+    expect(patched.wizard?.default_model).toBe("vendor/model-next");
+    expect(() => applySettingsPatch(settings, {apex_model_id: "@openai.default"})).toThrow("Unknown model");
   });
 });

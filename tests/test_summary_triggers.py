@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 import logging
 import uuid
 from dataclasses import dataclass
@@ -12,6 +13,7 @@ from nexus.api.summary_triggers import (
     plan_summary_tasks,
     schedule_summary_generation,
 )
+from tests.model_registry_helpers import registry_model
 
 
 def test_plan_summary_tasks():
@@ -281,9 +283,9 @@ def test_summary_token_check_uses_configured_request_budget():
 @pytest.mark.parametrize(
     "model_ref,expected_provider,expected_transport",
     [
-        ("@openai.default", "openai", "responses"),
-        ("@anthropic.default", "anthropic", None),
-        ("@local.default", "openai", "chat_completions"),
+        (registry_model("openai"), "openai", "responses"),
+        (registry_model("anthropic"), "anthropic", None),
+        (registry_model("local"), "openai", "chat_completions"),
     ],
 )
 def test_summary_generator_uses_registry_native_provider_contract(
@@ -322,7 +324,11 @@ def test_summary_generator_uses_registry_native_provider_contract(
         assert isinstance(provider, AnthropicProvider)
         assert expected_transport is None
         assert provider.max_tokens == settings.season_max_output_tokens
-        assert provider.reasoning_effort == settings.reasoning_effort
+        if generator.is_reasoning_model:
+            assert provider.reasoning_effort == settings.reasoning_effort
+        else:
+            assert provider.reasoning_effort is None
+            assert provider.temperature == settings.temperature
 
 
 @pytest.mark.requires_postgres

@@ -56,7 +56,7 @@ import type {
 import type { LocalModelsUiKnobs } from "@/types/settings";
 
 interface LocalModelRowsProps {
-  /** True when settings.apex.model is the `@local.<role>` ref. */
+  /** True when settings.apex.model is the managed local model ID. */
   selected: boolean;
   /** Persists apex/wizard model refs (same mutation as other rows). */
   onPickLocal: () => void;

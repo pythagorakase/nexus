@@ -1,5 +1,6 @@
 """Pydantic-AI wiring regressions."""
 
+
 import pytest
 from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.models.openai import OpenAIChatModel, OpenAIResponsesModel
@@ -8,6 +9,7 @@ from pydantic_ai.profiles.anthropic import anthropic_model_profile
 from nexus.api import pydantic_ai_utils
 from nexus.api.native_structured_output import AnthropicJsonSchemaTransformer
 from nexus.config import resolve_model_ref
+from tests.model_registry_helpers import registry_model
 
 
 class _LegacyAnthropicProviderStub:
@@ -80,7 +82,7 @@ def test_build_anthropic_model_without_override_omits_profile(monkeypatch):
 def test_build_pydantic_ai_model_uses_chat_model_for_local():
     """Chat-transport endpoints use pydantic-ai's Chat Completions model."""
     model = pydantic_ai_utils.build_pydantic_ai_model(
-        resolve_model_ref("@local.default")
+        resolve_model_ref(registry_model("local"))
     )
 
     assert isinstance(model, OpenAIChatModel)
@@ -94,11 +96,11 @@ def test_build_pydantic_ai_model_applies_registry_timeout_for_local():
     and time out on the ~17-min local grammar compile.
     """
     model = pydantic_ai_utils.build_pydantic_ai_model(
-        resolve_model_ref("@local.default")
+        resolve_model_ref(registry_model("local"))
     )
 
     expected = pydantic_ai_utils.get_openai_compatible_endpoint(
-        resolve_model_ref("@local.default")
+        resolve_model_ref(registry_model("local"))
     )["request_timeout_seconds"]
     assert expected is not None
     assert model.client.timeout == expected
@@ -107,7 +109,7 @@ def test_build_pydantic_ai_model_applies_registry_timeout_for_local():
 def test_build_pydantic_ai_model_keeps_test_on_responses():
     """The TEST mock retains the default pydantic-ai Responses model."""
     model = pydantic_ai_utils.build_pydantic_ai_model(
-        resolve_model_ref("@test.default")
+        resolve_model_ref(registry_model("test"))
     )
 
     assert isinstance(model, OpenAIResponsesModel)

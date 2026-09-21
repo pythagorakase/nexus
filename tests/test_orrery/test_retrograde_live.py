@@ -5,6 +5,7 @@ These tests are skipped unless ``NEXUS_RUN_LIVE_LLM=1`` is set.
 
 from __future__ import annotations
 
+
 import os
 
 import pytest
@@ -20,6 +21,7 @@ from nexus.agents.orrery.retrograde_vocabulary import (
     enumerate_seed_eligible_vocabulary,
 )
 from nexus.config import resolve_model_ref
+from tests.model_registry_helpers import registry_model
 
 
 @pytest.mark.live
@@ -29,7 +31,7 @@ def test_live_retrograde_seed_and_expansion_round_trip() -> None:
 
     packet = _compact_live_packet()
     model_name = resolve_model_ref(
-        os.environ.get("NEXUS_RETROGRADE_LIVE_MODEL", "@openai.default")
+        os.environ.get("NEXUS_RETROGRADE_LIVE_MODEL", registry_model("openai"))
     )
     max_tokens = int(os.environ.get("NEXUS_RETROGRADE_LIVE_MAX_TOKENS", "8000"))
 

@@ -28,7 +28,7 @@ Usage:
     python summarize_narrative.py --chunks 120 150
 
     # Options
-    python summarize_narrative.py --season 3 --model @openai.default --dry-run
+    python summarize_narrative.py --season 3 --dry-run
 """
 
 import argparse
@@ -1455,7 +1455,7 @@ class SummaryGenerator:
                 f"--model {model!r} is not declared in nexus.toml's "
                 "[global.model.api_models] registry, so its parameter "
                 "capabilities (temperature vs reasoning_effort) are unknown. "
-                "Add it to the registry or pass a '@provider.role' reference."
+                "Add it to the model registry."
             ) from exc
         entry = next(
             m
@@ -2490,11 +2490,10 @@ def main():
     args = parser.parse_args()
 
     # Resolve --model from nexus.toml when the user didn't specify it
-    # explicitly; explicit "@provider.role" references resolve through the
-    # same registry authority.
+    # explicitly. Explicit model IDs are validated against the same registry.
     if args.model is None:
         args.model = _resolve_default_summary_model()
-    elif args.model.startswith("@"):
+    else:
         from nexus.config import resolve_model_ref
 
         args.model = resolve_model_ref(args.model)

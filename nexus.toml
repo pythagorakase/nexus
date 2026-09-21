@@ -6,44 +6,32 @@
 # =============================================================================
 
 [global.model]
-# Display-only model reference for legacy settings consumers, resolved to a
-# concrete ID at config load via the api_models registry below.
-# Inference callers must use role-resolved agent fields such as @openai.default.
-default_model = "@openai.default"
+# Model IDs live only in the provider roster below. To upgrade a model, edit
+# its `id` once; `uses` supplies that ID to the listed configuration fields.
+# Move a use to another entry to select a different model. The settings picker
+# does this automatically. TEST supplies the default for new/reset save slots.
 
-# Default model for newly created/reset slots
-# Use "TEST" for development (mock responses, no API key needed)
-default_slot_model = "TEST"
-
-# Provider-grouped API model definitions
-# Each provider section lists models available for that API backend AND named
-# roles that downstream consumers reference via "@provider.role" syntax.
-# Editing a role here (e.g., openai.default) propagates everywhere automatically.
 # Per-model `unsupported_params` lists request parameters the provider rejects
 # outright for that model (e.g. temperature on reasoning-class models).
 # Config load refuses any consumer section that configures one of them.
 [global.model.api_models.openai]
-# Terra as default (owner, 2026-07-27): GPT-5.5's API rates equal Sol's
-# while Terra is half price — 5.5 stays selectable but earns no default.
-roles = { default = "gpt-5.6-terra", gaia = "gpt-5.6-sol" }
 models = [
     { id = "o3", label = "o3", unsupported_params = ["temperature", "top_p"] },
-    { id = "gpt-5.5", label = "GPT-5.5", unsupported_params = ["temperature", "top_p"] },
-    { id = "gpt-5.6-sol", label = "GPT-5.6-Sol", unsupported_params = ["temperature", "top_p"] },
-    { id = "gpt-5.6-terra", label = "GPT-5.6-Terra", unsupported_params = ["temperature", "top_p"] },
+    { id = "gpt-6-astra", label = "GPT-6-Astra", unsupported_params = ["temperature", "top_p"] },
+    { id = "gpt-5.6-sol", label = "GPT-5.6-Sol", unsupported_params = ["temperature", "top_p"], uses = ["apex.gaia_model", "orrery.experiences.model", "storyteller.correspondence.compaction_model"] },
+    { id = "gpt-5.6-terra", label = "GPT-5.6-Terra", unsupported_params = ["temperature", "top_p"], uses = ["apex.model", "global.model.default_model", "ir_eval.judgment.model", "orrery.retrograde.maturation.model_ref", "wizard.default_model"] },
 ]
 
 [global.model.api_models.anthropic]
-roles = { default = "claude-opus-4-8", deep = "claude-fable-5", fast = "claude-sonnet-5-0" }
 # Issue #454: native_structured_output overrides pydantic-ai's stale model
 # allowlist. Live-verified in PR #457 (tests/test_wizard_live.py -k anthropic:
 # 4/4 wizard phases on opus-4-8, plus a fable-5 setting-phase probe); the
 # schema strip set it relies on was proven on the legacy path in PR #410.
 models = [
-    { id = "claude-sonnet-5-0", label = "Sonnet 5.0", native_structured_output = true },
+    { id = "claude-sonnet-5-0", label = "Sonnet 5.0", native_structured_output = true, uses = ["wizard.fallback_model"] },
     { id = "claude-opus-4-8", label = "Opus 4.8", unsupported_params = ["temperature", "top_p", "top_k"], native_structured_output = true },
     { id = "claude-opus-5", label = "Opus 5", unsupported_params = ["temperature", "top_p", "top_k"], native_structured_output = true },
-    { id = "claude-fable-5", label = "Fable 5", unsupported_params = ["temperature", "top_p", "top_k"], native_structured_output = true },
+    { id = "claude-fable-5-1", label = "Fable 5", unsupported_params = ["temperature", "top_p", "top_k"], native_structured_output = true },
 ]
 
 # Non-native providers are OpenAI-compatible servers: `base_url` is where the
@@ -54,9 +42,8 @@ models = [
 [global.model.api_models.test]
 ui_visible = false  # Backend/CLI-only mock server; hidden from UI model pickers
 base_url = "http://127.0.0.1:5102/v1"
-roles = { default = "TEST" }
 models = [
-    { id = "TEST", label = "TEST", description = "Mock server with cached data (dev)" },
+    { id = "TEST", label = "TEST", description = "Mock server with cached data (dev)", uses = ["global.model.default_slot_model"] },
 ]
 
 # Headless `llama-server` (llama.cpp) serves this local model over a GGUF quant.
@@ -68,9 +55,8 @@ models = [
 base_url = "http://127.0.0.1:1234/v1"
 structured_transport = "chat_completions"
 request_timeout_seconds = 1800
-roles = { default = "nousresearch/hermes-4-70b" }
 models = [
-    { id = "nousresearch/hermes-4-70b", label = "Hermes 4 70B (Local)", description = "Local llama-server inference (GGUF)" },
+    { id = "nousresearch/hermes-4-70b", label = "Hermes 4 70B (Local)", description = "Local llama-server inference (GGUF)", uses = ["local_models.model"] },
     { id = "nousresearch/hermes-4.3-36b", label = "Hermes 4.3 36B (Local)", description = "Local llama-server inference (GGUF, Seed-OSS)" },
 ]
 
@@ -87,7 +73,6 @@ base_url = "https://openrouter.ai/api/v1"
 api_key_secret = "openrouter"
 structured_transport = "chat_completions"
 request_timeout_seconds = 600
-roles = { default = "moonshotai/kimi-k2.5" }
 models = [
     { id = "moonshotai/kimi-k2.5", label = "Kimi K2.5", description = "Moonshot K2.5 via OpenRouter" },
     { id = "moonshotai/kimi-k3", label = "Kimi K3", description = "Moonshot K3 via OpenRouter", request_params = { reasoning = { effort = "low" } } },
@@ -97,8 +82,8 @@ models = [
     { id = "z-ai/glm-5", label = "GLM-5", description = "Zhipu GLM-5 via OpenRouter" },
 ]
 
-# Interactive local GGUF management. The server port and alias remain sourced
-# from [global.model.api_models.local], not duplicated here.
+# Interactive local GGUF management. The endpoint is configured in
+# [global.model.api_models.local]; its local_models.model use selects the served ID.
 [local_models]
 models_dir = "~/.lmstudio/models/lmstudio-community"
 # Classic-HTTP downloads byte-resume after cancel; Xet chunk transfer does not.
@@ -186,9 +171,7 @@ display = "Sixtyfour"
 # =============================================================================
 
 [wizard]
-# Use @provider.role syntax. Resolved at config load via the api_models registry.
-default_model = "@openai.default"
-fallback_model = "@anthropic.fast"
+# Model selections are assigned by `uses` in the provider roster.
 message_history_limit = 20
 max_retries = 2
 max_tokens = 4096
@@ -373,7 +356,6 @@ duration_hours = 12
 [orrery.experiences]
 enabled = true
 include_player_character = false
-model = "@openai.gaia"
 dossier_fields = ["summary", "background", "personality"]
 minimum_dossier_fields = 2
 magnitude_weight = 0.60
@@ -736,7 +718,6 @@ weird_level = "medium"
 # backstory retrofits around its on-screen introduction. 1.0 = full band.
 weird_band_fraction = 0.6
 # Frontier model for the R4/R6 maturation calls.
-model_ref = "@openai.default"
 # Maturation responses are larger than ordinary wizard chat turns.
 max_tokens = 16000
 chunk_excerpt_chars = 1200
@@ -1148,7 +1129,6 @@ max_sql_iterations = 5           # Max iterations for agentic SQL generation
 # above the ceiling, retaining the prior floor plus the newly accepted turn.
 floor_turns = 5
 ceiling_turns = 10
-compaction_model = "@openai.gaia"
 # Semantic limits are enforced inside the bounded structured-output repair
 # loops. With six failed compactions budgeted, their configured worst case
 # consumes 11.8K of the 16K context budget.
@@ -1166,8 +1146,6 @@ max_rendered_tokens = 16000
 # =============================================================================
 
 [apex]
-provider = "openai"           # API provider: "openai", "anthropic", or "local"
-model = "@openai.default"     # Resolved via api_models registry; edit roles to migrate
 reasoning_effort = "medium"   # Reasoning effort level (low/medium/high)
 max_output_tokens = 25000     # Maximum tokens for generated narrative
 anthropic_storyteller_transport = "prompted" # "prompted", "native", or "tool_envelope"
@@ -1176,10 +1154,9 @@ turn_pipeline = "two_pass" # "single_pass" or "two_pass"; two_pass default per #
 # the world's half of the turn (updates, Orrery adjudications, new-entity
 # declarations) always runs on this registry model under OpenAI native
 # grammar enforcement, while the slot model picker rotates the prose chair
-# freely. Unset to have Gaia follow the slot model (required for
+# freely. Remove the apex.gaia_model use to follow the slot model (required for
 # fully-local/offline installs). TEST-provider slots always stay
 # self-contained regardless of this setting.
-gaia_model = "@openai.gaia" # Sol: the string-puller seat per the 2026-07-27 night-session bake-off
 structured_output_retries = 3 # Validation retry budget for structured story turns
 # HTTP client timeout for a narrative continue turn. Frontier generation runs
 # inside the request and blocks the API worker, so status polls aren't answered
@@ -1206,7 +1183,7 @@ suggestion_limit = 3
 # storyteller. Provider routing follows the model registry: native OpenAI,
 # native Anthropic, Responses-compatible endpoints, and local Chat Completions
 # endpoints all use their declared structured-output transport.
-# model = "@openai.default"
+# model = "MODEL_ID"
 temperature = 0.2
 reasoning_effort = "medium"
 episode_max_output_tokens = 2500
@@ -1219,7 +1196,6 @@ structured_output_retries = 0
 # =============================================================================
 
 [ir_eval.judgment]
-model = "@openai.default"     # Resolved via api_models registry; edit openai.default to migrate
 reasoning_effort = "high"     # Reasoning effort level (low/medium/high)
 
 # =============================================================================

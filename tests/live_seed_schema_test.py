@@ -9,6 +9,7 @@ Usage:
     python tests/live_seed_schema_test.py
 """
 
+
 import asyncio
 import json
 import logging
@@ -44,6 +45,7 @@ from nexus.api.wizard_agent import WizardContext, get_wizard_agent
 from nexus.api.pydantic_ai_utils import build_pydantic_ai_model
 from nexus.api.new_story_schemas import StorySeedSubmission, WizardResponse
 from nexus.config import resolve_model_ref
+from tests.model_registry_helpers import registry_model
 
 
 # Test context data - minimal setting and character to enable seed phase
@@ -70,8 +72,8 @@ TEST_CONTEXT = {
     },
 }
 
-# Model role references, resolved against the nexus.toml registry at run time.
-TEST_MODEL_REFS = ["@openai.default", "@anthropic.default"]
+# Registered model IDs, resolved against the nexus.toml registry at run time.
+TEST_MODEL_REFS = [registry_model("openai"), registry_model("anthropic")]
 
 SEED_PROMPT = """Create a compelling story opening for this cyberpunk setting and character.
 

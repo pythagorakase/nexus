@@ -10,6 +10,7 @@ Run with: NEXUS_RUN_POSTGRES=1 python -m pytest tests/test_runtime
 
 from __future__ import annotations
 
+
 import json
 import os
 import shutil
@@ -26,6 +27,7 @@ import tomlkit
 from nexus.config import load_settings
 from nexus.runtime import RUNTIME_CONFIG_ENV, Supervisor
 from nexus.runtime.supervisor import _pid_alive, _port_open
+from tests.model_registry_helpers import registry_model
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 GATEWAY_PORT = 8032
@@ -59,7 +61,7 @@ def _write_config(
     else:
         del doc["global"]["model"]["api_models"]["test"]
         # default_slot_model = "TEST" would dangle without the registry entry
-        doc["global"]["model"]["default_slot_model"] = "@openai.default"
+        doc["global"]["model"]["default_slot_model"] = registry_model("openai")
     if external_gateway_url:
         doc["runtime"]["external"] = {"gateway_url": external_gateway_url}
     if remote_base_url:

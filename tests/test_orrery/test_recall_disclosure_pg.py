@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+
 import asyncio
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
@@ -41,6 +42,7 @@ from nexus.agents.orrery.substrate import ALWAYS, Branch, DriveBand, Slot, Templ
 from nexus.api import db_pool, narrative, orrery_dev_endpoints
 from nexus.config import load_settings_as_dict
 from scripts import new_story_setup
+from tests.model_registry_helpers import registry_model
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -2018,7 +2020,7 @@ class _TurnLoreHarness:
                 },
                 "experiences": {
                     "include_player_character": True,
-                    "model": "@openai.gaia",
+                    "model": registry_model("openai"),
                 },
                 "recall": {
                     "semantic_fit_weight": 1.0,

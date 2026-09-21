@@ -200,7 +200,7 @@ def _insert_job(
             source_digest
         ) VALUES (
             %s, %s, 'primary', 1, 1, 2, 1, 1, 1,
-            %s, %s, 'qa_wt720', %s::orrery_job_state, '@openai.gaia', %s
+            %s, %s, 'qa_wt720', %s::orrery_job_state, 'TEST', %s
         )
         """,
         (
@@ -387,7 +387,7 @@ def test_enqueue_select_uses_pending_experience_gin_index(conn: Any) -> None:
             )
             SELECT %s, %s, 'primary', 1, 1, 2, 1, 1, 1,
                    grouped.batch_ordinal, grouped.experience_ids,
-                   'qa_wt720', 'queued', '@openai.gaia',
+                   'qa_wt720', 'queued', 'TEST',
                    'qa-wt720-benchmark-job-' || grouped.batch_ordinal::text
             FROM (
                 SELECT ((numbered.ordinal - 1) / 10)::integer AS batch_ordinal,
