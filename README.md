@@ -136,9 +136,11 @@ CLI reference: `docs/cli.md`.
 ## Configuration
 
 `nexus.toml` is the sole runtime configuration file, validated by Pydantic
-models in `nexus/config/settings_models.py`. Model choices use
-`@provider.role` references resolved against the `[global.model.api_models]`
-registry at load time. The legacy `settings.json` is retired.
+models in `nexus/config/settings_models.py`. Each entry in the
+`[global.model.api_models]` roster lists the component fields it supplies in
+`uses`. To upgrade a model, edit its `id` once; all those configured uses follow
+the new ID. The settings picker selects concrete models and moves their
+assignments automatically. The legacy `settings.json` is retired.
 
 ## Testing
 
