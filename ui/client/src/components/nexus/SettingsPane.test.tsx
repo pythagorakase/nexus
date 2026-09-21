@@ -135,7 +135,7 @@ describe("SettingsPane model card local provider", () => {
     active: null,
   };
 
-  it("renders catalog family rows instead of the registry model row", () => {
+  it("keeps the shared local runtime manager under Skald only", () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false, staleTime: Infinity } },
     });
@@ -150,8 +150,13 @@ describe("SettingsPane model card local provider", () => {
             id: "nousresearch/hermes-4-70b",
             label: "Hermes 4 70B (Local)",
           },
+          {
+            provider: "openai",
+            id: "remote-model",
+            label: "Remote Model",
+          },
         ],
-        apex_allowed_providers: ["local"],
+        apex_allowed_providers: ["local", "openai"],
       },
     } satisfies SettingsPayload);
     queryClient.setQueryData([...SECRETS_QUERY_KEY], STATUSES);
@@ -174,6 +179,22 @@ describe("SettingsPane model card local provider", () => {
     expect(screen.getByText("Hermes 4.3 36B")).toBeInTheDocument();
     // The registry model row is replaced by the family rows.
     expect(screen.queryByText("Hermes 4 70B (Local)")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /^World State / }));
+    expect(screen.queryByTestId("model-local-hermes-4.3-36b"))
+      .not.toBeInTheDocument();
+    expect(screen.queryByText("Hermes 4 70B (Local)")).not.toBeInTheDocument();
+    expect(screen.queryByText("local", { exact: true })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /quantizations/ }))
+      .not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Remote Model" }))
+      .toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Same as Skald" }))
+      .toBeInTheDocument();
+    expect(screen.queryByText("Gaia", { exact: true })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("model-target-skald"));
+    expect(screen.getByTestId("model-local-hermes-4.3-36b")).toBeInTheDocument();
   });
 });
 

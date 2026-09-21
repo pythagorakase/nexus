@@ -310,8 +310,9 @@ function AdvancedSection() {
 // ──────────────────────────────────────────────────────────────────────────
 // 4. Model - independent Skald and Gaia assignments. Skald also selects
 // the new-story wizard model; Gaia can follow the active Skald or be pinned.
-// The local provider group renders catalog-driven family rows with a
-// per-quant manager (LocalModelRows) instead of its registry model row.
+// Skald's local provider group owns the shared runtime's family/quant manager.
+// Gaia cannot pin independent local weights on that single shared endpoint;
+// Same as Skald is the supported way for both assignments to run locally.
 // ──────────────────────────────────────────────────────────────────────────
 
 function ModelSection({
@@ -327,7 +328,11 @@ function ModelSection({
   const meta = settings.settings_meta;
   const models = meta?.models ?? [];
   const apexAllowed = new Set(meta?.apex_allowed_providers ?? []);
-  const options = models.filter((r) => apexAllowed.has(r.provider));
+  const options = models.filter(
+    (r) =>
+      apexAllowed.has(r.provider) &&
+      (target === "skald" || r.provider !== LOCAL_PROVIDER),
+  );
   const providers = Array.from(new Set(options.map((r) => r.provider)));
   const skald = settings.apex?.model ?? "";
   const gaia = settings.apex?.gaia_model ?? null;
@@ -356,7 +361,7 @@ function ModelSection({
           onClick={() => setTarget("gaia")}
           data-testid="model-target-gaia"
         >
-          <span className="model-target-name">Gaia</span>
+          <span className="model-target-name">World State</span>
           <span className="model-target-value">
             {gaia === null ? "Same as Skald" : modelLabel(gaia)}
           </span>
@@ -377,7 +382,7 @@ function ModelSection({
       )}
       <ul
         className="model-providers"
-        aria-label={`${target === "skald" ? "Skald" : "Gaia"} models`}
+        aria-label={`${target === "skald" ? "Skald" : "World State"} models`}
       >
         {providers.map((provider) => {
           const localModel =
@@ -392,9 +397,8 @@ function ModelSection({
               <ul className="model-list">
                 {localModel ? (
                   <LocalModelRows
-                    key={target}
                     selected={localModel.id === current}
-                    onPickLocal={() => onPick(localModel.id)}
+                    onPickLocal={() => onPickSkald(localModel.id)}
                     knobs={settings.ui?.local_models}
                   />
                 ) : (
