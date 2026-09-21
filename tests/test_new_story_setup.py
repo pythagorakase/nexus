@@ -14,11 +14,15 @@ Uses throwaway databases created and dropped by the test itself. Live slots
 from __future__ import annotations
 
 import os
+from pathlib import Path
+import shutil
 import subprocess
 from typing import Generator
 
 import psycopg2
+from psycopg2 import sql
 import pytest
+import tomlkit
 
 from scripts import migrate
 from scripts import new_story_setup
@@ -117,8 +121,12 @@ def template_db() -> Generator[str, None, None]:
         subprocess.run(["dropdb", "--if-exists", _SOURCE_DB], check=False)
 
 
+@pytest.mark.parametrize("desktop_reset", [False, True], ids=["fresh", "desktop-reset"])
 def test_fresh_database_is_baseline_stamped(
-    template_db: str, monkeypatch: pytest.MonkeyPatch
+    template_db: str,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    desktop_reset: bool,
 ) -> None:
     """A template-derived database carries stamps + seed rows; migrate is a no-op."""
     # The pooled connection path only accepts save_NN names; this test must
@@ -126,7 +134,47 @@ def test_fresh_database_is_baseline_stamped(
     monkeypatch.setattr(new_story_setup, "USE_POOL", False)
 
     try:
-        new_story_setup.initialize_slot_database(_TARGET_DB, source_db=template_db)
+        if desktop_reset:
+            admin = _connect("postgres")
+            admin.autocommit = True
+            try:
+                with admin.cursor() as cur:
+                    cur.execute(
+                        sql.SQL("CREATE DATABASE {}").format(sql.Identifier(_TARGET_DB))
+                    )
+            finally:
+                admin.close()
+            existing = _connect(_TARGET_DB)
+            try:
+                with existing, existing.cursor() as cur:
+                    cur.execute("CREATE TABLE previous_story (content text)")
+                    cur.execute(
+                        "INSERT INTO previous_story VALUES ('erase this story')"
+                    )
+            finally:
+                existing.close()
+
+            # Model the desktop process's restricted PATH while still using
+            # the real installed tools through the configured search paths.
+            tool_dirs = set()
+            for name in ("dropdb", "createdb", "pg_dump", "psql"):
+                executable = shutil.which(name)
+                assert executable is not None, f"PostgreSQL gate requires {name}"
+                tool_dirs.add(str(Path(executable).parent))
+            document = tomlkit.parse(
+                (Path(__file__).resolve().parents[1] / "nexus.toml").read_text()
+            )
+            document["api"]["database"]["tool_search_paths"] = sorted(tool_dirs)
+            config_path = tmp_path / "desktop.toml"
+            config_path.write_text(tomlkit.dumps(document))
+            with monkeypatch.context() as desktop:
+                desktop.setenv("PATH", str(tmp_path))
+                desktop.setenv("NEXUS_RUNTIME_CONFIG", str(config_path))
+                new_story_setup.initialize_slot_database(
+                    _TARGET_DB, source_db=template_db, force=True
+                )
+        else:
+            new_story_setup.initialize_slot_database(_TARGET_DB, source_db=template_db)
 
         expected_stamps = {version for version, _ in _all_known_migrations()}
         conn = _connect(_TARGET_DB)
@@ -142,6 +190,8 @@ def test_fresh_database_is_baseline_stamped(
                 global_row = cur.fetchone()
                 cur.execute("SELECT COUNT(*) FROM public.narrative_chunks")
                 narrative_count = cur.fetchone()[0]
+                cur.execute("SELECT to_regclass('public.previous_story')")
+                assert cur.fetchone()[0] is None
         finally:
             conn.close()
 

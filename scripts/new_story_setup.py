@@ -12,6 +12,8 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 from typing import Optional
@@ -138,6 +140,31 @@ def create_slot_schema_only(
     initialize_slot_database(target_db, source_db=source_db, force=force)
 
 
+def _postgres_tools(*names: str) -> dict[str, str]:
+    """Resolve every required tool before changing an existing database."""
+    resolved = {name: shutil.which(name) for name in names}
+    if not all(resolved.values()):
+        from nexus.config import load_settings
+
+        settings = load_settings()
+        search_paths = settings.api.database.tool_search_paths if settings.api else []
+        extra_path = os.pathsep.join(
+            str(Path(path).expanduser()) for path in search_paths
+        )
+        if extra_path:
+            for name, executable in resolved.items():
+                if executable is None:
+                    resolved[name] = shutil.which(name, path=extra_path)
+
+    missing = [name for name, executable in resolved.items() if executable is None]
+    if missing:
+        raise RuntimeError(
+            f"PostgreSQL tools unavailable: {', '.join(missing)}. "
+            "Add their directory to [api.database].tool_search_paths in nexus.toml."
+        )
+    return {name: str(executable) for name, executable in resolved.items()}
+
+
 def initialize_slot_database(
     target_db: str, source_db: Optional[str] = None, force: bool = False
 ) -> None:
@@ -153,6 +180,7 @@ def initialize_slot_database(
     """
     # NEXUS_template is the canonical fresh-slot image (schema + seed data)
     source_db = source_db or "NEXUS_template"
+    tools = _postgres_tools("dropdb", "createdb", "pg_dump", "psql")
 
     if force:
         # Terminate active connections before dropping
@@ -172,14 +200,14 @@ def initialize_slot_database(
                 )
         finally:
             admin_conn.close()
-        subprocess.run(["dropdb", "--if-exists", target_db], check=False)
+        subprocess.run([tools["dropdb"], "--if-exists", target_db], check=True)
         LOG.warning("Dropped database %s if it existed", target_db)
 
-    subprocess.run(["createdb", target_db], check=True)
+    subprocess.run([tools["createdb"], target_db], check=True)
     LOG.info("Created database %s", target_db)
 
     # Dump both public and assets schemas from template
-    dump_cmd = ["pg_dump", "-s", "-n", "public", "-n", "assets", source_db]
+    dump_cmd = [tools["pg_dump"], "-s", "-n", "public", "-n", "assets", source_db]
     LOG.info("Dumping schema (public + assets) from %s", source_db)
     with tempfile.NamedTemporaryFile("w+", delete=False, suffix=".sql") as tmp:
         subprocess.run(dump_cmd, check=True, stdout=tmp)
@@ -188,11 +216,11 @@ def initialize_slot_database(
     try:
         # Ensure required extensions exist in the new DB
         subprocess.run(
-            ["psql", target_db, "-c", "CREATE EXTENSION IF NOT EXISTS vector;"],
+            [tools["psql"], target_db, "-c", "CREATE EXTENSION IF NOT EXISTS vector;"],
             check=True,
         )
         subprocess.run(
-            ["psql", target_db, "-c", "CREATE EXTENSION IF NOT EXISTS postgis;"],
+            [tools["psql"], target_db, "-c", "CREATE EXTENSION IF NOT EXISTS postgis;"],
             check=True,
         )
 
@@ -212,7 +240,10 @@ def initialize_slot_database(
             f.writelines(sql_lines)
 
         LOG.info("Restoring schema into %s", target_db)
-        subprocess.run(["psql", target_db, "-f", tmp_path], check=True)
+        subprocess.run(
+            [tools["psql"], "-v", "ON_ERROR_STOP=1", target_db, "-f", tmp_path],
+            check=True,
+        )
     finally:
         try:
             os.remove(tmp_path)
@@ -220,7 +251,7 @@ def initialize_slot_database(
             pass
 
     # Copy template data: seed/vocab rows plus schema_migrations stamps.
-    _copy_template_data(source_db, target_db)
+    _copy_template_data(source_db, target_db, tools)
     _require_migration_stamps(source_db, target_db)
 
     # Ensure global_variables row exists
@@ -288,7 +319,7 @@ TEMPLATE_SEED_TABLES = (
 )
 
 
-def _copy_template_data(source_db: str, target_db: str) -> None:
+def _copy_template_data(source_db: str, target_db: str, tools: dict[str, str]) -> None:
     """Copy the seed image from the template into the freshly restored schema.
 
     Transfers exactly the seed/vocab tables and the schema_migrations
@@ -296,7 +327,7 @@ def _copy_template_data(source_db: str, target_db: str) -> None:
     the source database carries them. ON_ERROR_STOP keeps failures loud.
     """
     LOG.info("Copying template data (seed rows + migration stamps) from %s", source_db)
-    dump_cmd = ["pg_dump", "--data-only", source_db]
+    dump_cmd = [tools["pg_dump"], "--data-only", source_db]
     for table in TEMPLATE_SEED_TABLES:
         dump_cmd.extend(["-t", table])
     with tempfile.NamedTemporaryFile("w+", delete=False, suffix=".sql") as tmp:
@@ -308,7 +339,7 @@ def _copy_template_data(source_db: str, target_db: str) -> None:
         tmp_path = tmp.name
     try:
         subprocess.run(
-            ["psql", "-v", "ON_ERROR_STOP=1", target_db, "-f", tmp_path],
+            [tools["psql"], "-v", "ON_ERROR_STOP=1", target_db, "-f", tmp_path],
             check=True,
         )
     finally:

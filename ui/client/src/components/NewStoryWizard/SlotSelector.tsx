@@ -91,11 +91,17 @@ export function SlotSelector({ onSlotSelected, onSlotResumed }: SlotSelectorProp
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ slot }),
             });
-            if (!res.ok) throw new Error("Failed to reset slot");
+            if (!res.ok) {
+                const error = await res.json().catch(() => null);
+                throw new Error(
+                    typeof error?.detail === "string" ? error.detail : "Failed to clear slot",
+                );
+            }
             return res.json();
         },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["/api/story/new/slots"] });
+        onSuccess: async () => {
+            await queryClient.invalidateQueries({ queryKey: ["/api/story/new/slots"] });
+            setSlotToDelete(null);
             toast({ title: "Slot cleared" });
         },
     });
@@ -142,13 +148,13 @@ export function SlotSelector({ onSlotSelected, onSlotResumed }: SlotSelectorProp
     const handleReset = (e: React.MouseEvent, slotData: SlotData) => {
         e.stopPropagation();
         if (slotData.is_locked) return;
+        resetMutation.reset();
         setSlotToDelete(slotData.slot);
     };
 
     const confirmReset = () => {
-        if (slotToDelete) {
+        if (slotToDelete !== null && !resetMutation.isPending) {
             resetMutation.mutate(slotToDelete);
-            setSlotToDelete(null);
         }
     };
 
@@ -285,7 +291,10 @@ export function SlotSelector({ onSlotSelected, onSlotResumed }: SlotSelectorProp
                 </div>
             </div>
 
-            <AlertDialog open={!!slotToDelete} onOpenChange={(open) => !open && setSlotToDelete(null)}>
+            <AlertDialog
+                open={slotToDelete !== null}
+                onOpenChange={(open) => !open && !resetMutation.isPending && setSlotToDelete(null)}
+            >
                 <AlertDialogContent className="border-destructive/50 bg-background/95 backdrop-blur-xl">
                     <AlertDialogHeader>
                         <AlertDialogTitle className="text-destructive font-mono uppercase tracking-wider flex items-center gap-2">
@@ -296,13 +305,29 @@ export function SlotSelector({ onSlotSelected, onSlotResumed }: SlotSelectorProp
                             The story in this slot will be erased.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
+                    {resetMutation.isError && (
+                        <p role="alert" className="rounded border border-destructive/40 bg-destructive/10 p-3 text-foreground font-mono text-sm">
+                            Could not clear the slot: {resetMutation.error.message}
+                        </p>
+                    )}
                     <AlertDialogFooter>
-                        <AlertDialogCancel className="font-mono">CANCEL</AlertDialogCancel>
+                        <AlertDialogCancel disabled={resetMutation.isPending} className="font-mono">
+                            CANCEL
+                        </AlertDialogCancel>
                         <AlertDialogAction
-                            onClick={confirmReset}
+                            onClick={(event) => {
+                                event.preventDefault();
+                                confirmReset();
+                            }}
+                            disabled={resetMutation.isPending}
                             className="bg-destructive text-destructive-foreground hover:bg-destructive/90 font-mono"
                         >
-                            ERASE
+                            {resetMutation.isPending ? (
+                                <>
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                                    ERASING…
+                                </>
+                            ) : "ERASE"}
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
@@ -344,5 +369,3 @@ export function SlotSelector({ onSlotSelected, onSlotResumed }: SlotSelectorProp
         </div>
     );
 }
-
-
