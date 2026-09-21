@@ -196,6 +196,9 @@ max_tokens = 4096
 # connections. Bounds how long an unreachable database can stall a caller;
 # import-time code must never connect at all (issue #369).
 connect_timeout_seconds = 5
+# Desktop launches do not inherit the interactive shell's PATH. These paths
+# supplement PATH when creating or clearing story databases.
+tool_search_paths = ["/Applications/Postgres.app/Contents/Versions/latest/bin"]
 
 [api.narrative_generation]
 # A crashed gateway must not brick a slot. This exceeds the longest configured

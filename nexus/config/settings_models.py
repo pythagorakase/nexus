@@ -3276,6 +3276,13 @@ class APIDatabaseSettings(BaseModel):
             "connections, bounding outage pain when the server is unreachable"
         ),
     )
+    tool_search_paths: List[str] = Field(
+        default_factory=list,
+        description=(
+            "Additional directories to search for PostgreSQL command-line tools "
+            "when the runtime PATH does not include them"
+        ),
+    )
 
 
 class APINarrativeGenerationSettings(BaseModel):
