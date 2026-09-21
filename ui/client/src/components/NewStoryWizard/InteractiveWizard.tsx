@@ -109,6 +109,8 @@ export function InteractiveWizard({
 }: InteractiveWizardProps) {
     const [messages, setMessages] = useState<Message[]>([]);
     const [isLoading, setIsLoading] = useState(false);
+    const [initializationError, setInitializationError] = useState<string | null>(null);
+    const [initializationAttempt, setInitializationAttempt] = useState(0);
     const [threadId, setThreadId] = useState<string | null>(null);
     const [currentPhase, setCurrentPhase] = useState<Phase>(initialPhase || "setting");
     const [pendingArtifact, setPendingArtifact] = useState<any>(null);
@@ -149,9 +151,12 @@ export function InteractiveWizard({
 
     // Initialize chat
     useEffect(() => {
+        let cancelled = false;
         const initChat = async () => {
             try {
                 setIsLoading(true);
+                setInitializationError(null);
+                setThreadId(null);
 
                 // Reset local UI state when starting/resuming a session
                 setMessages([]);
@@ -173,8 +178,17 @@ export function InteractiveWizard({
                     body: JSON.stringify({ slot }),
                 });
 
-                if (!startRes.ok) throw new Error("Failed to start setup");
+                if (!startRes.ok) {
+                    const error = await startRes.json().catch(() => null);
+                    throw new Error(
+                        typeof error?.detail === "string"
+                            ? error.detail
+                            : `Could not start a new story (${startRes.status}).`,
+                    );
+                }
                 const { thread_id, welcome_message, welcome_choices } = await startRes.json();
+                if (cancelled) return;
+                if (!thread_id) throw new Error("The new story session was not created.");
                 setThreadId(thread_id);
 
                 if (welcome_message) {
@@ -182,19 +196,19 @@ export function InteractiveWizard({
                 }
                 setDisplayChoices(normalizeChoices(welcome_choices));
             } catch (error) {
+                if (cancelled) return;
                 console.error("Failed to init chat:", error);
-                toast({
-                    title: "Initialization Error",
-                    description: "Failed to initialize new story wizard. Please try again.",
-                    variant: "destructive",
-                });
+                setInitializationError(
+                    error instanceof Error ? error.message : "Could not start a new story.",
+                );
             } finally {
-                setIsLoading(false);
+                if (!cancelled) setIsLoading(false);
             }
         };
 
         initChat();
-    }, [slot, toast, resumeThreadId]);
+        return () => { cancelled = true; };
+    }, [slot, resumeThreadId, initializationAttempt]);
 
     useEffect(() => {
         setCurrentPhase(initialPhase || "setting");
@@ -926,6 +940,24 @@ export function InteractiveWizard({
                 {/* Chat Area - shadcn AI Conversation with auto-scroll */}
                 <Conversation className="flex-1">
                     <ConversationContent className="p-4 space-y-6">
+                        {initializationError && (
+                            <div role="alert" className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 space-y-3">
+                                <p className="font-serif text-sm text-foreground whitespace-pre-wrap break-words">
+                                    {initializationError}
+                                </p>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                        setInitializationError(null);
+                                        setIsLoading(true);
+                                        setInitializationAttempt(attempt => attempt + 1);
+                                    }}
+                                >
+                                    Retry
+                                </Button>
+                            </div>
+                        )}
                         <AnimatePresence initial={false}>
                             {messages.map((msg) => (
                                 <motion.div
@@ -969,7 +1001,7 @@ export function InteractiveWizard({
                             ))}
                         </AnimatePresence>
                         {/* Structured choices + freeform slot */}
-                        {!isLoading && (
+                        {!isLoading && !initializationError && (
                             <motion.div
                                 initial={{ opacity: 0, y: 10 }}
                                 animate={{ opacity: 1, y: 0 }}

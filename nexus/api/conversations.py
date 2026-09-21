@@ -1,7 +1,7 @@
 """
 Conversation storage wrapper for new-story setup flows.
 
-Uses OpenAI Threads for OpenAI models, file-backed storage for Anthropic models,
+Uses OpenAI Conversations for OpenAI models, file-backed storage for Anthropic models,
 and in-memory storage for TEST mode.
 """
 
@@ -24,6 +24,7 @@ logger = logging.getLogger("nexus.api.conversations")
 
 class Message(TypedDict):
     """Type definition for conversation messages."""
+
     role: str
     content: str
 
@@ -32,10 +33,10 @@ class ConversationsClient:
     """
     Minimal Conversations client (thread create/send/list/delete).
 
-    Provides a lightweight wrapper around OpenAI's beta Conversations API
-    for managing new-story setup flows.
+    Provides a lightweight wrapper around OpenAI's Conversations API. The
+    application keeps the name ``thread_id`` for its stored conversation ID.
 
-    In TEST mode, uses in-memory storage instead of OpenAI Threads API
+    In TEST mode, uses in-memory storage instead of the OpenAI Conversations API
     to enable instant testing without API credentials.
     """
 
@@ -69,10 +70,10 @@ class ConversationsClient:
             logger.info("ConversationsClient using file storage for %s", model)
             return
 
-        # Production mode: use OpenAI Threads API
+        # Production mode: use the supported Conversations API. Assistants
+        # Threads were retired on August 26, 2026.
         self._test_mode = False
         provider_client = OpenAIProvider(model=model)
-        # Use the raw OpenAI client to access beta endpoints
         self.client = openai.OpenAI(api_key=provider_client.api_key)
 
     def create_thread(self) -> str:
@@ -87,7 +88,7 @@ class ConversationsClient:
             logger.info("Created local thread %s", thread_id)
             return thread_id
 
-        thread = self.client.beta.threads.create()
+        thread = self.client.conversations.create()
         thread_id = thread.id
         logger.info("Created conversations thread %s", thread_id)
         return thread_id
@@ -109,11 +110,9 @@ class ConversationsClient:
             # Initialize thread if it doesn't exist (handle edge cases)
             if thread_id not in self._test_threads:
                 self._test_threads[thread_id] = []
-            self._test_threads[thread_id].append({
-                "id": msg_id,
-                "role": role,
-                "content": content
-            })
+            self._test_threads[thread_id].append(
+                {"id": msg_id, "role": role, "content": content}
+            )
             logger.debug("[TEST MODE] Added %s message to thread %s", role, thread_id)
             return msg_id
         if self._store_mode == "file" and self._file_store:
@@ -121,13 +120,12 @@ class ConversationsClient:
             logger.debug("Added %s message to local thread %s", role, thread_id)
             return msg_id
 
-        msg = self.client.beta.threads.messages.create(
-            thread_id=thread_id,
-            role=role,
-            content=content,
+        items = self.client.conversations.items.create(
+            conversation_id=thread_id,
+            items=[{"type": "message", "role": role, "content": content}],
         )
         logger.debug("Added %s message to thread %s", role, thread_id)
-        return msg.id
+        return items.data[0].id
 
     def list_messages(self, thread_id: str, limit: int = 20) -> List[Message]:
         """
@@ -149,20 +147,26 @@ class ConversationsClient:
         if self._store_mode == "file" and self._file_store:
             return self._file_store.list_messages(thread_id, limit=limit)
 
-        messages = self.client.beta.threads.messages.list(thread_id=thread_id, limit=limit)
+        items = self.client.conversations.items.list(
+            conversation_id=thread_id,
+            order="desc",
+            limit=min(limit, 100) if limit else 100,
+        )
 
         history = []
-        for msg in messages.data:
-            content = ""
-            if msg.content and len(msg.content) > 0:
-                # Assuming text content for now
-                if hasattr(msg.content[0], 'text'):
-                    content = msg.content[0].text.value
-
-            history.append({
-                "role": msg.role,
-                "content": content
-            })
+        # SDK iteration follows pagination. Conversations can also contain
+        # tool items; only messages count toward the wizard history limit.
+        for item in items:
+            if item.type != "message":
+                continue
+            content = "".join(
+                part.text
+                for part in item.content
+                if part.type in {"input_text", "output_text"}
+            )
+            history.append({"role": item.role, "content": content})
+            if limit and len(history) >= limit:
+                break
 
         return history
 
@@ -192,7 +196,7 @@ class ConversationsClient:
             return deleted
 
         try:
-            self.client.beta.threads.delete(thread_id)
+            self.client.conversations.delete(thread_id)
             logger.info("Deleted thread %s", thread_id)
             return True
         except openai.OpenAIError as exc:
@@ -204,7 +208,9 @@ class _FileConversationStore:
     """File-backed conversation store for non-OpenAI providers."""
 
     def __init__(self, base_dir: Optional[Path] = None) -> None:
-        self._base_dir = base_dir or (Path(__file__).parent.parent.parent / "temp" / "wizard_threads")
+        self._base_dir = base_dir or (
+            Path(__file__).parent.parent.parent / "temp" / "wizard_threads"
+        )
         self._base_dir.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
 
