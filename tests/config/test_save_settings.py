@@ -9,7 +9,7 @@ from nexus.config import save_settings
 def sample_toml(tmp_path):
     """Create a sample TOML file with comments."""
     content = """# Header comment
-[global.model]
+[example]
 # Default model comment
 default_model = "old-model"
 default_slot_model = "TEST"
@@ -22,7 +22,7 @@ default_slot_model = "TEST"
 def test_preserves_comments(sample_toml):
     """Verify comments are preserved after save."""
     save_settings(
-        {"global.model.default_model": "new-model"},
+        {"example.default_model": "new-model"},
         path=sample_toml,
         validate=False,
     )
@@ -35,7 +35,7 @@ def test_preserves_comments(sample_toml):
 def test_partial_update_leaves_other_fields(sample_toml):
     """Verify only specified fields are changed."""
     save_settings(
-        {"global.model.default_model": "new-model"},
+        {"example.default_model": "new-model"},
         path=sample_toml,
         validate=False,
     )
@@ -43,15 +43,15 @@ def test_partial_update_leaves_other_fields(sample_toml):
 
     with open(sample_toml, "rb") as f:
         data = tomllib.load(f)
-    assert data["global"]["model"]["default_model"] == "new-model"
-    assert data["global"]["model"]["default_slot_model"] == "TEST"
+    assert data["example"]["default_model"] == "new-model"
+    assert data["example"]["default_slot_model"] == "TEST"
 
 
 def test_creates_backup(sample_toml):
     """Verify backup file is created."""
     original_content = sample_toml.read_text()
     save_settings(
-        {"global.model.default_model": "new-model"},
+        {"example.default_model": "new-model"},
         path=sample_toml,
         backup=True,
         validate=False,
@@ -65,7 +65,7 @@ def test_file_not_found_raises(tmp_path):
     """Verify FileNotFoundError for missing files."""
     with pytest.raises(FileNotFoundError):
         save_settings(
-            {"global.model.default_model": "new"},
+            {"example.default_model": "new"},
             path=tmp_path / "nonexistent.toml",
         )
 

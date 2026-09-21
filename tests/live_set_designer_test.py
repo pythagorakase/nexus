@@ -9,6 +9,7 @@ Usage:
     python tests/live_set_designer_test.py
 """
 
+
 import asyncio
 import logging
 import os
@@ -47,6 +48,7 @@ from nexus.api.new_story_schemas import (
     TechLevel,
 )
 from nexus.config import resolve_model_ref
+from tests.model_registry_helpers import registry_model
 
 
 # Test setting (cyberpunk Neon Palimpsest)
@@ -118,9 +120,9 @@ The air tastes of rust, recycled coolant, and the ozone snap of failing electron
     },
 ]
 
-# Model role references to test, resolved against the nexus.toml registry at
+# Registered model IDs to test, resolved against the nexus.toml registry at
 # run time (testing defaults per CLAUDE.md).
-TEST_MODEL_REFS = ["@openai.default", "@anthropic.default"]
+TEST_MODEL_REFS = [registry_model("openai"), registry_model("anthropic")]
 
 
 async def test_set_designer(model: str, sketch_info: Dict[str, str]) -> Dict[str, Any]:

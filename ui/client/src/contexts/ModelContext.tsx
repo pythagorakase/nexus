@@ -28,7 +28,7 @@ interface ModelContextType {
 const ModelContext = createContext<ModelContextType | undefined>(undefined);
 
 const STORAGE_KEY = 'nexus-model';
-// Offline-only seed; should track @openai.default in the nexus.toml
+// Offline-only seed; should track the default model in the nexus.toml
 // api_models registry. Reached only when /api/config/models is unreachable,
 // and replaced by registry truth on the first successful fetch.
 const DEFAULT_MODEL = 'gpt-5.2';

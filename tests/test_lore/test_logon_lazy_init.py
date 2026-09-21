@@ -136,26 +136,11 @@ def _minimal_payload(*, is_bootstrap: bool = False) -> Dict[str, Any]:
     return payload
 
 
-def test_runtime_roster_reference_resolves_before_provider_call(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A @provider.role selection becomes the concrete provider model id."""
-
-    seen: list[str] = []
-
-    def fake_resolve(model_ref: str, path: object = None) -> str:
-        seen.append(model_ref)
-        return "resolved-roster-model"
-
-    monkeypatch.setattr(
-        "nexus.agents.lore.logon_utility.resolve_model_ref", fake_resolve
-    )
-
-    assert (
+def test_runtime_model_ids_pass_through_and_aliases_are_rejected() -> None:
+    """Provider construction receives literal IDs and rejects retired aliases."""
+    assert LogonUtility._resolve_generation_model("TEST") == "TEST"
+    with pytest.raises(ValueError, match="aliases are no longer supported"):
         LogonUtility._resolve_generation_model("@openai.storyteller")
-        == "resolved-roster-model"
-    )
-    assert seen == ["@openai.storyteller"]
 
 
 @pytest.mark.parametrize(

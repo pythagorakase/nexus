@@ -31,7 +31,7 @@ except ModuleNotFoundError:
             "Install with: pip install tomli"
         )
 
-from .settings_models import LocalModelsSettings, Settings
+from .settings_models import MODEL_SELECTION_PATHS, LocalModelsSettings, Settings
 
 logger = logging.getLogger("nexus.config.loader")
 
@@ -49,7 +49,7 @@ def save_settings(
 
     Args:
         updates: Dictionary of updates using dot-notation keys.
-                 Example: {"global.model.default_model": "@openai.default"}
+                 Model selections move the corresponding roster use.
         path: Path to TOML file (default: nexus.toml)
         validate: If True, validate the merged config against Pydantic models
                   before writing. Raises ValidationError if invalid.
@@ -71,7 +71,10 @@ def save_settings(
 
     # Apply updates using nested key navigation
     for key_path, value in updates.items():
-        _set_nested_value(doc, key_path, value)
+        if key_path in MODEL_SELECTION_PATHS:
+            _set_model_selection(doc, key_path, value)
+        else:
+            _set_nested_value(doc, key_path, value)
 
     # Validate merged config against Pydantic models
     if validate:
@@ -86,6 +89,43 @@ def save_settings(
     # Write back using tomlkit (preserves comments)
     with open(path, "w") as f:
         tomlkit.dump(doc, f)
+
+
+def _set_model_selection(
+    doc: tomlkit.TOMLDocument, key_path: str, model_id: Optional[str]
+) -> None:
+    """Move a component assignment to the selected roster entry."""
+    entries = [
+        entry
+        for provider in doc["global"]["model"]["api_models"].values()
+        for entry in provider.get("models", [])
+    ]
+    selected = next((entry for entry in entries if entry["id"] == model_id), None)
+    if model_id is not None and selected is None:
+        raise ValueError(f"Model ID '{model_id}' is not declared in the model registry")
+    for entry in entries:
+        uses = list(entry.get("uses", []))
+        if key_path in uses:
+            uses.remove(key_path)
+        if entry is selected:
+            uses.append(key_path)
+        if uses:
+            entry["uses"] = uses
+        else:
+            entry.pop("uses", None)
+
+    keys = key_path.split(".")
+    target = doc
+    for key in keys[:-1]:
+        if key not in target:
+            break
+        target = target[key]
+    else:
+        target.pop(keys[-1], None)
+
+    # The provider is derived from the selected roster entry at config load.
+    if key_path == "apex.model":
+        doc.get("apex", {}).pop("provider", None)
 
 
 def _set_nested_value(doc: tomlkit.TOMLDocument, key_path: str, value: Any) -> None:
@@ -293,25 +333,7 @@ def get_openai_compatible_endpoint(
 
 
 def resolve_model_ref(ref: str, path: Union[str, Path, None] = None) -> str:
-    """
-    Resolve an "@provider.role" reference to a concrete model ID.
-
-    Literal model IDs are validated against the registry and returned
-    unchanged. Convenience wrapper for callers that take role references at
-    runtime (live tests, env overrides) rather than at config-load time.
-
-    Args:
-        ref: "@provider.role" reference or literal registry model ID
-        path: Path to configuration file (default: active runtime config, then
-            nexus.toml)
-
-    Returns:
-        Concrete model ID from the api_models registry
-
-    Raises:
-        ValueError: If the reference is malformed, names an unknown
-            provider/role, or a literal ID is not in the registry
-    """
+    """Validate a concrete model ID against the active registry."""
     return load_settings(path).resolve_model_ref(ref)
 
 
@@ -415,7 +437,9 @@ def _load_from_json(path: Path) -> Settings:
         "memory": data.get("memory", {}),
         "apex": data.get("API Settings", {}).get("apex", {}),
         "wizard": {
-            "default_model": legacy_new_story.get("model", "@openai.default"),
+            "default_model": legacy_new_story.get(
+                "model", legacy_model.get("default_model")
+            ),
             "fallback_model": legacy_new_story.get("fallback_model"),
             "message_history_limit": legacy_new_story.get("message_history_limit", 20),
             "max_retries": legacy_new_story.get("max_retries", 2),

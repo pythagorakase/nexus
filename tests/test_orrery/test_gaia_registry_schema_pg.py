@@ -7,6 +7,7 @@ The real inference gate additionally requires ``NEXUS_RUN_LIVE_LLM=1`` and
 
 from __future__ import annotations
 
+
 import json
 import os
 from typing import Any, Iterator
@@ -25,7 +26,6 @@ from nexus.agents.logon.skald_wire import (
     skald_gaia_strict_text_format,
 )
 from nexus.api.slot_utils import VALID_DBNAMES
-from nexus.config import resolve_model_ref
 from scripts.api_openai import OpenAIProvider
 
 
@@ -243,10 +243,14 @@ def test_gaia_registry_strict_schema_stays_within_measured_budget_and_limits(
 def test_live_openai_accepts_registry_gaia_strict_schema(
     qa638_registry_db: str,
 ) -> None:
-    model_ref = os.environ.get("NEXUS_638_ENUM_MODEL_REF", "@openai.gaia")
-    if not model_ref.startswith("@openai."):
-        pytest.fail("NEXUS_638_ENUM_MODEL_REF must be an @openai.<role> reference")
-    model = resolve_model_ref(model_ref)
+    from nexus.config import load_settings
+
+    settings = load_settings()
+    model = settings.resolve_model_ref(
+        os.environ.get("NEXUS_638_ENUM_MODEL_REF", settings.apex.gaia_model)
+    )
+    if settings.provider_for_model(model) != "openai":
+        pytest.fail("NEXUS_638_ENUM_MODEL_REF must name a registered OpenAI model")
     spec = load_gaia_registry_wire_spec(qa638_registry_db)
     text_format = skald_gaia_strict_text_format(spec.model)
     assert "CharacterTagName" in text_format["schema"]["$defs"]

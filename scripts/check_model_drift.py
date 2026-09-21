@@ -4,8 +4,8 @@
 Background
 ----------
 nexus.toml is the single source of truth for which API models the project uses
-(see [global.model.api_models]). Consumer sections reference roles via
-"@provider.role" syntax, which is resolved at config-load time. Outside the
+(see [global.model.api_models]). Each roster entry assigns its ID to
+component fields through `uses` at config-load time. Outside the
 registry, literal model IDs ("gpt-5.5", "claude-sonnet-4-6", ...) should not
 appear in source code — every reference should either flow through the registry
 or be marked as an *intentional* pin.
@@ -36,14 +36,13 @@ import sys
 from pathlib import Path
 from typing import Iterable, List, Tuple
 
-# Patterns that look like *currently-managed* API-model IDs. The point is to
-# guard against drift in the families this project actively uses today (GPT-5
-# and Claude 4). Older model strings (gpt-3.5, gpt-4.1, etc.) appear in legacy
-# utility scripts and aren't part of this issue's acceptance criterion.
+# Cover GPT-5 and later generations plus named Claude families without needing
+# another pattern edit for each roster upgrade. Older GPT strings (gpt-3.5,
+# gpt-4.1, etc.) appear in legacy utilities and remain outside this check.
 MODEL_ID_PATTERN = re.compile(
     r"\b("
-    r"gpt-5(?:\.\d+)?"                        # gpt-5, gpt-5.1, gpt-5.5, ...
-    r"|claude-(?:sonnet|opus|haiku)-\d+-\d+"  # claude-sonnet-4-6, claude-opus-4-7, ...
+    r"gpt-(?:[5-9]|[1-9]\d+)(?:\.\d+)?(?:-[a-z0-9]+)*"
+    r"|claude-[a-z]+-\d+(?:-[a-z0-9]+)*"
     r")\b"
 )
 
@@ -61,11 +60,11 @@ SKIP_DIRS = {
     "build",
     "__pycache__",
     "temp",
-    "tests",       # parametrized test pins are intentional per issue #181
-    "docs",        # documentation often references frozen examples
-    "archive",     # archived legacy code, frozen in time
-    "llama.cpp",   # vendored third-party
-    ".claude",     # Claude Code skills/docs (CC-internal)
+    "tests",  # parametrized test pins are intentional per issue #181
+    "docs",  # documentation often references frozen examples
+    "archive",  # archived legacy code, frozen in time
+    "llama.cpp",  # vendored third-party
+    ".claude",  # Claude Code skills/docs (CC-internal)
 }
 
 # Specific files always skipped — each has a documented reason for housing
@@ -87,8 +86,7 @@ SKIP_FILES = {
     "ir_eval/scripts/auto_judge.py",
 }
 
-# File extensions checked. TOML is included so consumer sections that haven't
-# yet migrated to "@provider.role" surface as drift.
+# File extensions checked, including auxiliary TOML outside the main registry.
 SCAN_EXTENSIONS = {".py", ".toml", ".md"}
 
 
@@ -147,7 +145,11 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    repo_root = Path(args.root).resolve() if args.root else Path(__file__).resolve().parent.parent
+    repo_root = (
+        Path(args.root).resolve()
+        if args.root
+        else Path(__file__).resolve().parent.parent
+    )
     violations = find_violations(repo_root)
 
     if not violations:
@@ -164,9 +166,9 @@ def main() -> int:
         print(file=sys.stderr)
         print(
             "Each line above mentions a literal model ID. Either route it through "
-            "the [global.model.api_models] registry (preferably via a "
-            '"@provider.role" reference resolved at config load) or, if the '
-            'literal is intentional (e.g., a regression-test pin), append a '
+            "the [global.model.api_models] registry and configured component fields "
+            "or, if the "
+            "literal is intentional (e.g., a regression-test pin), append a "
             '"# pin: <reason>" comment on that line.',
             file=sys.stderr,
         )

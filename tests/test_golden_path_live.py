@@ -405,13 +405,9 @@ def _configure_model_override(tmp_path_factory: pytest.TempPathFactory) -> None:
     model_ref = os.environ.get(MODEL_OVERRIDE_ENV)
     if not model_ref:
         return
-    if not model_ref.startswith("@") or "." not in model_ref:
-        raise RuntimeError(
-            f"{MODEL_OVERRIDE_ENV} must be an @provider.role reference, got "
-            f"{model_ref!r}"
-        )
+    from nexus.config import load_settings
 
-    provider = model_ref[1:].split(".", 1)[0]
+    provider = load_settings().provider_for_model(model_ref)
     if provider not in {"openai", "anthropic"}:
         raise RuntimeError(
             f"{MODEL_OVERRIDE_ENV} provider must be openai or anthropic, got "

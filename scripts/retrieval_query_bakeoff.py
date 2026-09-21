@@ -962,7 +962,7 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Backfill missing Skald directives into the cache via OpenAI",
     )
-    parser.add_argument("--skald-model", default="@openai.default")
+    parser.add_argument("--skald-model", default=None)
     parser.add_argument(
         "--cache",
         type=Path,
@@ -1020,27 +1020,14 @@ def _init_skald_provider(model: str, *, reasoning_effort: str) -> Any:
     )
 
 
-def resolve_api_model_reference(model: str) -> str:
-    """Resolve ``@provider.role`` model references through ``nexus.toml``."""
-
-    if not model.startswith("@"):
-        return model
-
-    try:
-        provider, role = model[1:].split(".", 1)
-    except ValueError as exc:
-        raise ValueError(
-            f"Expected model reference like '@openai.default', got {model!r}"
-        ) from exc
-
+def resolve_api_model_reference(model: Optional[str]) -> str:
+    """Use the configured wizard model unless an explicit model ID is supplied."""
     settings = load_settings()
-    provider_config = settings.global_.model.api_models.get(provider)
-    if provider_config is None:
-        raise ValueError(f"Unknown API model provider in {model!r}")
-    resolved = provider_config.roles.get(role)
-    if not resolved:
-        raise ValueError(f"Unknown API model role in {model!r}")
-    return resolved
+    return (
+        settings.resolve_model_ref(model)
+        if model is not None
+        else settings.wizard.default_model
+    )
 
 
 def main() -> None:

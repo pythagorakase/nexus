@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+
 import asyncio
 import json
 import logging
@@ -45,6 +46,7 @@ from nexus.config import resolve_model_ref
 from scripts import api_openai
 from scripts.api_anthropic import AnthropicProvider
 from scripts.api_openai import OpenAIProvider
+from tests.model_registry_helpers import registry_model
 
 
 def _bootstrap_response() -> StorytellerResponseBootstrap:
@@ -1183,7 +1185,7 @@ def test_openai_chat_transport_dispatches_without_responses_attempt() -> None:
     """Configured Chat transport bypasses Responses at method dispatch."""
     expected = (_bootstrap_response(), Mock())
     provider = build_native_structured_provider(
-        model=resolve_model_ref("@local.default"),
+        model=resolve_model_ref(registry_model("local")),
         max_tokens=600,
         system_prompt="System prompt",
         structured_output_retries=0,
@@ -1215,7 +1217,7 @@ async def test_openai_chat_transport_dispatches_async_without_responses_attempt(
     """Configured Chat transport also bypasses Responses on the async path."""
     expected = (_bootstrap_response(), Mock())
     provider = build_native_structured_provider(
-        model=resolve_model_ref("@local.default"),
+        model=resolve_model_ref(registry_model("local")),
         max_tokens=600,
         system_prompt="System prompt",
         structured_output_retries=0,

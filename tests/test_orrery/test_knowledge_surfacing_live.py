@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 import json
@@ -22,6 +23,7 @@ from nexus.api.slot_utils import get_slot_db_url
 from tests.test_orrery.claim_accounts_test_support import (
     install_claim_accounts_shadow_sync,
 )
+from tests.model_registry_helpers import registry_model
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -573,7 +575,7 @@ class _LiveLoreHarness:
                 "knowledge": _settings(enabled=enabled),
                 "experiences": {
                     "include_player_character": True,
-                    "model": "@openai.gaia",
+                    "model": registry_model("openai"),
                 },
             },
         }

@@ -11,8 +11,7 @@ explicit destructive opt-in ``NEXUS_RETROGRADE_WIZARD_E2E=1``. Set
 ``NEXUS_CONFIRM_DISPOSABLE_DB``. Slot 5 is categorically rejected.
 
 Model selection: defaults to the wizard default model (wizard.default_model in
-nexus.toml). Set ``NEXUS_RETROGRADE_WIZARD_MODEL`` to an ``@provider.role``
-reference (e.g. ``@anthropic.default``) to prove the run on another provider.
+nexus.toml). Set ``NEXUS_RETROGRADE_WIZARD_MODEL`` to a registered model ID to prove the run on another provider.
 """
 
 from __future__ import annotations
@@ -31,7 +30,7 @@ MODEL_OVERRIDE_ENV = "NEXUS_RETROGRADE_WIZARD_MODEL"
 
 
 def _live_run_model() -> str:
-    """Wizard default model, or the @provider.role env override if set."""
+    """Wizard default model, or an explicit model ID override if set."""
     from nexus.api.config_utils import get_new_story_model
     from nexus.config import resolve_model_ref
 

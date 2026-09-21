@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections import Counter
 import json
 import os
-import tomllib
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast, get_args
@@ -75,7 +74,6 @@ from nexus.agents.lore.logon_utility import LogonUtility, read_presence_baseline
 from nexus.agents.orrery.tag_schemas import OrreryTagBestowal
 from nexus.api.native_structured_output import anthropic_output_config
 from nexus.api.presence_reconciliation import CharacterRosterRows
-from nexus.config import resolve_model_ref
 from scripts.api_openai import OpenAIProvider
 
 
@@ -2199,11 +2197,12 @@ def test_writer_schema_size_stays_within_measured_budget() -> None:
 )
 def test_live_openai_decodes_writer_presence_kind_partitions() -> None:
     config_path = Path(__file__).parents[1] / "nexus.toml"
-    with config_path.open("rb") as config_file:
-        model_ref = tomllib.load(config_file)["apex"]["model"]
-    if not isinstance(model_ref, str) or not model_ref.startswith("@openai."):
-        pytest.fail("The configured writer model must be an @openai.<role> reference")
-    model = resolve_model_ref(model_ref, config_path)
+    from nexus.config import load_settings
+
+    settings = load_settings(config_path)
+    model = settings.apex.model
+    if settings.provider_for_model(model) != "openai":
+        pytest.fail("The configured writer must be a registered OpenAI model")
 
     provider = OpenAIProvider(
         model=model,

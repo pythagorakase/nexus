@@ -4,7 +4,7 @@ These tests make REAL calls:
 
 - the rejection itself is reproduced live, proving the registry's
   ``unsupported_params`` declaration matches provider behavior;
-- an ``@openai.default`` role call still works through the OpenAI provider;
+- a configured OpenAI model call still works through the OpenAI provider;
 - the TEST model works through an OpenAI-compatible server registered via the
   first-class ``base_url`` registry field (a real mock_openai process).
 
@@ -12,6 +12,7 @@ Run with: NEXUS_RUN_LIVE_LLM=1 python -m pytest tests/test_model_registry_live.p
 """
 
 from __future__ import annotations
+
 
 import copy
 import subprocess
@@ -25,6 +26,7 @@ import requests
 
 from nexus.config import load_settings
 from nexus.config.settings_models import Settings
+from tests.model_registry_helpers import registry_model
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MOCK_PORT = 5133  # lane-assigned test port; never the dev stack's 5102
@@ -44,7 +46,11 @@ def test_temperature_rejected_live_matches_registry_declaration():
     from scripts.api_anthropic import AnthropicProvider
 
     settings = load_settings(REPO_ROOT / "nexus.toml")
-    model = settings.resolve_model_ref("@anthropic.default")
+    model = next(
+        entry.id
+        for entry in settings.global_.model.api_models["anthropic"].models
+        if "temperature" in entry.unsupported_params
+    )
     assert "temperature" in settings.model_entry(model).unsupported_params
 
     provider = AnthropicProvider(model=model, temperature=0.4, max_tokens=16)
@@ -52,12 +58,12 @@ def test_temperature_rejected_live_matches_registry_declaration():
         provider.get_completion("Say OK.")
 
 
-def test_openai_default_role_still_works():
-    """An @openai role resolves and completes through the OpenAI provider."""
+def test_configured_openai_model_still_works():
+    """A registered model completes through the OpenAI provider."""
     from scripts.api_openai import OpenAIProvider
 
     settings = load_settings(REPO_ROOT / "nexus.toml")
-    model = settings.resolve_model_ref("@openai.default")
+    model = settings.resolve_model_ref(registry_model("openai"))
 
     provider = OpenAIProvider(model=model, max_output_tokens=64)
     # The provider's reasoning-model detection must suppress temperature for

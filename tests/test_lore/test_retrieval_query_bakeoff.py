@@ -1,5 +1,6 @@
 """Tests for the retrieval query bake-off harness."""
 
+
 from scripts.retrieval_query_bakeoff import (
     bootstrap_ci,
     build_query_sets,
@@ -7,6 +8,7 @@ from scripts.retrieval_query_bakeoff import (
     resolve_api_model_reference,
     score_strategy_result,
 )
+from tests.model_registry_helpers import registry_model
 
 
 def _context() -> dict:
@@ -115,7 +117,7 @@ def test_bootstrap_ci_reports_degenerate_singletons() -> None:
 def test_resolve_api_model_reference_uses_registry() -> None:
     """Diagnostic defaults should avoid hardcoded concrete model IDs."""
 
-    resolved = resolve_api_model_reference("@openai.default")
+    resolved = resolve_api_model_reference(registry_model("openai"))
 
     assert resolved
     assert not resolved.startswith("@")

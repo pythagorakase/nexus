@@ -69,7 +69,7 @@ from nexus.api.presence_reconciliation import (  # noqa: E402
     read_character_roster_async,
     reconcile_prose_mentions,
 )
-from nexus.config.loader import get_provider_for_model, resolve_model_ref  # noqa: E402
+from nexus.config.loader import get_provider_for_model  # noqa: E402
 from nexus.config.settings_models import (  # noqa: E402
     APEXTagLibrarySettings,
     OrreryRetrogradeMaturationSettings,
@@ -629,10 +629,10 @@ class LogonUtility:
     def _resolve_generation_model(
         model: str, settings_path: Optional[Path] = None
     ) -> str:
-        """Resolve a runtime roster reference before constructing the provider."""
-        return (
-            resolve_model_ref(model, settings_path) if model.startswith("@") else model
-        )
+        """Require concrete model IDs for runtime selections and overrides."""
+        if model.startswith("@"):
+            raise ValueError("Model aliases are no longer supported; select a model ID")
+        return model
 
     def _resolve_storyteller_route(self) -> StorytellerRoute:
         """Resolve the active model, endpoint, and storyteller wire class."""

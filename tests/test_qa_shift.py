@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 import hashlib
@@ -245,7 +246,7 @@ def test_tracked_config_encodes_bounded_completion_policy() -> None:
     assert config.token_fence == 9_000_000
 
 
-def test_begin_creates_archive_and_pins_every_openai_role(
+def test_begin_creates_archive_and_pins_every_remote_model(
     tmp_path: Path,
 ) -> None:
     config = replace(qa_shift.load_shift_config(), archive_root=tmp_path)
@@ -261,16 +262,15 @@ def test_begin_creates_archive_and_pins_every_openai_role(
     state = json.loads((archive / "shift_state.json").read_text())
     document = cast(Any, tomlkit.parse((archive / "nexus.qa.toml").read_text()))
     model = document["global"]["model"]
-    roles = model["api_models"]["openai"]["roles"]
 
     assert state["baseline_total"] == 123
     assert state["baseline_bleed_offered_count"] == 0
     assert state["baseline_bleed_used_count"] == 0
     assert state["status"] == "active"
     assert model["default_slot_model"] == "gpt-5.6-terra"
-    assert set(roles) >= {"default", "gaia"}
-    assert all(value == "gpt-5.6-terra" for value in roles.values())
-    assert document["wizard"]["fallback_model"] == "@openai.default"
+    assert document["apex"]["model"] == config.target_model
+    assert document["apex"]["gaia_model"] == config.target_model
+    assert document["wizard"]["fallback_model"] == config.target_model
     assert "provider" not in document["orrery"]["narration"]
     assert "model_ref" not in document["orrery"]["narration"]
     assert document["usage"]["daily_allowance"]["openai"] == 10_000_000
@@ -317,7 +317,7 @@ def test_generated_runtime_environment_selects_qa_config(
     assert supervisor.config_path == (archive / "nexus.qa.toml").resolve()
 
 
-@pytest.mark.parametrize("missing_table", ("roles", "daily_allowance"))
+@pytest.mark.parametrize("missing_table", ("models", "daily_allowance"))
 def test_runtime_config_shape_errors_are_clean_shift_errors(
     tmp_path: Path,
     missing_table: str,
@@ -330,8 +330,8 @@ def test_runtime_config_shape_errors_are_clean_shift_errors(
         Any,
         tomlkit.parse((qa_shift.REPO_ROOT / "nexus.toml").read_text()),
     )
-    if missing_table == "roles":
-        del document["global"]["model"]["api_models"]["openai"]["roles"]
+    if missing_table == "models":
+        del document["global"]["model"]["api_models"]["openai"]["models"]
     else:
         del document["usage"]["daily_allowance"]
     (repo / "nexus.toml").write_text(tomlkit.dumps(document))
@@ -363,6 +363,7 @@ DIRECTLY_PINNED_ROUTES = {
 NON_REMOTE_ROUTES = {
     # Local embedding retriever; never a provider API call.
     "memnon.retrieval.hybrid_search.target_model",
+    "local_models.model",
 }
 
 
@@ -377,41 +378,20 @@ def _collect_model_routes(table: Mapping[str, Any], prefix: str = "") -> dict[st
     return routes
 
 
-def test_every_tracked_model_route_is_pinned_or_role_indirect() -> None:
-    """Every remote model route in nexus.toml must be covered by the QA lane.
+def test_every_tracked_model_route_is_pinned(tmp_path: Path) -> None:
+    """An isolated QA config must not leak inference onto an unpinned model."""
+    from nexus.config.settings_models import materialize_model_selections
 
-    The lane rewrites the openai roles table, so any ``@openai.<role>`` ref is
-    pinned by indirection. Every other route must be pinned directly in
-    ``_write_runtime_config`` (or be a non-remote local route). An unclassified
-    route means the isolated lane silently leaks calls to an unpinned
-    provider — the Orrery-narration leak the 2026-07-30 scratchpad audit
-    caught live, and the wizard-fallback leak found while closing it.
-    """
-    document = tomllib.loads(
-        (qa_shift.REPO_ROOT / "nexus.toml").read_text(encoding="utf-8")
+    config = qa_shift.load_shift_config()
+    path = qa_shift._write_runtime_config(
+        repo_root=qa_shift.REPO_ROOT, archive=tmp_path, config=config
     )
+    document = materialize_model_selections(tomllib.loads(path.read_text()))
     routes = _collect_model_routes(document)
-
-    missing = (DIRECTLY_PINNED_ROUTES | NON_REMOTE_ROUTES) - set(routes)
-    assert not missing, (
-        f"Routes {sorted(missing)} vanished from nexus.toml; update the pin "
-        "roster and _write_runtime_config together"
-    )
-    openai_roles = document["global"]["model"]["api_models"]["openai"]["roles"]
-    for path, value in routes.items():
-        if path in DIRECTLY_PINNED_ROUTES | NON_REMOTE_ROUTES:
-            continue
-        assert value.startswith("@openai."), (
-            f"{path} = {value!r} is not covered by the QA lane's openai role "
-            "pins; pin it in _write_runtime_config and add it to "
-            "DIRECTLY_PINNED_ROUTES"
-        )
-        role = value.removeprefix("@openai.")
-        assert role in openai_roles, (
-            f"{path} = {value!r} references openai role {role!r}, which is "
-            "absent from the roles table _write_runtime_config rewrites; the "
-            "lane would leave it unpinned"
-        )
+    assert DIRECTLY_PINNED_ROUTES <= set(routes)
+    for route, model in routes.items():
+        if route not in NON_REMOTE_ROUTES:
+            assert model == config.target_model, f"{route} escaped the QA model pin"
 
 
 def test_begin_refuses_untrustworthy_or_exhausted_usage(tmp_path: Path) -> None:

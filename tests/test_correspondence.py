@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+
 import asyncio
 import copy
 import logging
@@ -50,6 +51,7 @@ from nexus.memory.correspondence import (
     plan_correspondence_compaction,
 )
 from nexus.memory.manager import empty_pass2_baseline
+from tests.model_registry_helpers import registry_model
 
 
 PROMPTS_DIR = Path(__file__).parents[1] / "prompts"
@@ -497,11 +499,13 @@ def test_letter_and_digest_limits_are_repairable_semantic_errors() -> None:
     assert secret not in str(digest_error.value)
 
 
-def test_correspondence_settings_are_mandatory_bounded_and_use_role_ref() -> None:
+def test_correspondence_settings_are_mandatory_bounded_and_use_roster_selection() -> (
+    None
+):
     valid = {
         "floor_turns": 5,
         "ceiling_turns": 10,
-        "compaction_model": "@openai.gaia",
+        "compaction_model": registry_model("openai"),
         "max_letter_tokens": 300,
         "max_digest_tokens": 2000,
         "digest_hard_cap_multiplier": 1.1,
@@ -523,7 +527,13 @@ def test_correspondence_settings_are_mandatory_bounded_and_use_role_ref() -> Non
     with Path("nexus.toml").open("rb") as handle:
         raw = tomllib.load(handle)
     configured = raw["storyteller"]["correspondence"]
-    assert configured["compaction_model"].startswith("@")
+    assert "compaction_model" not in configured
+    from nexus.config.settings_models import Settings
+
+    resolved = Settings(**raw)
+    assert (
+        resolved.storyteller.correspondence.compaction_model == resolved.apex.gaia_model
+    )
     digest_hard_cap_tokens = calculate_digest_hard_cap_tokens(
         max_digest_tokens=configured["max_digest_tokens"],
         digest_hard_cap_multiplier=configured["digest_hard_cap_multiplier"],

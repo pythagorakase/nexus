@@ -173,10 +173,10 @@ def _endpoint(settings: Settings) -> tuple[str, int, str]:
         raise LocalInferenceError(
             "Local provider base_url must be an explicit http://host:port URL"
         )
-    alias = provider.roles.get("default")
+    alias = settings.local_models.model
     if not alias:
         raise LocalInferenceError(
-            "[global.model.api_models.local].roles.default is required as alias"
+            "Assign local_models.model to the served model's registry uses"
         )
     return parsed.hostname, parsed.port, alias
 

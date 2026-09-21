@@ -582,7 +582,7 @@ observed routine outcomes never exceeded 0.22, so 0.35 cannot fire on the
 noise floor. The previous defaults (50.0 / 0.5) made magnitude unreachable in
 practice.
 
-Every model reference uses the `@provider.role` syntax that the config loader resolves against `[global.model.api_models]` — never a hardcoded model ID in runtime code (per `CLAUDE.md` "Testing Defaults").
+Model IDs and their component `uses` live in `[global.model.api_models]`. Runtime code reads the resolved component settings; one roster ID edit upgrades its configured uses (per `CLAUDE.md` "Testing Defaults").
 
 ---
 

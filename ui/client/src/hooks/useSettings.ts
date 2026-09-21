@@ -69,12 +69,19 @@ export function applySettingsPatch(
       },
     };
   }
-  if (patch.apex_model_ref !== undefined) {
-    const provider = patch.apex_model_ref.replace(/^@/, "").split(".")[0];
-    next.apex = { ...payload.apex, model: patch.apex_model_ref, provider };
+  if (patch.apex_model_id !== undefined) {
+    const registered = payload.settings_meta?.models.find(
+      (model) => model.id === patch.apex_model_id,
+    );
+    if (!registered) throw new Error(`Unknown model: ${patch.apex_model_id}`);
+    const provider =
+      registered.provider === "openai" || registered.provider === "anthropic"
+        ? registered.provider
+        : "local";
+    next.apex = { ...payload.apex, model: patch.apex_model_id, provider };
   }
-  if (patch.wizard_model_ref !== undefined) {
-    next.wizard = { ...payload.wizard, default_model: patch.wizard_model_ref };
+  if (patch.wizard_model_id !== undefined) {
+    next.wizard = { ...payload.wizard, default_model: patch.wizard_model_id };
   }
   if (patch.apex_context_window !== undefined) {
     next.lore = {

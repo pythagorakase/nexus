@@ -1,10 +1,9 @@
 """
 FastAPI endpoints for the operator settings surface (GET/PATCH /api/settings).
 
-GET serves the raw nexus.toml contents (with @provider.role references left
-unresolved so the client can show role-level bindings), plus the legacy
+GET serves nexus.toml with concrete model selections, plus the legacy
 "Agent Settings"/"API Settings" aliases the React client predates, plus a
-derived ``settings_meta`` block (model role options, apex provider allowlist,
+derived ``settings_meta`` block (model options, apex provider allowlist,
 typewriter bounds) so the client never hardcodes config semantics.
 
 PATCH accepts a typed subset of safe-to-edit keys and persists them through
@@ -17,7 +16,7 @@ suffix, reranker paths, ...) are intentionally not writable from the UI.
 import logging
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, Literal, Optional
 
 from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -30,9 +29,9 @@ except ModuleNotFoundError:  # pragma: no cover - exercised only on Python <3.11
 
 from nexus.config.loader import save_settings
 from nexus.config.settings_models import (
-    MODEL_ROLE_PREFIX,
     APEXSettings,
     UISettings,
+    materialize_model_selections,
 )
 
 logger = logging.getLogger("nexus.api.settings_endpoints")
@@ -80,16 +79,13 @@ class SettingsPatchRequest(BaseModel):
     test_mode: Optional[bool] = Field(
         default=None, description="Test write routing (global.narrative.test_mode)"
     )
-    apex_model_ref: Optional[str] = Field(
+    apex_model_id: Optional[str] = Field(
         default=None,
-        description=(
-            "Role reference for live narrative turns, e.g. '@anthropic.deep' "
-            "(apex.model; apex.provider is derived from the reference)"
-        ),
+        description=("Registered model ID for live narrative turns (apex.model)"),
     )
-    wizard_model_ref: Optional[str] = Field(
+    wizard_model_id: Optional[str] = Field(
         default=None,
-        description="Role reference for the new-story wizard (wizard.default_model)",
+        description="Registered model ID for the new-story wizard (wizard.default_model)",
     )
     apex_context_window: Optional[int] = Field(
         default=None,
@@ -98,7 +94,7 @@ class SettingsPatchRequest(BaseModel):
 
 
 def _read_raw_settings() -> Dict[str, Any]:
-    """Load nexus.toml as a plain dict without resolving model references."""
+    """Load the persisted roster and settings as a plain dict."""
     if not NEXUS_TOML.exists():
         raise FileNotFoundError(f"Configuration file not found: {NEXUS_TOML}")
     with open(NEXUS_TOML, "rb") as f:
@@ -141,32 +137,24 @@ def _build_settings_meta(raw: Dict[str, Any]) -> Dict[str, Any]:
         if cfg.get("ui_visible", True)
     }
 
-    labels_by_id: Dict[str, str] = {}
-    for provider_cfg in visible.values():
-        for entry in provider_cfg.get("models", []):
-            labels_by_id[entry["id"]] = entry.get("label", entry["id"])
-
-    model_roles: List[Dict[str, str]] = []
-    for provider, provider_cfg in visible.items():
-        for role, model_id in provider_cfg.get("roles", {}).items():
-            model_roles.append(
-                {
-                    "ref": f"{MODEL_ROLE_PREFIX}{provider}.{role}",
-                    "provider": provider,
-                    "role": role,
-                    "model_id": model_id,
-                    "label": labels_by_id.get(model_id, model_id),
-                }
-            )
+    models = [
+        {
+            "id": entry["id"],
+            "provider": provider,
+            "label": entry.get("label", entry["id"]),
+        }
+        for provider, cfg in visible.items()
+        for entry in cfg.get("models", [])
+    ]
 
     apex_allowed_providers = [
         provider
-        for provider in visible
-        if re.fullmatch(_APEX_PROVIDER_PATTERN, provider)
+        for provider, cfg in visible.items()
+        if re.fullmatch(_APEX_PROVIDER_PATTERN, provider) or cfg.get("base_url")
     ]
 
     return {
-        "model_roles": model_roles,
+        "models": models,
         "apex_allowed_providers": apex_allowed_providers,
         "typewriter": dict(_TYPEWRITER_BOUNDS),
     }
@@ -174,6 +162,7 @@ def _build_settings_meta(raw: Dict[str, Any]) -> Dict[str, Any]:
 
 def _build_payload(raw: Dict[str, Any]) -> Dict[str, Any]:
     """Raw settings + legacy aliases + derived metadata, minus secrets refs."""
+    raw = materialize_model_selections(raw)
     payload = dict(raw)
     # 1Password reference strings are bootstrap-only config; the browser has
     # no business seeing them even though they contain no secret material.
@@ -186,20 +175,6 @@ def _build_payload(raw: Dict[str, Any]) -> Dict[str, Any]:
     payload["API Settings"] = {"apex": raw.get("apex", {})}
     payload["settings_meta"] = _build_settings_meta(raw)
     return payload
-
-
-def _provider_from_ref(ref: str, source: str) -> str:
-    """Extract the provider from an '@provider.role' reference or raise 422."""
-    if not ref.startswith(MODEL_ROLE_PREFIX) or "." not in ref:
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                f"{source}: expected an '@provider.role' reference "
-                f"(e.g., '@openai.default'), got '{ref}'"
-            ),
-        )
-    provider, _, _ = ref[len(MODEL_ROLE_PREFIX) :].partition(".")
-    return provider
 
 
 def _updates_from_patch(patch: SettingsPatchRequest) -> Dict[str, Any]:
@@ -217,16 +192,10 @@ def _updates_from_patch(patch: SettingsPatchRequest) -> Dict[str, Any]:
         updates["ui.typewriter_ms_per_char"] = patch.typewriter_ms_per_char
     if patch.test_mode is not None:
         updates["global.narrative.test_mode"] = patch.test_mode
-    if patch.apex_model_ref is not None:
-        updates["apex.model"] = patch.apex_model_ref
-        updates["apex.provider"] = _provider_from_ref(
-            patch.apex_model_ref, "apex_model_ref"
-        )
-    if patch.wizard_model_ref is not None:
-        # Format check up front; provider/role existence is validated by the
-        # Settings model's resolution pass inside save_settings.
-        _provider_from_ref(patch.wizard_model_ref, "wizard_model_ref")
-        updates["wizard.default_model"] = patch.wizard_model_ref
+    if patch.apex_model_id is not None:
+        updates["apex.model"] = patch.apex_model_id
+    if patch.wizard_model_id is not None:
+        updates["wizard.default_model"] = patch.wizard_model_id
     if patch.apex_context_window is not None:
         updates["lore.token_budget.apex_context_window"] = patch.apex_context_window
     return updates

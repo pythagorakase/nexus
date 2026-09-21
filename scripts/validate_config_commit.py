@@ -4,9 +4,8 @@ Model-roster edits are routine and accelerating; this hook makes their
 failure modes fail AT COMMIT TIME instead of at the next boot or on a
 teammate's machine:
 
-1. nexus.toml loads through the full Pydantic model — a removed model id
-   with a dangling @provider.role reference (or any other registry
-   violation) aborts the commit with the validator's message.
+1. nexus.toml loads through the full Pydantic model — an invalid model selection
+   or duplicate/unknown roster use aborts the commit with the validator's message.
 2. The dev-dashboard ship-off invariant: committed [orrery.dashboard]
    enabled must be false (no-auth gateway on 0.0.0.0). Local dashboard
    work uses NEXUS_DEV_DASHBOARD=1 instead of editing the file.
@@ -68,7 +67,8 @@ def main() -> int:
         )
         failures.append(
             "Model-ID drift detected (add the id to the registry, route "
-            "through @provider.role, or mark '# pin: <reason>'):\n" + report
+            "through a configured component setting, or mark '# pin: <reason>'):\n"
+            + report
         )
 
     if failures:

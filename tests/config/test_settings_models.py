@@ -19,12 +19,17 @@ from nexus.config.settings_models import (
     RuntimeRemoteSettings,
     RuntimeServiceSettings,
     Settings,
+    materialize_model_selections,
 )
 
 
 def _nexus_toml_dict() -> dict:
     with open("nexus.toml", "rb") as handle:
-        return tomllib.load(handle)
+        raw = materialize_model_selections(tomllib.load(handle))
+    for provider in raw["global"]["model"]["api_models"].values():
+        for entry in provider["models"]:
+            entry.pop("uses", None)
+    return raw
 
 
 @pytest.mark.parametrize(
@@ -53,7 +58,6 @@ def test_model_config_rejects_unknown_default_model():
             default_slot_model="TEST",
             api_models={
                 "test": ProviderModels(
-                    roles={"default": "TEST"},
                     models=[APIModelEntry(id="TEST", label="TEST")],
                     base_url="http://127.0.0.1:5102/v1",
                 )
@@ -61,34 +65,22 @@ def test_model_config_rejects_unknown_default_model():
         )
 
 
-def test_model_config_defers_role_references_to_settings_resolution():
-    """ "@provider.role" defaults pass ModelConfig and resolve on the root model."""
-    config = ModelConfig(
-        default_model="@test.default",
-        default_slot_model="TEST",
-        api_models={
-            "test": ProviderModels(
-                roles={"default": "TEST"},
-                models=[APIModelEntry(id="TEST", label="TEST")],
-                base_url="http://127.0.0.1:5102/v1",
-            )
-        },
+def test_provider_rejects_retired_alias_table():
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        ProviderModels(roles={"default": "TEST"})
+
+
+def test_global_default_model_comes_from_roster_use():
+    raw = tomllib.loads(open("nexus.toml").read())
+    assert "default_model" not in raw["global"]["model"]
+    settings = Settings(**raw)
+    entries = [
+        e for p in raw["global"]["model"]["api_models"].values() for e in p["models"]
+    ]
+    expected = next(
+        e["id"] for e in entries if "global.model.default_model" in e.get("uses", [])
     )
-    assert config.default_model == "@test.default"
-
-
-def test_global_default_model_resolves_at_load():
-    """nexus.toml's display default is a role reference resolved at load."""
-    raw = _nexus_toml_dict()
-    raw_default = raw["global"]["model"]["default_model"]
-    assert raw_default.startswith("@"), (
-        "global.model.default_model should be an @provider.role reference in "
-        f"nexus.toml, found literal '{raw_default}'"
-    )
-
-    settings = load_settings("nexus.toml")
-    openai_default = settings.global_.model.api_models["openai"].roles["default"]
-    assert settings.global_.model.default_model == openai_default
+    assert settings.global_.model.default_model == expected
 
 
 def test_summaries_follow_the_storyteller_by_default():
@@ -195,10 +187,10 @@ def test_shipped_turn_pipeline_is_two_pass() -> None:
 
 
 def test_shipped_gaia_model_resolves_to_openai_gaia_registry_id() -> None:
-    """Committed Gaia seat resolves through its dedicated OpenAI role (#592)."""
+    """Committed Gaia seat resolves through its roster assignment (#592)."""
     settings = Settings(**_nexus_toml_dict())
 
-    openai_gaia = settings.global_.model.api_models["openai"].roles["gaia"]
+    openai_gaia = load_settings().apex.gaia_model
     assert settings.apex.gaia_model == openai_gaia
     assert not settings.apex.gaia_model.startswith("@")
 
@@ -345,7 +337,9 @@ def test_entity_inclusion_provider_overrides_allow_empty_table() -> None:
 def test_summaries_follow_anthropic_storyteller_with_registry_route():
     """A native Anthropic storyteller remains the default summarizer."""
     raw = _nexus_toml_dict()
-    raw["apex"]["model"] = "@anthropic.default"
+    raw["apex"]["model"] = raw["global"]["model"]["api_models"]["anthropic"]["models"][
+        0
+    ]["id"]
     raw.get("summaries", {}).pop("model", None)
 
     settings = Settings(**raw)
@@ -356,11 +350,13 @@ def test_summaries_follow_anthropic_storyteller_with_registry_route():
 def test_summaries_model_explicit_override_resolves_at_load():
     """The advanced setting decouples the summarizer from the storyteller."""
     raw = _nexus_toml_dict()
-    raw["apex"]["model"] = "@anthropic.default"
-    raw.setdefault("summaries", {})["model"] = "@openai.default"
+    raw["apex"]["model"] = raw["global"]["model"]["api_models"]["anthropic"]["models"][
+        0
+    ]["id"]
+    raw.setdefault("summaries", {})["model"] = load_settings().wizard.default_model
 
     settings = Settings(**raw)
-    openai_default = settings.global_.model.api_models["openai"].roles["default"]
+    openai_default = load_settings().wizard.default_model
 
     assert settings.summaries.model == openai_default
     assert settings.summaries.model != settings.apex.model
@@ -369,7 +365,7 @@ def test_summaries_model_explicit_override_resolves_at_load():
 def test_summaries_model_accepts_responses_compatible_test_provider():
     """A base_url provider is routable when it implements Responses."""
     raw = _nexus_toml_dict()
-    raw["summaries"]["model"] = "@test.default"
+    raw["summaries"]["model"] = "TEST"
 
     assert Settings(**raw).summaries.model == "TEST"
 
@@ -377,7 +373,7 @@ def test_summaries_model_accepts_responses_compatible_test_provider():
 def test_summaries_model_accepts_local_chat_completions_provider():
     """An explicit local summary model resolves through the registry."""
     raw = _nexus_toml_dict()
-    raw["summaries"]["model"] = "@local.default"
+    raw["summaries"]["model"] = load_settings().local_models.model
 
     settings = Settings(**raw)
     assert settings.provider_for_model(settings.summaries.model) == "local"
@@ -409,7 +405,7 @@ def test_global_default_model_unknown_role_rejected():
     """An unknown role in the global display default fails Settings validation."""
     raw = _nexus_toml_dict()
     raw["global"]["model"]["default_model"] = "@openai.nonexistent_role"
-    with pytest.raises(ValidationError, match="no role 'nonexistent_role'"):
+    with pytest.raises(ValidationError, match="references unknown model id"):
         Settings(**raw)
 
 
@@ -417,7 +413,7 @@ def test_global_default_slot_model_unknown_role_rejected():
     """An unknown role in the slot default fails Settings validation too."""
     raw = _nexus_toml_dict()
     raw["global"]["model"]["default_slot_model"] = "@test.nonexistent_role"
-    with pytest.raises(ValidationError, match="no role 'nonexistent_role'"):
+    with pytest.raises(ValidationError, match="references unknown model id"):
         Settings(**raw)
 
 
@@ -437,26 +433,26 @@ def test_llama_server_port_drift_ignored_while_disabled():
     Settings(**raw)
 
 
-def test_global_default_slot_model_role_ref_resolves_at_load():
-    """A valid role ref in default_slot_model resolves to the concrete ID."""
+def test_global_default_slot_model_accepts_registered_id():
+    """An explicit slot default must be a registered model ID."""
     raw = _nexus_toml_dict()
-    raw["global"]["model"]["default_slot_model"] = "@test.default"
+    raw["global"]["model"]["default_slot_model"] = "TEST"
     settings = Settings(**raw)
-    test_default = settings.global_.model.api_models["test"].roles["default"]
+    test_default = "TEST"
     assert settings.global_.model.default_slot_model == test_default
 
 
-def test_resolve_model_ref_resolves_roles_and_validates_literals():
-    """The public resolver maps roles to concrete IDs and validates literals."""
+def test_resolve_model_ref_validates_ids_and_rejects_aliases():
+    """The public model lookup accepts only concrete registered IDs."""
     settings = load_settings("nexus.toml")
-    anthropic_default = settings.global_.model.api_models["anthropic"].roles["default"]
+    anthropic_default = settings.global_.model.api_models["anthropic"].models[0].id
 
-    assert resolve_model_ref("@anthropic.default") == anthropic_default
-    assert settings.resolve_model_ref("@anthropic.default") == anthropic_default
+    assert resolve_model_ref(anthropic_default) == anthropic_default
+    assert settings.resolve_model_ref(anthropic_default) == anthropic_default
     # Literal registry IDs pass through unchanged.
     assert resolve_model_ref(anthropic_default) == anthropic_default
 
-    with pytest.raises(ValueError, match="no role 'bogus'"):
+    with pytest.raises(ValueError, match="not declared"):
         resolve_model_ref("@anthropic.bogus")
     with pytest.raises(ValueError, match="not declared"):
         resolve_model_ref("model-that-does-not-exist")
@@ -466,7 +462,7 @@ def test_ui_visible_filters_ui_model_lists_but_not_registry():
     """ui_visible = false hides a provider from UI lists, not the registry.
 
     The TEST mock server stays fully functional for backend/CLI callers
-    (unfiltered loader calls, role resolution) while every UI-facing model
+    (unfiltered loader calls, model validation) while every UI-facing model
     list - /api/config/models and the settings pane metadata - omits it.
     """
     from nexus.config.loader import get_all_api_models, get_api_models_by_provider
@@ -484,8 +480,8 @@ def test_ui_visible_filters_ui_model_lists_but_not_registry():
     assert "test" not in get_api_models_by_provider(ui_only=True)
     assert "test" in get_api_models_by_provider()
 
-    # Backend role resolution is untouched by UI visibility.
-    assert resolve_model_ref("@test.default") == "TEST"
+    # Backend model validation is untouched by UI visibility.
+    assert resolve_model_ref("TEST") == "TEST"
 
 
 # =============================================================================
@@ -586,8 +582,8 @@ def test_get_openai_compatible_endpoint_routing():
         "request_params": {},
     }
     local = settings.global_.model.api_models["local"]
-    assert resolve_model_ref("@local.default") == "nousresearch/hermes-4-70b"
-    assert get_openai_compatible_endpoint(local.roles["default"]) == {
+    assert resolve_model_ref(settings.local_models.model) == settings.local_models.model
+    assert get_openai_compatible_endpoint(settings.local_models.model) == {
         "base_url": local.base_url,
         "api_key": "nexus-local-no-key",
         "structured_transport": "chat_completions",
@@ -701,7 +697,6 @@ def test_default_load_honors_runtime_config_env(tmp_path, monkeypatch):
 
     raw = _nexus_toml_dict()
     raw["global"]["model"]["default_slot_model"] = "TEMPTEST"
-    raw["global"]["model"]["api_models"]["test"]["roles"]["default"] = "TEMPTEST"
     raw["global"]["model"]["api_models"]["test"]["models"][0]["id"] = "TEMPTEST"
     raw["global"]["model"]["api_models"]["test"][
         "base_url"

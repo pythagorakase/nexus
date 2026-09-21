@@ -723,12 +723,25 @@ def _write_runtime_config(
             )
 
         model["default_slot_model"] = config.target_model
-        for role in openai["roles"]:
-            openai["roles"][role] = config.target_model
-        # Remote routes not expressed as @openai.<role> refs escape the role
-        # pins above and need direct pins; tests/test_qa_shift.py enforces the
-        # full route roster against drift.
-        dynamic_document["wizard"]["fallback_model"] = "@openai.default"
+        from nexus.config.settings_models import (
+            MODEL_SELECTION_PATHS,
+            materialize_model_selections,
+        )
+
+        expanded = materialize_model_selections(document.unwrap())
+        for key_path in MODEL_SELECTION_PATHS - {"local_models.model"}:
+            keys = key_path.split(".")
+            source_table = expanded
+            target_table = dynamic_document
+            for key in keys[:-1]:
+                if key not in source_table:
+                    break
+                source_table = source_table[key]
+                target_table = target_table.setdefault(key, {})
+            else:
+                if source_table.get(keys[-1]) is not None:
+                    target_table[keys[-1]] = config.target_model
+        dynamic_document["apex"]["provider"] = "openai"
         dynamic_document["usage"]["daily_allowance"][
             "openai"
         ] = config.daily_token_limit

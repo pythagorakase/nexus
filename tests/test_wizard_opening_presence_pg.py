@@ -189,7 +189,7 @@ def _seed_post_transition_world(dbname: str) -> None:
                 """
                 INSERT INTO global_variables (
                     id, base_timestamp, setting, new_story, model
-                ) VALUES (TRUE, %s, %s::jsonb, FALSE, '@test.default')
+                ) VALUES (TRUE, %s, %s::jsonb, FALSE, 'TEST')
                 ON CONFLICT (id) DO UPDATE SET
                     base_timestamp = EXCLUDED.base_timestamp,
                     setting = EXCLUDED.setting,

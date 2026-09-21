@@ -119,7 +119,7 @@ def _reset_world(cur: Any, character_names: list[str]) -> dict[str, int]:
         """
         INSERT INTO global_variables (
             id, base_timestamp, setting, new_story, model
-        ) VALUES (TRUE, %s, '{}'::jsonb, FALSE, '@test.default')
+        ) VALUES (TRUE, %s, '{}'::jsonb, FALSE, 'TEST')
         ON CONFLICT (id) DO UPDATE SET
             base_timestamp = EXCLUDED.base_timestamp,
             new_story = EXCLUDED.new_story,
