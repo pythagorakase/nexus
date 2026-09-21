@@ -63,7 +63,7 @@ export interface SettingsPayload {
     narrative?: { test_mode?: boolean; test_database_suffix?: string };
   };
   /** Concrete model ID supplied by the roster. */
-  apex?: { provider?: string; model?: string };
+  apex?: { provider?: string; model?: string; gaia_model?: string | null };
   local_models?: { model?: string };
   wizard?: { default_model?: string; fallback_model?: string };
   lore?: {
@@ -99,6 +99,8 @@ export interface SettingsPatch {
   typewriter_ms_per_char?: number;
   test_mode?: boolean;
   apex_model_id?: string;
+  /** Null clears the independent assignment so Gaia follows the active Skald. */
+  gaia_model_id?: string | null;
   wizard_model_id?: string;
   apex_context_window?: number;
 }

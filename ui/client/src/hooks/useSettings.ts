@@ -80,6 +80,17 @@ export function applySettingsPatch(
         : "local";
     next.apex = { ...payload.apex, model: patch.apex_model_id, provider };
   }
+  if (patch.gaia_model_id !== undefined) {
+    if (
+      patch.gaia_model_id !== null &&
+      !payload.settings_meta?.models.some(
+        (model) => model.id === patch.gaia_model_id,
+      )
+    ) {
+      throw new Error(`Unknown model: ${patch.gaia_model_id}`);
+    }
+    next.apex = { ...next.apex, gaia_model: patch.gaia_model_id };
+  }
   if (patch.wizard_model_id !== undefined) {
     next.wizard = { ...payload.wizard, default_model: patch.wizard_model_id };
   }

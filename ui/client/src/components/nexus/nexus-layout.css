@@ -1846,6 +1846,30 @@
 .alert-body { font-family: var(--font-body); font-size: 14px; line-height: 1.5; color: var(--fg); }
 
 /* ─── 4. Model picker ─── */
+.model-targets {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px; margin-bottom: 16px;
+}
+.model-target {
+  min-width: 0; padding: 12px 14px; text-align: left; cursor: pointer;
+  background: var(--bg); color: var(--fg-muted);
+  border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+}
+.model-target:hover { color: var(--brass-bright); }
+.model-target.on {
+  border-color: var(--brass); color: var(--brass-bright);
+  background: hsl(320 55% 50% / .12);
+}
+.model-target-name {
+  display: block; margin-bottom: 6px;
+  font-family: var(--font-menu); font-size: 11px;
+  letter-spacing: .18em; text-transform: uppercase;
+}
+.model-target-value {
+  display: block; overflow-wrap: anywhere;
+  font-family: var(--font-mono); font-size: 13px;
+}
+.model-follow { margin-bottom: 8px; }
 .model-providers {
   list-style: none; padding: 0; margin: 0;
   display: flex; flex-direction: column; gap: 4px;
@@ -1876,6 +1900,7 @@
 }
 .model-row {
   display: flex; align-items: center; gap: 10px;
+  width: 100%; text-align: left; background: transparent;
   padding: 7px 12px;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);

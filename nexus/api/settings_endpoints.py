@@ -83,6 +83,13 @@ class SettingsPatchRequest(BaseModel):
         default=None,
         description=("Registered model ID for live narrative turns (apex.model)"),
     )
+    gaia_model_id: Optional[str] = Field(
+        default=None,
+        description=(
+            "Registered model ID for world state (apex.gaia_model); "
+            "null follows the active Skald model"
+        ),
+    )
     wizard_model_id: Optional[str] = Field(
         default=None,
         description="Registered model ID for the new-story wizard (wizard.default_model)",
@@ -194,6 +201,8 @@ def _updates_from_patch(patch: SettingsPatchRequest) -> Dict[str, Any]:
         updates["global.narrative.test_mode"] = patch.test_mode
     if patch.apex_model_id is not None:
         updates["apex.model"] = patch.apex_model_id
+    if "gaia_model_id" in patch.model_fields_set:
+        updates["apex.gaia_model"] = patch.gaia_model_id
     if patch.wizard_model_id is not None:
         updates["wizard.default_model"] = patch.wizard_model_id
     if patch.apex_context_window is not None:

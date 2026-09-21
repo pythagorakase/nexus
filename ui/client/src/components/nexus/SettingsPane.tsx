@@ -11,7 +11,7 @@
  *
  * Presentation follows the visual minimalism principle (PR #388): one label
  * per section matching its rail name, no explanatory prose in persistent
- * chrome, no internal module names in UI copy.
+ * chrome. The model card names both assignments so they can be set separately.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -308,29 +308,82 @@ function AdvancedSection() {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// 4. Model - one picker; selection binds both narrative turns and the
-// new-story wizard to the same registry model in nexus.toml.
-// The local provider group renders catalog-driven family rows with a
-// per-quant manager (LocalModelRows) instead of its registry model row.
+// 4. Model - independent Skald and Gaia assignments. Skald also selects
+// the new-story wizard model; Gaia can follow the active Skald or be pinned.
+// Skald's local provider group owns the shared runtime's family/quant manager.
+// Gaia cannot pin independent local weights on that single shared endpoint;
+// Same as Skald is the supported way for both assignments to run locally.
 // ──────────────────────────────────────────────────────────────────────────
 
 function ModelSection({
   settings,
-  onPick,
+  onPickSkald,
+  onPickGaia,
 }: {
   settings: SettingsPayload;
-  onPick: (ref: string) => void;
+  onPickSkald: (id: string) => void;
+  onPickGaia: (id: string | null) => void;
 }) {
+  const [target, setTarget] = useState<"skald" | "gaia">("skald");
   const meta = settings.settings_meta;
   const models = meta?.models ?? [];
   const apexAllowed = new Set(meta?.apex_allowed_providers ?? []);
-  const options = models.filter((r) => apexAllowed.has(r.provider));
+  const options = models.filter(
+    (r) =>
+      apexAllowed.has(r.provider) &&
+      (target === "skald" || r.provider !== LOCAL_PROVIDER),
+  );
   const providers = Array.from(new Set(options.map((r) => r.provider)));
-  const current = settings.apex?.model ?? "";
+  const skald = settings.apex?.model ?? "";
+  const gaia = settings.apex?.gaia_model ?? null;
+  const current = target === "skald" ? skald : gaia;
+  const onPick = target === "skald" ? onPickSkald : onPickGaia;
+  const modelLabel = (id: string) =>
+    models.find((model) => model.id === id)?.label ?? id;
 
   return (
     <SettingsCard id="model" label="MODEL">
-      <ul className="model-providers">
+      <div className="model-targets" role="group" aria-label="Model assignment">
+        <button
+          type="button"
+          className={`model-target ${target === "skald" ? "on" : ""}`}
+          aria-pressed={target === "skald"}
+          onClick={() => setTarget("skald")}
+          data-testid="model-target-skald"
+        >
+          <span className="model-target-name">Skald</span>
+          <span className="model-target-value">{modelLabel(skald)}</span>
+        </button>
+        <button
+          type="button"
+          className={`model-target ${target === "gaia" ? "on" : ""}`}
+          aria-pressed={target === "gaia"}
+          onClick={() => setTarget("gaia")}
+          data-testid="model-target-gaia"
+        >
+          <span className="model-target-name">World State</span>
+          <span className="model-target-value">
+            {gaia === null ? "Same as Skald" : modelLabel(gaia)}
+          </span>
+        </button>
+      </div>
+      {target === "gaia" && (
+        <button
+          type="button"
+          className={`model-row model-follow ${gaia === null ? "on" : ""}`}
+          aria-pressed={gaia === null}
+          onClick={() => onPickGaia(null)}
+        >
+          <span className="model-radio">
+            {gaia === null ? <CircleDot size={12} /> : <Circle size={12} />}
+          </span>
+          <span className="model-name">Same as Skald</span>
+        </button>
+      )}
+      <ul
+        className="model-providers"
+        aria-label={`${target === "skald" ? "Skald" : "World State"} models`}
+      >
         {providers.map((provider) => {
           const localModel =
             provider === LOCAL_PROVIDER
@@ -345,7 +398,7 @@ function ModelSection({
                 {localModel ? (
                   <LocalModelRows
                     selected={localModel.id === current}
-                    onPickLocal={() => onPick(localModel.id)}
+                    onPickLocal={() => onPickSkald(localModel.id)}
                     knobs={settings.ui?.local_models}
                   />
                 ) : (
@@ -354,16 +407,19 @@ function ModelSection({
                     .map((model) => {
                       const on = model.id === current;
                       return (
-                        <li
-                          key={model.id}
-                          className={`model-row ${on ? "on" : ""}`}
-                          onClick={() => onPick(model.id)}
-                          data-testid={`model-${model.provider}-${model.id}`}
-                        >
-                          <span className="model-radio">
-                            {on ? <CircleDot size={12} /> : <Circle size={12} />}
-                          </span>
-                          <span className="model-name">{model.label}</span>
+                        <li key={model.id}>
+                          <button
+                            type="button"
+                            className={`model-row ${on ? "on" : ""}`}
+                            aria-pressed={on}
+                            onClick={() => onPick(model.id)}
+                            data-testid={`model-${model.provider}-${model.id}`}
+                          >
+                            <span className="model-radio">
+                              {on ? <CircleDot size={12} /> : <Circle size={12} />}
+                            </span>
+                            <span className="model-name">{model.label}</span>
+                          </button>
                         </li>
                       );
                     })
@@ -818,9 +874,10 @@ function SettingsConsole({ settings }: { settings: SettingsPayload }) {
         />
         <ModelSection
           settings={settings}
-          onPick={(ref) =>
-            mutation.mutate({ apex_model_id: ref, wizard_model_id: ref })
+          onPickSkald={(id) =>
+            mutation.mutate({ apex_model_id: id, wizard_model_id: id })
           }
+          onPickGaia={(id) => mutation.mutate({ gaia_model_id: id })}
         />
         <KeysSection />
         <ContextLengthSection
