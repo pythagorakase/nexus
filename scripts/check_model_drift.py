@@ -36,14 +36,13 @@ import sys
 from pathlib import Path
 from typing import Iterable, List, Tuple
 
-# Patterns that look like *currently-managed* API-model IDs. The point is to
-# guard against drift in the families this project actively uses today (GPT-5
-# and Claude 4). Older model strings (gpt-3.5, gpt-4.1, etc.) appear in legacy
-# utility scripts and aren't part of this issue's acceptance criterion.
+# Cover GPT-5 and later generations plus named Claude families without needing
+# another pattern edit for each roster upgrade. Older GPT strings (gpt-3.5,
+# gpt-4.1, etc.) appear in legacy utilities and remain outside this check.
 MODEL_ID_PATTERN = re.compile(
     r"\b("
-    r"gpt-5(?:\.\d+)?"  # gpt-5, gpt-5.1, gpt-5.5, ...
-    r"|claude-(?:sonnet|opus|haiku)-\d+-\d+"  # claude-sonnet-4-6, claude-opus-4-7, ...
+    r"gpt-(?:[5-9]|[1-9]\d+)(?:\.\d+)?(?:-[a-z0-9]+)*"
+    r"|claude-[a-z]+-\d+(?:-[a-z0-9]+)*"
     r")\b"
 )
 
