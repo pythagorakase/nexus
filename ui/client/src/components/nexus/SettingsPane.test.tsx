@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FontProvider, KEEPERS } from "@/contexts/FontContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { DeveloperModeProvider } from "@/contexts/DeveloperModeContext";
@@ -10,6 +10,7 @@ import {
 } from "@/hooks/useLocalModels";
 import { SECRETS_QUERY_KEY } from "@/hooks/useSecrets";
 import { applySettingsPatch, SETTINGS_QUERY_KEY } from "@/hooks/useSettings";
+import { queryClient as settingsQueryClient } from "@/lib/queryClient";
 import type { LocalModelsStatus } from "@/types/localModels";
 import type { SecretStatus } from "@/types/secrets";
 import type { SettingsPayload } from "@/types/settings";
@@ -42,10 +43,10 @@ const STATUSES: SecretStatus[] = [
 function renderPane(
   settings: SettingsPayload = SETTINGS,
   gateOpen: boolean = false,
-) {
-  const queryClient = new QueryClient({
+  queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
-  });
+  }),
+) {
   queryClient.setQueryData([...SETTINGS_QUERY_KEY], settings);
   queryClient.setQueryData([...SECRETS_QUERY_KEY], STATUSES);
   queryClient.setQueryData(["/api/dev/backstage/health"], gateOpen);
@@ -66,7 +67,10 @@ function renderPane(
 
 beforeEach(() => {
   localStorage.clear();
+  settingsQueryClient.clear();
 });
+
+afterEach(() => vi.restoreAllMocks());
 
 describe("SettingsPane developer mode", () => {
   it("omits ADVANCED while the server gate is closed", () => {
@@ -177,7 +181,12 @@ describe("SettingsPane model card local provider", () => {
 describe("SettingsPane model IDs", () => {
   const settings: SettingsPayload = {
     ...SETTINGS,
-    apex: { model: "frontier-2.1", provider: "openai" },
+    apex: {
+      model: "frontier-2.1",
+      provider: "openai",
+      gaia_model: "vendor/model-next",
+    },
+    wizard: { default_model: "frontier-2.1" },
     settings_meta: {
       ...SETTINGS.settings_meta!,
       models: [
@@ -199,8 +208,128 @@ describe("SettingsPane model IDs", () => {
       apex_model_id: "vendor/model-next",
       wizard_model_id: "vendor/model-next",
     });
-    expect(patched.apex).toEqual({ model: "vendor/model-next", provider: "local" });
+    expect(patched.apex).toEqual({
+      model: "vendor/model-next",
+      provider: "local",
+      gaia_model: "vendor/model-next",
+    });
     expect(patched.wizard?.default_model).toBe("vendor/model-next");
     expect(() => applySettingsPatch(settings, {apex_model_id: "@openai.default"})).toThrow("Unknown model");
+  });
+
+  it("shows both assignments and switches which model is selected", () => {
+    renderPane(settings);
+    expect(screen.getByTestId("model-target-skald")).toHaveTextContent(
+      "Frontier 2.1",
+    );
+    expect(screen.getByTestId("model-target-gaia")).toHaveTextContent("Model Next");
+    fireEvent.click(screen.getByTestId("model-target-gaia"));
+    expect(screen.getByTestId("model-openai-frontier-2.1")).toHaveAttribute(
+      "aria-pressed", "false",
+    );
+    expect(screen.getByTestId("model-openrouter-vendor/model-next"))
+      .toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Same as Skald" }))
+      .toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("projects Gaia changes independently, including follow mode and combined patches", () => {
+    const patched = applySettingsPatch(settings, { gaia_model_id: "frontier-2.1" });
+    expect(patched.apex).toEqual({ ...settings.apex, gaia_model: "frontier-2.1" });
+    expect(patched.wizard).toEqual(settings.wizard);
+    expect(settings.apex?.gaia_model).toBe("vendor/model-next");
+
+    const following = applySettingsPatch(settings, {
+      apex_model_id: "vendor/model-next",
+      gaia_model_id: null,
+    });
+    expect(following.apex).toEqual({
+      model: "vendor/model-next",
+      provider: "local",
+      gaia_model: null,
+    });
+    expect(() => applySettingsPatch(settings, { gaia_model_id: "unknown" }))
+      .toThrow("Unknown model");
+  });
+
+  it("sends independent Gaia writes, clears to follow Skald, and retains that mode on Skald changes", async () => {
+    const gaiaChanged = {
+      ...settings,
+      apex: { ...settings.apex, gaia_model: "frontier-2.1" },
+    };
+    const following = { ...settings, apex: { ...settings.apex, gaia_model: null } };
+    const skaldChanged = {
+      ...following,
+      apex: { ...following.apex, model: "vendor/model-next", provider: "local" },
+      wizard: { default_model: "vendor/model-next" },
+    };
+    const request = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify(gaiaChanged)))
+      .mockResolvedValueOnce(new Response(JSON.stringify(following)))
+      .mockResolvedValueOnce(new Response(JSON.stringify(skaldChanged)));
+    renderPane(settings, false, settingsQueryClient);
+
+    fireEvent.click(screen.getByTestId("model-target-gaia"));
+    fireEvent.click(screen.getByRole("button", { name: "Frontier 2.1" }));
+    await waitFor(() =>
+      expect(screen.getByTestId("model-target-gaia"))
+        .toHaveTextContent("Frontier 2.1"),
+    );
+    expect(request).toHaveBeenNthCalledWith(
+      1, "/api/settings", expect.objectContaining({
+        method: "PATCH", body: JSON.stringify({ gaia_model_id: "frontier-2.1" }),
+      }),
+    );
+    expect(screen.getByTestId("model-target-skald")).toHaveTextContent(
+      "Frontier 2.1",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Same as Skald" }));
+    await waitFor(() =>
+      expect(screen.getByTestId("model-target-gaia"))
+        .toHaveTextContent("Same as Skald"),
+    );
+    expect(request).toHaveBeenNthCalledWith(
+      2, "/api/settings", expect.objectContaining({
+        body: JSON.stringify({ gaia_model_id: null }),
+      }),
+    );
+    expect(screen.getByRole("button", { name: "Frontier 2.1" }))
+      .toHaveAttribute("aria-pressed", "false");
+
+    fireEvent.click(screen.getByTestId("model-target-skald"));
+    fireEvent.click(screen.getByRole("button", { name: "Model Next" }));
+    await waitFor(() =>
+      expect(screen.getByTestId("model-target-skald"))
+        .toHaveTextContent("Model Next"),
+    );
+    expect(request).toHaveBeenNthCalledWith(
+      3, "/api/settings", expect.objectContaining({
+        body: JSON.stringify({
+          apex_model_id: "vendor/model-next",
+          wizard_model_id: "vendor/model-next",
+        }),
+      }),
+    );
+    expect(settingsQueryClient.getQueryData(SETTINGS_QUERY_KEY)).toEqual(skaldChanged);
+    expect(screen.getByTestId("model-target-gaia")).toHaveTextContent("Same as Skald");
+  });
+
+  it("restores the confirmed Gaia selection when the server rejects a write", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response("Write rejected", { status: 422 }),
+    );
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    renderPane(settings, false, settingsQueryClient);
+    fireEvent.click(screen.getByTestId("model-target-gaia"));
+    fireEvent.click(screen.getByRole("button", { name: "Same as Skald" }));
+    expect(await screen.findByText("WRITE REJECTED")).toBeInTheDocument();
+    expect(screen.getByTestId("model-target-gaia")).toHaveTextContent("Model Next");
+    expect(screen.getByTestId("model-target-skald")).toHaveTextContent(
+      "Frontier 2.1",
+    );
+    expect(screen.getByTestId("model-openrouter-vendor/model-next"))
+      .toHaveAttribute("aria-pressed", "true");
   });
 });

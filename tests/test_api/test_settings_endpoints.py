@@ -44,6 +44,7 @@ def test_head_and_get_serve_concrete_selections(client: TestClient) -> None:
     payload = response.json()
     assert "secrets" not in payload
     assert payload["apex"]["model"] == load_settings().apex.model
+    assert payload["apex"].get("gaia_model") == load_settings().apex.gaia_model
     assert not payload["apex"]["model"].startswith("@")
     assert payload["API Settings"]["apex"] == payload["apex"]
     assert payload["Agent Settings"]["global"] == payload["global"]
@@ -72,6 +73,9 @@ def test_picker_lists_every_visible_model() -> None:
         ({"embedding_model": "x"}, 422),
         ({"apex_model_id": "unregistered-model"}, 422),
         ({"apex_model_id": "@anthropic.deep"}, 422),
+        ({"gaia_model_id": "unregistered-model"}, 422),
+        ({"gaia_model_id": "@openai.default"}, 422),
+        ({"gaia_model_id": ""}, 422),
         ({"wizard_model_id": "@openai.default"}, 422),
         ({"apex_model_ref": "@openai.default"}, 422),
     ],
@@ -92,6 +96,7 @@ def test_patch_maps_supported_fields() -> None:
         typewriter_ms_per_char=42,
         test_mode=True,
         apex_model_id=model,
+        gaia_model_id=model,
         wizard_model_id=model,
         apex_context_window=100_000,
     )
@@ -101,6 +106,7 @@ def test_patch_maps_supported_fields() -> None:
         "ui.typewriter_ms_per_char": 42,
         "global.narrative.test_mode": True,
         "apex.model": model,
+        "apex.gaia_model": model,
         "wizard.default_model": model,
         "lore.token_budget.apex_context_window": 100_000,
     }
@@ -111,7 +117,9 @@ def test_picker_write_moves_roster_uses_and_survives_model_upgrade(
     client: TestClient, config_path: Path, provider: str
 ) -> None:
     """Selection and later ID replacement work without maintaining aliases."""
-    model = load_settings(config_path).global_.model.api_models[provider].models[-1].id
+    settings = load_settings(config_path)
+    gaia_model = settings.apex.gaia_model
+    model = settings.global_.model.api_models[provider].models[-1].id
     response = client.patch(
         "/api/settings",
         json={"apex_model_id": model, "wizard_model_id": model, "theme": "vector"},
@@ -119,6 +127,7 @@ def test_picker_write_moves_roster_uses_and_survives_model_upgrade(
     assert response.status_code == 200, response.text
     assert response.json()["apex"]["model"] == model
     assert response.json()["wizard"]["default_model"] == model
+    assert response.json()["apex"].get("gaia_model") == gaia_model
     assert response.json()["apex"]["provider"] == (
         provider if provider in {"openai", "anthropic"} else "local"
     )
@@ -141,3 +150,71 @@ def test_picker_write_moves_roster_uses_and_survives_model_upgrade(
     assert refreshed["apex"]["model"] == updated_id
     assert refreshed["wizard"]["default_model"] == updated_id
     assert load_settings(config_path).apex.model == updated_id
+
+
+@pytest.mark.parametrize("provider", ["openai", "anthropic", "local", "openrouter"])
+def test_gaia_assignment_is_independent_and_tracks_roster_upgrades(
+    client: TestClient, config_path: Path, provider: str
+) -> None:
+    """The Gaia picker moves only its own use, leaving every other seat intact."""
+    before = load_settings(config_path)
+    model = before.global_.model.api_models[provider].models[-1].id
+    response = client.patch("/api/settings", json={"gaia_model_id": model})
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["apex"]["gaia_model"] == model
+    assert payload["API Settings"]["apex"]["gaia_model"] == model
+    after = load_settings(config_path)
+    assert after.apex.model == before.apex.model
+    assert after.apex.provider == before.apex.provider
+    assert after.wizard.default_model == before.wizard.default_model
+    assert after.orrery.experiences.model == before.orrery.experiences.model
+    assert (
+        after.storyteller.correspondence.compaction_model
+        == before.storyteller.correspondence.compaction_model
+    )
+
+    raw = tomllib.loads(config_path.read_text())
+    assert "gaia_model" not in raw["apex"]
+    entries = [
+        e for p in raw["global"]["model"]["api_models"].values() for e in p["models"]
+    ]
+    assert [e["id"] for e in entries if "apex.gaia_model" in e.get("uses", [])] == [
+        model
+    ]
+    updated_id = model + "-next"
+    config_path.write_text(
+        config_path.read_text().replace(f'id = "{model}"', f'id = "{updated_id}"')
+    )
+    assert client.get("/api/settings").json()["apex"]["gaia_model"] == updated_id
+    assert load_settings(config_path).apex.gaia_model == updated_id
+
+
+def test_explicit_null_restores_gaia_following_skald(
+    client: TestClient, config_path: Path
+) -> None:
+    """Omitted Gaia stays pinned; explicit null clears even a literal override."""
+    before = load_settings(config_path)
+    model = before.apex.model
+    config_path.write_text(
+        config_path.read_text().replace("[apex]", f'[apex]\ngaia_model = "{model}"')
+    )
+    response = client.patch("/api/settings", json={"apex_model_id": model})
+    assert response.status_code == 200, response.text
+    assert response.json()["apex"]["gaia_model"] == model
+
+    response = client.patch("/api/settings", json={"gaia_model_id": None})
+    assert response.status_code == 200, response.text
+    assert response.json()["apex"].get("gaia_model") is None
+    after = load_settings(config_path)
+    assert after.apex.gaia_model is None
+    assert after.apex.model == model
+    assert after.wizard.default_model == before.wizard.default_model
+    assert after.orrery.experiences.model == before.orrery.experiences.model
+    raw = tomllib.loads(config_path.read_text())
+    assert "gaia_model" not in raw["apex"]
+    assert all(
+        "apex.gaia_model" not in e.get("uses", [])
+        for p in raw["global"]["model"]["api_models"].values()
+        for e in p["models"]
+    )
