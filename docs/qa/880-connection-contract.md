@@ -1,209 +1,224 @@
-# Work Order 880 Stop Report
+# Work Order 880: PostgreSQL Connection Contract
 
-No PR was opened. This is an incomplete implementation, not a review-ready result.
+The pooled, SQLAlchemy, direct psycopg2, asyncpg adapter, CLI, worker, and script paths share `nexus/database.py`. Explicit target arguments take precedence over `[api.database]`, then PGHOST/PGPORT/PGUSER/PGPASSWORD and OS/libpq defaults. Passwords use the platform secret resolver when `password_secret` is set. URLs escape credentials; status exposes only host, port, user, and database. Every generated connection carries the configured session timezone, default UTC.
 
-## Stop Condition
+MEMNON checks the requested server/user/database target before schema initialization. The database argument remains explicitly selectable per request; a caller can supply an expected database to `verify_database_url` to reject a mismatched URL. An existing pool rejects changed parameters until it is closed.
 
-The full wizard-to-continuation proof is blocked by the no-hosted-provider rule and the existing local wizard conversation route. A real local model server was started successfully; its health endpoint returned `{"status":"ok"}`. Constructing `ConversationsClient` with the configured local model, without creating a thread or making a hosted call, returned:
+## Verification
 
-```text
-Configured local model: nousresearch/hermes-4-70b
-Conversation store mode: openai
-Conversation API base URL: https://api.openai.com/v1/
-```
+Commands ran from this worktree using `PY=/Users/pythagor/nexus/.venv/bin/python`. The required import probe printed:
 
-`nexus/api/conversations.py:70` handles Anthropic file storage, but the local provider falls through to the hosted OpenAI client at lines 80-82. `create_thread()` calls that client's Conversations API at line 96. Fixing local wizard storage is outside this frozen connection work order. No hosted provider call was made. The local model process started for this investigation was terminated.
-
-## Current Snapshot Limitations
-
-The final targeted check has two failures introduced by the last, unvalidated URL-query preservation edit:
-
-```text
-{'options': '-c TimeZone=UTC'} != {'options': '-c TimeZone=UTC -c TimeZone=UTC'}
-{'connect_timeout': 5} != {'connect_timeout': '5'}
-```
-
-These come from `nexus/database.py:64` appending TimeZone and `nexus/database.py:115` copying URL query strings back over typed parameters. They remain unresolved because implementation stopped at the external proof blocker. The clean offline run below predates that final edit and is not evidence that the stopped snapshot passes.
-
-The two-cluster test exercises actual pooled, SQLAlchemy, and asyncpg connections, UTC sessions, and pre-DDL mismatch rejection. It inspects the non-target cluster's catalog, pg_stat_activity, and connection/statement log. It does **not** prove wizard creation, bootstrap, a real continuation, retrieval, or background-job execution. No gateway was started. No UI files, fleet migrations, template writes, or paid inference were used. The test-created clusters were stopped and removed, including the directory left by the initial failed cluster startup.
-
-## Commands and Verbatim Tails
-
-All Python commands ran from this worktree. `$PY` was `/Users/pythagor/nexus/.venv/bin/python`.
-
-```sh
-PY=/Users/pythagor/nexus/.venv/bin/python
-PYTHONPATH=$PWD $PY -c 'import nexus,sys;print(nexus.__file__)'
-```
 ```text
 /Users/pythagor/nexus/.claude/worktrees/880-connection-contract/nexus/__init__.py
 ```
 
+TEST supplied only model responses. Every database operation, CLI command, HTTP request, turn-cycle step, retrieval, and background-job operation used production code and real PostgreSQL. The test fixture restores read-only schema/vocabulary exports from NEXUS_template into its own temporary clusters. No owner save or template was modified; no fleet migration or paid provider was called.
+
+The lifecycle fixture creates save_04 and mock only inside its two disposable clusters. These are fixture-owned databases, not the owner's slots. It uses gateway port 8014 and a free port for its own TEST server. `nexus down`, provider termination, pool closure, `pg_ctl stop`, and cluster-directory removal run during teardown.
+
+### Two-Cluster Evidence
+
+`tests/test_connection_lifecycle.py` runs the wizard through setting, character, traits, wildcard, introduction, and bootstrap via `nexus continue`. A normal choice completes the actual LORE/MEMNON turn cycle. MEMNON retrieves the committed opening. A genuine sleep-pressure resolution is committed, promoted, leased, and completed by the production background worker.
+
+A conflicting PG environment names the non-target cluster while TOML names the private cluster. The non-target monitor starts before runtime startup and finishes after shutdown. Its catalog, pg_stat_activity, connection log, and statement log establish:
+
+```json
+{"catalog_before_count": 415, "catalog_unchanged": true, "other_clients": 0, "new_connections": 0, "schema_statements": 0}
+```
+
+The background result has `promoted=1`, `narrated=1`, and all failure counts zero. Tests also inspect private pg_stat_activity, compare both preflight targets, reject a foreign MEMNON schema target before connecting, and verify `SHOW TimeZone = UTC` for pooled, URL-based, and asyncpg connections.
+
+### Scope and Deferred Work
+
+- #885 is the coordinator-approved exemption. The exact unfiltered PostgreSQL selection has that one failure; the same selection with only that test deselected passes.
+- The full offline suite intentionally skips opt-in PostgreSQL and live-provider tests. Separate PostgreSQL gates actually ran.
+- TEST preserves its existing Retrograde cold-start bypass. This proves connection routing and lifecycle protocol, not paid-model quality.
+- The separate local-model Conversations routing issue remains deferred under the frozen work order.
+- No schema migration, UI, intertitle, world-clock view, or clock rendering change is included.
+- The connection audit found no executable PostgreSQL `localhost`, `5432`, or `user="pythagor"` defaults left in nexus/ or scripts/. Remaining localhost text is HTTP/CORS, documentation, or historical output.
+- Legacy standalone scripts now require an active slot or explicit URL instead of silently choosing the deprecated NEXUS database. DB_* connection variables are retired in favor of the single contract.
+
+## Commands and Verbatim Tails
+
 ```sh
-PYTHONPATH=$PWD $PY -m pytest -q > /tmp/nexus_880_offline.log 2>&1
+PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q > temp/qa880_resume/offline-final.log 2>&1
 ```
 ```text
-FAILED tests/test_api/test_runtime_status.py::test_database_status_uses_api_connection_path
-FAILED tests/test_memnon_db_access.py::test_setup_database_indexes_skips_ann_indexes_for_high_dimensions
-FAILED tests/test_memnon_db_access.py::test_setup_database_indexes_fails_on_unparseable_embedding_table
-FAILED tests/test_reachability.py::test_repository_reachability_ratchet - Ass...
-FAILED tests/test_reachability.py::test_checker_cli_is_stdlib_only_and_writes_evidence_without_importing_app
-5 failed, 2571 passed, 756 skipped, 11 warnings in 88.58s (0:01:28)
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+2583 passed, 758 skipped, 11 warnings in 90.89s (0:01:30)
 ```
 
 ```sh
-PYTHONPATH=$PWD $PY -m pytest -q > /tmp/nexus_880_offline_final.log 2>&1
-```
-```text
-2583 passed, 757 skipped, 11 warnings in 89.89s (0:01:29)
-```
-
-```sh
-PYTHONPATH=$PWD NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_api tests/test_lore tests/test_memnon_db_access.py tests/test_runtime -k 'connection or url or pool or override or status' > /tmp/nexus_880_postgres.log 2>&1
+NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_api tests/test_lore tests/test_memnon_db_access.py tests/test_runtime -k 'connection or url or pool or override or status' > temp/qa880_resume/postgres.log 2>&1
 ```
 ```text
 FAILED tests/test_api/test_orrery_dev_endpoints.py::test_what_if_need_override_reaches_stacks_and_pressures
-1 failed, 45 passed, 614 deselected, 11 warnings in 26.11s
+1 failed, 45 passed, 614 deselected, 11 warnings in 26.50s
 sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
 ```
 
-The only selection failure is the coordinator-exempt #885 test. No exemptions were added to the suite.
+```sh
+NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_api tests/test_lore tests/test_memnon_db_access.py tests/test_runtime -k 'connection or url or pool or override or status' --deselect=tests/test_api/test_orrery_dev_endpoints.py::test_what_if_need_override_reaches_stacks_and_pressures > temp/qa880_resume/postgres-exempt.log 2>&1
+```
+```text
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+45 passed, 615 deselected, 11 warnings in 26.56s
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+```
 
 ```sh
-PYTHONPATH=$PWD NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_database_contract.py > /tmp/nexus_880_contract.log 2>&1
+NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_database_contract.py > temp/qa880_resume/contract-final.log 2>&1
 ```
-
-Initial attempt:
-```text
-ERROR tests/test_database_contract.py::test_connection_two_clusters_pool_url_async_timezone_and_guard
-7 passed, 1 error in 0.88s
-```
-
-The cluster log identified a Unix-domain socket path longer than macOS's 103-byte limit. The fixture then used `/tmp` for the socket directory; rerunning the same command produced:
 ```text
 ........                                                                 [100%]
-8 passed in 1.67s
+8 passed in 1.71s
 ```
 
-Final stopped-snapshot check:
 ```sh
-PYTHONPATH=$PWD NEXUS_RUN_POSTGRES=1 $PY -m pytest -q tests/test_database_contract.py > /tmp/nexus_880_contract_stop.log 2>&1
+NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_database_contract.py tests/test_connection_lifecycle.py --basetemp=temp/qa880_resume/proof > temp/qa880_resume/proof-final.log 2>&1
 ```
 ```text
-FAILED tests/test_database_contract.py::test_connection_environment_and_url_escaping
-FAILED tests/test_database_contract.py::test_connection_config_and_explicit_override
-2 failed, 6 passed in 1.67s
+.........                                                                [100%]
+9 passed in 21.44s
 ```
 
 ```sh
-$PY -m compileall -q nexus scripts
+/Users/pythagor/nexus/.venv/bin/python -m black --check nexus/database.py tests/test_database_contract.py tests/test_connection_lifecycle.py
+```
+```text
+All done! ✨ 🍰 ✨
+3 files would be left unchanged.
+```
+
+```sh
+/Users/pythagor/nexus/.venv/bin/python -m compileall -q nexus scripts tests/test_connection_lifecycle.py
+bash -n scripts/install_pgvector.sh scripts/apply_migration_to_slots.sh
 git diff --check
 ```
-Both exited 0 with no output after formatting. Changed Python ranges were formatted using Black 25.1.0; new modules were formatted in full. Complete retained test logs are under `temp/qa880_stop/` (local, ignored).
 
-## Files Changed
+Each exited 0 with no output. These were syntax/format checks, not execution of the installer or migration scripts. Pre-commit catalog and configuration/model-drift hooks passed.
 
-- `config/reachability_baseline.json` — Register the new production connection module.
-- `docs/qa/880-stop-report.md` — Record the stop condition, partial changes, evidence, and incomplete gates.
-- `nexus.toml` — Add PostgreSQL identity and TimeZone settings; clear the legacy MEMNON URL.
-- `nexus/agents/lore/logon_utility.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `nexus/agents/lore/lore.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `nexus/agents/memnon/memnon.py` — Route connections through the contract and reject foreign schema targets.
-- `nexus/agents/memnon/test_idf_dictionary.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `nexus/agents/memnon/utils/continuous_temporal_search.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `nexus/agents/memnon/utils/db_access.py` — Route connections through the contract and reject foreign schema targets.
-- `nexus/agents/memnon/utils/db_schema.py` — Route connections through the contract and reject foreign schema targets.
-- `nexus/agents/memnon/utils/idf_dictionary.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `nexus/agents/memnon/utils/temporal_search.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `nexus/agents/orrery/retrograde_maturation.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `nexus/agents/orrery/tag_library.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `nexus/agents/orrery/worker.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `nexus/api/backstage_endpoints.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `nexus/api/db_pool.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `nexus/api/mock_openai.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `nexus/api/narrative.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `nexus/api/new_story_flow.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `nexus/api/orrery_dev_endpoints.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `nexus/api/presence_reconciliation.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `nexus/api/runtime_status.py` — Report credential-free pooled and URL client targets.
-- `nexus/api/save_slots.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `nexus/api/slot_utils.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `nexus/api/summary_triggers.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `nexus/cli.py` — Report credential-free pooled and URL client targets.
-- `nexus/config/settings_models.py` — Validate server fields and IANA session time zones.
-- `nexus/database.py` — Add target, URL, asyncpg, subprocess, and session-policy adapters; URL normalization remains incomplete.
-- `nexus/memory/correspondence.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/api_anthropic.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/api_openai.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/api_openrouter.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/apply_migration_to_slots.sh` — Delegate PostgreSQL CLI environment resolution to the shared module.
-- `scripts/apply_slot2_semantic_tags.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/assemble_context.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/backfill_routine_anchors.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/benchmark_experience_enqueue_fence.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/character_chunk_ranker.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/character_episode_ranker.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/checkpoint_state.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/create_vector_index.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/creative_character_expansion.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/estimate_time_delta.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/extract_scene_numbers.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/extract_season_episode.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/faction_former.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/faction_relationship_analyst.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/fix_chunks.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/fix_episode_ranges.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/freestyle_api_query.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/generate_character_summaries_experimental.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/generate_psychology copy.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/generate_psychology.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/gis_backfill.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/gis_hygiene.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/import_narratives.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/import_orrery_route_graph.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/import_setting.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/map_builder.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/map_builder_fail.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/map_builder_legacy.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/map_illustrator.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/measure_presence_boost.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/memnon_config.json` — Remove the legacy hardcoded database URL.
-- `scripts/migrate.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/migrate_chunk_character_references.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/migrate_provider_names.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/new_story_setup.py` — Route Python and PostgreSQL CLI connections through the contract.
-- `scripts/orrery_sample.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/process_characters.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/process_factions.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/propagate_schema.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/qa_shift/prose_metrics.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/query_narratives_simple.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/query_narratives_vector.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/regenerate_embeddings.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/register_drift_study.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/relationship_analyst.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/replay_state.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/report_retrieval_coverage.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/retrieval_query_bakeoff.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/run_golden_queries.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/seed_slot2_routine_anchors.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/simple_update.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/stamp_lore_pass_baseline.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/summarize_narrative.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/test_narrative_simple.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/test_narrative_turn.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/trim_oversized_contexts.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/update_raw_text.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/update_scene_numbers.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/validate_embeddings.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `scripts/vector_migration.py` — Replace independent connection/URL construction or credential-bearing diagnostics with the shared contract.
-- `tests/test_api/test_runtime_status.py` — Update existing expectations for the shared contract and status payload.
-- `tests/test_database_contract.py` — Add precedence, escaping, guard, timezone, and two-disposable-cluster tests.
-- `tests/test_memnon_db_access.py` — Update existing expectations for the shared contract and status payload.
+## File Manifest
 
-## Questions for the Coordinator
+REVIEW marks nonmechanical behavior or validation work. Other entries are resolver redirects. Several legacy scripts also have whitespace-only cleanup inherited from the resumed commit; use `git diff -w` to concentrate on behavior.
 
-1. Should a separate order repair local-provider wizard conversation storage, or may this proof use the repository's deterministic TEST provider at the model boundary while keeping every database path real?
-2. After that decision, resume the two URL-normalization fixes, re-run the full gates on one frozen snapshot, complete the gameplay/CLI proof, and review the broad script migration before authorizing PR publication.
+### Resolver and Pool
 
-Codex — GPT-6 Astra.
+- `nexus.toml` — REVIEW: add empty connection identity fields and UTC session policy; clear the legacy MEMNON URL.
+- `nexus/api/db_pool.py` — REVIEW: key pools by validated database, pass explicit overrides, and reject changed connection parameters until pools are closed.
+- `nexus/api/slot_utils.py` — REVIEW: replace literal defaults with optional overrides and add escaped password support through the resolver.
+- `nexus/config/settings_models.py` — REVIEW: validate PostgreSQL host, port, user, secret-account, and IANA session timezone configuration.
+- `nexus/database.py` — REVIEW: introduce precedence, escaped URL and driver adapters, credential-free targets, schema-target checks, and idempotent timezone normalization with typed timeouts.
+
+### URL-Based Clients and Direct Runtime Clients
+
+- `nexus/agents/lore/logon_utility.py` — Redirect connection or URL construction through the shared resolver.
+- `nexus/agents/lore/lore.py` — REVIEW: replace credential-bearing connection URL logging with a safe message.
+- `nexus/agents/memnon/test_idf_dictionary.py` — Redirect connection or URL construction through the shared resolver.
+- `nexus/agents/memnon/utils/continuous_temporal_search.py` — Redirect connection or URL construction through the shared resolver.
+- `nexus/agents/memnon/utils/idf_dictionary.py` — Redirect connection or URL construction through the shared resolver.
+- `nexus/agents/memnon/utils/temporal_search.py` — Redirect connection or URL construction through the shared resolver.
+- `nexus/agents/orrery/retrograde_maturation.py` — Redirect connection or URL construction through the shared resolver.
+- `nexus/agents/orrery/tag_library.py` — Redirect connection or URL construction through the shared resolver.
+- `nexus/agents/orrery/worker.py` — Redirect connection or URL construction through the shared resolver.
+- `nexus/api/backstage_endpoints.py` — Redirect connection or URL construction through the shared resolver.
+- `nexus/api/mock_openai.py` — Redirect connection or URL construction through the shared resolver.
+- `nexus/api/narrative.py` — Redirect connection or URL construction through the shared resolver.
+- `nexus/api/new_story_flow.py` — Redirect connection or URL construction through the shared resolver.
+- `nexus/api/orrery_dev_endpoints.py` — Redirect connection or URL construction through the shared resolver.
+- `nexus/api/presence_reconciliation.py` — Redirect connection or URL construction through the shared resolver.
+- `nexus/api/save_slots.py` — Redirect connection or URL construction through the shared resolver.
+- `nexus/api/summary_triggers.py` — Redirect connection or URL construction through the shared resolver.
+- `nexus/memory/correspondence.py` — Redirect connection or URL construction through the shared resolver.
+
+### MEMNON Initialization Guard
+
+- `nexus/agents/memnon/memnon.py` — REVIEW: verify schema target before engine creation and stop logging credential-bearing URLs.
+- `nexus/agents/memnon/utils/db_access.py` — REVIEW: reject foreign targets before index setup; use shared URL decoding at all direct connection sites.
+- `nexus/agents/memnon/utils/db_schema.py` — REVIEW: reject foreign targets before create_all and index initialization.
+
+### Status Reporting
+
+- `nexus/api/runtime_status.py` — REVIEW: expose separate redacted pooled and URL target identities in runtime status.
+- `nexus/cli.py` — REVIEW: render both database targets in nexus status.
+
+### Scripts
+
+- `scripts/api_anthropic.py` — REVIEW: retire DB_* and implicit NEXUS defaults in favor of the active slot contract; remove URL logging.
+- `scripts/api_openai.py` — REVIEW: retire DB_* and implicit NEXUS defaults in favor of the active slot contract; remove URL logging.
+- `scripts/api_openrouter.py` — REVIEW: retire DB_* and implicit NEXUS defaults in favor of the active slot contract; remove URL logging.
+- `scripts/apply_migration_to_slots.sh` — Delegate PostgreSQL CLI environment resolution to the shared module; not executed during verification.
+- `scripts/apply_slot2_semantic_tags.py` — Redirect connection or URL construction through the shared resolver.
+- `scripts/assemble_context.py` — Redirect connection or URL construction through the shared resolver.
+- `scripts/backfill_routine_anchors.py` — Redirect connection or URL construction through the shared resolver.
+- `scripts/benchmark_experience_enqueue_fence.py` — Redirect connection or URL construction through the shared resolver.
+- `scripts/character_chunk_ranker.py` — Redirect connection or URL construction through the shared resolver.
+- `scripts/character_episode_ranker.py` — Redirect connection or URL construction through the shared resolver.
+- `scripts/checkpoint_state.py` — Redirect connection or URL construction through the shared resolver.
+- `scripts/create_vector_index.py` — Redirect connection or URL construction through the shared resolver.
+- `scripts/creative_character_expansion.py` — Redirect connection or URL construction through the shared resolver.
+- `scripts/estimate_time_delta.py` — Redirect connection or URL construction through the shared resolver.
+- `scripts/extract_scene_numbers.py` — REVIEW: replace ad hoc legacy settings parsing and empty-config fallback with validated resolution.
+- `scripts/extract_season_episode.py` — REVIEW: retire duplicate DB_* resolution and implicit NEXUS default.
+- `scripts/faction_former.py` — Redirect connection or URL construction through the shared resolver.
+- `scripts/faction_relationship_analyst.py` — Redirect connection or URL construction through the shared resolver.
+- `scripts/fix_chunks.py` — Redirect connection or URL construction through the shared resolver.
+- `scripts/fix_episode_ranges.py` — Redirect connection or URL construction through the shared resolver.
+- `scripts/freestyle_api_query.py` — REVIEW: retire its duplicate DB_* resolver and implicit NEXUS default.
+- `scripts/generate_character_summaries_experimental.py` — Redirect connection or URL construction through the shared resolver.
+- `scripts/generate_psychology copy.py` — Redirect connection or URL construction through the shared resolver.
+- `scripts/generate_psychology.py` — Redirect connection or URL construction through the shared resolver.
+- `scripts/gis_backfill.py` — Redirect connection or URL construction through the shared resolver.
+- `scripts/gis_hygiene.py` — Redirect connection or URL construction through the shared resolver.
+- `scripts/import_narratives.py` — REVIEW: remove implicit NEXUS fallback and credential-bearing URL logging; normalize explicit URLs.
+- `scripts/import_orrery_route_graph.py` — Redirect connection or URL construction through the shared resolver.
+- `scripts/import_setting.py` — Redirect connection or URL construction through the shared resolver.
+- `scripts/install_pgvector.sh` — REVIEW: resolve PostgreSQL CLI targets through the selected worktree even after changing cwd; installer not executed.
+- `scripts/map_builder.py` — Redirect connection or URL construction through the shared resolver.
+- `scripts/map_builder.py.new` — Normalize the tracked legacy script variant through the URL adapter.
+- `scripts/map_builder_fail.py` — Redirect connection or URL construction through the shared resolver.
+- `scripts/map_builder_legacy.py` — Redirect connection or URL construction through the shared resolver.
+- `scripts/map_illustrator.py` — Redirect connection or URL construction through the shared resolver.
+- `scripts/measure_presence_boost.py` — Redirect connection or URL construction through the shared resolver.
+- `scripts/memnon_config.json` — Remove the obsolete literal database URL from legacy script settings.
+- `scripts/migrate.py` — Redirect connection or URL construction through the shared resolver.
+- `scripts/migrate_chunk_character_references.py` — Redirect connection or URL construction through the shared resolver.
+- `scripts/migrate_provider_names.py` — Redirect connection or URL construction through the shared resolver.
+- `scripts/new_story_setup.py` — REVIEW: propagate the resolved environment to every PostgreSQL child process as well as direct connections.
+- `scripts/orrery_sample.py` — Redirect connection or URL construction through the shared resolver.
+- `scripts/process_characters.py` — Redirect connection or URL construction through the shared resolver.
+- `scripts/process_factions.py` — Redirect connection or URL construction through the shared resolver.
+- `scripts/propagate_schema.py` — Redirect connection or URL construction through the shared resolver.
+- `scripts/qa_shift/prose_metrics.py` — Redirect connection or URL construction through the shared resolver.
+- `scripts/query_narratives_simple.py` — Redirect connection or URL construction through the shared resolver.
+- `scripts/query_narratives_vector.py` — REVIEW: remove implicit NEXUS fallback and credential-bearing URL logging; normalize explicit URLs.
+- `scripts/regenerate_embeddings.py` — Redirect connection or URL construction through the shared resolver.
+- `scripts/register_drift_study.py` — Redirect connection or URL construction through the shared resolver.
+- `scripts/relationship_analyst.py` — Redirect connection or URL construction through the shared resolver.
+- `scripts/replay_state.py` — Redirect connection or URL construction through the shared resolver.
+- `scripts/report_retrieval_coverage.py` — Redirect connection or URL construction through the shared resolver.
+- `scripts/retrieval_query_bakeoff.py` — Redirect connection or URL construction through the shared resolver.
+- `scripts/run_golden_queries.py` — Remove implicit NEXUS fallback so absent legacy URL settings use the active slot.
+- `scripts/seed_slot2_routine_anchors.py` — Redirect connection or URL construction through the shared resolver.
+- `scripts/simple_update.py` — Use the contract for the default CLI URL and normalize explicit URLs.
+- `scripts/stamp_lore_pass_baseline.py` — Redirect connection or URL construction through the shared resolver.
+- `scripts/summarize_narrative.py` — REVIEW: retire duplicate DB_* resolution and implicit NEXUS default; normalize worker URLs.
+- `scripts/test_narrative_simple.py` — Redirect connection or URL construction through the shared resolver.
+- `scripts/test_narrative_turn.py` — Redirect connection or URL construction through the shared resolver.
+- `scripts/trim_oversized_contexts.py` — Redirect connection or URL construction through the shared resolver.
+- `scripts/update_raw_text.py` — REVIEW: remove implicit NEXUS fallback and credential-bearing URL logging; normalize explicit URLs.
+- `scripts/update_scene_numbers.py` — Redirect connection or URL construction through the shared resolver.
+- `scripts/validate_embeddings.py` — REVIEW: retire duplicate DB_* resolution and postgres/postgres credential defaults.
+- `scripts/vector_migration.py` — Redirect connection or URL construction through the shared resolver.
+
+### Tests
+
+- `tests/test_api/test_runtime_status.py` — Update status expectations for resolver-derived target dictionaries.
+- `tests/test_connection_lifecycle.py` — REVIEW: real CLI/gateway TEST lifecycle, retrieval, completed background work, startup-to-shutdown foreign-server monitoring and cleanup.
+- `tests/test_database_contract.py` — REVIEW: real resolver precedence, secret-backend, URL escaping, timezone, foreign-target guards, and two-cluster driver coverage.
+- `tests/test_memnon_db_access.py` — Use resolver-built URLs in existing index tests so target guards see the configured runtime.
+
+### Documentation and Inventory
+
+- `config/reachability_baseline.json` — Register the new production connection module in the reachability inventory.
+- `docs/qa/880-connection-contract.md` — Record final verification, proof boundaries, and the grouped file manifest.
