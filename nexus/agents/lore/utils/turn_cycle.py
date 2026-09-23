@@ -1353,9 +1353,10 @@ class TurnCycleManager:
                 }
                 return []
 
-            present_entity_ids = load_bleed_anchor_entity_ids(
-                session,
-                anchor_chunk_id=anchor_chunk_id,
+            from nexus.presence.roster import read_roster
+
+            present_entity_ids = tuple(
+                sorted(read_roster(session, anchor_chunk_id).present_entity_ids)
             )
             digest = build_knowledge_digest_sync(
                 session,

@@ -13,10 +13,6 @@ from typing import Any, Dict, List, Mapping, Optional, cast
 
 from psycopg2.extras import RealDictCursor
 
-from nexus.agents.orrery.relationship_provenance import (
-    relationship_producer,
-    emit_relationship_milestones_sync,
-)
 from nexus.agents.logon.apex_schema import (
     ChunkMetadataUpdate,
     ChronologyUpdate,
@@ -32,9 +28,6 @@ from nexus.agents.orrery.experiences import (
     enqueue_scene_experience_job_sync,
     seed_character_experiences_sync,
 )
-from nexus.agents.orrery.retrograde_maturation import (
-    enqueue_declared_entity_maturations,
-)
 from nexus.agents.orrery.reconstruction import (
     capture_state_checkpoint_sync,
     interval_checkpoint_due,
@@ -42,22 +35,32 @@ from nexus.agents.orrery.reconstruction import (
     playable_narrative_ordinal_sync,
     set_commit_chunk_attribution_sync,
 )
+from nexus.agents.orrery.relationship_provenance import (
+    relationship_producer,
+    emit_relationship_milestones_sync,
+)
+from nexus.agents.orrery.retrograde_maturation import (
+    enqueue_declared_entity_maturations,
+)
 from nexus.agents.orrery.tag_writer import _row_value, apply_tag_bestowal
 from nexus.api.choice_handling import (
     normalize_choice_object,
     selected_text_from_choice_object,
 )
 from nexus.api.db_converters import chronology_to_db_values
-from nexus.api.summary_triggers import (
-    SummaryTask,
-    plan_summary_tasks,
-    schedule_summary_generation,
-)
 from nexus.api.lore_adapter import compute_raw_text, split_staged_orrery_payload
 from nexus.api.presence_reconciliation import (
     read_character_roster_from_connection,
     reconcile_declared_character_mentions,
     reconcile_public_prose_mentions_by_character_ids,
+)
+from nexus.api.summary_triggers import (
+    SummaryTask,
+    plan_summary_tasks,
+    schedule_summary_generation,
+)
+from nexus.memory.context_state import (
+    bind_pass2_baseline,
 )
 from nexus.memory.correspondence import (
     correspondence_settings,
@@ -66,9 +69,14 @@ from nexus.memory.correspondence import (
     persist_staged_correspondence,
     plan_correspondence_compaction,
 )
-from nexus.memory.context_state import (
-    bind_pass2_baseline,
+from nexus.presence.cues import promote_in_scene_characters
+from nexus.presence.roster import (
+    read_roster,
+    roster_from_resolved_references,
+    write_roster,
 )
+from nexus.presence.roster import resolve_reference
+
 
 logger = logging.getLogger("nexus.api.commit_handler_sync")
 
@@ -149,35 +157,18 @@ def resolve_place_references_sync(
 ) -> List[dict]:
     """Synchronous version of resolve_place_references"""
     resolved_refs = []
-
     for ref in place_references:
-        place_id = None
-
-        with conn.cursor() as cur:
-            if ref.place_id:
-                place_id = ref.place_id
-            elif ref.place_name:
-                cur.execute("SELECT id FROM places WHERE name = %s", (ref.place_name,))
-                result = cur.fetchone()
-                if result:
-                    place_id = result[0]
-                else:
-                    logger.warning(
-                        "Skipping unresolved place reference %r; provide a canonical "
-                        "place_id or place_name to persist place_chunk_references",
-                        ref.place_name,
-                    )
-                    continue
-
-        # Build junction table entry
+        entry = resolve_reference(
+            conn, kind="place", id=ref.place_id, name=ref.place_name
+        )
         resolved_refs.append(
             {
-                "place_id": place_id,
+                "place_id": entry.id,
+                "name": entry.name,
                 "reference_type": ref.reference_type.value,
                 "evidence": ref.evidence,
             }
         )
-
     return resolved_refs
 
 
@@ -186,34 +177,17 @@ def resolve_character_references_sync(
 ) -> List[dict]:
     """Synchronous version of resolve_character_references"""
     resolved_refs = []
-
     for ref in character_references:
-        char_id = None
-
-        with conn.cursor() as cur:
-            if ref.character_id:
-                char_id = ref.character_id
-            elif ref.character_name:
-                cur.execute(
-                    "SELECT id FROM characters WHERE name = %s", (ref.character_name,)
-                )
-                result = cur.fetchone()
-                if result:
-                    char_id = result[0]
-                else:
-                    logger.warning(
-                        "Skipping unresolved character reference %r; provide a "
-                        "canonical character_id or character_name to persist "
-                        "chunk_character_references",
-                        ref.character_name,
-                    )
-                    continue
-
-        # Build junction table entry
-        resolved_refs.append(
-            {"character_id": char_id, "reference": ref.reference_type.value}
+        entry = resolve_reference(
+            conn, kind="character", id=ref.character_id, name=ref.character_name
         )
-
+        resolved_refs.append(
+            {
+                "character_id": entry.id,
+                "name": entry.name,
+                "reference": ref.reference_type.value,
+            }
+        )
     return resolved_refs
 
 
@@ -222,32 +196,11 @@ def resolve_faction_references_sync(
 ) -> List[dict]:
     """Synchronous version of resolve_faction_references"""
     resolved_refs = []
-
     for ref in faction_references:
-        faction_id = None
-
-        with conn.cursor() as cur:
-            if ref.faction_id:
-                faction_id = ref.faction_id
-            elif ref.faction_name:
-                cur.execute(
-                    "SELECT id FROM factions WHERE name = %s", (ref.faction_name,)
-                )
-                result = cur.fetchone()
-                if result:
-                    faction_id = result[0]
-                else:
-                    logger.warning(
-                        "Skipping unresolved faction reference %r; provide a "
-                        "canonical faction_id or faction_name to persist "
-                        "chunk_faction_references",
-                        ref.faction_name,
-                    )
-                    continue
-
-        # Build junction table entry
-        resolved_refs.append({"faction_id": faction_id})
-
+        entry = resolve_reference(
+            conn, kind="faction", id=ref.faction_id, name=ref.faction_name
+        )
+        resolved_refs.append({"faction_id": entry.id, "name": entry.name})
     return resolved_refs
 
 
@@ -607,7 +560,11 @@ def commit_incubator_to_database_sync(
                         "Declared-character reconciliation returned no character id"
                     )
                 character_refs.append(
-                    {"character_id": mention.id, "reference": "mentioned"}
+                    {
+                        "character_id": mention.id,
+                        "name": mention.name,
+                        "reference": "mentioned",
+                    }
                 )
             roster_mentions = reconcile_public_prose_mentions_by_character_ids(
                 [enacted_text],
@@ -622,7 +579,11 @@ def commit_incubator_to_database_sync(
                         "Roster-character reconciliation returned no character id"
                     )
                 character_refs.append(
-                    {"character_id": mention.id, "reference": "mentioned"}
+                    {
+                        "character_id": mention.id,
+                        "name": mention.name,
+                        "reference": "mentioned",
+                    }
                 )
             place_refs = resolve_place_references_sync(ref_entities.places, conn)
             faction_refs = resolve_faction_references_sync(ref_entities.factions, conn)
@@ -632,73 +593,24 @@ def commit_incubator_to_database_sync(
                     StateUpdates(**incubator["entity_updates"]),
                 )
 
-            # Step 8: Insert junction table references
-            # Insert place references
-            if place_refs:
-                with conn.cursor() as cur:
-                    for ref in place_refs:
-                        cur.execute(
-                            """
-                            INSERT INTO place_chunk_references (
-                                place_id, chunk_id, reference_type, evidence
-                            )
-                            VALUES (%s, %s, %s, %s)
-                        """,
-                            (
-                                ref["place_id"],
-                                chunk_id,
-                                ref["reference_type"],
-                                ref.get("evidence"),
-                            ),
-                        )
-                    logger.info(
-                        "Inserted %s place references for chunk %s",
-                        len(place_refs),
-                        chunk_id,
-                    )
-
-            # Insert character references
-            if character_refs:
-                with conn.cursor() as cur:
-                    for ref in character_refs:
-                        cur.execute(
-                            """
-                            INSERT INTO chunk_character_references (
-                                chunk_id, character_id, reference
-                            )
-                            VALUES (%s, %s, %s)
-                            ON CONFLICT (chunk_id, character_id) DO UPDATE
-                            SET reference = 'present'
-                            WHERE 'present' IN (
-                                chunk_character_references.reference,
-                                EXCLUDED.reference
-                            )
-                        """,
-                            (chunk_id, ref["character_id"], ref["reference"]),
-                        )
-                    logger.info(
-                        "Inserted %s character references for chunk %s",
-                        len(character_refs),
-                        chunk_id,
-                    )
-
-            # Insert faction references
-            if faction_refs:
-                with conn.cursor() as cur:
-                    for ref in faction_refs:
-                        cur.execute(
-                            """
-                            INSERT INTO chunk_faction_references (chunk_id, faction_id)
-                            VALUES (%s, %s)
-                            ON CONFLICT (chunk_id, faction_id) DO NOTHING
-                        """,
-                            (chunk_id, ref["faction_id"]),
-                        )
-                    logger.info(
-                        "Inserted %s faction references for chunk %s",
-                        len(faction_refs),
-                        chunk_id,
-                    )
+            # Step 8: Reconcile the physical scene and persist its named views.
+            roster = roster_from_resolved_references(
+                character_refs, place_refs, faction_refs
+            )
+            parent_roster = (
+                read_roster(conn, incubator["parent_chunk_id"])
+                if incubator["parent_chunk_id"]
+                else None
+            )
+            roster = promote_in_scene_characters(
+                roster,
+                prose=raw_text,
+                declarations=declarations,
+                character_rows=roster_rows.characters,
+                alias_rows=roster_rows.aliases,
+                parent=parent_roster,
+            )
+            write_roster(conn, chunk_id, roster)
 
             # Step 9: Update entity states (if provided)
             if state_updates is not None:

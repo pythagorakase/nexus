@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "Register the shared production clock-face formatter and read-only world_clock QA operator for issue 778.",
+  "reason": "Register the production presence owner and deterministic scene cues for #798.",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -251,6 +251,9 @@
     "nexus/memory/query_memory.py",
     "nexus/memory/retrieval_coverage.py",
     "nexus/memory/user_confirmation.py",
+    "nexus/presence/__init__.py",
+    "nexus/presence/cues.py",
+    "nexus/presence/roster.py",
     "nexus/runtime/__init__.py",
     "nexus/runtime/contract.py",
     "nexus/runtime/remote_auth.py",

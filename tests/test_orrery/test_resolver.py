@@ -6,9 +6,9 @@ from typing import Any
 import pytest
 
 import nexus.agents.orrery.resolver as resolver_module
-from nexus.agents.orrery.audit import explain_dry_run
 from nexus.agents.lore.utils.turn_context import TurnContext
 from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
+from nexus.agents.orrery.audit import explain_dry_run
 from nexus.agents.orrery.resolver import (
     LOCATION_CLASS_TAG_CATEGORIES,
     OrreryResolutionDraft,
@@ -327,9 +327,30 @@ class FakeSession:
             assert "ca.created_at <= (SELECT created_at FROM anchor)" in sql
             assert "anchor_chunk_id" in _params
             return FakeResult(self.epistemics_awareness_rows)
-        if "/* orrery:actor_bindings_chunk_refs */" in sql:
-            assert "reference_type IS DISTINCT FROM 'present'" in sql
-            return FakeResult(self.chunk_ref_actor_rows)
+        if "/* presence:window_chunks */" in sql:
+            return FakeResult([{"id": _params["anchor_chunk_id"]}])
+        if "/* presence:roster */" in sql:
+            chunk_id = _params["chunk_ids"][0]
+            rows = [{"chunk_id": chunk_id, "kind": None}]
+            for reference, entries in (
+                ("present", self.present_actor_rows),
+                ("mentioned", self.chunk_ref_actor_rows),
+            ):
+                rows.extend(
+                    {
+                        "chunk_id": chunk_id,
+                        "kind": "character",
+                        "id": entry["entity_id"],
+                        "name": str(entry["entity_id"]),
+                        "entity_id": entry["entity_id"],
+                        "is_active": True,
+                        "summary": None,
+                        "evidence": None,
+                        "reference": reference,
+                    }
+                    for entry in entries
+                )
+            return FakeResult(rows)
         if "/* orrery:actor_bindings_events */" in sql:
             assert "(world_layer IS NULL OR world_layer = 'primary')" in sql
             assert "superseded_by_event_id IS NULL" in sql
@@ -3191,7 +3212,7 @@ def test_resolve_dry_run_reuses_composition_sources_once_per_tick() -> None:
         marker = f"/* orrery:{tag} */"
         return sum(marker in sql for sql in session.executed_sql)
 
-    assert query_count("present_actor_ids_at_anchor") == 1
+    assert sum("/* presence:roster */" in sql for sql in session.executed_sql) == 2
     assert query_count("actor_target_bindings_character_relationships") == 1
     assert query_count("actor_target_bindings_social_contacts") == 1
     assert query_count("actor_target_bindings_hostile_edges") == 1

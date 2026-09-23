@@ -21,10 +21,10 @@ from nexus.api.commit_handler_sync import (
     commit_incubator_to_database_sync,
     resolve_character_references_sync,
 )
-import nexus.api.commit_handler_sync as commit_handler_sync
 from nexus.api.lore_adapter import response_to_incubator
 from nexus.api.presence_reconciliation import CharacterRosterRows
 from nexus.memory.manager import empty_pass2_baseline
+import nexus.api.commit_handler_sync as commit_handler_sync
 
 
 TEST_BASELINE = empty_pass2_baseline({})
@@ -32,6 +32,11 @@ TEST_BASELINE_PAYLOAD = TEST_BASELINE.model_dump(mode="json")
 
 
 class MissingLookupCursor:
+    description = []
+
+    def fetchall(self):
+        return []
+
     """Cursor stand-in whose name lookups find no rows."""
 
     def __enter__(self):
@@ -88,6 +93,7 @@ class CommitCursor:
         self.result = None
         self.rows = []
         self.rowcount = 0
+        self.description = []
 
     def __enter__(self):
         return self
@@ -100,6 +106,69 @@ class CommitCursor:
         self.connection.statements.append((normalized, params))
         self.rows = []
         self.rowcount = 0
+        if "SELECT item.id, item.name, item.entity_id FROM" in normalized:
+            table = normalized.split(" FROM ")[1].split()[0]
+            identities = getattr(self.connection, table)
+            self.rows = [
+                {"id": id, "name": name, "entity_id": id + 1000}
+                for name, id in identities.items()
+                if (
+                    id == params.get("id")
+                    if "id" in params
+                    else name.casefold() == str(params.get("name")).casefold()
+                )
+            ]
+            self.result = None
+            return
+        if "/* presence:roster */" in normalized:
+            self.rows = [
+                {"chunk_id": chunk_id, "kind": None} for chunk_id in params["chunk_ids"]
+            ]
+            for chunk_id, id, reference in self.connection.character_junctions:
+                if chunk_id in params["chunk_ids"]:
+                    name = next(
+                        name
+                        for name, value in self.connection.characters.items()
+                        if value == id
+                    )
+                    self.rows.append(
+                        {
+                            "chunk_id": chunk_id,
+                            "kind": "character",
+                            "id": id,
+                            "name": name,
+                            "entity_id": id + 1000,
+                            "is_active": True,
+                            "reference": reference,
+                            "evidence": None,
+                            "summary": None,
+                        }
+                    )
+            for id, chunk_id, reference, evidence in self.connection.place_junctions:
+                if chunk_id in params["chunk_ids"]:
+                    name = next(
+                        name
+                        for name, value in self.connection.places.items()
+                        if value == id
+                    )
+                    self.rows.append(
+                        {
+                            "chunk_id": chunk_id,
+                            "kind": "place",
+                            "id": id,
+                            "name": name,
+                            "entity_id": id + 2000,
+                            "is_active": True,
+                            "reference": reference,
+                            "evidence": evidence,
+                            "summary": None,
+                        }
+                    )
+            return
+        if "/* orrery:canonical_player_identity */" in normalized:
+            id = next(iter(self.connection.characters.values()))
+            self.result = (id, id, id + 1000)
+            return
         if "current_setting('nexus." in normalized:
             self.result = ("",)
         elif normalized.startswith("DELETE FROM incubator"):
@@ -153,10 +222,19 @@ class CommitCursor:
         elif "INSERT INTO narrative_chunks" in normalized:
             self.result = (self.connection.chunk_id,)
         elif "INSERT INTO place_chunk_references" in normalized:
-            self.connection.place_junctions.append(params)
+            self.connection.place_junctions.append(
+                (
+                    params["id"],
+                    params["chunk_id"],
+                    params["reference"],
+                    params["evidence"],
+                )
+            )
             self.result = None
         elif "INSERT INTO chunk_character_references" in normalized:
-            self.connection.character_junctions.append(params)
+            self.connection.character_junctions.append(
+                (params["chunk_id"], params["id"], params["reference"])
+            )
             self.result = None
         elif "/* orrery:bleed_uptake_candidates */" in normalized:
             self.rows = [
@@ -273,20 +351,18 @@ def _empty_orrery_result():
     )
 
 
-def test_sync_unresolved_character_reference_is_skipped(caplog):
-    """Unresolved group labels should not block chunk commit."""
-    refs = resolve_character_references_sync(
-        [
-            CharacterReference(
-                character_name="Rectification officers",
-                reference_type=ReferenceType.PRESENT,
-            )
-        ],
-        MissingLookupConnection(),
-    )
-
-    assert refs == []
-    assert "Skipping unresolved character reference" in caplog.text
+def test_sync_unresolved_character_reference_raises():
+    """Unresolved physical identities cannot disappear silently at commit."""
+    with pytest.raises(ValueError, match="Unresolved character"):
+        resolve_character_references_sync(
+            [
+                CharacterReference(
+                    character_name="Rectification officers",
+                    reference_type=ReferenceType.PRESENT,
+                )
+            ],
+            MissingLookupConnection(),
+        )
 
 
 def test_sync_commit_links_same_turn_character_declaration(monkeypatch):
@@ -759,41 +835,12 @@ def test_bootstrap_commit_seeds_setting_for_next_presence_baseline(
     chunk_id = commit_incubator_to_database_sync(conn, "bootstrap-session", slot=5)
     assert conn.place_junctions == [(81, chunk_id, "setting", None)]
 
-    class BaselineCursor:
-        def __init__(self):
-            self.rows = []
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *_args):
-            return False
-
-        def execute(self, sql, params):
-            normalized = " ".join(sql.split())
-            assert params == (chunk_id,)
-            if "FROM chunk_character_references" in normalized:
-                self.rows = [(71, "Iria Vale")]
-            elif "FROM place_chunk_references" in normalized:
-                self.rows = [
-                    (place_id, "Fixture Station")
-                    for place_id, recorded_chunk_id, reference_type, _evidence in (
-                        conn.place_junctions
-                    )
-                    if recorded_chunk_id == chunk_id and reference_type == "setting"
-                ]
-            else:
-                raise AssertionError(f"Unexpected baseline SQL: {normalized}")
-
-        def fetchall(self):
-            return self.rows
-
     class BaselineConnection:
         def set_session(self, **_kwargs):
             return None
 
         def cursor(self):
-            return BaselineCursor()
+            return CommitCursor(conn)
 
         def close(self):
             return None

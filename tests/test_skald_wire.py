@@ -859,7 +859,7 @@ def test_scene_reset_replaces_roster_and_setting() -> None:
     )
 
 
-def test_enter_present_and_exit_absent_are_idempotent() -> None:
+def test_exit_absent_raises_loudly() -> None:
     wire = SkaldTurnWire.model_validate(
         {
             **SPARSE_WIRE_PAYLOAD,
@@ -869,11 +869,8 @@ def test_enter_present_and_exit_absent_are_idempotent() -> None:
             },
         }
     )
-    hydrated = hydrate_skald_turn(wire, presence_baseline=BASELINE)
-    assert [
-        (reference.character_id, reference.character_name)
-        for reference in hydrated.referenced_entities.characters
-    ] == [(7, "Brena Tideloft"), (8, "Odile")]
+    with pytest.raises(ValueError, match="Cannot exit non-present"):
+        hydrate_skald_turn(wire, presence_baseline=BASELINE)
 
 
 def test_presence_without_baseline_raises_loudly() -> None:
@@ -1052,30 +1049,21 @@ def test_presence_normalizes_same_name_in_enter_and_exit_casefolded(
     ] == ["presence out-and-back normalized to mention: name='nika rel'"]
 
 
-def test_presence_rejects_casefold_name_with_conflicting_ids(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
+def test_presence_distinct_ids_with_same_name_remain_distinct() -> None:
     baseline = PresenceBaseline(
-        present=[CharacterRef(kind="character", name="NIKA REL", id=32)]
+        present=[CharacterRef(kind="character", name="Nika Rel", id=32)]
     )
-    presence_payload = {
-        "enter": [{"kind": "character", "name": "Nika Rel", "id": 31}],
-        "exit": [{"kind": "character", "name": "NIKA REL", "id": 32}],
-    }
-    payload_before_validation = json.dumps(presence_payload, sort_keys=True)
-
-    with pytest.raises(ValidationError) as exc_info:
-        wire = SkaldTurnWire.model_validate(
-            {**SPARSE_WIRE_PAYLOAD, "presence": presence_payload}
-        )
-        hydrate_skald_turn(wire, presence_baseline=baseline)
-
-    assert (
-        "presence cannot enter and exit the same character: "
-        "nika rel (enter id=31, exit id=32)" in str(exc_info.value)
+    wire = SkaldTurnWire.model_validate(
+        {
+            **SPARSE_WIRE_PAYLOAD,
+            "presence": {
+                "enter": [{"kind": "character", "name": "Nika Rel", "id": 31}],
+                "exit": [{"kind": "character", "name": "NIKA REL", "id": 32}],
+            },
+        }
     )
-    assert json.dumps(presence_payload, sort_keys=True) == payload_before_validation
-    assert "presence out-and-back normalized to mention:" not in caplog.text
+    hydrated = hydrate_skald_turn(wire, presence_baseline=baseline)
+    assert [ref.character_id for ref in hydrated.referenced_entities.characters] == [31]
 
 
 def test_presence_normalizes_casefold_name_with_same_id() -> None:
@@ -1091,34 +1079,15 @@ def test_presence_normalizes_casefold_name_with_same_id() -> None:
     assert presence.mentions == [PresenceRef(kind="character", name="Nika Rel", id=31)]
 
 
-def test_presence_mixed_compatible_and_conflicting_names_rejects_conflict(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    presence_payload = {
-        "enter": [
-            {"kind": "character", "name": "Nika Rel", "id": 31},
-            {"kind": "character", "name": "Mara Venn", "id": 41},
-        ],
-        "exit": [
-            {"kind": "character", "name": "NIKA REL", "id": 31},
-            {"kind": "character", "name": "MARA VENN", "id": 42},
-        ],
-    }
-
-    with pytest.raises(ValidationError) as exc_info:
-        PresenceDelta.model_validate(presence_payload)
-
-    error_message = exc_info.value.errors()[0]["msg"]
-    assert (
-        "presence cannot enter and exit the same character: "
-        "mara venn (enter id=41, exit id=42)" in error_message
+def test_presence_normalizes_same_id_with_different_names() -> None:
+    presence = PresenceDelta.model_validate(
+        {
+            "enter": [{"kind": "character", "name": "Nika Rel", "id": 31}],
+            "exit": [{"kind": "character", "name": "Nika", "id": 31}],
+        }
     )
-    assert "nika rel" not in error_message
-    assert [
-        record.getMessage()
-        for record in caplog.records
-        if "presence out-and-back normalized to mention:" in record.getMessage()
-    ] == ["presence out-and-back normalized to mention: name='Nika Rel'"]
+    assert presence.enter == presence.exit == []
+    assert [ref.id for ref in presence.mentions] == [31]
 
 
 def test_presence_out_and_back_normalization_is_idempotent(
@@ -1139,18 +1108,13 @@ def test_presence_out_and_back_normalization_is_idempotent(
     assert "presence out-and-back normalized to mention:" not in caplog.text
 
 
-def test_presence_out_and_back_deduplicates_existing_character_mention() -> None:
-    existing_mention = PresenceRef(kind="character", name="NIKA REL", id=31)
-
-    presence = PresenceDelta(
-        enter=[CharacterRef(kind="character", name="Nika Rel")],
-        exit=[CharacterRef(kind="character", name="nika rel", id=32)],
-        mentions=[existing_mention],
-    )
-
-    assert presence.enter == []
-    assert presence.exit == []
-    assert presence.mentions == [existing_mention]
+def test_presence_idless_crossing_with_conflicting_ids_raises() -> None:
+    with pytest.raises(ValueError, match="Ambiguous character name"):
+        PresenceDelta(
+            enter=[CharacterRef(kind="character", name="Nika Rel")],
+            exit=[CharacterRef(kind="character", name="nika rel", id=32)],
+            mentions=[PresenceRef(kind="character", name="NIKA REL", id=31)],
+        )
 
 
 def test_non_overlapping_presence_payload_passes_through_byte_identical(
@@ -1217,7 +1181,7 @@ def test_hydration_out_and_back_absent_from_baseline_is_mentioned() -> None:
     ]
 
 
-def test_hydration_out_and_back_prior_present_yields_both_references() -> None:
+def test_hydration_out_and_back_prior_present_keeps_one_present_reference() -> None:
     wire = SkaldTurnWire.model_validate(
         {
             **SPARSE_WIRE_PAYLOAD,
@@ -1238,11 +1202,6 @@ def test_hydration_out_and_back_prior_present_yields_both_references() -> None:
             character_id=31,
             character_name="Nika Rel",
             reference_type=ReferenceType.PRESENT,
-        ),
-        CharacterReference(
-            character_id=31,
-            character_name="Nika Rel",
-            reference_type=ReferenceType.MENTIONED,
         ),
     ]
 

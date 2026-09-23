@@ -432,28 +432,24 @@ def test_live_boundary_reservation_and_configured_starvation(
     ]
 
 
-def test_live_faction_anchor_and_empty_anchor_fallback(
+def test_live_faction_reference_is_not_a_physical_anchor(
     bleed_proximity_db: dict[str, Any],
 ) -> None:
-    """Hunting reaches a faction anchor; empty anchors preserve old bytes."""
+    """Mentioned factions do not provide physical-scene Bleed proximity."""
 
     db = bleed_proximity_db
     faction_ids = load_bleed_anchor_entity_ids(
         db["session"], anchor_chunk_id=db["chunks"]["faction"]
     )
-    assert faction_ids == (db["faction_entity_id"],)
+    assert faction_ids == ()
     faction_result = _select(
         db,
         anchor_chunk="faction",
         anchor_entity_ids=faction_ids,
         max_candidates=2,
     )
-    faction_candidate = next(
-        candidate
-        for candidate in faction_result.selected
-        if candidate.resolution_id == db["candidates"]["faction_near"]
-    )
-    assert faction_candidate.distance == 1
+    assert faction_result.selected
+    assert all(candidate.distance is None for candidate in faction_result.selected)
 
     assert (
         load_bleed_anchor_entity_ids(

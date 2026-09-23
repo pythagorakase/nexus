@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Dict, List, Literal, Optional, Sequence, TypeVar
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
@@ -161,64 +161,39 @@ class PresenceDelta(BaseModel):
         except ValidationError:
             return data
 
-        overlap = {reference.name.casefold() for reference in enter} & {
-            reference.name.casefold() for reference in exit_references
-        }
+        from nexus.presence.roster import identity_keys
+
+        keys = identity_keys([*enter, *exit_references, *mentions])
+        enter_keys = keys[: len(enter)]
+        exit_keys = keys[len(enter) : len(enter) + len(exit_references)]
+        mention_keys = set(keys[len(enter) + len(exit_references) :])
+        overlap = set(enter_keys) & set(exit_keys)
         if not overlap:
             return data
-
-        removed = [*enter, *exit_references]
-        matching_by_name = {
-            name_key: [
-                reference
-                for reference in removed
-                if reference.name.casefold() == name_key
-            ]
-            for name_key in overlap
-        }
-        normalizable_overlap = {
-            name_key
-            for name_key, matching in matching_by_name.items()
-            if len({reference.id for reference in matching if reference.id is not None})
-            <= 1
-        }
-        if not normalizable_overlap:
-            return data
-
         normalized = dict(data)
         normalized["enter"] = [
-            reference
-            for reference, parsed in zip(enter_data, enter)
-            if parsed.name.casefold() not in normalizable_overlap
+            ref for ref, key in zip(enter_data, enter_keys) if key not in overlap
         ]
         normalized["exit"] = [
-            reference
-            for reference, parsed in zip(exit_data, exit_references)
-            if parsed.name.casefold() not in normalizable_overlap
+            ref for ref, key in zip(exit_data, exit_keys) if key not in overlap
         ]
         normalized_mentions = list(mentions_data)
-        mention_keys = {
-            (reference.kind, reference.name.casefold()) for reference in mentions
-        }
-        for name_key in sorted(normalizable_overlap):
-            matching = matching_by_name[name_key]
-            name = matching[0].name
-            reference_id = next(
-                (reference.id for reference in matching if reference.id is not None),
-                None,
-            )
-            mention_key: tuple[Literal["character", "place", "faction"], str] = (
-                "character",
-                name_key,
-            )
-            if mention_key not in mention_keys:
+        for key in dict.fromkeys(enter_keys):
+            if key not in overlap:
+                continue
+            ref = enter[enter_keys.index(key)]
+            if key not in mention_keys:
                 normalized_mentions.append(
-                    {"kind": "character", "name": name, "id": reference_id}
+                    {
+                        "kind": "character",
+                        "name": ref.name,
+                        "id": key[1] if isinstance(key[1], int) else None,
+                    }
                 )
-                mention_keys.add(mention_key)
+                mention_keys.add(key)
             logger.warning(
                 "presence out-and-back normalized to mention: name=%s",
-                quote_log_value(name),
+                quote_log_value(ref.name),
             )
         normalized["mentions"] = normalized_mentions
         return normalized
@@ -229,53 +204,11 @@ class PresenceDelta(BaseModel):
 
         if self.scene_reset is not None and (self.enter or self.exit):
             raise ValueError("scene_reset cannot be combined with enter or exit")
-        enter_names = {reference.name.casefold() for reference in self.enter}
-        exit_names = {reference.name.casefold() for reference in self.exit}
-        overlap = enter_names & exit_names
-        if overlap:
-            conflicts: List[str] = []
-            for name in sorted(overlap):
-                enter_ids = sorted(
-                    {
-                        reference.id
-                        for reference in self.enter
-                        if reference.name.casefold() == name
-                        and reference.id is not None
-                    }
-                )
-                exit_ids = sorted(
-                    {
-                        reference.id
-                        for reference in self.exit
-                        if reference.name.casefold() == name
-                        and reference.id is not None
-                    }
-                )
-                if len(set(enter_ids) | set(exit_ids)) < 2:
-                    continue
-                id_details: List[str] = []
-                if enter_ids:
-                    enter_label = "id" if len(enter_ids) == 1 else "ids"
-                    id_details.append(
-                        f"enter {enter_label}="
-                        + ", ".join(str(reference_id) for reference_id in enter_ids)
-                    )
-                if exit_ids:
-                    exit_label = "id" if len(exit_ids) == 1 else "ids"
-                    id_details.append(
-                        f"exit {exit_label}="
-                        + ", ".join(str(reference_id) for reference_id in exit_ids)
-                    )
-                conflicts.append(f"{name} ({', '.join(id_details)})")
-            if conflicts:
-                raise ValueError(
-                    "presence cannot enter and exit the same character: "
-                    + "; ".join(conflicts)
-                )
-            raise ValueError(
-                "presence cannot enter and exit the same character: "
-                + ", ".join(sorted(overlap))
-            )
+        from nexus.presence.roster import identity_keys
+
+        keys = identity_keys([*self.enter, *self.exit])
+        if set(keys[: len(self.enter)]) & set(keys[len(self.enter) :]):
+            raise ValueError("presence cannot enter and exit the same character")
         return self
 
     model_config = ConfigDict(extra="forbid")
@@ -289,6 +222,7 @@ class PresenceBaseline(BaseModel):
         description="Parent present-character roster.",
     )
     setting: Optional[PlaceRef] = None
+    player_character_id: Optional[int] = None
 
     model_config = ConfigDict(extra="forbid")
 
@@ -652,30 +586,6 @@ def _hydrate_scene(scene: Optional[SceneDelta]) -> ChunkMetadataUpdate:
     )
 
 
-def _presence_key(reference: PresenceRef) -> tuple[str, str]:
-    """Return the stable set key used by roster math."""
-
-    return reference.kind, reference.name.casefold()
-
-
-PresenceRefT = TypeVar("PresenceRefT", bound=PresenceRef)
-
-
-def _deduplicate_presence(
-    references: Sequence[PresenceRefT],
-) -> List[PresenceRefT]:
-    """Keep the first occurrence of each semantic entity reference."""
-
-    seen: set[tuple[str, str]] = set()
-    result: List[PresenceRefT] = []
-    for reference in references:
-        key = _presence_key(reference)
-        if key not in seen:
-            seen.add(key)
-            result.append(reference)
-    return result
-
-
 def _hydrate_references(
     presence: Optional[PresenceDelta],
     baseline: Optional[PresenceBaseline],
@@ -688,24 +598,13 @@ def _hydrate_references(
         return ReferencedEntities()
 
     assert baseline is not None
-    setting: Optional[PlaceRef]
-    if presence is not None and presence.scene_reset is not None:
-        roster = _deduplicate_presence(presence.scene_reset.present)
-        setting = presence.scene_reset.place
-    else:
-        enter = presence.enter if presence is not None else []
-        exit_references = presence.exit if presence is not None else []
-        roster = _deduplicate_presence([*baseline.present, *enter])
-        exit_keys = {_presence_key(reference) for reference in exit_references}
-        roster = [
-            reference
-            for reference in roster
-            if _presence_key(reference) not in exit_keys
-        ]
-        setting = baseline.setting
+    from nexus.presence.roster import apply_delta, roster_from_baseline
 
-    mentions = presence.mentions if presence is not None else []
-    transit = presence.transit if presence is not None else []
+    result = apply_delta(roster_from_baseline(baseline), presence)
+    roster = result.present.values()
+    setting = next(iter(result.setting.values()), None)
+    mentions = result.referenced.values()
+    transit = result.transitioning.values()
 
     characters = [
         CharacterReference(
@@ -879,8 +778,7 @@ def hydrate_skald_turn(
     """Hydrate one wire turn into the canonical application response.
 
     The mapper is pure: parent presence arrives as explicit input. Roster math
-    is set-idempotent, so re-entering a present character or exiting an absent
-    one is a tolerated no-op. A present ``presence`` block without a baseline
+    keys resolved identities by ID; exiting an absent character raises. A present ``presence`` block without a baseline
     raises instead of inventing an empty prior scene.
     """
 

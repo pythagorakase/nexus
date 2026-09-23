@@ -15,6 +15,8 @@ from sqlalchemy import text
 
 from nexus.agents.orrery.ambient import shared_ambient_pacing_allows
 from nexus.config import load_settings
+from nexus.presence.roster import read_roster
+
 
 logger = logging.getLogger("nexus.orrery.bleed")
 
@@ -156,33 +158,8 @@ def load_bleed_anchor_entity_ids(
     *,
     anchor_chunk_id: int,
 ) -> Tuple[int, ...]:
-    """Resolve character and faction references on one chunk to spine ids."""
-
-    rows = session.execute(
-        text(
-            """
-            /* orrery:bleed_anchor_entities */
-            SELECT entity_id
-            FROM (
-                SELECT c.entity_id
-                FROM chunk_character_references ccr
-                JOIN characters c ON c.id = ccr.character_id
-                WHERE ccr.chunk_id = :anchor_chunk_id
-
-                UNION
-
-                SELECT f.entity_id
-                FROM chunk_faction_references cfr
-                JOIN factions f ON f.id = cfr.faction_id
-                WHERE cfr.chunk_id = :anchor_chunk_id
-            ) anchor_entities
-            WHERE entity_id IS NOT NULL
-            ORDER BY entity_id
-            """
-        ),
-        {"anchor_chunk_id": anchor_chunk_id},
-    ).mappings()
-    return tuple(int(row["entity_id"]) for row in rows)
+    """Return the physical scene audience's active spine IDs."""
+    return tuple(sorted(read_roster(session, anchor_chunk_id).present_entity_ids))
 
 
 def assemble_bleed_proximity_graph(session_or_cur: Any) -> BleedProximityGraph:

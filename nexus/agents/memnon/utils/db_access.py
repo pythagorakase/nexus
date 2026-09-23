@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 from urllib.parse import urlparse
 
 from nexus.agents.orrery.reconstruction import playable_narrative_predicate
+from nexus.presence.roster import read_rosters
 
 from .embedding_tables import (
     PGVECTOR_ANN_INDEX_MAX_DIMENSIONS,
@@ -63,33 +64,11 @@ def _presence_boosts_for_narrative_results(
     if not narrative_chunk_ids or not present_character_ids:
         return {}
 
-    cursor.execute(
-        """
-        SELECT
-            nc.id,
-            CASE
-                WHEN present_reference.chunk_id IS NOT NULL THEN %s
-                ELSE 0.0
-            END AS presence_boost
-        FROM narrative_chunks AS nc
-        LEFT JOIN (
-            SELECT DISTINCT chunk_id
-            FROM chunk_character_references
-            WHERE character_id = ANY(%s)
-              AND reference::text = 'present'
-        ) AS present_reference ON present_reference.chunk_id = nc.id
-        WHERE nc.id = ANY(%s)
-        """,
-        (
-            presence_boost_factor,
-            list(present_character_ids),
-            narrative_chunk_ids,
-        ),
-    )
+    present_ids = set(present_character_ids)
     return {
-        str(chunk_id): float(boost)
-        for chunk_id, boost in cursor.fetchall()
-        if float(boost) > 0.0
+        str(chunk_id): presence_boost_factor
+        for chunk_id, roster in read_rosters(cursor, narrative_chunk_ids).items()
+        if roster.present_character_ids & present_ids
     }
 
 
@@ -929,7 +908,9 @@ def execute_multi_model_hybrid_search(
                         summary_query_value = idf_dict.for_corpus(
                             "retrograde_summary"
                         ).generate_weighted_query(
-                            query_text, connection=conn, corpus_kind="retrograde_summary"
+                            query_text,
+                            connection=conn,
+                            corpus_kind="retrograde_summary",
                         )
                         summary_query_kind = "to_tsquery"
                     summary_query_function = (

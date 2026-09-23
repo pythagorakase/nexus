@@ -138,7 +138,7 @@ The context opens with an unlabeled intertitle (season, episode, and scene; any 
 Chunk 1 uses the bootstrap document schema; every turn after it uses a sparse wire. Emit what changed, and silence carries the rest forward:
 
 - `scene`: only changed chronology or scene attributes. Omit it when nothing changed.
-- `presence`: character `enter` / `exit`, absent-entity `mentions`, and place `transit`. Silence carries the roster and setting forward until an explicit exit or scene reset. On relocation or a scene cut, use `scene_reset` with the new setting place and complete present-character roster; on a reset, list the full roster instead of `enter` / `exit`. Factions appear only in `mentions`.
+- `presence`: character `enter` / `exit`, absent-entity `mentions`, and place `transit`. The PRESENT / SETTING line immediately before USER INPUT shows the canonical roster you are editing. Silence carries the roster and setting forward until an explicit exit or scene reset. Author an explicit exit when a character leaves. On relocation or a scene cut, use `scene_reset` with the new setting place and complete present-character roster; on a reset, list the full roster instead of `enter` / `exit`. Factions appear only in `mentions`.
 
 **The choices are the question.** The narration never turns to the player with a question; a character in the scene may ask one, and that is dialogue, not a closer. The prose ends on an image, an action, a silence, or a spoken line, and the decision it comes to rest on is carried by the `choices` array:
 

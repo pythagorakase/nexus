@@ -11,24 +11,10 @@ from sqlalchemy import text
 from .context_state import is_retrograde_summary
 from .entity_detector import EntityMatch
 
+from nexus.presence.roster import read_rosters
+
 logger = logging.getLogger(__name__)
 
-
-_REFERENCE_QUERY = text(
-    """
-    SELECT 'character' AS kind, character_id AS entity_id, chunk_id
-    FROM chunk_character_references
-    WHERE chunk_id = ANY(CAST(:kept_chunk_ids AS bigint[]))
-    UNION ALL
-    SELECT 'place' AS kind, place_id AS entity_id, chunk_id
-    FROM place_chunk_references
-    WHERE chunk_id = ANY(CAST(:kept_chunk_ids AS bigint[]))
-    UNION ALL
-    SELECT 'faction' AS kind, faction_id AS entity_id, chunk_id
-    FROM chunk_faction_references
-    WHERE chunk_id = ANY(CAST(:kept_chunk_ids AS bigint[]))
-    """
-)
 
 _INSERT_QUERY = text(
     """
@@ -123,13 +109,9 @@ def _write_retrieval_coverage(
 
     references: Dict[tuple[str, int], set[int]] = {}
     if kept_chunk_ids:
-        rows = connection.execute(
-            _REFERENCE_QUERY,
-            {"kept_chunk_ids": kept_chunk_ids},
-        )
-        for row in rows:
-            key = (str(row.kind), int(row.entity_id))
-            references.setdefault(key, set()).add(int(row.chunk_id))
+        for chunk_id, roster in read_rosters(connection, kept_chunk_ids).items():
+            for kind, reference_id in roster.all_references:
+                references.setdefault((kind, int(reference_id)), set()).add(chunk_id)
 
     coverage: List[Dict[str, Any]] = []
     gap_entities: List[Dict[str, Any]] = []

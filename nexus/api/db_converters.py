@@ -22,6 +22,8 @@ from nexus.agents.orrery.geo import (
     resolve_zone_for_point_async,
     story_active_zone_async,
 )
+from nexus.presence.roster import resolve_reference_async
+
 
 logger = logging.getLogger("nexus.api.db_converters")
 
@@ -130,30 +132,18 @@ async def resolve_place_references(
         List of dicts ready for junction table insertion
     """
     resolved_refs = []
-
     for ref in place_references:
-        place_id = None
-
-        if ref.place_id:
-            place_id = ref.place_id
-        elif ref.place_name:
-            place_id = await lookup_place_by_name(conn, ref.place_name)
-            if not place_id:
-                logger.warning(
-                    "Skipping unresolved place reference %r; provide a canonical "
-                    "place_id or place_name to persist place_chunk_references",
-                    ref.place_name,
-                )
-                continue
-
+        entry = await resolve_reference_async(
+            conn, kind="place", id=ref.place_id, name=ref.place_name
+        )
         resolved_refs.append(
             {
-                "place_id": place_id,
+                "place_id": entry.id,
+                "name": entry.name,
                 "reference_type": ref.reference_type.value,
                 "evidence": ref.evidence,
             }
         )
-
     return resolved_refs
 
 
@@ -275,27 +265,17 @@ async def resolve_character_references(
     Resolve existing character references to IDs.
     """
     resolved_refs = []
-
     for ref in character_references:
-        char_id = None
-
-        if ref.character_id:
-            char_id = ref.character_id
-        elif ref.character_name:
-            char_id = await lookup_character_by_name(conn, ref.character_name)
-            if not char_id:
-                logger.warning(
-                    "Skipping unresolved character reference %r; provide a "
-                    "canonical character_id or character_name to persist "
-                    "chunk_character_references",
-                    ref.character_name,
-                )
-                continue
-
-        resolved_refs.append(
-            {"character_id": char_id, "reference": ref.reference_type.value}
+        entry = await resolve_reference_async(
+            conn, kind="character", id=ref.character_id, name=ref.character_name
         )
-
+        resolved_refs.append(
+            {
+                "character_id": entry.id,
+                "name": entry.name,
+                "reference": ref.reference_type.value,
+            }
+        )
     return resolved_refs
 
 
@@ -319,24 +299,11 @@ async def resolve_faction_references(
     Resolve existing faction references to IDs.
     """
     resolved_refs = []
-
     for ref in faction_references:
-        faction_id = None
-
-        if ref.faction_id:
-            faction_id = ref.faction_id
-        elif ref.faction_name:
-            faction_id = await lookup_faction_by_name(conn, ref.faction_name)
-            if not faction_id:
-                logger.warning(
-                    "Skipping unresolved faction reference %r; provide a canonical "
-                    "faction_id or faction_name to persist chunk_faction_references",
-                    ref.faction_name,
-                )
-                continue
-
-        resolved_refs.append({"faction_id": faction_id})
-
+        entry = await resolve_reference_async(
+            conn, kind="faction", id=ref.faction_id, name=ref.faction_name
+        )
+        resolved_refs.append({"faction_id": entry.id, "name": entry.name})
     return resolved_refs
 
 

@@ -33,6 +33,8 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from nexus.memory.entity_detector import EntityMatch, HighSpecificityEntityDetector
+from nexus.presence.roster import read_roster, read_roster_async
+
 
 logger = logging.getLogger("nexus.api.presence_audit")
 
@@ -112,21 +114,14 @@ def audit_chunk_presence(
     try:
         from psycopg2.extras import RealDictCursor
 
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT character_id FROM chunk_character_references "
-                "WHERE chunk_id = %s",
-                (chunk_id,),
-            )
-            accounted = {row[0] for row in cur.fetchall()}
-            if parent_chunk_id:
-                # Authored-exit accounting: see the module docstring.
-                cur.execute(
-                    "SELECT character_id FROM chunk_character_references "
-                    "WHERE chunk_id = %s AND reference::text = 'present'",
-                    (parent_chunk_id,),
-                )
-                accounted |= {row[0] for row in cur.fetchall()}
+        roster = read_roster(conn, chunk_id)
+        accounted = {
+            entry.id
+            for entry in roster.all_references.values()
+            if entry.kind == "character"
+        }
+        if parent_chunk_id:
+            accounted |= read_roster(conn, parent_chunk_id).present_character_ids
 
         active_detector = detector
         if active_detector is None:
@@ -161,20 +156,16 @@ async def audit_chunk_presence_async(
 ) -> List[Dict[str, Any]]:
     """Asyncpg twin of audit_chunk_presence for the async commit handler."""
     try:
-        accounted_rows = await conn.fetch(
-            "SELECT character_id FROM chunk_character_references "
-            "WHERE chunk_id = $1",
-            chunk_id,
-        )
-        accounted = {row["character_id"] for row in accounted_rows}
+        roster = await read_roster_async(conn, chunk_id)
+        accounted = {
+            entry.id
+            for entry in roster.all_references.values()
+            if entry.kind == "character"
+        }
         if parent_chunk_id:
-            # Authored-exit accounting: see the module docstring.
-            parent_rows = await conn.fetch(
-                "SELECT character_id FROM chunk_character_references "
-                "WHERE chunk_id = $1 AND reference::text = 'present'",
-                parent_chunk_id,
-            )
-            accounted |= {row["character_id"] for row in parent_rows}
+            accounted |= (
+                await read_roster_async(conn, parent_chunk_id)
+            ).present_character_ids
 
         character_rows = await conn.fetch(
             "SELECT id, name, summary FROM characters WHERE name IS NOT NULL"

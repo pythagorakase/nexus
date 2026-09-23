@@ -7,7 +7,7 @@ from dataclasses import dataclass
 import logging
 import os
 import re
-from typing import Any, Collection, List, Literal, Mapping, Optional, Sequence
+from typing import Any, Collection, List, Mapping, Optional, Sequence
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -19,10 +19,14 @@ from nexus.agents.logon.skald_wire import (
     PresenceDelta,
     PresenceRef,
     SkaldTurnWire,
-    _deduplicate_presence,
-    _presence_key,
 )
 from nexus.memory.entity_detector import EntityMatch, HighSpecificityEntityDetector
+from nexus.presence.roster import (
+    RosterEntry,
+    apply_delta,
+    character_identity_index,
+    roster_from_baseline,
+)
 from nexus.util.log_safety import quote_log_value
 
 
@@ -35,17 +39,6 @@ class CharacterRosterRows:
 
     characters: List[Any]
     aliases: List[Any]
-
-
-@dataclass(frozen=True)
-class _DeclaredNameCollision:
-    """One canonical or alias owner conflicting with a declared name."""
-
-    declared_id: int
-    declared_name: str
-    conflict_id: int
-    conflict_name: str
-    conflict_kind: Literal["canonical", "alias_of"]
 
 
 @dataclass(frozen=True)
@@ -66,7 +59,7 @@ class _LongestMatchCharacterDetector(HighSpecificityEntityDetector):
         if not text:
             return EntityMatch(characters=[], places=[], factions=[])
 
-        text_lower = text.lower()
+        text_lower = text.casefold()
         candidates: List[_CharacterMatchSpan] = []
         for lookup_key in self.character_lookup:
             pattern = rf"\b{re.escape(lookup_key)}\b"
@@ -107,6 +100,11 @@ class _LongestMatchCharacterDetector(HighSpecificityEntityDetector):
         for index, candidate in enumerate(candidates):
             if index not in accepted_indices:
                 continue
+            ambiguous = getattr(self, "ambiguous_names", {})
+            if candidate.lookup_key.casefold() in ambiguous:
+                raise ValueError(
+                    f"Ambiguous character name {candidate.lookup_key!r}: {sorted(ambiguous[candidate.lookup_key.casefold()])}"
+                )
             character = self.character_lookup[candidate.lookup_key]
             found_characters[int(character["id"])] = character
 
@@ -124,22 +122,22 @@ def build_character_presence_detector(
     """Build the shared longest-match character detector for presence paths."""
 
     detector = _LongestMatchCharacterDetector(db_connection=None)
-    characters: dict[int, Any] = {}
-    for row in character_rows:
-        character_id = int(row["id"])
-        record = {
-            "id": character_id,
+    index = character_identity_index(character_rows, alias_rows)
+    records = {
+        int(row["id"]): {
+            "id": int(row["id"]),
             "name": row["name"],
             "summary": (row["summary"] or "")[:100] or None,
         }
-        characters[character_id] = record
-        detector.character_lookup[str(record["name"]).lower()] = record
-    for row in alias_rows:
-        character_id = int(row["character_id"])
-        if character_id in characters:
-            detector.character_lookup[str(row["alias"]).lower()] = characters[
-                character_id
-            ]
+        for row in character_rows
+    }
+    detector.ambiguous_names = {}
+    for (_, name), keys in index.by_name.items():
+        if len(keys) > 1:
+            detector.ambiguous_names[name] = {int(key[1]) for key in keys}
+            detector.character_lookup[name] = None
+        else:
+            detector.character_lookup[name] = records[int(next(iter(keys))[1])]
     return detector
 
 
@@ -204,48 +202,14 @@ def _matches_character(character: Any, reference: PresenceRef) -> bool:
     return str(character["name"]) == reference.name
 
 
-def _ambiguous_character_keys(
-    roster_rows: CharacterRosterRows,
-) -> dict[str, set[int]]:
-    """Return casefolded lookup keys that identify multiple characters."""
-
-    candidate_ids: dict[str, set[int]] = {}
-    known_character_ids: set[int] = set()
-    for character in roster_rows.characters:
-        character_id = int(character["id"])
-        known_character_ids.add(character_id)
-        key = str(character["name"]).casefold()
-        candidate_ids.setdefault(key, set()).add(character_id)
-    for alias in roster_rows.aliases:
-        character_id = int(alias["character_id"])
-        if character_id not in known_character_ids:
-            continue
-        key = str(alias["alias"]).casefold()
-        candidate_ids.setdefault(key, set()).add(character_id)
-    return {key: ids for key, ids in candidate_ids.items() if len(ids) > 1}
-
-
 def _reconciliation_detector(
     roster_rows: CharacterRosterRows,
 ) -> HighSpecificityEntityDetector:
-    """Build the shared detector with ambiguous character keys excluded."""
+    """Build the shared detector with fail-loud ambiguous identity handling."""
 
-    ambiguous = _ambiguous_character_keys(roster_rows)
-    for key in sorted(ambiguous):
-        logger.warning(
-            "presence prose mention ambiguous: %s candidate_ids=%s",
-            key,
-            sorted(ambiguous[key]),
-        )
-
-    detector = build_character_presence_detector(
-        roster_rows.characters,
-        roster_rows.aliases,
+    return build_character_presence_detector(
+        roster_rows.characters, roster_rows.aliases
     )
-    for lookup_key in list(detector.character_lookup):
-        if lookup_key.casefold() in ambiguous:
-            del detector.character_lookup[lookup_key]
-    return detector
 
 
 def _end_of_turn_roster(
@@ -254,17 +218,12 @@ def _end_of_turn_roster(
 ) -> List[CharacterRef]:
     """Apply the same end-roster algebra used by Skald hydration."""
 
-    if presence is not None and presence.scene_reset is not None:
-        return _deduplicate_presence(presence.scene_reset.present)
     if baseline is None:
-        return []
-
-    enter = presence.enter if presence is not None else []
-    exit_references = presence.exit if presence is not None else []
-    roster = _deduplicate_presence([*baseline.present, *enter])
-    exit_keys = {_presence_key(reference) for reference in exit_references}
+        baseline = PresenceBaseline()
+    roster = apply_delta(roster_from_baseline(baseline), presence)
     return [
-        reference for reference in roster if _presence_key(reference) not in exit_keys
+        CharacterRef(kind="character", id=entry.id, name=entry.name)
+        for entry in roster.present.values()
     ]
 
 
@@ -405,8 +364,6 @@ def _reconcile_declared_character_mentions(
         declared_rows.append(matches[0])
 
     declared_ids = {int(character["id"]) for character in declared_rows}
-    collisions = _declared_name_collisions(declared_rows, roster_rows)
-    colliding_ids = set(collisions)
     accounted_ids = set(accounted_character_ids)
     accounted_references = [
         PresenceRef(
@@ -421,7 +378,7 @@ def _reconcile_declared_character_mentions(
         prose_parts,
         accounted_references=accounted_references,
         roster_rows=roster_rows,
-        candidate_character_ids=declared_ids - colliding_ids,
+        candidate_character_ids=declared_ids,
     )
     for canonical in reconciled:
         logger.warning(
@@ -429,100 +386,7 @@ def _reconcile_declared_character_mentions(
             quote_log_value(canonical.name),
         )
 
-    for declared_row in declared_rows:
-        declared_id = int(declared_row["id"])
-        if declared_id not in colliding_ids:
-            continue
-        declared_roster = CharacterRosterRows(
-            characters=[declared_row],
-            aliases=[],
-        )
-        detected = _unaccounted_public_prose_mentions(
-            prose_parts,
-            accounted_references=[],
-            roster_rows=declared_roster,
-            candidate_character_ids={declared_id},
-        )
-        if not detected:
-            continue
-        for collision in collisions[declared_id]:
-            logger.warning(
-                "presence declared mention collision: declared=%s id=%s "
-                "conflicts %s=%s id=%s",
-                quote_log_value(collision.declared_name),
-                collision.declared_id,
-                collision.conflict_kind,
-                quote_log_value(collision.conflict_name),
-                collision.conflict_id,
-            )
-        reconciled.extend(
-            _unaccounted_public_prose_mentions(
-                prose_parts,
-                accounted_references=accounted_references,
-                roster_rows=declared_roster,
-                candidate_character_ids={declared_id},
-            )
-        )
     return reconciled
-
-
-def _declared_name_collisions(
-    declared_rows: Sequence[Any],
-    roster_rows: CharacterRosterRows,
-) -> dict[int, List[_DeclaredNameCollision]]:
-    """Return case-insensitive canonical/alias conflicts for declared names."""
-
-    characters_by_id = {
-        int(character["id"]): character for character in roster_rows.characters
-    }
-    result: dict[int, List[_DeclaredNameCollision]] = {}
-
-    for declared in declared_rows:
-        declared_id = int(declared["id"])
-        declared_name = str(declared["name"])
-        declared_key = declared_name.casefold()
-        conflicts_by_id: dict[int, _DeclaredNameCollision] = {}
-
-        for character_id, character in characters_by_id.items():
-            if character_id == declared_id:
-                continue
-            conflict_name = str(character["name"])
-            if conflict_name.casefold() != declared_key:
-                continue
-            conflicts_by_id[character_id] = _DeclaredNameCollision(
-                declared_id=declared_id,
-                declared_name=declared_name,
-                conflict_id=character_id,
-                conflict_name=conflict_name,
-                conflict_kind="canonical",
-            )
-
-        for alias in roster_rows.aliases:
-            character_id = int(alias["character_id"])
-            if (
-                character_id == declared_id
-                or character_id in conflicts_by_id
-                or str(alias["alias"]).casefold() != declared_key
-            ):
-                continue
-            character = characters_by_id.get(character_id)
-            if character is None:
-                continue
-            conflicts_by_id[character_id] = _DeclaredNameCollision(
-                declared_id=declared_id,
-                declared_name=declared_name,
-                conflict_id=character_id,
-                conflict_name=str(character["name"]),
-                conflict_kind="alias_of",
-            )
-
-        if conflicts_by_id:
-            result[declared_id] = [
-                conflicts_by_id[character_id]
-                for character_id in sorted(conflicts_by_id)
-            ]
-
-    return result
 
 
 def reconcile_declared_character_mentions(
@@ -584,6 +448,29 @@ def reconcile_prose_mentions(
     baseline by design and therefore require their own child mention.
     """
 
+    index = character_identity_index(roster_rows.characters, roster_rows.aliases)
+    if presence_baseline is not None:
+        presence_baseline.present = [
+            CharacterRef(kind="character", id=resolved.id, name=resolved.name)
+            for ref in presence_baseline.present
+            for resolved in [
+                index.resolve(RosterEntry(kind="character", id=ref.id, name=ref.name))
+            ]
+        ]
+    if wire.presence is not None:
+        references = [
+            *wire.presence.enter,
+            *wire.presence.exit,
+            *wire.presence.mentions,
+        ]
+        if wire.presence.scene_reset is not None:
+            references.extend(wire.presence.scene_reset.present)
+        for ref in references:
+            if ref.kind == "character":
+                resolved = index.resolve(
+                    RosterEntry(kind="character", id=ref.id, name=ref.name)
+                )
+                ref.id, ref.name = resolved.id, resolved.name
     presence = wire.presence
     end_roster = _end_of_turn_roster(presence, presence_baseline)
     mentions = presence.mentions if presence is not None else []

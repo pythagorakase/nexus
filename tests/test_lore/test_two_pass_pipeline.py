@@ -40,10 +40,6 @@ from nexus.agents.logon.skald_wire import (
 )
 from nexus.agents.lore import logon_utility
 from nexus.agents.lore.logon_utility import LogonUtility
-from nexus.config import load_settings
-from nexus.config.story_model import StorySettings
-
-from nexus.memory.correspondence import CorrespondenceDigestWire
 from nexus.api.native_structured_output import (
     anthropic_output_config,
     openai_response_text_format,
@@ -52,6 +48,9 @@ from nexus.api.native_structured_output import (
 )
 from nexus.api.presence_reconciliation import CharacterRosterRows
 from nexus.api.slot_utils import require_slot_dbname
+from nexus.config import load_settings
+from nexus.config.story_model import StorySettings
+from nexus.memory.correspondence import CorrespondenceDigestWire
 
 
 PINNED_GAIA_MODEL = next(
@@ -449,7 +448,14 @@ def _assert_two_pass_calls(
     assert "# Writer Pass" in writer_call["system_prompt"]
     assert "# Writer Pass" not in gaia_call["system_prompt"]
     assert "## Gaia" in gaia_call["system_prompt"]
-    assert gaia_call["prompt"].startswith(writer_call["prompt"])
+    writer_context = "\n".join(
+        line
+        for line in writer_call["prompt"].split("\n")
+        if not line.startswith("PRESENT:")
+    )
+    assert gaia_call["prompt"].startswith(writer_context)
+    assert "PRESENT:" in writer_call["prompt"]
+    assert "PRESENT:" not in gaia_call["prompt"]
     assert writer.narrative in gaia_call["prompt"]
     assert writer.scene is not None
     assert writer.scene.model_dump_json(exclude_none=True) in gaia_call["prompt"]
