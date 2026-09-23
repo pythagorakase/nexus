@@ -6,6 +6,7 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
+from nexus.config.story_model import resolve_story_model
 from scripts.api_openai import OpenAIProvider
 
 
@@ -58,7 +59,7 @@ class JudgmentEngine:
         Errors from the underlying API call propagate to the caller — this
         engine has no fallback or default-score behavior.
         """
-        self.model = model
+        self.model = resolve_story_model("ir_eval", override=model)
         self.reasoning_effort = reasoning_effort
         self._provider: Optional[OpenAIProvider] = None
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import closing
 from copy import deepcopy
 from typing import Any
 
@@ -24,8 +25,15 @@ class StorySettings(BaseModel):
 
 
 def read_story_settings(dbname: str) -> StorySettings:
-    """Read a story's settings through the shared pool; DB errors propagate."""
-    with get_connection(dbname) as conn, conn.cursor() as cur:
+    """Read slot or explicitly named evaluation settings; DB errors propagate."""
+    if dbname.startswith(("qa640_", "ref_")):
+        from scripts.database_targets import evaluation_dbname
+        from scripts.migrate import get_connection as get_evaluation_connection
+
+        connection = closing(get_evaluation_connection(evaluation_dbname(dbname)))
+    else:
+        connection = get_connection(dbname=dbname)
+    with connection as conn, conn.cursor() as cur:
         cur.execute(
             "SELECT model, gaia_model, apex_context_window "
             "FROM global_variables WHERE id = TRUE"

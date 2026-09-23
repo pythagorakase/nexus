@@ -565,6 +565,7 @@ class ContextMemoryManager:
                 "Pass-2 baseline restoration requires MEMNON database access"
             )
 
+        self._refresh_story_settings()
         with engine.connect() as conn:
             row = (
                 conn.execute(

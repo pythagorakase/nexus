@@ -70,3 +70,24 @@ def test_story_context_window_outranks_repository_resource_profile() -> None:
     assert resolve_storyteller_context_window(scoped, "local", "local") == 100_000
     assert resolve_storyteller_context_window(scoped, "openai", "openai") == 100_000
     assert resolve_storyteller_context_window(defaults, "local", "local") == before
+
+
+@pytest.mark.parametrize("model", ["retired-evaluation-id", None])
+def test_ir_evaluation_model_fails_at_registry_boundary(model: str | None) -> None:
+    """Invalid developer seats fail before a provider or API credential is needed."""
+    from ir_eval.engine.judge import JudgmentEngine
+
+    with pytest.raises(
+        ValueError, match="absent from the registry|explicit configured model"
+    ):
+        JudgmentEngine(model=model)
+
+
+def test_ir_evaluation_model_resolves_configured_developer_seat() -> None:
+    """The configured evaluation model crosses the same registry boundary."""
+    from ir_eval.engine.judge import JudgmentEngine
+
+    model = load_settings().ir_eval.judgment.model
+    engine = JudgmentEngine(model=model)
+    assert engine.model == model
+    assert engine._provider is None

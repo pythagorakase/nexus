@@ -65,10 +65,11 @@ class TestTokenBudgetManager:
         assert "reasoning_reserve" in budget or budget["total_available"] < 200000
 
     def test_local_reasoning_model_cannot_return_negative_allocations(self):
-        """The committed role-resolved route cannot yield negative allocations."""
+        """A model covered by the base reasoning heuristic cannot overallocate."""
         settings = load_settings_as_dict()
-        committed_model = settings["API Settings"]["apex"]["model"]
-        assert not committed_model.startswith("@")
+        committed_model = (
+            "gpt-5.6-terra"  # pin: base GPT-5 reasoning-reserve regression
+        )
         manager = TokenBudgetManager(settings)
 
         with pytest.raises(ValueError) as exc_info:

@@ -6,6 +6,7 @@ import asyncio
 import copy
 import json
 import os
+from contextlib import closing
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Iterator
@@ -20,7 +21,7 @@ from sqlalchemy.orm import sessionmaker
 from nexus.agents.lore.logon_utility import LogonUtility
 from nexus.agents.lore.lore import LORE
 from nexus.agents.logon.apex_schema import StorytellerResponseStandard
-from nexus.api import commit_handler, commit_handler_sync
+from nexus.api import commit_handler, commit_handler_sync, slot_utils
 from nexus.api.commit_handler_sync import commit_incubator_to_database_sync
 from nexus.api.lore_adapter import response_to_incubator
 from nexus.api.narrative_generation import generate_narrative_async, write_to_incubator
@@ -51,11 +52,20 @@ def _connect(dbname: str) -> Any:
 
 
 @pytest.fixture()
-def pass2_database() -> Iterator[str]:
+def pass2_database(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
     """Initialize the template, reapply migration 107, and drop the clone."""
 
     source_db = os.environ.get("NEXUS_TEST_TEMPLATE_DB", "NEXUS_template")
     with disposable_slot_database("nexus_test_pass2", source_db=source_db) as dbname:
+        monkeypatch.setattr(
+            slot_utils, "VALID_DBNAMES", slot_utils.VALID_DBNAMES | {dbname}
+        )
+        original_slot_dbname = slot_utils.slot_dbname
+        monkeypatch.setattr(
+            slot_utils,
+            "slot_dbname",
+            lambda slot: dbname if slot == 5 else original_slot_dbname(slot),
+        )
         migration = MIGRATION.read_text()
         with _connect(dbname) as conn:
             with conn.cursor() as cur:
@@ -165,7 +175,7 @@ class _RouteProvider:
     """Structured-output provider stub used beneath a real LogonUtility."""
 
     def __init__(self, outputs: list[dict[str, Any]]) -> None:
-        self.model = "gpt-4o"
+        self.model = load_settings_as_dict()["API Settings"]["apex"]["model"]
         self.system_prompt = "Pass-2 lifecycle provider stub"
         self.outputs = outputs
         self.calls: list[dict[str, Any]] = []
@@ -396,7 +406,7 @@ def test_real_continuation_route_restores_pass2_baseline_in_fresh_lore(
             lore.settings,
             dbname=pass2_database,
             settings_path=lore.settings_path,
-            model_override="gpt-4o",
+            model_override=route_settings["API Settings"]["apex"]["model"],
         )
         utility._setting_context_loaded = True
         utility._setting_context = None
@@ -909,3 +919,103 @@ def test_missing_tail_error_and_admin_stamp_boundary(
     finally:
         conn.close()
         engine.dispose()
+
+
+def test_story_settings_pinned_window_survives_accepted_turn(
+    pass2_database: str,
+) -> None:
+    """Real LORE, MEMNON, and acceptance preserve a pin across fresh turn stacks.
+
+    LOGON is disabled: this covers budget/fingerprint ordering, not inference.
+    The migrated clone supplies narrative, baseline, incubator, and Orrery tables.
+    """
+    from nexus.config.story_model import read_story_settings, story_context_settings
+
+    with closing(_connect(pass2_database)) as conn:
+        parent_id = _seed_parent(conn, "Pinned story parent.")
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE global_variables SET apex_context_window = 100000 WHERE id"
+            )
+        conn.commit()
+        scoped = story_context_settings(
+            load_settings_as_dict(), read_story_settings(pass2_database)
+        )
+        boundary = bind_pass2_baseline(empty_pass2_baseline(scoped), parent_id)
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO lore_pass_baselines (chunk_id, schema_version, payload) "
+                "VALUES (%s, %s, %s::jsonb)",
+                (parent_id, boundary.schema_version, boundary.model_dump_json()),
+            )
+        conn.commit()
+        first_attempt = str(uuid4())
+        first = LORE(enable_logon=False, dbname=pass2_database)
+        try:
+            result = asyncio.run(
+                first.process_turn(
+                    "Continue.", parent_chunk_id=parent_id, attempt_id=first_attempt
+                )
+            )
+            assert result == "LOGON disabled", result
+            assert first.turn_context.token_counts["apex_window"] == 100_000
+            baseline = first.memory_manager.export_pass2_baseline()
+            assert baseline.config_fingerprint == boundary.config_fingerprint
+        finally:
+            first.close()
+        _create_lease(conn, first_attempt, parent_id)
+        conn.commit()
+        payload = response_to_incubator(
+            _response("The pinned story continues."),
+            parent_chunk_id=parent_id,
+            user_text="Continue.",
+            session_id=first_attempt,
+            lore_pass_baseline=baseline,
+        )
+        asyncio.run(write_to_incubator(conn, payload))
+        accepted_id = commit_incubator_to_database_sync(conn, first_attempt, slot=5)
+        second = LORE(enable_logon=False, dbname=pass2_database)
+        try:
+            result = asyncio.run(
+                second.process_turn(
+                    "Continue.", parent_chunk_id=accepted_id, attempt_id=str(uuid4())
+                )
+            )
+            assert result == "LOGON disabled", result
+            assert second.turn_context.token_counts["apex_window"] == 100_000
+            assert second.turn_context.memory_state["pass2"]["baseline_available"]
+            assert (
+                second.memory_manager.export_pass2_baseline().config_fingerprint
+                == baseline.config_fingerprint
+            )
+        finally:
+            second.close()
+
+
+def test_evaluation_database_baseline_stamp_uses_story_settings() -> None:
+    """The guarded --dbname path stamps a real qa640 clone without slot aliases."""
+    from nexus.config.story_model import read_story_settings, story_context_settings
+
+    with disposable_slot_database("qa640_settings_stamp") as dbname:
+        with _connect(dbname) as conn:
+            tail_id = _seed_parent(conn, "Evaluation tail.")
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE global_variables SET apex_context_window = 100000 WHERE id"
+                )
+        assert stamp_lore_pass_baseline.stamp_slot_tail(dbname=dbname) == (
+            tail_id,
+            True,
+            False,
+        )
+        expected = empty_pass2_baseline(
+            story_context_settings(load_settings_as_dict(), read_story_settings(dbname))
+        )
+        with _connect(dbname) as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT payload FROM lore_pass_baselines WHERE chunk_id = %s",
+                (tail_id,),
+            )
+            payload = cur.fetchone()[0]
+        assert payload["parent_chunk_id"] == tail_id
+        assert payload["config_fingerprint"] == expected.config_fingerprint

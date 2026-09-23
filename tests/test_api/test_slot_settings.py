@@ -110,3 +110,27 @@ def test_wizard_records_player_model_in_slot(
     with connect(offline_gate_db) as conn, conn.cursor() as cur:
         cur.execute("SELECT thread_id FROM assets.new_story_creator WHERE id")
         assert cur.fetchone() == (thread_id,)
+
+
+def test_setting_card_database_failure_is_loud(offline_gate_db: str) -> None:
+    """An actual failed Setting Card query never becomes a cached empty prompt."""
+    import psycopg2
+    from nexus.agents.lore.logon_utility import LogonUtility
+
+    utility = LogonUtility(load_settings_as_dict(), dbname=offline_gate_db)
+    with connect(offline_gate_db) as conn, conn.cursor() as cur:
+        cur.execute(
+            "ALTER TABLE global_variables RENAME COLUMN setting TO unavailable_setting"
+        )
+    try:
+        for _ in range(2):
+            with pytest.raises(psycopg2.errors.UndefinedColumn, match="setting"):
+                utility._load_setting_context()
+            assert utility._setting_context_loaded is False
+    finally:
+        with connect(offline_gate_db) as conn, conn.cursor() as cur:
+            cur.execute(
+                "ALTER TABLE global_variables RENAME COLUMN unavailable_setting TO setting"
+            )
+    utility._load_setting_context()
+    assert utility._setting_context_loaded is True

@@ -72,8 +72,9 @@ class TokenBudgetManager:
                 )
             apex_model = configured_model
 
-        using_reasoning_model = apex_model.startswith("o") or apex_model.startswith(
-            ("gpt-5", "gpt-6")  # pin: family-prefix feature detection
+        using_reasoning_model = (
+            apex_model.startswith("o")
+            or "gpt-5" in apex_model  # pin: family-prefix feature detection
         )
 
         # Reserve tokens for reasoning if needed (up to 30k for high-effort reasoning)

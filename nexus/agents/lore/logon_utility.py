@@ -493,39 +493,26 @@ class LogonUtility:
 
     def _fetch_setting_context(self) -> Optional[str]:
         """Perform the actual SettingCard read behind the snapshot cache."""
-        from nexus.api.slot_utils import require_slot_dbname
+        from nexus.api.db_pool import get_connection
 
-        try:
-            db = require_slot_dbname(dbname=self.dbname)
-            conn = psycopg2.connect(host="localhost", database=db, user="pythagor")
-            with conn.cursor() as cur:
-                cur.execute("SELECT setting FROM global_variables WHERE id = true")
-                result = cur.fetchone()
+        with get_connection(dbname=self.dbname) as conn, conn.cursor() as cur:
+            cur.execute("SELECT setting FROM global_variables WHERE id = true")
+            result = cur.fetchone()
 
-                if result and result[0]:
-                    setting_content = self._format_setting_context(result[0])
-                    if not setting_content:
-                        logger.warning(
-                            "Setting data found in global_variables but no "
-                            "promptable fields were present"
-                        )
-                        return None
-                    logger.info(
-                        "Loaded setting context (%s chars)", len(setting_content)
-                    )
-                    return setting_content
+        if result and result[0]:
+            setting_content = self._format_setting_context(result[0])
+            if not setting_content:
                 logger.warning(
-                    "No setting data found in global_variables, using core "
-                    "prompt only"
+                    "Setting data found in global_variables but no "
+                    "promptable fields were present"
                 )
                 return None
-
-        except Exception as e:
-            logger.error(f"Failed to load setting from database: {e}")
-            return None
-        finally:
-            if "conn" in locals():
-                conn.close()
+            logger.info("Loaded setting context (%s chars)", len(setting_content))
+            return setting_content
+        logger.warning(
+            "No setting data found in global_variables, using core prompt only"
+        )
+        return None
 
     @staticmethod
     def _load_gaia_system_prompt(max_letter_tokens: int) -> str:
