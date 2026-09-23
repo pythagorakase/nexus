@@ -119,43 +119,16 @@ def _wizard_subphase_for_state(
 
 
 def _hydrate_character_context(request: ChatRequest) -> Optional[Dict[str, Any]]:
-    """Load character_state from cache if in character phase and no context provided."""
-    if request.current_phase != "character" or request.context_data is not None:
-        return request.context_data
+    """Fill missing character context from the persisted wizard subphases."""
+    context = request.context_data
+    if request.current_phase != "character" or (context or {}).get("character_state"):
+        return context
 
     cache = read_cache(slot_dbname(request.slot))
-    if not cache:
-        return None
-
-    char_state: Dict[str, Any] = {}
-    if cache.character.has_concept():
-        selected = [st.trait for st in cache.character.suggested_traits]
-        rationales = {st.trait: st.rationale for st in cache.character.suggested_traits}
-        char_state["concept"] = {
-            "name": cache.character.name,
-            "archetype": cache.character.archetype,
-            "background": cache.character.background,
-            "appearance": cache.character.appearance,
-            "suggested_traits": selected,
-            "trait_rationales": rationales,
-        }
-    if cache.character.has_traits():
-        selected = [st.trait for st in cache.character.suggested_traits]
-        rationales = {st.trait: st.rationale for st in cache.character.suggested_traits}
-        char_state["trait_selection"] = {
-            "selected_traits": selected,
-            "trait_rationales": rationales,
-        }
-    if cache.character.has_wildcard():
-        char_state["wildcard"] = {
-            "wildcard_name": cache.character.wildcard_name,
-            "wildcard_description": cache.character.wildcard_rationale,
-            "orrery_tags": cache.character.orrery_tags,
-        }
-
+    char_state = cache.get_character_state_dict() if cache else None
     if char_state:
-        return {"character_state": char_state}
-    return None
+        return {**(context or {}), "character_state": char_state}
+    return context
 
 
 def _accept_fate_prompt(message: Optional[str]) -> str:
@@ -489,6 +462,7 @@ async def new_story_chat_endpoint(request: ChatRequest):
             )
             content = result.output
             client.add_message(request.thread_id, "assistant", content)
+            write_wizard_choices([], slot_dbname(request.slot))
             return {
                 "message": content,
                 "choices": [],
@@ -517,6 +491,9 @@ async def new_story_chat_endpoint(request: ChatRequest):
             thread_id=request.thread_id,
         )
         if traits_result is not None:
+            write_wizard_choices(
+                traits_result.get("choices", []), slot_dbname(request.slot)
+            )
             return traits_result
 
         # =================================================================
@@ -642,6 +619,7 @@ async def new_story_chat_endpoint(request: ChatRequest):
                             context.last_tool_result["set_design_error"] = str(e)
                             # Still return partial result so user can see the seed
 
+            write_wizard_choices([], slot_dbname(request.slot))
             return context.last_tool_result
         if isinstance(result.output, DeferredToolRequests):
             raise HTTPException(
@@ -662,8 +640,7 @@ async def new_story_chat_endpoint(request: ChatRequest):
             ui_choices,
         )
 
-        if ui_choices:
-            write_wizard_choices(ui_choices, slot_dbname(request.slot))
+        write_wizard_choices(ui_choices, slot_dbname(request.slot))
 
         return {
             "message": wizard_response.message,
@@ -808,9 +785,10 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
                 slot=request.slot,
                 run_id=request.thread_id,
             )
+            client.add_message(request.thread_id, "assistant", result.output)
+            write_wizard_choices([], slot_dbname(request.slot))
             payload = {"type": "message", "message": result.output, "choices": []}
             yield json.dumps(payload) + "\n"
-            client.add_message(request.thread_id, "assistant", result.output)
             return
 
         # Deterministic traits + auto-advance to wildcard (same as /chat endpoint)
@@ -828,6 +806,9 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
             thread_id=request.thread_id,
         )
         if traits_result is not None:
+            write_wizard_choices(
+                traits_result.get("choices", []), slot_dbname(request.slot)
+            )
             yield json.dumps({"type": "artifact", "data": traits_result}) + "\n"
             return
 
@@ -963,6 +944,7 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
                                 logger.error("Set designer (stream) failed: %s", e)
                                 payload["set_design_error"] = str(e)
 
+                write_wizard_choices([], slot_dbname(request.slot))
                 yield json.dumps({"type": "artifact", "data": payload}) + "\n"
                 return
 
@@ -972,8 +954,7 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
                 for c in final_output.choices
                 if isinstance(c, str) and c.strip()
             ]
-            if ui_choices:
-                write_wizard_choices(ui_choices, slot_dbname(request.slot))
+            write_wizard_choices(ui_choices, slot_dbname(request.slot))
             yield json.dumps(
                 {
                     "type": "final",

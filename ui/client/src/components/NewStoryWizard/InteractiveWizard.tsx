@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback, useMemo } from "react"
 import { Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { rememberActiveSlot } from "@/lib/active-slot";
 import { motion, AnimatePresence } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
 import { WizardChoices, normalizeChoices } from "./WizardChoices";
@@ -30,6 +31,20 @@ interface Message {
     artifactData?: any;       // The tool submission data (viewable via modal)
 }
 
+export interface WizardResumeData {
+    thread_id: string;
+    current_phase: Phase | "ready";
+    messages: Pick<Message, "role" | "content">[];
+    choices: string[];
+    setting_draft: any;
+    character_draft: any;
+    character_state: any;
+    selected_seed: any;
+    layer_draft: any;
+    zone_draft: any;
+    initial_location: any;
+}
+
 interface InteractiveWizardProps {
     slot: number;
     onComplete: () => void;
@@ -38,7 +53,7 @@ interface InteractiveWizardProps {
     onArtifactConfirmed?: (type: "setting" | "character" | "seed", data: any) => void;
     wizardData: any;
     setWizardData: (data: any) => void;
-    resumeThreadId?: string | null;
+    resumeData?: WizardResumeData | null;
     initialPhase?: Phase;
 }
 
@@ -104,7 +119,7 @@ export function InteractiveWizard({
     onArtifactConfirmed,
     wizardData,
     setWizardData,
-    resumeThreadId,
+    resumeData,
     initialPhase,
 }: InteractiveWizardProps) {
     const [messages, setMessages] = useState<Message[]>([]);
@@ -163,9 +178,37 @@ export function InteractiveWizard({
                 setDisplayChoices([]);
                 setPendingArtifact(null);
                 setShowTraitSelector(false);
+                setSuggestedTraits([]);
+                setSelectedTraits([]);
 
-                if (resumeThreadId) {
-                    setThreadId(resumeThreadId);
+                if (resumeData) {
+                    setThreadId(resumeData.thread_id);
+                    setMessages(resumeData.messages.map((message, index) => ({
+                        ...message,
+                        id: `${resumeData.thread_id}-${index}`,
+                        timestamp: 0,
+                    })));
+                    setDisplayChoices(normalizeChoices(resumeData.choices));
+                    const characterState = resumeData.character_state;
+                    if (resumeData.current_phase === "character" && characterState?.concept && !characterState.trait_selection) {
+                        setSuggestedTraits(characterState.concept.suggested_traits ?? []);
+                        setShowTraitSelector(true);
+                        setDisplayChoices([]);
+                        // This introduction is normally created locally after the
+                        // concept submission, so it is not in stored chat history.
+                        addMessage("assistant", buildTraitIntroMessage(characterState.concept));
+                    }
+                    if (resumeData.current_phase === "ready") {
+                        setPendingArtifact({
+                            type: "submit_starting_scenario",
+                            data: {
+                                seed: resumeData.selected_seed,
+                                layer: resumeData.layer_draft,
+                                zone: resumeData.zone_draft,
+                                location: resumeData.initial_location,
+                            },
+                        });
+                    }
                     return;
                 }
 
@@ -189,6 +232,7 @@ export function InteractiveWizard({
                 const { thread_id, welcome_message, welcome_choices } = await startRes.json();
                 if (cancelled) return;
                 if (!thread_id) throw new Error("The new story session was not created.");
+                rememberActiveSlot(slot);
                 setThreadId(thread_id);
 
                 if (welcome_message) {
@@ -208,7 +252,7 @@ export function InteractiveWizard({
 
         initChat();
         return () => { cancelled = true; };
-    }, [slot, resumeThreadId, initializationAttempt]);
+    }, [slot, resumeData, initializationAttempt]);
 
     useEffect(() => {
         setCurrentPhase(initialPhase || "setting");
@@ -355,7 +399,7 @@ export function InteractiveWizard({
             // No "generation started" toast: the reader the user lands on
             // shows the live generation telemetry already (tenet 3).
             setWaitScreenActive(false);
-            localStorage.setItem("activeSlot", slot.toString());
+            rememberActiveSlot(slot);
             onComplete();
 
         } catch (e: any) {
@@ -962,7 +1006,7 @@ export function InteractiveWizard({
                             {messages.map((msg) => (
                                 <motion.div
                                     key={msg.id}
-                                    initial={{ opacity: 0, y: 10 }}
+                                    initial={resumeData ? false : { opacity: 0, y: 10 }}
                                     animate={{ opacity: 1, y: 0 }}
                                     className={cn(
                                         "flex w-full",
@@ -1003,7 +1047,7 @@ export function InteractiveWizard({
                         {/* Structured choices + freeform slot */}
                         {!isLoading && !initializationError && (
                             <motion.div
-                                initial={{ opacity: 0, y: 10 }}
+                                initial={resumeData ? false : { opacity: 0, y: 10 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 className="mt-4"
                             >

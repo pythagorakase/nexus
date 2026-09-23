@@ -21,6 +21,7 @@ const props = {
 };
 
 afterEach(() => {
+    localStorage.clear();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
 });
@@ -36,18 +37,21 @@ describe("wizard initialization", () => {
                 welcome_choices: ["A moonlit harbor"],
             })));
         vi.stubGlobal("fetch", fetch);
+        localStorage.setItem("activeSlot", "2");
         render(<InteractiveWizard {...props} />);
 
         expect(await screen.findByRole("alert")).toHaveTextContent("Conversation service unavailable");
         expect(screen.getByRole("button", { name: "Accept Fate" })).toBeDisabled();
         expect(screen.queryByTestId("wizard-freeform")).toBeNull();
 
+        expect(localStorage.getItem("activeSlot")).toBe("2");
         fireEvent.click(screen.getByRole("button", { name: "Retry" }));
 
         expect(await screen.findByText("Where does your story begin?")).toBeInTheDocument();
         expect(screen.getByTestId("wizard-choice-1")).toBeEnabled();
         expect(screen.getByTestId("wizard-freeform")).toBeEnabled();
         expect(screen.queryByRole("alert")).toBeNull();
+        expect(localStorage.getItem("activeSlot")).toBe("5");
         expect(fetch).toHaveBeenCalledTimes(2);
         expect(JSON.parse(fetch.mock.calls[1][1].body)).toEqual({ slot: 5 });
     });
@@ -72,6 +76,7 @@ describe("wizard initialization", () => {
         await act(async () => {
             finishFirst(new Response(JSON.stringify({ thread_id: "conv_old", welcome_message: "Wrong slot" })));
         });
+        expect(localStorage.getItem("activeSlot")).toBe("5");
         expect(fetch).toHaveBeenCalledTimes(2);
         expect(screen.queryByText("Wrong slot")).toBeNull();
     });
