@@ -24,6 +24,7 @@ from nexus.agents.orrery.bleed import (
     load_bleed_candidates,
     select_bleed_menu,
 )
+from nexus.agents.orrery.relationship_provenance import relationship_producer
 from tests.pg_fixtures import disposable_slot_database, sqlalchemy_url
 
 
@@ -117,21 +118,23 @@ def _insert_relationship(
     source_character_id: int,
     target_character_id: int,
 ) -> None:
-    session.execute(
-        text(
-            """
-            INSERT INTO character_relationships (
-                character1_id, character2_id, relationship_type,
-                emotional_valence, dynamic, recent_events, history
-            ) VALUES (
-                :source_id, :target_id, 'associate', '-5|fixture',
-                'Rollback-only Bleed fixture.', 'No persistent events.',
-                'Created for issue 477 Stage 3 live coverage.'
+    with session.connection().connection.cursor() as cur:
+        with relationship_producer(cur, "manual"):
+            session.execute(
+                text(
+                    """
+                    INSERT INTO character_relationships (
+                        character1_id, character2_id, relationship_type,
+                        emotional_valence, dynamic, recent_events, history
+                    ) VALUES (
+                        :source_id, :target_id, 'associate', '-5|fixture',
+                        'Rollback-only Bleed fixture.', 'No persistent events.',
+                        'Created for issue 477 Stage 3 live coverage.'
+                    )
+                    """
+                ),
+                {"source_id": source_character_id, "target_id": target_character_id},
             )
-            """
-        ),
-        {"source_id": source_character_id, "target_id": target_character_id},
-    )
 
 
 def _insert_hunting_edge(

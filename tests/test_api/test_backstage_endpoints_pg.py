@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 from psycopg2 import sql
 import pytest
 
+from nexus.agents.orrery.relationship_provenance import relationship_producer
 from nexus.agents.orrery.retrograde_persistence import (
     _ensure_prologue_metadata,
     _insert_prologue_chunk,
@@ -230,25 +231,26 @@ def backstage_case(disposable_db: str) -> dict[str, Any]:
                 first_character, second_character = [
                     int(row[0]) for row in cur.fetchall()
                 ]
-                cur.execute(
-                    """
-                    INSERT INTO character_relationships (
-                        character1_id, character2_id, relationship_type,
-                        emotional_valence, valence_current, dynamic,
-                        recent_events, history
-                    ) VALUES
-                        (%s, %s, 'acquaintance', '0|neutral', 0,
-                         'quiet', 'none', 'fixture'),
-                        (%s, %s, 'acquaintance', '0|neutral', 0,
-                         'quiet', 'none', 'fixture')
-                    """,
-                    (
-                        first_character,
-                        second_character,
-                        second_character,
-                        first_character,
-                    ),
-                )
+                with relationship_producer(cur, "manual"):
+                    cur.execute(
+                        """
+                        INSERT INTO character_relationships (
+                            character1_id, character2_id, relationship_type,
+                            emotional_valence, valence_current, dynamic,
+                            recent_events, history
+                        ) VALUES
+                            (%s, %s, 'acquaintance', '0|neutral', 0,
+                             'quiet', 'none', 'fixture'),
+                            (%s, %s, 'acquaintance', '0|neutral', 0,
+                             'quiet', 'none', 'fixture')
+                        """,
+                        (
+                            first_character,
+                            second_character,
+                            second_character,
+                            first_character,
+                        ),
+                    )
                 cur.execute(
                     """
                     INSERT INTO global_variables (id, user_character, base_timestamp)
