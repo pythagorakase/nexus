@@ -3141,6 +3141,9 @@ def _print_runtime_status(result: Dict[str, Any]) -> None:
             f"{'' if auth.get('enforced') else ' (not enforced)'}"
         )
 
+    if runtime.get("jobs"):
+        _print_jobs({"slot": runtime.get("slot"), **runtime["jobs"]})
+
 
 def run_status(args: argparse.Namespace) -> Dict[str, Any]:
     """Render supervisor process state plus the gateway's /runtime/status."""
@@ -3286,16 +3289,28 @@ def _print_usage(payload: Dict[str, Any]) -> None:
 def _print_jobs(payload: Dict[str, Any]) -> None:
     """Render every provider-capable durable Orrery queue."""
 
-    print(f"Durable Orrery jobs for slot {payload['slot']}:")
-    for queue_kind, queue in payload["queues"].items():
-        counts = queue["counts"]
-        count_text = ", ".join(f"{state}={count}" for state, count in counts.items())
-        print(f"  {queue_kind}: {count_text}")
-        for job in queue["non_terminal_jobs"]:
-            print(
-                f"    id={job['id']} state={job['state']} "
-                f"attempts={job['attempts']} last_error={job['last_error']!r}"
+    scheduler = payload.get("scheduler")
+    if scheduler:
+        print(
+            f"scheduler: state={scheduler.get('state', 'observer')} "
+            f"owner={scheduler.get('owner_id', '-')} active={scheduler.get('active', False)} "
+            f"heartbeat={scheduler.get('heartbeat_at', '-')} job={scheduler.get('current_job') or '-'}"
+            + (
+                f" error={scheduler['last_error']}"
+                if scheduler.get("last_error")
+                else ""
             )
+        )
+    else:
+        print("scheduler: no owner")
+    for queue_kind, queue in payload["queues"].items():
+        if any(queue["counts"].values()):
+            counts = ", ".join(
+                f"{state}={count}" for state, count in queue["counts"].items()
+            )
+            print(f"{queue_kind}: {counts}")
+    if payload.get("unembedded_accepted_chunks"):
+        print(f"unembedded_accepted_chunks: {payload['unembedded_accepted_chunks']}")
 
 
 def _add_global_output_args(parser: argparse.ArgumentParser) -> None:

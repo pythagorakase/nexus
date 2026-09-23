@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "Register the shared seat window arithmetic and rendered prompt ledger as production-reachable modules",
+  "reason": "Register shared seat-window accounting, the gateway scheduler, and durable correspondence compaction as production-reachable modules.",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -239,6 +239,10 @@
     "nexus/config/settings_models.py",
     "nexus/config/story_model.py",
     "nexus/database.py",
+    "nexus/jobs/__init__.py",
+    "nexus/jobs/compaction.py",
+    "nexus/jobs/gate.py",
+    "nexus/jobs/scheduler.py",
     "nexus/memory/__init__.py",
     "nexus/memory/context_state.py",
     "nexus/memory/correspondence.py",

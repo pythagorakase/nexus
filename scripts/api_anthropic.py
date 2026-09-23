@@ -468,6 +468,9 @@ class AnthropicProvider(LLMProvider):
             # Call the API
             if extra_body:
                 params["extra_body"] = extra_body
+            from nexus.jobs.gate import before_provider_call
+
+            before_provider_call()
             response = cast(Any, self.client.messages).create(**params)
 
             # Extract the content from the response
@@ -721,6 +724,9 @@ class AnthropicProvider(LLMProvider):
                     ),
                 )
             try:
+                from nexus.jobs.gate import before_provider_call
+
+                before_provider_call()
                 response = self.client.beta.messages.create(
                     **self._build_native_structured_request_params(
                         active_prompt,
@@ -803,6 +809,9 @@ class AnthropicProvider(LLMProvider):
                     ),
                 )
             try:
+                from nexus.jobs.gate import before_provider_call
+
+                before_provider_call()
                 response = self.client.beta.messages.create(
                     **self._build_tool_envelope_structured_request_params(
                         active_prompt,
@@ -886,6 +895,9 @@ class AnthropicProvider(LLMProvider):
                     ),
                 )
             try:
+                from nexus.jobs.gate import before_provider_call
+
+                before_provider_call()
                 response = self.client.beta.messages.create(
                     **self._build_prompted_structured_request_params(active_prompt)
                 )

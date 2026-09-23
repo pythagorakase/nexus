@@ -15,6 +15,7 @@ Usage:
 
 from nexus.database import connection_kwargs
 
+import asyncio
 import json
 import logging
 import re
@@ -942,7 +943,7 @@ def _mock_orrery_adjudications(prompt: str) -> List[Dict[str, Any]]:
                     "proposal_id": proposal_id,
                     "action": "replace",
                     "note": "[TEST MODE] Replaced with a story-truer activity.",
-                    "replacement_event_type": "mock_replacement",
+                    "replacement_event_type": "work_performed",
                     "replacement_state_delta": {
                         "character_current_activity": (
                             "following the mock-server replacement beat"
@@ -1133,6 +1134,31 @@ async def responses_create(request: ResponsesRequest):
     output_fields = _requested_output_properties(request)
     if output_fields:
         final_result_tool = _requested_output_uses_final_result_tool(request)
+        if output_fields == {"recollections"}:
+            delay = load_settings().api.test_provider.experience_response_delay_seconds
+            logger.info("[MOCK] Experience render received; response delay=%s", delay)
+            await asyncio.sleep(delay)
+            records_text = input_text.rsplit("Scene seed records:\n", 1)[1]
+            records, _ = json.JSONDecoder().raw_decode(records_text.lstrip())
+            return _responses_payload(
+                {
+                    "recollections": [
+                        {
+                            "experience_id": row["experience_id"],
+                            "experience_text": "I remember receiving this account. I kept it in mind.",
+                        }
+                        for row in records
+                    ]
+                },
+                final_result_tool=final_result_tool,
+            )
+        if output_fields == {"digest"}:
+            return _responses_payload(
+                {
+                    "digest": "The accepted exchanges preserve the unresolved pressure and the next intended action."
+                },
+                final_result_tool=final_result_tool,
+            )
         if "updates" in output_fields and "narrative" in output_fields:
             logger.info(
                 "[MOCK] Skald turn wire requested (%d Orrery proposals)",

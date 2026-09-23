@@ -716,6 +716,33 @@ class UsageSettings(BaseModel):
         return value
 
 
+class DeferredWorkSettings(BaseModel):
+    """Timing and bounded work for the per-slot recovery owner."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    lease_duration_seconds: float = Field(default=60, gt=0)
+    heartbeat_interval_seconds: float = Field(default=10, gt=0)
+    poll_interval_seconds: float = Field(default=5, gt=0)
+    generation_wait_seconds: float = Field(default=1, gt=0)
+    error_backoff_seconds: float = Field(default=5, gt=0)
+    milestone_recovery_age_seconds: float = Field(default=60, ge=0)
+    promotion_limit: int = Field(default=20, ge=1)
+    compaction_max_jobs_per_drain: int = Field(default=1, ge=1)
+    compaction_max_attempts: int = Field(default=3, ge=1)
+    compaction_retry_delay_seconds: float = Field(default=300, ge=0)
+    compaction_lease_duration_seconds: float = Field(default=300, gt=0)
+
+    @model_validator(mode="after")
+    def validate_heartbeat(self) -> "DeferredWorkSettings":
+        """Reject a heartbeat that cannot renew the lease before expiry."""
+        if self.heartbeat_interval_seconds >= self.lease_duration_seconds:
+            raise ValueError(
+                "Scheduler heartbeat interval must be below lease duration"
+            )
+        return self
+
+
 class RuntimeSettings(BaseModel):
     """Managed runtime configuration (nexus up / down / status / logs)."""
 
@@ -750,6 +777,7 @@ class RuntimeSettings(BaseModel):
         description="Supervised services for the local profile, by name",
     )
     gateway: RuntimeGatewaySettings
+    scheduler: DeferredWorkSettings = Field(default_factory=DeferredWorkSettings)
     health: RuntimeHealthSettings = Field(default_factory=RuntimeHealthSettings)
     logs: RuntimeLogsSettings = Field(default_factory=RuntimeLogsSettings)
     external: Optional[RuntimeExternalSettings] = None
@@ -2368,6 +2396,7 @@ class OrreryRetrogradeMaturationSettings(BaseModel):
             "asynchronous Retrograde maturation jobs for them."
         ),
     )
+    lease_duration_seconds: float = Field(default=900, gt=0)
     budget_seconds: float = Field(
         default=30.0,
         gt=0.0,
@@ -3406,6 +3435,13 @@ class APIUploadsSettings(BaseModel):
     )
 
 
+class APITestProviderSettings(BaseModel):
+    """Deterministic TEST provider timing for interruption proofs."""
+
+    model_config = ConfigDict(extra="forbid")
+    experience_response_delay_seconds: float = Field(default=0, ge=0)
+
+
 class APISettings(BaseModel):
     """Top-level API settings."""
 
@@ -3416,6 +3452,9 @@ class APISettings(BaseModel):
     )
     database: APIDatabaseSettings = Field(
         ..., description="Slot database connection behavior"
+    )
+    test_provider: APITestProviderSettings = Field(
+        default_factory=APITestProviderSettings
     )
     narrative_generation: APINarrativeGenerationSettings = Field(
         ..., description="Durable narrative generation ownership"

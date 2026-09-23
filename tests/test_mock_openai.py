@@ -105,7 +105,10 @@ async def test_mock_responses_returns_orrery_adjudication_fixture() -> None:
     assert parsed.orrery_adjudications[1].proposal_id == "hide:bbb"
     replacement = parsed.orrery_adjudications[2]
     assert replacement.proposal_id == "tend_craft:ccc"
-    assert replacement.replacement_event_type == "mock_replacement"
+    assert replacement.replacement_event_type == "work_performed"
+    from nexus.agents.orrery.event_vocabulary import known_event_types
+
+    assert replacement.replacement_event_type in known_event_types()
     assert replacement.replacement_state_delta is not None
     assert (
         replacement.replacement_state_delta.character_current_activity

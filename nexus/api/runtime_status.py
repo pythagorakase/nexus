@@ -90,6 +90,16 @@ def build_runtime_status() -> Dict[str, Any]:
         "auth": {"header": NEXUS_AUTH_HEADER, "enforced": False},
     }
 
+    if database["ok"]:
+        from nexus.agents.orrery.job_queues import load_job_queues_for_slot_sync
+
+        import psycopg2
+
+        try:
+            status["jobs"] = load_job_queues_for_slot_sync(database["slot"])
+        except psycopg2.Error as exc:
+            database.update(ok=False, error=str(exc))
+
     if runtime and runtime.profile == "local":
         gateway = runtime.services.get("gateway")
         if gateway:
@@ -132,4 +142,14 @@ def register_runtime_status(app: FastAPI) -> None:
 
     @app.get(RUNTIME_STATUS_PATH)
     async def runtime_status() -> Dict[str, Any]:
-        return await asyncio.to_thread(build_runtime_status)
+        status = await asyncio.to_thread(build_runtime_status)
+        scheduler = getattr(app.state, "scheduler", None)
+        if scheduler is not None:
+            jobs = status.setdefault("jobs", {})
+            lease = jobs.get("scheduler") or {}
+            jobs["scheduler"] = {
+                **lease,
+                "state": scheduler.state,
+                "last_error": scheduler.last_error or lease.get("last_error"),
+            }
+        return status

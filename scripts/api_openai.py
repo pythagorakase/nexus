@@ -576,6 +576,9 @@ class OpenAIProvider(LLMProvider):
                 )
             try:
                 try:
+                    from nexus.jobs.gate import before_provider_call
+
+                    before_provider_call()
                     response = self.client.responses.parse(
                         **self._build_native_structured_request_params(
                             active_prompt,
@@ -713,6 +716,9 @@ class OpenAIProvider(LLMProvider):
                     or openai_response_text_format(schema_model),
                 )
             try:
+                from nexus.jobs.gate import before_provider_call
+
+                before_provider_call()
                 response = self.client.chat.completions.create(
                     **self._build_chat_structured_request_params(
                         active_prompt, schema_model, text_format=text_format
@@ -991,6 +997,9 @@ class OpenAIProvider(LLMProvider):
 
         # Create the response
         try:
+            from nexus.jobs.gate import before_provider_call
+
+            before_provider_call()
             response = self.client.responses.create(**request_params)
         except Exception as exc:
             if not self._should_fallback_plain_completion(exc):
@@ -1044,6 +1053,9 @@ class OpenAIProvider(LLMProvider):
             # too — Orrery narration reaches OpenRouter through this path.
             request_params["extra_body"] = copy.deepcopy(self.request_params)
 
+        from nexus.jobs.gate import before_provider_call
+
+        before_provider_call()
         response = self.client.chat.completions.create(**request_params)
         usage_outcome: Literal["accepted", "error"] = "error"
         try:

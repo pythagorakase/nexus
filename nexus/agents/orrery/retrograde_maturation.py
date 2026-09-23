@@ -33,6 +33,7 @@ import json
 import logging
 import os
 import time
+from uuid import uuid4
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Mapping, Optional, Sequence
@@ -566,7 +567,13 @@ def drain_maturation_jobs_sync(
 
     owns_conn = conn is None
     conn = conn or _connect_for_slot(slot)
-    job_limit = limit if limit is not None else cfg.max_jobs_per_drain
+    job_limit = (
+        min(limit, cfg.max_jobs_per_drain)
+        if limit is not None
+        else cfg.max_jobs_per_drain
+    )
+    if job_limit < 0:
+        raise ValueError("Maturation job limit must be non-negative")
     try:
         with conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -601,21 +608,39 @@ def drain_maturation_jobs_sync(
                 if not rows:
                     return (0, 0)
                 for row in rows:
+                    row["locked_by"] = f"maturation:{slot}:{uuid4()}"
+                    row["lease_nonce"] = str(uuid4())
                     cur.execute(
                         """
                         UPDATE orrery_maturation_jobs
                         SET state = 'leased',
-                            lease_until = now() + interval '15 minutes',
+                            lease_until = clock_timestamp() + (%s * interval '1 second'),
+                            locked_by = %s, lease_nonce = %s,
                             attempts = attempts + 1,
                             updated_at = now()
                         WHERE id = %s
                         """,
-                        (row["job_id"],),
+                        (
+                            cfg.lease_duration_seconds,
+                            row["locked_by"],
+                            row["lease_nonce"],
+                            row["job_id"],
+                        ),
                     )
 
         matured = 0
         failed = 0
         for row in rows:
+            from nexus.jobs.gate import report_leased_job, track_job_lease
+
+            track_job_lease(
+                "orrery_maturation_jobs",
+                row["job_id"],
+                locked_by=row["locked_by"],
+                lease_nonce=row["lease_nonce"],
+                duration=cfg.lease_duration_seconds,
+            )
+            report_leased_job("orrery_maturation_jobs", row["job_id"])
             try:
                 with usage_context(
                     slot=(int(row["slot"]) if row.get("slot") is not None else None),
@@ -630,6 +655,11 @@ def drain_maturation_jobs_sync(
                         slot=slot,
                     )
                 matured += 1
+            except MaturationLeaseLostError:
+                failed += 1
+                logger.exception(
+                    "Rejected stale maturation completion %s", row["job_id"]
+                )
             except Exception as exc:
                 failed += 1
                 with conn:
@@ -667,7 +697,7 @@ def _mature_one(
     from nexus.api.slot_utils import require_slot_dbname
 
     started = time.monotonic()
-    dbname = require_slot_dbname(slot=slot)
+    dbname = conn.info.dbname
     retrieval = _retrieval_settings(settings_dict)
     if settings.orrery is None:
         raise ValueError("settings.orrery is required for Retrograde maturation")
@@ -694,7 +724,7 @@ def _mature_one(
                         "existing_world_event_count": connected_events,
                     }
                 )
-                _mark_maturation_succeeded(cur, job_id=row["job_id"], manifest=manifest)
+                _mark_maturation_succeeded(cur, row=row, manifest=manifest)
                 logger.info(
                     "Maturation job %s skipped: entity %r already participates "
                     "in %s world events",
@@ -753,7 +783,7 @@ def _mature_one(
         )
         with conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                _mark_maturation_succeeded(cur, job_id=row["job_id"], manifest=manifest)
+                _mark_maturation_succeeded(cur, row=row, manifest=manifest)
         logger.warning(
             "Maturation job %s: Skald selected no seeds for %r; entity stays "
             "a bare stub",
@@ -781,6 +811,7 @@ def _mature_one(
     if not selected_seed_ids:
         with conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                _require_maturation_lease(cur, row)
                 _apply_maturation_coordinates(
                     cur,
                     row=row,
@@ -805,7 +836,7 @@ def _mature_one(
                 )
                 _mark_maturation_succeeded(
                     cur,
-                    job_id=row["job_id"],
+                    row=row,
                     manifest=manifest,
                 )
         logger.info(
@@ -819,6 +850,7 @@ def _mature_one(
     persistence_started = time.monotonic()
     with conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            _require_maturation_lease(cur, row)
             persistence = _persist_maturation_expansion(
                 cur,
                 packet=packet,
@@ -947,7 +979,7 @@ def _finish_embedding(
 
     with conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            _mark_maturation_succeeded(cur, job_id=row["job_id"], manifest=manifest)
+            _mark_maturation_succeeded(cur, row=row, manifest=manifest)
     logger.info(
         "Maturation job %s succeeded for %s %r",
         row["job_id"],
@@ -1494,19 +1526,41 @@ def _pending_embedding_ids(cur: Any, summary_ids: Sequence[Any]) -> list[int]:
     return [int(_row_value(row, "id", 0)) for row in cur.fetchall()]
 
 
+class MaturationLeaseLostError(RuntimeError):
+    """Reject writes from an expired or superseded maturation worker."""
+
+
+def _require_maturation_lease(cur: Any, row: Mapping[str, Any]) -> None:
+    cur.execute(
+        "SELECT id FROM orrery_maturation_jobs WHERE id = %s FOR UPDATE",
+        (row["job_id"],),
+    )
+    cur.execute(
+        """
+        SELECT id FROM orrery_maturation_jobs
+        WHERE id = %s AND state = 'leased' AND locked_by = %s
+          AND lease_nonce = %s AND lease_until > clock_timestamp()
+        FOR UPDATE
+        """,
+        (row["job_id"], row["locked_by"], row["lease_nonce"]),
+    )
+    if cur.fetchone() is None:
+        raise MaturationLeaseLostError(f"Maturation job {row['job_id']} lost its lease")
+
+
 def _mark_maturation_succeeded(
-    cur: Any, *, job_id: int, manifest: Mapping[str, Any]
+    cur: Any, *, row: Mapping[str, Any], manifest: Mapping[str, Any]
 ) -> None:
+    _require_maturation_lease(cur, row)
     cur.execute(
         """
         UPDATE orrery_maturation_jobs
-        SET state = 'succeeded',
-            lease_until = NULL,
-            result_manifest = %s::jsonb,
-            updated_at = now()
+        SET state = 'succeeded', lease_until = NULL,
+            locked_by = NULL, lease_nonce = NULL,
+            result_manifest = %s::jsonb, last_error = NULL, updated_at = now()
         WHERE id = %s
         """,
-        (json.dumps(manifest), job_id),
+        (json.dumps(manifest), row["job_id"]),
     )
 
 
@@ -1518,31 +1572,23 @@ def _mark_maturation_failed(
     max_attempts: int,
     retry_delay_seconds: int,
 ) -> None:
+    _require_maturation_lease(cur, row)
     attempt_count = int(row.get("attempts") or 0) + 1
-    if attempt_count < max_attempts:
-        cur.execute(
-            """
-            UPDATE orrery_maturation_jobs
-            SET state = 'queued',
-                available_at = now() + (%s * interval '1 second'),
-                lease_until = NULL,
-                last_error = %s,
-                updated_at = now()
-            WHERE id = %s
-            """,
-            (retry_delay_seconds, error, row["job_id"]),
-        )
-        return
     cur.execute(
         """
         UPDATE orrery_maturation_jobs
-        SET state = 'failed',
-            lease_until = NULL,
-            last_error = %s,
-            updated_at = now()
+        SET state = %s::orrery_job_state,
+            available_at = now() + (%s * interval '1 second'),
+            lease_until = NULL, locked_by = NULL, lease_nonce = NULL,
+            last_error = %s, updated_at = now()
         WHERE id = %s
         """,
-        (error, row["job_id"]),
+        (
+            "queued" if attempt_count < max_attempts else "failed",
+            retry_delay_seconds,
+            error,
+            row["job_id"],
+        ),
     )
 
 

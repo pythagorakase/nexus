@@ -99,7 +99,7 @@ class OrreryStatus(BaseModel):
 def process_orrery_outbox_sync(
     slot: Optional[int] = None,
     *,
-    promotion_limit: int = 20,
+    promotion_limit: Optional[int] = None,
     narration_limit: Optional[int] = None,
     semantic_clearance_limit: int = DEFAULT_SEMANTIC_CLEARANCE_LIMIT,
     semantic_clearance_recent_chunks: int = DEFAULT_SEMANTIC_CLEARANCE_RECENT_CHUNKS,
@@ -114,47 +114,36 @@ def process_orrery_outbox_sync(
     experience_limit: Optional[int] = None,
     experience_provider: Optional[Any] = None,
 ) -> OrreryWorkerResult:
-    """Drain pending Orrery background work."""
+    """Operator compatibility entry: run one pass under durable ownership."""
+    from nexus.api.slot_utils import get_active_slot
+    from nexus.jobs.scheduler import SlotScheduler
 
-    promoted, skipped = promote_pending_resolutions_sync(
-        slot,
-        limit=promotion_limit,
-        settings=settings,
+    if experience_provider is not None:
+        raise ValueError(
+            "Select the registered TEST provider in settings for scheduler proofs"
+        )
+    scheduler = SlotScheduler(
+        slot or get_active_slot(), settings=dict(settings) if settings else None
     )
-    narrated, failed = drain_narration_outbox_sync(
-        slot,
-        limit=narration_limit,
-        settings=settings,
+    result = scheduler.run_pass(
+        promotion_limit=promotion_limit,
+        narration_limit=narration_limit,
+        maturation_limit=maturation_limit,
+        experience_limit=experience_limit,
     )
-    semantically_cleared = clear_semantic_tags_sync(
-        slot,
-        limit=semantic_clearance_limit,
-        recent_chunk_window=semantic_clearance_recent_chunks,
-        evidence_chunk_limit=semantic_clearance_evidence_chunks,
-        evidence_event_limit=semantic_clearance_evidence_events,
-        settings=settings,
-    )
-    matured, maturation_failed = drain_maturation_jobs_sync(
-        slot,
-        limit=maturation_limit,
-        settings=settings,
-    )
-    experiences_rendered, experience_render_failed = drain_experience_outbox_sync(
-        slot=slot,
-        settings=settings,
-        provider=experience_provider,
-        limit=experience_limit,
-    )
+    promotion = result.get("promotion", (0, 0))
+    narration = result.get("orrery_narration_jobs", (0, 0))
+    experience = result.get("character_experience_jobs", (0, 0))
+    maturation = result.get("orrery_maturation_jobs", (0, 0))
     return OrreryWorkerResult(
-        promoted=promoted,
-        skipped=skipped,
-        narrated=narrated,
-        failed=failed,
-        semantically_cleared=semantically_cleared,
-        matured=matured,
-        maturation_failed=maturation_failed,
-        experiences_rendered=experiences_rendered,
-        experience_render_failed=experience_render_failed,
+        promoted=promotion[0],
+        skipped=promotion[1],
+        narrated=narration[0],
+        failed=narration[1],
+        matured=maturation[0],
+        maturation_failed=maturation[1],
+        experiences_rendered=experience[0],
+        experience_render_failed=experience[1],
     )
 
 
@@ -349,6 +338,9 @@ def drain_narration_outbox_sync(
         narrated = 0
         failed = 0
         for row in leased_rows:
+            from nexus.jobs.gate import report_leased_job
+
+            report_leased_job("orrery_narration_jobs", row["job_id"])
             try:
                 descriptor = _perceptual_descriptor(row)
                 completion_error = None
@@ -935,7 +927,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument(
         "--promotion-limit",
         type=int,
-        default=20,
+        default=None,
         help="Maximum pending resolutions to promote in this run.",
     )
     parser.add_argument(
@@ -983,7 +975,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     args = parser.parse_args(argv)
 
     if args.status:
-        payload = load_orrery_status_sync(args.slot).model_dump()
+        from nexus.agents.orrery.job_queues import load_job_queues_for_slot_sync
+        from nexus.api.slot_utils import get_active_slot
+
+        payload = load_job_queues_for_slot_sync(args.slot or get_active_slot())
     else:
         payload = process_orrery_outbox_sync(
             args.slot,
