@@ -517,8 +517,8 @@ def _accept_pending(session_id: str, chunk_id: int) -> int:
     return accepted_chunk_id
 
 
-def _assert_mentioned_row(dbname: str, chunk_id: int) -> None:
-    """Assert the durable junction row names the known character as mentioned."""
+def _assert_present_row(dbname: str, chunk_id: int) -> None:
+    """Assert the deterministic stage cue promotes the known character."""
 
     with _connect(dbname) as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -535,7 +535,7 @@ def _assert_mentioned_row(dbname: str, chunk_id: int) -> None:
             rows = list(cur.fetchall())
     assert {row["name"]: row["reference"] for row in rows} == {
         PROTAGONIST: "present",
-        KNOWN_CHARACTER: "mentioned",
+        KNOWN_CHARACTER: "present",
     }
 
 
@@ -560,40 +560,6 @@ def _assert_declared_row(
             )
             rows = [dict(row) for row in cur.fetchall()]
     assert rows == [{"name": DECLARED_CHARACTER, "reference": expected_reference}]
-
-
-def _assert_collision_rows(
-    dbname: str,
-    chunk_id: int,
-    *,
-    conflict_id: int,
-    conflict_name: str,
-) -> int:
-    """Require one mentioned row for each side of a declared-name collision."""
-
-    with _connect(dbname) as conn:
-        with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute(
-                """
-                SELECT c.id, c.name, ccr.reference::text AS reference
-                FROM chunk_character_references AS ccr
-                JOIN characters AS c ON c.id = ccr.character_id
-                WHERE ccr.chunk_id = %s AND c.name IN (%s, %s)
-                ORDER BY c.id
-                """,
-                (chunk_id, DECLARED_CHARACTER, conflict_name),
-            )
-            rows = [dict(row) for row in cur.fetchall()]
-
-    conflict_rows = [row for row in rows if row["id"] == conflict_id]
-    declared_rows = [row for row in rows if row["name"] == DECLARED_CHARACTER]
-    assert conflict_rows == [
-        {"id": conflict_id, "name": conflict_name, "reference": "mentioned"}
-    ]
-    assert len(declared_rows) == 1
-    assert declared_rows[0]["reference"] == "mentioned"
-    assert len(rows) == 2
-    return int(declared_rows[0]["id"])
 
 
 def _assert_clean_presence_audit(caplog: pytest.LogCaptureFixture) -> None:
@@ -624,33 +590,6 @@ def _assert_clean_declared_presence_audit(
         f"{quote_log_value(DECLARED_CHARACTER)}"
     )
     assert (marker in messages) is normalized
-    assert not [
-        message for message in messages if message.startswith("presence audit:")
-    ]
-    assert not [
-        message
-        for message in messages
-        if message.startswith("presence audit failed for committed chunk")
-    ]
-
-
-def _assert_clean_collision_presence_audit(
-    caplog: pytest.LogCaptureFixture,
-    *,
-    expected_warning: str,
-) -> None:
-    """Require exactly one collision marker and no post-commit audit finding."""
-
-    messages = [record.getMessage() for record in caplog.records]
-    assert [
-        message
-        for message in messages
-        if message.startswith("presence declared mention collision:")
-    ] == [expected_warning]
-    assert (
-        "presence declared mention normalized: "
-        f"{quote_log_value(DECLARED_CHARACTER)}"
-    ) not in messages
     assert not [
         message for message in messages if message.startswith("presence audit:")
     ]
@@ -704,6 +643,7 @@ def _assert_staged_mention(
     *,
     session_id: str,
     staged_chunk_id: int,
+    expected_reference: str = "mentioned",
 ) -> None:
     """Prove reconciliation is durable before the accept/commit boundary."""
 
@@ -724,12 +664,14 @@ def _assert_staged_mention(
             )
             known_character_id = int(cur.fetchone()["id"])
     assert staged is not None
-    assert staged["chunk_id"] == staged_chunk_id
+    assert (
+        staged["chunk_id"] is None
+    )  # Draft identity is its session, not a future chunk.
     character_updates = staged["reference_updates"]["characters"]
     assert any(
         update.get("character_name") == KNOWN_CHARACTER
         and update["character_id"] == known_character_id
-        and update["reference_type"] == "mentioned"
+        and update["reference_type"] == expected_reference
         for update in character_updates
     )
 
@@ -794,7 +736,9 @@ def _assert_staged_collision_owner_reference(
         {
             "character_id": conflict_id,
             "character_name": conflict_name,
-            "reference_type": "mentioned",
+            "reference_type": (
+                "present" if conflict_name == KNOWN_CHARACTER else "mentioned"
+            ),
         }
     ]
 
@@ -858,13 +802,13 @@ def test_wizard_opening_stage_and_accept_reconcile_known_character(
         chunk_id = _accept_pending(session_id, staged_chunk_id)
 
     assert chunk_id == 2
-    _assert_mentioned_row(wizard_database, chunk_id)
+    _assert_present_row(wizard_database, chunk_id)
     _assert_committed_prose_names_character(wizard_database, chunk_id=chunk_id)
     _assert_audit_observation(audit_observations, chunk_id)
     _assert_clean_presence_audit(caplog)
 
 
-def test_declared_character_named_without_presence_commits_mentioned_row(
+def test_declared_character_named_without_presence_commits_present_row(
     wizard_database: str,
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
@@ -902,7 +846,7 @@ def test_declared_character_named_without_presence_commits_mentioned_row(
     _assert_declared_row(
         wizard_database,
         chunk_id,
-        expected_reference="mentioned",
+        expected_reference="present",
     )
     _assert_committed_prose_names_character(
         wizard_database,
@@ -962,13 +906,13 @@ def test_declared_character_already_listed_present_has_one_present_row(
     ["alias", "canonical"],
     ids=["alias-owner", "canonical-name"],
 )
-def test_declared_name_collision_references_both_identities(
+def test_declared_name_collision_raises_and_rolls_back(
     wizard_database: str,
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
     collision_kind: str,
 ) -> None:
-    """An unknowable declared-name collision stays dual-referenced and loud."""
+    """An ambiguous declaration must not commit either guessed identity."""
 
     payloads: Dict[type[BaseModel], Deque[dict[str, Any]]] = {
         StorytellerResponseBootstrap: deque([BOOTSTRAP_PAYLOAD.copy()]),
@@ -989,14 +933,12 @@ def test_declared_name_collision_references_both_identities(
             character_name=conflict_name,
             alias=DECLARED_CHARACTER,
         )
-        conflict_field = "alias_of"
     else:
         conflict_name = CANONICAL_COLLISION_CHARACTER
         conflict_id = _insert_roster_character(
             wizard_database,
             name=conflict_name,
         )
-        conflict_field = "canonical"
 
     audit_observations.clear()
     caplog.clear()
@@ -1017,34 +959,27 @@ def test_declared_name_collision_references_both_identities(
             conflict_id=conflict_id,
             conflict_name=conflict_name,
         )
-        chunk_id = _accept_pending(session_id, staged_chunk_id)
+        from fastapi import HTTPException
 
-    assert chunk_id == 3
-    declared_id = _assert_collision_rows(
-        wizard_database,
-        chunk_id,
-        conflict_id=conflict_id,
-        conflict_name=conflict_name,
-    )
-    expected_warning = (
-        "presence declared mention collision: "
-        f"declared={quote_log_value(DECLARED_CHARACTER)} id={declared_id} "
-        f"conflicts {conflict_field}={quote_log_value(conflict_name)} "
-        f"id={conflict_id}"
-    )
-    _assert_audit_observation(audit_observations, chunk_id)
-    _assert_clean_collision_presence_audit(
-        caplog,
-        expected_warning=expected_warning,
-    )
+        with pytest.raises(HTTPException, match="Ambiguous character name"):
+            _accept_pending(session_id, staged_chunk_id)
+    with _connect(wizard_database) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT count(*) FROM characters WHERE name = %s", (DECLARED_CHARACTER,)
+            )
+            assert cur.fetchone()[0] == 0
+            cur.execute("SELECT max(id) FROM narrative_chunks")
+            assert cur.fetchone()[0] == opening_chunk_id
+    assert audit_observations == []
 
 
-def test_ordinary_turn_control_still_normalizes_before_commit(
+def test_ordinary_turn_carries_promoted_presence_before_commit(
     wizard_database: str,
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """An ordinary child turn retains PR #663's pre-hydration behavior."""
+    """An ordinary child turn carries the opening cast without a second promotion."""
 
     payloads: Dict[type[BaseModel], Deque[dict[str, Any]]] = {
         StorytellerResponseBootstrap: deque([BOOTSTRAP_PAYLOAD.copy()]),
@@ -1075,11 +1010,14 @@ def test_ordinary_turn_control_still_normalizes_before_commit(
             wizard_database,
             session_id=session_id,
             staged_chunk_id=staged_chunk_id,
+            expected_reference="present",
         )
         chunk_id = _accept_pending(session_id, staged_chunk_id)
 
     assert chunk_id == 3
-    _assert_mentioned_row(wizard_database, chunk_id)
+    _assert_present_row(wizard_database, chunk_id)
     _assert_committed_prose_names_character(wizard_database, chunk_id=chunk_id)
     _assert_audit_observation(audit_observations, chunk_id)
-    _assert_clean_presence_audit(caplog)
+    assert not any(
+        "presence audit:" in record.getMessage() for record in caplog.records
+    )

@@ -2,14 +2,6 @@
 
 import pytest
 from datetime import timedelta
-from nexus.api.db_converters import (
-    time_fields_to_interval,
-    interval_to_time_fields,
-    chronology_to_db_values,
-    resolve_character_references,
-    resolve_faction_references,
-    resolve_place_references,
-)
 from nexus.agents.logon.apex_schema import (
     CharacterReference,
     ChronologyUpdate,
@@ -18,9 +10,20 @@ from nexus.agents.logon.apex_schema import (
     PlaceReferenceType,
     ReferenceType,
 )
+from nexus.api.db_converters import (
+    time_fields_to_interval,
+    interval_to_time_fields,
+    chronology_to_db_values,
+    resolve_character_references,
+    resolve_faction_references,
+    resolve_place_references,
+)
 
 
 class MissingLookupConnection:
+    async def fetch(self, *args):
+        return []
+
     """Async connection stand-in whose name lookups find no rows."""
 
     async def fetchval(self, *_args, **_kwargs):
@@ -151,50 +154,43 @@ class TestReferenceResolution:
     """Test reference resolver tolerance for non-canonical extraction metadata."""
 
     @pytest.mark.asyncio
-    async def test_unresolved_character_reference_is_skipped(self, caplog):
-        """Group labels should not block committing an otherwise valid chunk."""
-        refs = await resolve_character_references(
-            [
-                CharacterReference(
-                    character_name="Rectification officers",
-                    reference_type=ReferenceType.PRESENT,
-                )
-            ],
-            MissingLookupConnection(),
-        )
-
-        assert refs == []
-        assert "Skipping unresolved character reference" in caplog.text
+    async def test_unresolved_character_reference_raises(self):
+        with pytest.raises(ValueError, match="Unresolved character"):
+            await resolve_character_references(
+                [
+                    CharacterReference(
+                        character_name="Unresolved Name",
+                        reference_type=ReferenceType.MENTIONED,
+                    )
+                ],
+                MissingLookupConnection(),
+            )
 
     @pytest.mark.asyncio
-    async def test_unresolved_place_reference_is_skipped(self, caplog):
-        refs = await resolve_place_references(
-            [
-                PlaceReference(
-                    place_name="Unresolved Threshold",
-                    reference_type=PlaceReferenceType.MENTIONED,
-                )
-            ],
-            MissingLookupConnection(),
-        )
-
-        assert refs == []
-        assert "Skipping unresolved place reference" in caplog.text
+    async def test_unresolved_place_reference_raises(self):
+        with pytest.raises(ValueError, match="Unresolved place"):
+            await resolve_place_references(
+                [
+                    PlaceReference(
+                        place_name="Unresolved Name",
+                        reference_type=PlaceReferenceType.MENTIONED,
+                    )
+                ],
+                MissingLookupConnection(),
+            )
 
     @pytest.mark.asyncio
-    async def test_unresolved_faction_reference_is_skipped(self, caplog):
-        refs = await resolve_faction_references(
-            [
-                FactionReference(
-                    faction_name="Unresolved Office",
-                    reference_type=ReferenceType.MENTIONED,
-                )
-            ],
-            MissingLookupConnection(),
-        )
-
-        assert refs == []
-        assert "Skipping unresolved faction reference" in caplog.text
+    async def test_unresolved_faction_reference_raises(self):
+        with pytest.raises(ValueError, match="Unresolved faction"):
+            await resolve_faction_references(
+                [
+                    FactionReference(
+                        faction_name="Unresolved Name",
+                        reference_type=ReferenceType.MENTIONED,
+                    )
+                ],
+                MissingLookupConnection(),
+            )
 
 
 class TestTimeFieldValidation:

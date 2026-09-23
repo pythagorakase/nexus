@@ -14,10 +14,6 @@ from typing import Any, Awaitable, Callable, Dict, List, Mapping, Optional, cast
 
 import asyncpg  # type: ignore[import-untyped]
 
-from nexus.agents.orrery.relationship_provenance import (
-    relationship_producer_async,
-    emit_relationship_milestones_async,
-)
 from nexus.agents.logon.apex_schema import (
     ChunkMetadataUpdate,
     ChronologyUpdate,
@@ -33,7 +29,15 @@ from nexus.agents.orrery.reconstruction import (
     playable_narrative_ordinal_async,
     set_commit_chunk_attribution_async,
 )
+from nexus.agents.orrery.relationship_provenance import (
+    relationship_producer_async,
+    emit_relationship_milestones_async,
+)
 from nexus.agents.orrery.tag_writer import apply_tag_bestowal_async
+from nexus.api.choice_handling import (
+    normalize_choice_object,
+    selected_text_from_choice_object,
+)
 from nexus.api.db_converters import (
     chronology_to_db_values,
     create_declared_entity_stubs,
@@ -44,25 +48,28 @@ from nexus.api.db_converters import (
     resolve_faction_references,
     resolve_place_references,
 )
-from nexus.api.summary_triggers import (
-    SummaryTask,
-    plan_summary_tasks,
-    schedule_summary_generation,
-)
-from nexus.api.choice_handling import (
-    normalize_choice_object,
-    selected_text_from_choice_object,
-)
 from nexus.api.lore_adapter import compute_raw_text, split_staged_orrery_payload
 from nexus.api.presence_reconciliation import (
     read_character_roster_from_async_connection,
     reconcile_declared_character_mentions_async,
     reconcile_public_prose_mentions_by_character_ids,
 )
+from nexus.api.summary_triggers import (
+    SummaryTask,
+    plan_summary_tasks,
+    schedule_summary_generation,
+)
 from nexus.memory.context_state import (
     bind_pass2_baseline,
     validate_staged_pass2_baseline,
 )
+from nexus.presence.cues import promote_in_scene_characters
+from nexus.presence.roster import (
+    read_roster_async,
+    roster_from_resolved_references,
+    write_roster_async,
+)
+
 
 logger = logging.getLogger("nexus.api.commit_handler")
 
@@ -300,81 +307,6 @@ async def insert_chunk_metadata(
             scene_weather,
         )
     logger.info(f"Created metadata for chunk {chunk_id}: {slug}")
-
-
-async def insert_place_references(
-    conn: asyncpg.Connection, chunk_id: int, place_refs: list
-) -> None:
-    """
-    Insert place-chunk references into junction table.
-    """
-    if not place_refs:
-        return
-
-    for ref in place_refs:
-        await conn.execute(
-            """
-            INSERT INTO place_chunk_references (
-                place_id, chunk_id, reference_type, evidence
-            )
-            VALUES ($1, $2, $3, $4)
-            """,
-            ref["place_id"],
-            chunk_id,
-            ref["reference_type"],
-            ref.get("evidence"),
-        )
-    logger.info(f"Inserted {len(place_refs)} place references for chunk {chunk_id}")
-
-
-async def insert_character_references(
-    conn: asyncpg.Connection, chunk_id: int, char_refs: list
-) -> None:
-    """
-    Insert character-chunk references into junction table.
-    """
-    if not char_refs:
-        return
-
-    for ref in char_refs:
-        await conn.execute(
-            """
-            INSERT INTO chunk_character_references (chunk_id, character_id, reference)
-            VALUES ($1, $2, $3)
-            ON CONFLICT (chunk_id, character_id) DO UPDATE
-            SET reference = 'present'
-            WHERE 'present' IN (
-                chunk_character_references.reference,
-                EXCLUDED.reference
-            )
-            """,
-            chunk_id,
-            ref["character_id"],
-            ref["reference"],
-        )
-    logger.info(f"Inserted {len(char_refs)} character references for chunk {chunk_id}")
-
-
-async def insert_faction_references(
-    conn: asyncpg.Connection, chunk_id: int, faction_refs: list
-) -> None:
-    """
-    Insert faction-chunk references into junction table.
-    """
-    if not faction_refs:
-        return
-
-    for ref in faction_refs:
-        await conn.execute(
-            """
-            INSERT INTO chunk_faction_references (chunk_id, faction_id)
-            VALUES ($1, $2)
-            ON CONFLICT (chunk_id, faction_id) DO NOTHING
-            """,
-            chunk_id,
-            ref["faction_id"],
-        )
-    logger.info(f"Inserted {len(faction_refs)} faction references for chunk {chunk_id}")
 
 
 # ============================================================================
@@ -792,7 +724,11 @@ async def commit_incubator_to_database(
                         "Declared-character reconciliation returned no character id"
                     )
                 character_refs.append(
-                    {"character_id": mention.id, "reference": "mentioned"}
+                    {
+                        "character_id": mention.id,
+                        "name": mention.name,
+                        "reference": "mentioned",
+                    }
                 )
             roster_mentions = reconcile_public_prose_mentions_by_character_ids(
                 [enacted_text],
@@ -807,7 +743,11 @@ async def commit_incubator_to_database(
                         "Roster-character reconciliation returned no character id"
                     )
                 character_refs.append(
-                    {"character_id": mention.id, "reference": "mentioned"}
+                    {
+                        "character_id": mention.id,
+                        "name": mention.name,
+                        "reference": "mentioned",
+                    }
                 )
             place_refs = await resolve_place_references(ref_entities.places, conn)
             faction_refs = await resolve_faction_references(ref_entities.factions, conn)
@@ -817,10 +757,24 @@ async def commit_incubator_to_database(
                     StateUpdates(**incubator["entity_updates"]),
                 )
 
-            # Step 8: Insert junction table references
-            await insert_place_references(conn, chunk_id, place_refs)
-            await insert_character_references(conn, chunk_id, character_refs)
-            await insert_faction_references(conn, chunk_id, faction_refs)
+            # Step 8: Reconcile the physical scene and persist its named views.
+            roster = roster_from_resolved_references(
+                character_refs, place_refs, faction_refs
+            )
+            parent_roster = (
+                await read_roster_async(conn, incubator["parent_chunk_id"])
+                if incubator["parent_chunk_id"]
+                else None
+            )
+            roster = promote_in_scene_characters(
+                roster,
+                prose=raw_text,
+                declarations=declarations,
+                character_rows=roster_rows.characters,
+                alias_rows=roster_rows.aliases,
+                parent=parent_roster,
+            )
+            await write_roster_async(conn, chunk_id, roster)
 
             # Step 9: Update entity states (if provided)
             if state_updates is not None:

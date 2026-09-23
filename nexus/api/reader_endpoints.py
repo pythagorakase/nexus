@@ -29,7 +29,9 @@ from fastapi import APIRouter, HTTPException
 from nexus.agents.orrery.reconstruction import playable_narrative_predicate
 from nexus.api.db_pool import get_connection
 from nexus.api.slot_utils import require_slot_dbname
+from nexus.presence.roster import read_roster
 from nexus.util.clock_face import clock_face
+
 
 logger = logging.getLogger("nexus.api.reader_endpoints")
 
@@ -264,40 +266,27 @@ async def get_chunk_context(
     Powers the reader's location header and the Session Ledger scene cast.
     """
     dbname = resolve_dbname(slot)
-    character_rows = _fetch_all(
-        dbname,
-        """
-        SELECT c.id, c.name, ccr.reference::text AS reference
-        FROM chunk_character_references ccr
-        JOIN characters c ON c.id = ccr.character_id
-        WHERE ccr.chunk_id = %s
-        ORDER BY (ccr.reference = 'present') DESC, c.id ASC
-        """,
-        (chunk_id,),
-    )
-    place_rows = _fetch_all(
-        dbname,
-        """
-        SELECT p.id, p.name, pcr.reference_type::text AS reference_type
-        FROM place_chunk_references pcr
-        JOIN places p ON p.id = pcr.place_id
-        WHERE pcr.chunk_id = %s
-        ORDER BY (pcr.reference_type = 'setting') DESC, p.id ASC
-        """,
-        (chunk_id,),
-    )
+    with get_connection(dbname) as conn:
+        roster = read_roster(conn, chunk_id)
     return {
         "characters": [
-            {"id": row["id"], "name": row["name"], "reference": row["reference"]}
-            for row in character_rows
+            {"id": entry.id, "name": entry.name, "reference": reference}
+            for reference, view in (
+                ("present", roster.present),
+                ("mentioned", roster.referenced),
+            )
+            for entry in view.values()
+            if entry.kind == "character"
         ],
         "places": [
-            {
-                "id": row["id"],
-                "name": row["name"],
-                "referenceType": row["reference_type"],
-            }
-            for row in place_rows
+            {"id": entry.id, "name": entry.name, "referenceType": reference}
+            for reference, view in (
+                ("setting", roster.setting),
+                ("transit", roster.transitioning),
+                ("mentioned", roster.referenced),
+            )
+            for entry in view.values()
+            if entry.kind == "place"
         ],
     }
 

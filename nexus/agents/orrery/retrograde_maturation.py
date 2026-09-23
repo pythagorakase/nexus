@@ -64,7 +64,9 @@ from nexus.config.settings_models import (
     OrreryRetrogradeRetrievalSettings,
     Settings,
 )
+from nexus.presence.roster import read_roster
 from nexus.telemetry.usage import usage_context
+
 
 logger = logging.getLogger("nexus.orrery.retrograde_maturation")
 
@@ -1369,52 +1371,20 @@ def _load_job_context(
     )
 
     scene_entities: list[dict[str, Any]] = []
-    for kind, sql in (
-        (
-            "character",
-            """
-            SELECT c.name, c.summary
-            FROM chunk_character_references r
-            JOIN characters c ON c.id = r.character_id
-            WHERE r.chunk_id = %s
-            ORDER BY c.id
-            LIMIT 6
-            """,
-        ),
-        (
-            "place",
-            """
-            SELECT p.name, p.summary
-            FROM place_chunk_references r
-            JOIN places p ON p.id = r.place_id
-            WHERE r.chunk_id = %s
-            ORDER BY p.id
-            LIMIT 6
-            """,
-        ),
-        (
-            "faction",
-            """
-            SELECT f.name, f.summary
-            FROM chunk_faction_references r
-            JOIN factions f ON f.id = r.faction_id
-            WHERE r.chunk_id = %s
-            ORDER BY f.id
-            LIMIT 6
-            """,
-        ),
-    ):
-        cur.execute(sql, (row["requesting_chunk_id"],))
-        for entity in cur.fetchall():
-            name = _row_value(entity, "name", 0)
-            if name == row["entity_name"]:
+    roster = read_roster(cur, row["requesting_chunk_id"])
+    for kind in ("character", "place", "faction"):
+        entries = [
+            entry for entry in roster.all_references.values() if entry.kind == kind
+        ]
+        for entry in sorted(entries, key=lambda entry: entry.id)[:6]:
+            if entry.name == row["entity_name"]:
                 continue
             scene_entities.append(
                 {
                     "kind": kind,
                     "role": "scene_anchor",
-                    "name": name,
-                    "summary": _row_value(entity, "summary", 1),
+                    "name": entry.name,
+                    "summary": entry.summary,
                     "details": {},
                 }
             )

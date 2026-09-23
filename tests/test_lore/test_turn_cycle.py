@@ -10,11 +10,11 @@ from typing import Any, Dict
 
 import pytest
 
-from nexus.agents.lore.utils import turn_cycle as turn_cycle_module
 from nexus.agents.lore.logon_utility import LogonUtility
-from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
-from nexus.agents.lore.utils.turn_context import TurnContext
+from nexus.agents.lore.utils import turn_cycle as turn_cycle_module
 from nexus.agents.lore.utils.token_budget import TokenBudgetManager
+from nexus.agents.lore.utils.turn_context import TurnContext
+from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
 from nexus.config import load_settings_as_dict
 from nexus.memory import ContextMemoryManager
 from nexus.memory.context_state import ContextPackage, PassTransition
@@ -824,6 +824,9 @@ def test_turn_phases_gate_and_thread_produced_presence_roster(
         def __init__(self, rows: list[Any] | None = None) -> None:
             self.rows = rows or []
 
+        def mappings(self):
+            return self
+
         def fetchall(self) -> list[Any]:
             return self.rows
 
@@ -845,15 +848,27 @@ def test_turn_phases_gate_and_thread_produced_presence_roster(
         ) -> Result:
             nonlocal roster_query_count
             sql = " ".join(str(statement).split())
-            if (
-                "SELECT character_id FROM chunk_character_references" in sql
-                and "reference::text = 'present'" in sql
-            ):
+            if "/* presence:roster */" in sql:
                 if not presence_boost_enabled:
                     raise AssertionError("disabled arm executed the roster query")
-                assert parameters == {"chunk_id": 42}
+                assert parameters == {"chunk_ids": [42]}
                 roster_query_count += 1
-                return Result([Row(9), Row(3)])
+                return Result(
+                    [
+                        {
+                            "chunk_id": 42,
+                            "kind": "character",
+                            "id": id,
+                            "name": str(id),
+                            "entity_id": id,
+                            "is_active": True,
+                            "reference": "present",
+                            "summary": None,
+                            "evidence": None,
+                        }
+                        for id in (9, 3)
+                    ]
+                )
             return Result()
 
     class DummyMemnon:

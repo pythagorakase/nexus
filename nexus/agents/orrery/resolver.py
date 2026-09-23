@@ -21,17 +21,19 @@ from nexus.agents.orrery.epistemics import (
     load_epistemics_hydration,
     load_epistemics_policy,
 )
+from nexus.agents.orrery.needs import (
+    NEED_SEVERITY_PREFIX,
+    NeedTuning,
+    coerce_need_tuning,
+    effective_debt_score,
+    need_applies_to_tags,
+    severity_for_debt,
+)
 from nexus.agents.orrery.player_identity import canonical_player_character_id
 from nexus.agents.orrery.reciprocal import (
     OrreryJointBeat,
     coerce_joint_beats,
     detect_joint_beats,
-)
-from nexus.agents.orrery.weather import (
-    WeatherContext,
-    classify_weather,
-    climate_for_seed,
-    weather_at,
 )
 from nexus.agents.orrery.substrate import (
     PackageSelection,
@@ -56,15 +58,15 @@ from nexus.agents.orrery.substrate import (
     binding_hash,
     evaluate_stack,
 )
-from nexus.agents.orrery.needs import (
-    NEED_SEVERITY_PREFIX,
-    NeedTuning,
-    coerce_need_tuning,
-    effective_debt_score,
-    need_applies_to_tags,
-    severity_for_debt,
-)
 from nexus.agents.orrery.tag_activity import active_entity_tag_at_world_time_sql
+from nexus.agents.orrery.weather import (
+    WeatherContext,
+    classify_weather,
+    climate_for_seed,
+    weather_at,
+)
+from nexus.presence.roster import read_roster, read_rosters
+
 
 logger = logging.getLogger(__name__)
 
@@ -1277,22 +1279,23 @@ def compose_actor_bindings(
 
     if anchor_chunk_id is not None:
         lower_bound = max(0, anchor_chunk_id - window_chunks + 1)
-        for row in session.execute(
-            text(
-                """
-                /* orrery:actor_bindings_chunk_refs */
-                SELECT DISTINCT cer.entity_id
-                FROM chunk_entity_references_v cer
-                JOIN entities e ON e.id = cer.entity_id
-                WHERE e.kind = 'character'
-                  AND e.is_active = true
-                  AND cer.reference_type IS DISTINCT FROM 'present'
-                  AND cer.chunk_id BETWEEN :lower_bound AND :anchor_chunk_id
-                """
-            ),
-            {"lower_bound": lower_bound, "anchor_chunk_id": anchor_chunk_id},
-        ).mappings():
-            actor_ids.add(row["entity_id"])
+        chunk_ids = [
+            row["id"]
+            for row in session.execute(
+                text(
+                    "/* presence:window_chunks */ SELECT id FROM narrative_chunks WHERE id BETWEEN :lower_bound AND :anchor_chunk_id"
+                ),
+                {"lower_bound": lower_bound, "anchor_chunk_id": anchor_chunk_id},
+            ).mappings()
+        ]
+        for roster in read_rosters(session, chunk_ids).values():
+            actor_ids.update(
+                entry.entity_id
+                for entry in roster.all_references.values()
+                if entry.kind == "character"
+                and entry.is_active
+                and entry.entity_id is not None
+            )
 
         for row in session.execute(
             text(
@@ -1392,25 +1395,7 @@ def _present_actor_ids_at_anchor(
     if anchor_chunk_id is None:
         return set()
 
-    return {
-        row["entity_id"]
-        for row in session.execute(
-            text(
-                """
-                /* orrery:present_actor_ids_at_anchor */
-                SELECT DISTINCT c.entity_id
-                FROM chunk_character_references ccr
-                JOIN characters c ON c.id = ccr.character_id
-                JOIN entities e ON e.id = c.entity_id
-                WHERE ccr.chunk_id = :anchor_chunk_id
-                  AND ccr.reference = 'present'
-                  AND e.kind = 'character'
-                  AND e.is_active = true
-                """
-            ),
-            {"anchor_chunk_id": anchor_chunk_id},
-        ).mappings()
-    }
+    return read_roster(session, anchor_chunk_id).present_entity_ids
 
 
 def compose_actor_target_bindings(

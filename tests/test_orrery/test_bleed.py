@@ -71,8 +71,25 @@ class FakeSession:
             limit = params.get("limit")
             rows = self.candidate_rows if limit is None else self.candidate_rows[:limit]
             return FakeResult(rows)
-        if "/* orrery:bleed_anchor_entities */" in sql:
-            return FakeResult(self.anchor_entity_rows)
+        if "/* presence:roster */" in sql:
+            chunk_id = params["chunk_ids"][0]
+            return FakeResult(
+                [{"chunk_id": chunk_id, "kind": None}]
+                + [
+                    {
+                        "chunk_id": chunk_id,
+                        "kind": "character",
+                        "id": entry["entity_id"],
+                        "name": str(entry["entity_id"]),
+                        "entity_id": entry["entity_id"],
+                        "is_active": True,
+                        "summary": None,
+                        "evidence": None,
+                        "reference": "present",
+                    }
+                    for entry in self.anchor_entity_rows
+                ]
+            )
         if "/* orrery:bleed_proximity_nodes */" in sql:
             return FakeResult(self.graph_nodes)
         if "/* orrery:bleed_proximity_edges */" in sql:

@@ -17,6 +17,12 @@ from nexus.agents.lore.utils.entity_queries import (
 class _Row:
     """Small SQLAlchemy row stand-in with attribute and mapping access."""
 
+    def keys(self):
+        return self._mapping.keys()
+
+    def __getitem__(self, key):
+        return self._mapping[key]
+
     def __init__(self, **values: Any) -> None:
         self._mapping = values
         for key, value in values.items():
@@ -88,31 +94,26 @@ class _CharacterQuerySession:
                 ]
             )
 
-        if "FROM chunk_character_references" in sql:
-            eligible = [
-                row for row in self.references if row.chunk_id in params["chunk_ids"]
+        if "/* presence:roster */" in sql:
+            rows = [
+                _Row(chunk_id=chunk_id, kind=None) for chunk_id in params["chunk_ids"]
             ]
-            if "character_id IS DISTINCT FROM :user_character_id" in sql:
-                eligible = [
-                    row
-                    for row in eligible
-                    if row.character_id != params["user_character_id"]
-                ]
-
-            latest_by_character: dict[int, _Row] = {}
-            for row in sorted(
-                eligible,
-                key=lambda candidate: (
-                    candidate.character_id,
-                    -candidate.chunk_id,
-                ),
-            ):
-                latest_by_character.setdefault(row.character_id, row)
-            selected = sorted(
-                latest_by_character.values(),
-                key=lambda row: (-row.chunk_id, row.character_id),
-            )[: params["max_featured_characters"]]
-            return _Result(selected)
+            rows.extend(
+                _Row(
+                    chunk_id=row.chunk_id,
+                    kind="character",
+                    id=row.character_id,
+                    name=self.characters[row.character_id].name,
+                    entity_id=10_000 + row.character_id,
+                    is_active=True,
+                    reference=row.reference,
+                    summary=None,
+                    evidence=None,
+                )
+                for row in self.references
+                if row.chunk_id in params["chunk_ids"]
+            )
+            return _Result(rows)
 
         if "FROM characters" in sql and "WHERE id = ANY(:ids)" in sql:
             return _Result(
@@ -198,21 +199,8 @@ class _PlaceQuerySession:
 def test_present_character_ids_use_exact_chunk_roster() -> None:
     """Presence retrieval carries only sorted present rows from its anchor."""
 
-    class PresenceSession:
-        def execute(
-            self, statement: Any, parameters: Optional[Dict[str, Any]] = None
-        ) -> _Result:
-            assert "reference::text = 'present'" in str(statement)
-            assert parameters == {"chunk_id": 42}
-            return _Result(
-                [
-                    _Row(character_id=9),
-                    _Row(character_id=3),
-                    _Row(character_id=9),
-                ]
-            )
-
-    assert fetch_present_character_ids(PresenceSession(), 42) == [3, 9]
+    session = _CharacterQuerySession()
+    assert fetch_present_character_ids(session, 100) == [1, 2]
 
 
 def test_user_character_does_not_consume_non_user_character_cap() -> None:
@@ -232,13 +220,8 @@ def test_user_character_does_not_consume_non_user_character_cap() -> None:
         "user_character"
     )
 
-    reference_sql, reference_params = next(
-        (sql, params)
-        for sql, params in session.executed
-        if "FROM chunk_character_references" in sql
-    )
-    assert "character_id IS DISTINCT FROM :user_character_id" in reference_sql
-    assert reference_params["user_character_id"] == session.user_character_id
+    assert featured_by_id[2]["reference_type"] == "present"
+    assert featured_by_id[3]["reference_type"] == "recent"
 
 
 def test_featured_location_bypasses_cap_and_place_winner_is_deterministic() -> None:

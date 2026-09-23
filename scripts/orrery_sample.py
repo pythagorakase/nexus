@@ -10,8 +10,6 @@ Usage:
 
 from __future__ import annotations
 
-from nexus.database import resolved_database_url
-
 import argparse
 from collections import defaultdict
 from dataclasses import dataclass, field, replace
@@ -31,6 +29,8 @@ from nexus.agents.orrery.substrate import PresentTargetPolicy, Slot, evaluate
 from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
 from nexus.api.slot_utils import get_slot_db_url
 from nexus.config import load_settings_as_dict
+from nexus.database import resolved_database_url
+from nexus.presence.roster import read_rosters
 
 
 ACTOR_ONLY_SLOTS = (Slot.ACTOR,)
@@ -148,23 +148,23 @@ def fetch_actor_sources(
     sources: dict[int, list[str]] = {aid: [] for aid in actor_ids}
     lower_bound = max(0, anchor_chunk_id - window_chunks + 1)
 
-    for row in session.execute(
-        text(
-            """
-            SELECT DISTINCT cer.entity_id
-            FROM chunk_entity_references_v cer
-            WHERE cer.entity_id = ANY(:ids)
-              AND cer.reference_type IS DISTINCT FROM 'present'
-              AND cer.chunk_id BETWEEN :lower_bound AND :anchor_chunk_id
-            """
-        ),
-        {
-            "ids": list(actor_ids),
-            "lower_bound": lower_bound,
-            "anchor_chunk_id": anchor_chunk_id,
-        },
-    ).mappings():
-        sources[row["entity_id"]].append("chunk-ref")
+    chunk_ids = (
+        session.execute(
+            text("SELECT id FROM narrative_chunks WHERE id BETWEEN :lower AND :anchor"),
+            {"lower": lower_bound, "anchor": anchor_chunk_id},
+        )
+        .scalars()
+        .all()
+    )
+    for roster in read_rosters(session, chunk_ids).values():
+        for entry in roster.all_references.values():
+            if (
+                entry.kind == "character"
+                and entry.is_active
+                and entry.entity_id in sources
+                and "chunk-ref" not in sources[entry.entity_id]
+            ):
+                sources[entry.entity_id].append("chunk-ref")
 
     for row in session.execute(
         text(

@@ -11,6 +11,8 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from nexus.agents.orrery.player_identity import canonical_player_character_id
+from nexus.presence.roster import read_roster, read_rosters
+
 
 logger = logging.getLogger("nexus.lore.entity_queries")
 
@@ -30,21 +32,7 @@ FACTION_TAG_CONTEXT_CATEGORY_SQL = ", ".join(
 def fetch_present_character_ids(session: Session, chunk_id: int) -> List[int]:
     """Return the exact present-character roster recorded for one chunk."""
 
-    if chunk_id <= 0:
-        raise ValueError("chunk_id must be positive")
-    rows = session.execute(
-        text(
-            """
-            SELECT character_id
-            FROM chunk_character_references
-            WHERE chunk_id = :chunk_id
-              AND reference::text = 'present'
-            ORDER BY character_id
-            """
-        ),
-        {"chunk_id": chunk_id},
-    ).fetchall()
-    return sorted({int(row.character_id) for row in rows})
+    return sorted(read_roster(session, chunk_id).present_character_ids)
 
 
 def fetch_all_characters_with_references(
@@ -84,30 +72,26 @@ def fetch_all_characters_with_references(
     # Get character IDs referenced in chunks
     featured_ids = {}
     if featured_chunk_ids:
-        ref_query = text(
-            """
-            SELECT character_id, reference
-            FROM (
-                SELECT DISTINCT ON (character_id)
-                    character_id, reference, chunk_id
-                FROM chunk_character_references
-                WHERE chunk_id = ANY(:chunk_ids)
-                  AND character_id IS DISTINCT FROM :user_character_id
-                ORDER BY character_id, chunk_id DESC
-            ) AS latest_character_references
-            ORDER BY chunk_id DESC, character_id
-            LIMIT :max_featured_characters
-        """
-        )
-        ref_rows = session.execute(
-            ref_query,
-            {
-                "chunk_ids": featured_chunk_ids,
-                "max_featured_characters": max_featured_characters,
-                "user_character_id": user_char_id,
-            },
-        ).fetchall()
-        featured_ids = {row.character_id: str(row.reference) for row in ref_rows}
+        rosters = read_rosters(session, featured_chunk_ids)
+        anchor = rosters[max(featured_chunk_ids)]
+        for chunk_id in sorted(rosters, reverse=True):
+            for (kind, character_id), entry in rosters[chunk_id].all_references.items():
+                if (
+                    kind != "character"
+                    or character_id == user_char_id
+                    or character_id in featured_ids
+                ):
+                    continue
+                key = (kind, character_id)
+                featured_ids[character_id] = (
+                    "present"
+                    if key in anchor.present
+                    else "mentioned" if key in anchor.referenced else "recent"
+                )
+                if len(featured_ids) >= max_featured_characters:
+                    break
+            if len(featured_ids) >= max_featured_characters:
+                break
 
     # ALWAYS feature the user character, regardless of chunk references
     if user_char_id not in featured_ids:
