@@ -41,7 +41,6 @@ try:
     )
     from nexus.agents.orrery.bleed import (
         load_bleed_anchor_entity_ids,
-        record_bleed_offers,
         select_bleed_menu,
     )
     from nexus.agents.orrery.knowledge_surfacing import (
@@ -82,7 +81,6 @@ except ImportError:
     )
     from nexus.agents.orrery.bleed import (
         load_bleed_anchor_entity_ids,
-        record_bleed_offers,
         select_bleed_menu,
     )
     from nexus.agents.orrery.knowledge_surfacing import (
@@ -1479,31 +1477,6 @@ class TurnCycleManager:
             "selected_channel": selected_channel,
         }
 
-    def record_orrery_bleed_offers(self, turn_context: TurnContext) -> None:
-        """Record Bleed offer bookkeeping after successful generation."""
-
-        if not turn_context.bleed_menu:
-            return
-
-        phase_state = turn_context.phase_states.setdefault("orrery_bleed", {})
-        if phase_state.get("offers_recorded"):
-            return
-
-        anchor_chunk_id = phase_state.get("anchor_chunk_id")
-        if anchor_chunk_id is None:
-            raise RuntimeError("Orrery bleed selected candidates without an anchor")
-        if not self.lore.memnon:
-            raise RuntimeError("Orrery bleed offer recording requires MEMNON")
-
-        with self.lore.memnon.Session() as session:
-            record_bleed_offers(
-                session,
-                turn_context.bleed_menu,
-                anchor_chunk_id=int(anchor_chunk_id),
-            )
-
-        phase_state["offers_recorded"] = len(turn_context.bleed_menu)
-
     async def call_apex_ai(self, turn_context: TurnContext) -> str:
         """
         Phase 6: Call Apex AI for narrative generation.
@@ -1591,8 +1564,6 @@ class TurnCycleManager:
                 "narrative_length": len(narrative_text),
                 "generation_model": generation_model,
             }
-
-            self.record_orrery_bleed_offers(turn_context)
 
             return story_response  # Return the full StoryTurnResponse
 

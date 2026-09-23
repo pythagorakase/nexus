@@ -22,7 +22,7 @@ from nexus.agents.logon.apex_schema import (
     FactionReference,
     StateUpdates,
 )
-from nexus.agents.orrery.bleed import record_bleed_uptake_sync
+from nexus.agents.orrery.bleed import record_bleed_offers, record_bleed_uptake_sync
 from nexus.agents.orrery.events import commit_orrery_tick_sync
 from nexus.agents.orrery.experiences import (
     enqueue_scene_experience_job_sync,
@@ -703,6 +703,11 @@ def commit_incubator_to_database_sync(
                 distortion_settings=orrery_settings.get("distortion"),
                 drift_settings=orrery_settings.get("drift"),
                 reveal_settings=orrery_settings.get("reveal"),
+            )
+            record_bleed_offers(
+                conn,
+                resolution_ids=bleed_offer_resolution_ids,
+                anchor_chunk_id=incubator["parent_chunk_id"],
             )
             bleed_used_count = record_bleed_uptake_sync(
                 conn,

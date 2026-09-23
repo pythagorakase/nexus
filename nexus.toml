@@ -570,6 +570,9 @@ lease_duration_seconds = 300
 max_jobs_per_drain = 5
 
 [orrery.bleed]
+# Retirement and demotion count accepted offers, not generation attempts.
+max_offers_per_candidate = 3
+demote_unused_after_offers = 2
 density = 0.20
 max_candidates = 3
 near_distance_max = 2

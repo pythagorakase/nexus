@@ -67,7 +67,7 @@ class FakeSession:
         self.executed.append((sql, params))
         if "/* orrery:bleed_candidates */" in sql:
             assert "r.tick_chunk_id <= :anchor_chunk_id" in sql
-            assert "r.offer_count < 3" in sql
+            assert "r.offer_count < :max_offers_per_candidate" in sql
             limit = params.get("limit")
             rows = self.candidate_rows if limit is None else self.candidate_rows[:limit]
             return FakeResult(rows)
@@ -692,8 +692,10 @@ async def test_assemble_context_payload_preserves_scene_moods() -> None:
 
 
 @pytest.mark.asyncio
-async def test_call_apex_ai_records_bleed_offers_after_generation_success() -> None:
-    """Surfacing bookkeeping is written only after LOGON returns a response."""
+async def test_call_apex_ai_does_not_record_bleed_offers_after_generation_success() -> (
+    None
+):
+    """Successful generation leaves canonical offer bookkeeping to acceptance."""
 
     session = FakeSession()
     manager = TurnCycleManager(FakeLore(_settings(), session, logon=FakeLogon()))
@@ -714,10 +716,8 @@ async def test_call_apex_ai_records_bleed_offers_after_generation_success() -> N
     }
 
     response = await manager.call_apex_ai(context)
-    update_params = next(
-        params
-        for sql, params in session.executed
-        if "/* orrery:record_bleed_offers */" in sql
+    assert not any(
+        "/* orrery:record_bleed_offers */" in sql for sql, _ in session.executed
     )
 
     assert response.narrative == "Rain ticks against the glass."
@@ -727,9 +727,8 @@ async def test_call_apex_ai_records_bleed_offers_after_generation_success() -> N
         context.phase_states["apex_generation"]["generation_model"]
         == "resolved-bleed-test-model"
     )
-    assert session.commits == 1
-    assert update_params["resolution_ids"] == [10]
-    assert context.phase_states["orrery_bleed"]["offers_recorded"] == 1
+    assert session.commits == 0
+    assert context.phase_states["orrery_bleed"]["offers_recorded"] == 0
 
 
 @pytest.mark.asyncio
