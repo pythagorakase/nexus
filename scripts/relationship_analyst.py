@@ -45,6 +45,8 @@ from sqlalchemy.exc import SQLAlchemyError
 import tenacity
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
+from nexus.agents.orrery.relationship_provenance import relationship_producer_sqlalchemy
+
 # Constants
 DATABASE_URL = "postgresql://pythagor@localhost:5432/NEXUS"
 PROMPT_PATH = "/Users/pythagor/nexus/prompts/relationship_analyst.json"
@@ -542,7 +544,7 @@ def save_relationship_data(
             # Start transaction
             with session.begin():
                 # Stamp the same SQLAlchemy transaction that deletes/inserts the rows.
-                session.execute(text("SET LOCAL nexus.write_producer = 'manual'"))
+                relationship_producer_sqlalchemy(session, "manual")
                 # Check if relationships already exist and delete them
                 stmt1 = select(relationship_table).where(
                     relationship_table.c.character1_id == row_1_to_2["character1_id"],

@@ -8,6 +8,10 @@ from datetime import datetime
 from decimal import Decimal, ROUND_HALF_UP, localcontext
 from typing import Any, AsyncIterator, Iterator, Optional, Sequence
 
+from sqlalchemy import text
+from sqlalchemy.engine import Connection
+from sqlalchemy.orm import Session
+
 from nexus.agents.orrery.db_rows import row_get as _row_get
 from nexus.agents.orrery.epistemics import (
     ClaimParticipant,
@@ -30,6 +34,18 @@ PRODUCERS = frozenset(
         "manual",
     }
 )
+
+
+def relationship_producer_sqlalchemy(
+    connection_or_session: Connection | Session, producer: str
+) -> None:
+    """Stamp the caller's SQLAlchemy transaction until commit or rollback."""
+    if producer not in PRODUCERS:
+        raise ValueError(f"Unknown relationship producer: {producer}")
+    connection_or_session.execute(
+        text("SELECT set_config('nexus.write_producer', :producer, true)"),
+        {"producer": producer},
+    )
 
 
 @contextmanager

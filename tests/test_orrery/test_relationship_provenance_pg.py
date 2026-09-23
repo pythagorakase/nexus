@@ -7,6 +7,7 @@ import asyncpg
 import pytest
 from psycopg2.extras import RealDictCursor
 from sqlalchemy import create_engine, text
+from sqlalchemy.exc import InternalError
 from sqlalchemy.orm import Session
 
 from nexus.agents.logon.apex_schema import StateUpdates
@@ -17,13 +18,10 @@ from nexus.agents.orrery.drift import (
     _apply_plan_sync,
     plan_relationship_drift,
 )
+from nexus.agents.orrery.relationship_provenance import relationship_producer_sqlalchemy
 from nexus.agents.orrery.resolver import _load_recent_events
 from nexus.api.commit_handler import apply_state_updates
 from nexus.api.commit_handler_sync import apply_state_updates_sync
-from scripts.relationship_analyst import (
-    CharacterRelationshipPair,
-    save_relationship_data,
-)
 from tests.pg_fixtures import asyncpg_kwargs, connect, sqlalchemy_url
 from tests.test_orrery.test_drift_live import (
     EPISTEMICS,
@@ -37,56 +35,66 @@ from tests.test_orrery.test_drift_live import (
 pytestmark = pytest.mark.requires_postgres
 
 
-def test_analyst_save_stamps_insert_and_replacement(drift_database: str) -> None:
-    """The SQLAlchemy save path commits both directions, including replacement."""
+def test_analyst_sqlalchemy_helper_stamps_insert_and_replacement(
+    drift_database: str,
+) -> None:
+    """The analyst helper stamps real session writes; unstamped writes fail."""
     with connect(drift_database) as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             _, first = _insert_character(cur, "analyst-first")
             _, second = _insert_character(cur, "analyst-second")
     conn.close()
-    extra = {
-        "schema_type": "liminal_relationship",
-        "impressions": {
-            "first_impression": "Quiet",
-            "current_assessment": "Kind",
-            "points_of_interest": [],
-        },
-        "interaction_history": {"contexts": ["Fixture"], "quality": "positive"},
-        "potential_directions": [],
-        "information_gaps": [],
-        "intuition_notes": "Fixture",
-    }
-
-    def direction(source: int, target: int) -> dict[str, Any]:
-        return dict(
-            character1_id=source,
-            character2_id=target,
-            relationship_type="acquaintance",
-            emotional_valence="+1|favorable",
-            dynamic="Fixture",
-            recent_events="Fixture",
-            history="Fixture",
-            extra_data=extra,
+    insert = text(
+        """
+        INSERT INTO character_relationships (
+            character1_id, character2_id, relationship_type,
+            emotional_valence, dynamic, recent_events, history
+        ) VALUES (
+            :first, :second, 'acquaintance', '+1|favorable',
+            'Fixture', 'Fixture', 'Fixture'
         )
-
-    pair = CharacterRelationshipPair(
-        rel_1_to_2=direction(first, second), rel_2_to_1=direction(second, first)
+        """
     )
+    delete = text(
+        """
+        DELETE FROM character_relationships
+        WHERE character1_id = :first AND character2_id = :second
+        """
+    )
+    directions = [
+        {"first": first, "second": second},
+        {"first": second, "second": first},
+    ]
     engine = create_engine(sqlalchemy_url(drift_database))
     try:
-        assert save_relationship_data(engine, pair) == (first, second)
-        assert save_relationship_data(engine, pair) == (first, second)
-        with engine.connect() as connection:
-            versions = connection.execute(
+        with Session(engine) as session:
+            with pytest.raises(
+                InternalError, match="Missing or invalid nexus.write_producer"
+            ):
+                with session.begin():
+                    session.execute(insert, directions)
+            with session.begin():
+                relationship_producer_sqlalchemy(session, "manual")
+                session.execute(insert, directions)
+            with pytest.raises(
+                InternalError, match="Missing or invalid nexus.write_producer"
+            ):
+                with session.begin():
+                    session.execute(delete, directions)
+            with session.begin():
+                relationship_producer_sqlalchemy(session, "manual")
+                session.execute(delete, directions)
+                session.execute(insert, directions)
+            versions = session.execute(
                 text(
                     """
-                SELECT operation, producer FROM relationship_versions
-                WHERE relationship_table = 'character_relationships'
-                  AND (old_row->>'character1_id')::bigint IN (:first, :second)
-                ORDER BY id
-            """
+                    SELECT operation, producer FROM relationship_versions
+                    WHERE relationship_table = 'character_relationships'
+                      AND (old_row->>'character1_id')::bigint IN (:first, :second)
+                    ORDER BY id
+                    """
                 ),
-                {"first": first, "second": second},
+                directions[0],
             ).all()
             assert versions == [
                 ("insert", "manual"),
@@ -97,15 +105,16 @@ def test_analyst_save_stamps_insert_and_replacement(drift_database: str) -> None
                 ("insert", "manual"),
             ]
             assert (
-                connection.execute(
+                session.execute(
                     text(
-                        "SELECT count(*) FROM character_relationships WHERE character1_id IN (:first, :second)"
+                        "SELECT count(*) FROM character_relationships "
+                        "WHERE character1_id IN (:first, :second)"
                     ),
-                    {"first": first, "second": second},
+                    directions[0],
                 ).scalar_one()
                 == 2
             )
-            assert not connection.execute(
+            assert not session.execute(
                 text("SELECT current_setting('nexus.write_producer', true)")
             ).scalar_one()
     finally:
