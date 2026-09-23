@@ -30,6 +30,8 @@ from sqlalchemy import create_engine, Column, Table, MetaData, text, inspect, fu
 from sqlalchemy.dialects.postgresql import UUID, BYTEA, ARRAY, JSONB
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
+from nexus.util.clock_face import clock_face
+
 # Import utility modules
 from .utils.db_access import (
     check_vector_extension,
@@ -1603,7 +1605,7 @@ class MEMNON:
                     header = f"Season {result.season}, Episode {result.episode}, Scene {result.scene}\n"
                     header += f"(chunk {chunk_id})\n"
                     if result.world_time:
-                        header += f"{result.world_time}\n"
+                        header += f"{clock_face(result.world_time)}\n"
                     if result.place_names:
                         header += f"{result.place_names}\n"
 

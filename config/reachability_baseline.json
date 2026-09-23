@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "Register shared staging validation and choice recovery for issue 801, shared relationship provenance and milestone consumption for issue 790, the evaluation database-name guard, and the read-only prose metrics operator for issue 765.",
+  "reason": "Register the shared production clock-face formatter and read-only world_clock QA operator for issue 778.",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -258,6 +258,7 @@
     "nexus/telemetry/__init__.py",
     "nexus/telemetry/usage.py",
     "nexus/util/__init__.py",
+    "nexus/util/clock_face.py",
     "nexus/util/gguf_inspect.py",
     "nexus/util/log_safety.py",
     "nexus/util/secret_manager.py",

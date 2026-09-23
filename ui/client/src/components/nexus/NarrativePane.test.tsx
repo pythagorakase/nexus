@@ -36,6 +36,7 @@ function makeChunk(
       scene,
       worldLayer: "primary",
       worldTime: "2087-11-03T22:47:00+00:00",
+      worldTimeFace: "3 Nov 2087 · 22:47",
       timeDelta: null,
       generationDate: new Date("2026-07-10T12:00:00Z"),
       slug: `S05E06_${String(scene).padStart(3, "0")}`,

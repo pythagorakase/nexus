@@ -781,7 +781,7 @@ def test_context_prompt_renders_intertitle() -> None:
     )
 
     assert prompt.startswith("S05E06 - Scene 13\n")
-    assert "\n2073-10-31T14:37:00-04:00\n" in prompt
+    assert "\n31 Oct 2073 · 18:37\n" in prompt
     assert "The Land Rig — SRID=4326;POINT(-90.0725 29.9320 0 0)" in prompt
     # Primary layer is the default register; only deviations are announced.
     assert "primary layer" not in prompt

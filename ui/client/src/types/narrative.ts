@@ -10,7 +10,7 @@ import type { NarrativeChunk, ChunkMetadata } from "@shared/schema";
 export type ChunkWithMetadata = Omit<NarrativeChunk, "choiceObject"> & {
   choiceObject?: ChoiceObject | null;
   hasInlineSceneMarkup: boolean;
-  metadata?: ChunkMetadata & { worldTime: string | null };
+  metadata?: ChunkMetadata & { worldTime: string | null; worldTimeFace: string | null };
 };
 
 /**

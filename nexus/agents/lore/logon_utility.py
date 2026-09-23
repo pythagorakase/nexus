@@ -15,6 +15,8 @@ from typing import Any, Dict, Literal, Mapping, Optional, Union, cast
 
 import psycopg2
 
+from nexus.util.clock_face import clock_face
+
 # Add scripts directory to path for API imports
 sys.path.append(str(Path(__file__).parent.parent.parent.parent))
 
@@ -2098,7 +2100,7 @@ class LogonUtility:
             if position_bits:
                 sections.append(" - ".join(position_bits))
             if intertitle.get("world_time"):
-                sections.append(str(intertitle["world_time"]))
+                sections.append(clock_face(intertitle["world_time"]))
             if intertitle.get("location_name"):
                 location_line = str(intertitle["location_name"])
                 if intertitle.get("location_geom"):
