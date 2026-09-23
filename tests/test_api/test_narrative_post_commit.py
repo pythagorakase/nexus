@@ -11,13 +11,18 @@ from __future__ import annotations
 
 import asyncio
 import threading
+import uuid
+from contextlib import closing
 from typing import Any
 
 import pytest
 from fastapi import BackgroundTasks
+from psycopg2.extras import Json
 
-from nexus.api import commit_handler_sync
-from nexus.api import narrative
+from nexus.agents.orrery import retrograde_maturation
+from nexus.api import commit_handler_sync, narrative
+from nexus.memory.manager import empty_pass2_baseline
+from tests.pg_fixtures import connect, seed_protagonist
 
 
 class _PostCommitHandle:
@@ -304,94 +309,91 @@ async def test_cancelled_approval_leaves_worker_connection_owned_until_exit(
     assert close_threads == commit_threads
 
 
+@pytest.mark.requires_postgres
 @pytest.mark.asyncio
 async def test_cancelled_auto_approval_releases_lease_and_hands_off_post_commit(
     monkeypatch: pytest.MonkeyPatch,
+    offline_gate_db: str,
 ) -> None:
-    """Cancellation releases the new lease while the accepted turn drains."""
+    """Cancel a real leased approval; its worker must still commit and drain."""
+    dbname = offline_gate_db
+    seed_protagonist(dbname)
+    pending_session = str(uuid.uuid4())
+    with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO incubator (
+                id, chunk_id, parent_chunk_id, user_text, storyteller_text,
+                generation_model, choice_object, metadata_updates,
+                reference_updates, lore_pass_baseline, session_id, status
+            ) VALUES (
+                TRUE, 1, 0, 'Begin.', 'The stair awaits.', 'TEST',
+                %s, '{}'::jsonb, '{}'::jsonb, %s, %s, 'provisional'
+            )
+            """,
+            (
+                Json({"presented": ["Take the left stair."], "selected": None}),
+                Json(empty_pass2_baseline({}).model_dump(mode="json")),
+                pending_session,
+            ),
+        )
 
     commit_started = threading.Event()
     release_commit = threading.Event()
-    connection_closed = threading.Event()
     post_commit_finished = threading.Event()
-    acquired_sessions: list[str] = []
-    abandoned_sessions: list[tuple[str, str]] = []
+    maturation_finished = threading.Event()
+    commit_connections: list[Any] = []
+    worker_errors: list[BaseException] = []
+    original_commit = commit_handler_sync.commit_incubator_to_database_sync
+    original_post_commit = narrative._run_post_commit_orrery_work
+    original_maturation = retrograde_maturation.drain_maturation_jobs_sync
 
-    class BlockingConnection:
-        def rollback(self) -> None:
-            return None
-
-        def close(self) -> None:
-            connection_closed.set()
-
-    def blocking_commit(
-        _conn: Any,
-        _session_id: str,
-        _slot: int | None,
+    def gated_real_commit(
+        conn: Any,
+        session_id: str,
+        slot: int | None,
         *,
         warning_sink: list[dict[str, Any]] | None = None,
     ) -> int:
-        assert warning_sink == []
+        """Pause the real commit at entry without replacing its SQL or connection."""
+        commit_connections.append(conn)
         commit_started.set()
-        assert release_commit.wait(timeout=5)
-        assert not connection_closed.is_set()
-        return 42
+        try:
+            assert release_commit.wait(timeout=5)
+            assert not conn.closed
+            return original_commit(conn, session_id, slot, warning_sink=warning_sink)
+        except BaseException as exc:
+            worker_errors.append(exc)
+            raise
 
-    pending_state = type(
-        "PendingState",
-        (),
-        {
-            "is_wizard_mode": False,
-            "narrative_state": type(
-                "NarrativeState",
-                (),
-                {
-                    "has_pending": True,
-                    "session_id": "pending-session",
-                    "current_chunk_id": 41,
-                    "choices": ["Take the left stair."],
-                },
-            )(),
-        },
-    )()
+    def observed_post_commit(slot: int | None) -> None:
+        """Observe the production outbox drain, including worker-owned close."""
+        try:
+            assert commit_connections[0].closed
+            original_post_commit(slot)
+        except BaseException as exc:
+            worker_errors.append(exc)
+            raise
+        finally:
+            post_commit_finished.set()
+
+    def observed_maturation(*args: Any, **kwargs: Any) -> tuple[int, int]:
+        """Wait for the real detached drain before dropping its database."""
+        try:
+            return original_maturation(*args, **kwargs)
+        except BaseException as exc:
+            worker_errors.append(exc)
+            raise
+        finally:
+            maturation_finished.set()
 
     monkeypatch.setattr(
-        "nexus.api.slot_state.get_slot_state",
-        lambda _slot: pending_state,
+        commit_handler_sync, "commit_incubator_to_database_sync", gated_real_commit
     )
+    monkeypatch.setattr(narrative, "_run_post_commit_orrery_work", observed_post_commit)
     monkeypatch.setattr(
-        narrative,
-        "_acquire_generation_owner",
-        lambda **kwargs: acquired_sessions.append(kwargs["session_id"]),
+        retrograde_maturation, "drain_maturation_jobs_sync", observed_maturation
     )
-    monkeypatch.setattr(
-        narrative,
-        "_abandon_generation_owner",
-        lambda **kwargs: abandoned_sessions.append(
-            (kwargs["session_id"], kwargs["error"])
-        ),
-    )
-    monkeypatch.setattr(
-        narrative,
-        "get_db_connection",
-        lambda _slot: BlockingConnection(),
-    )
-    monkeypatch.setattr(
-        narrative,
-        "_record_player_response_for_chunk",
-        lambda **_kwargs: "resolved player response",
-    )
-    monkeypatch.setattr(
-        commit_handler_sync,
-        "commit_incubator_to_database_sync",
-        blocking_commit,
-    )
-    monkeypatch.setattr(
-        narrative,
-        "_run_post_commit_orrery_work",
-        lambda _slot: post_commit_finished.set(),
-    )
-
     continue_task = asyncio.create_task(
         narrative.continue_narrative(
             narrative.ContinueNarrativeRequest(slot=4, choice=1),
@@ -401,14 +403,34 @@ async def test_cancelled_auto_approval_releases_lease_and_hands_off_post_commit(
 
     try:
         assert await asyncio.to_thread(commit_started.wait, 2)
+        with closing(connect(dbname)) as conn, conn.cursor() as cur:
+            cur.execute("SELECT session_id FROM narrative_generation_lease")
+            lease_session = cur.fetchone()[0]
         continue_task.cancel()
         with pytest.raises(asyncio.CancelledError):
             await continue_task
-        assert acquired_sessions
-        assert abandoned_sessions == [(acquired_sessions[0], "CancelledError")]
-        assert not connection_closed.is_set()
+        with closing(connect(dbname)) as conn, conn.cursor() as cur:
+            cur.execute("SELECT count(*) FROM narrative_generation_lease")
+            assert cur.fetchone() == (0,)
+            cur.execute(
+                "SELECT status, error FROM narrative_generation_sessions WHERE session_id = %s",
+                (lease_session,),
+            )
+            assert cur.fetchone() == ("error", "CancelledError")
+        assert not commit_connections[0].closed
     finally:
         release_commit.set()
+        if not continue_task.done():
+            continue_task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await continue_task
+        assert await asyncio.to_thread(post_commit_finished.wait, 2), worker_errors
+        assert await asyncio.to_thread(maturation_finished.wait, 2), worker_errors
 
-    assert await asyncio.to_thread(connection_closed.wait, 2)
-    assert await asyncio.to_thread(post_commit_finished.wait, 2)
+    assert not worker_errors
+    assert commit_connections[0].closed
+    with closing(connect(dbname)) as conn, conn.cursor() as cur:
+        cur.execute("SELECT count(*) FROM incubator")
+        assert cur.fetchone() == (0,)
+        cur.execute("SELECT choice_text FROM narrative_chunks")
+        assert cur.fetchone() == ("Take the left stair.",)

@@ -7,6 +7,7 @@ backend resolves it: explicit request override -> slot's stamped model
 mock TEST server must never be selected implicitly.
 """
 
+from contextlib import closing
 from types import SimpleNamespace
 from typing import Any
 
@@ -17,9 +18,11 @@ from pydantic import ValidationError
 
 from nexus.api import new_story_flow, setup_endpoints, storyteller
 from nexus.api.config_utils import get_new_story_model
+from nexus.api.new_story_cache import read_cache_raw
 from nexus.api.narrative_schemas import ChatRequest, StartSetupRequest
 from nexus.api.new_story_flow import resolve_setup_model
 from nexus.api.wizard_chat import resolve_wizard_model, wizard_model_lock_candidate
+from tests.pg_fixtures import connect
 
 
 def test_chat_request_model_defaults_to_none() -> None:
@@ -229,46 +232,31 @@ def test_start_setup_preserves_explicit_test_model_on_restart(
     assert clients == ["TEST", "TEST"]
 
 
+@pytest.mark.requires_postgres
 def test_setup_endpoint_passes_omitted_model_to_core(
-    monkeypatch: pytest.MonkeyPatch,
+    offline_gate_db: str,
 ) -> None:
-    """The HTTP layer must not replace omission with the roster default."""
-    starts: list[tuple[int, str | None]] = []
-
-    class FakeConversationsClient:
-        def __init__(self, model: str) -> None:
-            assert model == "operator-model"
-
-        def add_message(self, *_args: Any) -> None:
-            """Accept welcome-message seeding without a provider call."""
-
-    def fake_start_setup(slot: int, model: str | None) -> str:
-        starts.append((slot, model))
-        return "thread-operator"
-
-    monkeypatch.setattr(
-        setup_endpoints,
-        "start_setup",
-        fake_start_setup,
-    )
-    monkeypatch.setattr(
-        setup_endpoints,
-        "get_slot_model",
-        lambda _slot, dbname=None: "operator-model",
-    )
-    monkeypatch.setattr(setup_endpoints, "slot_dbname", lambda _slot: "save_test")
-    monkeypatch.setattr(setup_endpoints, "ConversationsClient", FakeConversationsClient)
-    monkeypatch.setattr(
-        setup_endpoints, "write_wizard_choices", lambda *_args, **_kwargs: None
-    )
-
+    """An omitted model preserves the persisted TEST stamp through real setup."""
+    # Establish an intentional TEST stamp, distinct from a fresh-slot default.
+    previous_thread = new_story_flow.start_setup(4, model="TEST")
     app = FastAPI()
     app.include_router(setup_endpoints.router)
     response = TestClient(app).post("/api/story/new/setup/start", json={"slot": 4})
 
-    assert response.status_code == 200
-    assert starts == [(4, None)]
-    assert response.json()["model"] == "operator-model"
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["model"] == "TEST"
+    assert result["thread_id"] != previous_thread
+    cache = read_cache_raw(offline_gate_db)
+    assert cache is not None
+    assert cache["thread_id"] == result["thread_id"]
+    with closing(connect(offline_gate_db)) as conn, conn.cursor() as cur:
+        cur.execute("SELECT model FROM global_variables WHERE id = TRUE")
+        assert cur.fetchone() == ("TEST",)
+        cur.execute(
+            "SELECT choice_object FROM assets.new_story_creator WHERE id = TRUE"
+        )
+        assert cur.fetchone()[0]["presented"] == result["welcome_choices"]
 
 
 def test_legacy_storyteller_setup_passes_omitted_model_to_core(
