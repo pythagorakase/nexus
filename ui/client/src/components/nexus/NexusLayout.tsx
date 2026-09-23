@@ -18,6 +18,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useDeveloperMode } from "@/contexts/DeveloperModeContext";
 import { useNarrativeEngine } from "@/hooks/useNarrativeEngine";
 import { getUserCharacter } from "@/lib/narrative-api";
+import { getActiveSlot } from "@/lib/active-slot";
 import type { SettingsPayload } from "@/types/settings";
 import { LeftRail, type NexusTab } from "./LeftRail";
 import { TopBar } from "./TopBar";
@@ -41,24 +42,13 @@ function initialTab(): NexusTab {
     : "narrative";
 }
 
-function activeSlot(): number | null {
-  try {
-    const stored = localStorage.getItem("activeSlot");
-    if (!stored) return null;
-    const slot = parseInt(stored, 10);
-    return isNaN(slot) ? null : slot;
-  } catch {
-    return null;
-  }
-}
-
 export function NexusLayout() {
   const [, setLocation] = useLocation();
   const { isVector } = useTheme();
   const { effectiveDeveloperMode } = useDeveloperMode();
   const [tab, setTab] = useState<NexusTab>(initialTab);
   const [backstageOpen, setBackstageOpen] = useState(false);
-  const [slot] = useState<number | null>(activeSlot);
+  const [slot] = useState<number | null>(getActiveSlot);
   // Reading position: null = live frontier; a chunk id = historical
   // reading (read-only). Shared by the reader and the right-rail tree.
   const [readingChunkId, setReadingChunkId] = useState<number | null>(null);

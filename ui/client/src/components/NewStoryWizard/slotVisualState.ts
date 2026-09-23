@@ -15,6 +15,7 @@
  * Kept free of React so the classification logic is unit-testable.
  */
 import { cn } from "@/lib/utils";
+import { getActiveSlot } from "@/lib/active-slot";
 
 export type SlotOccupancy = "empty" | "occupied" | "wizard";
 
@@ -55,17 +56,9 @@ export function classifySlot(slot: SlotVisualInput): SlotOccupancy {
 
 /**
  * Read the currently-bound story slot from localStorage ('activeSlot').
- * Same safe-access pattern as pages/splash/shared.tsx getActiveSlot().
  */
 export function readBoundSlot(): number | null {
-    try {
-        const raw = localStorage.getItem("activeSlot");
-        if (raw === null) return null;
-        const parsed = Number.parseInt(raw, 10);
-        return Number.isNaN(parsed) ? null : parsed;
-    } catch {
-        return null;
-    }
+    return getActiveSlot();
 }
 
 const CARD_BASE =

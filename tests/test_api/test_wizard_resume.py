@@ -1,5 +1,6 @@
 """Resume must restore the persisted conversation without starting a new one."""
 
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import Mock
@@ -11,7 +12,15 @@ from pydantic_ai.tools import DeferredToolRequests
 
 from nexus.api import setup_endpoints, slot_state, wizard_agent, wizard_chat
 from nexus.api.conversations import ConversationsClient
-from nexus.api.new_story_cache import WizardCache, _row_to_cache
+from nexus.api.narrative_schemas import ChatRequest
+from nexus.api.new_story_cache import (
+    CharacterData,
+    SeedData,
+    SettingData,
+    SuggestedTrait,
+    WizardCache,
+    _row_to_cache,
+)
 from nexus.api.new_story_schemas import WizardResponse
 from nexus.api.slot_state import SlotState, WizardState
 
@@ -90,6 +99,90 @@ def test_resume_does_not_hide_history_failure(
     assert response.status_code == 500
     assert response.json()["detail"] == "Conversation unavailable"
     storage.client.close.assert_called_once_with()
+
+
+@pytest.mark.parametrize("traits_confirmed", [False, True])
+def test_resume_restores_partial_character(
+    monkeypatch: pytest.MonkeyPatch,
+    resume_client: TestClient,
+    traits_confirmed: bool,
+) -> None:
+    """Concept and confirmed traits survive before the wildcard is completed."""
+    cache = WizardCache(
+        thread_id="conv_saved",
+        setting=SettingData(genre="folklore"),
+        character=CharacterData(
+            name="Rowan",
+            archetype="Keeper",
+            traits_confirmed=traits_confirmed,
+            suggested_traits=[SuggestedTrait("duty", "The gate must stay closed")],
+        ),
+    )
+    monkeypatch.setattr(setup_endpoints, "resume_setup", lambda slot: cache)
+    monkeypatch.setattr(
+        setup_endpoints,
+        "ConversationsClient",
+        lambda model: SimpleNamespace(list_messages=lambda *a, **k: [], client=None),
+    )
+    response = resume_client.get("/api/story/new/setup/resume?slot=4")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["current_phase"] == "character"
+    assert data["character_draft"] is None
+    state = data["character_state"]
+    assert state["concept"]["name"] == "Rowan"
+    assert state["concept"]["suggested_traits"] == ["duty"]
+    assert ("trait_selection" in state) is traits_confirmed
+    assert "wildcard" not in state
+
+    # Older clients can send other draft data without character_state.
+    # Hydration must preserve that context and add the saved character.
+    monkeypatch.setattr(wizard_chat, "read_cache", lambda dbname: cache)
+    context = {"setting": {"world_name": "The Waking Wood"}}
+    request = ChatRequest(
+        slot=4, message="Continue", current_phase="character", context_data=context
+    )
+    assert wizard_chat._hydrate_character_context(request) == {
+        **context,
+        "character_state": state,
+    }
+    assert "character_state" not in context
+
+
+def test_resume_restores_seed_awaiting_confirmation(
+    monkeypatch: pytest.MonkeyPatch, resume_client: TestClient
+) -> None:
+    """A ready wizard includes the seed and complete set design for confirmation."""
+    cache = WizardCache(
+        thread_id="conv_saved",
+        setting=SettingData(genre="folklore"),
+        character=CharacterData(
+            name="Rowan", traits_confirmed=True, wildcard_rationale="A hidden name"
+        ),
+        seed=SeedData(
+            seed_type="mystery",
+            title="The missing key",
+            layer_name="Mortal world",
+            zone_name="The wood",
+            initial_location={"name": "The gate", "summary": "An ancient arch"},
+        ),
+        base_timestamp=datetime(2026, 9, 23, tzinfo=timezone.utc),
+    )
+    monkeypatch.setattr(setup_endpoints, "resume_setup", lambda slot: cache)
+    monkeypatch.setattr(
+        setup_endpoints,
+        "ConversationsClient",
+        lambda model: SimpleNamespace(list_messages=lambda *a, **k: [], client=None),
+    )
+    response = resume_client.get("/api/story/new/setup/resume?slot=4")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["current_phase"] == "ready"
+    assert data["selected_seed"]["title"] == "The missing key"
+    assert data["layer_draft"]["name"] == "Mortal world"
+    assert data["zone_draft"]["name"] == "The wood"
+    assert data["initial_location"]["summary"] == "An ancient arch"
+    assert data["character_draft"] == data["character_state"]
 
 
 @pytest.mark.parametrize(

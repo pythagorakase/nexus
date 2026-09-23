@@ -12,6 +12,7 @@ import { DeveloperModeProvider } from "@/contexts/DeveloperModeContext";
 import NotFound from "@/pages/not-found";
 import SplashPage from "@/pages/SplashPage";
 import NewStoryPage from "@/pages/NewStoryPage";
+import ContinuePage from "@/pages/ContinuePage";
 import { NexusLayout } from "@/components/nexus";
 
 // Dev-only markdown harness: lazy + DEV-guarded so the module (and its
@@ -31,6 +32,7 @@ function Router() {
     <Switch>
       <Route path="/" component={SplashPage} />
       <Route path="/new-story" component={NewStoryPage} />
+      <Route path="/continue" component={ContinuePage} />
       <Route path="/nexus" component={NexusLayout} />
       {DevMarkdownPreview && (
         <Route path="/dev/markdown">

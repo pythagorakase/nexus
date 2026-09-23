@@ -23,18 +23,6 @@ export const ANIMATION = {
 } as const;
 
 /**
- * Safe localStorage access - handles environments where localStorage
- * may not be available (SSR, strict privacy mode, etc.)
- */
-export const getActiveSlot = (): string | null => {
-  try {
-    return localStorage.getItem('activeSlot');
-  } catch {
-    return null;
-  }
-};
-
-/**
  * Shared navigation hook for splash page variants.
  * Handles staggered fade-out animation before navigation.
  */
@@ -51,9 +39,7 @@ export const useSplashNavigation = () => {
   };
 
   const handleContinue = () => {
-    const activeSlot = getActiveSlot();
-    const destination = activeSlot ? '/nexus' : '/new-story';
-    handleNavigation(destination, 'continue');
+    handleNavigation('/continue', 'continue');
   };
 
   const handleLoad = () => {

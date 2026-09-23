@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Menu, Home, Settings, X, Globe, User, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { rememberActiveSlot } from "@/lib/active-slot";
 import { Button } from "@/components/ui/button";
 import { SlotSelector } from "./SlotSelector";
 import { InteractiveWizard, type WizardResumeData } from "./InteractiveWizard";
@@ -59,10 +60,13 @@ const PHASES: { id: WizardPhase; label: string }[] = [
     { id: "seed", label: "Introduction" },
 ];
 
-export function NewStoryWizard() {
+export function NewStoryWizard({ resumeSlot }: { resumeSlot?: number }) {
     const [currentPhase, setCurrentPhase] = useState<WizardPhase>("slot");
     const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
     const [resumeData, setResumeData] = useState<WizardResumeData | null>(null);
+    const [resumeRequest, setResumeRequest] = useState<number | null>(resumeSlot ?? null);
+    const [resumeAttempt, setResumeAttempt] = useState(0);
+    const [resumeError, setResumeError] = useState(false);
     const [_, setLocation] = useLocation();
     const { isGilded, isVector, glowClass } = useTheme();
     const { toast } = useToast();
@@ -72,6 +76,7 @@ export function NewStoryWizard() {
         slot: null as number | null,
         setting: null,
         character: null,
+        character_state: null,
         seed: null,
         location: null,
     });
@@ -92,6 +97,7 @@ export function NewStoryWizard() {
             slot,
             setting: null,
             character: null,
+            character_state: null,
             seed: null,
             location: null,
         });
@@ -102,22 +108,36 @@ export function NewStoryWizard() {
         setCurrentPhase(phase);
     };
 
-    const handleSlotResumed = async (slotData: {
+    const handleSlotResumed = (slotData: {
         slot: number;
         wizard_in_progress?: boolean;
         wizard_thread_id?: string;
         wizard_phase?: "setting" | "character" | "seed";
     }) => {
-        localStorage.setItem("activeSlot", slotData.slot.toString());
+        if (slotData.wizard_in_progress) {
+            setResumeError(false);
+            setResumeRequest(slotData.slot);
+        } else {
+            rememberActiveSlot(slotData.slot);
+            setLocation("/nexus");
+        }
+    };
 
-        if (slotData.wizard_in_progress && slotData.wizard_thread_id) {
+    useEffect(() => {
+        if (resumeRequest === null) return;
+        const controller = new AbortController();
+        const resume = async () => {
+            setResumeError(false);
             try {
-                const resumeRes = await fetch(`/api/story/new/setup/resume?slot=${slotData.slot}`);
+                const resumeRes = await fetch(`/api/story/new/setup/resume?slot=${resumeRequest}`, {
+                    signal: controller.signal,
+                });
                 if (!resumeRes.ok) {
                     throw new Error("Failed to resume wizard session");
                 }
 
                 const resumeData: WizardResumeData = await resumeRes.json();
+                if (controller.signal.aborted) return;
                 if (!resumeData.thread_id || !Array.isArray(resumeData.messages) || !Array.isArray(resumeData.choices)) {
                     throw new Error("The saved wizard response is incomplete");
                 }
@@ -126,10 +146,11 @@ export function NewStoryWizard() {
 
                 setResumeData(resumeData);
                 setWizardData({
-                    slot: slotData.slot,
+                    slot: resumeRequest,
                     setting: resumeData.setting_draft ?? null,
                     character: resumeData.character_draft ?? null,
-                    seed: resumeData.selected_seed ?? null,
+                    character_state: resumeData.character_state ?? null,
+                    seed: null,
                     location: resumeData.initial_location ?? null,
                 });
 
@@ -137,28 +158,30 @@ export function NewStoryWizard() {
                 setConfirmedArtifacts({
                     setting: resumeData.setting_draft ?? undefined,
                     character: resumeData.character_draft ?? undefined,
-                    seed: resumeData.selected_seed ?? undefined,
                 });
 
-                setSelectedSlot(slotData.slot);
+                rememberActiveSlot(resumeRequest);
+                setSelectedSlot(resumeRequest);
                 setCurrentPhase(inferredPhase);
+                setResumeRequest(null);
             } catch (error) {
+                if (controller.signal.aborted) return;
                 console.error("Failed to resume wizard:", error);
+                setResumeError(true);
                 toast({
                     title: "Resume Failed",
                     description: "Could not resume your in-progress wizard. Please try again.",
                     variant: "destructive",
                 });
             }
-        } else {
-            // Story complete - go to NexusLayout
-            window.location.href = "/nexus";
-        }
-    };
+        };
+        void resume();
+        return () => controller.abort();
+    }, [resumeRequest, resumeAttempt, toast]);
 
     const handleComplete = () => {
         if (selectedSlot) {
-            localStorage.setItem("activeSlot", selectedSlot.toString());
+            rememberActiveSlot(selectedSlot);
         }
         window.location.href = "/nexus";
     };
@@ -171,7 +194,8 @@ export function NewStoryWizard() {
 
     return (
         <div className={cn(
-            "h-screen bg-background flex flex-col font-mono overflow-hidden dark animate-fade-in",
+            "h-screen bg-background flex flex-col font-mono overflow-hidden dark",
+            !resumeSlot && "animate-fade-in",
             isVector && "terminal-scanlines"
         )}>
             {/* Status Bar with Hamburger Menu */}
@@ -240,7 +264,20 @@ export function NewStoryWizard() {
 
             {/* Main Content */}
             <div className="flex-1 overflow-hidden relative">
-                {currentPhase === "slot" ? (
+                {resumeRequest !== null ? (
+                    <div className="h-full flex flex-col items-center justify-center gap-4">
+                        {resumeError ? (
+                            <>
+                                <p role="alert">Could not resume Memory Slot {resumeRequest}.</p>
+                                <Button onClick={() => setResumeAttempt(attempt => attempt + 1)}>Retry</Button>
+                                <Button variant="ghost" onClick={() => {
+                                    setResumeRequest(null);
+                                    setLocation("/new-story");
+                                }}>Load another slot</Button>
+                            </>
+                        ) : <p role="status">Resuming Memory Slot {resumeRequest}…</p>}
+                    </div>
+                ) : currentPhase === "slot" ? (
                     <div className="h-full overflow-auto py-8">
                         <div className="max-w-5xl mx-auto">
                             <SlotSelector

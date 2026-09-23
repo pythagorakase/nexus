@@ -9,7 +9,7 @@ This module handles the setup phase of story creation including:
 
 import logging
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Any, Dict, List
 
 import frontmatter
 import psycopg2
@@ -17,20 +17,20 @@ from fastapi import APIRouter, HTTPException, Query
 
 from nexus.api.conversations import ConversationsClient
 from nexus.api.narrative_schemas import (
-    StartSetupRequest,
-    ResumeSetupResponse,
     RecordDraftRequest,
     ResetSetupRequest,
+    ResumeSetupResponse,
     SelectSlotRequest,
-)
-from nexus.api.new_story_flow import (
-    start_setup,
-    resume_setup,
-    record_drafts,
-    reset_setup,
-    activate_slot,
+    StartSetupRequest,
 )
 from nexus.api.new_story_cache import write_wizard_choices
+from nexus.api.new_story_flow import (
+    activate_slot,
+    record_drafts,
+    reset_setup,
+    resume_setup,
+    start_setup,
+)
 from nexus.api.save_slots import get_slot_model
 from nexus.api.slot_mutations import require_writable_slot
 from nexus.api.slot_utils import slot_dbname
@@ -122,7 +122,10 @@ def resume_setup_endpoint(slot: int = Query(..., ge=1, le=5)) -> ResumeSetupResp
             choices=data.choices,
             setting_draft=data.get_setting_dict(),
             character_draft=data.get_character_dict(),
+            character_state=data.get_character_state_dict(),
             selected_seed=data.get_seed_dict(),
+            layer_draft=data.get_layer_dict(),
+            zone_draft=data.get_zone_dict(),
             initial_location=data.get_initial_location(),
             base_timestamp=data.base_timestamp,
         )

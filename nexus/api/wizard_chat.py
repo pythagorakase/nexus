@@ -119,43 +119,16 @@ def _wizard_subphase_for_state(
 
 
 def _hydrate_character_context(request: ChatRequest) -> Optional[Dict[str, Any]]:
-    """Load character_state from cache if in character phase and no context provided."""
-    if request.current_phase != "character" or request.context_data is not None:
-        return request.context_data
+    """Fill missing character context from the persisted wizard subphases."""
+    context = request.context_data
+    if request.current_phase != "character" or (context or {}).get("character_state"):
+        return context
 
     cache = read_cache(slot_dbname(request.slot))
-    if not cache:
-        return None
-
-    char_state: Dict[str, Any] = {}
-    if cache.character.has_concept():
-        selected = [st.trait for st in cache.character.suggested_traits]
-        rationales = {st.trait: st.rationale for st in cache.character.suggested_traits}
-        char_state["concept"] = {
-            "name": cache.character.name,
-            "archetype": cache.character.archetype,
-            "background": cache.character.background,
-            "appearance": cache.character.appearance,
-            "suggested_traits": selected,
-            "trait_rationales": rationales,
-        }
-    if cache.character.has_traits():
-        selected = [st.trait for st in cache.character.suggested_traits]
-        rationales = {st.trait: st.rationale for st in cache.character.suggested_traits}
-        char_state["trait_selection"] = {
-            "selected_traits": selected,
-            "trait_rationales": rationales,
-        }
-    if cache.character.has_wildcard():
-        char_state["wildcard"] = {
-            "wildcard_name": cache.character.wildcard_name,
-            "wildcard_description": cache.character.wildcard_rationale,
-            "orrery_tags": cache.character.orrery_tags,
-        }
-
+    char_state = cache.get_character_state_dict() if cache else None
     if char_state:
-        return {"character_state": char_state}
-    return None
+        return {**(context or {}), "character_state": char_state}
+    return context
 
 
 def _accept_fate_prompt(message: Optional[str]) -> str:

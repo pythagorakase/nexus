@@ -163,7 +163,10 @@ class ResumeSetupResponse(BaseModel):
     choices: List[str]
     setting_draft: Optional[Dict[str, Any]]
     character_draft: Optional[Dict[str, Any]]
+    character_state: Optional[Dict[str, Any]]
     selected_seed: Optional[Dict[str, Any]]
+    layer_draft: Optional[Dict[str, Any]]
+    zone_draft: Optional[Dict[str, Any]]
     initial_location: Optional[Dict[str, Any]]
     base_timestamp: Optional[datetime]
 

@@ -312,6 +312,12 @@ class WizardCache:
         """Reconstruct character_draft dict from normalized columns + assets.traits."""
         if not self.character_complete():
             return None
+        return self.get_character_state_dict()
+
+    def get_character_state_dict(self) -> Optional[Dict[str, Any]]:
+        """Restore completed character subphases, including an unfinished character."""
+        if not self.character.has_concept():
+            return None
 
         # Build trait data from suggested_traits (which are the selected ones)
         selected = [st.trait for st in self.character.suggested_traits]
@@ -327,7 +333,7 @@ class WizardCache:
             for st in self.character.suggested_traits
         ]
 
-        return {
+        state = {
             "concept": {
                 "name": self.character.name,
                 "archetype": self.character.archetype,
@@ -336,17 +342,20 @@ class WizardCache:
                 "suggested_traits": selected,
                 "trait_rationales": rationales,
             },
-            "trait_selection": {
+        }
+        if self.character.has_traits():
+            state["trait_selection"] = {
                 "selected_traits": selected,
                 "trait_rationales": rationales,
                 "trait_constraints": constraints,
-            },
-            "wildcard": {
+            }
+        if self.character.has_wildcard():
+            state["wildcard"] = {
                 "wildcard_name": self.character.wildcard_name,
                 "wildcard_description": self.character.wildcard_rationale,
                 "orrery_tags": self.character.orrery_tags,
-            },
-        }
+            }
+        return state
 
     def get_seed_dict(self) -> Optional[Dict[str, Any]]:
         """Reconstruct selected_seed dict from normalized columns.
