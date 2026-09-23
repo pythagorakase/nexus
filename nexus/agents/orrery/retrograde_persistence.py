@@ -10,6 +10,9 @@ import logging
 import re
 from typing import Any, Mapping, Optional, Sequence
 
+from nexus.agents.orrery.relationship_provenance import (
+    relationship_producer,
+)
 from nexus.agents.orrery.epistemics import (
     ClaimParticipant,
     coerce_epistemics_policy,
@@ -2472,27 +2475,28 @@ def _insert_character_relationship(
     character1_id: int,
     character2_id: int,
 ) -> None:
-    cur.execute(
-        """
-        /* orrery:retrograde:insert_character_relationship */
-        INSERT INTO character_relationships (
-            character1_id, character2_id, relationship_type, emotional_valence,
-            dynamic, recent_events, history, extra_data
+    with relationship_producer(cur, "retrograde"):
+        cur.execute(
+            """
+            /* orrery:retrograde:insert_character_relationship */
+            INSERT INTO character_relationships (
+                character1_id, character2_id, relationship_type, emotional_valence,
+                dynamic, recent_events, history, extra_data
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb)
+            ON CONFLICT (character1_id, character2_id) DO NOTHING
+            """,
+            (
+                character1_id,
+                character2_id,
+                relationship.relationship_type,
+                _default_emotional_valence(relationship.relationship_type),
+                "latent in generated backstory",
+                _relationship_recent_events(relationship),
+                _relationship_history(relationship),
+                json.dumps(_relationship_extra_data(relationship)),
+            ),
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb)
-        ON CONFLICT (character1_id, character2_id) DO NOTHING
-        """,
-        (
-            character1_id,
-            character2_id,
-            relationship.relationship_type,
-            _default_emotional_valence(relationship.relationship_type),
-            "latent in generated backstory",
-            _relationship_recent_events(relationship),
-            _relationship_history(relationship),
-            json.dumps(_relationship_extra_data(relationship)),
-        ),
-    )
 
 
 def _insert_prologue_chunk(cur: Any) -> int:

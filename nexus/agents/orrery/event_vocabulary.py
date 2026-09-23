@@ -21,7 +21,6 @@ NON_TEMPLATE_EVENT_TYPES = frozenset(
         "faction_realignment",
         "recovered_from_illness",
         "regained_consciousness",
-        "relationship_drift_drained",
         "relationship_drift_milestone",
         "revealed",
         "threat_removed",

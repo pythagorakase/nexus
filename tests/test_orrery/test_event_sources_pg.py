@@ -16,6 +16,7 @@ from sqlalchemy import create_engine
 
 from nexus.agents.orrery.audit import EXOGENOUS_EVENT_PRODUCERS, build_catalog
 from nexus.agents.orrery.coverage import analyze_coverage
+from nexus.agents.orrery.relationship_provenance import relationship_producer
 from nexus.agents.orrery.resolver import hydrate_world_state
 from nexus.agents.orrery.retrograde_expansion import RetrogradeExpansionEventPlan
 from nexus.agents.orrery.retrograde_graph import build_candidate_graph
@@ -57,16 +58,17 @@ def event_source_db() -> Iterator[tuple[str, int, int, int]]:
                         (target,),
                     )
                     target_character = int(cur.fetchone()[0])
-                    cur.execute(
-                        """
-                        INSERT INTO character_relationships (
-                            character1_id, character2_id, relationship_type,
-                            emotional_valence, dynamic, recent_events, history
-                        ) VALUES (%s, %s, 'rival', '+0|neutral',
-                                  'Competing interests.', '', '')
-                        """,
-                        (actor_character, target_character),
-                    )
+                    with relationship_producer(cur, "manual"):
+                        cur.execute(
+                            """
+                            INSERT INTO character_relationships (
+                                character1_id, character2_id, relationship_type,
+                                emotional_valence, dynamic, recent_events, history
+                            ) VALUES (%s, %s, 'rival', '+0|neutral',
+                                      'Competing interests.', '', '')
+                            """,
+                            (actor_character, target_character),
+                        )
                     anchor = _insert_prologue_chunk(cur)
                     _ensure_prologue_metadata(cur, prologue_chunk_id=anchor)
             yield dbname, anchor, actor, target

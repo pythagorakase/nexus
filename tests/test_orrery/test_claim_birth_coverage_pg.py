@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator, Mapping, Sequence
 from datetime import timedelta
+from decimal import Decimal
 from itertools import count
 import os
 from typing import Any
@@ -22,6 +23,7 @@ from nexus.agents.orrery.epistemics import (
 )
 from nexus.agents.orrery.events import commit_orrery_tick_sync
 from nexus.agents.orrery.reconstruction import capture_state_checkpoint_sync
+from nexus.agents.orrery.relationship_provenance import relationship_producer
 from nexus.agents.orrery.replay import canonicalize, reconstruct_state_at_sync
 from nexus.agents.orrery.resolver import resolve_dry_run
 from nexus.agents.orrery.retrograde_expansion import (
@@ -40,6 +42,7 @@ from nexus.agents.orrery.substrate import (
     Slot,
     Template,
 )
+from scripts.migrate import migrate_database
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -120,6 +123,8 @@ def claim_birth_db() -> Iterator[str]:
                     sql.Identifier("NEXUS_template"),
                 )
             )
+        _, failed = migrate_database(dbname, skip_locked=False)
+        assert failed == 0
         with _connect(dbname) as conn, conn.cursor() as cur:
             cur.execute(
                 """
@@ -238,19 +243,20 @@ def _seed_world(dbname: str) -> dict[str, Any]:
             """,
             (entities["actor"], place_id),
         )
-        cur.execute(
-            """
-            INSERT INTO character_relationships (
-                character1_id, character2_id, relationship_type,
-                emotional_valence, valence_current, dynamic,
-                recent_events, history
-            ) VALUES (
-                %s, %s, 'associate', '+1|favorable', 0.1,
-                'Ephemeral claim-birth edge.', 'None.', 'Issue 679 fixture.'
+        with relationship_producer(cur, "manual"):
+            cur.execute(
+                """
+                INSERT INTO character_relationships (
+                    character1_id, character2_id, relationship_type,
+                    emotional_valence, valence_current, dynamic,
+                    recent_events, history
+                ) VALUES (
+                    %s, %s, 'associate', '+1|favorable', 0.1,
+                    'Ephemeral claim-birth edge.', 'None.', 'Issue 679 fixture.'
+                )
+                """,
+                (characters["actor"], characters["target"]),
             )
-            """,
-            (characters["actor"], characters["target"]),
-        )
         base_chunk = _insert_chunk(cur, delta=timedelta(0))
     return {
         **entities,
@@ -701,8 +707,6 @@ def test_relationship_drift_birth_is_actor_private_and_replays(
         tick_chunk_id=tick_chunk_id,
         drift_settings={
             "enabled": True,
-            "copresence_rate_per_hour": "0.001",
-            "copresence_max_hours_per_tick": "1",
             "project_milestone_delta": "0.03",
             "hostile_events": {"threat_issued": "-0.2"},
             "cooperative_events": {},
@@ -716,6 +720,15 @@ def test_relationship_drift_birth_is_actor_private_and_replays(
             event_type="relationship_drift_milestone",
         )[0]
         claim_id = int(drift_claim["claim_id"])
+        cur.execute(
+            "SELECT producer, delta, valence_after FROM relationship_versions "
+            "WHERE source_chunk_id = %s AND operation = 'update'",
+            (tick_chunk_id,),
+        )
+        (version,) = cur.fetchall()
+        assert version["producer"] == "drift_event"
+        assert version["delta"] == Decimal("-0.18")
+        assert version["valence_after"] == Decimal("-0.08")
         assert _awareness(cur, claim_id) == {state["actor"]: "participant"}
         assert state["target"] not in _awareness(cur, claim_id)
         assert state["nearby"] not in _awareness(cur, claim_id)

@@ -115,6 +115,8 @@ class AsyncCommitConnection:
 
     async def fetch(self, sql, *args):
         normalized = " ".join(sql.split())
+        if "FROM relationship_milestone_queue" in normalized:
+            return []
         if "/* orrery:bleed_uptake_candidates */" in normalized:
             return [offer for offer in self.bleed_offers if offer["id"] in args[0]]
         if normalized == (
@@ -133,6 +135,8 @@ class AsyncCommitConnection:
 
     async def fetchval(self, sql, *args):
         normalized = " ".join(sql.split())
+        if "current_setting('nexus." in normalized:
+            return ""
         if "INSERT INTO narrative_chunks" in normalized:
             return self.chunk_id
         if normalized == "SELECT world_time FROM chunk_metadata WHERE chunk_id = $1":

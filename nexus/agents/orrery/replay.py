@@ -3127,7 +3127,11 @@ class _Replayer:
             # For both 'update' and 'delete' the pre-image IS the row state
             # before the mutation; assignment restores it (delete pre-images
             # re-insert).
-            working[tuple(old_row[c] for c in key_columns)] = old_row
+            key = tuple(old_row[c] for c in key_columns)
+            if operation == "insert":
+                working.pop(key, None)
+            else:
+                working[key] = old_row
         if null_attributed:
             result.add_note(
                 table,

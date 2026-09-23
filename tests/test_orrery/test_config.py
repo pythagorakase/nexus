@@ -103,8 +103,6 @@ def test_orrery_settings_load_queue_and_resolution_defaults() -> None:
     assert settings.orrery.projects.milestone_magnitude == 0.40
     assert settings.orrery.projects.coverage_distribution_tolerance == 0.05
     assert settings.orrery.drift.enabled is True
-    assert settings.orrery.drift.copresence_rate_per_hour == Decimal("0.001")
-    assert settings.orrery.drift.copresence_max_hours_per_tick == Decimal("12.0")
     assert settings.orrery.drift.project_milestone_delta == Decimal("0.03")
     assert settings.orrery.drift.hostile_events["retaliation_executed"] == Decimal(
         "-0.06"
@@ -228,7 +226,7 @@ def test_epistemics_accepts_exact_birth_role_policy_registry() -> None:
 
     configured = list(CLAIM_BIRTH_ROLE_POLICY)
     settings = OrreryEpistemicsSettings(claim_event_types=configured)
-    assert len(known_event_types()) == 109
+    assert len(known_event_types()) == 108
     assert set(configured) <= known_event_types()
     assert settings.claim_event_types == configured
 
@@ -367,19 +365,14 @@ def test_drift_rejects_cooperative_delta_magnitude_at_or_above_one() -> None:
         OrreryDriftSettings(cooperative_events={"welfare_check": 1})
 
 
-def test_drift_rejects_copresence_tick_delta_at_or_above_one() -> None:
-    with pytest.raises(ValidationError, match=r"copresence_rate_per_hour \*"):
-        OrreryDriftSettings(
-            copresence_rate_per_hour=Decimal("0.1"),
-            copresence_max_hours_per_tick=Decimal("10"),
-        )
+def test_drift_rejects_removed_copresence_settings() -> None:
+    with pytest.raises(ValidationError, match="Extra inputs"):
+        OrreryDriftSettings(copresence_rate_per_hour=Decimal("0.1"))
 
 
 @pytest.mark.parametrize(
     "field",
     [
-        "copresence_rate_per_hour",
-        "copresence_max_hours_per_tick",
         "project_milestone_delta",
     ],
 )

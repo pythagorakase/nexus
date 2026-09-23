@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "Register shared staging validation and choice recovery for issue 801, the shared evaluation database-name guard, and the read-only prose metrics operator for issue 765.",
+  "reason": "Register shared staging validation and choice recovery for issue 801, shared relationship provenance and milestone consumption for issue 790, the evaluation database-name guard, and the read-only prose metrics operator for issue 765.",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -153,6 +153,7 @@
     "nexus/agents/orrery/propagation.py",
     "nexus/agents/orrery/reciprocal.py",
     "nexus/agents/orrery/reconstruction.py",
+    "nexus/agents/orrery/relationship_provenance.py",
     "nexus/agents/orrery/resolver.py",
     "nexus/agents/orrery/retrograde_embedding.py",
     "nexus/agents/orrery/retrograde_expansion.py",

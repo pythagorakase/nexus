@@ -100,7 +100,9 @@ class CommitCursor:
         self.connection.statements.append((normalized, params))
         self.rows = []
         self.rowcount = 0
-        if normalized.startswith("DELETE FROM incubator"):
+        if "current_setting('nexus." in normalized:
+            self.result = ("",)
+        elif normalized.startswith("DELETE FROM incubator"):
             self.rowcount = 1
             self.result = None
         elif "FROM incubator" in normalized:

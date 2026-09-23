@@ -13,12 +13,12 @@ import pytest
 from psycopg2.extras import RealDictCursor  # type: ignore[import-untyped]
 
 from nexus.agents.orrery.events import commit_orrery_tick_sync
-from nexus.api.slot_utils import get_slot_db_url
+from tests.pg_fixtures import connect, disposable_slot_database
+from nexus.api.commit_handler_sync import apply_state_updates_sync
+from nexus.agents.logon.apex_schema import StateUpdates
+from nexus.agents.orrery.relationship_provenance import relationship_producer
 from nexus.config import load_settings
 from nexus.config.settings_models import OrreryDriftSettings
-from tests.test_orrery.claim_accounts_test_support import (
-    install_claim_accounts_shadow_sync,
-)
 
 
 pytestmark = pytest.mark.requires_postgres
@@ -31,50 +31,20 @@ EPISTEMICS = {
 }
 
 
-@pytest.fixture()
-def live_conn() -> Iterator[Any]:
-    """Open a slot-5 transaction and roll back every fixture mutation."""
+@pytest.fixture(scope="module")
+def drift_database() -> Iterator[str]:
+    """Migrate a disposable clone; never modify a save slot."""
+    with disposable_slot_database(
+        "qa640_drift", source_db="save_03", include_data=True
+    ) as dbname:
+        yield dbname
 
-    conn = psycopg2.connect(get_slot_db_url(slot=5), cursor_factory=RealDictCursor)
+
+@pytest.fixture()
+def live_conn(drift_database: str) -> Iterator[Any]:
+    """Roll back each case inside the migrated disposable database."""
+    conn = connect(drift_database, cursor_factory=RealDictCursor)
     try:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT EXISTS (
-                           SELECT 1
-                           FROM information_schema.columns
-                           WHERE table_schema = ANY(current_schemas(false))
-                             AND table_name = 'character_relationships'
-                             AND column_name = 'valence_current'
-                       ) AS valence_ready,
-                       EXISTS (
-                           SELECT 1
-                           FROM information_schema.columns
-                           WHERE table_schema = ANY(current_schemas(false))
-                             AND table_name = 'world_events'
-                             AND column_name = 'world_time'
-                       ) AS event_clock_ready
-                """
-            )
-            readiness = cur.fetchone()
-            if not readiness["valence_ready"] or not readiness["event_clock_ready"]:
-                pytest.skip("slot 5 requires applied migrations 083 and 088")
-            install_claim_accounts_shadow_sync(cur)
-            cur.execute(
-                """
-                INSERT INTO event_types (type, category, severity, description)
-                VALUES
-                    (
-                        'relationship_drift_milestone', 'emotional', 'minor',
-                        'Rollback-only migration-089 milestone event seed.'
-                    ),
-                    (
-                        'relationship_drift_drained', 'emotional', 'minor',
-                        'Rollback-only migration-089 drain event seed.'
-                    )
-                ON CONFLICT (type) DO NOTHING
-                """
-            )
         yield conn
     finally:
         conn.rollback()
@@ -84,8 +54,6 @@ def live_conn() -> Iterator[Any]:
 def _settings(*, enabled: bool = True, **overrides: object) -> OrreryDriftSettings:
     payload: dict[str, object] = {
         "enabled": enabled,
-        "copresence_rate_per_hour": "0.001",
-        "copresence_max_hours_per_tick": "12",
         "project_milestone_delta": "0.03",
         "hostile_events": {"threat_issued": "-0.2"},
         "cooperative_events": {"welfare_check": "0.02"},
@@ -141,19 +109,20 @@ def _insert_edge(
     target_character_id: int,
     valence: Decimal = Decimal("0.1"),
 ) -> None:
-    cur.execute(
-        """
-        INSERT INTO character_relationships (
-            character1_id, character2_id, relationship_type,
-            emotional_valence, valence_current, dynamic,
-            recent_events, history
-        ) VALUES (
-            %s, %s, 'associate', '+1|favorable', %s,
-            'Rollback-only drift edge.', 'None.', 'Fixture.'
+    with relationship_producer(cur, "manual"):
+        cur.execute(
+            """
+            INSERT INTO character_relationships (
+                character1_id, character2_id, relationship_type,
+                emotional_valence, valence_current, dynamic,
+                recent_events, history
+            ) VALUES (
+                %s, %s, 'associate', '+1|favorable', %s,
+                'Rollback-only drift edge.', 'None.', 'Fixture.'
+            )
+            """,
+            (source_character_id, target_character_id, valence),
         )
-        """,
-        (source_character_id, target_character_id, valence),
-    )
 
 
 def _insert_hostile_event(
@@ -258,7 +227,7 @@ def test_commit_drift_updates_versions_projects_literal_and_mints_claim(
             """
             SELECT count(*) AS count
             FROM relationship_versions
-            WHERE relationship_table = 'character_relationships'
+            WHERE producer = 'drift_event' AND relationship_table = 'character_relationships'
               AND source_chunk_id = %s
               AND (old_row ->> 'character1_id')::bigint = %s
               AND (old_row ->> 'character2_id')::bigint = (
@@ -272,7 +241,7 @@ def test_commit_drift_updates_versions_projects_literal_and_mints_claim(
             """
             SELECT count(*) AS count
             FROM relationship_versions
-            WHERE relationship_table = 'character_relationships'
+            WHERE producer = 'drift_event' AND relationship_table = 'character_relationships'
               AND source_chunk_id = %s
             """,
             (tick_chunk_id,),
@@ -281,20 +250,16 @@ def test_commit_drift_updates_versions_projects_literal_and_mints_claim(
 
         cur.execute(
             """
-            SELECT payload
-            FROM world_events
+            SELECT applied_deltas
+            FROM orrery_drift_drains
             WHERE tick_chunk_id = %s
-              AND event_type = 'relationship_drift_drained'
             """,
             (tick_chunk_id,),
         )
         drain_marker = cur.fetchone()
         assert drain_marker is not None
         assert cur.fetchone() is None
-        assert drain_marker["payload"] == {
-            "edges_touched": tick_version_count,
-            "milestone_count": 1,
-        }
+        assert drain_marker["applied_deltas"] == tick_version_count
 
         cur.execute(
             """
@@ -321,7 +286,8 @@ def test_commit_drift_updates_versions_projects_literal_and_mints_claim(
         assert Decimal(str(milestone["payload"]["new_valence"])) == Decimal("-0.08")
         assert len(milestone["payload"]["producer_deltas"]) == 1
         producer_label = next(iter(milestone["payload"]["producer_deltas"]))
-        assert producer_label.startswith("hostile:")
+        assert producer_label == "drift_event"
+        assert milestone["payload"]["producer"] == "drift_event"
         assert Decimal(
             str(milestone["payload"]["producer_deltas"][producer_label])
         ) == Decimal("-0.18")
@@ -419,28 +385,25 @@ def test_zero_edge_tick_still_records_drain_marker(live_conn: Any) -> None:
     with live_conn.cursor() as cur:
         cur.execute(
             """
-            SELECT payload
-            FROM world_events
+            SELECT applied_deltas
+            FROM orrery_drift_drains
             WHERE tick_chunk_id = %s
-              AND event_type = 'relationship_drift_drained'
             """,
             (tick_chunk_id,),
         )
-        assert cur.fetchone()["payload"] == {
-            "edges_touched": 0,
-            "milestone_count": 0,
-        }
+        assert cur.fetchone()["applied_deltas"] == 0
 
 
-def test_resolution_free_copresence_crossing_mints_canonical_claim(
+def test_colocated_characters_without_events_produce_no_versions(
     live_conn: Any,
 ) -> None:
-    """Canonical epistemics reaches drift when no Orrery proposal exists."""
+    """Location equality cannot change valence without an authored event."""
 
     with live_conn.cursor() as cur:
         tick_chunk_id, actor_id, target_id, _character_id, _event = _seed_tick(
             cur, valence=Decimal("0.08")
         )
+        cur.execute("DELETE FROM world_events WHERE id = %s", (_event,))
         cur.execute("SELECT id FROM places ORDER BY id LIMIT 1")
         place_id = cur.fetchone()["id"]
         cur.execute(
@@ -457,8 +420,6 @@ def test_resolution_free_copresence_crossing_mints_canonical_claim(
         None,
         tick_chunk_id=tick_chunk_id,
         drift_settings=_settings(
-            copresence_rate_per_hour="0.2",
-            copresence_max_hours_per_tick="1",
             hostile_events={},
             cooperative_events={},
         ),
@@ -467,18 +428,15 @@ def test_resolution_free_copresence_crossing_mints_canonical_claim(
 
     with live_conn.cursor() as cur:
         cur.execute(
-            """
-            SELECT claim.id
-            FROM world_events event
-            JOIN claims claim ON claim.world_event_id = event.id
-            WHERE event.tick_chunk_id = %s
-              AND event.event_type = 'relationship_drift_milestone'
-              AND event.actor_entity_id = %s
-              AND event.target_entity_id = %s
-            """,
-            (tick_chunk_id, actor_id, target_id),
+            "SELECT count(*) AS count FROM relationship_versions WHERE source_chunk_id = %s",
+            (tick_chunk_id,),
         )
-        assert cur.fetchone() is not None
+        assert cur.fetchone()["count"] == 0
+        cur.execute(
+            "SELECT count(*) AS count FROM world_events WHERE tick_chunk_id = %s AND event_type = 'relationship_drift_drained'",
+            (tick_chunk_id,),
+        )
+        assert cur.fetchone()["count"] == 0
 
 
 def test_long_scale_valence_uses_same_rung_as_postgres(live_conn: Any) -> None:
@@ -518,3 +476,61 @@ def test_long_scale_valence_uses_same_rung_as_postgres(live_conn: Any) -> None:
             (tick_chunk_id,),
         )
         assert cur.fetchone()["python_rung"] == sql_rung
+
+
+def test_gaia_update_attributes_version_and_emits_milestone(live_conn: Any) -> None:
+    """Exercise the real Gaia entry point independently of the drift setting."""
+    with live_conn.cursor() as cur:
+        tick, actor, target, character1, _ = _seed_tick(cur)
+        cur.execute("SELECT id FROM characters WHERE entity_id = %s", (target,))
+        character2 = cur.fetchone()["id"]
+    apply_state_updates_sync(
+        live_conn,
+        StateUpdates(
+            relationships=[
+                {
+                    "character1_id": character1,
+                    "character2_id": character2,
+                    "emotional_valence": "-3|resentful",
+                }
+            ]
+        ),
+        source_chunk_id=tick,
+    )
+    with live_conn.cursor() as cur:
+        cur.execute(
+            "SELECT producer, delta, valence_after FROM relationship_versions WHERE source_chunk_id = %s",
+            (tick,),
+        )
+        version = cur.fetchone()
+        assert version["producer"] == "gaia"
+        assert version["delta"] == version["valence_after"] - Decimal("0.1")
+        cur.execute(
+            "SELECT payload FROM world_events WHERE tick_chunk_id = %s AND event_type = 'relationship_drift_milestone'",
+            (tick,),
+        )
+        payload = cur.fetchone()["payload"]
+        assert payload["producer"] == "gaia"
+        assert (payload["old_rung"], payload["new_rung"]) == (1, -3)
+        cur.execute("SELECT current_setting('nexus.write_producer', true) AS producer")
+        assert not cur.fetchone()["producer"]
+
+
+@pytest.mark.parametrize("producer", [None, "unknown", "unattributed_pre_115"])
+def test_unattributed_or_invalid_valence_update_raises(
+    live_conn: Any, producer: Any
+) -> None:
+    """Only an explicit current producer may mutate the canonical value."""
+    with live_conn.cursor() as cur:
+        _tick, _actor, _target, character1, _ = _seed_tick(cur)
+        if producer is not None:
+            cur.execute(
+                "SELECT set_config('nexus.write_producer', %s, true)", (producer,)
+            )
+        with pytest.raises(
+            psycopg2.errors.RaiseException, match="nexus.write_producer"
+        ):
+            cur.execute(
+                "UPDATE character_relationships SET valence_current = 0.5 WHERE character1_id = %s",
+                (character1,),
+            )
