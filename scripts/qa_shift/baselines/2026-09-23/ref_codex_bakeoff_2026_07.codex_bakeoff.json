@@ -1,0 +1,437 @@
+{
+  "schema_version": 1,
+  "corpus": "ref_codex_bakeoff_2026_07",
+  "provenance_tier": "codex_bakeoff",
+  "provenance": {
+    "manifest": {
+      "name": "ref_codex_bakeoff_2026_07",
+      "provenance_tier": "codex_bakeoff",
+      "source_kind": "restored_dump",
+      "source_artifact_path": "/Users/pythagor/nexus/temp/scratchpad_audit_2026-07-30_044920Z/save_05_before.dump",
+      "source_sha256": "b128df329f9d5ef5fb40019213dc44e5d85536f1132f768c2aa60c2241ae4db1",
+      "restore_date": "2026-09-23",
+      "migration_stamp_level": "114",
+      "migration_stamp_count": 112,
+      "chunk_count": 111,
+      "read_only": true,
+      "description": "July Codex-driven multi-Skald bakeoff regression artifact, not a taste reference; migrated and Pass-2 stamped before locking."
+    },
+    "measured_at": "2026-09-23T19:31:37.584195+00:00",
+    "text_source": "columns",
+    "text_source_counts": {
+      "columns": 110
+    },
+    "measurement_scope": {
+      "narrative": "Modern storyteller_text; legacy Storyteller section with only recovered menu option lines removed; whole section when no menu is recovered.",
+      "choices": "choice_object.presented when available, otherwise the final recovered sequential numbered legacy menu; missing menus are N/A.",
+      "comparable_metrics": [
+        "closers",
+        "negation",
+        "rhythm",
+        "motifs",
+        "words_per_chunk",
+        "selected_turns",
+        "same_setting_streak",
+        "world_minutes_per_turn"
+      ],
+      "comparability": "Narrative metrics use the same menu-excluding definitions across storage formats, conditional on legacy menu recovery. Selected turns and telemetry use the same definitions subject to source coverage.",
+      "legacy_heuristics": "Menu detection can misidentify numbered prose or miss menus and continuation lines. Legacy narrative metrics inherit that uncertainty; choice statistics describe recovered menus only, not equivalent coverage to structured menus.",
+      "shared_heuristics": "Sentence segmentation is punctuation-based; choice first verbs use lexical tokens and speech/change shares use keywords."
+    },
+    "snapshot_sha256": "592be3de2dce765fffb70431d7ae1d76b5b7c20b54b64331100d4ca9c1572656",
+    "migration": {
+      "count": 112,
+      "level": "114"
+    },
+    "database_chunk_count": 111,
+    "from_chunk": 6,
+    "to_chunk": 147,
+    "read_only": true,
+    "order": "playable narrative_chunks.id ASC"
+  },
+  "config": {
+    "contraction_pattern": "\\b\\w+n[’']t\\b",
+    "formal_negations": [
+      "does not",
+      "do not",
+      "is not",
+      "are not",
+      "was not",
+      "were not",
+      "did not",
+      "have not",
+      "has not",
+      "had not",
+      "will not",
+      "would not",
+      "can not",
+      "cannot",
+      "could not",
+      "should not",
+      "must not",
+      "need not",
+      "am not"
+    ],
+    "it_is_not_pattern": "\\bit\\s+is\\s+not\\s+[^.!?]+\\.",
+    "closer_pattern": "\\bwhat\\s+do\\s+you\\b[^?]*\\?$",
+    "word_pattern": "[^\\W\\d_]+(?:[’'][^\\W\\d_]+)*",
+    "sentence_boundary_pattern": "[.!?]+(?:[\"”’']*)(?:\\s+|$)",
+    "short_sentence_max_words": 4,
+    "motif_ngram_sizes": [
+      3,
+      4,
+      5
+    ],
+    "motif_min_chunks": 20,
+    "speech_act_verbs": [
+      "ask",
+      "tell",
+      "say",
+      "demand",
+      "press",
+      "question",
+      "answer",
+      "explain",
+      "convince",
+      "persuade",
+      "request",
+      "warn",
+      "challenge",
+      "confront",
+      "call"
+    ],
+    "change_keywords": [
+      "leave",
+      "go",
+      "follow",
+      "depart",
+      "walk",
+      "return",
+      "cross",
+      "move",
+      "wait",
+      "sleep",
+      "rest",
+      "later",
+      "tomorrow",
+      "alone",
+      "join",
+      "dismiss",
+      "invite",
+      "disengage",
+      "break from"
+    ],
+    "setting_reference_type": "setting",
+    "legacy_section_pattern": "^##[ \\t]+(Storyteller|You)[ \\t]*$",
+    "legacy_choice_pattern": "^\\s*(?:#{1,6}\\s+)?(?:\\*\\*)?(?P<number>[1-9][0-9]*)(?:[.)]|\\uFE0F?\\u20E3)\\s*(?P<text>.+)$",
+    "legacy_menu_min_choices": 2
+  },
+  "metrics": {
+    "chunks": 110,
+    "narrative_chunks": 110,
+    "player_only_chunk_ids": [],
+    "closers": {
+      "question_count": 2,
+      "question_rate": 0.01818181818181818,
+      "what_do_you_count": 1,
+      "what_do_you_rate": 0.00909090909090909
+    },
+    "negation": {
+      "contractions": 29,
+      "formal_counts": {
+        "does not": 338,
+        "do not": 148,
+        "is not": 188,
+        "are not": 29,
+        "was not": 20,
+        "were not": 3,
+        "did not": 35,
+        "have not": 10,
+        "has not": 34,
+        "had not": 5,
+        "will not": 33,
+        "would not": 4,
+        "can not": 0,
+        "cannot": 65,
+        "could not": 11,
+        "should not": 6,
+        "must not": 0,
+        "need not": 0,
+        "am not": 6
+      },
+      "formal_total": 935,
+      "contraction_ratio": 0.03008298755186722,
+      "it_is_not_sentence_count": 51
+    },
+    "rhythm": {
+      "paragraphs_per_chunk": 57.85454545454545,
+      "median_words_per_paragraph": 11.0,
+      "single_sentence_paragraph_share": 0.5111565053425519,
+      "short_sentence_share": 0.29329503363821907,
+      "paragraph_count": 6364,
+      "sentence_count": 13229
+    },
+    "motifs": [
+      {
+        "ngram": "beneath your ribs",
+        "chunks": 47
+      },
+      {
+        "ngram": "the debt marker",
+        "chunks": 45
+      },
+      {
+        "ngram": "she does not",
+        "chunks": 41
+      },
+      {
+        "ngram": "it is not",
+        "chunks": 40
+      },
+      {
+        "ngram": "looks at the",
+        "chunks": 36
+      },
+      {
+        "ngram": "she says not",
+        "chunks": 36
+      },
+      {
+        "ngram": "does not answer",
+        "chunks": 33
+      },
+      {
+        "ngram": "under your ribs",
+        "chunks": 33
+      },
+      {
+        "ngram": "that is not",
+        "chunks": 32
+      },
+      {
+        "ngram": "for a moment",
+        "chunks": 31
+      },
+      {
+        "ngram": "it is a",
+        "chunks": 29
+      },
+      {
+        "ngram": "it does not",
+        "chunks": 28
+      },
+      {
+        "ngram": "marker beneath your",
+        "chunks": 28
+      },
+      {
+        "ngram": "marker beneath your ribs",
+        "chunks": 28
+      },
+      {
+        "ngram": "she says the",
+        "chunks": 28
+      },
+      {
+        "ngram": "does not look",
+        "chunks": 26
+      },
+      {
+        "ngram": "is not a",
+        "chunks": 26
+      },
+      {
+        "ngram": "enough to be",
+        "chunks": 25
+      },
+      {
+        "ngram": "there is no",
+        "chunks": 25
+      },
+      {
+        "ngram": "she says it",
+        "chunks": 24
+      },
+      {
+        "ngram": "for the first",
+        "chunks": 23
+      },
+      {
+        "ngram": "looks at you",
+        "chunks": 23
+      },
+      {
+        "ngram": "looks toward the",
+        "chunks": 23
+      },
+      {
+        "ngram": "the first time",
+        "chunks": 23
+      },
+      {
+        "ngram": "the shape of",
+        "chunks": 23
+      },
+      {
+        "ngram": "close enough to",
+        "chunks": 22
+      },
+      {
+        "ngram": "enough to make",
+        "chunks": 22
+      },
+      {
+        "ngram": "it is the",
+        "chunks": 22
+      },
+      {
+        "ngram": "you do not",
+        "chunks": 22
+      },
+      {
+        "ngram": "for the first time",
+        "chunks": 21
+      },
+      {
+        "ngram": "away from the",
+        "chunks": 20
+      },
+      {
+        "ngram": "beneath her coat",
+        "chunks": 20
+      },
+      {
+        "ngram": "brass ring optic",
+        "chunks": 20
+      },
+      {
+        "ngram": "the salt vault",
+        "chunks": 20
+      }
+    ],
+    "choices": {
+      "status": "available",
+      "sources": {
+        "choice_object.presented": 110
+      },
+      "menus": 110,
+      "chunks_without_menu": 0,
+      "count_distribution": {
+        "3": 46,
+        "4": 64
+      },
+      "mean_count": 3.581818181818182,
+      "total": 394,
+      "first_verb_mix": {
+        "abandon": 2,
+        "accept": 3,
+        "allow": 2,
+        "answer": 2,
+        "ask": 76,
+        "authorize": 2,
+        "before": 1,
+        "begin": 1,
+        "call": 1,
+        "challenge": 1,
+        "choose": 1,
+        "climb": 4,
+        "contact": 1,
+        "continue": 1,
+        "cover": 1,
+        "create": 2,
+        "cross": 4,
+        "cut": 1,
+        "decide": 1,
+        "defy": 1,
+        "delay": 1,
+        "demand": 9,
+        "divert": 1,
+        "drink": 1,
+        "enter": 6,
+        "examine": 1,
+        "focus": 1,
+        "follow": 2,
+        "force": 4,
+        "get": 1,
+        "give": 1,
+        "go": 1,
+        "hand": 1,
+        "have": 62,
+        "help": 5,
+        "hold": 1,
+        "insist": 7,
+        "keep": 15,
+        "leave": 5,
+        "let": 6,
+        "move": 2,
+        "name": 3,
+        "offer": 2,
+        "open": 2,
+        "order": 7,
+        "pause": 1,
+        "press": 10,
+        "prioritize": 1,
+        "proceed": 1,
+        "pull": 2,
+        "push": 3,
+        "question": 3,
+        "race": 1,
+        "refuse": 7,
+        "register": 1,
+        "reject": 1,
+        "remain": 3,
+        "rest": 2,
+        "retreat": 1,
+        "risk": 1,
+        "say": 1,
+        "send": 3,
+        "slip": 7,
+        "speak": 1,
+        "split": 1,
+        "stabilize": 1,
+        "stay": 13,
+        "step": 1,
+        "stop": 3,
+        "surrender": 1,
+        "take": 18,
+        "tell": 19,
+        "turn": 2,
+        "use": 27,
+        "wait": 1,
+        "wake": 1,
+        "withdraw": 1
+      },
+      "speech_act_share": 0.3096446700507614,
+      "change_place_time_company_share": 0.1598984771573604
+    },
+    "selected_turns": {
+      "count": 110,
+      "words": 2349
+    },
+    "same_setting_streak": {
+      "count": 21,
+      "mean": 4.142857142857143,
+      "sd": 3.979539507766891,
+      "median": 3,
+      "max": 18,
+      "missing_place_chunks": 18,
+      "ambiguous_place_chunks": 5
+    },
+    "world_minutes_per_turn": {
+      "count": 109,
+      "mean": 8.045871559633028,
+      "sd": 11.844082888503507,
+      "median": 6.0,
+      "max": 120.0,
+      "missing_pairs": 0,
+      "negative_deltas": 0
+    },
+    "words_per_chunk": {
+      "count": 110,
+      "mean": 1105.5454545454545,
+      "sd": 282.6986714559784,
+      "median": 1067.5,
+      "max": 2113
+    }
+  }
+}

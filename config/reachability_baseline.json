@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "Register shared staging validation and choice recovery on production paths for issue 801",
+  "reason": "Register shared staging validation and choice recovery for issue 801, the shared evaluation database-name guard, and the read-only prose metrics operator for issue 765.",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -260,6 +260,7 @@
     "scripts/__init__.py",
     "scripts/api_anthropic.py",
     "scripts/api_openai.py",
+    "scripts/database_targets.py",
     "scripts/migrate.py",
     "scripts/new_story_setup.py",
     "scripts/summarize_narrative.py"
