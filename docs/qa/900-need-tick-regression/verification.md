@@ -1,14 +1,12 @@
 # Need-Tick Regression Verification
 
-## Status: Stop-Report
+## Status
 
-The candidate fix repairs the reproduced synchronous tick. The required broad
-PostgreSQL gate is blocked by six non-exempt connection-URL errors and the new
-async parity cases expose an existing parameter-typing error. Per the frozen
-work order's escape hatch, implementation stopped. No PR was opened or merged.
-The failing async cases remain visible for the coordinator; no skips or xfails
-were added. No production migration, gateway, or paid-provider call was added.
-The required lifecycle fixture owned and shut down its isolated local services.
+The coordinator accepted saturation and authorized the async timestamp repair.
+Merged `origin/main` at `34f008ed` (PR #904); its URL repair cleared all six
+previous connection errors. The required gates pass under the authorized #885
+empty-slot-5 exemptions listed below. No migration, paid call, or manually
+started gateway was needed. The lifecycle fixture owned its isolated services.
 
 ## Mechanism
 
@@ -45,7 +43,7 @@ path (`events.py:906,2237,2981,5480`). The async path mirrors it at
 anchors, and its experience-duration change reads present streaks; neither
 feeds the need anchor or debt calculation.
 
-## Production Decision and Candidate Fix
+## Production Decision and Fix
 
 Production can select the same historically present actor when absent at the
 anchor and still inside the relevance window (or retained by another actor
@@ -107,12 +105,58 @@ timestamp equals `2196-07-06T23:00:00Z`. Selection is unchanged by the fix.
 
 `tests/test_orrery/test_need_absence_pg.py` is the reproducible minimal probe plus
 regression: present -> absent 30 days / 310122 days -> present pressure ->
-offscreen fulfillment, with real tables and built-in templates. The sync cases
-pass. Async cases stop in the pre-existing applicability query before accrual.
+offscreen fulfillment, with real tables and built-in templates. All four sync/async absence cases pass, including persisted debt, world-time
+anchors, source chunk, and fulfillment metadata.
+
+Current disposable probe (sync and async, both intervals):
+
+```sh
+NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q -s tests/test_orrery/test_need_absence_pg.py -k long_absence
+```
+```text
+historical selection: before=[], after=({<Slot.ACTOR: 'actor'>: 1},)
+stored debt=0.00, evaluated=1347-06-10 22:24:58-04:56:02, fulfilled=None
+anchor before=1347-06-11T03:21:00+00:00, after=1347-07-10T23:24:58-04:56:02, debt=68.00
+historical selection: before=[], after=({<Slot.ACTOR: 'actor'>: 1},)
+stored debt=0.00, evaluated=1347-06-10 22:24:58-04:56:02, fulfilled=None
+anchor before=1347-06-11T03:21:00+00:00, after=2196-07-11T00:21:00-04:00, debt=68.00
+historical selection: before=[], after=({<Slot.ACTOR: 'actor'>: 1},)
+stored debt=0.00, evaluated=1347-06-10 22:24:58-04:56:02, fulfilled=None
+anchor before=1347-06-11T03:21:00+00:00, after=1347-07-10T23:24:58-04:56:02, debt=68.00
+historical selection: before=[], after=({<Slot.ACTOR: 'actor'>: 1},)
+stored debt=0.00, evaluated=1347-06-10 22:24:58-04:56:02, fulfilled=None
+anchor before=1347-06-11T03:21:00+00:00, after=2196-07-11T00:21:00-04:00, debt=68.00
+4 passed, 3 deselected in 4.24s
+```
+
+## Async Timestamp Repair
+
+`_need_applies_to_entity_async` first used `$2 IS NULL`, leaving asyncpg unable
+to infer the parameter type before the timestamp comparison. Both existing
+async absence cases reproduced `AmbiguousParameterError` after merging #904.
+The fix explicitly casts the parameter to `timestamptz` in both occurrences.
+
+The same statement family contained two siblings:
+`_routine_zone_destination_async` (`events.py:7040`) and
+`_location_class_destination_async` (`events.py:7076`). Both now cast their
+nullable world clocks too. A real disposable-schema test verifies preferred
+place selection with a null clock, before expiry, and at the exact expiry
+boundary. No other uncast `$N IS NULL` remains in `events.py`.
+
+## Accepted Policy and Follow-Up
+
+Debt beyond critical carries no additional behavioral meaning in the Orrery;
+saturating new accrual loses nothing a package can act on. Stored debt remains
+preserved, and the numeric-domain guard at `events.py:2932` is unchanged.
+Whether long-absent characters should care for their own needs offscreen is a
+taste-side follow-up for the dynamism campaign, not part of this repair.
+Replay still uses current tuning; no cross-configuration replay guarantee or
+stored-debt migration is added.
 
 ## Validation
 
-All commands ran from this worktree using the shared interpreter. Import proof:
+All commands ran from this worktree with the shared interpreter and no gateway
+URL/port overrides. Import proof:
 
 ```sh
 PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -c 'import nexus,sys;print(nexus.__file__)'
@@ -121,129 +165,97 @@ PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -c 'import nexus,sys;prin
 /Users/pythagor/nexus/.claude/worktrees/900-need-tick-regression/nexus/__init__.py
 ```
 
-Initial reproduction, before edits:
-
-```sh
-NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle
-```
-```text
-FAILED tests/test_connection_lifecycle.py::test_connection_two_clusters_story_lifecycle
-1 failed in 18.41s
-```
-
-New synchronous regression against unchanged production code:
+The first implementation's recorded baseline (commit `79f2b822`) ran the
+lifecycle case before edits: `1 failed in 18.41s`. The two synchronous absence
+cases against unchanged production code failed with `717.00 > 72.0` and
+`NeedDebtScoreDomainError: ... character=1, need=sleep, value=7442925.0`
+(`2 failed in 2.24s`). This round independently reproduced the async defect:
 
 ```sh
 NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_orrery/test_need_absence_pg.py
 ```
 ```text
-FAILED tests/test_orrery/test_need_absence_pg.py::test_long_absence_reappearance_and_offscreen_need_tick[30]
-FAILED tests/test_orrery/test_need_absence_pg.py::test_long_absence_reappearance_and_offscreen_need_tick[310122]
-2 failed in 2.24s
+FAILED tests/test_orrery/test_need_absence_pg.py::test_long_absence_reappearance_and_offscreen_need_tick[True-30]
+FAILED tests/test_orrery/test_need_absence_pg.py::test_long_absence_reappearance_and_offscreen_need_tick[True-310122]
+2 failed, 2 passed in 4.34s
 ```
 
-Failures were stored debt `717.00 > 72.0` and
-`NeedDebtScoreDomainError: ... character=1, need=sleep, value=7442925.0`.
-An earlier `-q -s` development run failed on an incorrect tuple/list assertion
-(`2 failed in 1.85s`); that assertion was corrected before the baseline above.
-
-Focused candidate validation, before adding async parity/config cases:
+Final commands and verbatim result tails:
 
 ```sh
-NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_orrery/test_need_absence_pg.py tests/test_orrery/test_needs_accrual.py tests/test_orrery/test_need_debt_domain.py
+NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_orrery/test_need_absence_pg.py tests/test_orrery/test_needs_accrual.py tests/test_orrery/test_need_debt_domain.py tests/test_orrery/test_need_clock_anchor_pg.py
 ```
 ```text
-16 passed in 2.04s
+43 passed, 5 warnings in 9.94s
 ```
 
 ```sh
 PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q
 ```
 ```text
-2633 passed, 770 skipped, 11 warnings in 98.27s (0:01:38)
+2633 passed, 776 skipped, 11 warnings in 91.86s (0:01:31)
 ```
-
-This offline run collected before adding the two async parameter cases. Its
-skips are opt-in tests, not PostgreSQL proof. The broad run below collected the
-final tests, including both async cases.
 
 ```sh
 NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_connection_lifecycle.py tests/test_orrery/test_resolver.py tests/test_orrery/test_bleed.py tests/test_presence_roster_pg.py
 ```
 ```text
-134 passed, 5 warnings in 27.33s
+134 passed, 5 warnings in 25.72s
 ```
 
 ```sh
 NEXUS_RUN_POSTGRES=1 PYTHONPATH=$PWD /Users/pythagor/nexus/.venv/bin/python -m pytest -q tests/test_orrery -k 'need or tick or resolver or presence or roster'
 ```
 ```text
-FAILED tests/test_orrery/test_need_absence_pg.py::test_long_absence_reappearance_and_offscreen_need_tick[True-30]
-FAILED tests/test_orrery/test_need_absence_pg.py::test_long_absence_reappearance_and_offscreen_need_tick[True-310122]
+=========================== short test summary info ============================
 FAILED tests/test_orrery/test_replay.py::test_post_target_replace_reapplication_is_presence_remainder
 FAILED tests/test_orrery/test_replay.py::test_need_fulfillment_replay_matches_production_applier
 FAILED tests/test_orrery/test_replay.py::test_need_applicability_trigger_is_mirrored
 FAILED tests/test_orrery/test_replay.py::test_applicability_toggle_resets_need_row_to_fresh_shape
+FAILED tests/test_orrery/test_reveal_live.py::test_same_tick_reveal_waits_until_next_tick_to_propagate
 ERROR tests/test_orrery/test_composition_sources_live.py::test_live_roster_source_respects_reach_roster_liveness_and_opt_in
 ERROR tests/test_orrery/test_composition_sources_live.py::test_live_widened_sources_keep_resolver_and_audit_in_parity
 ERROR tests/test_orrery/test_composition_sources_live.py::test_live_acquaintance_writes_mutual_contact_and_feeds_next_tick
-ERROR tests/test_orrery/test_geo_resolver_live.py::test_covering_zone_wins_over_nearer_noncovering_zone
-ERROR tests/test_orrery/test_geo_resolver_live.py::test_nearest_boundary_wins_outside_all_zones
-ERROR tests/test_orrery/test_geo_resolver_live.py::test_zone_id_breaks_equal_distance_tie
-ERROR tests/test_orrery/test_geo_resolver_live.py::test_no_bounded_zone_raises
-ERROR tests/test_orrery/test_geo_resolver_live.py::test_story_active_zone_and_corruption_raise
 ERROR tests/test_orrery/test_polymorphic_patron_live.py::test_roster_start_to_status_completion_closes_institutional_circle
-ERROR tests/test_orrery/test_reveal_live.py::test_same_tick_reveal_waits_until_next_tick_to_propagate
-6 failed, 223 passed, 1301 deselected, 9 warnings, 10 errors in 16.47s
+5 failed, 233 passed, 1301 deselected, 9 warnings, 4 errors in 19.29s
 ```
 
-An initial attempt of this broad command hit a new-test import typo
-(`commit_orrery_tick` instead of `commit_orrery_tick_async`):
-`1301 deselected, 9 warnings, 1 error in 3.09s`. That typo was fixed before the
-complete run above.
-
 ```sh
-/Users/pythagor/nexus/.venv/bin/python -m black --check nexus/agents/orrery/needs.py nexus/config/settings_models.py tests/test_orrery/test_need_absence_pg.py tests/test_orrery/test_needs_accrual.py tests/test_orrery/test_need_clock_anchor_pg.py
+/Users/pythagor/nexus/.venv/bin/python -m black --check nexus/agents/orrery/events.py nexus/agents/orrery/needs.py nexus/config/settings_models.py tests/test_orrery/test_need_absence_pg.py tests/test_orrery/test_needs_accrual.py tests/test_orrery/test_need_clock_anchor_pg.py
 ```
 ```text
 All done! ✨ 🍰 ✨
-5 files would be left unchanged.
+6 files would be left unchanged.
 ```
 
-`git diff --check` exited zero.
+`git diff --check` exited zero. The offline skips are opt-in tests; no test
+was skipped in the required PostgreSQL runs. During sibling-test construction,
+an invalid textual layer and then a nonexistent layer ID produced fixture
+errors (`3 failed, 40 passed, 5 warnings in 10.88s` and
+`3 failed, 40 passed, 5 warnings in 10.65s`). Seeding the real parent layer
+resolved them. No fixture skip or xfail was introduced.
 
-## Blockers and Coordinator Questions
+## Exempt Failures and Coordinator Questions
 
-Eight broad-gate cases match #885's empty-slot-5 class: the four replay cases,
-three composition-source cases, and polymorphic-patron case listed above. They
-raise `TypeError: cannot unpack non-iterable NoneType object` or `NoResultFound`.
+All nine broad-gate IDs above are empty-slot-5 dependencies covered by #885:
+four replay cases cannot fetch their required existing character, three
+composition-source cases and the patron case raise `NoResultFound`, and the
+reveal case now gets past the repaired URL but cannot fetch an existing place
+(`test_reveal_live.py:184`). These failures occur before the repaired need
+accrual path. No URL or async parameter error remains.
 
-Six additional errors are **not** claimed as #885 exemptions: the five geo
-resolver cases and the reveal case fail with:
+Read-only evidence, with `PGOPTIONS='-c default_transaction_read_only=on'`:
 
-```text
-psycopg2.OperationalError: connection to server on socket "/tmp/.s.PGSQL.5432" failed: FATAL:  unrecognized configuration parameter "+TimeZone"
+```sql
+SHOW default_transaction_read_only;
+-- on
+SELECT (SELECT count(*) FROM narrative_chunks),
+       (SELECT count(*) FROM characters), base_timestamp
+FROM global_variables LIMIT 1;
+-- (0, 0, NULL)
 ```
 
-The untouched fixtures pass `get_slot_db_url(...)` directly to psycopg2
-(`test_geo_resolver_live.py:22` and the reveal fixture). The latest #885 comment
-explicitly separates this #897 URL regression from the exempt class and says
-it is being repaired separately. Which prerequisite repair should be integrated?
-
-The two added async cases fail with:
-
-```text
-asyncpg.exceptions.AmbiguousParameterError: could not determine data type of parameter $2
-```
-
-The unchanged `_need_applies_to_entity_async` query uses `$2 IS NULL` before
-its timestamp comparison (`events.py:5647`). No new accrual code has executed
-at that point. Should its explicit timestamp-typing repair join this order,
-or be handled as a prerequisite? This run leaves it unchanged and records the
-failing real-path coverage.
-
-The candidate uses critical thresholds as default saturation limits. Claude
-should review that behavioral choice before resuming validation and opening a
-PR. No claim of completed proof gates or async execution parity is made.
+No blocking coordinator questions remain. Offscreen self-care is the deferred
+design question described above. No merge or review-bot wait is authorized.
 
 Codex — GPT-6 Astra

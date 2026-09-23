@@ -9,7 +9,12 @@ import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
-from nexus.agents.orrery.events import commit_orrery_tick_async, commit_orrery_tick_sync
+from nexus.agents.orrery.events import (
+    _location_class_destination_async,
+    _routine_zone_destination_async,
+    commit_orrery_tick_async,
+    commit_orrery_tick_sync,
+)
 from nexus.agents.orrery.needs import effective_debt_score, load_need_tuning
 from nexus.agents.orrery.resolver import compose_actor_bindings, resolve_dry_run
 from nexus.agents.orrery.substrate import Slot
@@ -175,3 +180,60 @@ def test_long_absence_reappearance_and_offscreen_need_tick(
         assert metadata["last_fulfillment"]["type"] == "sleep"
     finally:
         engine.dispose()
+
+
+@pytest.mark.parametrize("clock", [None, "before_expiry", "at_expiry"])
+def test_async_need_destination_tag_expiry(absence_db: str, clock: str | None) -> None:
+    """Sibling destination queries type nullable clocks and honor tag expiry."""
+    expiry = datetime(2100, 1, 2, tzinfo=timezone.utc)
+    world_time = (
+        None
+        if clock is None
+        else expiry - timedelta(hours=1) if clock == "before_expiry" else expiry
+    )
+    with connect(absence_db) as conn, conn.cursor() as cur:
+        cur.execute("INSERT INTO layers DEFAULT VALUES RETURNING id")
+        layer_id = cur.fetchone()[0]
+        cur.execute(
+            "INSERT INTO zones (name, layer) VALUES ('Need destinations', %s) "
+            "RETURNING id",
+            (layer_id,),
+        )
+        zone_id = cur.fetchone()[0]
+        place_ids = []
+        for name in ("Origin", "Dwelling"):
+            cur.execute(
+                "INSERT INTO places (name, type, zone) "
+                "VALUES (%s, 'fixed_location', %s) RETURNING id, entity_id",
+                (name, zone_id),
+            )
+            place_id, entity_id = cur.fetchone()
+            place_ids.append(place_id)
+        cur.execute(
+            "INSERT INTO entity_tags "
+            "(entity_id, tag_id, source_kind, expires_at_world_time) "
+            "SELECT %s, id, 'template', %s FROM tags WHERE tag = 'dwelling'",
+            (entity_id, expiry),
+        )
+        assert cur.rowcount == 1
+
+    async def resolve_destinations() -> None:
+        conn = await asyncpg.connect(**asyncpg_kwargs(absence_db))
+        try:
+            active = clock != "at_expiry"
+            assert await _routine_zone_destination_async(
+                conn,
+                zone_id=zone_id,
+                anchor_type="home",
+                current_world_time=world_time,
+            ) == (place_ids[1] if active else place_ids[0])
+            assert await _location_class_destination_async(
+                conn,
+                origin_place_id=place_ids[0],
+                location_classes=("dwelling",),
+                current_world_time=world_time,
+            ) == (place_ids[1] if active else None)
+        finally:
+            await conn.close()
+
+    asyncio.run(resolve_destinations())
