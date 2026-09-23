@@ -1,10 +1,7 @@
-"""Tests for post-commit Orrery work scheduling in the narrative API.
+"""Approval wakes the lifespan scheduler without joining deferred work.
 
-FastAPI background tasks run sequentially in add order, and the
-auto-approve path schedules post-commit Orrery work BEFORE the next
-chunk's generation task. The Retrograde maturation drain makes
-multi-minute frontier calls, so it must detach from that chain
-(fire-and-forget, spec decision 10) while quick outbox work stays inline.
+The real PostgreSQL cancellation proof retains accepted state and recovery;
+no provider-capable drain is registered ahead of interactive generation.
 """
 
 from __future__ import annotations
@@ -25,68 +22,24 @@ from nexus.memory.manager import empty_pass2_baseline
 from tests.pg_fixtures import connect, seed_protagonist
 
 
-class _PostCommitHandle:
-    """Small joinable handoff double for approval-route tests."""
+@pytest.mark.requires_postgres
+def test_post_commit_wakes_scheduler_without_joining(
+    offline_gate_db, monkeypatch
+) -> None:
+    """A commit signals the sole lifespan owner without starting a second drain."""
+    from nexus.jobs.scheduler import SlotScheduler
 
-    def __init__(self) -> None:
-        self.joined = False
-
-    def join(self) -> None:
-        self.joined = True
-
-
-def test_post_commit_orrery_work_detaches_maturation(monkeypatch) -> None:
-    """Quick outbox work runs inline with maturation excluded; the
-    maturation drain starts on a detached daemon thread instead."""
-
-    outbox_calls: list[dict[str, Any]] = []
-
-    def fake_outbox(slot: Any, *args: Any, **kwargs: Any) -> None:
-        outbox_calls.append({"slot": slot, **kwargs})
-
-    def fake_drain(*args: Any, **kwargs: Any) -> None:
-        raise AssertionError("drain must not run inline")
-
-    started: dict[str, Any] = {}
-
-    class FakeThread:
-        def __init__(
-            self,
-            *,
-            target: Any,
-            args: tuple[Any, ...] = (),
-            name: str | None = None,
-            daemon: bool | None = None,
-        ) -> None:
-            started["target"] = target
-            started["args"] = args
-            started["name"] = name
-            started["daemon"] = daemon
-
-        def start(self) -> None:
-            started["started"] = True
-
-    monkeypatch.setattr(
-        "nexus.agents.orrery.worker.process_orrery_outbox_sync",
-        fake_outbox,
-    )
-    monkeypatch.setattr(
-        "nexus.agents.orrery.retrograde_maturation.drain_maturation_jobs_sync",
-        fake_drain,
-    )
-    monkeypatch.setattr(narrative.threading, "Thread", FakeThread)
-
-    narrative._run_post_commit_orrery_work(2)
-
-    assert outbox_calls == [{"slot": 2, "maturation_limit": 0}]
-    assert started["started"] is True
-    assert started["target"] is fake_drain
-    assert started["args"] == (2,)
-    assert started["daemon"] is True
+    scheduler = SlotScheduler(4, dbname=offline_gate_db)
+    monkeypatch.setattr(narrative.app.state, "scheduler", scheduler, raising=False)
+    narrative.wake_scheduler(4)
+    assert scheduler.wakeup.is_set()
+    assert scheduler._thread is None
+    assert not hasattr(narrative, "_start_post_commit_orrery_work")
+    assert not hasattr(narrative, "_run_post_commit_orrery_work")
 
 
 @pytest.mark.asyncio
-async def test_auto_approval_runs_commit_and_compaction_off_event_loop(
+async def test_auto_approval_runs_commit_off_event_loop(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The continue route's approval seam isolates the synchronous provider."""
@@ -137,11 +90,11 @@ async def test_auto_approval_runs_commit_and_compaction_off_event_loop(
         "commit_incubator_to_database_sync",
         commit_in_worker,
     )
-    post_commit_handle = _PostCommitHandle()
+    woken = threading.Event()
     monkeypatch.setattr(
         narrative,
-        "_start_post_commit_orrery_work",
-        lambda _slot: post_commit_handle,
+        "wake_scheduler",
+        lambda _slot: woken.set(),
     )
     background_tasks = BackgroundTasks()
 
@@ -158,9 +111,9 @@ async def test_auto_approval_runs_commit_and_compaction_off_event_loop(
     assert result == ("resolved player response", 42, [quarantine_warning])
     assert commit_threads and commit_threads[0] != event_loop_thread
     assert connection.closed is True
-    assert len(background_tasks.tasks) == 1
+    assert len(background_tasks.tasks) == 0
     await background_tasks()
-    assert post_commit_handle.joined is True
+    assert woken.is_set()
 
 
 class _PendingCursor:
@@ -192,7 +145,7 @@ class _PendingConnection:
 
 
 @pytest.mark.asyncio
-async def test_explicit_approval_runs_commit_and_compaction_off_event_loop(
+async def test_explicit_approval_runs_commit_off_event_loop(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The standalone approval route uses the same worker boundary."""
@@ -222,8 +175,8 @@ async def test_explicit_approval_runs_commit_and_compaction_off_event_loop(
     )
     monkeypatch.setattr(
         narrative,
-        "_start_post_commit_orrery_work",
-        lambda _slot: _PostCommitHandle(),
+        "wake_scheduler",
+        lambda _slot: None,
     )
 
     result = await narrative._approve_narrative_impl(
@@ -283,7 +236,7 @@ async def test_cancelled_approval_leaves_worker_connection_owned_until_exit(
     )
     monkeypatch.setattr(
         narrative,
-        "_run_post_commit_orrery_work",
+        "wake_scheduler",
         lambda _slot: post_commit_finished.set(),
     )
     approval_task = asyncio.create_task(
@@ -315,7 +268,7 @@ async def test_cancelled_auto_approval_releases_lease_and_hands_off_post_commit(
     monkeypatch: pytest.MonkeyPatch,
     offline_gate_db: str,
 ) -> None:
-    """Cancel a real leased approval; its worker must still commit and drain."""
+    """Cancel a real leased approval; its worker still commits and wakes recovery."""
     dbname = offline_gate_db
     seed_protagonist(dbname)
     pending_session = str(uuid.uuid4())
@@ -368,7 +321,10 @@ async def test_cancelled_auto_approval_releases_lease_and_hands_off_post_commit(
     original_acquire = narrative._acquire_generation_owner
     original_abandon = narrative._abandon_generation_owner
     original_commit = commit_handler_sync.commit_incubator_to_database_sync
-    original_post_commit = narrative._run_post_commit_orrery_work
+    from nexus.jobs.scheduler import SlotScheduler
+
+    scheduler = SlotScheduler(4, dbname=dbname)
+    original_post_commit = lambda slot: scheduler.run_pass()
     original_maturation = retrograde_maturation.drain_maturation_jobs_sync
 
     def observed_acquire(**kwargs: Any) -> None:
@@ -426,7 +382,7 @@ async def test_cancelled_auto_approval_releases_lease_and_hands_off_post_commit(
     monkeypatch.setattr(
         commit_handler_sync, "commit_incubator_to_database_sync", gated_real_commit
     )
-    monkeypatch.setattr(narrative, "_run_post_commit_orrery_work", observed_post_commit)
+    monkeypatch.setattr(narrative, "wake_scheduler", observed_post_commit)
     monkeypatch.setattr(
         retrograde_maturation, "drain_maturation_jobs_sync", observed_maturation
     )

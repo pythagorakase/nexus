@@ -757,6 +757,17 @@ def commit_incubator_to_database_sync(
                                 chunk_id,
                             )
 
+            if incubator.get("correspondence_writer_letter") is not None:
+                from nexus.config import load_settings
+                from nexus.jobs.compaction import enqueue_compaction
+
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    enqueue_compaction(
+                        cur,
+                        accepting_chunk_id=chunk_id,
+                        floor_turns=load_settings().storyteller.correspondence.floor_turns,
+                    )
+
             # Step 10: Clear incubator
             with conn.cursor() as cur:
                 cur.execute(
@@ -782,12 +793,6 @@ def commit_incubator_to_database_sync(
                 "Failed to schedule summaries for session %s: %s", session_id, exc
             )
 
-    if incubator.get("correspondence_writer_letter") is not None:
-        _compact_accepted_correspondence_best_effort(
-            conn,
-            accepting_chunk_id=chunk_id,
-        )
-
     # Post-commit presence-roster drift audit (issue #567): read-only
     # diagnostics over the committed chunk, outside the transaction.
     # raw_text is the committed prose (storyteller text + enacted choice);
@@ -808,39 +813,11 @@ def commit_incubator_to_database_sync(
     return chunk_id
 
 
-def _compact_accepted_correspondence_best_effort(
-    conn: Any,
-    *,
-    accepting_chunk_id: int,
-) -> bool:
-    """Compact after acceptance without misreporting the durable commit.
-
-    Compaction is derived from the append-only accepted correspondence journal.
-    If the provider or persistence step fails, leaving the digest absent is a
-    deterministic retry marker: the next accepted correspondence turn plans
-    compaction from the same uncompacted exchanges. The accepted narrative and
-    cleared incubator must therefore remain a successful commit.
-    """
-
-    try:
-        return compact_accepted_correspondence_sync(
-            conn,
-            accepting_chunk_id=accepting_chunk_id,
-        )
-    except Exception:
-        logger.exception(
-            "Correspondence compaction failed after chunk %s was durably "
-            "accepted; leaving the uncompacted journal intact for retry on "
-            "the next accepted correspondence turn",
-            accepting_chunk_id,
-        )
-        return False
-
-
 def compact_accepted_correspondence_sync(
     conn: Any,
     *,
     accepting_chunk_id: int,
+    completion_fence: Any = None,
 ) -> bool:
     """Run and persist post-accept hysteresis compaction when it is due."""
 
@@ -901,6 +878,8 @@ def compact_accepted_correspondence_sync(
                     "Accepted correspondence changed during compaction; refusing "
                     "to persist a stale digest"
                 )
+            if completion_fence is not None:
+                completion_fence(cur)
             insert_digest_version(cur, plan=plan, digest=digest)
     logger.info(
         "Compacted private storyteller correspondence through chunk %s at "

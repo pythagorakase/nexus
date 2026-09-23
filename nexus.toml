@@ -202,6 +202,9 @@ connect_timeout_seconds = 5
 # supplement PATH when creating or clearing story databases.
 tool_search_paths = ["/Applications/Postgres.app/Contents/Versions/latest/bin"]
 
+[api.test_provider]
+experience_response_delay_seconds = 0
+
 [api.narrative_generation]
 # A crashed gateway must not brick a slot. This exceeds the longest configured
 # storyteller request budget while still allowing eventual lease reclamation.
@@ -701,6 +704,7 @@ junction_counts_by_weird = { low = 0, medium = 1, high = 1 }
 excluded_event_categories = ["orrery_resolution", "physiological", "routine"]
 
 [orrery.retrograde.maturation]
+lease_duration_seconds = 900
 # Runtime stub maturation (spec decisions 9/10/12, M8). When Skald declares a
 # new entity via the new_entities structured-output field and the entity
 # appears in the committed chunk, the commit path enqueues a durable
@@ -1248,6 +1252,19 @@ cors_allowed_origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
 ]
+
+[runtime.scheduler]
+lease_duration_seconds = 60
+heartbeat_interval_seconds = 10
+poll_interval_seconds = 5
+generation_wait_seconds = 1
+error_backoff_seconds = 5
+milestone_recovery_age_seconds = 60
+promotion_limit = 20
+compaction_max_jobs_per_drain = 1
+compaction_max_attempts = 3
+compaction_retry_delay_seconds = 300
+compaction_lease_duration_seconds = 300
 
 [runtime.health]
 timeout_seconds = 2.0            # per HTTP health probe

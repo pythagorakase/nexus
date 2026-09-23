@@ -751,3 +751,49 @@ def test_descriptor_retirement_preserves_canon_legacy_jobs_and_bleed(
             assert not list(usage._config.usage_dir.rglob("*.jsonl"))
         finally:
             conn.close()
+
+
+def test_operator_uses_scheduler_lease_and_retains_narration_fences(monkeypatch):
+    """The CLI observes a live owner, then drains once after owner release."""
+    from nexus.jobs.scheduler import SlotScheduler
+    from tests.pg_fixtures import disposable_slot_database, seed_protagonist
+    from tests.scheduler_helpers import route_slot
+
+    with disposable_slot_database("qa640_800_operator") as dbname:
+        route_slot(monkeypatch, dbname)
+        seed_protagonist(dbname)
+        conn = _connect(dbname)
+        try:
+            resolution, _ = _materialize_pending_resolution(conn, label="operator")
+            _enqueue(conn, resolution)
+            owner = SlotScheduler(4)
+            assert owner.acquire()
+            try:
+                assert worker.main(["--slot", "4"]) == 0
+                with conn, conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT state::text, attempts FROM orrery_narration_jobs"
+                    )
+                    assert cur.fetchall() == [("queued", 0)]
+            finally:
+                owner.release()
+            assert worker.main(["--slot", "4"]) == 0
+            with conn, conn.cursor() as cur:
+                cur.execute(
+                    "SELECT state::text, attempts, locked_by, lease_nonce FROM orrery_narration_jobs"
+                )
+                assert cur.fetchall() == [("succeeded", 1, None, None)]
+                cur.execute(
+                    "SELECT count(*) FROM offscreen_narrations WHERE resolution_id=%s",
+                    (resolution,),
+                )
+                assert cur.fetchone() == (1,)
+            assert worker.main(["--slot", "4"]) == 0
+            with conn, conn.cursor() as cur:
+                cur.execute(
+                    "SELECT count(*) FROM offscreen_narrations WHERE resolution_id=%s",
+                    (resolution,),
+                )
+                assert cur.fetchone() == (1,)
+        finally:
+            conn.close()

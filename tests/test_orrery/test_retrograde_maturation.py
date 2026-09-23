@@ -481,6 +481,9 @@ def test_maturation_persistence_uses_injected_epistemics_settings(
         def execute(self, sql: str, params: Any = None) -> None:
             self.executed.append((sql, params))
 
+        def fetchone(self):
+            return {"id": 7}
+
     class Connection:
         def __init__(self) -> None:
             self.cursor_obj = Cursor()
@@ -490,6 +493,8 @@ def test_maturation_persistence_uses_injected_epistemics_settings(
 
         def __exit__(self, *_args: Any) -> bool:
             return False
+
+        info = type("Info", (), {"dbname": "save_02"})()
 
         def cursor(self, *_args: Any, **_kwargs: Any) -> Cursor:
             return self.cursor_obj
@@ -582,6 +587,8 @@ def test_maturation_persistence_uses_injected_epistemics_settings(
         Connection(),
         row={
             "job_id": 7,
+            "locked_by": "fixture",
+            "lease_nonce": "00000000-0000-0000-0000-000000000001",
             "entity_id": 77,
             "entity_kind": "character",
             "entity_subtype_id": 17,
@@ -620,6 +627,9 @@ def test_required_geo_runs_expansion_when_seed_selection_is_empty(
         def execute(self, sql: str, params: Any = None) -> None:
             self.executed.append((sql, params))
 
+        def fetchone(self):
+            return {"id": 7}
+
     class Connection:
         def __init__(self) -> None:
             self.cursor_obj = Cursor()
@@ -629,6 +639,8 @@ def test_required_geo_runs_expansion_when_seed_selection_is_empty(
 
         def __exit__(self, *_args: Any) -> bool:
             return False
+
+        info = type("Info", (), {"dbname": "save_02"})()
 
         def cursor(self, *_args: Any, **_kwargs: Any) -> Cursor:
             return self.cursor_obj
@@ -704,6 +716,8 @@ def test_required_geo_runs_expansion_when_seed_selection_is_empty(
         Connection(),
         row={
             "job_id": 8,
+            "locked_by": "fixture",
+            "lease_nonce": "00000000-0000-0000-0000-000000000001",
             "entity_id": 78,
             "entity_kind": "place",
             "entity_subtype_id": 18,

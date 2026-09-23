@@ -43,7 +43,26 @@ QUEUE_STATES: Mapping[str, tuple[str, ...]] = {
         "stale_rejected",
     ),
 }
-SHARED_QUEUE_STATES = ("queued", "leased", "succeeded", "failed")
+QUEUE_STATES = {
+    **QUEUE_STATES,
+    "narration": ("queued", "leased", "succeeded", "failed", "stale_rejected"),
+    "correspondence_compaction": (
+        "queued",
+        "leased",
+        "succeeded",
+        "failed",
+        "stale_rejected",
+    ),
+    "relationship_milestone": ("pending",),
+}
+SHARED_QUEUE_STATES = (
+    "queued",
+    "leased",
+    "succeeded",
+    "failed",
+    "stale_rejected",
+    "pending",
+)
 
 
 class ShiftError(RuntimeError):
@@ -392,7 +411,24 @@ def _jobs_snapshot(payload: Mapping[str, Any], *, slot: int) -> dict[str, Any]:
     def validate_job(raw_job: Any, *, queue_kind: str, location: str) -> dict[str, Any]:
         if not isinstance(raw_job, dict):
             raise ShiftError(f"Jobs payload row {location} is not an object")
-        required_fields = common_fields + queue_fields[queue_kind]
+        if queue_kind == "relationship_milestone":
+            if (
+                set(raw_job) != {"id", "queue", "state"}
+                or raw_job.get("state") != "pending"
+            ):
+                raise ShiftError(
+                    f"Jobs payload row {location} is not a pending milestone"
+                )
+            if (
+                raw_job["queue"] != queue_kind
+                or type(raw_job["id"]) is not int
+                or raw_job["id"] < 1
+            ):
+                raise ShiftError(
+                    f"Jobs payload row {location} has invalid milestone identity"
+                )
+            return dict(raw_job)
+        required_fields = common_fields + queue_fields.get(queue_kind, ())
         missing = [field for field in required_fields if field not in raw_job]
         if missing:
             raise ShiftError(
@@ -428,7 +464,7 @@ def _jobs_snapshot(payload: Mapping[str, Any], *, slot: int) -> dict[str, Any]:
                 raise ShiftError(
                     f"Jobs payload row {location} has invalid " "'requesting_chunk_id'"
                 )
-        else:
+        elif queue_kind == "experience_render":
             for field in (
                 "boundary_chunk_id",
                 "scene_end_chunk_id",
@@ -492,7 +528,9 @@ def _jobs_snapshot(payload: Mapping[str, Any], *, slot: int) -> dict[str, Any]:
             )
             for index, raw_job in enumerate(raw_queue_jobs)
         ]
-        if queue_counts["queued"] + queue_counts["leased"] != len(queue_jobs):
+        if sum(
+            queue_counts.get(state, 0) for state in ("queued", "leased", "pending")
+        ) != len(queue_jobs):
             raise ShiftError(
                 f"Jobs payload queue {queue_kind!r} non-terminal counts do not "
                 "match its diagnostic list"
@@ -508,7 +546,7 @@ def _jobs_snapshot(payload: Mapping[str, Any], *, slot: int) -> dict[str, Any]:
         jobs.extend(queue_jobs)
 
     aggregate_counts = {
-        state: sum(queue["counts"][state] for queue in queues.values())
+        state: sum(queue["counts"].get(state, 0) for queue in queues.values())
         for state in SHARED_QUEUE_STATES
     }
     if counts != aggregate_counts:
@@ -517,7 +555,7 @@ def _jobs_snapshot(payload: Mapping[str, Any], *, slot: int) -> dict[str, Any]:
         raise ShiftError(
             "Jobs payload top-level non-terminal rows do not match its queues"
         )
-    if counts["queued"] + counts["leased"] != len(jobs):
+    if counts["queued"] + counts["leased"] + counts["pending"] != len(jobs):
         raise ShiftError(
             "Jobs payload non-terminal counts do not match its diagnostic list"
         )
@@ -852,7 +890,7 @@ def begin_shift(
         "last_event_count": len(usage["events"]),
         "last_unknown_usage_events": usage["unknown"],
         "baseline_failed_jobs": {
-            queue_kind: queue["counts"]["failed"]
+            queue_kind: queue["counts"].get("failed", 0)
             for queue_kind, queue in jobs["queues"].items()
         },
         "baseline_bleed_offered_count": baseline_bleed_offered,
@@ -1028,7 +1066,7 @@ def evaluate_check(
         for queue_kind in QUEUE_STATES
     }
     current_failed_jobs = {
-        queue_kind: int(jobs["queues"][queue_kind]["counts"]["failed"])
+        queue_kind: int(jobs["queues"][queue_kind]["counts"].get("failed", 0))
         for queue_kind in QUEUE_STATES
     }
     max_non_terminal_attempts = int(config["max_non_terminal_attempts"])
@@ -1108,6 +1146,8 @@ def evaluate_check(
     failure_reasons = {
         "retrograde_maturation": "maturation_job_failed",
         "experience_render": "experience_job_failed",
+        "narration": "narration_job_failed",
+        "correspondence_compaction": "compaction_job_failed",
     }
     for queue_kind, reason in failure_reasons.items():
         if current_failed_jobs[queue_kind] > baseline_failed_jobs[queue_kind]:
@@ -1266,7 +1306,7 @@ def finish_shift(
         for queue_kind in QUEUE_STATES
     }
     current_failed_jobs = {
-        queue_kind: int(jobs["queues"][queue_kind]["counts"]["failed"])
+        queue_kind: int(jobs["queues"][queue_kind]["counts"].get("failed", 0))
         for queue_kind in QUEUE_STATES
     }
     usage_settled = not jobs["non_terminal_jobs"] and all(

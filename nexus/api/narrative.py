@@ -9,7 +9,7 @@ import frontmatter
 import json
 import logging
 import os
-import threading
+from contextlib import asynccontextmanager
 import uuid
 from datetime import datetime
 from typing import Dict, Any, Optional, List, Literal
@@ -93,17 +93,48 @@ from nexus.config import get_gateway_cors_allowed_origins
 
 logger = logging.getLogger("nexus.api.narrative")
 
-app = FastAPI(title="NEXUS Narrative API", version="1.0.0")
 
-
-@app.on_event("startup")
 async def recover_active_choice_on_startup() -> None:
-    """Reconcile the active slot before the gateway accepts requests."""
+    """Reconcile the active slot before accepting requests."""
     from nexus.api.choice_recovery import recover_active_slot_choice
     from nexus.api.slot_utils import get_active_slot
 
     if os.environ.get("NEXUS_SLOT") is not None:
         await asyncio.to_thread(recover_active_slot_choice, get_active_slot())
+
+
+@asynccontextmanager
+async def gateway_lifespan(app: FastAPI):
+    """Recover the active slot and own its deferred-work loop until shutdown."""
+    from nexus.api.choice_recovery import recover_active_slot_choice
+    from nexus.api.slot_utils import get_active_slot
+    from nexus.jobs.scheduler import SlotScheduler
+
+    scheduler = None
+    if os.environ.get("NEXUS_SLOT") is not None:
+        slot = get_active_slot()
+        await recover_active_choice_on_startup()
+        scheduler = SlotScheduler(slot)
+        await asyncio.to_thread(scheduler.start)
+    app.state.scheduler = scheduler
+    try:
+        yield
+    finally:
+        if scheduler is not None:
+            await asyncio.to_thread(scheduler.stop)
+        app.state.scheduler = None
+
+
+app = FastAPI(title="NEXUS Narrative API", version="1.0.0", lifespan=gateway_lifespan)
+
+
+def wake_scheduler(slot: Optional[int]) -> None:
+    """Wake the active slot owner; other gateways recover on their own clock."""
+    from nexus.api.slot_utils import get_active_slot
+
+    scheduler = getattr(app.state, "scheduler", None)
+    if scheduler is not None and scheduler.slot == (slot or get_active_slot()):
+        scheduler.wakeup.set()
 
 
 # Configure credentialed CORS from the validated gateway allowlist.
@@ -701,7 +732,7 @@ def _resolve_and_approve_pending_sync(
     choice: Optional[int],
     accept_fate: bool,
     warning_sink: Optional[List[Dict[str, Any]]] = None,
-) -> tuple[str, int, Optional[threading.Thread]]:
+) -> tuple[str, int]:
     """Resolve and approve a pending choice with worker-owned connection life."""
 
     from nexus.api.commit_handler_sync import commit_incubator_to_database_sync
@@ -744,8 +775,8 @@ def _resolve_and_approve_pending_sync(
     finally:
         conn.close()
 
-    post_commit_thread = _start_post_commit_orrery_work(slot)
-    return resolved_user_text, approved_chunk_id, post_commit_thread
+    wake_scheduler(slot)
+    return resolved_user_text, approved_chunk_id
 
 
 async def _resolve_and_approve_pending(
@@ -761,7 +792,7 @@ async def _resolve_and_approve_pending(
     """Resolve and approve without exposing the worker connection to cancellation."""
 
     commit_warnings: List[Dict[str, Any]] = []
-    resolved_user_text, approved_chunk_id, post_commit_thread = await asyncio.to_thread(
+    resolved_user_text, approved_chunk_id = await asyncio.to_thread(
         _resolve_and_approve_pending_sync,
         slot=slot,
         session_id=session_id,
@@ -771,8 +802,6 @@ async def _resolve_and_approve_pending(
         accept_fate=accept_fate,
         warning_sink=commit_warnings,
     )
-    if post_commit_thread is not None:
-        background_tasks.add_task(post_commit_thread.join)
     return resolved_user_text, approved_chunk_id, commit_warnings
 
 
@@ -1256,78 +1285,11 @@ async def approve_narrative(
     return await _approve_narrative_impl(session_id, should_commit, effective_slot)
 
 
-def _run_post_commit_orrery_work(slot: Optional[int]) -> None:
-    """Drain quick Orrery outbox work inline; detach the maturation drain.
-
-    FastAPI background tasks run sequentially in add order, and the
-    auto-approve path in ``continue_narrative`` schedules this work BEFORE
-    the next chunk's generation task. Promotions, narration, and semantic
-    clearance are quick and benefit from completing before the next turn
-    sees the world; Retrograde stub maturation makes multi-minute frontier
-    calls and must never serialize the play loop (fire-and-forget, spec
-    decision 10), so it drains on a detached thread. The durable
-    ``orrery_maturation_jobs`` queue makes a mid-drain process death safe:
-    leases expire and the next drain resumes the work.
-    """
-
-    from nexus.agents.orrery.retrograde_maturation import drain_maturation_jobs_sync
-    from nexus.agents.orrery.worker import process_orrery_outbox_sync
-
-    process_orrery_outbox_sync(slot, maturation_limit=0)
-    threading.Thread(
-        target=drain_maturation_jobs_sync,
-        args=(slot,),
-        name=f"retrograde-maturation-slot-{slot}",
-        daemon=True,
-    ).start()
-
-
-def _run_post_commit_orrery_work_safely(slot: Optional[int]) -> None:
-    """Drain durable post-commit work without changing an accepted response."""
-
-    try:
-        _run_post_commit_orrery_work(slot)
-    except Exception:
-        logger.exception(
-            "Post-commit Orrery work failed for slot %s; durable queues remain.",
-            slot,
-        )
-
-
-def _start_post_commit_orrery_work(
-    slot: Optional[int],
-) -> Optional[threading.Thread]:
-    """Hand durable Orrery work off before a cancellable await can resume.
-
-    The quick outbox drain is deliberately non-daemon so graceful server
-    shutdown cannot strand it. ``_run_post_commit_orrery_work`` detaches only
-    the potentially multi-minute maturation drain.
-    """
-
-    try:
-        thread = threading.Thread(
-            target=_run_post_commit_orrery_work_safely,
-            args=(slot,),
-            name=f"orrery-post-commit-slot-{slot}",
-            daemon=False,
-        )
-        thread.start()
-        return thread
-    except Exception:
-        logger.exception(
-            "Could not start post-commit Orrery worker for slot %s; "
-            "running the drain inline.",
-            slot,
-        )
-        _run_post_commit_orrery_work_safely(slot)
-        return None
-
-
 def _approve_narrative_sync(
     session_id: str,
     commit: bool,
     slot: Optional[int],
-) -> tuple[Dict[str, Any], Optional[threading.Thread]]:
+) -> Dict[str, Any]:
     """Read or commit one incubator row with a worker-owned connection."""
 
     conn = get_db_connection(slot)
@@ -1377,8 +1339,9 @@ def _approve_narrative_sync(
     finally:
         conn.close()
 
-    post_commit_thread = _start_post_commit_orrery_work(slot) if commit else None
-    return result, post_commit_thread
+    if commit:
+        wake_scheduler(slot)
+    return result
 
 
 async def _approve_narrative_impl(
@@ -1388,7 +1351,7 @@ async def _approve_narrative_impl(
 ):
     """Approve a narrative without exposing the worker connection to cancellation."""
 
-    result, _post_commit_thread = await asyncio.to_thread(
+    result = await asyncio.to_thread(
         _approve_narrative_sync,
         session_id,
         commit,
