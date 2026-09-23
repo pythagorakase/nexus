@@ -28,7 +28,7 @@ models = [
 # 4/4 wizard phases on opus-4-8, plus a fable-5 setting-phase probe); the
 # schema strip set it relies on was proven on the legacy path in PR #410.
 models = [
-    { id = "claude-sonnet-5-0", label = "Sonnet 5.0", native_structured_output = true, uses = ["wizard.fallback_model"] },
+    { id = "claude-sonnet-5", label = "Sonnet 5.0", native_structured_output = true, uses = ["wizard.fallback_model"] }, # Model ID: https://platform.claude.com/docs/en/models/overview (retrieved 2026-09-23).
     { id = "claude-opus-4-8", label = "Opus 4.8", unsupported_params = ["temperature", "top_p", "top_k"], native_structured_output = true },
     { id = "claude-opus-5", label = "Opus 5", unsupported_params = ["temperature", "top_p", "top_k"], native_structured_output = true },
     { id = "claude-fable-5-1", label = "Fable 5", unsupported_params = ["temperature", "top_p", "top_k"], native_structured_output = true },
