@@ -91,3 +91,38 @@ def test_rendered_blocks_sum_to_exact_request_and_ignore_payload_metadata():
         utility._enforce_final_prompt_window(
             "unused", effective_context_window=first - 1, rendered_tokens=first
         )
+
+
+def test_usage_window_ledger_preserves_attempts_and_cli_blocks(tmp_path, capsys):
+    """Real append/read and CLI rendering retain per-attempt block truth."""
+    from argparse import Namespace
+    from datetime import datetime, timezone
+    from nexus import cli
+    from nexus.telemetry.prompt_window import PromptWindowRecord
+    from nexus.telemetry.usage import record_prompt_window, read_prompt_windows
+
+    record = PromptWindowRecord(
+        generation_session="window-cli-proof",
+        seat="skald_writer",
+        attempt=1,
+        model="TEST",
+        block_tokens={"system": 20, "user input": 5},
+        input_tokens=25,
+        effective_ceiling=100,
+        policy_headroom=4,
+        headroom=75,
+        trimming={"dropped_chunk_ids": [7], "tokens_recovered": 10},
+    )
+    record_prompt_window(record)
+    record_prompt_window(record.model_copy(update={"attempt": 2}))
+    day = datetime.now(timezone.utc).date().isoformat()
+    assert [row.attempt for row in read_prompt_windows("window-cli-proof", day)] == [
+        1,
+        2,
+    ]
+    assert read_prompt_windows("unrelated", day) == []
+    result = cli.run_usage(Namespace(day=day, run="window-cli-proof"))
+    cli._print_usage(result)
+    output = capsys.readouterr().out
+    assert "skald_writer attempt 2: 25 / 100 (headroom 75)" in output
+    assert "BLOCK" in output and "user input" in output

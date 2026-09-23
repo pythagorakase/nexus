@@ -16,20 +16,50 @@ pytestmark = pytest.mark.requires_postgres
 
 def test_window_coverage_is_written_only_from_post_render_kept_chunks():
     with disposable_slot_database("qa640_window_coverage") as dbname:
-        seed_protagonist(
+        character_id, _ = seed_protagonist(
             dbname, name="Window Proof Player", summary="Window coverage fixture."
         )
         memnon = MEMNON(interface=None, db_url=database_url(dbname))
         try:
             settings = load_settings_as_dict()
             manager = ContextMemoryManager(settings, memnon=memnon)
+            with memnon.db_manager.engine.begin() as conn:
+                conn.execute(
+                    text(
+                        "INSERT INTO narrative_chunks (id, raw_text, storyteller_text) VALUES (42, 'Retained passage.', 'Retained passage.'), (43, 'Trimmed passage.', 'Trimmed passage.')"
+                    )
+                )
+            with memnon.db_manager.engine.begin() as conn:
+                conn.execute(
+                    text("SELECT set_config('nexus.write_producer', 'manual', true)")
+                )
+                conn.execute(
+                    text(
+                        "INSERT INTO chunk_character_references (chunk_id, character_id, reference) VALUES (43, :character, 'mentioned')"
+                    ),
+                    {"character": character_id},
+                )
+            manager.handle_user_input("1", turn_id="pending-empty-coverage")
+            with memnon.db_manager.engine.connect() as conn:
+                assert (
+                    conn.execute(
+                        text(
+                            "SELECT count(*) FROM retrieval_coverage_log WHERE turn_id = 'pending-empty-coverage'"
+                        )
+                    ).scalar_one()
+                    == 0
+                )
             chunks = [
                 {"chunk_id": 42, "text": "Retained passage."},
                 {"chunk_id": 43, "text": "Trimmed passage."},
             ]
             manager._stage_retrieval_coverage(
                 incremental_retriever=manager.incremental,
-                entity_match=EntityMatch(characters=[], places=[], factions=[]),
+                entity_match=EntityMatch(
+                    characters=[{"id": character_id, "name": "Window Proof Player"}],
+                    places=[],
+                    factions=[],
+                ),
                 user_input="Recall the earlier passage.",
                 raw_result_count=2,
                 kept_chunks=chunks,
@@ -59,12 +89,24 @@ def test_window_coverage_is_written_only_from_post_render_kept_chunks():
             with memnon.db_manager.engine.connect() as conn:
                 rows = conn.execute(
                     text(
-                        "SELECT kept_chunk_ids, kept_tokens, raw_result_count FROM retrieval_coverage_log WHERE turn_id = 'post-render-coverage'"
+                        "SELECT kept_chunk_ids, kept_tokens, raw_result_count, coverage, gap_entities FROM retrieval_coverage_log WHERE turn_id = 'post-render-coverage'"
                     )
                 ).all()
             assert len(rows) == 1
             assert rows[0].kept_chunk_ids == [42]
             assert rows[0].kept_tokens == count(chunks[0]["text"]) - count("")
             assert rows[0].raw_result_count == 2
+            assert rows[0].coverage == [
+                {
+                    "kind": "character",
+                    "id": character_id,
+                    "name": "Window Proof Player",
+                    "covered": False,
+                    "covering_chunk_ids": [],
+                }
+            ]
+            assert rows[0].gap_entities == [
+                {"kind": "character", "id": character_id, "name": "Window Proof Player"}
+            ]
         finally:
             memnon.close()

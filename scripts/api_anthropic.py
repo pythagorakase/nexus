@@ -710,7 +710,16 @@ class AnthropicProvider(LLMProvider):
             usage_outcome: Literal["accepted", "rejected_validation", "error"] = "error"
             guard = getattr(self, "prompt_window_guard", None)
             if guard is not None:
-                guard(active_prompt, attempt + 1)
+                guard(
+                    active_prompt,
+                    attempt + 1,
+                    anthropic_request=self._build_native_structured_request_params(
+                        active_prompt,
+                        schema_model,
+                        output_config=output_config,
+                        output_format=output_format,
+                    ),
+                )
             try:
                 response = self.client.beta.messages.create(
                     **self._build_native_structured_request_params(
@@ -786,7 +795,13 @@ class AnthropicProvider(LLMProvider):
             usage_outcome: Literal["accepted", "rejected_validation", "error"] = "error"
             guard = getattr(self, "prompt_window_guard", None)
             if guard is not None:
-                guard(active_prompt, attempt + 1)
+                guard(
+                    active_prompt,
+                    attempt + 1,
+                    anthropic_request=self._build_tool_envelope_structured_request_params(
+                        active_prompt, schema_model, input_schema=input_schema
+                    ),
+                )
             try:
                 response = self.client.beta.messages.create(
                     **self._build_tool_envelope_structured_request_params(
@@ -863,7 +878,13 @@ class AnthropicProvider(LLMProvider):
             usage_outcome: Literal["accepted", "rejected_validation", "error"] = "error"
             guard = getattr(self, "prompt_window_guard", None)
             if guard is not None:
-                guard(active_prompt, attempt + 1)
+                guard(
+                    active_prompt,
+                    attempt + 1,
+                    anthropic_request=self._build_prompted_structured_request_params(
+                        active_prompt
+                    ),
+                )
             try:
                 response = self.client.beta.messages.create(
                     **self._build_prompted_structured_request_params(active_prompt)

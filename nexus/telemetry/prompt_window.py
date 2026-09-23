@@ -4,11 +4,10 @@ from __future__ import annotations
 
 from collections import defaultdict
 from functools import lru_cache
+from pathlib import Path
 from typing import Any, Callable, Iterable
 
 from pydantic import BaseModel, ConfigDict, Field
-
-from nexus.config.seat_window import SeatWindow
 
 
 class RenderedSections(list[str]):
@@ -77,7 +76,11 @@ def count_openai_request(
 
 
 def rendered_request_counter(
-    provider: Any, *, text_format: dict[str, Any] | None = None
+    provider: Any,
+    *,
+    text_format: dict[str, Any] | None = None,
+    anthropic_request: dict[str, Any] | None = None,
+    settings_path: Path | None = None,
 ) -> Callable[[str], int]:
     """Return the provider's exact counter; unsupported transports fail loudly."""
     if provider.usage_provider_name == "openai":
@@ -85,12 +88,26 @@ def rendered_request_counter(
     if provider.usage_provider_name == "anthropic":
 
         def count(prompt: str) -> int:
-            result = provider.client.messages.count_tokens(
-                model=provider.model,
-                system=provider.system_prompt or "",
-                messages=[{"role": "user", "content": prompt}],
+            body = {
+                key: value
+                for key, value in (anthropic_request or {}).items()
+                if key
+                in {
+                    "model",
+                    "system",
+                    "thinking",
+                    "tools",
+                    "tool_choice",
+                    "output_config",
+                }
+            }
+            body["model"] = provider.model
+            body["system"] = provider.system_prompt or ""
+            body["messages"] = [{"role": "user", "content": prompt}]
+            result = provider.client.post(
+                "/v1/messages/count_tokens", cast_to=dict[str, Any], body=body
             )
-            return result.input_tokens
+            return result["input_tokens"]
 
         return count
     if provider.usage_provider_name == "test":
@@ -103,13 +120,22 @@ def rendered_request_counter(
         )
     from nexus.config import load_settings
 
-    entry = load_settings().model_entry(provider.model)
+    entry = load_settings(settings_path).model_entry(provider.model)
     if entry.tokenizer_repository is None:
         raise ValueError(f"No tokenizer declared for {provider.model!r}")
     tokenizer = _load_tokenizer(entry.tokenizer_repository)
-    return lambda prompt: len(
-        tokenizer.encode(provider.system_prompt or "", add_special_tokens=False)
-    ) + len(tokenizer.encode(prompt, add_special_tokens=False))
+
+    def count_local(prompt: str) -> int:
+        messages = [{"role": "user", "content": prompt}]
+        if provider.system_prompt:
+            messages.insert(0, {"role": "system", "content": provider.system_prompt})
+        return len(
+            tokenizer.apply_chat_template(
+                messages, tokenize=True, add_generation_prompt=True
+            )
+        )
+
+    return count_local
 
 
 @lru_cache(maxsize=None)

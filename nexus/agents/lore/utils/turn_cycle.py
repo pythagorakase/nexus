@@ -8,12 +8,11 @@ import json
 import logging
 from dataclasses import replace
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, List, Optional, Union
+from typing import Any, Callable, Dict, Iterable, List, Optional, Union
 
 from nexus.agents.lore.utils.chunk_operations import calculate_chunk_tokens
 from nexus.agents.orrery.player_identity import canonical_player_character_id
 from nexus.memory.context_state import memory_identity
-from nexus.memory.manager import resolve_storyteller_prompt_overhead_tokens
 from nexus.memory.retrieval_coverage import coerce_chunk_id
 
 logger = logging.getLogger("nexus.lore.turn_cycle")
@@ -1257,7 +1256,7 @@ class TurnCycleManager:
             },
         }
 
-        def record_coverage(counter):
+        def record_coverage(counter: Callable[[str], int]) -> None:
             self.lore.memory_manager.record_rendered_coverage(
                 payload["warm_slice"]["chunks"]
                 + payload["retrieved_passages"]["results"][:5],

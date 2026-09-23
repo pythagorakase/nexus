@@ -226,10 +226,10 @@ max_deep_queries = 5
 
 [lore.token_budget]
 # Context window limits for APEX generation
-apex_context_window = 75_000  # Total tokens available for APEX (includes prompt + context)
+apex_context_window = 75_000  # Owner default input spend; model ceiling and seat headroom apply
 system_prompt_tokens = 5000  # Legacy allocation hint; enforcement counts the rendered system prompt
-# Reserve for LOGON's tag library and formatting after Phase 5; live chunk
-# 1369 measured +2,999 tokens. Keep headroom above that observed overhead.
+# Legacy fingerprinted allocation hint; retained for existing stamped baselines.
+# Exact rendered enforcement uses apex.response_reserve_tokens instead.
 prompt_overhead_tokens = 4_000
 
 [lore.token_budget.provider_overrides]
@@ -1294,10 +1294,9 @@ command = [
     # so it matches [global.model.api_models.local].models[].id.
     "--alias", "nousresearch/hermes-4-70b",
     "--host", "{host}", "--port", "{port}",
-    # Context must hold the full storyteller prompt (lore.token_budget
-    # apex_context_window = 75k ceiling; measured 36.8k at slot-5 depth ~75)
-    # PLUS generation headroom — 32768 rejected real turns with
-    # exceed_context_size_error. 98304 = 75k prompt ceiling + >20k output.
+    # Runtime context holds input plus output. The local input profile is
+    # lore.token_budget.provider_overrides.local; seat headroom and output
+    # allowance are declared under apex. Both fit this deployed 98,304 total.
     # --parallel 1: NEXUS turns are strictly sequential, and the server
     # build defaults to 4 slots, each provisioning the full ctx — 4x98304
     # of KV (~120GB) spilled off-Metal and prefill collapsed to ~30 tok/s

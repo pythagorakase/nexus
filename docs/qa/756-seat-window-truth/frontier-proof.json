@@ -1,0 +1,229 @@
+{
+  "frontier_chunk": 49,
+  "comparison": {
+    "before": {
+      "blocks": {
+        "system": 5769,
+        "intertitle": 49,
+        "scene conditions": 16,
+        "private storyteller correspondence": 5665,
+        "recent narrative": 1002,
+        "scene roster": 21,
+        "user input": 24,
+        "entity dossier": 1762,
+        "historical context": 4579,
+        "world knowledge": 249,
+        "orrery tag library": 3701,
+        "recent orrery rulings": 204,
+        "orrery imminent activity": 425,
+        "orrery scene pressure": 224,
+        "orrery joint beats": 189,
+        "instructions": 28
+      },
+      "input_tokens": 23907,
+      "warm_ids": [
+        49
+      ],
+      "retrieved_ids": [
+        "49",
+        "48",
+        "34",
+        "36",
+        "47",
+        "28",
+        "46",
+        "37"
+      ],
+      "effective_ceiling": 31982
+    },
+    "after": {
+      "blocks": {
+        "system": 5769,
+        "intertitle": 49,
+        "scene conditions": 16,
+        "private storyteller correspondence": 5665,
+        "recent narrative": 15409,
+        "scene roster": 21,
+        "user input": 24,
+        "entity dossier": 1762,
+        "historical context": 4579,
+        "world knowledge": 249,
+        "orrery tag library": 3701,
+        "recent orrery rulings": 204,
+        "orrery imminent activity": 425,
+        "orrery scene pressure": 224,
+        "orrery joint beats": 189,
+        "instructions": 28
+      },
+      "input_tokens": 38314,
+      "warm_ids": [
+        49,
+        48,
+        47,
+        46,
+        45,
+        44,
+        43,
+        42,
+        41,
+        40,
+        "2",
+        "retrograde_summary:29",
+        "34",
+        "retrograde_summary:27",
+        "retrograde_summary:28",
+        "9",
+        "retrograde_summary:18",
+        "11",
+        "21",
+        "retrograde_summary:21",
+        "retrograde_summary:26",
+        "retrograde_summary:22"
+      ],
+      "retrieved_ids": [
+        "49",
+        "48",
+        "34",
+        "36",
+        "47",
+        "28",
+        "46",
+        "37",
+        "43",
+        "27",
+        "42",
+        "26",
+        "33",
+        "21",
+        "retrograde_summary:26"
+      ],
+      "effective_ceiling": 71000
+    },
+    "old_trimming": {
+      "tokens_before": 58081,
+      "tokens_after": 31937,
+      "warm_chunks_dropped": 21,
+      "retrieved_passages_dropped": 7,
+      "memory_budget_refunded": 0,
+      "payload_ceiling": 31982,
+      "prompt_overhead_tokens": 4000
+    }
+  },
+  "coverage": {
+    "turn_id": "63d2a2c0-a9ca-4f61-b0b9-7ab0c37f37e5",
+    "raw_result_count": 14,
+    "kept_chunk_ids": [
+      47,
+      49,
+      9,
+      2,
+      21,
+      11,
+      34
+    ],
+    "kept_tokens": 7241,
+    "coverage": [
+      {
+        "id": 18,
+        "kind": "character",
+        "name": "Kessa Brin",
+        "covered": true,
+        "covering_chunk_ids": [
+          47,
+          49
+        ]
+      }
+    ],
+    "gap_entities": []
+  },
+  "baseline": {
+    "chunk_id": 49,
+    "fingerprint": "434647cf417a9365a6e3af0e762d317915099deea8ea38cd4abb891ecbf36eca"
+  },
+  "current_fingerprint": "434647cf417a9365a6e3af0e762d317915099deea8ea38cd4abb891ecbf36eca",
+  "window_record": {
+    "attempt": 1,
+    "block_tokens": {
+      "entity dossier": 1762,
+      "historical context": 4579,
+      "instructions": 28,
+      "intertitle": 49,
+      "orrery imminent activity": 425,
+      "orrery joint beats": 189,
+      "orrery scene pressure": 224,
+      "orrery tag library": 3701,
+      "private storyteller correspondence": 5665,
+      "recent narrative": 15409,
+      "recent orrery rulings": 204,
+      "scene conditions": 16,
+      "scene roster": 21,
+      "system": 5769,
+      "user input": 24,
+      "world knowledge": 249
+    },
+    "effective_ceiling": 38314,
+    "generation_session": "63d2a2c0-a9ca-4f61-b0b9-7ab0c37f37e5",
+    "headroom": 0,
+    "input_tokens": 38314,
+    "model": "gpt-6-astra",
+    "policy_headroom": 36686,
+    "seat": "skald_writer",
+    "trimming": {
+      "dropped_blocks": {
+        "historical context": 0,
+        "recent narrative": 0
+      },
+      "dropped_chunk_ids": [],
+      "tokens_after": 38314,
+      "tokens_before": 38314,
+      "tokens_recovered": 0
+    }
+  },
+  "provider_usage": [
+    {
+      "aggregate": false,
+      "attempt": 1,
+      "cache_creation_tokens": null,
+      "cached_input_tokens": 0,
+      "input_tokens": 38314,
+      "model": "gpt-6-astra",
+      "outcome": "accepted",
+      "output_tokens": 1086,
+      "provider": "openai",
+      "quota_day": "2026-09-23",
+      "reasoning_tokens": 158,
+      "request_id": "resp_008e120e46073edc006ab45e5bc61887d2bad8b3a6aa7b7f23",
+      "requests": null,
+      "run_id": "63d2a2c0-a9ca-4f61-b0b9-7ab0c37f37e5",
+      "seat": "skald_writer",
+      "service_tier": "default",
+      "slot": null,
+      "total_tokens": 39400,
+      "transport": "responses",
+      "ts": "2026-09-23T23:19:24.621735Z"
+    }
+  ],
+  "paid_calls": [
+    {
+      "seat": "skald_writer",
+      "input": 38993,
+      "output": 1464,
+      "reasoning": 122,
+      "session": "166f5085-4874-4857-8284-ca0c5ed8aeec"
+    },
+    {
+      "seat": "gaia",
+      "input": 41673,
+      "output": 945,
+      "reasoning": 149,
+      "session": "166f5085-4874-4857-8284-ca0c5ed8aeec"
+    },
+    {
+      "seat": "skald_writer",
+      "input": 38314,
+      "output": 1086,
+      "reasoning": 158,
+      "session": "63d2a2c0-a9ca-4f61-b0b9-7ab0c37f37e5"
+    }
+  ]
+}

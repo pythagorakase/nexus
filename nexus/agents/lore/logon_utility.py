@@ -1648,8 +1648,32 @@ class LogonUtility:
             if self._is_two_pass_turn(schema)
             else self._schema_format_kwargs(schema)
         )
+        anthropic_request = None
+        if provider.usage_provider_name == "anthropic":
+            if (
+                self._is_two_pass_turn(schema)
+                or provider.structured_transport == "native"
+            ):
+                anthropic_request = provider._build_native_structured_request_params(
+                    prompt,
+                    SkaldWriterWire if self._is_two_pass_turn(schema) else schema,
+                    **format_kwargs,
+                )
+            elif provider.structured_transport == "tool_envelope":
+                anthropic_request = (
+                    provider._build_tool_envelope_structured_request_params(
+                        prompt, schema, **format_kwargs
+                    )
+                )
+            else:
+                anthropic_request = provider._build_prompted_structured_request_params(
+                    prompt
+                )
         count = rendered_request_counter(
-            provider, text_format=format_kwargs.get("text_format")
+            provider,
+            text_format=format_kwargs.get("text_format"),
+            anthropic_request=anthropic_request,
+            settings_path=self.settings_path,
         )
         return count(prompt), budget, blocks, count
 
@@ -1677,6 +1701,7 @@ class LogonUtility:
             attempt: int,
             *,
             text_format: Optional[Dict[str, Any]] = None,
+            anthropic_request: Optional[Dict[str, Any]] = None,
         ) -> None:
             if window is None:
                 resolved_window = resolve_storyteller_context_window(
@@ -1696,7 +1721,12 @@ class LogonUtility:
             provider.max_output_tokens = budget.max_output_tokens
             if hasattr(provider, "max_tokens"):
                 provider.max_tokens = budget.max_output_tokens
-            count = rendered_request_counter(provider, text_format=text_format)
+            count = rendered_request_counter(
+                provider,
+                text_format=text_format,
+                anthropic_request=anthropic_request,
+                settings_path=self.settings_path,
+            )
             blocks = list(
                 self._writer_window_blocks
                 if seat != "gaia"
