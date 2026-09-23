@@ -22,7 +22,7 @@ def _calculate_budget(
     """Exercise allocation with an already-resolved base provider window."""
     return manager.calculate_budget(
         user_input,
-        apex_model=apex_model,
+        apex_model=apex_model if apex_model is not None else "TEST",
         apex_context_window=manager.token_budget_config["apex_context_window"],
     )
 
