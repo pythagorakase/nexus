@@ -66,10 +66,11 @@ def recover_orphaned_choice(conn: Any) -> Optional[int]:
                 "LOCK TABLE narrative_generation_lease IN SHARE ROW EXCLUSIVE MODE"
             )
             cur.execute(
-                "SELECT 1 FROM narrative_generation_lease "
-                "WHERE expires_at > clock_timestamp() LIMIT 1"
+                "SELECT expires_at > clock_timestamp() FROM narrative_generation_lease "
+                "WHERE id = TRUE FOR UPDATE"
             )
-            if cur.fetchone() is not None:
+            lease = cur.fetchone()
+            if lease is not None and lease[0]:
                 return None
             cur.execute(
                 "LOCK TABLE incubator, narrative_chunks IN SHARE ROW EXCLUSIVE MODE"
