@@ -5,8 +5,8 @@
    nexus_layout.jsx) against the vendored brand tokens in index.css. Every
    color is a token — no invented hues. Locked decisions applied:
    - No CommandBar; freeform directive is slot 0 inside the choices block.
-   - Top bar: wordmark + slot label left, SKALD status right. No scene
-     cartouche, no MODEL field.
+   - Top bar: wordmark + slot label left, frontier clock right (Decision 8,
+     Option A, #857). No scene cartouche, no MODEL field.
    - Voice differentiation by color only (st = --fg, you = --fg-muted) with
      a thin centered hr between speaker changes. No >/>> prefixes.
    - Current chunk: 3px magenta left edge-marker + faint fill + glow.
@@ -140,6 +140,13 @@
   font-weight: 600;
   margin-left: 2px;
   text-transform: uppercase;
+}
+.topbar .frontier-clock {
+  font-family: var(--font-menu);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-muted);
+  white-space: nowrap;
 }
 .topbar .field {
   display: inline-flex;

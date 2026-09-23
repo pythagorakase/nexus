@@ -48,7 +48,7 @@
 ### D. Component Library
 
 **Terminal Window Components**:
-- **StatusBar**: Fixed top bar with system status, model info, chapter/scene indicators, hamburger menu
+- **TopBar**: Wordmark and slot identity; one compact story date and time at rest. Owner Decision 8, Option A ([#857](https://github.com/pythagorakase/nexus/issues/857), [#771](https://github.com/pythagorakase/nexus/issues/771)) reverses the locked "nothing at rest" rule for this element alone. Use the intertitle's shared clock face, tabular numerals, and a reduced-emphasis theme token. No label, icon, tooltip prose, animation, or repeated season/episode/scene. The clock follows the latest accepted playable chunk and is absent without a known frontier instant; pending drafts do not advance it. Historical-scene following awaits C029 (#768). Other status surfaces remain transient; no persistent model field or scene cartouche.
 - **CommandBar**: Fixed bottom input with prefix label ("ALEX:" or "NEXUS:USER"), monospace input, blinking cursor
 - **NarrativePane**: Scrollable story display with instant, section-based rendering
 - **NavigationPane**: Collapsible right sidebar with chunk/episode tree navigation
@@ -89,7 +89,7 @@ Narrative text renders in full immediately, with parsed Markdown and actionable 
 **Structure**:
 ```
 ┌─────────────────────────────────────────┐
-│  StatusBar (Model | S1E1S2 | Status)    │
+│  TopBar (NEXUS · Slot | Story Clock)     │
 ├─────────────────────────────────┬───────┤
 │                                 │       │
 │  Narrative/Map Pane             │  Nav/ │

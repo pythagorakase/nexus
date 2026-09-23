@@ -1,0 +1,20 @@
+{
+  "frontier_clock": {
+    "instant": "2189-10-17T18:37:00-04:00",
+    "face": "17 Oct 2189 \u00b7 22:37"
+  },
+  "reader_metadata": {
+    "id": 49,
+    "chunkId": 49,
+    "season": 1,
+    "episode": 2,
+    "scene": 45,
+    "worldLayer": "primary",
+    "worldTime": "2189-10-17T22:37:00+00:00",
+    "worldTimeFace": "17 Oct 2189 \u00b7 22:37",
+    "timeDelta": "00:08:00",
+    "generationDate": "2026-08-21T04:51:41.729684",
+    "slug": "S01E02_045"
+  },
+  "has_pending": true
+}
