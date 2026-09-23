@@ -266,10 +266,13 @@ class LORE:
             )
 
         # Memory manager orchestrates Pass 1/Pass 2 state
+        from nexus.api.slot_utils import require_slot_dbname
+
         self.memory_manager = ContextMemoryManager(
             self.settings,
             memnon=self.memnon,
             token_manager=self.token_manager,
+            dbname=require_slot_dbname(dbname=self.dbname, slot=self.slot),
         )
 
         logger.info("Component initialization complete")

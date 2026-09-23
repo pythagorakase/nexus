@@ -609,21 +609,14 @@ class LogonUtility:
 
     def _get_slot_model(self) -> Optional[str]:
         """Get the model configured for the current slot from global_variables."""
+        from nexus.api.db_pool import get_connection
         from nexus.api.slot_utils import require_slot_dbname
 
-        try:
-            db = require_slot_dbname(dbname=self.dbname)
-            conn = psycopg2.connect(host="localhost", database=db, user="pythagor")
-            try:
-                with conn.cursor() as cur:
-                    cur.execute("SELECT model FROM global_variables WHERE id = TRUE")
-                    result = cur.fetchone()
-                    return result[0] if result else None
-            finally:
-                conn.close()
-        except Exception as e:
-            logger.warning(f"Failed to get slot model: {e}")
-            return None
+        db = require_slot_dbname(dbname=self.dbname)
+        with get_connection(db) as conn, conn.cursor() as cur:
+            cur.execute("SELECT model FROM global_variables WHERE id = TRUE")
+            row = cur.fetchone()
+        return row[0] if row else None
 
     @staticmethod
     def _resolve_generation_model(
@@ -638,19 +631,18 @@ class LogonUtility:
         """Resolve the active model, endpoint, and storyteller wire class."""
         apex_settings = self.settings.get("API Settings", {}).get("apex", {})
 
-        # Model priority: override > slot config > settings
-        model = self.model_override
-        if not model:
-            model = self._get_slot_model()
-        if not model:
-            model = apex_settings.get("model", "gpt-4o")
-        if not isinstance(model, str) or not model.strip():
-            raise RuntimeError("LOGON could not resolve a storyteller model id")
-        model = self._resolve_generation_model(model, self.settings_path)
+        from nexus.config import load_settings
+        from nexus.config.story_model import StorySettings, resolve_story_model
 
-        provider_type = get_provider_for_model(
-            model, self.settings_path
-        ) or apex_settings.get("provider", "openai")
+        model = resolve_story_model(
+            "skald",
+            settings=load_settings(self.settings_path),
+            story=StorySettings(skald_model=self._get_slot_model()),
+            override=self.model_override,
+        )
+        provider_type = get_provider_for_model(model, self.settings_path)
+        if provider_type is None:
+            raise ValueError(f"Model {model!r} is absent from the registry")
 
         # OpenAI-compatible base_url routing (mock TEST server, local servers):
         # the endpoint lives in [global.model.api_models] (#401).
@@ -1222,10 +1214,22 @@ class LogonUtility:
         slots stay self-contained and offline); or the pinned model IS the
         slot model (a fresh provider would be an identical twin).
         """
-        apex_settings = self.settings.get("API Settings", {}).get("apex", {})
-        gaia_model = apex_settings.get("gaia_model")
-        if not gaia_model:
-            return None
+        from nexus.api.slot_utils import require_slot_dbname
+        from nexus.config import load_settings
+        from nexus.config.story_model import read_story_settings, resolve_story_model
+
+        story = read_story_settings(require_slot_dbname(dbname=self.dbname))
+        # A null pin follows the actual writer, including a request override.
+        gaia_model = resolve_story_model(
+            "gaia",
+            settings=load_settings(self.settings_path),
+            story=story,
+            override=(
+                getattr(self.provider, "model", None)
+                if story.gaia_model is None
+                else None
+            ),
+        )
         if self._provider_type_name is None:
             raise RuntimeError("Gaia route resolution requires an initialized provider")
         if self._provider_type_name == "test":

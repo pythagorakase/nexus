@@ -82,7 +82,11 @@ def resolve_wizard_model(
     nexus.toml. The mock TEST model is never introduced here; it can only
     arrive as an explicit request override or a deliberate slot stamp.
     """
-    return request_model or slot_model or get_new_story_model()
+    from nexus.config.story_model import StorySettings, resolve_story_model
+
+    return resolve_story_model(
+        "wizard", story=StorySettings(skald_model=slot_model), override=request_model
+    )
 
 
 def wizard_model_lock_candidate(

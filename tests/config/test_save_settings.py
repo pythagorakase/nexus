@@ -1,103 +1,22 @@
-"""Tests for save_settings() TOML write functionality."""
+"""The retired settings writer must fail before touching repository files."""
+
+from pathlib import Path
 
 import pytest
-from pathlib import Path
+
 from nexus.config import save_settings
 
 
-@pytest.fixture
-def sample_toml(tmp_path):
-    """Create a sample TOML file with comments."""
-    content = """# Header comment
-[example]
-# Default model comment
-default_model = "old-model"
-default_slot_model = "TEST"
-"""
-    toml_path = tmp_path / "test.toml"
-    toml_path.write_text(content)
-    return toml_path
-
-
-def test_preserves_comments(sample_toml):
-    """Verify comments are preserved after save."""
-    save_settings(
-        {"example.default_model": "new-model"},
-        path=sample_toml,
-        validate=False,
-    )
-    content = sample_toml.read_text()
-    assert "# Header comment" in content
-    assert "# Default model comment" in content
-    assert 'default_model = "new-model"' in content
-
-
-def test_partial_update_leaves_other_fields(sample_toml):
-    """Verify only specified fields are changed."""
-    save_settings(
-        {"example.default_model": "new-model"},
-        path=sample_toml,
-        validate=False,
-    )
-    import tomllib
-
-    with open(sample_toml, "rb") as f:
-        data = tomllib.load(f)
-    assert data["example"]["default_model"] == "new-model"
-    assert data["example"]["default_slot_model"] == "TEST"
-
-
-def test_creates_backup(sample_toml):
-    """Verify backup file is created."""
-    original_content = sample_toml.read_text()
-    save_settings(
-        {"example.default_model": "new-model"},
-        path=sample_toml,
-        backup=True,
-        validate=False,
-    )
-    backup_path = sample_toml.with_suffix(".toml.bak")
-    assert backup_path.exists()
-    assert backup_path.read_text() == original_content
-
-
-def test_file_not_found_raises(tmp_path):
-    """Verify FileNotFoundError for missing files."""
-    with pytest.raises(FileNotFoundError):
+@pytest.mark.parametrize("validate,backup", [(True, True), (False, False)])
+def test_save_settings_is_read_only(
+    tmp_path: Path, validate: bool, backup: bool
+) -> None:
+    path = tmp_path / "nexus.toml"
+    path.write_text("# repository defaults\n")
+    before = path.read_bytes()
+    with pytest.raises(RuntimeError, match="read-only at runtime"):
         save_settings(
-            {"example.default_model": "new"},
-            path=tmp_path / "nonexistent.toml",
+            {"ui.theme": "vector"}, path=path, validate=validate, backup=backup
         )
-
-
-def test_preserves_multiline_arrays(tmp_path):
-    """Verify multiline array format is preserved."""
-    content = """[example]
-values = [
-    "open",
-    "active",
-]
-"""
-    toml_path = tmp_path / "test.toml"
-    toml_path.write_text(content)
-
-    save_settings(
-        {
-            "example.values": [
-                "open",
-                "active",
-                "latent",
-            ]
-        },
-        path=toml_path,
-        validate=False,
-    )
-
-    result = toml_path.read_text()
-    # Check that array is still multiline (one element per line)
-    assert '"open",' in result
-    assert '"active",' in result
-    assert '"latent"' in result
-    # Ensure it's not a single-line array
-    lines_with_open = [l for l in result.split("\n") if "open" in l]
-    assert len(lines_with_open) == 1, "Array should be multiline, not single-line"
+    assert path.read_bytes() == before
+    assert not path.with_suffix(".toml.bak").exists()

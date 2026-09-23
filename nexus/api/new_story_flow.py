@@ -132,20 +132,22 @@ def start_setup(slot_number: int, model: Optional[str] = None) -> str:
         # New slot databases are created by cloning this template's structure.
         create_slot_schema_only(slot_number, source_db="NEXUS_template")
 
-    if model:
-        # Preserve the explicit-override path without requiring config or a
-        # metadata read: it is authoritative by definition.
-        model_to_use = model
-    else:
-        from nexus.config import load_settings
+    from nexus.config import load_settings
+    from nexus.config.story_model import StorySettings, resolve_story_model
 
-        settings = load_settings()
-        model_to_use = resolve_setup_model(
-            get_slot_model(slot_number, dbname=dbname),
-            setup_started=read_cache_raw(dbname) is not None,
-            default_slot_model=settings.global_.model.default_slot_model,
-            wizard_default_model=settings.wizard.default_model,
-        )
+    settings = load_settings()
+    slot_model = get_slot_model(slot_number, dbname=dbname)
+    if (
+        slot_model == settings.global_.model.default_slot_model
+        and read_cache_raw(dbname) is None
+    ):
+        slot_model = None
+    model_to_use = resolve_story_model(
+        "wizard",
+        settings=settings,
+        story=StorySettings(skald_model=slot_model),
+        override=model,
+    )
 
     clear_cache(dbname)
     client = ConversationsClient(model=model_to_use)

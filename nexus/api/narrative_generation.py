@@ -695,6 +695,9 @@ async def generate_bootstrap_narrative(
     # Initialize LOGON and generate narrative
     settings = load_settings()
     dbname = require_slot_dbname(slot=slot)
+    from nexus.config.story_model import read_story_settings, story_context_settings
+
+    settings = story_context_settings(settings, read_story_settings(dbname))
     logon = LogonUtility(settings, dbname=dbname, bootstrap_mode=True)
     story_response = await logon.generate_narrative_async(bootstrap_context)
 

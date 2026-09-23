@@ -1,18 +1,4 @@
-/**
- * SettingsPane - the operator's settings console (NEXUS IRIS, U5).
- *
- * Seven sections: Theme, Typography, Test Mode, Model, API Keys, Context
- * Length, App Icon. Settings dials write back to PATCH /api/settings
- * (FastAPI -> nexus.config.loader.save_settings -> nexus.toml) with
- * optimistic cache updates and server confirmation. API key plaintext stays
- * only in local draft state until its direct secret-store write completes.
- * Theme and font writes flow through ThemeContext/FontContext, which share
- * the same settings query + mutation.
- *
- * Presentation follows the visual minimalism principle (PR #388): one label
- * per section matching its rail name, no explanatory prose in persistent
- * chrome. The model card names both assignments so they can be set separately.
- */
+/** Settings controls write player preferences and the active story separately. */
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
@@ -25,7 +11,7 @@ import {
 import { useTheme } from "@/contexts/ThemeContext";
 import { useDeveloperMode } from "@/contexts/DeveloperModeContext";
 import { KEEPERS, useFonts } from "@/contexts/FontContext";
-import { useSettingsMutation, useSettingsQuery } from "@/hooks/useSettings";
+import { useSettingsQuery, useStorySettings, useStorySettingsMutation } from "@/hooks/useSettings";
 import {
   useSecretsQuery,
   useSetSecret,
@@ -48,7 +34,6 @@ import type {
 const SECTION_INDEX = [
   { id: "theme", label: "Theme" },
   { id: "type", label: "Typography" },
-  { id: "narrative", label: "Test Mode" },
   { id: "model", label: "Model" },
   { id: "keys", label: "API Keys" },
   { id: "lore", label: "Context Length" },
@@ -251,32 +236,6 @@ function TypographySection() {
 // ──────────────────────────────────────────────────────────────────────────
 // 3. Test Mode
 // ──────────────────────────────────────────────────────────────────────────
-
-function TestModeSection({
-  on,
-  onToggle,
-}: {
-  on: boolean;
-  onToggle: (value: boolean) => void;
-}) {
-  return (
-    <SettingsCard id="narrative" label="TEST MODE">
-      <div className="lever-row">
-        <button
-          className={`lever ${on ? "on" : ""}`}
-          onClick={() => onToggle(!on)}
-          role="switch"
-          aria-checked={on}
-          data-testid="lever-test-mode"
-        >
-          <span className="lever-knob" />
-          <span className="lever-tick l">OFF</span>
-          <span className="lever-tick r">TEST</span>
-        </button>
-      </div>
-    </SettingsCard>
-  );
-}
 
 function AdvancedSection() {
   const { developerMode, setDeveloperMode } = useDeveloperMode();
@@ -710,8 +669,10 @@ function SectionRail({
   );
 }
 
-export function SettingsPane() {
-  const { data: settings, error } = useSettingsQuery();
+export function SettingsPane({ slot = null }: { slot?: number | null }) {
+  const { data: settings, error: settingsError } = useSettingsQuery();
+  const story = useStorySettings(slot);
+  const error = settingsError ?? story.error;
 
   if (error) {
     return (
@@ -722,7 +683,7 @@ export function SettingsPane() {
     );
   }
 
-  if (!settings) {
+  if (!settings || (slot !== null && !story.data)) {
     return (
       <div className="pane-notice" data-testid="settings-pane">
         <span className="notice-text">[ RECEIVING ]</span>
@@ -732,13 +693,23 @@ export function SettingsPane() {
 
   // The console only mounts once settings exist, so its scroll-tracking
   // effect can bind on mount with the scroller guaranteed present.
-  return <SettingsConsole settings={settings} />;
+  const displayed = story.data ? {
+    ...settings,
+    apex: { ...settings.apex,
+      model: story.data.skald_model ?? settings.apex?.model,
+      gaia_model: story.data.gaia_model,
+    },
+    lore: { ...settings.lore, token_budget: { ...settings.lore?.token_budget,
+      apex_context_window: story.data.apex_context_window ?? settings.lore?.token_budget?.apex_context_window,
+    } },
+  } : settings;
+  return <SettingsConsole settings={displayed} slot={slot} />;
 }
 
-function SettingsConsole({ settings }: { settings: SettingsPayload }) {
+function SettingsConsole({ settings, slot }: { settings: SettingsPayload; slot: number | null }) {
   const { theme, setTheme } = useTheme();
   const { gateOpen } = useDeveloperMode();
-  const mutation = useSettingsMutation();
+  const mutation = useStorySettingsMutation(slot);
   const sections = useMemo(
     () =>
       gateOpen
@@ -774,7 +745,6 @@ function SettingsConsole({ settings }: { settings: SettingsPayload }) {
     return () => root.removeEventListener("scroll", onScroll);
   }, [sections]);
 
-  const testMode = settings.global?.narrative?.test_mode ?? false;
 
   return (
     <div className="settings-pane-v2" data-testid="settings-pane">
@@ -792,22 +762,16 @@ function SettingsConsole({ settings }: { settings: SettingsPayload }) {
 
         <ThemeSection active={theme as ThemeId} onPick={(t) => setTheme(t)} />
         <TypographySection />
-        <TestModeSection
-          on={testMode}
-          onToggle={(value) => mutation.mutate({ test_mode: value })}
-        />
-        <ModelSection
+        {slot !== null && <ModelSection
           settings={settings}
-          onPickSkald={(id) =>
-            mutation.mutate({ apex_model_id: id, wizard_model_id: id })
-          }
-          onPickGaia={(id) => mutation.mutate({ gaia_model_id: id })}
-        />
+          onPickSkald={(id) => mutation.mutate({ skald_model: id })}
+          onPickGaia={(id) => mutation.mutate({ gaia_model: id })}
+        />}
         <KeysSection />
-        <ContextLengthSection
+        {slot !== null && <ContextLengthSection
           settings={settings}
           onCommit={(value) => mutation.mutate({ apex_context_window: value })}
-        />
+        />}
         <PwaSection />
         {gateOpen && <AdvancedSection />}
       </div>

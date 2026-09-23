@@ -3389,6 +3389,16 @@ class UIFontMatrix(BaseModel):
     vector: UIFontSlots = Field(default_factory=_default_vector_fonts)
 
 
+class PreferencesSettings(BaseModel):
+    """Player-owned preferences stored separately from repository defaults."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    theme: Literal["veil", "gilded", "vector"]
+    fonts: UIFontMatrix
+    wizard_model: str = Field(min_length=1)
+
+
 def _default_lore_budget_stops() -> List[int]:
     return [75_000, 100_000, 150_000, 200_000]
 

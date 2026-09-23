@@ -1,7 +1,7 @@
 /**
  * Font preferences context. Theme-aware: applies the persisted font matrix
- * (ui.fonts in nexus.toml, served via GET /api/settings) to the CSS custom
- * properties for the active theme. Writes go through PATCH /api/settings -
+ * (fonts in preferences.toml, served via GET /api/preferences) to the CSS custom
+ * properties for the active theme. Writes go through PATCH /api/preferences -
  * localStorage only seeds the first paint before the query resolves.
  */
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';

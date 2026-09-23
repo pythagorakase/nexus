@@ -145,7 +145,7 @@ export function NexusLayout() {
             ) : (
               <CharactersPane slot={slot} />
             ))}
-          {tab === "settings" && <SettingsPane />}
+          {tab === "settings" && <SettingsPane slot={slot} />}
         </main>
         {showLedger && (
           <RightLedger

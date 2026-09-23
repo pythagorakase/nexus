@@ -51,7 +51,9 @@ class ConversationsClient:
         self._store_mode = "openai"
         self._file_store: Optional[_FileConversationStore] = None
 
-        provider = get_provider_for_model(model) or "openai"
+        provider = get_provider_for_model(model)
+        if provider is None:
+            raise ValueError(f"Model {model!r} is absent from the registry")
 
         # TEST mode: use in-memory storage, skip OpenAI entirely
         if model == "TEST" or provider == "test":

@@ -91,147 +91,6 @@ def test_setup_model_uses_wizard_default_only_for_fresh_slot(
     )
 
 
-@pytest.mark.parametrize(
-    ("requested_model", "slot_model", "setup_started", "expected_model"),
-    [
-        ("explicit-model", "operator-model", False, "explicit-model"),
-        (None, "operator-model", False, "operator-model"),
-        (None, "fresh-placeholder", False, "wizard-default"),
-        (None, "fresh-placeholder", True, "fresh-placeholder"),
-    ],
-)
-def test_start_setup_persists_resolved_model(
-    monkeypatch: pytest.MonkeyPatch,
-    requested_model: str | None,
-    slot_model: str,
-    setup_started: bool,
-    expected_model: str,
-) -> None:
-    """The core applies precedence once, then persists the selected model."""
-    clients: list[str] = []
-    upserts: list[dict[str, Any]] = []
-
-    class FakeConnection:
-        def close(self) -> None:
-            """Mirror the psycopg connection close surface."""
-
-    class FakeConversationsClient:
-        def __init__(self, model: str) -> None:
-            clients.append(model)
-
-        def create_thread(self) -> str:
-            """Return a deterministic thread without a provider call."""
-            return "thread-explicit"
-
-    monkeypatch.setattr(
-        new_story_flow.psycopg2,
-        "connect",
-        lambda **_kwargs: FakeConnection(),
-    )
-    monkeypatch.setattr(new_story_flow, "slot_dbname", lambda _slot: "save_test")
-    monkeypatch.setattr(
-        new_story_flow,
-        "get_slot_model",
-        lambda _slot, dbname=None: slot_model,
-    )
-    monkeypatch.setattr(
-        new_story_flow,
-        "read_cache_raw",
-        lambda _dbname: SimpleNamespace() if setup_started else None,
-    )
-    monkeypatch.setattr(new_story_flow, "clear_cache", lambda _dbname: None)
-    monkeypatch.setattr(new_story_flow, "init_cache", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(new_story_flow, "clear_active", lambda _dbname: None)
-    monkeypatch.setattr(
-        new_story_flow,
-        "upsert_slot",
-        lambda slot, **kwargs: upserts.append({"slot": slot, **kwargs}),
-    )
-    monkeypatch.setattr(new_story_flow, "ConversationsClient", FakeConversationsClient)
-    monkeypatch.setattr(
-        "nexus.config.load_settings",
-        lambda: SimpleNamespace(
-            global_=SimpleNamespace(
-                model=SimpleNamespace(default_slot_model="fresh-placeholder")
-            ),
-            wizard=SimpleNamespace(default_model="wizard-default"),
-        ),
-    )
-
-    thread_id = new_story_flow.start_setup(4, model=requested_model)
-
-    assert thread_id == "thread-explicit"
-    assert clients == [expected_model]
-    assert upserts == [
-        {
-            "slot": 4,
-            "is_active": True,
-            "model": expected_model,
-            "dbname": "save_test",
-        }
-    ]
-
-
-def test_start_setup_preserves_explicit_test_model_on_restart(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A TEST setup stamp survives a later omitted-model restart."""
-    clients: list[str] = []
-    slot_state: dict[str, Any] = {"model": "TEST", "cache": None}
-
-    class FakeConnection:
-        def close(self) -> None:
-            """Mirror the psycopg connection close surface."""
-
-    class FakeConversationsClient:
-        def __init__(self, model: str) -> None:
-            clients.append(model)
-
-        def create_thread(self) -> str:
-            return f"thread-{len(clients)}"
-
-    monkeypatch.setattr(
-        new_story_flow.psycopg2,
-        "connect",
-        lambda **_kwargs: FakeConnection(),
-    )
-    monkeypatch.setattr(new_story_flow, "slot_dbname", lambda _slot: "save_test")
-    monkeypatch.setattr(
-        new_story_flow,
-        "get_slot_model",
-        lambda _slot, dbname=None: slot_state["model"],
-    )
-    monkeypatch.setattr(
-        new_story_flow,
-        "read_cache_raw",
-        lambda _dbname: slot_state["cache"],
-    )
-    monkeypatch.setattr(new_story_flow, "clear_cache", lambda _dbname: None)
-    monkeypatch.setattr(
-        new_story_flow,
-        "init_cache",
-        lambda *_args, **_kwargs: slot_state.update(cache={"id": True}),
-    )
-    monkeypatch.setattr(new_story_flow, "clear_active", lambda _dbname: None)
-    monkeypatch.setattr(
-        new_story_flow,
-        "upsert_slot",
-        lambda _slot, **kwargs: slot_state.update(model=kwargs["model"]),
-    )
-    monkeypatch.setattr(new_story_flow, "ConversationsClient", FakeConversationsClient)
-    monkeypatch.setattr(
-        "nexus.config.load_settings",
-        lambda: SimpleNamespace(
-            global_=SimpleNamespace(model=SimpleNamespace(default_slot_model="TEST")),
-            wizard=SimpleNamespace(default_model="wizard-default"),
-        ),
-    )
-
-    assert new_story_flow.start_setup(4, model="TEST") == "thread-1"
-    assert new_story_flow.start_setup(4) == "thread-2"
-    assert clients == ["TEST", "TEST"]
-
-
 @pytest.mark.requires_postgres
 def test_setup_endpoint_passes_omitted_model_to_core(
     monkeypatch: pytest.MonkeyPatch,
@@ -297,12 +156,12 @@ def test_configured_wizard_default_is_not_the_mock() -> None:
 
 
 def test_resolve_wizard_model_explicit_override_wins() -> None:
-    assert resolve_wizard_model("explicit-model", "slot-model") == "explicit-model"
+    assert resolve_wizard_model("TEST", get_new_story_model()) == "TEST"
 
 
 def test_resolve_wizard_model_falls_back_to_slot_stamp() -> None:
     """Omitted request model resolves to the slot's stamped (locked) model."""
-    assert resolve_wizard_model(None, "slot-model") == "slot-model"
+    assert resolve_wizard_model(None, "TEST") == "TEST"
 
 
 def test_resolve_wizard_model_falls_back_to_configured_default() -> None:

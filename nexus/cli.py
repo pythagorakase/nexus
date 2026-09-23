@@ -1842,7 +1842,7 @@ def run_model(args: argparse.Namespace) -> Dict[str, Any]:
     """
     Get or set the model for a slot.
 
-    Calls GET or POST /api/slot/{slot}/model.
+    Calls GET or PATCH /api/slot/{slot}/settings.
     """
     try:
         if args.list:
@@ -1857,29 +1857,33 @@ def run_model(args: argparse.Namespace) -> Dict[str, Any]:
             }
 
         # Slot is required for get/set operations
-        base_url = f"{get_api_url()}/api/slot/{args.slot}/model"
+        base_url = f"{get_api_url()}/api/slot/{args.slot}/settings"
 
-        if args.set:
+        if args.set or getattr(args, "clear", False):
             # Set the model
-            response = _api_post(base_url, json={"model": args.set}, timeout=30)
+            response = _api_request(
+                "patch", base_url, json={"skald_model": args.set}, timeout=30
+            )
             response.raise_for_status()
             data = response.json()
             return {
                 "success": True,
-                "message": f"Model changed to {data.get('model')}",
-                "model": data.get("model"),
+                "message": f"Model changed to {data.get('skald_model')}",
+                "model": data.get("skald_model"),
             }
 
         # Get current model
         response = _api_get(base_url, timeout=30)
         response.raise_for_status()
         data = response.json()
-        current = data.get("model") or "(default)"
-        available = data.get("available_models", [])
+        current = data.get("skald_model") or "(default)"
+        from nexus.config import get_available_api_models
+
+        available = get_available_api_models()
         return {
             "success": True,
             "message": f"Current model: {current}\nAvailable: {', '.join(available)}",
-            "model": data.get("model"),
+            "model": data.get("skald_model"),
             "available_models": available,
         }
 
@@ -3486,7 +3490,11 @@ Examples:
     # model command
     model_parser = subparsers.add_parser("model", help="Get or set model for a slot")
     model_parser.add_argument("--slot", type=int, help="Slot number (1-5)")
-    model_parser.add_argument(
+    model_choice = model_parser.add_mutually_exclusive_group()
+    model_choice.add_argument(
+        "--clear", action="store_true", help="Clear the story Skald pin"
+    )
+    model_choice.add_argument(
         "--set",
         help="Set the model (use a registry ID; run with --list to see options)",
     )

@@ -1,25 +1,12 @@
-"""
-FastAPI endpoints for the operator settings surface (GET/PATCH /api/settings).
-
-GET serves nexus.toml with concrete model selections, plus the legacy
-"Agent Settings"/"API Settings" aliases the React client predates, plus a
-derived ``settings_meta`` block (model options and apex provider allowlist)
-so the client never hardcodes config semantics.
-
-PATCH accepts a typed subset of safe-to-edit keys and persists them through
-``nexus.config.loader.save_settings``, which validates the merged document
-against the Pydantic Settings model and preserves comments/formatting via
-tomlkit. Keys outside this subset (active embedding model, test database
-suffix, reranker paths, ...) are intentionally not writable from the UI.
-"""
+"""Read-only repository defaults and registry metadata for the settings card."""
 
 import logging
 import re
 from pathlib import Path
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Dict
 
-from fastapi import APIRouter, HTTPException, Response
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from fastapi import APIRouter, Response
+from pydantic import BaseModel
 
 # Python 3.11+ ships tomllib; mirror the loader's fallback for older runtimes.
 try:
@@ -27,7 +14,6 @@ try:
 except ModuleNotFoundError:  # pragma: no cover - exercised only on Python <3.11
     import tomli as tomllib  # type: ignore
 
-from nexus.config.loader import save_settings
 from nexus.config.settings_models import (
     APEXSettings,
     materialize_model_selections,
@@ -40,60 +26,6 @@ router = APIRouter(prefix="/api/settings", tags=["settings"])
 # Resolved relative to the process CWD, matching every other load_settings()
 # caller in the API layer (the narrative service runs from the repo root).
 NEXUS_TOML = Path("nexus.toml")
-
-ThemeId = Literal["veil", "gilded", "vector"]
-
-
-class FontSlotsPatch(BaseModel):
-    """Partial font slot update for one theme.
-
-    ``display`` (the marquee slot) is locked in the settings pane per the
-    design system's marquee rule, but stays writable here deliberately:
-    the pane's RESET TO KEEPERS action PATCHes the full keeper matrix
-    (display included), and the API remains the operator escape hatch for
-    rebinding the marquee without hand-editing nexus.toml.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    body: Optional[str] = None
-    menu: Optional[str] = None
-    display: Optional[str] = None
-
-
-class SettingsPatchRequest(BaseModel):
-    """The safe-to-edit settings subset accepted by PATCH /api/settings."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    theme: Optional[ThemeId] = Field(
-        default=None, description="Active NEXUS IRIS theme (ui.theme)"
-    )
-    fonts: Optional[Dict[ThemeId, FontSlotsPatch]] = Field(
-        default=None, description="Per-theme font slot choices (ui.fonts.*)"
-    )
-    test_mode: Optional[bool] = Field(
-        default=None, description="Test write routing (global.narrative.test_mode)"
-    )
-    apex_model_id: Optional[str] = Field(
-        default=None,
-        description=("Registered model ID for live narrative turns (apex.model)"),
-    )
-    gaia_model_id: Optional[str] = Field(
-        default=None,
-        description=(
-            "Registered model ID for world state (apex.gaia_model); "
-            "null follows the active Skald model"
-        ),
-    )
-    wizard_model_id: Optional[str] = Field(
-        default=None,
-        description="Registered model ID for the new-story wizard (wizard.default_model)",
-    )
-    apex_context_window: Optional[int] = Field(
-        default=None,
-        description="LORE context budget (lore.token_budget.apex_context_window)",
-    )
 
 
 def _read_raw_settings() -> Dict[str, Any]:
@@ -175,30 +107,6 @@ def _build_payload(raw: Dict[str, Any]) -> Dict[str, Any]:
     return payload
 
 
-def _updates_from_patch(patch: SettingsPatchRequest) -> Dict[str, Any]:
-    """Map the typed patch onto dot-notation save_settings updates."""
-    updates: Dict[str, Any] = {}
-    if patch.theme is not None:
-        updates["ui.theme"] = patch.theme
-    if patch.fonts is not None:
-        for theme_id, slots in patch.fonts.items():
-            for slot in ("body", "menu", "display"):
-                value = getattr(slots, slot)
-                if value is not None:
-                    updates[f"ui.fonts.{theme_id}.{slot}"] = value
-    if patch.test_mode is not None:
-        updates["global.narrative.test_mode"] = patch.test_mode
-    if patch.apex_model_id is not None:
-        updates["apex.model"] = patch.apex_model_id
-    if "gaia_model_id" in patch.model_fields_set:
-        updates["apex.gaia_model"] = patch.gaia_model_id
-    if patch.wizard_model_id is not None:
-        updates["wizard.default_model"] = patch.wizard_model_id
-    if patch.apex_context_window is not None:
-        updates["lore.token_budget.apex_context_window"] = patch.apex_context_window
-    return updates
-
-
 @router.head("")
 async def head_settings() -> Response:
     """Connectivity probe (useNarrativeEngine polls HEAD /api/settings).
@@ -215,29 +123,4 @@ async def head_settings() -> Response:
 @router.get("")
 async def get_settings() -> Dict[str, Any]:
     """Serve the full settings payload for the React client."""
-    return _build_payload(_read_raw_settings())
-
-
-@router.patch("")
-async def patch_settings(patch: SettingsPatchRequest) -> Dict[str, Any]:
-    """Persist a safe-subset settings update and return the fresh payload.
-
-    Concurrency posture: save_settings does an unlocked read-merge-write on
-    nexus.toml. That is safe for the deployed shape - a single-operator app
-    on a single-worker uvicorn process, where the event loop serializes
-    handlers. Running this API with multiple workers would reintroduce a
-    lost-update race and would need file locking here first.
-    """
-    updates = _updates_from_patch(patch)
-    if not updates:
-        raise HTTPException(status_code=400, detail="No supported settings provided")
-
-    try:
-        save_settings(updates, path=NEXUS_TOML)
-    except ValidationError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-    logger.info("Applied settings update: %s", sorted(updates))
     return _build_payload(_read_raw_settings())

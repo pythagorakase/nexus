@@ -9,7 +9,7 @@ import {
   LOCAL_MODELS_STATUS_KEY,
 } from "@/hooks/useLocalModels";
 import { SECRETS_QUERY_KEY } from "@/hooks/useSecrets";
-import { applySettingsPatch, SETTINGS_QUERY_KEY } from "@/hooks/useSettings";
+import { applySettingsPatch, SETTINGS_QUERY_KEY, PREFERENCES_QUERY_KEY } from "@/hooks/useSettings";
 import { queryClient as settingsQueryClient } from "@/lib/queryClient";
 import type { LocalModelsStatus } from "@/types/localModels";
 import type { SecretStatus } from "@/types/secrets";
@@ -46,6 +46,14 @@ function renderPane(
   }),
 ) {
   queryClient.setQueryData([...SETTINGS_QUERY_KEY], settings);
+  queryClient.setQueryData([...PREFERENCES_QUERY_KEY], {
+    theme: settings.ui?.theme ?? "veil", fonts: settings.ui?.fonts ?? KEEPERS,
+    wizard_model: settings.wizard?.default_model ?? "TEST",
+  });
+  queryClient.setQueryData(["/api/slot/4/settings"], {
+    skald_model: settings.apex?.model ?? null, gaia_model: settings.apex?.gaia_model ?? null,
+    apex_context_window: settings.lore?.token_budget?.apex_context_window ?? null,
+  });
   queryClient.setQueryData([...SECRETS_QUERY_KEY], STATUSES);
   queryClient.setQueryData(["/api/dev/backstage/health"], gateOpen);
 
@@ -54,7 +62,7 @@ function renderPane(
       <ThemeProvider>
         <DeveloperModeProvider>
           <FontProvider>
-            <SettingsPane />
+            <SettingsPane slot={4} />
           </FontProvider>
         </DeveloperModeProvider>
       </ThemeProvider>
@@ -165,7 +173,7 @@ describe("SettingsPane model card local provider", () => {
       <ThemeProvider>
         <DeveloperModeProvider>
           <FontProvider>
-            <SettingsPane />
+            <SettingsPane slot={4} />
           </FontProvider>
         </DeveloperModeProvider>
       </ThemeProvider>
@@ -221,18 +229,11 @@ describe("SettingsPane model IDs", () => {
     expect(screen.getByTestId("model-openrouter-vendor/model-next")).not.toHaveClass("on");
   });
 
-  it("takes provider routing from the roster when projecting a model choice", () => {
-    const patched = applySettingsPatch(settings, {
-      apex_model_id: "vendor/model-next",
-      wizard_model_id: "vendor/model-next",
-    });
-    expect(patched.apex).toEqual({
-      model: "vendor/model-next",
-      provider: "local",
-      gaia_model: "vendor/model-next",
-    });
+  it("projects player preferences without changing story defaults", () => {
+    const patched = applySettingsPatch(settings, { theme: "vector", wizard_model: "vendor/model-next" });
+    expect(patched.apex).toEqual(settings.apex);
+    expect(patched.ui?.theme).toBe("vector");
     expect(patched.wizard?.default_model).toBe("vendor/model-next");
-    expect(() => applySettingsPatch(settings, {apex_model_id: "@openai.default"})).toThrow("Unknown model");
   });
 
   it("shows both assignments and switches which model is selected", () => {
@@ -251,36 +252,10 @@ describe("SettingsPane model IDs", () => {
       .toHaveAttribute("aria-pressed", "false");
   });
 
-  it("projects Gaia changes independently, including follow mode and combined patches", () => {
-    const patched = applySettingsPatch(settings, { gaia_model_id: "frontier-2.1" });
-    expect(patched.apex).toEqual({ ...settings.apex, gaia_model: "frontier-2.1" });
-    expect(patched.wizard).toEqual(settings.wizard);
-    expect(settings.apex?.gaia_model).toBe("vendor/model-next");
-
-    const following = applySettingsPatch(settings, {
-      apex_model_id: "vendor/model-next",
-      gaia_model_id: null,
-    });
-    expect(following.apex).toEqual({
-      model: "vendor/model-next",
-      provider: "local",
-      gaia_model: null,
-    });
-    expect(() => applySettingsPatch(settings, { gaia_model_id: "unknown" }))
-      .toThrow("Unknown model");
-  });
-
   it("sends independent Gaia writes, clears to follow Skald, and retains that mode on Skald changes", async () => {
-    const gaiaChanged = {
-      ...settings,
-      apex: { ...settings.apex, gaia_model: "frontier-2.1" },
-    };
-    const following = { ...settings, apex: { ...settings.apex, gaia_model: null } };
-    const skaldChanged = {
-      ...following,
-      apex: { ...following.apex, model: "vendor/model-next", provider: "local" },
-      wizard: { default_model: "vendor/model-next" },
-    };
+    const gaiaChanged = { skald_model: "frontier-2.1", gaia_model: "frontier-2.1", apex_context_window: null };
+    const following = { ...gaiaChanged, gaia_model: null };
+    const skaldChanged = { ...following, skald_model: "vendor/model-next" };
     const request = vi
       .spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(new Response(JSON.stringify(gaiaChanged)))
@@ -295,8 +270,8 @@ describe("SettingsPane model IDs", () => {
         .toHaveTextContent("Frontier 2.1"),
     );
     expect(request).toHaveBeenNthCalledWith(
-      1, "/api/settings", expect.objectContaining({
-        method: "PATCH", body: JSON.stringify({ gaia_model_id: "frontier-2.1" }),
+      1, "/api/slot/4/settings", expect.objectContaining({
+        method: "PATCH", body: JSON.stringify({ gaia_model: "frontier-2.1" }),
       }),
     );
     expect(screen.getByTestId("model-target-skald")).toHaveTextContent(
@@ -309,8 +284,8 @@ describe("SettingsPane model IDs", () => {
         .toHaveTextContent("Same as Skald"),
     );
     expect(request).toHaveBeenNthCalledWith(
-      2, "/api/settings", expect.objectContaining({
-        body: JSON.stringify({ gaia_model_id: null }),
+      2, "/api/slot/4/settings", expect.objectContaining({
+        body: JSON.stringify({ gaia_model: null }),
       }),
     );
     expect(screen.getByRole("button", { name: "Frontier 2.1" }))
@@ -323,14 +298,14 @@ describe("SettingsPane model IDs", () => {
         .toHaveTextContent("Model Next"),
     );
     expect(request).toHaveBeenNthCalledWith(
-      3, "/api/settings", expect.objectContaining({
+      3, "/api/slot/4/settings", expect.objectContaining({
         body: JSON.stringify({
-          apex_model_id: "vendor/model-next",
-          wizard_model_id: "vendor/model-next",
+          skald_model: "vendor/model-next",
         }),
       }),
     );
-    expect(settingsQueryClient.getQueryData(SETTINGS_QUERY_KEY)).toEqual(skaldChanged);
+    expect(settingsQueryClient.getQueryData(["/api/slot/4/settings"])).toEqual(skaldChanged);
+    expect(settingsQueryClient.getQueryData(SETTINGS_QUERY_KEY)).toEqual(settings);
     expect(screen.getByTestId("model-target-gaia")).toHaveTextContent("Same as Skald");
   });
 

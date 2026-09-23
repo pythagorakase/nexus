@@ -17,7 +17,9 @@ def get_wizard_settings() -> WizardSettings:
 
 def get_new_story_model() -> str:
     """Get the configured model for new story workflow."""
-    return get_wizard_settings().default_model
+    from nexus.config.story_model import resolve_story_model
+
+    return resolve_story_model("wizard")
 
 
 def get_wizard_history_limit() -> int:
