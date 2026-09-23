@@ -134,6 +134,14 @@ class CommitCursor:
         elif "SELECT id FROM factions WHERE name" in normalized:
             entity_id = self.connection.factions.get(params[0])
             self.result = (entity_id,) if entity_id is not None else None
+        elif normalized.startswith("SELECT id FROM") and "WHERE id = %s" in normalized:
+            table = normalized.split()[3]
+            identities = getattr(self.connection, table).values()
+            self.result = (params[0],) if params[0] in identities else None
+        elif "FROM tag_category_registry" in normalized:
+            self.rows = [("state",)]
+        elif "FROM tags WHERE tag = %s" in normalized:
+            self.result = (1, "state", False, "refresh", "manual", None)
         elif "SELECT entity_id FROM characters WHERE id" in normalized:
             self.result = (1000 + params[0],)
         elif "SELECT entity_id FROM places WHERE id" in normalized:
@@ -728,6 +736,8 @@ def test_bootstrap_commit_seeds_setting_for_next_presence_baseline(
     """Chunk one persists the known starting place as its SETTING junction."""
 
     conn = CommitConnection()
+    conn.characters["Iria Vale"] = 71
+    conn.places["Fixture Station"] = 81
     conn.incubator["parent_chunk_id"] = 0
     conn.incubator["new_entities"] = []
     conn.incubator["entity_updates"] = {}

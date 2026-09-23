@@ -9,7 +9,14 @@ Handles conversion between structured Pydantic models and database JSONB fields.
 import logging
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
-from nexus.agents.logon.apex_schema import StateUpdates, StoryTurnResponse
+from nexus.agents.logon.apex_schema import (
+    ChunkMetadataUpdate,
+    ChronologyUpdate,
+    NewEntityDeclaration,
+    ReferencedEntities,
+    StateUpdates,
+    StoryTurnResponse,
+)
 from nexus.api.choice_handling import (
     ChoiceObject,
     normalize_choice_object,
@@ -167,7 +174,7 @@ def response_to_incubator(
 
     # Build incubator data structure
     incubator_data = {
-        "chunk_id": parent_chunk_id + 1,
+        "chunk_id": None,
         "parent_chunk_id": parent_chunk_id,
         "user_text": user_text,
         "storyteller_text": storyteller_text,
@@ -370,7 +377,7 @@ def extract_reference_updates(response: StoryTurnResponse) -> Dict[str, Any]:
 
 def validate_incubator_data(incubator_data: Dict[str, Any]) -> bool:
     """
-    Validate that incubator data has all required fields.
+    Validate required fields and typed structures before staging or acceptance.
 
     Args:
         incubator_data: The data to validate
@@ -403,7 +410,14 @@ def validate_incubator_data(incubator_data: Dict[str, Any]) -> bool:
 
     validate_staged_pass2_baseline(incubator_data["lore_pass_baseline"])
 
-    if incubator_data["chunk_id"] <= incubator_data["parent_chunk_id"]:
-        raise ValueError("Chunk ID must be greater than parent chunk ID")
+    ChunkMetadataUpdate.model_validate(incubator_data["metadata_updates"])
+    ChronologyUpdate.model_validate(
+        incubator_data["metadata_updates"].get("chronology", {})
+    )
+    StateUpdates.model_validate(incubator_data["entity_updates"])
+    ReferencedEntities.model_validate(incubator_data["reference_updates"])
+    for declaration in incubator_data.get("new_entities") or []:
+        NewEntityDeclaration.model_validate(declaration)
+    split_staged_orrery_payload(incubator_data.get("orrery_proposal"))
 
     return True

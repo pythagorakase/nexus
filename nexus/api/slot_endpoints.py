@@ -13,7 +13,6 @@ from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException
 
-from nexus.api.chunk_workflow import ChunkWorkflow
 from nexus.api.db_pool import get_connection
 from nexus.api.narrative_schemas import (
     SlotStateResponse,
@@ -72,7 +71,11 @@ async def get_slot_state_endpoint(slot: int):
             # Add trait menu if in character phase, traits subphase
             ws = state.wizard_state
             if ws.phase == "character" and ws.has_concept and not ws.has_traits:
-                from nexus.api.new_story_cache import get_trait_menu, get_selected_trait_count
+                from nexus.api.new_story_cache import (
+                    get_trait_menu,
+                    get_selected_trait_count,
+                )
+
                 dbname = slot_dbname(slot)
                 trait_menu = get_trait_menu(dbname)
                 selected_count = get_selected_trait_count(dbname)
@@ -137,7 +140,11 @@ async def slot_undo_endpoint(slot: int):
     """
     require_writable_slot(slot)
     from nexus.api.slot_state import get_slot_state
-    from nexus.api.new_story_cache import clear_seed_phase, clear_character_phase, clear_setting_phase
+    from nexus.api.new_story_cache import (
+        clear_seed_phase,
+        clear_character_phase,
+        clear_setting_phase,
+    )
 
     if slot < 1 or slot > 5:
         raise HTTPException(status_code=400, detail="Slot must be between 1 and 5")
@@ -198,13 +205,14 @@ async def slot_undo_endpoint(slot: int):
                 # choice-reset, so either both succeed or both roll back.
                 # (Codex P1 review on PR #205: a previously-split version
                 # left state inconsistent if revert_pending_choice raised.)
-                workflow = ChunkWorkflow(dbname=dbname)
+                from nexus.api.choice_recovery import clear_parent_choice
+
                 parent_chunk_id: Optional[int] = None
                 reverted_parent = False
                 with get_connection(dbname) as conn:
                     with conn.cursor() as cur:
                         cur.execute(
-                            "SELECT parent_chunk_id FROM incubator WHERE session_id = %s",
+                            "SELECT parent_chunk_id FROM incubator WHERE session_id = %s FOR UPDATE",
                             (narrative.session_id,),
                         )
                         row = cur.fetchone()
@@ -221,7 +229,7 @@ async def slot_undo_endpoint(slot: int):
                         # (parent_chunk_id == 0): chunk 1 has no preceding
                         # choice to revert.
                         if parent_chunk_id and parent_chunk_id > 0:
-                            workflow.revert_pending_choice(cur, parent_chunk_id)
+                            clear_parent_choice(cur, parent_chunk_id)
                             reverted_parent = True
 
                 message = (

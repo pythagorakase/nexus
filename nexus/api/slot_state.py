@@ -62,7 +62,7 @@ class WizardState:
 class NarrativeState:
     """State for a slot in narrative mode."""
 
-    current_chunk_id: int
+    current_chunk_id: Optional[int]
     has_pending: bool  # True if incubator has unapproved content
     storyteller_text: Optional[str]
     choices: List[str]  # Available choices from choice_object.presented
@@ -285,7 +285,7 @@ def _get_narrative_state(cur) -> NarrativeState:
         choices = extract_presented_choices(incubator_row.get("choice_object"))
 
         return NarrativeState(
-            current_chunk_id=incubator_row.get("chunk_id") or 0,
+            current_chunk_id=incubator_row.get("chunk_id"),
             has_pending=True,
             storyteller_text=incubator_row.get("storyteller_text"),
             choices=choices,

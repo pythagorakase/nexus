@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "Record the merged explicit-slot mutation helper and declare the PostgreSQL event-source proof dynamic writer.",
+  "reason": "Register shared staging validation and choice recovery on production paths for issue 801",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -185,12 +185,14 @@
     "nexus/api/backstage_endpoints.py",
     "nexus/api/character_tag_manifest.py",
     "nexus/api/choice_handling.py",
+    "nexus/api/choice_recovery.py",
     "nexus/api/chunk_workflow.py",
     "nexus/api/commit_handler_sync.py",
     "nexus/api/config_utils.py",
     "nexus/api/conversations.py",
     "nexus/api/db_converters.py",
     "nexus/api/db_pool.py",
+    "nexus/api/draft_validation.py",
     "nexus/api/entity_tag_manifest_apply.py",
     "nexus/api/faction_table_audit.py",
     "nexus/api/local_inference.py",

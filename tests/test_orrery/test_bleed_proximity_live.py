@@ -1,4 +1,4 @@
-"""Rollback-only slot-5 coverage for proximity-ranked Orrery Bleed.
+"""Disposable-clone coverage for proximity-ranked Orrery Bleed.
 
 Activated by ``NEXUS_RUN_POSTGRES=1``. Every fixture row and temporary update
 is enclosed in one external SQLAlchemy transaction and rolled back.
@@ -24,12 +24,10 @@ from nexus.agents.orrery.bleed import (
     load_bleed_candidates,
     select_bleed_menu,
 )
-from nexus.api.slot_utils import get_slot_db_url
+from tests.pg_fixtures import disposable_slot_database, sqlalchemy_url
 
 
 pytestmark = pytest.mark.requires_postgres
-
-LIVE_SLOT = 5
 
 
 def _insert_chunk(
@@ -158,7 +156,7 @@ def _insert_hunting_edge(
         ),
         {"actor_id": actor_entity_id, "faction_id": faction_entity_id},
     ).scalar_one_or_none()
-    assert result is not None, "slot 5 must register the hunting pair tag"
+    assert result is not None, "template must register the hunting pair tag"
 
 
 def _insert_candidate(
@@ -236,9 +234,13 @@ def _insert_candidate(
 
 @pytest.fixture()
 def bleed_proximity_db() -> Iterator[dict[str, Any]]:
-    """Build an isolated candidate pool and purpose-specific graph in slot 5."""
+    """Build the candidate pool in a disposable clone, never a native save."""
+    with disposable_slot_database("qa640_bleed_proximity") as dbname:
+        yield from _bleed_proximity_rows(dbname)
 
-    engine = create_engine(get_slot_db_url(slot=LIVE_SLOT), future=True)
+
+def _bleed_proximity_rows(dbname: str) -> Iterator[dict[str, Any]]:
+    engine = create_engine(sqlalchemy_url(dbname), future=True)
     connection = engine.connect()
     transaction = connection.begin()
     session = Session(bind=connection)
@@ -255,24 +257,18 @@ def bleed_proximity_db() -> Iterator[dict[str, Any]]:
                 """
             )
         )
-        faction = (
-            session.execute(
-                text(
-                    """
-                    SELECT f.id AS faction_id, f.entity_id
-                    FROM factions f
-                    JOIN entities e ON e.id = f.entity_id
-                    WHERE e.is_active = true
-                    ORDER BY f.entity_id
-                    LIMIT 1
-                    """
-                )
+        faction_entity = session.execute(
+            text(
+                "INSERT INTO entities (kind, is_active) VALUES ('faction', true) RETURNING id"
             )
-            .mappings()
-            .one_or_none()
-        )
-        if faction is None:
-            pytest.skip("save_05 needs one active faction for Bleed coverage")
+        ).scalar_one()
+        faction_id = session.execute(
+            text(
+                "INSERT INTO factions (id, name, entity_id) VALUES (1, 'Bleed fixture faction', :entity) RETURNING id"
+            ),
+            {"entity": faction_entity},
+        ).scalar_one()
+        faction = {"faction_id": faction_id, "entity_id": faction_entity}
 
         latest_world_time = session.execute(
             text("SELECT max(world_time) FROM chunk_metadata")

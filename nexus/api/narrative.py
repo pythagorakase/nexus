@@ -92,6 +92,17 @@ logger = logging.getLogger("nexus.api.narrative")
 
 app = FastAPI(title="NEXUS Narrative API", version="1.0.0")
 
+
+@app.on_event("startup")
+async def recover_active_choice_on_startup() -> None:
+    """Reconcile the active slot before the gateway accepts requests."""
+    from nexus.api.choice_recovery import recover_active_slot_choice
+    from nexus.api.slot_utils import get_active_slot
+
+    if os.environ.get("NEXUS_SLOT") is not None:
+        await asyncio.to_thread(recover_active_slot_choice, get_active_slot())
+
+
 # Configure credentialed CORS from the validated gateway allowlist.
 app.add_middleware(
     CORSMiddleware,
@@ -292,10 +303,11 @@ def _persist_chunk_response(
     cur,
     *,
     is_incubator: bool,
-    chunk_id: int,
+    chunk_id: Optional[int],
     storyteller_text: str,
     choice_object: Optional[Dict[str, Any]],
     choice_text: str,
+    incubator_session_id: Optional[str] = None,
 ) -> str:
     """Persist resolved player response fields for a chunk."""
     raw_text = compute_raw_text(storyteller_text, choice_object, choice_text)
@@ -306,18 +318,18 @@ def _persist_chunk_response(
             UPDATE incubator
             SET choice_object = %s,
                 choice_text = %s
-            WHERE chunk_id = %s
+            WHERE session_id = %s
             """,
             (
                 json.dumps(choice_object) if choice_object else None,
                 choice_text,
-                chunk_id,
+                incubator_session_id,
             ),
         )
         if cur.rowcount != 1:
             raise HTTPException(
                 status_code=409,
-                detail="Incubator chunk_id mismatch; concurrent generation may have replaced it.",
+                detail="Incubator session mismatch; concurrent generation may have replaced it.",
             )
     else:
         cur.execute(
@@ -347,7 +359,7 @@ def _persist_chunk_response(
 def _record_player_response_for_chunk(
     *,
     slot: Optional[int],
-    chunk_id: int,
+    chunk_id: Optional[int],
     user_text: str,
     choice: Optional[int],
     accept_fate: bool,
@@ -377,9 +389,11 @@ def _record_player_response_for_chunk(
                 SELECT chunk_id AS id, storyteller_text, choice_object,
                        choice_text, session_id
                 FROM incubator
-                WHERE chunk_id = %s
+                WHERE (%s IS NOT NULL AND id = TRUE)
+                   OR (%s IS NULL AND chunk_id = %s)
+                FOR UPDATE
                 """,
-                (chunk_id,),
+                (incubator_session_id, incubator_session_id, chunk_id),
             )
             chunk = cur.fetchone()
             if (
@@ -396,6 +410,11 @@ def _record_player_response_for_chunk(
                     },
                 )
             is_incubator = chunk is not None
+            if incubator_session_id is not None and not is_incubator:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Pending generation session no longer owns the incubator",
+                )
 
             if not chunk:
                 cur.execute(
@@ -484,6 +503,7 @@ def _record_player_response_for_chunk(
                 storyteller_text=chunk.get("storyteller_text") or "",
                 choice_object=resolved.choice_object,
                 choice_text=resolved.choice_text,
+                incubator_session_id=str(chunk["session_id"]) if is_incubator else None,
             )
 
         if owns_connection:
@@ -512,8 +532,8 @@ def _trigger_locked_chunk_embedding(
 
     Continuing from chunk N creates a provisional successor, leaving chunk N
     undoable while every committed chunk before it is locked and must be
-    embedded ("embedded == ironman"). Chunk ids are NOT contiguous: regens
-    burn ids, and migration 078 deliberately preserves gaps left by retired
+    embedded ("embedded == ironman"). Chunk ids are NOT contiguous: failed commits
+    historically consumed ids, and migration 078 preserves gaps left by retired
     Retrograde summary rows. The old single-id ``parent - 1`` arithmetic
     therefore silently skipped playable chunks across those gaps.
     This catch-up form embeds every unembedded locked chunk except the
@@ -677,7 +697,7 @@ def _resolve_and_approve_pending_sync(
     *,
     slot: Optional[int],
     session_id: str,
-    chunk_id: int,
+    chunk_id: Optional[int],
     user_text: str,
     choice: Optional[int],
     accept_fate: bool,
@@ -733,7 +753,7 @@ async def _resolve_and_approve_pending(
     *,
     slot: Optional[int],
     session_id: str,
-    chunk_id: int,
+    chunk_id: Optional[int],
     user_text: str,
     choice: Optional[int],
     accept_fate: bool,
@@ -1011,7 +1031,7 @@ async def get_narrative_status(session_id: str, slot: Optional[int] = None):
                 FROM narrative_generation_sessions gs
                 LEFT JOIN incubator i
                   ON i.session_id = gs.session_id
-                 AND i.chunk_id = gs.chunk_id
+                 AND i.chunk_id IS NOT DISTINCT FROM gs.chunk_id
                  AND i.parent_chunk_id = gs.parent_chunk_id
                 WHERE gs.session_id = %s
                 """,
@@ -1396,7 +1416,7 @@ async def select_choice(request: SelectChoiceRequest):
             if not chunk:
                 cur.execute(
                     """
-                    SELECT chunk_id as id, storyteller_text, choice_object, choice_text
+                    SELECT chunk_id as id, storyteller_text, choice_object, choice_text, session_id
                     FROM incubator
                     WHERE chunk_id = %s
                 """,
@@ -1473,6 +1493,7 @@ async def select_choice(request: SelectChoiceRequest):
                 storyteller_text=storyteller_text,
                 choice_object=choice_object,
                 choice_text=choice_text,
+                incubator_session_id=str(chunk["session_id"]) if is_incubator else None,
             )
             if is_incubator:
                 logger.info(

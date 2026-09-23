@@ -64,7 +64,6 @@ from nexus.memory.correspondence import (
 )
 from nexus.memory.context_state import (
     bind_pass2_baseline,
-    validate_staged_pass2_baseline,
 )
 
 logger = logging.getLogger("nexus.api.commit_handler_sync")
@@ -255,17 +254,27 @@ def _require_state_update_id_sync(
     table: str,
     current_id: Optional[int],
     name: Optional[str],
-) -> int:
+    pending_names: frozenset[str] = frozenset(),
+) -> Optional[int]:
     """Resolve one synchronous state-update identity or fail the transaction."""
 
     if current_id is not None:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"SELECT id FROM {table} WHERE id = %s FOR SHARE", (current_id,)
+            )
+            row = cur.fetchone()
+        if row is None:
+            raise ValueError(f"Unresolved {kind} state update id {current_id}")
         return current_id
     if not name:
         raise ValueError(f"{kind} state update requires an id or name")
     with conn.cursor() as cur:
-        cur.execute(f"SELECT id FROM {table} WHERE name = %s", (name,))
+        cur.execute(f"SELECT id FROM {table} WHERE name = %s FOR SHARE", (name,))
         row = cur.fetchone()
     if row is None:
+        if name in pending_names:
+            return None
         raise ValueError(f"Unresolved {kind} state update name {name!r}")
     return _row_value(row, "id", 0)
 
@@ -273,15 +282,19 @@ def _require_state_update_id_sync(
 def resolve_state_update_ids_sync(
     conn,
     state_updates: StateUpdates,
+    *,
+    pending_entities: Optional[Mapping[str, frozenset[str]]] = None,
 ) -> StateUpdates:
     """Resolve all name-addressed state updates to canonical database IDs."""
 
+    pending = pending_entities or {}
     resolved = state_updates.model_copy(deep=True)
     for character_update in resolved.characters:
         character_update.character_id = _require_state_update_id_sync(
             conn,
             kind="character",
             table="characters",
+            pending_names=pending.get("characters", frozenset()),
             current_id=character_update.character_id,
             name=character_update.character_name,
         )
@@ -290,6 +303,7 @@ def resolve_state_update_ids_sync(
             conn,
             kind="place",
             table="places",
+            pending_names=pending.get("places", frozenset()),
             current_id=location_update.place_id,
             name=location_update.place_name,
         )
@@ -298,6 +312,7 @@ def resolve_state_update_ids_sync(
             conn,
             kind="faction",
             table="factions",
+            pending_names=pending.get("factions", frozenset()),
             current_id=faction_update.faction_id,
             name=faction_update.faction_name,
         )
@@ -306,6 +321,7 @@ def resolve_state_update_ids_sync(
             conn,
             kind="relationship character1",
             table="characters",
+            pending_names=pending.get("characters", frozenset()),
             current_id=relationship_update.character1_id,
             name=relationship_update.character1_name,
         )
@@ -313,6 +329,7 @@ def resolve_state_update_ids_sync(
             conn,
             kind="relationship character2",
             table="characters",
+            pending_names=pending.get("characters", frozenset()),
             current_id=relationship_update.character2_id,
             name=relationship_update.character2_name,
         )
@@ -373,7 +390,9 @@ def commit_incubator_to_database_sync(
                     raise ValueError(
                         f"No incubator data found for session {session_id}"
                     )
-                validate_staged_pass2_baseline(incubator["lore_pass_baseline"])
+                from nexus.api.draft_validation import validate_commit_draft_sync
+
+                validate_commit_draft_sync(conn, dict(incubator, session_id=session_id))
 
                 logger.info("Processing incubator session %s", session_id)
 
@@ -472,6 +491,15 @@ def commit_incubator_to_database_sync(
                 chunk_id = cur.fetchone()[0]
                 if chunk_id is None:
                     raise ValueError("Failed to obtain chunk_id after insert")
+                cur.execute(
+                    "UPDATE incubator SET chunk_id = %s WHERE session_id = %s",
+                    (chunk_id, session_id),
+                )
+                cur.execute(
+                    "UPDATE narrative_generation_sessions SET chunk_id = %s "
+                    "WHERE session_id = %s",
+                    (chunk_id, session_id),
+                )
                 logger.info("Created narrative chunk %s", chunk_id)
                 bound_baseline = bind_pass2_baseline(
                     incubator["lore_pass_baseline"], chunk_id

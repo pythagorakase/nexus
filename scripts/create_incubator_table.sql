@@ -3,7 +3,7 @@
 
 CREATE TABLE IF NOT EXISTS incubator (
     id BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (id = TRUE),  -- Ensures only one row
-    chunk_id BIGINT NOT NULL,                               -- The NEW chunk being created (e.g., 1426)
+    chunk_id BIGINT,                                        -- NULL until acceptance assigns the real id
     parent_chunk_id BIGINT NOT NULL,                        -- Where we're continuing from (e.g., 1425)
     user_text TEXT,                                         -- User's completion text for parent chunk
     storyteller_text TEXT,                                  -- Generated text for new chunk
@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS incubator (
 
 COMMENT ON TABLE incubator IS 'Provisional storage for narrative turns awaiting approval';
 COMMENT ON COLUMN incubator.id IS 'Singleton constraint - only one incubation at a time';
-COMMENT ON COLUMN incubator.chunk_id IS 'ID of the new chunk being created (not yet in narrative_chunks)';
+COMMENT ON COLUMN incubator.chunk_id IS 'NULL while provisional; assigned from narrative_chunks INSERT RETURNING id inside acceptance before the incubator row is deleted.';
 COMMENT ON COLUMN incubator.parent_chunk_id IS 'ID of existing chunk being continued from';
 COMMENT ON COLUMN incubator.user_text IS 'User completion text for the parent chunk';
 COMMENT ON COLUMN incubator.storyteller_text IS 'AI-generated storyteller text for the new chunk';

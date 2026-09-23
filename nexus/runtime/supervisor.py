@@ -471,6 +471,9 @@ class Supervisor:
 
         self.state_dir.mkdir(parents=True, exist_ok=True)
         resolved_slot = self._resolve_slot(slot)
+        from nexus.api.choice_recovery import recover_active_slot_choice
+
+        recover_active_slot_choice(resolved_slot)
         ui_index = self.root / "ui" / "dist" / "public" / "index.html"
         if echo and not ui_index.exists():
             print(
