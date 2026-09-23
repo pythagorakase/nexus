@@ -1,6 +1,5 @@
 {
   "database": {
-    "url": "postgresql://pythagor@localhost/NEXUS",
     "create_tables": true,
     "drop_existing": true
   },

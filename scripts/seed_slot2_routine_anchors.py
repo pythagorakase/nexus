@@ -8,6 +8,8 @@ move characters; it only records routine anchors and home residence pair-tags.
 
 from __future__ import annotations
 
+from nexus.database import connection_kwargs
+
 import argparse
 import json
 import os
@@ -38,12 +40,7 @@ ROUTINES = (
 
 
 def _connect(slot: int) -> connection:
-    return psycopg2.connect(
-        dbname=f"save_{slot:02d}",
-        user=os.environ.get("PGUSER", "pythagor"),
-        host=os.environ.get("PGHOST", "localhost"),
-        port=os.environ.get("PGPORT", "5432"),
-    )
+    return psycopg2.connect(**connection_kwargs(f"save_{slot:02d}"))
 
 
 def _character(cur: Any, name: str) -> dict[str, Any]:

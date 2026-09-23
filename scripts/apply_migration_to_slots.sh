@@ -34,10 +34,10 @@ echo "Applying migration: $MIGRATION_FILE"
 echo "Target: All slot databases (save_01 through save_05)"
 echo "----------------------------------------"
 
-# PostgreSQL connection settings
-PGUSER="${PGUSER:-pythagor}"
-PGHOST="${PGHOST:-localhost}"
-PGPORT="${PGPORT:-5432}"
+# The shared resolver supplies server, credentials, and session policy.
+postgres_tool() {
+    "${PYTHON:-python}" -m nexus.database "$@"
+}
 
 SUCCESS_COUNT=0
 FAIL_COUNT=0
@@ -49,9 +49,9 @@ for slot in 01 02 03 04 05; do
     echo "Processing $DB_NAME..."
 
     # Check if database exists
-    if psql -U "$PGUSER" -h "$PGHOST" -p "$PGPORT" -lqt | cut -d \| -f 1 | grep -qw "$DB_NAME"; then
+    if postgres_tool psql -lqt | cut -d \| -f 1 | grep -qw "$DB_NAME"; then
         # Database exists, apply migration
-        if psql -U "$PGUSER" -h "$PGHOST" -p "$PGPORT" -d "$DB_NAME" -f "$MIGRATION_FILE" > /dev/null 2>&1; then
+        if postgres_tool psql -d "$DB_NAME" -f "$MIGRATION_FILE" > /dev/null 2>&1; then
             echo "✓ Successfully applied migration to $DB_NAME"
             ((SUCCESS_COUNT++))
         else

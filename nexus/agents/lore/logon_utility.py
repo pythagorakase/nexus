@@ -4,6 +4,8 @@ LOGON Utility - API Communication Handler for LORE
 Manages communication with Apex AI providers (OpenAI, Anthropic, xAI).
 """
 
+from nexus.database import connection_kwargs
+
 import asyncio
 import copy
 import json
@@ -202,12 +204,7 @@ def read_presence_baseline(
 ) -> PresenceBaseline:
     """Read one parent chunk's character roster and setting place."""
 
-    conn = psycopg2.connect(
-        host=os.environ.get("PGHOST", "localhost"),
-        database=dbname,
-        user=os.environ.get("PGUSER", "pythagor"),
-        port=os.environ.get("PGPORT", "5432"),
-    )
+    conn = psycopg2.connect(**connection_kwargs(dbname))
     try:
         conn.set_session(readonly=True, autocommit=True)
         from nexus.presence.roster import read_roster
@@ -238,12 +235,7 @@ def read_presence_baseline(
 def read_user_character_id(dbname: str) -> int:
     """Read the configured user character for contextual tag exposure."""
 
-    conn = psycopg2.connect(
-        host=os.environ.get("PGHOST", "localhost"),
-        database=dbname,
-        user=os.environ.get("PGUSER", "pythagor"),
-        port=os.environ.get("PGPORT", "5432"),
-    )
+    conn = psycopg2.connect(**connection_kwargs(dbname))
     try:
         conn.set_session(readonly=True, autocommit=True)
         with conn.cursor() as cur:

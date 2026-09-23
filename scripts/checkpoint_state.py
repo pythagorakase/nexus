@@ -11,6 +11,8 @@ approximate before (docs/orrery_audit_dashboard_notes.md, issue #426).
 
 from __future__ import annotations
 
+from nexus.database import connection_kwargs
+
 import argparse
 
 import psycopg2
@@ -20,7 +22,7 @@ from nexus.api.slot_utils import slot_dbname
 
 
 def checkpoint_slot(slot: int, label: str) -> None:
-    conn = psycopg2.connect(dbname=slot_dbname(slot), host="localhost")
+    conn = psycopg2.connect(**connection_kwargs(slot_dbname(slot)))
     try:
         with conn.cursor() as cur:
             cur.execute("SELECT max(id) FROM narrative_chunks")

@@ -35,6 +35,8 @@ Features:
     - Uses OpenAI API with structured outputs
 """
 
+from nexus.database import resolved_database_url
+
 import os
 import sys
 import re
@@ -74,7 +76,7 @@ logger = logging.getLogger("map_builder")
 # Default model to use
 DEFAULT_MODEL = "gpt-4.1"
 
-# Note: place_reference_type enum and place_chunk_references table 
+# Note: place_reference_type enum and place_chunk_references table
 # were created directly in the database
 
 # Database table names
@@ -291,9 +293,9 @@ def connect_to_database(db_url: Optional[str] = None) -> Engine:
     # Get connection string if not provided
     if not db_url:
         db_url = get_db_connection_string()
-    
+
     try:
-        engine = create_engine(db_url)
+        engine = create_engine(resolved_database_url(db_url))
         # Test connection
         with engine.connect() as conn:
             result = conn.execute(text("SELECT version()"))
@@ -863,8 +865,6 @@ def load_prompt_data() -> Dict[str, Any]:
         return prompt_data
 
 
-
-
 def format_places_by_zone(places_by_zone: Dict[Zone, List[Place]]) -> str:
     """
     Format places by zone in a hierarchical structure.
@@ -908,8 +908,6 @@ def format_places_by_zone(places_by_zone: Dict[Zone, List[Place]]) -> str:
     return result
 
 
-
-
 def log_api_response(response, episode_id: str, model: str) -> None:
     """Log API response statistics."""
     result = response.output_parsed
@@ -928,8 +926,6 @@ def log_api_response(response, episode_id: str, model: str) -> None:
     logger.info(f"API tokens used: {usage_stats['input_tokens']} input, "
                f"{usage_stats['output_tokens']} output, "
                f"{usage_stats['total_tokens']} total")
-
-
 
 
 def process_chunks(

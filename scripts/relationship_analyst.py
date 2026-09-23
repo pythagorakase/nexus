@@ -28,6 +28,8 @@ Options:
     --no-color                   Disable colored terminal output
 """
 
+from nexus.database import resolved_database_url
+
 import argparse
 import json
 import os
@@ -48,7 +50,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 from nexus.agents.orrery.relationship_provenance import relationship_producer_sqlalchemy
 
 # Constants
-DATABASE_URL = "postgresql://pythagor@localhost:5432/NEXUS"
+DATABASE_URL = None
 PROMPT_PATH = "/Users/pythagor/nexus/prompts/relationship_analyst.json"
 API_RESPONSE_DIR = "/Users/pythagor/nexus/results"
 
@@ -661,13 +663,13 @@ def setup_terminal_colors(args):
 def create_db_connection():
     """Create connection to the PostgreSQL database."""
     try:
-        engine = create_engine(DATABASE_URL)
+        engine = create_engine(resolved_database_url(DATABASE_URL))
         connection = engine.connect()
-        
+
         # Test connection
         result = connection.execute(text("SELECT 1"))
         connection.close()
-        
+
         return engine
     except SQLAlchemyError as e:
         print(f"Error connecting to database: {e}")

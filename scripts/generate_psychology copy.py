@@ -26,6 +26,8 @@ Usage:
     python generate_psychology.py --character 1 --model gpt-4.1 --overwrite --dry-run
 """
 
+from nexus.database import resolved_database_url
+
 import os
 import sys
 import json
@@ -388,18 +390,18 @@ def main():
     """Main entry point for the script."""
     # Parse command line arguments
     args = parse_arguments()
-    
+
     # Set up abort handler
     setup_abort_handler()
-    
+
     # Connect to database
     db_url = args.db_url or get_db_connection_string()
-    engine = create_engine(db_url)
-    
+    engine = create_engine(resolved_database_url(db_url))
+
     try:
         # Create tables if they don't exist
         character_psychology_table = create_database_tables(engine)
-        
+
         # Check if profile exists and how to handle it
         if check_existing_profile(engine, args.character):
             if args.overwrite:
@@ -408,53 +410,53 @@ def main():
             else:
                 logger.error(f"Profile already exists for character ID {args.character}. Use --overwrite to replace it.")
                 return 1
-        
+
         # If importing from file, skip the generation process
         if args.import_file:
             with open(args.import_file, "r") as f:
                 profile = json.load(f)
-                
+
             # Fetch character info for validation
             character_info = fetch_character_info(engine, args.character)
             if not character_info:
                 logger.error(f"Character with ID {args.character} not found.")
                 return 1
-                
+
             # Validate the profile against the template
             prompt_path = Path("prompts/generate_psychology.json")
             if prompt_path.exists():
                 with open(prompt_path, "r") as f:
                     prompt_template = json.load(f)
-                    
+
                 if not validate_profile(profile, prompt_template):
                     logger.error("Imported profile is invalid. Please check the structure.")
                     return 1
-            
+
             # Save to database if not a dry run
             if not args.dry_run:
                 save_profile_to_database(engine, args.character, profile)
                 logger.info(f"Imported profile saved for character ID {args.character}")
             else:
                 logger.info("Dry run - profile not saved to database.")
-                
+
             return 0
-        
+
         # Fetch character information
         character_info = fetch_character_info(engine, args.character)
         if not character_info:
             logger.error(f"Character with ID {args.character} not found.")
             return 1
-        
+
         logger.info(f"Generating psychological profile for character: {character_info['name']} (ID: {args.character})")
-        
+
         # Fetch data for context
         logger.info("Fetching character roster...")
         character_roster = fetch_character_roster(engine)
-        
+
         logger.info("Fetching narrative corpus (all chunks)...")
         narrative_corpus = fetch_narrative_corpus(engine)
         logger.info(f"Retrieved {len(narrative_corpus)} narrative chunks for analysis.")
-        
+
         # Prepare the prompt
         logger.info("Preparing prompt with context...")
         full_prompt, prompt_template = prepare_prompt(
@@ -462,11 +464,11 @@ def main():
             character_roster, 
             narrative_corpus
         )
-        
+
         # Count tokens
         prompt_tokens = get_token_count(full_prompt, args.model)
         logger.info(f"Prompt prepared with {prompt_tokens} tokens.")
-        
+
         # Initialize the OpenAI provider
         provider = OpenAIProvider(
             api_key=args.api_key,
@@ -476,7 +478,7 @@ def main():
             system_prompt=None,  # System prompt is included in our full prompt
             reasoning_effort=args.effort if args.model.startswith("o") else None
         )
-        
+
         # Check if prompt exceeds token limits
         # We're assuming a higher limit for chat completions compared to responses.parse()
         max_input_tokens = 1000000  # Testing with a higher limit (theoretical max for GPT-4.1)
@@ -484,11 +486,11 @@ def main():
             logger.error(f"Prompt exceeds presumed token limit ({prompt_tokens} tokens > {max_input_tokens}).")
             logger.error("Consider reducing context or using a different approach for very large narratives.")
             return 1
-            
+
         logger.info(f"Using direct chat completions API to test if it handles large contexts differently")
         if prompt_tokens > 128000:
             logger.info(f"This is a large context request ({prompt_tokens} tokens) which may benefit from different API behavior")
-        
+
         # Make the API call using chat completions instead of responses.parse()
         logger.info(f"Calling OpenAI API with model {args.model} using chat completions...")
         start_time = time.time()
@@ -496,14 +498,14 @@ def main():
             # Use OpenAI client directly without provider.get_completion to bypass token limit issue
             # This uses the traditional chat completions API rather than the new responses API
             messages = []
-            
+
             # Add system prompt if there is one
             if provider.system_prompt:
                 messages.append({"role": "system", "content": provider.system_prompt})
-            
+
             # Add user message with the full prompt
             messages.append({"role": "user", "content": full_prompt})
-            
+
             # Direct call to chat completions API
             client = openai.OpenAI(api_key=provider.api_key)
             completion = client.chat.completions.create(
@@ -512,7 +514,7 @@ def main():
                 temperature=provider.temperature,
                 max_tokens=provider.max_tokens
             )
-            
+
             # Create a compatible response object
             response = LLMResponse(
                 content=completion.choices[0].message.content,
@@ -521,10 +523,10 @@ def main():
                 model=provider.model,
                 raw_response=completion
             )
-            
+
             logger.info(f"API call completed in {time.time() - start_time:.2f} seconds.")
             logger.info(f"Response tokens: {response.input_tokens} input, {response.output_tokens} output")
-            
+
             # Parse the response as JSON
             try:
                 profile = json.loads(response.content)
@@ -532,35 +534,35 @@ def main():
                 logger.error("Failed to parse response as JSON. Raw response:")
                 logger.error(response.content[:1000] + "..." if len(response.content) > 1000 else response.content)
                 return 1
-            
+
             # Validate the profile against the template
             if not validate_profile(profile, prompt_template):
                 logger.error("Generated profile is invalid. Raw response:")
                 logger.error(json.dumps(profile, indent=2)[:1000] + "..." if len(json.dumps(profile, indent=2)) > 1000 else json.dumps(profile, indent=2))
                 return 1
-            
+
             # Output to file if requested
             if args.output:
                 with open(args.output, "w") as f:
                     json.dump(profile, f, indent=2)
                 logger.info(f"Profile saved to {args.output}")
-            
+
             # Save to database if not a dry run
             if not args.dry_run:
                 save_profile_to_database(engine, args.character, profile)
                 logger.info(f"Psychological profile saved for character ID {args.character}")
             else:
                 logger.info("Dry run - profile not saved to database.")
-            
+
         except Exception as e:
             logger.error(f"Error during API call: {str(e)}")
             return 1
-        
+
     except Exception as e:
         logger.error(f"Unexpected error: {str(e)}")
         return 1
-    
+
     return 0
 
 if __name__ == "__main__":
-    sys.exit(main()) 
+    sys.exit(main())

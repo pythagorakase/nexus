@@ -9,7 +9,7 @@ when possible and identifies new locations to be added to the database.
 Usage Examples:
     # Test connection and show prompt for the first processable chunk
     python map_builder.py --test
-    
+
     # Test with a specific chunk (e.g., ID 2) to see how the prompt would look with context from chunk 1
     python map_builder.py --start 2 --test
 
@@ -64,8 +64,10 @@ Supported Arguments:
                            (Note: New location submissions will ALWAYS prompt for verification)
 
 Database URL (from api_batch.py):
-postgresql://pythagor@localhost/NEXUS
+[api.database] and the active slot
 """
+
+from nexus.database import resolved_database_url
 
 import os
 import sys
@@ -190,14 +192,14 @@ def parse_arguments() -> argparse.Namespace:
 def get_db_connection(db_url: str) -> Engine:
     """Get database connection using SQLAlchemy."""
     try:
-        engine = create_engine(db_url)
+        engine = create_engine(resolved_database_url(db_url))
         # Test connection
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
         logger.info("Database connection successful.")
         return engine
     except Exception as e:
-        logger.error(f"Database connection error to {db_url}: {str(e)}")
+        logger.error("Database connection failed: %s", e)
         raise
 
 def check_database_schema(db: Engine) -> bool:

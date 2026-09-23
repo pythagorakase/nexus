@@ -7,6 +7,8 @@ Target: Get context packages under 110k tokens to leave headroom for API overhea
 
 from __future__ import annotations
 
+from nexus.database import resolved_database_url
+
 import argparse
 import json
 import logging
@@ -195,7 +197,7 @@ def main():
     )
 
     # Initialize database connection
-    engine = create_engine("postgresql://pythagor@localhost:5432/NEXUS")
+    engine = create_engine(resolved_database_url(None))
 
     LOGGER.info(f"Trimming {len(args.chunks)} context packages to {args.target_tokens:,} tokens")
     LOGGER.info(f"Target chunks: {args.chunks}")

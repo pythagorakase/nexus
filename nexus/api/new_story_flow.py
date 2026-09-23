@@ -4,6 +4,8 @@ Headless helpers to manage new-story setup per slot.
 
 from __future__ import annotations
 
+from nexus.database import connection_kwargs
+
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
@@ -124,7 +126,7 @@ def start_setup(slot_number: int, model: Optional[str] = None) -> str:
 
     # Ensure database exists
     try:
-        conn = psycopg2.connect(database=dbname)
+        conn = psycopg2.connect(**connection_kwargs(dbname))
         conn.close()
     except psycopg2.OperationalError:
         logger.info("Database %s does not exist. Creating...", dbname)

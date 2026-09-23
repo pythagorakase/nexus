@@ -32,6 +32,8 @@ Usage:
 
 from __future__ import annotations
 
+from nexus.database import resolved_database_url
+
 import argparse
 import csv
 import sys
@@ -271,7 +273,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    engine = create_engine(get_slot_db_url(slot=args.slot))
+    engine = create_engine(resolved_database_url(get_slot_db_url(slot=args.slot)))
     with engine.begin() as conn:
         if args.apply:
             reviewed = read_reviewed_csv(args.apply)

@@ -10,6 +10,10 @@ This script:
 4. Validates that the appropriate table is being used for each model
 """
 
+from nexus.database import resolved_database_url
+
+from nexus.database import database_url
+
 import os
 import sys
 import argparse
@@ -28,15 +32,11 @@ logger = logging.getLogger(__name__)
 # Define SQLAlchemy base
 Base = declarative_base()
 
-def get_db_connection_string():
-    """Get the database connection string from environment variables."""
-    DB_USER = os.environ.get("DB_USER", "postgres")
-    DB_PASSWORD = os.environ.get("DB_PASSWORD", "postgres")
-    DB_HOST = os.environ.get("DB_HOST", "localhost")
-    DB_PORT = os.environ.get("DB_PORT", "5432")
-    DB_NAME = os.environ.get("DB_NAME", "nexus")
-    
-    return f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+
+def get_db_connection_string() -> str:
+    """Resolve the database through the runtime connection contract."""
+    return database_url()
+
 
 def validate_table_counts(connection):
     """Count records in each table by model."""
@@ -165,21 +165,21 @@ def main():
     parser = argparse.ArgumentParser(description='Validate embedding tables and models.')
     parser.add_argument('--connection', '-c', help='Database connection string')
     args = parser.parse_args()
-    
+
     # Get database connection
     conn_string = args.connection if args.connection else get_db_connection_string()
     logger.info(f"Connecting to database: {conn_string.split('@')[1]}")
-    
+
     try:
         # Create engine and connect
-        engine = create_engine(conn_string)
+        engine = create_engine(resolved_database_url(conn_string))
         with engine.connect() as connection:
             # Run validations
             validate_table_counts(connection)
             validate_vector_search(connection)
-            
+
         logger.info("Validation complete!")
-        
+
     except Exception as e:
         logger.error(f"Error during validation: {str(e)}")
         sys.exit(1)

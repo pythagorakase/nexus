@@ -105,6 +105,7 @@ export function NexusLayout() {
         slot={slot}
         characterName={userCharacter?.name ?? null}
         skaldStatus={engine.skaldStatus}
+        frontierClock={engine.slotState?.frontier_clock ?? null}
       />
       <div className={`nexus-main ${showLedger ? "" : "no-ledger"}`}>
         <LeftRail

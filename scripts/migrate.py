@@ -16,6 +16,8 @@ Usage:
 
 from __future__ import annotations
 
+from nexus.database import connection_kwargs
+
 import argparse
 import importlib.util
 import logging
@@ -63,12 +65,7 @@ BOOTSTRAP_MIGRATIONS = [
 
 def get_connection(dbname: str):
     """Get a database connection."""
-    return psycopg2.connect(
-        dbname=dbname,
-        user=os.environ.get("PGUSER", "pythagor"),
-        host=os.environ.get("PGHOST", "localhost"),
-        port=os.environ.get("PGPORT", "5432"),
-    )
+    return psycopg2.connect(**connection_kwargs(dbname))
 
 
 def is_db_locked(dbname: str) -> bool:

@@ -3,6 +3,9 @@ Database Schema for MEMNON Agent
 
 Defines the database models and schema for MEMNON's PostgreSQL database.
 """
+from nexus.database import resolved_database_url
+from nexus.database import verify_database_url
+
 
 import logging
 from typing import Dict, Any, Optional
@@ -113,7 +116,8 @@ class DatabaseManager:
             SQLAlchemy engine instance
         """
         try:
-            engine = create_engine(self.db_url)
+            self.db_url = verify_database_url(self.db_url)
+            engine = create_engine(resolved_database_url(self.db_url))
 
             # Verify connection
             connection = engine.connect()
@@ -151,7 +155,7 @@ class DatabaseManager:
                 )
                 logger.warning("Please run scripts/install_pgvector_custom.sh first")
 
-            logger.info(f"Successfully connected to database at {self.db_url}")
+            logger.info("Successfully connected to the configured database")
             return engine
 
         except Exception as e:

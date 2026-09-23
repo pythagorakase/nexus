@@ -13,6 +13,8 @@ Usage:
     poetry run uvicorn nexus.api.mock_openai:app --port 5102
 """
 
+from nexus.database import connection_kwargs
+
 import json
 import logging
 import re
@@ -66,13 +68,7 @@ def get_mock_connection() -> psycopg2.extensions.connection:
     if settings.api is None:
         raise ValueError("nexus.toml is missing the [api] section")
 
-    return psycopg2.connect(
-        host="localhost",
-        database=MOCK_DB,
-        user="pythagor",
-        connect_timeout=settings.api.database.connect_timeout_seconds,
-        cursor_factory=RealDictCursor,
-    )
+    return psycopg2.connect(**connection_kwargs(MOCK_DB), cursor_factory=RealDictCursor)
 
 
 def query_wizard_cache() -> Dict[str, Any]:

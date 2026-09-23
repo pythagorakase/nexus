@@ -5,6 +5,8 @@ This module provides functions for database operations, focusing on vector searc
 and hybrid search capabilities with PostgreSQL.
 """
 
+from nexus.database import url_connection_kwargs, verify_database_url
+
 import logging
 import psycopg2
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
@@ -211,22 +213,9 @@ def check_vector_extension(db_url: str) -> bool:
         Boolean indicating if pgvector is available
     """
     try:
-        # Parse database URL
-        parsed_url = urlparse(db_url)
-        username = parsed_url.username
-        password = parsed_url.password
-        database = parsed_url.path[1:]  # Remove leading slash
-        hostname = parsed_url.hostname
-        port = parsed_url.port or 5432
 
         # Connect to the database
-        conn = psycopg2.connect(
-            host=hostname,
-            port=port,
-            user=username,
-            password=password,
-            database=database,
-        )
+        conn = psycopg2.connect(**url_connection_kwargs(db_url))
 
         with conn.cursor() as cursor:
             # Check if vector extension exists
@@ -274,22 +263,9 @@ def execute_vector_search(
         List of matching chunks with scores and metadata
     """
     try:
-        # Parse database URL
-        parsed_url = urlparse(db_url)
-        username = parsed_url.username
-        password = parsed_url.password
-        database = parsed_url.path[1:]  # Remove leading slash
-        hostname = parsed_url.hostname
-        port = parsed_url.port or 5432
 
         # Connect to the database
-        conn = psycopg2.connect(
-            host=hostname,
-            port=port,
-            user=username,
-            password=password,
-            database=database,
-        )
+        conn = psycopg2.connect(**url_connection_kwargs(db_url))
 
         results = {}
 
@@ -511,23 +487,11 @@ def setup_database_indexes(db_url: str) -> bool:
     Returns:
         Boolean indicating success
     """
+    db_url = verify_database_url(db_url)
     try:
-        # Parse database URL
-        parsed_url = urlparse(db_url)
-        username = parsed_url.username
-        password = parsed_url.password
-        database = parsed_url.path[1:]  # Remove leading slash
-        hostname = parsed_url.hostname
-        port = parsed_url.port or 5432
 
         # Connect to the database
-        conn = psycopg2.connect(
-            host=hostname,
-            port=port,
-            user=username,
-            password=password,
-            database=database,
-        )
+        conn = psycopg2.connect(**url_connection_kwargs(db_url))
 
         conn.autocommit = True
 
@@ -695,13 +659,6 @@ def execute_multi_model_hybrid_search(
     )
 
     try:
-        # Parse database URL
-        parsed_url = urlparse(db_url)
-        username = parsed_url.username
-        password = parsed_url.password
-        database = parsed_url.path[1:]  # Remove leading slash
-        hostname = parsed_url.hostname
-        port = parsed_url.port or 5432
 
         # Validate weights
         if vector_weight + text_weight != 1.0:
@@ -726,13 +683,7 @@ def execute_multi_model_hybrid_search(
         logger.debug(f"Model weights: {model_weights}")
 
         # Connect to the database
-        conn = psycopg2.connect(
-            host=hostname,
-            port=port,
-            user=username,
-            password=password,
-            database=database,
-        )
+        conn = psycopg2.connect(**url_connection_kwargs(db_url))
         if isinstance(idf_dict, IDFDictionary):
             conn.set_session(readonly=True, isolation_level="REPEATABLE READ")
         else:

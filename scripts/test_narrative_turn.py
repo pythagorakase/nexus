@@ -4,6 +4,8 @@ Test script for live narrative turns - completes chunk 1425 with "Continue."
 Tests the full flow: LORE context building → GPT-5.1 call → incubator write
 """
 
+from nexus.database import connection_kwargs
+
 import json
 import logging
 import sys
@@ -65,11 +67,7 @@ class NarrativeTurnTester:
         self.test_suffix = narrative_settings.get("test_database_suffix", "_test")
 
         # Set up database connection
-        self.conn = psycopg2.connect(
-            host="localhost",
-            database="NEXUS",
-            user="pythagor"
-        )
+        self.conn = psycopg2.connect(**connection_kwargs())
         self.conn.autocommit = False
 
         logger.info(f"Initialized NarrativeTurnTester (test_mode={self.test_mode}, dry_run={self.dry_run})")

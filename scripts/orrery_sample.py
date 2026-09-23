@@ -10,6 +10,8 @@ Usage:
 
 from __future__ import annotations
 
+from nexus.database import resolved_database_url
+
 import argparse
 from collections import defaultdict
 from dataclasses import dataclass, field, replace
@@ -668,7 +670,7 @@ def sample_anchor(
     location_overrides: Optional[list[tuple[str, str]]] = None,
 ) -> Path:
     orrery_settings = load_settings_as_dict()["orrery"]
-    engine = create_engine(get_slot_db_url(slot=slot))
+    engine = create_engine(resolved_database_url(get_slot_db_url(slot=slot)))
     with Session(engine) as session:
         actor_only_templates = [
             t for t in BUILTIN_TEMPLATES if t.required_slots == ACTOR_ONLY_SLOTS

@@ -46,6 +46,8 @@ Dependencies:
     - tqdm (for progress bars)
 """
 
+from nexus.database import resolved_database_url
+
 import os
 import sys
 import json
@@ -350,7 +352,7 @@ class EmbeddingRegenerator:
                 self.db_url = explicit_url
 
         # Initialize database connection
-        self.engine = create_engine(self.db_url)
+        self.engine = create_engine(resolved_database_url(self.db_url))
         self.Session = sessionmaker(bind=self.engine)
 
         # First make sure pgvector extension is available and, for write paths,
@@ -437,7 +439,7 @@ class EmbeddingRegenerator:
                 logger.error(f"Failed to load {model_name} model: {e}")
                 sys.exit(1)
 
-        logger.info(f"Connected to database: {self.db_url}")
+        logger.info("Connected to the configured database")
 
     def _ensure_dimension_table_exists(
         self,
@@ -1148,7 +1150,7 @@ def regenerate_missing_chunks(
                     raise RuntimeError(
                         "No database URL provided. Set NEXUS_SLOT (1-5) or NEXUS_DB_URL."
                     )
-        engine = create_engine(db_url)
+        engine = create_engine(resolved_database_url(db_url))
 
         # Get the chunks for these IDs
         chunks = []
@@ -1282,7 +1284,7 @@ def delete_existing_chunk_embedding(
 
     dimensions = get_model_dimensions(model_name)
     table_name = table_name_for_dimensions(dimensions)
-    engine = create_engine(db_url)
+    engine = create_engine(resolved_database_url(db_url))
 
     with engine.begin() as conn:
         table_exists = conn.execute(

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from nexus.database import connection_kwargs
+
 import argparse
 from collections import Counter
 from contextlib import closing
@@ -328,11 +330,10 @@ def corpus_report(
         raise ValueError("from-chunk must not exceed to-chunk")
     with closing(
         psycopg2.connect(
-            dbname=dbname,
-            user=os.environ.get("PGUSER", "pythagor"),
-            host=os.environ.get("PGHOST", "localhost"),
-            port=os.environ.get("PGPORT", "5432"),
-            options="-c default_transaction_read_only=on -c default_transaction_isolation=repeatable\\ read",
+            **connection_kwargs(
+                dbname,
+                options="-c default_transaction_read_only=on -c default_transaction_isolation=repeatable\\ read",
+            ),
             cursor_factory=RealDictCursor,
         )
     ) as conn:

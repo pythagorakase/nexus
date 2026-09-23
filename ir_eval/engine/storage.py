@@ -10,6 +10,8 @@ from typing import Any, Dict, Iterable, List, Optional
 import psycopg2
 import psycopg2.extras
 
+from nexus.database import url_connection_kwargs
+
 from ir_eval.models.schemas import EvalQuery, EvalRunConfig, QueryExecutionResult
 
 
@@ -23,7 +25,7 @@ class EvaluationStore:
     @contextmanager
     def _connect(self):
         """Create a new PostgreSQL connection with guaranteed close."""
-        conn = psycopg2.connect(self.db_url)
+        conn = psycopg2.connect(**url_connection_kwargs(self.db_url))
         try:
             yield conn
         finally:

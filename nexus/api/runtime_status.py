@@ -41,14 +41,31 @@ def _database_status() -> Dict[str, Any]:
         dbname = require_slot_dbname(slot=slot)
     except (RuntimeError, ValueError) as exc:
         return {"ok": False, "error": str(exc)}
+    from nexus.database import (
+        connection_kwargs,
+        connection_target,
+        database_url,
+        url_connection_kwargs,
+    )
+
+    targets = {
+        "pooled": connection_target(connection_kwargs(dbname)),
+        "url": connection_target(url_connection_kwargs(database_url(dbname))),
+    }
     try:
         with get_connection(dbname=dbname) as conn:
             with conn.cursor() as cur:
                 cur.execute("SELECT 1")
                 cur.fetchone()
-        return {"ok": True, "slot": slot, "dbname": dbname}
+        return {"ok": True, "slot": slot, "dbname": dbname, "targets": targets}
     except psycopg2.Error as exc:
-        return {"ok": False, "slot": slot, "dbname": dbname, "error": str(exc)}
+        return {
+            "ok": False,
+            "slot": slot,
+            "dbname": dbname,
+            "targets": targets,
+            "error": str(exc),
+        }
 
 
 def build_runtime_status() -> Dict[str, Any]:

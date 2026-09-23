@@ -22,6 +22,7 @@ from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
 
 from nexus.api.slot_utils import require_slot_dbname
+from nexus.database import connection_kwargs, database_url
 
 logger = logging.getLogger("nexus.api.db_pool")
 
@@ -53,39 +54,16 @@ def get_connect_timeout_seconds() -> int:
     return settings.api.database.connect_timeout_seconds
 
 
-def _get_connection_params(dbname: Optional[str] = None) -> Dict[str, Any]:
-    """
-    Get database connection parameters.
-
-    Args:
-        dbname: Explicit database name (save_01 through save_05).
-                If not provided, uses NEXUS_SLOT env var.
-
-    Returns:
-        Connection parameters dict for psycopg2
-
-    Raises:
-        ValueError: If dbname is not a valid slot database
-        RuntimeError: If no slot can be determined
-    """
-    # Use require_slot_dbname to validate and resolve the database name
-    # This ensures we never accidentally connect to NEXUS
-    resolved_dbname = require_slot_dbname(dbname=dbname)
-
-    return {
-        "dbname": resolved_dbname,
-        "user": os.environ.get("PGUSER", "pythagor"),
-        "host": os.environ.get("PGHOST", "localhost"),
-        "port": os.environ.get("PGPORT", "5432"),
-        # PGCONNECT_TIMEOUT keeps env precedence like the PG* params above;
-        # otherwise the nexus.toml [api.database] value applies.
-        "connect_timeout": int(
-            os.environ.get("PGCONNECT_TIMEOUT") or get_connect_timeout_seconds()
-        ),
-    }
+def _get_connection_params(
+    dbname: Optional[str] = None, **overrides: Any
+) -> Dict[str, Any]:
+    """Resolve a validated slot through the shared connection contract."""
+    return connection_kwargs(require_slot_dbname(dbname=dbname), **overrides)
 
 
-def _get_pool(dbname: Optional[str] = None) -> pool.ThreadedConnectionPool:
+def _get_pool(
+    dbname: Optional[str] = None, **overrides: Any
+) -> pool.ThreadedConnectionPool:
     """
     Get or create a connection pool for the specified database.
 
@@ -103,8 +81,13 @@ def _get_pool(dbname: Optional[str] = None) -> pool.ThreadedConnectionPool:
     # Resolve and validate the database name
     db_key = require_slot_dbname(dbname=dbname)
 
+    params = _get_connection_params(dbname, **overrides)
+    existing = _pools.get(db_key)
+    if existing is not None and existing._kwargs != params:
+        raise RuntimeError(
+            "PostgreSQL pool target changed; close the pool before reconfiguration"
+        )
     if db_key not in _pools:
-        params = _get_connection_params(dbname)
         try:
             _pools[db_key] = pool.ThreadedConnectionPool(
                 MIN_CONNECTIONS, MAX_CONNECTIONS, **params
@@ -118,7 +101,9 @@ def _get_pool(dbname: Optional[str] = None) -> pool.ThreadedConnectionPool:
 
 
 @contextmanager
-def get_connection(dbname: Optional[str] = None, dict_cursor: bool = False):
+def get_connection(
+    dbname: Optional[str] = None, dict_cursor: bool = False, **overrides: Any
+):
     """
     Get a database connection from the pool.
 
@@ -140,7 +125,7 @@ def get_connection(dbname: Optional[str] = None, dict_cursor: bool = False):
                 cur.execute("SELECT * FROM global_variables WHERE id = TRUE")
                 results = cur.fetchall()
     """
-    conn_pool = _get_pool(dbname)
+    conn_pool = _get_pool(dbname, **overrides)
     conn = None
 
     try:
