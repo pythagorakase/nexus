@@ -30,6 +30,17 @@ interface Message {
     artifactData?: any;       // The tool submission data (viewable via modal)
 }
 
+export interface WizardResumeData {
+    thread_id: string;
+    current_phase: Phase | "ready";
+    messages: Pick<Message, "role" | "content">[];
+    choices: string[];
+    setting_draft: any;
+    character_draft: any;
+    selected_seed: any;
+    initial_location: any;
+}
+
 interface InteractiveWizardProps {
     slot: number;
     onComplete: () => void;
@@ -38,7 +49,7 @@ interface InteractiveWizardProps {
     onArtifactConfirmed?: (type: "setting" | "character" | "seed", data: any) => void;
     wizardData: any;
     setWizardData: (data: any) => void;
-    resumeThreadId?: string | null;
+    resumeData?: WizardResumeData | null;
     initialPhase?: Phase;
 }
 
@@ -104,7 +115,7 @@ export function InteractiveWizard({
     onArtifactConfirmed,
     wizardData,
     setWizardData,
-    resumeThreadId,
+    resumeData,
     initialPhase,
 }: InteractiveWizardProps) {
     const [messages, setMessages] = useState<Message[]>([]);
@@ -164,8 +175,14 @@ export function InteractiveWizard({
                 setPendingArtifact(null);
                 setShowTraitSelector(false);
 
-                if (resumeThreadId) {
-                    setThreadId(resumeThreadId);
+                if (resumeData) {
+                    setThreadId(resumeData.thread_id);
+                    setMessages(resumeData.messages.map((message, index) => ({
+                        ...message,
+                        id: `${resumeData.thread_id}-${index}`,
+                        timestamp: 0,
+                    })));
+                    setDisplayChoices(normalizeChoices(resumeData.choices));
                     return;
                 }
 
@@ -208,7 +225,7 @@ export function InteractiveWizard({
 
         initChat();
         return () => { cancelled = true; };
-    }, [slot, resumeThreadId, initializationAttempt]);
+    }, [slot, resumeData, initializationAttempt]);
 
     useEffect(() => {
         setCurrentPhase(initialPhase || "setting");
@@ -962,7 +979,7 @@ export function InteractiveWizard({
                             {messages.map((msg) => (
                                 <motion.div
                                     key={msg.id}
-                                    initial={{ opacity: 0, y: 10 }}
+                                    initial={resumeData ? false : { opacity: 0, y: 10 }}
                                     animate={{ opacity: 1, y: 0 }}
                                     className={cn(
                                         "flex w-full",
@@ -1003,7 +1020,7 @@ export function InteractiveWizard({
                         {/* Structured choices + freeform slot */}
                         {!isLoading && !initializationError && (
                             <motion.div
-                                initial={{ opacity: 0, y: 10 }}
+                                initial={resumeData ? false : { opacity: 0, y: 10 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 className="mt-4"
                             >

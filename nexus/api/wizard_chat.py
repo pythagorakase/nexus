@@ -489,6 +489,7 @@ async def new_story_chat_endpoint(request: ChatRequest):
             )
             content = result.output
             client.add_message(request.thread_id, "assistant", content)
+            write_wizard_choices([], slot_dbname(request.slot))
             return {
                 "message": content,
                 "choices": [],
@@ -517,6 +518,9 @@ async def new_story_chat_endpoint(request: ChatRequest):
             thread_id=request.thread_id,
         )
         if traits_result is not None:
+            write_wizard_choices(
+                traits_result.get("choices", []), slot_dbname(request.slot)
+            )
             return traits_result
 
         # =================================================================
@@ -642,6 +646,7 @@ async def new_story_chat_endpoint(request: ChatRequest):
                             context.last_tool_result["set_design_error"] = str(e)
                             # Still return partial result so user can see the seed
 
+            write_wizard_choices([], slot_dbname(request.slot))
             return context.last_tool_result
         if isinstance(result.output, DeferredToolRequests):
             raise HTTPException(
@@ -662,8 +667,7 @@ async def new_story_chat_endpoint(request: ChatRequest):
             ui_choices,
         )
 
-        if ui_choices:
-            write_wizard_choices(ui_choices, slot_dbname(request.slot))
+        write_wizard_choices(ui_choices, slot_dbname(request.slot))
 
         return {
             "message": wizard_response.message,
@@ -808,9 +812,10 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
                 slot=request.slot,
                 run_id=request.thread_id,
             )
+            client.add_message(request.thread_id, "assistant", result.output)
+            write_wizard_choices([], slot_dbname(request.slot))
             payload = {"type": "message", "message": result.output, "choices": []}
             yield json.dumps(payload) + "\n"
-            client.add_message(request.thread_id, "assistant", result.output)
             return
 
         # Deterministic traits + auto-advance to wildcard (same as /chat endpoint)
@@ -828,6 +833,9 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
             thread_id=request.thread_id,
         )
         if traits_result is not None:
+            write_wizard_choices(
+                traits_result.get("choices", []), slot_dbname(request.slot)
+            )
             yield json.dumps({"type": "artifact", "data": traits_result}) + "\n"
             return
 
@@ -963,6 +971,7 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
                                 logger.error("Set designer (stream) failed: %s", e)
                                 payload["set_design_error"] = str(e)
 
+                write_wizard_choices([], slot_dbname(request.slot))
                 yield json.dumps({"type": "artifact", "data": payload}) + "\n"
                 return
 
@@ -972,8 +981,7 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
                 for c in final_output.choices
                 if isinstance(c, str) and c.strip()
             ]
-            if ui_choices:
-                write_wizard_choices(ui_choices, slot_dbname(request.slot))
+            write_wizard_choices(ui_choices, slot_dbname(request.slot))
             yield json.dumps(
                 {
                     "type": "final",

@@ -3,7 +3,7 @@ import { Menu, Home, Settings, X, Globe, User, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { SlotSelector } from "./SlotSelector";
-import { InteractiveWizard } from "./InteractiveWizard";
+import { InteractiveWizard, type WizardResumeData } from "./InteractiveWizard";
 import { useLocation, Link } from "wouter";
 import { useTheme } from "@/contexts/ThemeContext";
 import {
@@ -62,7 +62,7 @@ const PHASES: { id: WizardPhase; label: string }[] = [
 export function NewStoryWizard() {
     const [currentPhase, setCurrentPhase] = useState<WizardPhase>("slot");
     const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
-    const [resumeThreadId, setResumeThreadId] = useState<string | null>(null);
+    const [resumeData, setResumeData] = useState<WizardResumeData | null>(null);
     const [_, setLocation] = useLocation();
     const { isGilded, isVector, glowClass } = useTheme();
     const { toast } = useToast();
@@ -87,7 +87,7 @@ export function NewStoryWizard() {
     const handleSlotSelected = (slot: number) => {
         setSelectedSlot(slot);
         setCurrentPhase("setting");
-        setResumeThreadId(null);
+        setResumeData(null);
         setWizardData({
             slot,
             setting: null,
@@ -117,12 +117,14 @@ export function NewStoryWizard() {
                     throw new Error("Failed to resume wizard session");
                 }
 
-                const resumeData = await resumeRes.json();
-                const inferredPhase: WizardPhase =
-                    slotData.wizard_phase || resumeData.current_phase ||
-                    (resumeData.selected_seed ? "seed" : resumeData.character_draft ? "character" : "setting");
+                const resumeData: WizardResumeData = await resumeRes.json();
+                if (!resumeData.thread_id || !Array.isArray(resumeData.messages) || !Array.isArray(resumeData.choices)) {
+                    throw new Error("The saved wizard response is incomplete");
+                }
+                const inferredPhase: WizardPhase = resumeData.current_phase === "ready"
+                    ? "seed" : resumeData.current_phase;
 
-                setResumeThreadId(resumeData.thread_id ?? null);
+                setResumeData(resumeData);
                 setWizardData({
                     slot: slotData.slot,
                     setting: resumeData.setting_draft ?? null,
@@ -257,7 +259,7 @@ export function NewStoryWizard() {
                             onArtifactConfirmed={handleArtifactConfirmed}
                             wizardData={wizardData}
                             setWizardData={setWizardData}
-                            resumeThreadId={resumeThreadId}
+                            resumeData={resumeData}
                             initialPhase={currentPhase as "setting" | "character" | "seed"}
                         />
                     </div>

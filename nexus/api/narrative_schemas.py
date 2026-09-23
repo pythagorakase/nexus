@@ -146,6 +146,28 @@ class SelectChoiceResponse(BaseModel):
 # =============================================================================
 
 
+class WizardHistoryMessage(BaseModel):
+    """A persisted conversation message for the wizard transcript."""
+
+    role: Literal["user", "assistant"]
+    content: str
+
+
+class ResumeSetupResponse(BaseModel):
+    """Saved wizard state and chronological conversation for resuming the UI."""
+
+    thread_id: str
+    target_slot: int
+    current_phase: Literal["setting", "character", "seed", "ready"]
+    messages: List[WizardHistoryMessage]
+    choices: List[str]
+    setting_draft: Optional[Dict[str, Any]]
+    character_draft: Optional[Dict[str, Any]]
+    selected_seed: Optional[Dict[str, Any]]
+    initial_location: Optional[Dict[str, Any]]
+    base_timestamp: Optional[datetime]
+
+
 class StartSetupRequest(BaseModel):
     slot: StrictInt = Field(ge=1, le=5)
     model: Optional[str] = None

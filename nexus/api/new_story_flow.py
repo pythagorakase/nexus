@@ -13,6 +13,7 @@ import psycopg2
 
 from nexus.api.conversations import ConversationsClient
 from nexus.api.new_story_cache import (
+    WizardCache,
     clear_cache,
     init_cache,
     read_cache,
@@ -162,7 +163,7 @@ def start_setup(slot_number: int, model: Optional[str] = None) -> str:
     return thread_id
 
 
-def resume_setup(slot_number: int) -> Optional[Dict]:
+def resume_setup(slot_number: int) -> Optional[WizardCache]:
     """
     Resume setup by returning cache contents for the slot.
 
@@ -170,7 +171,7 @@ def resume_setup(slot_number: int) -> Optional[Dict]:
         slot_number: Target save slot (1-5)
 
     Returns:
-        Dictionary containing cached setup data, or None if no cache exists
+        Cached setup data, or None if no cache exists
     """
     dbname = slot_dbname(slot_number)
     cache = read_cache(dbname)

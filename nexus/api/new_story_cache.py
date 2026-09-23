@@ -17,6 +17,7 @@ from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Literal, Mapping, Optional
 
+from nexus.api.choice_handling import extract_presented_choices
 from nexus.api.db_pool import get_connection
 from nexus.api.trait_compiler_schemas import canonical_trait_name
 
@@ -249,6 +250,7 @@ class WizardCache:
     seed: SeedData = field(default_factory=SeedData)
     base_timestamp: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    choices: List[str] = field(default_factory=list)
 
     def setting_complete(self) -> bool:
         """Check if setting phase is complete."""
@@ -512,6 +514,7 @@ def _row_to_cache(
     return WizardCache(
         thread_id=row.get("thread_id"),
         target_slot=row.get("target_slot"),
+        choices=extract_presented_choices(row.get("choice_object")),
         setting=SettingData(
             genre=row.get("setting_genre"),
             secondary_genres=_parse_pg_array(row.get("setting_secondary_genres")),
