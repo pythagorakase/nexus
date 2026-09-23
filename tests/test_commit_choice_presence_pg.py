@@ -13,6 +13,7 @@ import psycopg2
 from psycopg2 import sql
 import pytest
 
+from nexus.agents.logon.apex_schema import StateUpdates
 from nexus.agents.logon.skald_wire import (
     CharacterRef,
     PlaceRef,
@@ -184,7 +185,11 @@ def _insert_staged_turn(
             json.dumps(choice_object) if choice_object is not None else None,
             choice_text,
             json.dumps(metadata_updates or {}),
-            json.dumps(entity_updates) if entity_updates is not None else None,
+            json.dumps(
+                entity_updates
+                if entity_updates is not None
+                else StateUpdates().model_dump(mode="json", exclude_none=True)
+            ),
             json.dumps(reference_updates),
             json.dumps(new_entities or []),
             json.dumps(TEST_BASELINE_PAYLOAD),
