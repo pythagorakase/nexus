@@ -166,9 +166,12 @@ def _jobs(
             ),
         },
     }
+    for name, states in qa_shift.QUEUE_STATES.items():
+        if name not in queues:
+            queues[name] = {"counts": dict.fromkeys(states, 0), "non_terminal_jobs": []}
     counts = {
-        shared_state: maturation_counts[shared_state] + experience_counts[shared_state]
-        for shared_state in ("queued", "leased", "succeeded", "failed")
+        state: sum(q["counts"].get(state, 0) for q in queues.values())
+        for state in qa_shift.SHARED_QUEUE_STATES
     }
     return {
         "success": True,
@@ -212,6 +215,7 @@ def _state(config: qa_shift.ShiftConfig) -> dict[str, object]:
         "last_event_count": 0,
         "last_unknown_usage_events": 0,
         "baseline_failed_jobs": {
+            **dict.fromkeys(qa_shift.QUEUE_STATES, 0),
             "retrograde_maturation": 0,
             "experience_render": 0,
         },
@@ -947,6 +951,7 @@ def test_failure_during_pending_stops_after_settlement_with_full_delta(
     assert pending["status"] == "pending"
     assert pending["reasons"] == []
     assert pending["current_failed_jobs"] == {
+        **dict.fromkeys(qa_shift.QUEUE_STATES, 0),
         "retrograde_maturation": 1,
         "experience_render": 0,
     }
@@ -1011,6 +1016,7 @@ def test_only_non_terminal_maturation_states_block_checks(
     shift_state = _state(qa_shift.load_shift_config())
     if state == "failed":
         shift_state["baseline_failed_jobs"] = {
+            **dict.fromkeys(qa_shift.QUEUE_STATES, 0),
             "retrograde_maturation": 1,
             "experience_render": 0,
         }
@@ -1104,10 +1110,12 @@ def test_new_terminal_maturation_failure_stops_settled_check() -> None:
     assert result["status"] == "stop"
     assert "maturation_job_failed" in result["reasons"]
     assert result["baseline_failed_jobs"] == {
+        **dict.fromkeys(qa_shift.QUEUE_STATES, 0),
         "retrograde_maturation": 0,
         "experience_render": 0,
     }
     assert result["current_failed_jobs"] == {
+        **dict.fromkeys(qa_shift.QUEUE_STATES, 0),
         "retrograde_maturation": 1,
         "experience_render": 0,
     }
@@ -1147,16 +1155,19 @@ def test_preexisting_failed_jobs_become_shift_baseline(tmp_path: Path) -> None:
     )
 
     assert state["baseline_failed_jobs"] == {
+        **dict.fromkeys(qa_shift.QUEUE_STATES, 0),
         "retrograde_maturation": 2,
         "experience_render": 0,
     }
     assert check["status"] == "continue"
     assert "maturation_job_failed" not in check["reasons"]
     assert check["baseline_failed_jobs"] == {
+        **dict.fromkeys(qa_shift.QUEUE_STATES, 0),
         "retrograde_maturation": 2,
         "experience_render": 0,
     }
     assert check["current_failed_jobs"] == {
+        **dict.fromkeys(qa_shift.QUEUE_STATES, 0),
         "retrograde_maturation": 2,
         "experience_render": 0,
     }
@@ -1531,10 +1542,12 @@ def test_finish_marks_new_maturation_failure_unsettled(tmp_path: Path) -> None:
     assert finish["status"] == "finished"
     assert finish["usage_settled"] is False
     assert finish["baseline_failed_jobs"] == {
+        **dict.fromkeys(qa_shift.QUEUE_STATES, 0),
         "retrograde_maturation": 1,
         "experience_render": 0,
     }
     assert finish["current_failed_jobs"] == {
+        **dict.fromkeys(qa_shift.QUEUE_STATES, 0),
         "retrograde_maturation": 2,
         "experience_render": 0,
     }

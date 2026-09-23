@@ -1133,6 +1133,28 @@ async def responses_create(request: ResponsesRequest):
     output_fields = _requested_output_properties(request)
     if output_fields:
         final_result_tool = _requested_output_uses_final_result_tool(request)
+        if output_fields == {"recollections"}:
+            records_text = input_text.rsplit("Scene seed records:\n", 1)[1]
+            records, _ = json.JSONDecoder().raw_decode(records_text.lstrip())
+            return _responses_payload(
+                {
+                    "recollections": [
+                        {
+                            "experience_id": row["experience_id"],
+                            "experience_text": "I remember receiving this account. I kept it in mind.",
+                        }
+                        for row in records
+                    ]
+                },
+                final_result_tool=final_result_tool,
+            )
+        if output_fields == {"digest"}:
+            return _responses_payload(
+                {
+                    "digest": "The accepted exchanges preserve the unresolved pressure and the next intended action."
+                },
+                final_result_tool=final_result_tool,
+            )
         if "updates" in output_fields and "narrative" in output_fields:
             logger.info(
                 "[MOCK] Skald turn wire requested (%d Orrery proposals)",

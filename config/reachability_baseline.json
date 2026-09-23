@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "Route runtime and maintenance database clients through nexus.database for issue 880",
+  "reason": "Issue 800 adds gateway-owned scheduler and durable correspondence compaction modules.",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -237,6 +237,10 @@
     "nexus/config/settings_models.py",
     "nexus/config/story_model.py",
     "nexus/database.py",
+    "nexus/jobs/__init__.py",
+    "nexus/jobs/compaction.py",
+    "nexus/jobs/gate.py",
+    "nexus/jobs/scheduler.py",
     "nexus/memory/__init__.py",
     "nexus/memory/context_state.py",
     "nexus/memory/correspondence.py",

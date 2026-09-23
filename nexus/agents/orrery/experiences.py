@@ -1960,6 +1960,9 @@ def drain_experience_render_jobs_sync(
                 jobs.append(job)
     rendered_count = 0
     for job in jobs:
+        from nexus.jobs.gate import report_leased_job
+
+        report_leased_job("character_experience_jobs", job["job_id"])
         try:
             with conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:

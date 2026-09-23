@@ -163,6 +163,7 @@ _PENDING_SQL = """
     JOIN characters target ON target.id = (version.old_row->>'character2_id')::bigint
     JOIN chunk_metadata metadata ON metadata.chunk_id = coalesce(version.source_chunk_id, {tick})
     WHERE queue.event_id IS NULL
+      {recovery_filter}
       AND (version.source_chunk_id = {tick} OR version.source_chunk_id IS NULL)
     ORDER BY queue.version_id
     FOR UPDATE OF queue
@@ -184,12 +185,24 @@ def emit_relationship_milestones_sync(
     *,
     tick_chunk_id: int,
     epistemics_settings: Any = None,
+    recovery_age_seconds: float | None = None,
 ) -> tuple[tuple[int, ...], tuple[int, ...]]:
     """Consume queued crossings atomically, regardless of their producer."""
     policy = (
         load_epistemics_policy() if epistemics_settings is None else epistemics_settings
     )
-    cur.execute(_PENDING_SQL.format(tick="%s"), (tick_chunk_id,) * 3)
+    recovery_filter = (
+        ""
+        if recovery_age_seconds is None
+        else (
+            "AND version.created_at <= clock_timestamp() - (%s * interval '1 second')"
+        )
+    )
+    params = (tick_chunk_id, tick_chunk_id)
+    if recovery_age_seconds is not None:
+        params += (recovery_age_seconds,)
+    params += (tick_chunk_id,)
+    cur.execute(_PENDING_SQL.format(tick="%s", recovery_filter=recovery_filter), params)
     rows = cur.fetchall()
     event_ids, claim_ids = [], []
     for row in rows:
@@ -221,7 +234,9 @@ async def emit_relationship_milestones_async(
     policy = (
         load_epistemics_policy() if epistemics_settings is None else epistemics_settings
     )
-    rows = await conn.fetch(_PENDING_SQL.format(tick="$1"), tick_chunk_id)
+    rows = await conn.fetch(
+        _PENDING_SQL.format(tick="$1", recovery_filter=""), tick_chunk_id
+    )
     event_ids, claim_ids = [], []
     for row in rows:
         event_id, claim_id = await _emit_milestone_async(

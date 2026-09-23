@@ -423,89 +423,27 @@ def test_clear_semantic_tags_is_conservative_noop_without_local_inference() -> N
     assert cursor.executed == []
 
 
-def test_process_orrery_outbox_includes_semantic_clearance(monkeypatch) -> None:
-    """The background entry point keeps the semantic-clearance compatibility call."""
+@pytest.mark.requires_postgres
+def test_operator_outbox_observes_existing_scheduler(monkeypatch) -> None:
+    """The old entry cannot lease or drain while a gateway holds ownership."""
+    from nexus.api import slot_utils
+    from nexus.jobs.scheduler import SlotScheduler
+    from tests.pg_fixtures import disposable_slot_database, seed_protagonist
 
-    calls = []
-
-    def fake_promote(*_args, **kwargs):
-        calls.append(("promote", kwargs["limit"]))
-        return (1, 2)
-
-    def fake_drain(*_args, **kwargs):
-        calls.append(("drain", kwargs["limit"]))
-        return (3, 4)
-
-    def fake_clear(*_args, **kwargs):
-        calls.append(
-            (
-                "clear",
-                kwargs["limit"],
-                kwargs["recent_chunk_window"],
-                kwargs["evidence_chunk_limit"],
-                kwargs["evidence_event_limit"],
-            )
-        )
-        return 5
-
-    monkeypatch.setattr(
-        "nexus.agents.orrery.worker.promote_pending_resolutions_sync",
-        fake_promote,
-    )
-    monkeypatch.setattr(
-        "nexus.agents.orrery.worker.drain_narration_outbox_sync",
-        fake_drain,
-    )
-    monkeypatch.setattr(
-        "nexus.agents.orrery.worker.clear_semantic_tags_sync",
-        fake_clear,
-    )
-
-    def fake_maturation(*_args, **kwargs):
-        calls.append(("mature", kwargs["limit"]))
-        return (6, 7)
-
-    monkeypatch.setattr(
-        "nexus.agents.orrery.worker.drain_maturation_jobs_sync",
-        fake_maturation,
-    )
-
-    def fake_experiences(*_args, **kwargs):
-        calls.append(("experiences", kwargs["limit"]))
-        return (8, 9)
-
-    monkeypatch.setattr(
-        "nexus.agents.orrery.worker.drain_experience_outbox_sync",
-        fake_experiences,
-    )
-
-    result = process_orrery_outbox_sync(
-        slot=5,
-        promotion_limit=6,
-        narration_limit=7,
-        semantic_clearance_limit=8,
-        semantic_clearance_recent_chunks=9,
-        semantic_clearance_evidence_chunks=10,
-        semantic_clearance_evidence_events=11,
-        maturation_limit=12,
-    )
-
-    assert result.promoted == 1
-    assert result.skipped == 2
-    assert result.narrated == 3
-    assert result.failed == 4
-    assert result.semantically_cleared == 5
-    assert result.matured == 6
-    assert result.maturation_failed == 7
-    assert result.experiences_rendered == 8
-    assert result.experience_render_failed == 9
-    assert calls == [
-        ("promote", 6),
-        ("drain", 7),
-        ("clear", 8, 9, 10, 11),
-        ("mature", 12),
-        ("experiences", None),
-    ]
+    with disposable_slot_database("qa640_worker") as dbname:
+        seed_protagonist(dbname)
+        monkeypatch.setattr(slot_utils, "slot_dbname", lambda slot: dbname)
+        owner = SlotScheduler(4, dbname=dbname)
+        assert owner.acquire()
+        try:
+            result = process_orrery_outbox_sync(slot=4)
+            assert all(value == 0 for value in result.model_dump().values())
+            assert owner.renew()
+        finally:
+            owner.release()
+        result = process_orrery_outbox_sync(slot=4)
+        assert result.semantically_cleared == 0
+        assert all(value == 0 for value in result.model_dump().values())
 
 
 def test_load_orrery_status_sync_counts_background_work() -> None:

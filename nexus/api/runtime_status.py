@@ -90,6 +90,11 @@ def build_runtime_status() -> Dict[str, Any]:
         "auth": {"header": NEXUS_AUTH_HEADER, "enforced": False},
     }
 
+    if database["ok"]:
+        from nexus.agents.orrery.job_queues import load_job_queues_for_slot_sync
+
+        status["jobs"] = load_job_queues_for_slot_sync(database["slot"])
+
     if runtime and runtime.profile == "local":
         gateway = runtime.services.get("gateway")
         if gateway:

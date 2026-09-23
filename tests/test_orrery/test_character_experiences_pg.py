@@ -1558,7 +1558,7 @@ def test_malformed_event_quarantines_without_blocking_accept_response(
     )
     monkeypatch.setattr(
         narrative_api,
-        "_start_post_commit_orrery_work",
+        "wake_scheduler",
         lambda _slot: None,
     )
     with _disposable_database() as dbname:

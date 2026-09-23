@@ -769,43 +769,89 @@ def test_sync_commit_aborts_on_unresolvable_state_update_name(monkeypatch):
     )
 
 
+@pytest.mark.requires_postgres
 def test_post_commit_compaction_failure_preserves_success_and_retries(
-    monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture,
+    monkeypatch,
+    tmp_path,
+    mock_openai_server,
 ) -> None:
-    """Derived compaction cannot turn a durable acceptance into a false 500."""
+    """A real DB rejection leaves the accepted journal intact and retries idle."""
+    from contextlib import closing
+    from nexus.api import slot_utils
+    from nexus.config import load_settings
+    from nexus.jobs.compaction import enqueue_compaction
+    from nexus.jobs.scheduler import SlotScheduler
+    from nexus.memory.correspondence import persist_staged_correspondence
+    from tests.pg_fixtures import connect, disposable_slot_database, seed_protagonist
+    from tests.scheduler_helpers import test_provider_config
+    from tests.test_orrery.test_narration_job_fencing_pg import _insert_chunk
+    from tests.test_api.test_scheduler_pg import wait_until
 
-    attempts = []
-
-    def flaky_compaction(_conn, *, accepting_chunk_id):
-        attempts.append(accepting_chunk_id)
-        if len(attempts) == 1:
-            raise RuntimeError("provider unavailable")
-        return True
-
-    monkeypatch.setattr(
-        commit_handler_sync,
-        "compact_accepted_correspondence_sync",
-        flaky_compaction,
-    )
-    connection = object()
-
-    assert (
-        commit_handler_sync._compact_accepted_correspondence_best_effort(
-            connection,
-            accepting_chunk_id=11,
+    test_provider_config(tmp_path, mock_openai_server, monkeypatch)
+    with disposable_slot_database("qa640_compaction_retry") as dbname:
+        monkeypatch.setattr(
+            slot_utils, "VALID_DBNAMES", slot_utils.VALID_DBNAMES | {dbname}
         )
-        is False
-    )
-    assert (
-        commit_handler_sync._compact_accepted_correspondence_best_effort(
-            connection,
-            accepting_chunk_id=12,
-        )
-        is True
-    )
-    assert attempts == [11, 12]
-    assert "leaving the uncompacted journal intact for retry" in caplog.text
+        seed_protagonist(dbname)
+        config = load_settings().storyteller.correspondence
+        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+            for index in range(config.ceiling_turns + 1):
+                chunk = _insert_chunk(cur, f"Accepted turn {index}")
+                persist_staged_correspondence(
+                    cur,
+                    chunk_id=chunk,
+                    writer_letter="Keep the unresolved pressure.",
+                    gaia_letter="The state is consistent.",
+                )
+            from psycopg2.extras import RealDictCursor
+
+            with conn.cursor(cursor_factory=RealDictCursor) as dict_cur:
+                enqueue_compaction(
+                    dict_cur, accepting_chunk_id=chunk, floor_turns=config.floor_turns
+                )
+            cur.execute(
+                """CREATE FUNCTION reject_digest_for_proof() RETURNS trigger LANGUAGE plpgsql AS $$
+                BEGIN RAISE EXCEPTION 'digest persistence unavailable'; END $$;
+                CREATE TRIGGER reject_digest_for_proof BEFORE INSERT ON storyteller_correspondence_digest_versions
+                FOR EACH ROW EXECUTE FUNCTION reject_digest_for_proof();"""
+            )
+        scheduler = SlotScheduler(4, dbname=dbname)
+        with pytest.raises(RuntimeError, match="digest persistence unavailable"):
+            scheduler.run_pass()
+        with closing(connect(dbname)) as conn, conn, conn.cursor() as cur:
+            cur.execute("SELECT count(*) FROM narrative_chunks")
+            assert cur.fetchone()[0] == config.ceiling_turns + 1
+            cur.execute(
+                "SELECT count(*) FROM storyteller_correspondence_digest_versions"
+            )
+            assert cur.fetchone() == (0,)
+            cur.execute(
+                "SELECT state::text, attempts, last_error FROM correspondence_compaction_jobs"
+            )
+            state, attempts, error = cur.fetchone()
+            assert (state, attempts) == ("queued", 1)
+            assert "digest persistence unavailable" in error
+            cur.execute(
+                "DROP TRIGGER reject_digest_for_proof ON storyteller_correspondence_digest_versions"
+            )
+
+        def completed():
+            with closing(connect(dbname)) as conn, conn.cursor() as cur:
+                cur.execute(
+                    "SELECT state::text, attempts FROM correspondence_compaction_jobs"
+                )
+                return cur.fetchone() == ("succeeded", 2)
+
+        scheduler.start()
+        try:
+            wait_until(completed)
+            with closing(connect(dbname)) as conn, conn.cursor() as cur:
+                cur.execute(
+                    "SELECT count(*) FROM storyteller_correspondence_digest_versions"
+                )
+                assert cur.fetchone() == (1,)
+        finally:
+            scheduler.stop()
 
 
 def test_bootstrap_commit_seeds_setting_for_next_presence_baseline(
@@ -903,3 +949,6 @@ def test_sync_location_state_updates_map_conditions_to_status_column():
 
     statements = conn.cursor_instance.statements
     assert any("UPDATE places SET current_status" in sql for sql in statements)
+
+
+from tests.test_logon_mock_integration import mock_openai_server  # noqa: E402,F401
