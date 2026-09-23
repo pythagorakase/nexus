@@ -157,7 +157,7 @@ def plan_relationship_drift(
 
         def apply(edge: EdgeKey, delta: Decimal, label: str) -> None:
             current = values.get(edge)
-            if current is None:
+            if current is None or delta == ZERO:
                 return
             next_value, effective = soft_clamp_step(current, delta)
             values[edge] = next_value
@@ -201,7 +201,6 @@ def plan_relationship_drift(
                 producer_deltas=tuple(applied[edge]),
             )
             for edge in sorted(applied)
-            if write_values[edge] != old_values[edge]
         )
         return RelationshipDriftPlan(edges=plans)
 

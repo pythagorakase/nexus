@@ -506,11 +506,11 @@ def save_relationship_data(
         MetaData(), 
         autoload_with=engine
     )
-    
+
     # Extract data from the relationship pair
     rel_1_to_2 = relationship_data.rel_1_to_2.model_dump()
     rel_2_to_1 = relationship_data.rel_2_to_1.model_dump()
-    
+
     # Convert to proper database format
     row_1_to_2 = {
         'character1_id': rel_1_to_2['character1_id'],
@@ -523,7 +523,7 @@ def save_relationship_data(
         'extra_data': rel_1_to_2['extra_data'],  # Store as native JSON, not a string
         'updated_at': time.strftime('%Y-%m-%d %H:%M:%S')
     }
-    
+
     row_2_to_1 = {
         'character1_id': rel_2_to_1['character1_id'],
         'character2_id': rel_2_to_1['character2_id'],
@@ -535,25 +535,27 @@ def save_relationship_data(
         'extra_data': rel_2_to_1['extra_data'],  # Store as native JSON, not a string
         'updated_at': time.strftime('%Y-%m-%d %H:%M:%S')
     }
-    
+
     # Save to database in a transaction
     with Session(engine) as session:
         try:
             # Start transaction
             with session.begin():
+                # Stamp the same SQLAlchemy transaction that deletes/inserts the rows.
+                session.execute(text("SET LOCAL nexus.write_producer = 'manual'"))
                 # Check if relationships already exist and delete them
                 stmt1 = select(relationship_table).where(
-                    relationship_table.c.character1_id == row_1_to_2['character1_id'],
-                    relationship_table.c.character2_id == row_1_to_2['character2_id']
+                    relationship_table.c.character1_id == row_1_to_2["character1_id"],
+                    relationship_table.c.character2_id == row_1_to_2["character2_id"],
                 )
                 result1 = session.execute(stmt1).first()
-                
+
                 stmt2 = select(relationship_table).where(
                     relationship_table.c.character1_id == row_2_to_1['character1_id'],
                     relationship_table.c.character2_id == row_2_to_1['character2_id']
                 )
                 result2 = session.execute(stmt2).first()
-                
+
                 # If relationships exist, delete them
                 if result1:
                     delete_stmt1 = relationship_table.delete().where(
@@ -561,30 +563,30 @@ def save_relationship_data(
                         relationship_table.c.character2_id == row_1_to_2['character2_id']
                     )
                     session.execute(delete_stmt1)
-                
+
                 if result2:
                     delete_stmt2 = relationship_table.delete().where(
                         relationship_table.c.character1_id == row_2_to_1['character1_id'],
                         relationship_table.c.character2_id == row_2_to_1['character2_id']
                     )
                     session.execute(delete_stmt2)
-                
+
                 # Insert new relationships
                 insert_stmt1 = relationship_table.insert().values(**row_1_to_2)
                 insert_stmt2 = relationship_table.insert().values(**row_2_to_1)
-                
+
                 session.execute(insert_stmt1)
                 session.execute(insert_stmt2)
-                
+
                 # No more relationship IDs - just return the character IDs as confirmation
                 char1_id = row_1_to_2['character1_id'] 
                 char2_id = row_2_to_1['character1_id']
-                
+
                 # Commit transaction (should happen automatically with context manager)
-            
+
             print(f"Successfully saved relationship data for characters {char1_id} and {char2_id}")
             return char1_id, char2_id
-            
+
         except SQLAlchemyError as e:
             # Transaction will be rolled back automatically
             print(f"Error saving relationship data: {e}")

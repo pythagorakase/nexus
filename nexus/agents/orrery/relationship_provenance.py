@@ -140,7 +140,7 @@ _PENDING_SQL = """
            (version.old_row->>'valence_current')::numeric AS old_valence,
            version.valence_after, version.producer,
            coalesce(version.source_chunk_id, {tick}) AS tick_chunk_id,
-           metadata.world_time
+           metadata.world_time, metadata.world_layer::text AS world_layer
     FROM relationship_milestone_queue queue
     JOIN relationship_versions version ON version.id = queue.version_id
     JOIN characters source ON source.id = (version.old_row->>'character1_id')::bigint
@@ -182,6 +182,7 @@ def emit_relationship_milestones_sync(
             edge=_crossing(row),
             tick_chunk_id=int(_row_get(row, "tick_chunk_id", 6)),
             world_time=_row_get(row, "world_time", 7),
+            world_layer=_row_get(row, "world_layer", 8),
             epistemics_settings=policy,
         )
         cur.execute(
@@ -212,6 +213,7 @@ async def emit_relationship_milestones_async(
             edge=_crossing(row),
             tick_chunk_id=int(row["tick_chunk_id"]),
             world_time=row["world_time"],
+            world_layer=row["world_layer"],
             epistemics_settings=policy,
         )
         await conn.execute(
@@ -260,6 +262,7 @@ def _emit_milestone_sync(
     edge: RelationshipCrossing,
     tick_chunk_id: int,
     world_time: datetime,
+    world_layer: str,
     epistemics_settings: Any,
 ) -> tuple[int, Optional[int]]:
     labels = [label for label, _delta in edge.producer_deltas]
@@ -270,7 +273,7 @@ def _emit_milestone_sync(
             event_type, tick_chunk_id, actor_entity_id, target_entity_id,
             world_layer, source, changed_fields, payload, world_time
         ) VALUES (
-            %s, %s, %s, %s, 'primary', 'resolver',
+            %s, %s, %s, %s, %s::world_layer_type, 'resolver',
             ARRAY['character_relationships.valence_current']::text[],
             {_MILESTONE_PAYLOAD_SYNC}, %s
         )
@@ -281,6 +284,7 @@ def _emit_milestone_sync(
             tick_chunk_id,
             edge.source_entity_id,
             edge.target_entity_id,
+            world_layer,
             edge.producer,
             edge.old_rung,
             edge.new_rung,
@@ -313,6 +317,7 @@ async def _emit_milestone_async(
     edge: RelationshipCrossing,
     tick_chunk_id: int,
     world_time: datetime,
+    world_layer: str,
     epistemics_settings: Any,
 ) -> tuple[int, Optional[int]]:
     labels = [label for label, _delta in edge.producer_deltas]
@@ -323,7 +328,7 @@ async def _emit_milestone_async(
             event_type, tick_chunk_id, actor_entity_id, target_entity_id,
             world_layer, source, changed_fields, payload, world_time
         ) VALUES (
-            $1, $2, $3, $4, 'primary', 'resolver',
+            $1, $2, $3, $4, $13::world_layer_type, 'resolver',
             ARRAY['character_relationships.valence_current']::text[],
             {_MILESTONE_PAYLOAD_ASYNC}, $11
         )
@@ -341,6 +346,7 @@ async def _emit_milestone_async(
         deltas,
         world_time,
         edge.producer,
+        world_layer,
     )
     await _insert_event_entities_async(conn, event_id=int(event_id), edge=edge)
     participants = await _claim_participants_async(conn, edge)
