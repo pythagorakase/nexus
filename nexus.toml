@@ -17,9 +17,9 @@
 [global.model.api_models.openai]
 models = [
     { id = "o3", label = "o3", unsupported_params = ["temperature", "top_p"] },
-    { id = "gpt-6-astra", label = "GPT-6-Astra", unsupported_params = ["temperature", "top_p"] },
-    { id = "gpt-5.6-sol", label = "GPT-5.6-Sol", unsupported_params = ["temperature", "top_p"], uses = ["apex.gaia_model", "orrery.experiences.model", "storyteller.correspondence.compaction_model"] },
-    { id = "gpt-5.6-terra", label = "GPT-5.6-Terra", unsupported_params = ["temperature", "top_p"], uses = ["apex.model", "global.model.default_model", "ir_eval.judgment.model", "orrery.retrograde.maturation.model_ref", "wizard.default_model"] },
+    { id = "gpt-6-astra", label = "GPT-6-Astra", unsupported_params = ["temperature", "top_p"], uses = ["apex.model", "wizard.default_model"]},
+    { id = "gpt-5.6-sol", label = "GPT-5.6-Sol", unsupported_params = ["temperature", "top_p"], uses = ["orrery.experiences.model", "storyteller.correspondence.compaction_model"] },
+    { id = "gpt-5.6-terra", label = "GPT-5.6-Terra", unsupported_params = ["temperature", "top_p"], uses = ["global.model.default_model", "ir_eval.judgment.model", "orrery.retrograde.maturation.model_ref"] },
 ]
 
 [global.model.api_models.anthropic]

@@ -98,8 +98,10 @@ def protected_database(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
     try:
         with psycopg2.connect(dbname=dbname, **connection_args) as conn:
             with conn.cursor() as cur:
-                cur.execute("CREATE TABLE incubator (id boolean PRIMARY KEY)")
-                cur.execute("INSERT INTO incubator VALUES (true)")
+                cur.execute(
+                    "CREATE TABLE incubator (id boolean PRIMARY KEY, session_id uuid)"
+                )
+                cur.execute("INSERT INTO incubator (id) VALUES (true)")
                 cur.execute("CREATE VIEW incubator_view AS SELECT * FROM incubator")
         conn.close()
         monkeypatch.setattr(
