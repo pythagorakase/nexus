@@ -460,8 +460,8 @@ def test_writer_render_is_compact_optional_and_absent_from_gaia_context() -> Non
 
     assert "=== ORRERY AMBIENT SCENE SEEDS ===" in writer_prompt
     assert (
-        "Ambient cues are optional; adapt, delay, or ignore them freely, and let "
-        "silence stand when the scene wants it."
+        "Ambient cues are optional texture. Skald uses one when the scene changes "
+        "or a named actor is about to re-enter, and otherwise lets silence stand."
     ) in writer_prompt
     assert writer_prompt.count(f"- {seed.seed_id} ") == 1
     assert "claims=" in writer_prompt
