@@ -269,7 +269,9 @@ def test_begin_creates_archive_and_pins_every_remote_model(
     assert state["status"] == "active"
     assert model["default_slot_model"] == "gpt-5.6-terra"
     assert document["apex"]["model"] == config.target_model
-    assert document["apex"]["gaia_model"] == config.target_model
+    assert (
+        document["apex"].get("gaia_model") or document["apex"]["model"]
+    ) == config.target_model
     assert document["wizard"]["fallback_model"] == config.target_model
     assert "provider" not in document["orrery"]["narration"]
     assert "model_ref" not in document["orrery"]["narration"]

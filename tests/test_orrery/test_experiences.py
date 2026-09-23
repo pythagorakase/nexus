@@ -91,7 +91,13 @@ def test_experience_config_resolves_model_and_eligibility() -> None:
 
     assert experiences.enabled is True
     assert experiences.include_player_character is False
-    assert experiences.model == (settings.apex.gaia_model)
+    selected_model = next(
+        entry.id
+        for provider in settings.global_.model.api_models.values()
+        for entry in provider.models
+        if "orrery.experiences.model" in entry.uses
+    )
+    assert experiences.model == selected_model
     assert experiences.minimum_dossier_fields == 2
     assert experiences.max_seeds_per_render == 12
     assert (
