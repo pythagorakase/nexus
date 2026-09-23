@@ -50,7 +50,7 @@
 **Terminal Window Components**:
 - **StatusBar**: Fixed top bar with system status, model info, chapter/scene indicators, hamburger menu
 - **CommandBar**: Fixed bottom input with prefix label ("ALEX:" or "NEXUS:USER"), monospace input, blinking cursor
-- **NarrativePane**: Scrollable story display with typewriter effect, section-based rendering
+- **NarrativePane**: Scrollable story display with instant, section-based rendering
 - **NavigationPane**: Collapsible right sidebar with chunk/episode tree navigation
 - **MapPane**: D3.js geographic visualization with location markers
 - **ZonesPane**: Location-based zone selection interface
@@ -70,8 +70,9 @@
 
 ### E. Animations
 
+Narrative text renders in full immediately, with parsed Markdown and actionable choices.
+
 **Core Animations** (use sparingly):
-- Typewriter effect: 50ms per character for narrative text
 - Loading spinner: Rotating ASCII characters [/,—,\,|]
 - Progress bars: ASCII fill animation using █ characters
 - Fade in: 300ms ease for panel transitions
@@ -103,7 +104,7 @@
 **Narrative Pane Features**:
 - Chunk header with metadata (location, timestamp, characters)
 - Section-based rendering with "you" vs "storyteller" distinction
-- Typewriter reveal for new content
+- Instant rendering of new content with parsed Markdown
 - Provisional input preview during confirmation
 - Scrollable with automatic scroll-to-bottom on new content
 
@@ -136,7 +137,7 @@
 3. **CRT effects mandatory** - Scanlines and subtle flicker on all surfaces
 4. **ASCII-based indicators** - Use █ ▓ ▒ ░ for progress, [OK] [FAIL] for status
 5. **No images/photos** - Pure terminal interface (except map SVG elements)
-6. **Typewriter reveals** - All new narrative text types character-by-character
+6. **Instant Narrative Rendering** - All new narrative text appears in full immediately; choices are immediately actionable
 7. **Command-driven UX** - Slash commands as primary navigation pattern
 
 ---

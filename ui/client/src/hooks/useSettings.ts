@@ -50,9 +50,6 @@ export function applySettingsPatch(
     }
     next.ui = { ...next.ui, fonts: fonts as FontMatrix };
   }
-  if (patch.typewriter_ms_per_char !== undefined) {
-    next.ui = { ...next.ui, typewriter_ms_per_char: patch.typewriter_ms_per_char };
-  }
   if (patch.test_mode !== undefined) {
     next.global = {
       ...payload.global,

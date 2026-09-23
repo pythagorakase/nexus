@@ -28,7 +28,6 @@ export interface SettingsMeta {
   models: ModelOption[];
   /** Providers APEXSettings.provider accepts (the wizard accepts all). */
   apex_allowed_providers: string[];
-  typewriter: { min: number; max: number };
 }
 
 export interface LoreBudgetSlider {
@@ -83,7 +82,6 @@ export interface SettingsPayload {
   };
   /** Mirrors `[ui]` in nexus.toml (UISettings in settings_models.py). */
   ui?: {
-    typewriter_ms_per_char?: number;
     theme?: ThemeId;
     fonts?: FontMatrix;
     lore_budget_slider?: LoreBudgetSlider;
@@ -96,7 +94,6 @@ export interface SettingsPayload {
 export interface SettingsPatch {
   theme?: ThemeId;
   fonts?: Partial<Record<ThemeId, Partial<FontSlots>>>;
-  typewriter_ms_per_char?: number;
   test_mode?: boolean;
   apex_model_id?: string;
   /** Null clears the independent assignment so Gaia follows the active Skald. */

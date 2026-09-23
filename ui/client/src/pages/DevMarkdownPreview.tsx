@@ -3,14 +3,11 @@
  *
  * Registered at /dev/markdown only when import.meta.env.DEV (see App.tsx).
  * Feeds a real save_02 legacy-corpus excerpt (narrative_chunks id 1425) and a
- * replayable typewriter reveal through the exact components and markup
- * NarrativePane uses (.reader / .prose-block / .md-part), so heading scale,
- * voice color, emphasis, and mid-reveal stabilization can be verified in a
- * real browser without staging database state.
+ * current chunk through the exact components and markup NarrativePane uses
+ * (.reader / .prose-block / .md-part), so heading scale, voice color, and
+ * emphasis can be verified in a real browser without staging database state.
  */
-import { useState } from "react";
 import { ProseMarkdown } from "@/components/nexus/ProseMarkdown";
-import { TypewriterText } from "@/components/nexus/TypewriterText";
 import "@/components/nexus/nexus-layout.css";
 
 const LEGACY_EXCERPT = `<!-- SCENE BREAK: S05E06_001 (episode heading) -->
@@ -37,14 +34,13 @@ The crew **moves through the quiet streets, recovering from the night before—s
 
 Plain body prose stays upright; only *marked* spans italicize and only **marked** spans embolden.`;
 
-const REVEAL_TEXT = `## Arrival
+const CURRENT_TEXT = `## Arrival
 
 The dory knocks against the quay, the *Gullwise* riding low, and somewhere behind the fog a bell counts what the **harbor refuses to say out loud**.
 
 You hold the lamp steady.`;
 
 export default function DevMarkdownPreview() {
-  const [run, setRun] = useState(1);
   return (
     <div style={{ padding: 28, background: "var(--bg)", minHeight: "100vh" }}>
       <article className="reader" data-testid="dev-markdown-reader">
@@ -62,29 +58,14 @@ export default function DevMarkdownPreview() {
                   </div>
                 </div>
               </div>
-              <div className="chunk-block current" data-testid="dev-md-reveal">
+              <div className="chunk-block current" data-testid="dev-md-current">
                 <div className="prose-block">
                   <div className="md-part st">
-                    <TypewriterText
-                      key={run}
-                      text={REVEAL_TEXT}
-                      msPerChar={18}
-                      animate
-                      markdown
-                    />
+                    <ProseMarkdown text={CURRENT_TEXT} />
                   </div>
                 </div>
               </div>
             </section>
-            <button
-              type="button"
-              className="choice"
-              onClick={() => setRun((r) => r + 1)}
-              data-testid="button-replay-reveal"
-            >
-              <span className="choice-glyph">◆</span>
-              <span className="choice-text">Replay the reveal.</span>
-            </button>
           </div>
         </div>
       </article>
