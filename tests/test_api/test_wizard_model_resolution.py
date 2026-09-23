@@ -234,9 +234,19 @@ def test_start_setup_preserves_explicit_test_model_on_restart(
 
 @pytest.mark.requires_postgres
 def test_setup_endpoint_passes_omitted_model_to_core(
+    monkeypatch: pytest.MonkeyPatch,
     offline_gate_db: str,
 ) -> None:
-    """An omitted model preserves the persisted TEST stamp through real setup."""
+    """Pass omission unchanged to real setup and preserve its persisted stamp."""
+    starts: list[tuple[int, str | None]] = []
+    original_start_setup = setup_endpoints.start_setup
+
+    def observed_start_setup(slot: int, model: str | None) -> str:
+        """Record endpoint arguments while running the genuine setup."""
+        starts.append((slot, model))
+        return original_start_setup(slot, model)
+
+    monkeypatch.setattr(setup_endpoints, "start_setup", observed_start_setup)
     # Establish an intentional TEST stamp, distinct from a fresh-slot default.
     previous_thread = new_story_flow.start_setup(4, model="TEST")
     app = FastAPI()
@@ -244,6 +254,7 @@ def test_setup_endpoint_passes_omitted_model_to_core(
     response = TestClient(app).post("/api/story/new/setup/start", json={"slot": 4})
 
     assert response.status_code == 200, response.text
+    assert starts == [(4, None)]
     result = response.json()
     assert result["model"] == "TEST"
     assert result["thread_id"] != previous_thread

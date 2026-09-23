@@ -344,9 +344,23 @@ async def test_cancelled_auto_approval_releases_lease_and_hands_off_post_commit(
     maturation_finished = threading.Event()
     commit_connections: list[Any] = []
     worker_errors: list[BaseException] = []
+    acquired_sessions: list[str] = []
+    abandoned_sessions: list[tuple[str, str]] = []
+    original_acquire = narrative._acquire_generation_owner
+    original_abandon = narrative._abandon_generation_owner
     original_commit = commit_handler_sync.commit_incubator_to_database_sync
     original_post_commit = narrative._run_post_commit_orrery_work
     original_maturation = retrograde_maturation.drain_maturation_jobs_sync
+
+    def observed_acquire(**kwargs: Any) -> None:
+        """Record the session passed to the real lease acquisition."""
+        acquired_sessions.append(kwargs["session_id"])
+        original_acquire(**kwargs)
+
+    def observed_abandon(**kwargs: Any) -> None:
+        """Record cancellation arguments while releasing the real lease."""
+        abandoned_sessions.append((kwargs["session_id"], kwargs["error"]))
+        original_abandon(**kwargs)
 
     def gated_real_commit(
         conn: Any,
@@ -359,6 +373,7 @@ async def test_cancelled_auto_approval_releases_lease_and_hands_off_post_commit(
         commit_connections.append(conn)
         commit_started.set()
         try:
+            assert warning_sink == []
             assert release_commit.wait(timeout=5)
             assert not conn.closed
             return original_commit(conn, session_id, slot, warning_sink=warning_sink)
@@ -387,6 +402,8 @@ async def test_cancelled_auto_approval_releases_lease_and_hands_off_post_commit(
         finally:
             maturation_finished.set()
 
+    monkeypatch.setattr(narrative, "_acquire_generation_owner", observed_acquire)
+    monkeypatch.setattr(narrative, "_abandon_generation_owner", observed_abandon)
     monkeypatch.setattr(
         commit_handler_sync, "commit_incubator_to_database_sync", gated_real_commit
     )
@@ -409,6 +426,8 @@ async def test_cancelled_auto_approval_releases_lease_and_hands_off_post_commit(
         continue_task.cancel()
         with pytest.raises(asyncio.CancelledError):
             await continue_task
+        assert acquired_sessions == [lease_session]
+        assert abandoned_sessions == [(acquired_sessions[0], "CancelledError")]
         with closing(connect(dbname)) as conn, conn.cursor() as cur:
             cur.execute("SELECT count(*) FROM narrative_generation_lease")
             assert cur.fetchone() == (0,)
