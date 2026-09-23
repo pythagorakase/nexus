@@ -52,6 +52,7 @@ from nexus.agents.orrery.substrate import coerce_project_policy
 from nexus.agents.orrery.templates import ADVANCE_BUILD_VENTURE
 from nexus.api.slot_utils import get_slot_db_url
 from nexus.config import load_settings
+from nexus.agents.orrery.relationship_provenance import relationship_producer
 
 pytestmark = pytest.mark.requires_postgres
 
@@ -92,17 +93,20 @@ def project_db() -> Iterator[dict[str, Any]]:
                 """,
                 (actor_ids,),
             )
-            cur.execute(
-                """
-                DELETE FROM character_relationships cr
-                USING characters c1, characters c2
-                WHERE cr.character1_id = c1.id
-                  AND cr.character2_id = c2.id
-                  AND c1.entity_id = ANY(%s)
-                  AND c2.entity_id = ANY(%s)
-                """,
-                (character_ids, character_ids),
-            )
+            # Migration 115 attributes every relationship write; the fixture's
+            # manual clearing is declared as such inside the rolled-back transaction.
+            with relationship_producer(cur, "manual"):
+                cur.execute(
+                    """
+                    DELETE FROM character_relationships cr
+                    USING characters c1, characters c2
+                    WHERE cr.character1_id = c1.id
+                      AND cr.character2_id = c2.id
+                      AND c1.entity_id = ANY(%s)
+                      AND c2.entity_id = ANY(%s)
+                    """,
+                    (character_ids, character_ids),
+                )
         yield {
             "conn": conn,
             "session": session,
@@ -413,20 +417,21 @@ def test_seek_redemption_rejects_non_materializing_planned_enemy(
     actor_id, actor = db["characters"][0]
     target_id, target = db["characters"][8]
     with db["conn"].cursor() as cur:
-        cur.execute(
-            """
-            INSERT INTO character_relationships (
-                character1_id, character2_id, relationship_type,
-                emotional_valence, dynamic, recent_events, history
+        with relationship_producer(cur, "manual"):
+            cur.execute(
+                """
+                INSERT INTO character_relationships (
+                    character1_id, character2_id, relationship_type,
+                    emotional_valence, dynamic, recent_events, history
+                )
+                SELECT target_c.id, actor_c.id, 'friend',
+                       '+2|friendly', '', '', ''
+                FROM characters target_c, characters actor_c
+                WHERE target_c.entity_id = %s
+                  AND actor_c.entity_id = %s
+                """,
+                (target_id, actor_id),
             )
-            SELECT target_c.id, actor_c.id, 'friend',
-                   '+2|friendly', '', '', ''
-            FROM characters target_c, characters actor_c
-            WHERE target_c.entity_id = %s
-              AND actor_c.entity_id = %s
-            """,
-            (target_id, actor_id),
-        )
         packet, seeds, expansion = _contracts(
             db["vocabulary"],
             [("seed_redemption", "seek_redemption", actor, target)],
