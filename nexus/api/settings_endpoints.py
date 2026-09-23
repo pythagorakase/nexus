@@ -3,8 +3,8 @@ FastAPI endpoints for the operator settings surface (GET/PATCH /api/settings).
 
 GET serves nexus.toml with concrete model selections, plus the legacy
 "Agent Settings"/"API Settings" aliases the React client predates, plus a
-derived ``settings_meta`` block (model options, apex provider allowlist,
-typewriter bounds) so the client never hardcodes config semantics.
+derived ``settings_meta`` block (model options and apex provider allowlist)
+so the client never hardcodes config semantics.
 
 PATCH accepts a typed subset of safe-to-edit keys and persists them through
 ``nexus.config.loader.save_settings``, which validates the merged document
@@ -30,7 +30,6 @@ except ModuleNotFoundError:  # pragma: no cover - exercised only on Python <3.11
 from nexus.config.loader import save_settings
 from nexus.config.settings_models import (
     APEXSettings,
-    UISettings,
     materialize_model_selections,
 )
 
@@ -72,9 +71,6 @@ class SettingsPatchRequest(BaseModel):
     )
     fonts: Optional[Dict[ThemeId, FontSlotsPatch]] = Field(
         default=None, description="Per-theme font slot choices (ui.fonts.*)"
-    )
-    typewriter_ms_per_char: Optional[int] = Field(
-        default=None, description="Typewriter reveal speed (ui.typewriter_ms_per_char)"
     )
     test_mode: Optional[bool] = Field(
         default=None, description="Test write routing (global.narrative.test_mode)"
@@ -122,10 +118,6 @@ def _field_constraint(model: type[BaseModel], field: str, attr: str) -> Any:
 # Resolved eagerly so a renamed/removed Pydantic constraint fails at import
 # (server startup) rather than on the first GET /api/settings request.
 _APEX_PROVIDER_PATTERN: str = _field_constraint(APEXSettings, "provider", "pattern")
-_TYPEWRITER_BOUNDS: Dict[str, int] = {
-    "min": _field_constraint(UISettings, "typewriter_ms_per_char", "ge"),
-    "max": _field_constraint(UISettings, "typewriter_ms_per_char", "le"),
-}
 
 
 def _build_settings_meta(raw: Dict[str, Any]) -> Dict[str, Any]:
@@ -163,7 +155,6 @@ def _build_settings_meta(raw: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "models": models,
         "apex_allowed_providers": apex_allowed_providers,
-        "typewriter": dict(_TYPEWRITER_BOUNDS),
     }
 
 
@@ -195,8 +186,6 @@ def _updates_from_patch(patch: SettingsPatchRequest) -> Dict[str, Any]:
                 value = getattr(slots, slot)
                 if value is not None:
                     updates[f"ui.fonts.{theme_id}.{slot}"] = value
-    if patch.typewriter_ms_per_char is not None:
-        updates["ui.typewriter_ms_per_char"] = patch.typewriter_ms_per_char
     if patch.test_mode is not None:
         updates["global.narrative.test_mode"] = patch.test_mode
     if patch.apex_model_id is not None:

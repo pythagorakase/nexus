@@ -54,7 +54,6 @@ if (typeof window !== "undefined" && !(window as any).__dsFetchStubbed) {
         vector: { body: "Rajdhani", menu: "Source Code Pro", display: "Sixtyfour" },
       },
       lore_budget_slider: { min: 8000, max: 200000, step: 1000, stops: [8000, 32000, 64000, 128000, 200000] },
-      typewriter_ms_per_char: 18,
     },
     apex: { model: "@anthropic.apex", provider: "anthropic" },
     lore: { token_budget: { apex_context_window: 128000 } },
@@ -66,7 +65,6 @@ if (typeof window !== "undefined" && !(window as any).__dsFetchStubbed) {
         { provider: "openai", role: "apex", ref: "@openai.apex", label: "GPT-5" },
       ],
       apex_allowed_providers: ["anthropic", "openai"],
-      typewriter: { min: 0, max: 60 },
     },
   });
   // Local-model manager (/api/local-models). LocalModelRows does

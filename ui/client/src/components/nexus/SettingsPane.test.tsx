@@ -21,12 +21,10 @@ const SETTINGS: SettingsPayload = {
   ui: {
     theme: "veil",
     fonts: KEEPERS,
-    typewriter_ms_per_char: 20,
   },
   settings_meta: {
     models: [],
     apex_allowed_providers: [],
-    typewriter: { min: 1, max: 500 },
   },
 };
 
@@ -143,7 +141,6 @@ describe("SettingsPane model card local provider", () => {
       ...SETTINGS,
       local_models: { model: "nousresearch/hermes-4-70b" },
       settings_meta: {
-        typewriter: { min: 1, max: 500 },
         models: [
           {
             provider: "local",

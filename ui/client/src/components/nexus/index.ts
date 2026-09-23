@@ -6,4 +6,3 @@ export { RightLedger } from "./RightLedger";
 export { CharactersPane } from "./CharactersPane";
 export { MapPane } from "./MapPane";
 export { SettingsPane } from "./SettingsPane";
-export { TypewriterText } from "./TypewriterText";
