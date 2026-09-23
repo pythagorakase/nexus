@@ -2253,6 +2253,7 @@ def test_trust_and_shared_status_can_disclose_private_claim(session: Session) ->
         label="trusted private briefing",
         scope="private",
     )
+    session.execute(text("SET LOCAL nexus.write_producer = 'manual'"))
     session.execute(
         text(
             """
@@ -2268,6 +2269,7 @@ def test_trust_and_shared_status_can_disclose_private_claim(session: Session) ->
         ),
         {"alpha_id": alpha[1], "beta_id": beta[1]},
     )
+    session.execute(text("SET LOCAL nexus.write_producer = ''"))
     for character in (alpha, beta):
         session.execute(
             text(

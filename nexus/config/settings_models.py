@@ -1697,8 +1697,6 @@ class OrreryDriftSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     enabled: bool = False
-    copresence_rate_per_hour: Decimal = Field(default=Decimal("0.001"), gt=0)
-    copresence_max_hours_per_tick: Decimal = Field(default=Decimal("12.0"), gt=0)
     project_milestone_delta: Decimal = Field(default=Decimal("0.03"), gt=0, lt=1)
     hostile_events: Dict[str, Decimal] = Field(
         default_factory=lambda: {
@@ -1764,20 +1762,6 @@ class OrreryDriftSettings(BaseModel):
                 "cooperative_events delta magnitudes must be < 1: " f"{oversized}"
             )
         return values
-
-    @model_validator(mode="after")
-    def _validate_copresence_tick_delta(self) -> "OrreryDriftSettings":
-        """Keep the maximum co-presence delta inside the soft-clamp domain."""
-
-        maximum_delta = (
-            self.copresence_rate_per_hour * self.copresence_max_hours_per_tick
-        )
-        if maximum_delta >= 1:
-            raise ValueError(
-                "copresence_rate_per_hour * copresence_max_hours_per_tick "
-                "must be < 1"
-            )
-        return self
 
     @model_validator(mode="after")
     def _validate_event_maps_disjoint(self) -> "OrreryDriftSettings":

@@ -244,6 +244,7 @@ def apply_migration(
         if path.suffix == ".sql":
             sql = path.read_text()
             with conn.cursor() as cur:
+                cur.execute("SET LOCAL nexus.write_producer = 'migration'")
                 cur.execute(sql)
         elif path.suffix == ".py":
             # Python migrations may need to manage transaction boundaries

@@ -8,6 +8,9 @@ from dataclasses import dataclass, replace
 from decimal import Decimal
 from typing import Any, Iterable, Optional
 
+from nexus.agents.orrery.relationship_provenance import (
+    relationship_producer,
+)
 from nexus.agents.logon.apex_enums import EmotionalValence
 from nexus.agents.orrery.geo import story_active_zone
 from nexus.agents.orrery.status_family import (
@@ -1892,56 +1895,57 @@ def _upsert_character_relationship(
 ) -> tuple[str, Decimal]:
     """Upsert one row and return the boundary trigger's canonical valence."""
 
-    extra_data: dict[str, Any] = {
-        "source": "trait_compiler",
-        "trait": trait,
-    }
-    if pair_tag is not None:
-        extra_data["trait_compiler_pair_tag"] = pair_tag
-    if pair_tag_direction is not None:
-        extra_data["trait_compiler_pair_tag_direction"] = pair_tag_direction
-    if contact_kind is not None:
-        extra_data["trait_compiler_contact_kind"] = contact_kind
-    if additional_extra_data:
-        extra_data.update(additional_extra_data)
-    cur.execute(
-        """
-        INSERT INTO character_relationships (
-            character1_id, character2_id, relationship_type, emotional_valence,
-            dynamic, recent_events, history, extra_data
-        ) VALUES (
-            %s, %s, %s, %s,
-            %s, %s, %s, %s::jsonb
+    with relationship_producer(cur, "trait_compiler"):
+        extra_data: dict[str, Any] = {
+            "source": "trait_compiler",
+            "trait": trait,
+        }
+        if pair_tag is not None:
+            extra_data["trait_compiler_pair_tag"] = pair_tag
+        if pair_tag_direction is not None:
+            extra_data["trait_compiler_pair_tag_direction"] = pair_tag_direction
+        if contact_kind is not None:
+            extra_data["trait_compiler_contact_kind"] = contact_kind
+        if additional_extra_data:
+            extra_data.update(additional_extra_data)
+        cur.execute(
+            """
+            INSERT INTO character_relationships (
+                character1_id, character2_id, relationship_type, emotional_valence,
+                dynamic, recent_events, history, extra_data
+            ) VALUES (
+                %s, %s, %s, %s,
+                %s, %s, %s, %s::jsonb
+            )
+            ON CONFLICT (character1_id, character2_id) DO UPDATE SET
+                relationship_type = EXCLUDED.relationship_type,
+                emotional_valence = EXCLUDED.emotional_valence,
+                dynamic = EXCLUDED.dynamic,
+                recent_events = EXCLUDED.recent_events,
+                history = EXCLUDED.history,
+                extra_data = COALESCE(character_relationships.extra_data, '{}'::jsonb)
+                             || EXCLUDED.extra_data,
+                updated_at = NOW()
+            RETURNING emotional_valence, valence_current
+            """,
+            (
+                character1_id,
+                character2_id,
+                relationship_type,
+                emotional_valence,
+                dynamic,
+                recent_events,
+                history,
+                json.dumps(extra_data),
+            ),
         )
-        ON CONFLICT (character1_id, character2_id) DO UPDATE SET
-            relationship_type = EXCLUDED.relationship_type,
-            emotional_valence = EXCLUDED.emotional_valence,
-            dynamic = EXCLUDED.dynamic,
-            recent_events = EXCLUDED.recent_events,
-            history = EXCLUDED.history,
-            extra_data = COALESCE(character_relationships.extra_data, '{}'::jsonb)
-                         || EXCLUDED.extra_data,
-            updated_at = NOW()
-        RETURNING emotional_valence, valence_current
-        """,
-        (
-            character1_id,
-            character2_id,
-            relationship_type,
-            emotional_valence,
-            dynamic,
-            recent_events,
-            history,
-            json.dumps(extra_data),
-        ),
-    )
-    stored = cur.fetchone()
-    if stored is None:
-        raise RuntimeError("Trait relationship upsert returned no row.")
-    return (
-        str(_row_value(stored, "emotional_valence", 0)),
-        Decimal(str(_row_value(stored, "valence_current", 1))),
-    )
+        stored = cur.fetchone()
+        if stored is None:
+            raise RuntimeError("Trait relationship upsert returned no row.")
+        return (
+            str(_row_value(stored, "emotional_valence", 0)),
+            Decimal(str(_row_value(stored, "valence_current", 1))),
+        )
 
 
 def _project_authored_valence_for_report(emotional_valence: str) -> str:

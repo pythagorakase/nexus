@@ -14,6 +14,10 @@ from typing import Any, Awaitable, Callable, Dict, List, Mapping, Optional, cast
 
 import asyncpg  # type: ignore[import-untyped]
 
+from nexus.agents.orrery.relationship_provenance import (
+    relationship_producer_async,
+    emit_relationship_milestones_async,
+)
 from nexus.agents.logon.apex_schema import (
     ChunkMetadataUpdate,
     ChronologyUpdate,
@@ -521,43 +525,54 @@ async def apply_state_updates(
                 anchor_world_time=anchor_world_time,
             )
 
-    for relationship_update in state_updates.relationships:
-        if (
-            relationship_update.character1_id is None
-            or relationship_update.character2_id is None
+    if state_updates.relationships:
+        async with relationship_producer_async(
+            conn, "gaia", source_chunk_id=source_chunk_id
         ):
-            raise ValueError("Relationship state update was not resolved before apply")
-        updates = []
-        params = []
-        param_count = 1
-        relationship_fields = (
-            ("relationship_type", relationship_update.relationship_type),
-            ("emotional_valence", relationship_update.emotional_valence),
-            ("dynamic", relationship_update.dynamic),
-            ("recent_events", relationship_update.recent_events),
-        )
-        for field, value in relationship_fields:
-            if value is None:
-                continue
-            updates.append(f"{field} = ${param_count}")
-            params.append(value.value if hasattr(value, "value") else value)
-            param_count += 1
-        if updates:
-            params.extend(
-                [
-                    relationship_update.character1_id,
-                    relationship_update.character2_id,
-                ]
-            )
-            await conn.execute(
-                f"""
-                UPDATE character_relationships
-                SET {', '.join(updates)}
-                WHERE character1_id = ${param_count}
-                  AND character2_id = ${param_count + 1}
-                """,
-                *params,
-            )
+            for relationship_update in state_updates.relationships:
+                if (
+                    relationship_update.character1_id is None
+                    or relationship_update.character2_id is None
+                ):
+                    raise ValueError(
+                        "Relationship state update was not resolved before apply"
+                    )
+                updates = []
+                params = []
+                param_count = 1
+                relationship_fields = (
+                    ("relationship_type", relationship_update.relationship_type),
+                    ("emotional_valence", relationship_update.emotional_valence),
+                    ("dynamic", relationship_update.dynamic),
+                    ("recent_events", relationship_update.recent_events),
+                )
+                for field, value in relationship_fields:
+                    if value is None:
+                        continue
+                    updates.append(f"{field} = ${param_count}")
+                    params.append(value.value if hasattr(value, "value") else value)
+                    param_count += 1
+                if updates:
+                    params.extend(
+                        [
+                            relationship_update.character1_id,
+                            relationship_update.character2_id,
+                        ]
+                    )
+                    await conn.execute(
+                        f"""
+                        UPDATE character_relationships
+                        SET {', '.join(updates)}
+                        WHERE character1_id = ${param_count}
+                          AND character2_id = ${param_count + 1}
+                        """,
+                        *params,
+                    )
+
+            if source_chunk_id is not None:
+                await emit_relationship_milestones_async(
+                    conn, tick_chunk_id=source_chunk_id
+                )
 
 
 async def apply_state_tags_async(

@@ -13,6 +13,10 @@ from typing import Any, Dict, List, Mapping, Optional, cast
 
 from psycopg2.extras import RealDictCursor
 
+from nexus.agents.orrery.relationship_provenance import (
+    relationship_producer,
+    emit_relationship_milestones_sync,
+)
 from nexus.agents.logon.apex_schema import (
     ChunkMetadataUpdate,
     ChronologyUpdate,
@@ -1084,42 +1088,49 @@ def apply_state_updates_sync(
                     anchor_world_time=anchor_world_time,
                 )
 
-        for relationship_update in state_updates.relationships:
-            if (
-                relationship_update.character1_id is None
-                or relationship_update.character2_id is None
-            ):
-                raise ValueError(
-                    "Relationship state update was not resolved before apply"
-                )
-            updates = []
-            params = []
-            relationship_fields = (
-                ("relationship_type", relationship_update.relationship_type),
-                ("emotional_valence", relationship_update.emotional_valence),
-                ("dynamic", relationship_update.dynamic),
-                ("recent_events", relationship_update.recent_events),
-            )
-            for field, value in relationship_fields:
-                if value is None:
-                    continue
-                updates.append(f"{field} = %s")
-                params.append(value.value if hasattr(value, "value") else value)
-            if updates:
-                params.extend(
-                    [
-                        relationship_update.character1_id,
-                        relationship_update.character2_id,
-                    ]
-                )
-                cur.execute(
-                    f"""
-                    UPDATE character_relationships
-                    SET {', '.join(updates)}
-                    WHERE character1_id = %s AND character2_id = %s
-                    """,
-                    params,
-                )
+        if state_updates.relationships:
+            with relationship_producer(cur, "gaia", source_chunk_id=source_chunk_id):
+                for relationship_update in state_updates.relationships:
+                    if (
+                        relationship_update.character1_id is None
+                        or relationship_update.character2_id is None
+                    ):
+                        raise ValueError(
+                            "Relationship state update was not resolved before apply"
+                        )
+                    updates = []
+                    params = []
+                    relationship_fields = (
+                        ("relationship_type", relationship_update.relationship_type),
+                        ("emotional_valence", relationship_update.emotional_valence),
+                        ("dynamic", relationship_update.dynamic),
+                        ("recent_events", relationship_update.recent_events),
+                    )
+                    for field, value in relationship_fields:
+                        if value is None:
+                            continue
+                        updates.append(f"{field} = %s")
+                        params.append(value.value if hasattr(value, "value") else value)
+                    if updates:
+                        params.extend(
+                            [
+                                relationship_update.character1_id,
+                                relationship_update.character2_id,
+                            ]
+                        )
+                        cur.execute(
+                            f"""
+                            UPDATE character_relationships
+                            SET {', '.join(updates)}
+                            WHERE character1_id = %s AND character2_id = %s
+                            """,
+                            params,
+                        )
+
+                if source_chunk_id is not None:
+                    emit_relationship_milestones_sync(
+                        cur, tick_chunk_id=source_chunk_id
+                    )
 
 
 def _apply_state_tags(

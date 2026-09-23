@@ -529,6 +529,7 @@ def save_faction_to_faction_relationship(
     try:
         conn = get_db_connection()
         cur = conn.cursor()
+        cur.execute("SET LOCAL nexus.write_producer = 'manual'")
         
         # Check if relationship already exists
         cur.execute("""
@@ -602,6 +603,7 @@ def save_faction_to_character_relationship(
     try:
         conn = get_db_connection()
         cur = conn.cursor()
+        cur.execute("SET LOCAL nexus.write_producer = 'manual'")
         
         # Check if relationship already exists
         cur.execute("""
