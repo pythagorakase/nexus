@@ -708,6 +708,9 @@ class AnthropicProvider(LLMProvider):
         for attempt in range(self.structured_output_retries + 1):
             response: Any = None
             usage_outcome: Literal["accepted", "rejected_validation", "error"] = "error"
+            guard = getattr(self, "prompt_window_guard", None)
+            if guard is not None:
+                guard(active_prompt, attempt + 1)
             try:
                 response = self.client.beta.messages.create(
                     **self._build_native_structured_request_params(
@@ -781,6 +784,9 @@ class AnthropicProvider(LLMProvider):
         for attempt in range(self.structured_output_retries + 1):
             response: Any = None
             usage_outcome: Literal["accepted", "rejected_validation", "error"] = "error"
+            guard = getattr(self, "prompt_window_guard", None)
+            if guard is not None:
+                guard(active_prompt, attempt + 1)
             try:
                 response = self.client.beta.messages.create(
                     **self._build_tool_envelope_structured_request_params(
@@ -855,6 +861,9 @@ class AnthropicProvider(LLMProvider):
         for attempt in range(self.structured_output_retries + 1):
             response: Any = None
             usage_outcome: Literal["accepted", "rejected_validation", "error"] = "error"
+            guard = getattr(self, "prompt_window_guard", None)
+            if guard is not None:
+                guard(active_prompt, attempt + 1)
             try:
                 response = self.client.beta.messages.create(
                     **self._build_prompted_structured_request_params(active_prompt)

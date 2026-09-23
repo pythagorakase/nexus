@@ -566,6 +566,14 @@ class OpenAIProvider(LLMProvider):
         for attempt in range(self.structured_output_retries + 1):
             response: Any = None
             usage_outcome: Literal["accepted", "rejected_validation", "error"] = "error"
+            guard = getattr(self, "prompt_window_guard", None)
+            if guard is not None:
+                guard(
+                    active_prompt,
+                    attempt + 1,
+                    text_format=text_format
+                    or openai_response_text_format(schema_model),
+                )
             try:
                 try:
                     response = self.client.responses.parse(
@@ -696,6 +704,14 @@ class OpenAIProvider(LLMProvider):
         for attempt in range(self.structured_output_retries + 1):
             response: Any = None
             usage_outcome: Literal["accepted", "rejected_validation", "error"] = "error"
+            guard = getattr(self, "prompt_window_guard", None)
+            if guard is not None:
+                guard(
+                    active_prompt,
+                    attempt + 1,
+                    text_format=text_format
+                    or openai_response_text_format(schema_model),
+                )
             try:
                 response = self.client.chat.completions.create(
                     **self._build_chat_structured_request_params(

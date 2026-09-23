@@ -1148,13 +1148,13 @@ def _install_gaia_capture(
     monkeypatch.setattr(utility, "_build_gaia_provider", fake_build)
 
     windows: list[Any] = []
-    real_enforce = utility._enforce_final_prompt_window
+    real_attach = utility._attach_prompt_window_guard
 
-    def spy_enforce(prompt: str, *, effective_context_window: Any) -> int:
-        windows.append(effective_context_window)
-        return real_enforce(prompt, effective_context_window=effective_context_window)
+    def spy_attach(provider, prompt, *, seat, window):
+        windows.append(window)
+        return real_attach(provider, prompt, seat=seat, window=window)
 
-    monkeypatch.setattr(utility, "_enforce_final_prompt_window", spy_enforce)
+    monkeypatch.setattr(utility, "_attach_prompt_window_guard", spy_attach)
     return captured, windows
 
 

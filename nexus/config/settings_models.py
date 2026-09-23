@@ -93,6 +93,53 @@ class APIModelEntry(BaseModel):
     id: str = Field(
         ..., description="Concrete model identifier registered with this provider"
     )
+    context_window: Optional[int] = Field(default=None, gt=0, strict=True)
+    max_input_tokens: Optional[int] = Field(default=None, gt=0, strict=True)
+    max_output_tokens: Optional[int] = Field(default=None, gt=0, strict=True)
+    reasoning_accounting: Optional[
+        Literal["inside_output", "outside_output", "none"]
+    ] = None
+    allows_overlapping_limits: bool = False
+    tokenizer_repository: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _validate_window_capabilities(self) -> "APIModelEntry":
+        """Reject partial declarations and unsupported combined limits."""
+        values = (
+            self.context_window,
+            self.max_input_tokens,
+            self.max_output_tokens,
+            self.reasoning_accounting,
+        )
+        if any(value is not None for value in values):
+            if any(value is None for value in values):
+                raise ValueError(
+                    f"Model {self.id!r} requires a complete window capability declaration"
+                )
+            if (
+                self.max_input_tokens > self.context_window
+                or self.max_output_tokens > self.context_window
+            ):
+                raise ValueError(
+                    f"Model {self.id!r} has a limit above its context_window"
+                )
+            if (
+                not self.allows_overlapping_limits
+                and self.max_input_tokens + self.max_output_tokens > self.context_window
+            ):
+                raise ValueError(
+                    f"Model {self.id!r}: max_input_tokens + max_output_tokens exceeds context_window"
+                )
+        return self
+
+    def require_window_capabilities(self) -> "APIModelEntry":
+        """Require documented limits before a seat can select this model."""
+        if self.context_window is None:
+            raise ValueError(
+                f"Model {self.id!r} is used by a seat without complete window capabilities"
+            )
+        return self
+
     label: str = Field(..., description="Display label for UI")
     uses: List[str] = Field(
         default_factory=list,
@@ -3060,11 +3107,22 @@ class APEXTagLibrarySettings(BaseModel):
     suggestion_limit: int = Field(default=3, ge=0)
 
 
-class APEXSettings(BaseModel):
+class SeatWindowPolicy(BaseModel):
+    """Output allowance and explicit input headroom for a generation seat."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    max_output_tokens: int = Field(..., gt=0, strict=True)
+    reasoning_reserve_tokens: int = Field(..., ge=0, strict=True)
+    response_reserve_tokens: int = Field(..., ge=0, strict=True)
+
+
+class APEXSettings(SeatWindowPolicy):
     """APEX API configuration for story generation."""
 
     model_config = ConfigDict(extra="forbid")
 
+    gaia: SeatWindowPolicy
     provider: str = Field(..., pattern="^(openai|anthropic|local)$")
     model: str
     reasoning_effort: str = Field(..., pattern="^(low|medium|high)$")
@@ -3654,6 +3712,8 @@ class Settings(BaseModel):
                 registry=registry,
                 source=f"{type(container).__name__}.{attr}",
             )
+
+            self.model_entry(current).require_window_capabilities()
 
         if self.local_models.model is not None:
             if registry[self.local_models.model] != "local":

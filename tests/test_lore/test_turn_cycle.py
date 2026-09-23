@@ -6,6 +6,8 @@ import asyncio
 import json
 import logging
 import time
+from copy import deepcopy
+from types import SimpleNamespace
 from typing import Any, Dict
 
 import pytest
@@ -16,12 +18,15 @@ from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
 from nexus.agents.lore.utils.turn_context import TurnContext
 from nexus.agents.lore.utils.token_budget import TokenBudgetManager
 from nexus.config import load_settings_as_dict
+from tests.test_lore.window_helpers import window_logon
 from nexus.memory import ContextMemoryManager
 from nexus.memory.context_state import ContextPackage, PassTransition
 
 
 class DummyLore:
     """Minimal LORE stub for exercising turn cycle logic."""
+
+    enable_logon = False
 
     def __init__(self) -> None:
         self.settings: Dict[str, Any] = {
@@ -371,7 +376,7 @@ def test_slot_model_change_mid_turn_aborts_before_provider_initialization(
     def resolve_route() -> tuple[str, str, None, str]:
         route_calls["count"] += 1
         if route_calls["count"] == 1:
-            return ("gpt-5.5", "openai", None, "openai")
+            return (lore.settings["apex"]["model"], "openai", None, "openai")
         return ("nousresearch/hermes-4-70b", "openai", None, "local")
 
     monkeypatch.setattr(lore.logon, "_resolve_storyteller_route", resolve_route)
@@ -388,65 +393,54 @@ def test_slot_model_change_mid_turn_aborts_before_provider_initialization(
     assert lore.logon.provider is None
 
 
-def test_local_payload_trims_oldest_warm_chunks_and_keeps_parent(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    """The real Phase 5 seam bounds a local payload without dropping its parent."""
-
-    class LocalLore:
-        def __init__(self) -> None:
-            self.settings = load_settings_as_dict()
-            self.settings["orrery"]["enabled"] = False
-            self.memnon = None
-            self.memory_manager = ContextMemoryManager(self.settings)
-            self.token_manager = TokenBudgetManager(self.settings)
-            self.logon = self
-            self.enable_logon = True
-
-        def ensure_logon(self) -> None:
-            return None
-
-        def resolve_storyteller_route(self) -> tuple[str, str, str]:
-            return "nousresearch/hermes-4-70b", "local", "local"
-
-    lore = LocalLore()
-    turn_manager = TurnCycleManager(lore)
-    ctx = TurnContext(
-        turn_id="local-payload-trim",
-        user_input="Continue.",
-        start_time=time.time(),
+def _rendered_trim_case(warm, retrieved, extra_tokens):
+    settings = load_settings_as_dict()
+    logon = window_logon(settings)
+    memory = ContextMemoryManager(settings)
+    lore = SimpleNamespace(
+        settings=settings,
+        logon=logon,
+        memory_manager=memory,
+        memnon=None,
+        token_manager=None,
+        enable_logon=True,
     )
-    asyncio.run(turn_manager.process_user_input(ctx))
-    ctx.warm_slice = [
-        {"chunk_id": 1, "text": "oldest " * 10_000},
-        {"chunk_id": 2, "text": "middle " * 7_000},
-        {"chunk_id": 3, "text": "parent " * 2_000, "is_target": True},
-    ]
+    manager = TurnCycleManager(lore)
+    ctx = TurnContext(turn_id="rendered-trim", user_input="Continue.", start_time=0)
+    ctx.context_payload = {
+        "user_input": ctx.user_input,
+        "warm_slice": {"chunks": warm},
+        "retrieved_passages": {"results": retrieved},
+        "entity_data": {},
+    }
+    core = deepcopy(ctx.context_payload)
+    core["warm_slice"]["chunks"] = [warm[-1]]
+    core["retrieved_passages"]["results"] = []
+    core_tokens = logon.measure_writer_request(core, 75000)[0]
+    window = core_tokens + extra_tokens + settings["apex"]["response_reserve_tokens"]
+    ctx.token_counts = {"total_available": window - 4000, "apex_window": window}
+    return manager, ctx
 
-    with caplog.at_level(logging.INFO, logger="nexus.lore.turn_cycle"):
-        asyncio.run(turn_manager.assemble_context_payload(ctx))
 
-    assembled_chunks = ctx.context_payload["warm_slice"]["chunks"]
-    assembled_ids = [chunk["chunk_id"] for chunk in assembled_chunks]
-    phase_state = ctx.phase_states["payload_assembly"]
-    trim_logs = [
-        record
-        for record in caplog.records
-        if "Storyteller payload trimmed" in record.getMessage()
-    ]
-
-    assert phase_state["total_tokens_used"] <= phase_state["payload_ceiling"]
-    assert ctx.token_counts["apex_window"] == 32_000
-    assert phase_state["prompt_overhead_tokens"] == 4_000
-    assert phase_state["payload_ceiling"] == (
-        ctx.token_counts["total_available"] - 4_000
+def test_local_payload_trims_oldest_warm_chunks_and_keeps_parent():
+    """Real rendering drops oldest warm text and protects the parent."""
+    manager, ctx = _rendered_trim_case(
+        [
+            {"chunk_id": 1, "text": "oldest " * 10000},
+            {"chunk_id": 2, "text": "middle " * 1000},
+            {"chunk_id": 3, "text": "Parent.", "is_target": True},
+        ],
+        [],
+        1500,
     )
-    assert 1 not in assembled_ids
-    assert assembled_ids[-1] == 3
-    assert len(ctx.warm_slice) == 3
-    assert len(trim_logs) == 1
-    assert "wire_class=local" in trim_logs[0].getMessage()
-    assert "warm_chunks_dropped=1" in trim_logs[0].getMessage()
+    result = manager._enforce_context_payload_budget(ctx)
+    assert [c["chunk_id"] for c in ctx.context_payload["warm_slice"]["chunks"]] == [
+        2,
+        3,
+    ]
+    assert result["warm_chunks_dropped"] == 1
+    assert result["tokens_after"] <= result["payload_ceiling"]
+    assert result["payload_ceiling"] == ctx.token_counts["total_available"]
 
 
 def test_frontier_payload_below_ceiling_is_unchanged(
@@ -502,42 +496,22 @@ def test_frontier_payload_below_ceiling_is_unchanged(
     assert "Storyteller payload trimmed" not in caplog.text
 
 
-def test_payload_trims_retrieved_passages_last_first(
-    turn_manager: TurnCycleManager,
-) -> None:
-    """The overhead-reduced ceiling drops lowest-ranked retrievals first."""
-    turn_manager.settings["Agent Settings"]["LORE"]["token_budget"][
-        "prompt_overhead_tokens"
-    ] = 400
-    ctx = TurnContext(
-        turn_id="retrieval-trim",
-        user_input="Continue.",
-        start_time=time.time(),
+def test_payload_trims_retrieved_passages_last_first():
+    """Renderer measurements retain the higher ranked passage."""
+    manager, ctx = _rendered_trim_case(
+        [{"chunk_id": 3, "text": "Parent.", "is_target": True}],
+        [
+            {"chunk_id": 1, "text": "first " * 250},
+            {"chunk_id": 2, "text": "last " * 250},
+        ],
+        350,
     )
-    ctx.provider_wire_type = "local"
-    ctx.provider_name = "local"
-    ctx.warm_slice = [{"chunk_id": 3, "text": "parent " * 600, "is_target": True}]
-    ctx.retrieved_passages = [
-        {"chunk_id": 1, "text": "first " * 250},
-        {"chunk_id": 2, "text": "last " * 250},
-    ]
-    ctx.token_counts = {
-        "total_available": 1_400,
-        "warm_slice": 600,
-        "structured": 100,
-        "augmentation": 300,
-    }
-
-    asyncio.run(turn_manager.assemble_context_payload(ctx))
-
-    assert ctx.context_payload["retrieved_passages"]["results"] == [
-        ctx.retrieved_passages[0]
-    ]
-    assert ctx.phase_states["payload_assembly"]["warm_chunks_dropped"] == 0
-    assert ctx.phase_states["payload_assembly"]["retrieved_passages_dropped"] == 1
-    assert ctx.phase_states["payload_assembly"]["payload_ceiling"] == 1_000
-    assert ctx.phase_states["payload_assembly"]["tokens_before_trimming"] <= 1_400
-    assert ctx.phase_states["payload_assembly"]["tokens_before_trimming"] > 1_000
+    result = manager._enforce_context_payload_budget(ctx)
+    assert [
+        c["chunk_id"] for c in ctx.context_payload["retrieved_passages"]["results"]
+    ] == [1]
+    assert result["retrieved_passages_dropped"] == 1
+    assert result["tokens_after"] <= result["payload_ceiling"]
 
 
 def test_trimmed_pass2_chunk_is_unregistered_refunded_and_retrievable() -> None:
@@ -567,6 +541,8 @@ def test_trimmed_pass2_chunk_is_unregistered_refunded_and_retrievable() -> None:
             self.settings["Agent Settings"]["LORE"]["token_budget"][
                 "prompt_overhead_tokens"
             ] = 500
+            self.logon = window_logon(self.settings)
+            self.enable_logon = True
             self.memnon = RetrievalMemnon()
             self.memory_manager = ContextMemoryManager(
                 self.settings,
@@ -614,6 +590,14 @@ def test_trimmed_pass2_chunk_is_unregistered_refunded_and_retrievable() -> None:
         "structured": 0,
         "augmentation": 0,
     }
+    core_payload = {
+        "user_input": first_turn.user_input,
+        "warm_slice": {"chunks": [parent]},
+        "retrieved_passages": {"results": []},
+        "entity_data": {},
+    }
+    core_tokens = lore.logon.measure_writer_request(core_payload, 75000)[0]
+    first_turn.token_counts["apex_window"] = core_tokens + 4100
     asyncio.run(manager.assemble_context_payload(first_turn))
 
     assert [
@@ -651,28 +635,20 @@ def test_trimmed_pass2_chunk_is_unregistered_refunded_and_retrievable() -> None:
     ]
 
 
-def test_structured_payload_overflow_raises(
-    turn_manager: TurnCycleManager,
-) -> None:
-    """A structured core that cannot fit is a loud configuration error."""
-    ctx = TurnContext(
-        turn_id="structured-overflow",
-        user_input="Continue.",
-        start_time=time.time(),
+def test_structured_payload_overflow_raises():
+    """Trimming leaves an untrimmable core for the sole final guard."""
+    manager, ctx = _rendered_trim_case(
+        [{"chunk_id": 3, "text": "Parent.", "is_target": True}], [], 0
     )
-    ctx.provider_wire_type = "local"
-    ctx.provider_name = "local"
-    ctx.warm_slice = [{"chunk_id": 3, "text": "Parent.", "is_target": True}]
-    ctx.entity_data = {"characters": [{"summary": "structured " * 1_500}]}
-    ctx.token_counts = {
-        "total_available": 1_000,
-        "warm_slice": 100,
-        "structured": 800,
-        "augmentation": 0,
-    }
-
-    with pytest.raises(ValueError, match="structured core is a configuration error"):
-        asyncio.run(turn_manager.assemble_context_payload(ctx))
+    ctx.context_payload["user_input"] = "untrimmable " * 1500
+    result = manager._enforce_context_payload_budget(ctx)
+    assert result["tokens_after"] > result["payload_ceiling"]
+    with pytest.raises(ValueError, match="Final storyteller prompt exceeds"):
+        manager.lore.logon._enforce_final_prompt_window(
+            "unused",
+            effective_context_window=result["payload_ceiling"],
+            rendered_tokens=result["tokens_after"],
+        )
 
 
 def test_integrate_response_does_not_pass_authorial_directives(

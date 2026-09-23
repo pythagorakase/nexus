@@ -908,6 +908,7 @@ class LogonUtility:
             context_payload
         )
         self._active_anchor_chunk_id = self._parent_chunk_id(context_payload)
+        self._window_payload = context_payload
         self._ensure_provider(
             context_payload,
             expected_model=expected_model,
@@ -925,10 +926,7 @@ class LogonUtility:
             context_payload,
             presence_baseline=presence_baseline,
         )
-        self._enforce_final_prompt_window(
-            prompt,
-            effective_context_window=effective_context_window,
-        )
+        self._writer_window_blocks = list(self._last_rendered_blocks)
 
         # Get structured completion from provider
         # This returns a tuple of (parsed_object, llm_response)
@@ -939,6 +937,7 @@ class LogonUtility:
                     presence_baseline=presence_baseline,
                     include_ambient_scene_seeds=False,
                 )
+                self._gaia_window_blocks = list(self._last_rendered_blocks)
                 response = self._generate_narrative_two_pass(
                     prompt,
                     gaia_turn_prompt=gaia_turn_prompt,
@@ -947,6 +946,12 @@ class LogonUtility:
                     effective_context_window=effective_context_window,
                 )
             else:
+                self._attach_prompt_window_guard(
+                    self.provider,
+                    prompt,
+                    seat="skald_single_pass",
+                    window=effective_context_window,
+                )
                 schema_kwargs = self._schema_format_kwargs(schema_model)
                 parsed_response, _llm_response = (
                     self.provider.get_structured_completion(
@@ -993,6 +998,7 @@ class LogonUtility:
             context_payload
         )
         self._active_anchor_chunk_id = self._parent_chunk_id(context_payload)
+        self._window_payload = context_payload
         self._ensure_provider(
             context_payload,
             expected_model=expected_model,
@@ -1011,10 +1017,7 @@ class LogonUtility:
             context_payload,
             presence_baseline=presence_baseline,
         )
-        self._enforce_final_prompt_window(
-            prompt,
-            effective_context_window=effective_context_window,
-        )
+        self._writer_window_blocks = list(self._last_rendered_blocks)
 
         try:
             if self._is_two_pass_turn(schema_model):
@@ -1023,6 +1026,7 @@ class LogonUtility:
                     presence_baseline=presence_baseline,
                     include_ambient_scene_seeds=False,
                 )
+                self._gaia_window_blocks = list(self._last_rendered_blocks)
                 response = await self._generate_narrative_two_pass_async(
                     prompt,
                     gaia_turn_prompt=gaia_turn_prompt,
@@ -1031,6 +1035,12 @@ class LogonUtility:
                     effective_context_window=effective_context_window,
                 )
             else:
+                self._attach_prompt_window_guard(
+                    self.provider,
+                    prompt,
+                    seat="skald_single_pass",
+                    window=effective_context_window,
+                )
                 schema_kwargs = self._schema_format_kwargs(schema_model)
                 parsed_response, _llm_response = (
                     await self.provider.get_structured_completion_async(
@@ -1461,6 +1471,12 @@ class LogonUtility:
                 "native" if self._provider_wire_type == "anthropic" else None
             ),
         )
+        self._attach_prompt_window_guard(
+            writer_provider,
+            turn_prompt,
+            seat="skald_writer",
+            window=effective_context_window,
+        )
         writer, _writer_response = writer_provider.get_structured_completion(
             turn_prompt,
             SkaldWriterWire,
@@ -1474,10 +1490,6 @@ class LogonUtility:
             self._gaia_effective_window(gaia_route)
             if gaia_route is not None
             else effective_context_window
-        )
-        self._enforce_final_prompt_window(
-            gaia_prompt,
-            effective_context_window=gaia_window,
         )
         gaia_system_prompt = self._gaia_system_prompt(
             wire_type=gaia_wire,
@@ -1498,6 +1510,9 @@ class LogonUtility:
                 usage_seat="gaia",
                 anthropic_transport=anthropic_gaia_transport,
             )
+        self._attach_prompt_window_guard(
+            gaia_provider, gaia_prompt, seat="gaia", window=gaia_window
+        )
         gaia_schema_model = self._gaia_schema_model(gaia_wire)
         gaia, _gaia_response = gaia_provider.get_structured_completion(
             gaia_prompt,
@@ -1554,6 +1569,12 @@ class LogonUtility:
                 "native" if self._provider_wire_type == "anthropic" else None
             ),
         )
+        self._attach_prompt_window_guard(
+            writer_provider,
+            turn_prompt,
+            seat="skald_writer",
+            window=effective_context_window,
+        )
         writer, _writer_response = (
             await writer_provider.get_structured_completion_async(
                 turn_prompt,
@@ -1569,10 +1590,6 @@ class LogonUtility:
             self._gaia_effective_window(gaia_route)
             if gaia_route is not None
             else effective_context_window
-        )
-        self._enforce_final_prompt_window(
-            gaia_prompt,
-            effective_context_window=gaia_window,
         )
         gaia_system_prompt = self._gaia_system_prompt(
             wire_type=gaia_wire,
@@ -1593,6 +1610,9 @@ class LogonUtility:
                 usage_seat="gaia",
                 anthropic_transport=anthropic_gaia_transport,
             )
+        self._attach_prompt_window_guard(
+            gaia_provider, gaia_prompt, seat="gaia", window=gaia_window
+        )
         gaia_schema_model = self._gaia_schema_model(gaia_wire)
         gaia, _gaia_response = await gaia_provider.get_structured_completion_async(
             gaia_prompt,
@@ -1619,51 +1639,146 @@ class LogonUtility:
             character_roster=character_roster,
         )
 
+    def measure_writer_request(
+        self, payload: Dict[str, Any], window: int
+    ) -> tuple[int, Any, list[tuple[str, str]], Any]:
+        """Render and count the writer request used by trimming and generation."""
+        from nexus.config.seat_window import resolve_seat_window
+        from nexus.telemetry.prompt_window import rendered_request_counter
+
+        self._active_orrery_proposal_bindings = _proposal_bindings_from_payload(payload)
+        self._active_anchor_chunk_id = self._parent_chunk_id(payload)
+        self._ensure_provider(payload)
+        schema = self._select_response_schema(payload)
+        presence = self._read_presence_baseline_for_context(payload, schema)
+        blocks: list[tuple[str, str]] = []
+        prompt = self._format_context_prompt(
+            payload, presence_baseline=presence, rendered_blocks=blocks
+        )
+        provider = copy.copy(self.provider)
+        if self._is_two_pass_turn(schema):
+            provider.system_prompt = self._writer_system_prompt()
+        budget = resolve_seat_window(
+            self.settings, provider.model, seat="skald_writer", window=window
+        )
+        format_kwargs = (
+            self._two_pass_schema_format_kwargs(SkaldWriterWire)
+            if self._is_two_pass_turn(schema)
+            else self._schema_format_kwargs(schema)
+        )
+        count = rendered_request_counter(
+            provider, text_format=format_kwargs.get("text_format")
+        )
+        return count(prompt), budget, blocks, count
+
+    def _attach_prompt_window_guard(
+        self, provider: Any, prompt: str, *, seat: str, window: Optional[int]
+    ) -> None:
+        """Bind exact rendered accounting to every provider attempt, including repair."""
+        from nexus.config.seat_window import resolve_seat_window
+        from nexus.telemetry.prompt_window import (
+            PromptWindowRecord,
+            measure_blocks,
+            rendered_request_counter,
+        )
+        from nexus.telemetry.usage import record_prompt_window, current_usage_context
+        from uuid import uuid4
+
+        generation_session = (
+            current_usage_context()[2]
+            or self._window_payload.get("metadata", {}).get("turn_id")
+            or str(uuid4())
+        )
+
+        def guard(
+            active_prompt: str,
+            attempt: int,
+            *,
+            text_format: Optional[Dict[str, Any]] = None,
+        ) -> None:
+            if window is None:
+                resolved_window = resolve_storyteller_context_window(
+                    self.settings, self._provider_wire_type, self._provider_type_name
+                )
+            else:
+                resolved_window = window
+            budget = resolve_seat_window(
+                self.settings, provider.model, seat=seat, window=resolved_window
+            )
+            from nexus.config import load_settings
+
+            entry = load_settings(self.settings_path).model_entry(provider.model)
+            provider.supports_temperature = (
+                "temperature" not in entry.unsupported_params
+            )
+            provider.max_output_tokens = budget.max_output_tokens
+            if hasattr(provider, "max_tokens"):
+                provider.max_tokens = budget.max_output_tokens
+            count = rendered_request_counter(provider, text_format=text_format)
+            blocks = list(
+                self._writer_window_blocks
+                if seat != "gaia"
+                else self._gaia_window_blocks
+            )
+            base = "".join(text for _, text in blocks)
+            if not prompt.startswith(base):
+                raise ValueError(
+                    "Rendered block set does not match the generation request"
+                )
+            if prompt != base:
+                blocks.append(("finished writer output", prompt[len(base) :]))
+            payload = self._window_payload
+            active_blocks = list(blocks)
+            if not active_prompt.startswith(prompt):
+                raise ValueError("Retry rewrote the rendered request prefix")
+            if active_prompt != prompt:
+                active_blocks.append(
+                    ("structured output retry", active_prompt[len(prompt) :])
+                )
+            counts, tokens = measure_blocks(active_blocks, count)
+            record_prompt_window(
+                PromptWindowRecord(
+                    generation_session=generation_session,
+                    seat=seat,
+                    attempt=attempt,
+                    model=provider.model,
+                    block_tokens=counts,
+                    input_tokens=tokens,
+                    effective_ceiling=budget.input_ceiling,
+                    policy_headroom=budget.policy_headroom,
+                    headroom=budget.input_ceiling - tokens,
+                    trimming=payload.get("window_trimming", {}),
+                )
+            )
+            self._enforce_final_prompt_window(
+                active_prompt,
+                effective_context_window=budget.input_ceiling,
+                rendered_tokens=tokens,
+            )
+            if seat != "gaia":
+                record_coverage = getattr(self, "record_rendered_coverage", None)
+                if record_coverage is not None:
+                    record_coverage(count)
+                    self.record_rendered_coverage = None
+
+        provider.prompt_window_guard = guard
+
     def _enforce_final_prompt_window(
         self,
         prompt: str,
         *,
         effective_context_window: Optional[int],
+        rendered_tokens: int,
     ) -> int:
-        """Fail before generation when LOGON formatting exceeds the turn window."""
-        provider_wire_type = self._provider_wire_type
-        provider_name = self._provider_type_name
-        if provider_wire_type is None or provider_name is None:
-            raise RuntimeError(
-                "Final storyteller prompt sizing requires an active provider "
-                "wire class and provider name"
-            )
+        """Sole hard stop: reject the exactly counted rendered generation request."""
         if effective_context_window is None:
-            effective_context_window = resolve_storyteller_context_window(
-                self.settings,
-                provider_wire_type,
-                provider_name,
-            )
-        if isinstance(effective_context_window, bool) or not isinstance(
-            effective_context_window, int
-        ):
-            raise TypeError("Effective storyteller context window must be an integer")
-        if effective_context_window < 1000:
-            raise ValueError(
-                "Effective storyteller context window must be at least 1000 tokens"
-            )
-
-        prompt_tokens = calculate_chunk_tokens(prompt)
-        logger.debug(
-            "Final storyteller prompt size: wire_class=%s tokens=%s "
-            "effective_window=%s",
-            provider_wire_type,
-            prompt_tokens,
-            effective_context_window,
-        )
-        if prompt_tokens > effective_context_window:
+            raise ValueError("Final request requires a resolved seat input ceiling")
+        if rendered_tokens > effective_context_window:
             raise ValueError(
                 "Final storyteller prompt exceeds the effective context window: "
-                f"wire_class={provider_wire_type!r}, "
-                f"prompt_tokens={prompt_tokens}, "
-                f"effective_window={effective_context_window}"
+                f"prompt_tokens={rendered_tokens}, effective_window={effective_context_window}"
             )
-        return prompt_tokens
+        return rendered_tokens
 
     def _select_response_schema(
         self, context_payload: Dict[str, Any]
@@ -2065,9 +2180,12 @@ class LogonUtility:
         *,
         presence_baseline: Optional[PresenceBaseline] = None,
         include_ambient_scene_seeds: bool = True,
+        rendered_blocks: Optional[list[tuple[str, str]]] = None,
     ) -> str:
         """Format context payload into a prompt for the Apex AI"""
-        sections = []
+        from nexus.telemetry.prompt_window import RenderedSections
+
+        sections = RenderedSections()
 
         # The intertitle anchors Skald's declared time deltas and episode
         # transitions to visible state: without it the model reasons about
@@ -2100,6 +2218,7 @@ class LogonUtility:
                 sections.append(location_line)
             sections.append("")
 
+        sections.kind = "scene conditions"
         scene_conditions = context.get("scene_conditions") or {}
         if scene_conditions:
             sections.append("=== SCENE CONDITIONS ===")
@@ -2115,6 +2234,7 @@ class LogonUtility:
                 sections.append(f"Moods: {rendered_moods}")
             sections.append("")
 
+        sections.kind = "private storyteller correspondence"
         correspondence = context.get("storyteller_correspondence")
         if correspondence is not None:
             if not isinstance(correspondence, str) or not correspondence.strip():
@@ -2123,6 +2243,7 @@ class LogonUtility:
                 )
             sections.extend([correspondence, ""])
 
+        sections.kind = "recent narrative"
         # Add warm slice
         if context.get("warm_slice"):
             sections.append("=== RECENT NARRATIVE ===")
@@ -2133,16 +2254,19 @@ class LogonUtility:
                 else:
                     sections.append(chunk_text)
 
+        sections.kind = "bootstrap context"
         bootstrap_sections = self._format_bootstrap_context(
             context.get("bootstrap_data")
         )
         if bootstrap_sections:
             sections.extend(bootstrap_sections)
 
+        sections.kind = "user input"
         # Add user input
         sections.append("\n=== USER INPUT ===")
         sections.append(context.get("user_input", ""))
 
+        sections.kind = "entity dossier"
         # Add entity data with hierarchical support
         entity_data = context.get("entity_data", {})
         if entity_data:
@@ -2273,6 +2397,7 @@ class LogonUtility:
                     sections.append(f"- {name}: {description}")
 
         # Add retrieved passages
+        sections.kind = "historical context"
         if context.get("retrieved_passages"):
             sections.append("\n=== HISTORICAL CONTEXT ===")
             for passage in context["retrieved_passages"]["results"][
@@ -2284,6 +2409,7 @@ class LogonUtility:
                     f"{passage.get('text', '')}"
                 )
 
+        sections.kind = "world knowledge"
         world_knowledge = context.get("world_knowledge") or []
         if world_knowledge:
             sections.append("\n=== WORLD KNOWLEDGE ===")
@@ -2310,6 +2436,7 @@ class LogonUtility:
             if context.get("world_knowledge_truncated"):
                 sections.append("(older knowledge omitted)")
 
+        sections.kind = "orrery tag library"
         tag_library = self._format_turn_tag_library(
             context,
             presence_baseline=presence_baseline,
@@ -2328,6 +2455,7 @@ class LogonUtility:
         max_rendered_proposals = prompt_settings.max_rendered_proposals
         max_rendered_pressures = prompt_settings.max_rendered_pressures
 
+        sections.kind = "recent orrery rulings"
         recent_rulings_section = context.get("orrery_recent_rulings_section")
         if recent_rulings_section is None:
             recent_rulings_section = []
@@ -2346,6 +2474,7 @@ class LogonUtility:
             sections.append("")
             sections.extend(recent_rulings_section)
 
+        sections.kind = "orrery imminent activity"
         imminent_activity = context.get("orrery_imminent_activity") or []
         if imminent_activity:
             sections.append("\n=== ORRERY IMMINENT ACTIVITY ===")
@@ -2366,6 +2495,7 @@ class LogonUtility:
                 state_delta = proposal.get("state_delta") or {}
                 sections.append(f"- {proposal_id} [{label}]: state_delta={state_delta}")
 
+        sections.kind = "orrery scene pressure"
         scene_pressures = context.get("orrery_scene_pressures") or []
         if scene_pressures:
             sections.append("\n=== ORRERY SCENE PRESSURE ===")
@@ -2386,6 +2516,7 @@ class LogonUtility:
                 if prompt_text:
                     sections.append(f"- {label}: {prompt_text}")
 
+        sections.kind = "orrery ambient scene seeds"
         ambient_scene_seeds = context.get("orrery_ambient_scene_seeds") or []
         if ambient_scene_seeds and include_ambient_scene_seeds:
             sections.append("\n=== ORRERY AMBIENT SCENE SEEDS ===")
@@ -2424,6 +2555,7 @@ class LogonUtility:
                     f"{seed.get('line_budget')} lines; silence_ok=true"
                 )
 
+        sections.kind = "orrery joint beats"
         joint_beats = context.get("orrery_joint_beats") or []
         if joint_beats:
             sections.append("\n=== ORRERY JOINT BEATS ===")
@@ -2450,6 +2582,7 @@ class LogonUtility:
                     f"{beat.get('reverse_proposal_id')})"
                 )
 
+        sections.kind = "orrery ambient peripherals"
         bleed_menu = context.get("orrery_bleed_menu") or []
         if bleed_menu:
             sections.append("\n=== ORRERY AMBIENT PERIPHERALS ===")
@@ -2473,6 +2606,7 @@ class LogonUtility:
         # Add author's note (soft out-of-character suggestion, used by regenerate).
         # Placed immediately before INSTRUCTIONS so recency bias gives it the influence
         # a soft nudge needs — entity/historical context above would otherwise bury it.
+        sections.kind = "author's note"
         note = context.get("note")
         if note:
             sections.append("\n=== AUTHOR'S NOTE ===")
@@ -2484,6 +2618,7 @@ class LogonUtility:
             )
             sections.append(note)
 
+        sections.kind = "instructions"
         # Add instructions
         sections.append("\n=== INSTRUCTIONS ===")
         sections.append(
@@ -2493,6 +2628,9 @@ class LogonUtility:
             "Maintain consistency with established characters, locations, and plot."
         )
 
+        self._last_rendered_blocks = sections.blocks()
+        if rendered_blocks is not None:
+            rendered_blocks.extend(self._last_rendered_blocks)
         return "\n".join(sections)
 
     def _format_turn_tag_library(

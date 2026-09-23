@@ -7,10 +7,15 @@ Tests token budget allocation and management with 20k limit for testing.
 import copy
 
 import pytest
-from unittest.mock import patch
 
 from nexus.agents.lore.utils.token_budget import TokenBudgetManager
 from nexus.config import load_settings_as_dict
+
+
+@pytest.fixture
+def settings():
+    """Use the real typed registry and seat policies."""
+    return load_settings_as_dict()
 
 
 def _calculate_budget(
@@ -59,32 +64,23 @@ class TestTokenBudgetManager:
         user_input = "Test input"
 
         # Test with o1 model (reasoning)
-        budget = _calculate_budget(manager, user_input, apex_model="o1-preview")
+        budget = _calculate_budget(
+            manager, user_input, apex_model=settings["apex"]["model"]
+        )
 
         # Should have reasoning reserve
         assert "reasoning_reserve" in budget or budget["total_available"] < 200000
 
-    def test_local_reasoning_model_cannot_return_negative_allocations(self):
-        """A model covered by the base reasoning heuristic cannot overallocate."""
-        settings = load_settings_as_dict()
-        committed_model = (
-            "gpt-5.6-terra"  # pin: base GPT-5 reasoning-reserve regression
-        )
+    def test_inside_output_reasoning_does_not_shrink_input(self, settings):
+        """The writer can use a small story window without a second output reserve."""
         manager = TokenBudgetManager(settings)
-
-        with pytest.raises(ValueError) as exc_info:
-            manager.calculate_budget(
-                "Test input",
-                apex_model=committed_model,
-                apex_context_window=24_000,
-            )
-
-        message = str(exc_info.value)
-        assert "window=24000" in message
-        assert "system_prompt=5000" in message
-        assert "reasoning_reserve=30000" in message
-        assert "response_reserve=4000" in message
-        assert f"model={committed_model}" in message
+        budget = manager.calculate_budget(
+            "Test input",
+            apex_model=settings["apex"]["model"],
+            apex_context_window=24_000,
+        )
+        assert budget["total_available"] == 20_000
+        assert budget["reasoning_reserve"] == 0
 
     def test_real_local_model_produces_positive_allocations(self, settings):
         """Hermes uses the local window without inheriting frontier reasoning."""
@@ -137,18 +133,10 @@ class TestTokenBudgetManager:
         # Should reduce other allocations accordingly
         assert budget["warm_slice"] < budget["total_available"] * 0.7
 
-    @patch("nexus.agents.lore.utils.token_budget.calculate_chunk_tokens")
-    def test_calculate_budget_token_counting(self, mock_calc_tokens, settings):
-        """Test that token counting is called correctly."""
-        mock_calc_tokens.return_value = 100
-
-        manager = TokenBudgetManager(settings)
-        user_input = "Test input"
-        budget = _calculate_budget(manager, user_input)
-
-        # Should have called token calculation
-        mock_calc_tokens.assert_called_with(user_input)
-        assert budget["user_input"] == 100
+    def test_calculate_budget_token_counting(self, settings):
+        """Count real text without replacing the tokenizer."""
+        budget = _calculate_budget(TokenBudgetManager(settings), "Test input")
+        assert budget["user_input"] == 2
 
 
 class TestBudgetAllocation:
@@ -165,9 +153,7 @@ class TestBudgetAllocation:
         percent_config = settings["Agent Settings"]["LORE"]["payload_percent_budget"]
 
         # Calculate actual percentages
-        total_context = (
-            budget["warm_slice"] + budget["structured"] + budget["augmentation"]
-        )
+        total_context = budget["total_available"]
 
         if total_context > 0:
             warm_percent = (budget["warm_slice"] / total_context) * 100

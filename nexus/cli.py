@@ -3180,14 +3180,19 @@ def run_logs(args: argparse.Namespace) -> Dict[str, Any]:
 
 
 def run_usage(args: argparse.Namespace) -> Dict[str, Any]:
-    """Return exact provider-reported usage for one UTC day or run."""
+    """Return provider usage and rendered blocks for one UTC day or run."""
+    from nexus.telemetry.usage import read_prompt_windows, summarize_usage
 
-    from nexus.telemetry.usage import summarize_usage
-
-    return {
-        "success": True,
-        "usage": summarize_usage(day=args.day, run_id=args.run),
-    }
+    usage = summarize_usage(day=args.day, run_id=args.run)
+    result = {"success": True, "usage": usage}
+    windows = (
+        [record.model_dump() for record in read_prompt_windows(args.run, usage["day"])]
+        if args.run
+        else []
+    )
+    if windows:
+        result["windows"] = windows
+    return result
 
 
 def run_jobs(args: argparse.Namespace) -> Dict[str, Any]:
@@ -3268,6 +3273,14 @@ def _print_usage(payload: Dict[str, Any]) -> None:
                     str(cell).ljust(widths[index]) for index, cell in enumerate(row)
                 )
             )
+
+    for record in payload.get("windows", []):
+        print(
+            f"\n{record['seat']} attempt {record['attempt']}: {record['input_tokens']} / {record['effective_ceiling']} (headroom {record['headroom']})"
+        )
+        print(f"  {'BLOCK':36} TOKENS")
+        for kind, tokens in record["block_tokens"].items():
+            print(f"  {kind:36} {tokens}")
 
 
 def _print_jobs(payload: Dict[str, Any]) -> None:

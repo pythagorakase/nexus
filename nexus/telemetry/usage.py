@@ -10,13 +10,16 @@ import logging
 import os
 from pathlib import Path
 from threading import Lock
-from typing import Any, Dict, Iterator, Literal, Optional
+from typing import TYPE_CHECKING, Any, Dict, Iterator, Literal, Optional
 from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from nexus.config import load_settings
 
+
+if TYPE_CHECKING:
+    from nexus.telemetry.prompt_window import PromptWindowRecord
 
 logger = logging.getLogger("nexus.usage")
 
@@ -580,3 +583,40 @@ def record_pydantic_ai_result(
         requests=getattr(usage, "requests", None),
     )
     record_usage_event(event)
+
+
+def record_prompt_window(record: "PromptWindowRecord") -> None:
+    """Append a pre-generation measurement beside provider usage events."""
+    config = _get_recorder_config()
+    if not config.enabled:
+        return
+    day = datetime.now(timezone.utc).date().isoformat()
+    path = config.usage_dir / f"windows-{day}.jsonl"
+    line = (record.model_dump_json() + "\n").encode("utf-8")
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(path, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o600)
+        try:
+            if os.write(fd, line) != len(line):
+                raise UsageWriteError(f"Short window append to {path}")
+        finally:
+            os.close(fd)
+    except OSError as exc:
+        raise UsageWriteError(
+            f"Failed to append window record to {path}: {exc}"
+        ) from exc
+
+
+def read_prompt_windows(run_id: str, day: str) -> list["PromptWindowRecord"]:
+    """Read the attempt-level rendered block ledger for one generation run."""
+    from nexus.telemetry.prompt_window import PromptWindowRecord
+
+    path = _get_recorder_config().usage_dir / f"windows-{day}.jsonl"
+    if not path.exists():
+        return []
+    records = []
+    for line in path.read_text().splitlines():
+        record = PromptWindowRecord.model_validate_json(line)
+        if record.generation_session == run_id:
+            records.append(record)
+    return records

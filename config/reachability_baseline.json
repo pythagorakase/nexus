@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "Route runtime and maintenance database clients through nexus.database for issue 880",
+  "reason": "Register the shared seat window arithmetic and rendered prompt ledger as production-reachable modules",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -234,6 +234,7 @@
     "nexus/config/__init__.py",
     "nexus/config/loader.py",
     "nexus/config/preferences.py",
+    "nexus/config/seat_window.py",
     "nexus/config/settings_models.py",
     "nexus/config/story_model.py",
     "nexus/database.py",
@@ -252,6 +253,7 @@
     "nexus/runtime/remote_auth.py",
     "nexus/runtime/supervisor.py",
     "nexus/telemetry/__init__.py",
+    "nexus/telemetry/prompt_window.py",
     "nexus/telemetry/usage.py",
     "nexus/util/__init__.py",
     "nexus/util/clock_face.py",

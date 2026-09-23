@@ -11,12 +11,7 @@
             "enable_narrative_state_allocation": false,
             "token_budget": {
                 "apex_context_window": 200000,
-                "test_limit": 20000,
-                "utilization": {
-                    "target": 95,
-                    "minimum": 90,
-                    "maximum": 98
-                }
+                "test_limit": 20000
             },
             "payload_percent_budget": {
                 "structured_summaries": {

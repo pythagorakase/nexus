@@ -1025,7 +1025,8 @@ async def test_logon_terminal_validation_propagation_logs_no_payload_prose(
             )
 
     provider = OpenAIProvider(
-        model="terminal-propagation-test-model",
+        model="TEST",
+        usage_provider_name="test",
         api_key="test-key",
         structured_output_retries=1,
         usage_seat="skald_single_pass",
@@ -1035,6 +1036,10 @@ async def test_logon_terminal_validation_propagation_logs_no_payload_prose(
         {"API Settings": {"apex": {"turn_pipeline": "single_pass"}}},
         model_override=provider.model,
     )
+    from nexus.config import load_settings_as_dict
+
+    utility.settings.update(load_settings_as_dict())
+    utility.settings["apex"]["turn_pipeline"] = "single_pass"
     utility.provider = provider
     utility._provider_bootstrap_mode = False
     utility._provider_wire_type = "openai"

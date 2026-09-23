@@ -79,12 +79,19 @@ def resolve_story_model(
         else:
             model = settings.apex.model
     try:
-        return settings.resolve_model_ref(model)
+        selected = settings.resolve_model_ref(model)
     except ValueError as exc:
         raise ValueError(
             f"Cannot resolve {seat} model {model!r}: absent from the registry. "
             "Clear or replace the story pin with nexus model --slot N --clear."
         ) from exc
+    entry = settings.model_entry(selected).require_window_capabilities()
+    if story is not None and story.apex_context_window is not None:
+        if story.apex_context_window > entry.max_input_tokens:
+            raise ValueError(
+                f"Story window {story.apex_context_window} exceeds model {selected!r} max_input_tokens {entry.max_input_tokens}"
+            )
+    return selected
 
 
 def story_context_settings(

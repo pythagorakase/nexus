@@ -720,9 +720,6 @@ class LORE:
             "turn_id": self.turn_context.turn_id,
             "elapsed_time": f"{elapsed:.2f} seconds",
             "phases_completed": list(self.turn_context.phase_states.keys()),
-            "token_utilization": self.turn_context.phase_states.get(
-                "payload_assembly", {}
-            ).get("utilization_percentage", 0),
             "errors": self.turn_context.error_log,
             "apex_tokens": self.turn_context.phase_states.get("apex_generation", {}),
             "components": {

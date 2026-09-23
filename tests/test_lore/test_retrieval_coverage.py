@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+import pytest
 from typing import Dict
 
 from nexus.memory import ContextMemoryManager
@@ -54,7 +55,7 @@ def test_handle_user_input_skips_retrieval_coverage_without_database(
     ]
 
 
-def test_attempted_retrieval_coverage_failure_logs_and_returns(caplog) -> None:
+def test_attempted_retrieval_coverage_failure_propagates(caplog) -> None:
     class FailingEngine:
         def connect(self) -> None:
             return None
@@ -68,27 +69,17 @@ def test_attempted_retrieval_coverage_failure_logs_and_returns(caplog) -> None:
         )
     )
 
-    audit_retrieval_coverage(
-        incremental_retriever=retriever,
-        entity_match=EntityMatch(characters=[], places=[], factions=[]),
-        turn_id="failed-audit-turn",
-        user_input="Ask Alex.",
-        raw_result_count=1,
-        kept_chunks=[{"chunk_id": 42}],
-        kept_tokens=3,
-        available_budget=100,
-    )
-
-    errors = [
-        record.getMessage()
-        for record in caplog.records
-        if record.levelname == "ERROR"
-        and "Retrieval coverage audit failed" in record.getMessage()
-    ]
-    assert len(errors) == 1
-    assert "failed-audit-turn" in errors[0]
-    assert "Ask Alex." in errors[0]
-    assert "kept_chunk_ids': [42]" in errors[0]
+    with pytest.raises(RuntimeError, match="audit database unavailable"):
+        audit_retrieval_coverage(
+            incremental_retriever=retriever,
+            entity_match=EntityMatch(characters=[], places=[], factions=[]),
+            turn_id="failed-audit-turn",
+            user_input="Ask Alex.",
+            raw_result_count=1,
+            kept_chunks=[{"chunk_id": 42}],
+            kept_tokens=3,
+            available_budget=100,
+        )
 
 
 def test_format_retrieval_coverage_report_shows_decision_measures() -> None:

@@ -138,7 +138,6 @@ class TestInfrastructure:
         # Verify token budget structure
         token_budget = lore_settings["token_budget"]
         assert "apex_context_window" in token_budget
-        assert "utilization" in token_budget
 
         # Verify percentage ranges
         percent_budget = lore_settings["payload_percent_budget"]
