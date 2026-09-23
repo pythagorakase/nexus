@@ -585,6 +585,7 @@ export function NarrativePane({
               <label className="choice freeform">
                 <Textarea
                   ref={freeformRef}
+                  autoSize
                   className="choice-input"
                   rows={1}
                   value={freeform}

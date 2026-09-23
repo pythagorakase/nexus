@@ -144,6 +144,7 @@ export function WizardChoices({
                 <span className="min-w-[1.5rem]" aria-hidden="true" />
                 <Textarea
                     ref={freeformRef}
+                    autoSize
                     rows={1}
                     value={freeform}
                     placeholder="…or something else"
