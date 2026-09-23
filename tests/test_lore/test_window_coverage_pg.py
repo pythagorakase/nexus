@@ -83,9 +83,10 @@ def test_window_coverage_is_written_only_from_post_render_kept_chunks():
                 "retrieved_passages": {"results": []},
                 "entity_data": {},
             }
-            _, _, _, count = utility.measure_writer_request(payload, 75000)
-            manager.record_rendered_coverage(chunks[:1], count)
-            manager.record_rendered_coverage(chunks[:1], count)
+            request = utility.measure_turn_requests(payload, 75000)[0]
+            rendered_tokens = sum(request.sizes[index] for index in request.sources)
+            manager.record_rendered_coverage(chunks[:1], {42: rendered_tokens})
+            manager.record_rendered_coverage(chunks[:1], {42: rendered_tokens})
             with memnon.db_manager.engine.connect() as conn:
                 rows = conn.execute(
                     text(
@@ -94,7 +95,7 @@ def test_window_coverage_is_written_only_from_post_render_kept_chunks():
                 ).all()
             assert len(rows) == 1
             assert rows[0].kept_chunk_ids == [42]
-            assert rows[0].kept_tokens == count(chunks[0]["text"]) - count("")
+            assert rows[0].kept_tokens == rendered_tokens
             assert rows[0].raw_result_count == 2
             assert rows[0].coverage == [
                 {

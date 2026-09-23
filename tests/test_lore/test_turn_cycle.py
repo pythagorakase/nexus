@@ -416,8 +416,17 @@ def _rendered_trim_case(warm, retrieved, extra_tokens):
     core = deepcopy(ctx.context_payload)
     core["warm_slice"]["chunks"] = [warm[-1]]
     core["retrieved_passages"]["results"] = []
-    core_tokens = logon.measure_writer_request(core, 75000)[0]
-    window = core_tokens + extra_tokens + settings["apex"]["response_reserve_tokens"]
+    requests = logon.measure_turn_requests(core, 75000)
+    window = (
+        max(
+            request.tokens
+            + request.reserved_output
+            + request.safety_margin
+            + request.budget.policy_headroom
+            for request in requests
+        )
+        + extra_tokens
+    )
     ctx.token_counts = {"total_available": window - 4000, "apex_window": window}
     return manager, ctx
 
@@ -440,7 +449,11 @@ def test_local_payload_trims_oldest_warm_chunks_and_keeps_parent():
     ]
     assert result["warm_chunks_dropped"] == 1
     assert result["tokens_after"] <= result["payload_ceiling"]
-    assert result["payload_ceiling"] == ctx.token_counts["total_available"]
+    assert result["payload_ceiling"] < ctx.token_counts["total_available"]
+    assert all(
+        request.tokens <= request.target
+        for request in manager.lore.logon._assembly_window_requests
+    )
 
 
 def test_frontier_payload_below_ceiling_is_unchanged(

@@ -48,7 +48,13 @@ def test_inside_output_reasoning_does_not_shrink_input_twice():
 def test_story_window_above_declared_input_ceiling_names_both_limits():
     settings = load_settings()
     model = settings.apex.model
-    maximum = settings.model_entry(model).max_input_tokens
+    policy = resolve_seat_window(
+        settings.model_dump(),
+        model,
+        seat="skald_writer",
+        window=settings.model_entry(model).context_window,
+    )
+    maximum = policy.input_ceiling + policy.policy_headroom
     with pytest.raises(ValueError, match=f"{maximum + 1}.*{maximum}"):
         resolve_story_model(
             "skald",
@@ -126,3 +132,175 @@ def test_usage_window_ledger_preserves_attempts_and_cli_blocks(tmp_path, capsys)
     output = capsys.readouterr().out
     assert "skald_writer attempt 2: 25 / 100 (headroom 75)" in output
     assert "BLOCK" in output and "user input" in output
+
+
+def test_total_only_models_reserve_seat_output_not_provider_maximum():
+    """Every OpenRouter model can use the owner's normal 75K input spend."""
+    settings = load_settings_as_dict()
+    for entry in settings["global"]["model"]["api_models"]["openrouter"]["models"]:
+        assert entry["max_input_tokens"] is None
+        window = resolve_seat_window(
+            settings, entry["id"], seat="skald_writer", window=75000
+        )
+        assert window.input_ceiling == 71000
+        window = resolve_seat_window(
+            settings, entry["id"], seat="skald_writer", window=entry["context_window"]
+        )
+        assert (
+            window.input_ceiling + window.policy_headroom
+            == entry["context_window"] - settings["apex"]["max_output_tokens"]
+        )
+
+
+def test_documented_input_limit_and_total_only_declarations():
+    """Both supported capability forms validate without inventing an input cap."""
+    total_only = dict(
+        id="fixture",
+        label="Fixture",
+        context_window=100,
+        max_output_tokens=90,
+        reasoning_accounting="none",
+    )
+    assert APIModelEntry.model_validate(total_only).max_input_tokens is None
+    assert APIModelEntry.model_validate(dict(total_only, max_input_tokens=10))
+    with pytest.raises(ValidationError, match="exceeds context_window"):
+        APIModelEntry.model_validate(dict(total_only, max_input_tokens=20))
+    with pytest.raises(ValidationError, match="complete window"):
+        APIModelEntry.model_validate(
+            dict(id="partial", label="Partial", max_input_tokens=50)
+        )
+
+
+def test_local_serving_window_is_the_supervisor_window():
+    """A 32K deployment cannot admit 28K input plus a 25K completion."""
+    from nexus.config.local_window import (
+        serving_context_window,
+        validate_reported_context,
+    )
+    from nexus.config.settings_models import Settings
+
+    settings = load_settings().model_dump()
+    command = settings["runtime"]["services"]["llama_server"]["command"]
+    command[command.index("--ctx-size") + 1] = "32768"
+    validated = Settings.model_validate(settings)
+    model = validated.local_models.model
+    window = resolve_seat_window(
+        validated.model_dump(), model, seat="skald_writer", window=32000
+    )
+    assert window.input_ceiling == 3768
+    assert (
+        window.input_ceiling + window.policy_headroom + window.max_output_tokens
+        == 32768
+    )
+    validate_reported_context({"default_generation_settings": {"n_ctx": 32768}}, 32768)
+    with pytest.raises(ValueError, match="98304.*32768"):
+        validate_reported_context(
+            {"default_generation_settings": {"n_ctx": 98304}}, 32768
+        )
+    with pytest.raises(ValueError, match="n_ctx=None"):
+        validate_reported_context({}, 32768)
+    with pytest.raises(ValueError, match="explicit positive"):
+        serving_context_window(["llama-server", "--ctx-size", "0"])
+    command[command.index("--ctx-size") + 1] = str(
+        validated.model_entry(model).context_window + 1
+    )
+    with pytest.raises(ValidationError, match="architectural window"):
+        Settings.model_validate(settings)
+
+
+def test_local_block_accounting_reuses_counts_and_subtracts_without_rendering():
+    """The actual tokenizer runs once per distinct block, even after trimming."""
+    from nexus.telemetry.prompt_window import (
+        AssemblyRequest,
+        LocalRequestCounter,
+        local_text_counter,
+    )
+
+    settings = load_settings()
+    count = local_text_counter(settings.model_entry(settings.apex.model))
+    chunk = {"chunk_id": 42}
+    budget = resolve_seat_window(
+        settings.model_dump(), settings.apex.model, seat="skald_writer", window=75000
+    )
+    request = AssemblyRequest(
+        budget,
+        [("recent narrative", " A passage."), ("instructions", " Continue.")],
+        {0: id(chunk)},
+        LocalRequestCounter(count, 100),
+    )
+    before = request.tokens
+    misses = count.cache_info().misses
+    counts, _ = measure_blocks(request.blocks, request.counter)
+    assert count.cache_info().misses == misses
+    request.drop(chunk)
+    assert request.tokens == before - counts["recent narrative"]
+    assert count.cache_info().misses == misses
+
+
+def test_shared_trim_reserves_maximal_writer_response_for_gaia():
+    """Real seat renderers fit a full-sized writer response at the shared boundary."""
+    from types import SimpleNamespace
+    from nexus.agents.logon.skald_wire import SkaldWriterWire
+    from nexus.agents.lore.utils.turn_context import TurnContext
+    from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
+    from nexus.memory import ContextMemoryManager
+    from nexus.telemetry.prompt_window import rendered_request_counter
+
+    settings = load_settings_as_dict()
+    logon = window_logon(settings)
+    payload = {
+        "user_input": "Continue.",
+        "warm_slice": {
+            "chunks": [
+                {"chunk_id": 1, "text": " Earlier." * 60000},
+                {"chunk_id": 2, "text": " Now.", "is_target": True},
+            ]
+        },
+        "retrieved_passages": {"results": []},
+        "entity_data": {},
+    }
+    ctx = TurnContext(turn_id="both-seats", user_input="Continue.", start_time=0)
+    ctx.context_payload = payload
+    ctx.token_counts = {"total_available": 71000, "apex_window": 75000}
+    manager = TurnCycleManager(
+        SimpleNamespace(
+            settings=settings,
+            logon=logon,
+            memory_manager=ContextMemoryManager(settings),
+            memnon=None,
+            token_manager=None,
+        )
+    )
+    manager._enforce_context_payload_budget(ctx)
+    writer, gaia = logon._assembly_window_requests
+    assert gaia.reserved_output == settings["apex"]["max_output_tokens"]
+    assert writer.tokens <= writer.target and gaia.tokens <= gaia.target
+    # Fill the remaining shared capacity using a one-token-per-repeat string.
+    count = writer.counter.text_count
+    parent = payload["warm_slice"]["chunks"][0]
+    parent["text"] += " X" * (gaia.target - gaia.tokens)
+    writer, gaia = logon.measure_turn_requests(payload, 75000)
+    assert gaia.tokens == gaia.target
+    output = SkaldWriterWire(
+        narrative="X", choices=["Go.", "Wait."], letter="Continue."
+    )
+    cost = count(output.model_dump_json())
+    output.narrative += " X" * (writer.budget.max_output_tokens - cost)
+    assert count(output.model_dump_json()) == writer.budget.max_output_tokens
+    turn_prompt = logon._format_context_prompt(
+        payload, seat="gaia", include_ambient_scene_seeds=False
+    )
+    gaia_prompt = logon._format_gaia_user_prompt(turn_prompt, output)
+    provider = logon._clone_provider_for_two_pass(
+        system_prompt=logon._gaia_system_prompt(),
+        output_validator=None,
+        usage_seat="gaia",
+        anthropic_transport=None,
+    )
+    exact = rendered_request_counter(provider)(gaia_prompt)
+    logon._enforce_final_prompt_window(
+        gaia_prompt,
+        effective_context_window=gaia.budget.input_ceiling,
+        rendered_tokens=exact,
+    )
+    assert exact <= gaia.budget.input_ceiling

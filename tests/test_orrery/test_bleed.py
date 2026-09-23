@@ -143,8 +143,8 @@ class FakeLogon:
     def __init__(self):
         self.window_logon = window_logon()
 
-    def measure_writer_request(self, payload, window):
-        return self.window_logon.measure_writer_request(payload, window)
+    def measure_turn_requests(self, payload, window):
+        return self.window_logon.measure_turn_requests(payload, window)
 
     async def generate_narrative_async(self, _payload, **_route):
         return FakeStoryResponse()

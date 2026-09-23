@@ -8,7 +8,7 @@ import logging
 import re
 from collections import Counter
 from dataclasses import dataclass
-from typing import Callable, Any, Callable, Dict, Iterable, List, Mapping, Optional, Set
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Set
 
 from sqlalchemy import text
 
@@ -1022,7 +1022,9 @@ class ContextMemoryManager:
         self._pending_retrieval_coverage = kwargs
 
     def record_rendered_coverage(
-        self, chunks: Iterable[Dict[str, Any]], count_tokens: Callable[[str], int]
+        self,
+        chunks: Iterable[Dict[str, Any]],
+        rendered_chunk_tokens: Dict[MemoryIdentity, int],
     ) -> None:
         """Write coverage from retrieved identities that survived final rendering."""
         pending = getattr(self, "_pending_retrieval_coverage", None)
@@ -1038,8 +1040,9 @@ class ContextMemoryManager:
         ]
         data = dict(pending)
         data["kept_chunks"] = kept
-        empty = count_tokens("")
-        data["kept_tokens"] = sum(count_tokens(chunk["text"]) - empty for chunk in kept)
+        data["kept_tokens"] = sum(
+            rendered_chunk_tokens[self._memory_identity(chunk)] for chunk in kept
+        )
         audit_retrieval_coverage(**data)
         self._pending_retrieval_coverage = None
 

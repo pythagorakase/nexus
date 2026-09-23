@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+import json
 from collections import defaultdict
+from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Callable, Iterable
+from typing import TYPE_CHECKING, Any, Callable, Iterable
 
 from pydantic import BaseModel, ConfigDict, Field
+
+if TYPE_CHECKING:
+    from nexus.config.seat_window import SeatWindow
+    from nexus.config.settings_models import APIModelEntry
 
 
 class RenderedSections(list[str]):
@@ -17,6 +23,7 @@ class RenderedSections(list[str]):
         super().__init__()
         self.kind = "intertitle"
         self.kinds: list[str] = []
+        self.sources: dict[int, int] = {}
 
     def append(self, value: str) -> None:
         super().append(value)
@@ -26,16 +33,113 @@ class RenderedSections(list[str]):
         for value in values:
             self.append(value)
 
+    def append_chunk(self, value: str, chunk: dict[str, Any]) -> None:
+        """Retain payload ownership for subtraction without rerendering."""
+        self.sources[len(self)] = id(chunk)
+        self.append(value)
+
     def blocks(self) -> list[tuple[str, str]]:
-        """Return contiguous blocks including their exact joining separators."""
-        result: list[tuple[str, str]] = []
-        for index, (kind, value) in enumerate(zip(self.kinds, self)):
-            value = ("\n" if index else "") + value
-            if result and result[-1][0] == kind:
-                result[-1] = (kind, result[-1][1] + value)
-            else:
-                result.append((kind, value))
-        return result
+        """Return independently removable blocks with their joining separators."""
+        return [
+            (kind, ("\n" if index else "") + value)
+            for index, (kind, value) in enumerate(zip(self.kinds, self))
+        ]
+
+
+class LocalRequestCounter:
+    """Memoized local block counts plus the request's fixed system/schema cost."""
+
+    def __init__(self, text_count: Callable[[str], int], overhead: int) -> None:
+        self.text_count = text_count
+        self.overhead = overhead
+
+    def __call__(self, text: str) -> int:
+        return self.overhead + self.text_count(text)
+
+
+def local_text_counter(entry: APIModelEntry) -> Callable[[str], int]:
+    """Select only the explicitly declared tokenizer; cache within one assembly."""
+    if entry.tokenizer_encoding:
+        import tiktoken
+
+        tokenizer = tiktoken.get_encoding(entry.tokenizer_encoding)
+        return lru_cache(maxsize=None)(lambda text: len(tokenizer.encode(text)))
+    if entry.tokenizer_repository:
+        tokenizer = _load_tokenizer(entry.tokenizer_repository)
+        return lru_cache(maxsize=None)(
+            lambda text: len(tokenizer.encode(text, add_special_tokens=False))
+        )
+    raise ValueError(f"No local tokenizer declared for {entry.id!r}")
+
+
+def local_request_counter(
+    provider: Any,
+    entry: APIModelEntry,
+    text_count: Callable[[str], int],
+    *,
+    text_format: dict[str, Any] | None = None,
+    anthropic_request: dict[str, Any] | None = None,
+) -> LocalRequestCounter:
+    """Estimate fixed request costs locally; only the final guard counts remotely."""
+    overhead = text_count(provider.system_prompt or "")
+    if provider.usage_provider_name != "test":
+        schema = text_format or {
+            key: value
+            for key, value in (anthropic_request or {}).items()
+            if key in {"thinking", "tools", "tool_choice", "output_config"}
+        }
+        if schema:
+            overhead += text_count(json.dumps(schema, ensure_ascii=False))
+        if entry.tokenizer_repository:
+            tokenizer = _load_tokenizer(entry.tokenizer_repository)
+            messages = [{"role": "user", "content": ""}]
+            if provider.system_prompt:
+                messages.insert(
+                    0, {"role": "system", "content": provider.system_prompt}
+                )
+            # Compatible transports enforce response_format as a grammar, not
+            # additional user text. Match the final chat-template counter.
+            overhead = len(
+                tokenizer.apply_chat_template(
+                    messages, tokenize=True, add_generation_prompt=True
+                )
+            )
+    return LocalRequestCounter(text_count, overhead)
+
+
+@dataclass
+class AssemblyRequest:
+    """A rendered seat request whose removable costs are computed only once."""
+
+    budget: SeatWindow
+    blocks: list[tuple[str, str]]
+    sources: dict[int, int]
+    counter: LocalRequestCounter
+    safety_margin: int = 0
+    reserved_output: int = 0
+    sizes: list[int] = field(init=False)
+    removed: set[int] = field(default_factory=set)
+
+    def __post_init__(self) -> None:
+        self.sizes = [self.counter.text_count(text) for _, text in self.blocks]
+
+    @property
+    def tokens(self) -> int:
+        """Return the remaining rendered estimate without retokenizing."""
+        return self.counter.overhead + sum(
+            size for index, size in enumerate(self.sizes) if index not in self.removed
+        )
+
+    @property
+    def target(self) -> int:
+        """Reserve the writer response and configured tokenizer safety margin."""
+        return self.budget.input_ceiling - self.reserved_output - self.safety_margin
+
+    def drop(self, chunk: dict[str, Any]) -> None:
+        """Subtract only rendered blocks owned by the removed payload object."""
+        self.removed.update(
+            index for index, source in self.sources.items() if source == id(chunk)
+        )
 
 
 class PromptWindowRecord(BaseModel):
@@ -147,16 +251,19 @@ def _load_tokenizer(repository: str) -> Any:
 
 
 def measure_blocks(
-    blocks: list[tuple[str, str]], count: Callable[[str], int]
+    blocks: list[tuple[str, str]],
+    count: LocalRequestCounter,
+    *,
+    exact_total: int | None = None,
 ) -> tuple[dict[str, int], int]:
-    """Attribute each exact prefix increment, including message framing once."""
+    """Count each local block once and reconcile framing to the one full count."""
     counts: dict[str, int] = defaultdict(int)
-    previous = count("")
-    counts["system"] = previous
-    prefix = ""
+    counts["system"] = count.overhead
     for kind, text in blocks:
-        prefix += text
-        current = count(prefix)
-        counts[kind] += current - previous
-        previous = current
-    return dict(counts), previous
+        counts[kind] += count.text_count(text)
+    total = sum(counts.values())
+    if exact_total is not None:
+        # Request framing includes provider schema serialization and BPE joins.
+        counts["request framing"] = exact_total - total
+        total = exact_total
+    return dict(counts), total

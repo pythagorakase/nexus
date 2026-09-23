@@ -87,9 +87,18 @@ def resolve_story_model(
         ) from exc
     entry = settings.model_entry(selected).require_window_capabilities()
     if story is not None and story.apex_context_window is not None:
-        if story.apex_context_window > entry.max_input_tokens:
+        from nexus.config.seat_window import resolve_seat_window
+
+        policy = resolve_seat_window(
+            settings.model_dump(),
+            selected,
+            seat="gaia" if seat == "gaia" else "skald_writer",
+            window=entry.context_window,
+        )
+        maximum = policy.input_ceiling + policy.policy_headroom
+        if story.apex_context_window > maximum:
             raise ValueError(
-                f"Story window {story.apex_context_window} exceeds model {selected!r} max_input_tokens {entry.max_input_tokens}"
+                f"Story window {story.apex_context_window} exceeds model {selected!r} max_input_tokens {maximum}"
             )
     return selected
 

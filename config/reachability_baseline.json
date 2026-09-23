@@ -233,6 +233,7 @@
     "nexus/cli.py",
     "nexus/config/__init__.py",
     "nexus/config/loader.py",
+    "nexus/config/local_window.py",
     "nexus/config/preferences.py",
     "nexus/config/seat_window.py",
     "nexus/config/settings_models.py",

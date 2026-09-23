@@ -101,30 +101,39 @@ class APIModelEntry(BaseModel):
     ] = None
     allows_overlapping_limits: bool = False
     tokenizer_repository: Optional[str] = None
+    tokenizer_encoding: Optional[str] = None
+    token_count_safety_margin: int = Field(default=0, ge=0, strict=True)
 
     @model_validator(mode="after")
     def _validate_window_capabilities(self) -> "APIModelEntry":
         """Reject partial declarations and unsupported combined limits."""
         values = (
             self.context_window,
-            self.max_input_tokens,
             self.max_output_tokens,
             self.reasoning_accounting,
         )
-        if any(value is not None for value in values):
+        if self.tokenizer_repository and self.tokenizer_encoding:
+            raise ValueError(
+                "Declare one local tokenizer, not both repository and encoding"
+            )
+        if (
+            any(value is not None for value in values)
+            or self.max_input_tokens is not None
+        ):
             if any(value is None for value in values):
                 raise ValueError(
                     f"Model {self.id!r} requires a complete window capability declaration"
                 )
             if (
-                self.max_input_tokens > self.context_window
-                or self.max_output_tokens > self.context_window
-            ):
+                self.max_input_tokens is not None
+                and self.max_input_tokens > self.context_window
+            ) or self.max_output_tokens > self.context_window:
                 raise ValueError(
                     f"Model {self.id!r} has a limit above its context_window"
                 )
             if (
-                not self.allows_overlapping_limits
+                self.max_input_tokens is not None
+                and not self.allows_overlapping_limits
                 and self.max_input_tokens + self.max_output_tokens > self.context_window
             ):
                 raise ValueError(
@@ -3718,6 +3727,20 @@ class Settings(BaseModel):
         if self.local_models.model is not None:
             if registry[self.local_models.model] != "local":
                 raise ValueError("local_models.model must belong to the local provider")
+            from nexus.config.local_window import serving_context_window
+
+            if self.runtime is None or "llama_server" not in self.runtime.services:
+                raise ValueError(
+                    "local_models.model requires a llama_server serving window"
+                )
+            window = serving_context_window(
+                self.runtime.services["llama_server"].command
+            )
+            entry = self.model_entry(self.local_models.model)
+            if window > entry.context_window:
+                raise ValueError(
+                    f"Local serving context_window {window} exceeds model {entry.id!r} architectural window {entry.context_window}"
+                )
 
         return self
 

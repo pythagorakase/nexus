@@ -13,9 +13,14 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import Any, Dict, Literal, Mapping, Optional, Union, cast
+from typing import TYPE_CHECKING, Any, Dict, Literal, Mapping, Optional, Union, cast
 
 import psycopg2
+
+if TYPE_CHECKING:
+    from nexus.config.seat_window import SeatWindow
+    from nexus.config.settings_models import APIModelEntry
+    from nexus.telemetry.prompt_window import AssemblyRequest, LocalRequestCounter
 
 from nexus.agents.logon.apex_schema import (  # noqa: E402
     StoryTurnResponse,
@@ -1621,43 +1626,57 @@ class LogonUtility:
             character_roster=character_roster,
         )
 
-    def measure_writer_request(
-        self, payload: Dict[str, Any], window: int
-    ) -> tuple[int, Any, list[tuple[str, str]], Any]:
-        """Render and count the writer request used by trimming and generation."""
-        from nexus.config.seat_window import resolve_seat_window
-        from nexus.telemetry.prompt_window import rendered_request_counter
+    def _local_window_counter(
+        self, provider: Any, **kwargs: Any
+    ) -> tuple["LocalRequestCounter", "APIModelEntry"]:
+        """Reuse one declared local tokenizer cache for all blocks in this turn."""
+        from nexus.config.settings_models import APIModelEntry
+        from nexus.telemetry.prompt_window import (
+            local_text_counter,
+            local_request_counter,
+        )
 
-        self._active_orrery_proposal_bindings = _proposal_bindings_from_payload(payload)
-        self._active_anchor_chunk_id = self._parent_chunk_id(payload)
-        self._ensure_provider(payload)
-        schema = self._select_response_schema(payload)
-        presence = self._read_presence_baseline_for_context(payload, schema)
-        blocks: list[tuple[str, str]] = []
-        prompt = self._format_context_prompt(
-            payload, presence_baseline=presence, rendered_blocks=blocks
+        entry = next(
+            APIModelEntry.model_validate(entry)
+            for provider_settings in self.settings["global"]["model"][
+                "api_models"
+            ].values()
+            for entry in provider_settings["models"]
+            if entry["id"] == provider.model
         )
-        provider = copy.copy(self.provider)
-        if self._is_two_pass_turn(schema):
-            provider.system_prompt = self._writer_system_prompt()
-        budget = resolve_seat_window(
-            self.settings, provider.model, seat="skald_writer", window=window
+        if not hasattr(self, "_window_text_counters"):
+            self._window_text_counters = {}
+        key = (entry.tokenizer_encoding, entry.tokenizer_repository)
+        if key not in self._window_text_counters:
+            self._window_text_counters[key] = local_text_counter(entry)
+        return (
+            local_request_counter(
+                provider, entry, self._window_text_counters[key], **kwargs
+            ),
+            entry,
         )
-        format_kwargs = (
-            self._two_pass_schema_format_kwargs(SkaldWriterWire)
-            if self._is_two_pass_turn(schema)
-            else self._schema_format_kwargs(schema)
-        )
+
+    def _measure_assembly_request(
+        self,
+        provider: Any,
+        prompt: str,
+        blocks: list[tuple[str, str]],
+        sources: dict[int, int],
+        schema: type,
+        format_kwargs: Dict[str, Any],
+        *,
+        seat: str,
+        window: int,
+    ) -> "AssemblyRequest":
+        """Count each block locally, including the seat's system and schema."""
+        from nexus.config.seat_window import resolve_seat_window
+        from nexus.telemetry.prompt_window import AssemblyRequest
+
         anthropic_request = None
         if provider.usage_provider_name == "anthropic":
-            if (
-                self._is_two_pass_turn(schema)
-                or provider.structured_transport == "native"
-            ):
+            if provider.structured_transport == "native":
                 anthropic_request = provider._build_native_structured_request_params(
-                    prompt,
-                    SkaldWriterWire if self._is_two_pass_turn(schema) else schema,
-                    **format_kwargs,
+                    prompt, schema, **format_kwargs
                 )
             elif provider.structured_transport == "tool_envelope":
                 anthropic_request = (
@@ -1669,13 +1688,112 @@ class LogonUtility:
                 anthropic_request = provider._build_prompted_structured_request_params(
                     prompt
                 )
-        count = rendered_request_counter(
+        count, entry = self._local_window_counter(
             provider,
             text_format=format_kwargs.get("text_format"),
             anthropic_request=anthropic_request,
-            settings_path=self.settings_path,
         )
-        return count(prompt), budget, blocks, count
+        budget = resolve_seat_window(
+            self.settings, provider.model, seat=seat, window=window
+        )
+        return AssemblyRequest(
+            budget, blocks, sources, count, entry.token_count_safety_margin
+        )
+
+    def measure_turn_requests(
+        self, payload: Dict[str, Any], window: int
+    ) -> list["AssemblyRequest"]:
+        """Render both seats once, reserving the full writer allowance for Gaia."""
+        self._window_text_counters = {}
+        self._active_orrery_proposal_bindings = _proposal_bindings_from_payload(payload)
+        self._active_anchor_chunk_id = self._parent_chunk_id(payload)
+        self._ensure_provider(payload)
+        schema = self._select_response_schema(payload)
+        presence = self._read_presence_baseline_for_context(payload, schema)
+        prompt = self._format_context_prompt(payload, presence_baseline=presence)
+        blocks = self._last_rendered_blocks
+        sources = self._last_rendered_block_sources
+        provider = copy.copy(self.provider)
+        two_pass = self._is_two_pass_turn(schema)
+        if two_pass:
+            provider.system_prompt = self._writer_system_prompt()
+            if provider.usage_provider_name == "anthropic":
+                provider.structured_transport = "native"
+        writer = self._measure_assembly_request(
+            provider,
+            prompt,
+            blocks,
+            sources,
+            SkaldWriterWire if two_pass else schema,
+            (
+                self._two_pass_schema_format_kwargs(SkaldWriterWire)
+                if two_pass
+                else self._schema_format_kwargs(schema)
+            ),
+            seat="skald_writer",
+            window=window,
+        )
+        if not two_pass:
+            return [writer]
+        gaia_route = self._resolve_gaia_route()
+        gaia_wire = (
+            gaia_route[3] if gaia_route is not None else self._provider_wire_type
+        )
+        transport = self._resolve_anthropic_two_pass_gaia_transport(gaia_wire)
+        system = self._gaia_system_prompt(
+            wire_type=gaia_wire, anthropic_transport=transport
+        )
+        if gaia_route is not None:
+            gaia_provider = self._build_gaia_provider(
+                gaia_route,
+                system_prompt=system,
+                output_validator=None,
+                anthropic_transport=transport,
+            )
+        else:
+            gaia_provider = copy.copy(self.provider)
+            gaia_provider.system_prompt = system
+            if transport is not None:
+                gaia_provider.structured_transport = transport
+        gaia_prompt = self._format_context_prompt(
+            payload,
+            presence_baseline=presence,
+            include_ambient_scene_seeds=False,
+            seat="gaia",
+        )
+        gaia_blocks = list(self._last_rendered_blocks)
+        gaia_sources = self._last_rendered_block_sources
+        # Rendering adds fixed headings beyond the writer's response tokens.
+        empty_writer = SkaldWriterWire.model_construct(
+            narrative="",
+            choices=[],
+            letter="",
+            scene=None,
+            presence=None,
+            operations=None,
+        )
+        suffix = self._format_gaia_user_prompt("", empty_writer)
+        gaia_blocks.append(("finished writer framing", suffix))
+        gaia_schema = self._gaia_schema_model(gaia_wire)
+        gaia = self._measure_assembly_request(
+            gaia_provider,
+            gaia_prompt + suffix,
+            gaia_blocks,
+            gaia_sources,
+            gaia_schema,
+            self._two_pass_schema_format_kwargs(gaia_schema, wire_type=gaia_wire),
+            seat="gaia",
+            window=self._gaia_effective_window(gaia_route) if gaia_route else window,
+        )
+        gaia.reserved_output = writer.budget.max_output_tokens
+        return [writer, gaia]
+
+    def measure_writer_request(
+        self, payload: Dict[str, Any], window: int
+    ) -> tuple[int, "SeatWindow", list[tuple[str, str]], "LocalRequestCounter"]:
+        """Expose the writer's locally counted assembly for diagnostics."""
+        writer = self.measure_turn_requests(payload, window)[0]
+        return writer.tokens, writer.budget, writer.blocks, writer.counter
 
     def _attach_prompt_window_guard(
         self, provider: Any, prompt: str, *, seat: str, window: Optional[int]
@@ -1747,7 +1865,15 @@ class LogonUtility:
                 active_blocks.append(
                     ("structured output retry", active_prompt[len(prompt) :])
                 )
-            counts, tokens = measure_blocks(active_blocks, count)
+            if provider.usage_provider_name == "local":
+                from nexus.config.local_window import verify_local_context
+
+                verify_local_context(provider, self.settings)
+            local_count, _ = self._local_window_counter(
+                provider, text_format=text_format, anthropic_request=anthropic_request
+            )
+            tokens = count(active_prompt)
+            counts, _ = measure_blocks(active_blocks, local_count, exact_total=tokens)
             record_prompt_window(
                 PromptWindowRecord(
                     generation_session=generation_session,
@@ -1768,9 +1894,20 @@ class LogonUtility:
                 rendered_tokens=tokens,
             )
             if seat != "gaia":
+                # An untrimmable Gaia core must fail before paying for the writer.
+                for request in getattr(self, "_assembly_window_requests", []):
+                    if (
+                        request.budget.seat == "gaia"
+                        and request.tokens > request.target
+                    ):
+                        raise ValueError(
+                            f"Gaia shared request {request.tokens} plus reserved writer output "
+                            f"{request.reserved_output} and tokenizer margin {request.safety_margin} "
+                            f"exceeds the effective input window {request.budget.input_ceiling}"
+                        )
                 record_coverage = getattr(self, "record_rendered_coverage", None)
                 if record_coverage is not None:
-                    record_coverage(count)
+                    record_coverage()
                     self.record_rendered_coverage = None
 
         provider.prompt_window_guard = guard
@@ -2263,9 +2400,11 @@ class LogonUtility:
             for chunk in context["warm_slice"]["chunks"]:
                 chunk_text = chunk.get("text", "")
                 if is_retrograde_summary(chunk):
-                    sections.append(f"[{_retrieval_source_label(chunk)}] {chunk_text}")
+                    sections.append_chunk(
+                        f"[{_retrieval_source_label(chunk)}] {chunk_text}", chunk
+                    )
                 else:
-                    sections.append(chunk_text)
+                    sections.append_chunk(chunk_text, chunk)
 
         sections.kind = "bootstrap context"
         bootstrap_sections = self._format_bootstrap_context(
@@ -2428,10 +2567,11 @@ class LogonUtility:
             for passage in context["retrieved_passages"]["results"][
                 :5
             ]:  # Limit to top 5
-                sections.append(
+                sections.append_chunk(
                     f"[{_retrieval_source_label(passage)} | "
                     f"Score: {passage.get('score', 0):.2f}] "
-                    f"{passage.get('text', '')}"
+                    f"{passage.get('text', '')}",
+                    passage,
                 )
 
         sections.kind = "world knowledge"
@@ -2654,6 +2794,7 @@ class LogonUtility:
         )
 
         self._last_rendered_blocks = sections.blocks()
+        self._last_rendered_block_sources = sections.sources
         if rendered_blocks is not None:
             rendered_blocks.extend(self._last_rendered_blocks)
         return "\n".join(sections)

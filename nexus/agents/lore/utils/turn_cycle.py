@@ -8,7 +8,7 @@ import json
 import logging
 from dataclasses import replace
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, Iterable, List, Optional, Union
+from typing import Any, Dict, Iterable, List, Optional, Union
 
 from nexus.agents.lore.utils.chunk_operations import calculate_chunk_tokens
 from nexus.agents.orrery.player_identity import canonical_player_character_id
@@ -1166,14 +1166,17 @@ class TurnCycleManager:
             }
         logon = self.lore.logon
         window = turn_context.token_counts["apex_window"]
-        tokens_before, budget, blocks, count = logon.measure_writer_request(
-            payload, window
-        )
-        ceiling = budget.input_ceiling
-        prompt_overhead_tokens = budget.policy_headroom
+        requests = logon.measure_turn_requests(payload, window)
+        writer = requests[0]
+        tokens_before = writer.tokens
+        prompt_overhead_tokens = writer.budget.policy_headroom
 
-        def measure() -> int:
-            return logon.measure_writer_request(payload, window)[0]
+        def over_budget() -> bool:
+            return any(request.tokens > request.target for request in requests)
+
+        def drop(chunk: Dict[str, Any]) -> None:
+            for request in requests:
+                request.drop(chunk)
 
         tokens_after = tokens_before
         warm_chunks_dropped = 0
@@ -1198,18 +1201,28 @@ class TurnCycleManager:
         dropped_chunks: List[Dict[str, Any]] = []
 
         protected_chunk = _protected_warm_chunk(warm_chunks) if warm_chunks else None
-        while tokens_after > ceiling and protected_chunk is not None:
+        while over_budget() and protected_chunk is not None:
             oldest_index = _oldest_droppable_warm_index(warm_chunks, protected_chunk)
             if oldest_index is None:
                 break
-            dropped_chunks.append(warm_chunks.pop(oldest_index))
+            chunk = warm_chunks.pop(oldest_index)
+            dropped_chunks.append(chunk)
+            drop(chunk)
             warm_chunks_dropped += 1
-            tokens_after = measure()
+            tokens_after = writer.tokens
 
-        while tokens_after > ceiling and retrieved_passages:
-            dropped_chunks.append(retrieved_passages.pop())
+        while over_budget() and retrieved_passages:
+            chunk = retrieved_passages.pop()
+            dropped_chunks.append(chunk)
+            drop(chunk)
             retrieved_passages_dropped += 1
-            tokens_after = measure()
+            tokens_after = writer.tokens
+
+        # Express the tighter seat constraint in writer-token units for telemetry.
+        ceiling = min(
+            request.target - request.tokens + writer.tokens for request in requests
+        )
+        logon._assembly_window_requests = requests
 
         if warm_chunks_dropped or retrieved_passages_dropped:
             memory_manager = getattr(self.lore, "memory_manager", None)
@@ -1254,14 +1267,33 @@ class TurnCycleManager:
                 "recent narrative": warm_chunks_dropped,
                 "historical context": retrieved_passages_dropped,
             },
+            "seats": {
+                request.budget.seat: {
+                    "input_tokens": request.tokens,
+                    "input_ceiling": request.budget.input_ceiling,
+                    "trim_target": request.target,
+                    "reserved_writer_output": request.reserved_output,
+                    "token_count_safety_margin": request.safety_margin,
+                }
+                for request in requests
+            },
         }
 
-        def record_coverage(counter: Callable[[str], int]) -> None:
-            self.lore.memory_manager.record_rendered_coverage(
-                payload["warm_slice"]["chunks"]
-                + payload["retrieved_passages"]["results"][:5],
-                counter,
-            )
+        chunks = (
+            payload["warm_slice"]["chunks"]
+            + payload["retrieved_passages"]["results"][:5]
+        )
+        identities = {id(chunk): memory_identity(chunk) for chunk in chunks}
+        chunk_tokens: Dict[Any, int] = {}
+        for index, source in writer.sources.items():
+            if index not in writer.removed and source in identities:
+                identity = identities[source]
+                chunk_tokens[identity] = (
+                    chunk_tokens.get(identity, 0) + writer.sizes[index]
+                )
+
+        def record_coverage() -> None:
+            self.lore.memory_manager.record_rendered_coverage(chunks, chunk_tokens)
 
         logon.record_rendered_coverage = record_coverage
 
