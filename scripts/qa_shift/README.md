@@ -206,14 +206,29 @@ The [2026-09-23 baselines](baselines/2026-09-23/) use these definitions:
   sequential decimal/keycap list is a **legacy menu heuristic**, with coverage
   reported separately; prose may itself contain numbered lists. Only option
   lines are recovered. Chunks without such a list have N/A menu statistics,
-  never a fabricated zero-choice menu. Narrative measurements retain the full
-  Storyteller section, including embedded lists/headings, unlike modern prose
-  stored separately from choices. Cross-tier comparisons carry that limitation.
+  never a fabricated zero-choice menu. Recovered option lines feed only choice
+  statistics and are removed before measuring narrative closers, word counts,
+  paragraph/sentence rhythm, negation, and motifs. Surrounding prose and blank
+  lines remain intact, including questions before menus and prose after them.
+  When no menu is recovered, the narrative is the whole Storyteller section.
+  Markdown decoration cleanup preserves paragraph separators.
 - Exactly one `setting` link identifies a primary place. Missing or multiple
   setting links break the streak and are counted, rather than picking an
   arbitrary place or carrying one forward. World-minute deltas use adjacent
   playable chunks with both timestamps present; missing pairs and negative
   deltas remain explicit.
+
+The JSON provenance's `measurement_scope` records cross-format comparability.
+Closers, negation, rhythm, motifs, and words per chunk now share menu-excluding
+narrative definitions across legacy and modern storage. Selected-turn counts
+and telemetry also share definitions, subject to source coverage. Legacy menu
+recovery remains heuristic: it can mistake numbered prose for a menu or miss
+menus and option continuation lines. Legacy narrative metrics inherit that
+uncertainty, and legacy choice statistics describe only recovered menus; their
+coverage is not equivalent to structured `choice_object.presented` menus.
+Punctuation-based sentence segmentation and lexical/keyword choice proxies
+remain heuristics in every corpus. These are descriptive comparisons, not
+quality scores.
 
 To reconstruct the locked July reference, verify the manifest SHA against the
 sidecar, `createdb ref_codex_bakeoff_2026_07`, restore with

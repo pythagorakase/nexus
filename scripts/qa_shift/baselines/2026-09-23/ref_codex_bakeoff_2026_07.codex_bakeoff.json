@@ -16,10 +16,27 @@
       "read_only": true,
       "description": "July Codex-driven multi-Skald bakeoff regression artifact, not a taste reference; migrated and Pass-2 stamped before locking."
     },
-    "measured_at": "2026-09-23T19:20:54.963684+00:00",
+    "measured_at": "2026-09-23T19:31:37.584195+00:00",
     "text_source": "columns",
     "text_source_counts": {
       "columns": 110
+    },
+    "measurement_scope": {
+      "narrative": "Modern storyteller_text; legacy Storyteller section with only recovered menu option lines removed; whole section when no menu is recovered.",
+      "choices": "choice_object.presented when available, otherwise the final recovered sequential numbered legacy menu; missing menus are N/A.",
+      "comparable_metrics": [
+        "closers",
+        "negation",
+        "rhythm",
+        "motifs",
+        "words_per_chunk",
+        "selected_turns",
+        "same_setting_streak",
+        "world_minutes_per_turn"
+      ],
+      "comparability": "Narrative metrics use the same menu-excluding definitions across storage formats, conditional on legacy menu recovery. Selected turns and telemetry use the same definitions subject to source coverage.",
+      "legacy_heuristics": "Menu detection can misidentify numbered prose or miss menus and continuation lines. Legacy narrative metrics inherit that uncertainty; choice statistics describe recovered menus only, not equivalent coverage to structured menus.",
+      "shared_heuristics": "Sentence segmentation is punctuation-based; choice first verbs use lexical tokens and speech/change shares use keywords."
     },
     "snapshot_sha256": "592be3de2dce765fffb70431d7ae1d76b5b7c20b54b64331100d4ca9c1572656",
     "migration": {

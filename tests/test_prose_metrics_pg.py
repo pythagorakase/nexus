@@ -42,6 +42,9 @@ def test_metrics_cli_on_disposable_corpus(tmp_path: Path) -> None:
         assert report["corpus"] == dbname
         assert report["provenance"]["read_only"] is True
         assert report["provenance"]["text_source"] == "columns"
+        scope = report["provenance"]["measurement_scope"]
+        assert "rhythm" in scope["comparable_metrics"]
+        assert "recovered menus only" in scope["legacy_heuristics"]
         assert (
             report["provenance"]["database_chunk_count"]
             > report["metrics"]["chunks"]

@@ -16,10 +16,27 @@
       "chunk_count": 1425,
       "description": "Human-play legacy import predating Orrery; taste calibration reference, adapted read-only from raw_text sections."
     },
-    "measured_at": "2026-09-23T19:20:34.851658+00:00",
+    "measured_at": "2026-09-23T19:31:30.189870+00:00",
     "text_source": "raw_text_legacy_sections",
     "text_source_counts": {
       "raw_text_legacy_sections": 1425
+    },
+    "measurement_scope": {
+      "narrative": "Modern storyteller_text; legacy Storyteller section with only recovered menu option lines removed; whole section when no menu is recovered.",
+      "choices": "choice_object.presented when available, otherwise the final recovered sequential numbered legacy menu; missing menus are N/A.",
+      "comparable_metrics": [
+        "closers",
+        "negation",
+        "rhythm",
+        "motifs",
+        "words_per_chunk",
+        "selected_turns",
+        "same_setting_streak",
+        "world_minutes_per_turn"
+      ],
+      "comparability": "Narrative metrics use the same menu-excluding definitions across storage formats, conditional on legacy menu recovery. Selected turns and telemetry use the same definitions subject to source coverage.",
+      "legacy_heuristics": "Menu detection can misidentify numbered prose or miss menus and continuation lines. Legacy narrative metrics inherit that uncertainty; choice statistics describe recovered menus only, not equivalent coverage to structured menus.",
+      "shared_heuristics": "Sentence segmentation is punctuation-based; choice first verbs use lexical tokens and speech/change shares use keywords."
     },
     "snapshot_sha256": "28e625a4a78934d12cc30a502e246a3e855a9dce5b41c53126e2cc6050eb3f64",
     "migration": {
@@ -117,45 +134,45 @@
       1383
     ],
     "closers": {
-      "question_count": 452,
-      "question_rate": 0.31763879128601546,
-      "what_do_you_count": 7,
-      "what_do_you_rate": 0.004919184820801124
+      "question_count": 930,
+      "question_rate": 0.6535488404778637,
+      "what_do_you_count": 193,
+      "what_do_you_rate": 0.13562895291637386
     },
     "negation": {
-      "contractions": 3490,
+      "contractions": 3193,
       "formal_counts": {
-        "does not": 410,
-        "do not": 141,
-        "is not": 308,
-        "are not": 90,
+        "does not": 404,
+        "do not": 125,
+        "is not": 299,
+        "are not": 83,
         "was not": 44,
-        "were not": 7,
-        "did not": 74,
+        "were not": 5,
+        "did not": 73,
         "have not": 14,
-        "has not": 38,
+        "has not": 37,
         "had not": 3,
-        "will not": 56,
+        "will not": 49,
         "would not": 9,
         "can not": 0,
-        "cannot": 78,
+        "cannot": 74,
         "could not": 2,
-        "should not": 9,
+        "should not": 6,
         "must not": 2,
         "need not": 0,
-        "am not": 15
+        "am not": 14
       },
-      "formal_total": 1300,
-      "contraction_ratio": 0.7286012526096033,
-      "it_is_not_sentence_count": 100
+      "formal_total": 1243,
+      "contraction_ratio": 0.7197926059513075,
+      "it_is_not_sentence_count": 99
     },
     "rhythm": {
-      "paragraphs_per_chunk": 23.507378777231203,
-      "median_words_per_paragraph": 8,
-      "single_sentence_paragraph_share": 0.6752862395743027,
-      "short_sentence_share": 0.38933107847282217,
-      "paragraph_count": 33451,
-      "sentence_count": 54401
+      "paragraphs_per_chunk": 23.74068868587491,
+      "median_words_per_paragraph": 7,
+      "single_sentence_paragraph_share": 0.7529230678151733,
+      "short_sentence_share": 0.4039581611882545,
+      "paragraph_count": 33783,
+      "sentence_count": 49619
     },
     "motifs": [
       {
@@ -164,11 +181,11 @@
       },
       {
         "ngram": "aboard the ghost",
-        "chunks": 397
+        "chunks": 396
       },
       {
         "ngram": "what do you",
-        "chunks": 223
+        "chunks": 220
       },
       {
         "ngram": "tilts her head",
@@ -176,7 +193,7 @@
       },
       {
         "ngram": "how does alex",
-        "chunks": 204
+        "chunks": 203
       },
       {
         "ngram": "her head slightly",
@@ -199,10 +216,6 @@
         "chunks": 151
       },
       {
-        "ngram": "the weight of",
-        "chunks": 150
-      },
-      {
         "ngram": "the ghost bridge",
         "chunks": 147
       },
@@ -223,12 +236,16 @@
         "chunks": 145
       },
       {
+        "ngram": "the weight of",
+        "chunks": 136
+      },
+      {
         "ngram": "and you you",
         "chunks": 134
       },
       {
         "ngram": "how do you",
-        "chunks": 127
+        "chunks": 121
       },
       {
         "ngram": "location the ghost",
@@ -236,18 +253,18 @@
       },
       {
         "ngram": "the first time",
-        "chunks": 115
+        "chunks": 114
       },
       {
         "ngram": "tilts her head slightly",
         "chunks": 114
       },
       {
-        "ngram": "for the first",
-        "chunks": 110
+        "ngram": "do you do",
+        "chunks": 109
       },
       {
-        "ngram": "do you do",
+        "ngram": "for the first",
         "chunks": 109
       },
       {
@@ -291,39 +308,23 @@
         "chunks": 92
       },
       {
-        "ngram": "for a moment",
-        "chunks": 90
-      },
-      {
         "ngram": "and that that",
         "chunks": 86
       },
       {
-        "ngram": "this is a",
-        "chunks": 84
+        "ngram": "for a moment",
+        "chunks": 79
       },
       {
         "ngram": "do you say",
         "chunks": 77
       },
       {
-        "ngram": "you need to",
-        "chunks": 77
-      },
-      {
-        "ngram": "this is the",
-        "chunks": 74
-      },
-      {
-        "ngram": "you want to",
+        "ngram": "this is a",
         "chunks": 73
       },
       {
         "ngram": "because this is",
-        "chunks": 72
-      },
-      {
-        "ngram": "say nothing let",
         "chunks": 71
       },
       {
@@ -331,7 +332,7 @@
         "chunks": 70
       },
       {
-        "ngram": "see if it",
+        "ngram": "this is the",
         "chunks": 69
       },
       {
@@ -339,20 +340,16 @@
         "chunks": 68
       },
       {
-        "ngram": "it is not",
-        "chunks": 67
+        "ngram": "aboard the ghost galley",
+        "chunks": 66
       },
       {
-        "ngram": "aboard the ghost galley",
+        "ngram": "it is not",
         "chunks": 66
       },
       {
         "ngram": "the ghost galley",
         "chunks": 66
-      },
-      {
-        "ngram": "i don't know",
-        "chunks": 64
       },
       {
         "ngram": "land rig mobile",
@@ -387,32 +384,12 @@
         "chunks": 62
       },
       {
-        "ngram": "what this means",
-        "chunks": 62
-      },
-      {
-        "ngram": "if this is",
-        "chunks": 61
-      },
-      {
-        "ngram": "we need to",
-        "chunks": 61
-      },
-      {
-        "ngram": "you are not",
-        "chunks": 61
-      },
-      {
-        "ngram": "need to know",
-        "chunks": 60
+        "ngram": "raises an eyebrow",
+        "chunks": 59
       },
       {
         "ngram": "it does not",
-        "chunks": 59
-      },
-      {
-        "ngram": "raises an eyebrow",
-        "chunks": 59
+        "chunks": 58
       },
       {
         "ngram": "pete leans back",
@@ -423,7 +400,7 @@
         "chunks": 57
       },
       {
-        "ngram": "to see if",
+        "ngram": "what this means",
         "chunks": 57
       },
       {
@@ -435,7 +412,19 @@
         "chunks": 56
       },
       {
+        "ngram": "you are not",
+        "chunks": 56
+      },
+      {
+        "ngram": "you want to",
+        "chunks": 56
+      },
+      {
         "ngram": "and now now",
+        "chunks": 55
+      },
+      {
+        "ngram": "i don't know",
         "chunks": 55
       },
       {
@@ -444,10 +433,6 @@
       },
       {
         "ngram": "hum of the",
-        "chunks": 53
-      },
-      {
-        "ngram": "the next move",
         "chunks": 53
       },
       {
@@ -487,15 +472,7 @@
         "chunks": 51
       },
       {
-        "ngram": "for a second",
-        "chunks": 51
-      },
-      {
         "ngram": "secure research bay",
-        "chunks": 51
-      },
-      {
-        "ngram": "weight of the",
         "chunks": 51
       },
       {
@@ -508,10 +485,6 @@
       },
       {
         "ngram": "staring at the",
-        "chunks": 50
-      },
-      {
-        "ngram": "the bridge is",
         "chunks": 50
       },
       {
@@ -531,7 +504,7 @@
         "chunks": 49
       },
       {
-        "ngram": "it's time to",
+        "ngram": "for a second",
         "chunks": 49
       },
       {
@@ -551,19 +524,15 @@
         "chunks": 49
       },
       {
-        "ngram": "she wants to",
-        "chunks": 49
-      },
-      {
         "ngram": "that that is",
         "chunks": 49
       },
       {
-        "ngram": "the weight of the",
+        "ngram": "tilting her head",
         "chunks": 49
       },
       {
-        "ngram": "tilting her head",
+        "ngram": "you need to",
         "chunks": 49
       },
       {
@@ -576,10 +545,6 @@
       },
       {
         "ngram": "ghost submarine operations the",
-        "chunks": 48
-      },
-      {
-        "ngram": "just enough to",
         "chunks": 48
       },
       {
@@ -599,12 +564,8 @@
         "chunks": 48
       },
       {
-        "ngram": "see if he",
+        "ngram": "just enough to",
         "chunks": 47
-      },
-      {
-        "ngram": "she does not",
-        "chunks": 46
       },
       {
         "ngram": "the hum of",
@@ -619,19 +580,23 @@
         "chunks": 45
       },
       {
-        "ngram": "for a long",
-        "chunks": 45
-      },
-      {
         "ngram": "pause then with",
         "chunks": 45
       },
       {
-        "ngram": "ghost running silent",
+        "ngram": "she does not",
+        "chunks": 45
+      },
+      {
+        "ngram": "weight of the",
+        "chunks": 45
+      },
+      {
+        "ngram": "for a long",
         "chunks": 44
       },
       {
-        "ngram": "is not a",
+        "ngram": "ghost running silent",
         "chunks": 44
       },
       {
@@ -647,6 +612,10 @@
         "chunks": 44
       },
       {
+        "ngram": "the bridge is",
+        "chunks": 44
+      },
+      {
         "ngram": "the ghost running",
         "chunks": 44
       },
@@ -655,15 +624,23 @@
         "chunks": 44
       },
       {
-        "ngram": "be able to",
+        "ngram": "is not a",
         "chunks": 43
+      },
+      {
+        "ngram": "the weight of the",
+        "chunks": 43
+      },
+      {
+        "ngram": "the next move",
+        "chunks": 42
       },
       {
         "ngram": "through her nose",
         "chunks": 42
       },
       {
-        "ngram": "waiting to see",
+        "ngram": "we need to",
         "chunks": 42
       },
       {
@@ -676,10 +653,6 @@
       },
       {
         "ngram": "en route to",
-        "chunks": 41
-      },
-      {
-        "ngram": "let's see if",
         "chunks": 41
       },
       {
@@ -699,6 +672,10 @@
         "chunks": 41
       },
       {
+        "ngram": "waiting to see",
+        "chunks": 41
+      },
+      {
         "ngram": "what do you say next",
         "chunks": 41
       },
@@ -715,27 +692,11 @@
         "chunks": 40
       },
       {
-        "ngram": "let the moment",
-        "chunks": 40
-      },
-      {
-        "ngram": "not just a",
-        "chunks": 40
-      },
-      {
         "ngram": "oh my god",
         "chunks": 40
       },
       {
         "ngram": "then as if",
-        "chunks": 40
-      },
-      {
-        "ngram": "this this is",
-        "chunks": 40
-      },
-      {
-        "ngram": "you let the",
         "chunks": 40
       },
       {
@@ -751,19 +712,19 @@
         "chunks": 39
       },
       {
+        "ngram": "not just a",
+        "chunks": 39
+      },
+      {
         "ngram": "the first time in",
         "chunks": 39
       },
       {
-        "ngram": "back to the",
-        "chunks": 38
+        "ngram": "this this is",
+        "chunks": 39
       },
       {
-        "ngram": "don't know what",
-        "chunks": 38
-      },
-      {
-        "ngram": "just a little",
+        "ngram": "if this is",
         "chunks": 38
       },
       {
@@ -771,7 +732,7 @@
         "chunks": 38
       },
       {
-        "ngram": "there is no",
+        "ngram": "you let the",
         "chunks": 38
       },
       {
@@ -779,19 +740,11 @@
         "chunks": 37
       },
       {
-        "ngram": "do you want",
-        "chunks": 37
-      },
-      {
         "ngram": "her voice is",
         "chunks": 37
       },
       {
-        "ngram": "i want to",
-        "chunks": 37
-      },
-      {
-        "ngram": "in real time",
+        "ngram": "let's see if",
         "chunks": 37
       },
       {
@@ -811,19 +764,19 @@
         "chunks": 37
       },
       {
+        "ngram": "there is no",
+        "chunks": 37
+      },
+      {
+        "ngram": "in real time",
+        "chunks": 36
+      },
+      {
         "ngram": "this isn't just",
-        "chunks": 37
+        "chunks": 36
       },
       {
-        "ngram": "what happens next",
-        "chunks": 37
-      },
-      {
-        "ngram": "you don't know",
-        "chunks": 37
-      },
-      {
-        "ngram": "you do not",
+        "ngram": "to see if",
         "chunks": 36
       },
       {
@@ -835,23 +788,27 @@
         "chunks": 35
       },
       {
-        "ngram": "don't know if",
-        "chunks": 35
-      },
-      {
         "ngram": "emilia is still",
         "chunks": 35
       },
       {
-        "ngram": "tilt your head",
+        "ngram": "i want to",
         "chunks": 35
       },
       {
-        "ngram": "a way to",
-        "chunks": 34
+        "ngram": "just a little",
+        "chunks": 35
+      },
+      {
+        "ngram": "she wants to",
+        "chunks": 35
       },
       {
         "ngram": "at the screen",
+        "chunks": 34
+      },
+      {
+        "ngram": "be able to",
         "chunks": 34
       },
       {
@@ -879,7 +836,7 @@
         "chunks": 34
       },
       {
-        "ngram": "it is a",
+        "ngram": "need to know",
         "chunks": 34
       },
       {
@@ -887,11 +844,15 @@
         "chunks": 34
       },
       {
-        "ngram": "the team is",
+        "ngram": "what happens next",
         "chunks": 34
       },
       {
         "ngram": "you do next",
+        "chunks": 34
+      },
+      {
+        "ngram": "you do not",
         "chunks": 34
       },
       {
@@ -903,6 +864,10 @@
         "chunks": 33
       },
       {
+        "ngram": "don't know what",
+        "chunks": 33
+      },
+      {
         "ngram": "ghost running silent objective",
         "chunks": 33
       },
@@ -911,15 +876,7 @@
         "chunks": 33
       },
       {
-        "ngram": "if you can",
-        "chunks": 33
-      },
-      {
-        "ngram": "is not just",
-        "chunks": 33
-      },
-      {
-        "ngram": "it's not just",
+        "ngram": "it is a",
         "chunks": 33
       },
       {
@@ -939,15 +896,7 @@
         "chunks": 33
       },
       {
-        "ngram": "what comes next",
-        "chunks": 33
-      },
-      {
         "ngram": "a slow breath",
-        "chunks": 32
-      },
-      {
-        "ngram": "and that means",
         "chunks": 32
       },
       {
@@ -967,6 +916,14 @@
         "chunks": 32
       },
       {
+        "ngram": "is not just",
+        "chunks": 32
+      },
+      {
+        "ngram": "it's not just",
+        "chunks": 32
+      },
+      {
         "ngram": "out a slow",
         "chunks": 32
       },
@@ -979,24 +936,12 @@
         "chunks": 32
       },
       {
-        "ngram": "to know what",
-        "chunks": 32
-      },
-      {
-        "ngram": "what the hell",
-        "chunks": 32
-      },
-      {
-        "ngram": "what to do",
+        "ngram": "the team is",
         "chunks": 32
       },
       {
         "ngram": "you you are",
         "chunks": 32
-      },
-      {
-        "ngram": "a little longer",
-        "chunks": 31
       },
       {
         "ngram": "a long pause",
@@ -1015,6 +960,10 @@
         "chunks": 31
       },
       {
+        "ngram": "back to the",
+        "chunks": 31
+      },
+      {
         "ngram": "bougie mall high",
         "chunks": 31
       },
@@ -1024,6 +973,14 @@
       },
       {
         "ngram": "bougie mall high end fashion",
+        "chunks": 31
+      },
+      {
+        "ngram": "do you want",
+        "chunks": 31
+      },
+      {
+        "ngram": "don't know if",
         "chunks": 31
       },
       {
@@ -1047,15 +1004,11 @@
         "chunks": 31
       },
       {
-        "ngram": "want to be",
+        "ngram": "tilt your head",
         "chunks": 31
       },
       {
-        "ngram": "what does she",
-        "chunks": 31
-      },
-      {
-        "ngram": "you don't need",
+        "ngram": "what the hell",
         "chunks": 31
       },
       {
@@ -1072,14 +1025,6 @@
       },
       {
         "ngram": "aboard the ghost bridge alina",
-        "chunks": 30
-      },
-      {
-        "ngram": "and see if",
-        "chunks": 30
-      },
-      {
-        "ngram": "away from the",
         "chunks": 30
       },
       {
@@ -1135,14 +1080,6 @@
         "chunks": 30
       },
       {
-        "ngram": "say nothing just",
-        "chunks": 30
-      },
-      {
-        "ngram": "the edge of",
-        "chunks": 30
-      },
-      {
         "ngram": "the ghost below",
         "chunks": 30
       },
@@ -1163,19 +1100,7 @@
         "chunks": 30
       },
       {
-        "ngram": "the kind of",
-        "chunks": 30
-      },
-      {
-        "ngram": "the rest of",
-        "chunks": 30
-      },
-      {
-        "ngram": "what happens if",
-        "chunks": 30
-      },
-      {
-        "ngram": "your next move",
+        "ngram": "what comes next",
         "chunks": 30
       },
       {
@@ -1184,6 +1109,10 @@
       },
       {
         "ngram": "alina's voice filters",
+        "chunks": 29
+      },
+      {
+        "ngram": "and that means",
         "chunks": 29
       },
       {
@@ -1207,23 +1136,15 @@
         "chunks": 29
       },
       {
-        "ngram": "if you want",
-        "chunks": 29
-      },
-      {
-        "ngram": "no need to",
-        "chunks": 29
-      },
-      {
-        "ngram": "out of the",
-        "chunks": 29
-      },
-      {
         "ngram": "pause then as",
         "chunks": 29
       },
       {
-        "ngram": "to be a",
+        "ngram": "the edge of",
+        "chunks": 29
+      },
+      {
+        "ngram": "the rest of",
         "chunks": 29
       },
       {
@@ -1243,10 +1164,6 @@
         "chunks": 28
       },
       {
-        "ngram": "don't need to",
-        "chunks": 28
-      },
-      {
         "ngram": "emilia tilts her",
         "chunks": 28
       },
@@ -1259,10 +1176,6 @@
         "chunks": 28
       },
       {
-        "ngram": "in the dark",
-        "chunks": 28
-      },
-      {
         "ngram": "lets out a slow",
         "chunks": 28
       },
@@ -1272,10 +1185,6 @@
       },
       {
         "ngram": "pause then as if",
-        "chunks": 28
-      },
-      {
-        "ngram": "see if she",
         "chunks": 28
       },
       {
@@ -1307,10 +1216,6 @@
         "chunks": 27
       },
       {
-        "ngram": "do you say next then",
-        "chunks": 27
-      },
-      {
         "ngram": "for a long moment",
         "chunks": 27
       },
@@ -1319,27 +1224,7 @@
         "chunks": 27
       },
       {
-        "ngram": "if this thing",
-        "chunks": 27
-      },
-      {
-        "ngram": "let's see what",
-        "chunks": 27
-      },
-      {
-        "ngram": "now you have",
-        "chunks": 27
-      },
-      {
-        "ngram": "or does she",
-        "chunks": 27
-      },
-      {
         "ngram": "sam does not",
-        "chunks": 27
-      },
-      {
-        "ngram": "say next then",
         "chunks": 27
       },
       {
@@ -1347,7 +1232,7 @@
         "chunks": 27
       },
       {
-        "ngram": "the ghost is",
+        "ngram": "the kind of",
         "chunks": 27
       },
       {
@@ -1355,19 +1240,7 @@
         "chunks": 27
       },
       {
-        "ngram": "the weight of it",
-        "chunks": 27
-      },
-      {
-        "ngram": "there is a",
-        "chunks": 27
-      },
-      {
         "ngram": "tilting her head slightly",
-        "chunks": 27
-      },
-      {
-        "ngram": "to see what",
         "chunks": 27
       },
       {
@@ -1375,19 +1248,11 @@
         "chunks": 27
       },
       {
-        "ngram": "want to know",
+        "ngram": "what to do",
         "chunks": 27
       },
       {
-        "ngram": "weight of it",
-        "chunks": 27
-      },
-      {
-        "ngram": "what it is",
-        "chunks": 27
-      },
-      {
-        "ngram": "you say next then",
+        "ngram": "you don't know",
         "chunks": 27
       },
       {
@@ -1411,7 +1276,7 @@
         "chunks": 26
       },
       {
-        "ngram": "check in with",
+        "ngram": "away from the",
         "chunks": 26
       },
       {
@@ -1424,10 +1289,6 @@
       },
       {
         "ngram": "does alex do",
-        "chunks": 26
-      },
-      {
-        "ngram": "does that mean",
         "chunks": 26
       },
       {
@@ -1475,6 +1336,10 @@
         "chunks": 26
       },
       {
+        "ngram": "in the dark",
+        "chunks": 26
+      },
+      {
         "ngram": "move how do",
         "chunks": 26
       },
@@ -1483,7 +1348,7 @@
         "chunks": 26
       },
       {
-        "ngram": "need to be",
+        "ngram": "or does she",
         "chunks": 26
       },
       {
@@ -1492,14 +1357,6 @@
       },
       {
         "ngram": "pete raises an eyebrow",
-        "chunks": 26
-      },
-      {
-        "ngram": "see if the",
-        "chunks": 26
-      },
-      {
-        "ngram": "see if you",
         "chunks": 26
       },
       {
@@ -1527,10 +1384,6 @@
         "chunks": 26
       },
       {
-        "ngram": "to do with",
-        "chunks": 26
-      },
-      {
         "ngram": "unknown trench region",
         "chunks": 26
       },
@@ -1539,12 +1392,8 @@
         "chunks": 26
       },
       {
-        "ngram": "you need to know",
+        "ngram": "your next move",
         "chunks": 26
-      },
-      {
-        "ngram": "a long time",
-        "chunks": 25
       },
       {
         "ngram": "aboard the ghost galley you",
@@ -1556,10 +1405,6 @@
       },
       {
         "ngram": "alex corpo snake cold",
-        "chunks": 25
-      },
-      {
-        "ngram": "and you don't",
         "chunks": 25
       },
       {
@@ -1595,11 +1440,7 @@
         "chunks": 25
       },
       {
-        "ngram": "is going to",
-        "chunks": 25
-      },
-      {
-        "ngram": "just for a",
+        "ngram": "if you want",
         "chunks": 25
       },
       {
@@ -1607,11 +1448,7 @@
         "chunks": 25
       },
       {
-        "ngram": "of the bridge",
-        "chunks": 25
-      },
-      {
-        "ngram": "that is the",
+        "ngram": "out of the",
         "chunks": 25
       },
       {
@@ -1623,7 +1460,11 @@
         "chunks": 25
       },
       {
-        "ngram": "to the bridge",
+        "ngram": "to be a",
+        "chunks": 25
+      },
+      {
+        "ngram": "what does she",
         "chunks": 25
       },
       {
@@ -1651,19 +1492,7 @@
         "chunks": 24
       },
       {
-        "ngram": "don't want to",
-        "chunks": 24
-      },
-      {
         "ngram": "encoding surveyor transmission",
-        "chunks": 24
-      },
-      {
-        "ngram": "if this is a",
-        "chunks": 24
-      },
-      {
-        "ngram": "in front of",
         "chunks": 24
       },
       {
@@ -1679,19 +1508,15 @@
         "chunks": 24
       },
       {
-        "ngram": "needs to be",
-        "chunks": 24
-      },
-      {
         "ngram": "of her nose",
         "chunks": 24
       },
       {
-        "ngram": "see how it",
+        "ngram": "shaking her head slightly",
         "chunks": 24
       },
       {
-        "ngram": "shaking her head slightly",
+        "ngram": "that is the",
         "chunks": 24
       },
       {
@@ -1711,10 +1536,6 @@
         "chunks": 24
       },
       {
-        "ngram": "the next step",
-        "chunks": 24
-      },
-      {
         "ngram": "then a small",
         "chunks": 24
       },
@@ -1723,15 +1544,31 @@
         "chunks": 24
       },
       {
+        "ngram": "to see what",
+        "chunks": 24
+      },
+      {
         "ngram": "voice is quiet",
         "chunks": 24
+      },
+      {
+        "ngram": "want to be",
+        "chunks": 24
+      },
+      {
+        "ngram": "a long time",
+        "chunks": 23
       },
       {
         "ngram": "a slow sip",
         "chunks": 23
       },
       {
-        "ngram": "back into the",
+        "ngram": "a way to",
+        "chunks": 23
+      },
+      {
+        "ngram": "and you don't",
         "chunks": 23
       },
       {
@@ -1743,7 +1580,11 @@
         "chunks": 23
       },
       {
-        "ngram": "it's not a",
+        "ngram": "is going to",
+        "chunks": 23
+      },
+      {
+        "ngram": "just for a",
         "chunks": 23
       },
       {
@@ -1767,7 +1608,7 @@
         "chunks": 23
       },
       {
-        "ngram": "on the table",
+        "ngram": "of the bridge",
         "chunks": 23
       },
       {
@@ -1827,11 +1668,11 @@
         "chunks": 23
       },
       {
-        "ngram": "the ghost submarine operations sam's",
+        "ngram": "the ghost is",
         "chunks": 23
       },
       {
-        "ngram": "this thing is",
+        "ngram": "the ghost submarine operations sam's",
         "chunks": 23
       },
       {
@@ -1863,15 +1704,15 @@
         "chunks": 23
       },
       {
-        "ngram": "what kind of",
-        "chunks": 23
-      },
-      {
         "ngram": "who has been",
         "chunks": 23
       },
       {
         "ngram": "without looking at",
+        "chunks": 23
+      },
+      {
+        "ngram": "you don't need",
         "chunks": 23
       },
       {
@@ -1899,14 +1740,6 @@
         "chunks": 22
       },
       {
-        "ngram": "decide what to",
-        "chunks": 22
-      },
-      {
-        "ngram": "for a while",
-        "chunks": 22
-      },
-      {
         "ngram": "for half a",
         "chunks": 22
       },
@@ -1927,19 +1760,19 @@
         "chunks": 22
       },
       {
-        "ngram": "how it reacts",
-        "chunks": 22
-      },
-      {
-        "ngram": "i need to",
-        "chunks": 22
-      },
-      {
         "ngram": "is no longer",
         "chunks": 22
       },
       {
-        "ngram": "no hesitation no",
+        "ngram": "let the moment",
+        "chunks": 22
+      },
+      {
+        "ngram": "let's see what",
+        "chunks": 22
+      },
+      {
+        "ngram": "need to be",
         "chunks": 22
       },
       {
@@ -1948,6 +1781,10 @@
       },
       {
         "ngram": "now you are",
+        "chunks": 22
+      },
+      {
+        "ngram": "on the table",
         "chunks": 22
       },
       {
@@ -1999,15 +1836,15 @@
         "chunks": 22
       },
       {
+        "ngram": "there is a",
+        "chunks": 22
+      },
+      {
         "ngram": "tilts his head",
         "chunks": 22
       },
       {
-        "ngram": "we need to know",
-        "chunks": 22
-      },
-      {
-        "ngram": "what it means",
+        "ngram": "to do with",
         "chunks": 22
       },
       {
@@ -2016,14 +1853,6 @@
       },
       {
         "ngram": "a flicker of",
-        "chunks": 21
-      },
-      {
-        "ngram": "a little too",
-        "chunks": 21
-      },
-      {
-        "ngram": "a moment of",
         "chunks": 21
       },
       {
@@ -2055,6 +1884,10 @@
         "chunks": 21
       },
       {
+        "ngram": "back into the",
+        "chunks": 21
+      },
+      {
         "ngram": "beach karaoke bar",
         "chunks": 21
       },
@@ -2067,6 +1900,14 @@
         "chunks": 21
       },
       {
+        "ngram": "does that mean",
+        "chunks": 21
+      },
+      {
+        "ngram": "for a while",
+        "chunks": 21
+      },
+      {
         "ngram": "ghost bridge pete",
         "chunks": 21
       },
@@ -2075,23 +1916,19 @@
         "chunks": 21
       },
       {
-        "ngram": "he wants to",
+        "ngram": "if this thing",
         "chunks": 21
       },
       {
-        "ngram": "i don't know if",
+        "ngram": "in front of",
         "chunks": 21
       },
       {
-        "ngram": "isn't just a",
+        "ngram": "it's not a",
         "chunks": 21
       },
       {
-        "ngram": "just a moment",
-        "chunks": 21
-      },
-      {
-        "ngram": "know how to",
+        "ngram": "it's time to",
         "chunks": 21
       },
       {
@@ -2103,10 +1940,6 @@
         "chunks": 21
       },
       {
-        "ngram": "meant to be",
-        "chunks": 21
-      },
-      {
         "ngram": "north atlantic ridge secure",
         "chunks": 21
       },
@@ -2115,11 +1948,7 @@
         "chunks": 21
       },
       {
-        "ngram": "of the ghost's",
-        "chunks": 21
-      },
-      {
-        "ngram": "of the moment",
+        "ngram": "now you have",
         "chunks": 21
       },
       {
@@ -2135,10 +1964,6 @@
         "chunks": 21
       },
       {
-        "ngram": "something closer to",
-        "chunks": 21
-      },
-      {
         "ngram": "the characters resolve alina",
         "chunks": 21
       },
@@ -2147,15 +1972,7 @@
         "chunks": 21
       },
       {
-        "ngram": "to decide what",
-        "chunks": 21
-      },
-      {
-        "ngram": "to say it",
-        "chunks": 21
-      },
-      {
-        "ngram": "to the cradle",
+        "ngram": "to know what",
         "chunks": 21
       },
       {
@@ -2167,7 +1984,7 @@
         "chunks": 21
       },
       {
-        "ngram": "we have to",
+        "ngram": "want to know",
         "chunks": 21
       },
       {
@@ -2179,19 +1996,23 @@
         "chunks": 21
       },
       {
-        "ngram": "you have to",
-        "chunks": 21
-      },
-      {
         "ngram": "you lean back",
         "chunks": 21
       },
       {
-        "ngram": "you need a",
-        "chunks": 21
+        "ngram": "a fraction of",
+        "chunks": 20
       },
       {
-        "ngram": "a fraction of",
+        "ngram": "a little longer",
+        "chunks": 20
+      },
+      {
+        "ngram": "a little too",
+        "chunks": 20
+      },
+      {
+        "ngram": "a moment of",
         "chunks": 20
       },
       {
@@ -2203,23 +2024,7 @@
         "chunks": 20
       },
       {
-        "ngram": "back in the",
-        "chunks": 20
-      },
-      {
         "ngram": "but there's something",
-        "chunks": 20
-      },
-      {
-        "ngram": "but you can",
-        "chunks": 20
-      },
-      {
-        "ngram": "but you don't",
-        "chunks": 20
-      },
-      {
-        "ngram": "deeper into the",
         "chunks": 20
       },
       {
@@ -2227,7 +2032,7 @@
         "chunks": 20
       },
       {
-        "ngram": "don't have to",
+        "ngram": "don't need to",
         "chunks": 20
       },
       {
@@ -2247,11 +2052,7 @@
         "chunks": 20
       },
       {
-        "ngram": "if it has",
-        "chunks": 20
-      },
-      {
-        "ngram": "if she wants",
+        "ngram": "i need to",
         "chunks": 20
       },
       {
@@ -2259,7 +2060,7 @@
         "chunks": 20
       },
       {
-        "ngram": "is not the",
+        "ngram": "isn't just a",
         "chunks": 20
       },
       {
@@ -2271,7 +2072,15 @@
         "chunks": 20
       },
       {
-        "ngram": "let the silence",
+        "ngram": "needs to be",
+        "chunks": 20
+      },
+      {
+        "ngram": "no hesitation no",
+        "chunks": 20
+      },
+      {
+        "ngram": "of the ghost's",
         "chunks": 20
       },
       {
@@ -2291,10 +2100,6 @@
         "chunks": 20
       },
       {
-        "ngram": "shake your head",
-        "chunks": 20
-      },
-      {
         "ngram": "the ghost coastal",
         "chunks": 20
       },
@@ -2307,31 +2112,43 @@
         "chunks": 20
       },
       {
+        "ngram": "the next step",
+        "chunks": 20
+      },
+      {
+        "ngram": "the weight of it",
+        "chunks": 20
+      },
+      {
         "ngram": "this is going",
         "chunks": 20
       },
       {
-        "ngram": "to know if",
+        "ngram": "to the bridge",
         "chunks": 20
       },
       {
-        "ngram": "to the next",
+        "ngram": "we have to",
         "chunks": 20
       },
       {
-        "ngram": "you are still",
+        "ngram": "weight of it",
+        "chunks": 20
+      },
+      {
+        "ngram": "what happens if",
+        "chunks": 20
+      },
+      {
+        "ngram": "what kind of",
+        "chunks": 20
+      },
+      {
+        "ngram": "you have to",
         "chunks": 20
       },
       {
         "ngram": "you keep going",
-        "chunks": 20
-      },
-      {
-        "ngram": "you say it",
-        "chunks": 20
-      },
-      {
-        "ngram": "you turn to",
         "chunks": 20
       }
     ],
@@ -2977,10 +2794,10 @@
     },
     "words_per_chunk": {
       "count": 1423,
-      "mean": 267.1784961349262,
-      "sd": 127.77956318905412,
-      "median": 260,
-      "max": 844
+      "mean": 236.67252283907237,
+      "sd": 115.75583566092634,
+      "median": 220,
+      "max": 773
     }
   }
 }

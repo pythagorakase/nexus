@@ -36,8 +36,8 @@ def load_config(path: Path = ROOT / "qa_shift.toml") -> ProseMetricsSettings:
 def plain_text(text: str) -> str:
     """Remove Markdown decoration while retaining wording and paragraph breaks."""
     text = re.sub(r"<!--[\s\S]*?-->", "", text)
-    text = re.sub(r"(?m)^\s*[-*_]{3,}\s*$", "", text)
-    text = re.sub(r"(?m)^\s*#{1,6}\s+", "", text)
+    text = re.sub(r"(?m)^[ \t]*[-*_]{3,}[ \t]*$", "", text)
+    text = re.sub(r"(?m)^[ \t]*#{1,6}[ \t]+", "", text)
     return text.replace("*", "").replace("_", "").replace("`", "")
 
 
@@ -64,15 +64,18 @@ def legacy_sections(
     return sections.get("Storyteller", ""), sections.get("You", "")
 
 
-def legacy_choices(story: str, config: ProseMetricsSettings) -> list[str] | None:
-    """Detect the final consecutively numbered legacy menu (a labeled heuristic).
+def separate_legacy_menu(
+    story: str, config: ProseMetricsSettings
+) -> tuple[str, list[str] | None]:
+    """Remove the final consecutively numbered legacy menu (a labeled heuristic).
 
-    Only option lines are counted; subsequent explanatory paragraphs are not
-    reconstructed as choices. Unnumbered conversational prompts are N/A.
+    Only recovered option lines are removed and counted as choices; surrounding
+    prose and separators stay intact. Unnumbered conversational prompts are N/A.
     """
-    runs: list[list[str]] = []
-    current: list[str] = []
-    for line in story.splitlines():
+    runs: list[list[tuple[int, str]]] = []
+    current: list[tuple[int, str]] = []
+    lines = story.splitlines(keepends=True)
+    for index, line in enumerate(lines):
         match = re.match(config.legacy_choice_pattern, line)
         if match is None:
             continue
@@ -81,11 +84,18 @@ def legacy_choices(story: str, config: ProseMetricsSettings) -> list[str] | None
             current = []
             runs.append(current)
         if number == len(current) + 1:
-            current.append(plain_text(match["text"]).strip())
+            current.append((index, plain_text(match["text"]).strip()))
         else:
             current = []
     candidates = [run for run in runs if len(run) >= config.legacy_menu_min_choices]
-    return candidates[-1] if candidates else None
+    if not candidates:
+        return story, None
+    menu = candidates[-1]
+    menu_lines = {index for index, _ in menu}
+    narrative = "".join(
+        line for index, line in enumerate(lines) if index not in menu_lines
+    ).strip()
+    return narrative, [choice for _, choice in menu]
 
 
 def adapt_chunk(row: dict[str, Any], config: ProseMetricsSettings) -> dict[str, Any]:
@@ -93,8 +103,8 @@ def adapt_chunk(row: dict[str, Any], config: ProseMetricsSettings) -> dict[str, 
     chunk = dict(row)
     if row["storyteller_text"] is None:
         story, player = legacy_sections(row["raw_text"] or "", row["id"], config)
+        story, choices = separate_legacy_menu(story, config)
         chunk.update(story=story, player=player, text_source="raw_text_legacy_sections")
-        choices = legacy_choices(story, config)
         chunk["choice_source"] = "legacy_numbered_lines_heuristic"
     else:
         if not row["storyteller_text"].strip():
@@ -379,6 +389,23 @@ def corpus_report(
             "measured_at": datetime.now(timezone.utc).isoformat(),
             "text_source": sources[0] if len(sources) == 1 else "mixed",
             "text_source_counts": dict(Counter(c["text_source"] for c in chunks)),
+            "measurement_scope": {
+                "narrative": "Modern storyteller_text; legacy Storyteller section with only recovered menu option lines removed; whole section when no menu is recovered.",
+                "choices": "choice_object.presented when available, otherwise the final recovered sequential numbered legacy menu; missing menus are N/A.",
+                "comparable_metrics": [
+                    "closers",
+                    "negation",
+                    "rhythm",
+                    "motifs",
+                    "words_per_chunk",
+                    "selected_turns",
+                    "same_setting_streak",
+                    "world_minutes_per_turn",
+                ],
+                "comparability": "Narrative metrics use the same menu-excluding definitions across storage formats, conditional on legacy menu recovery. Selected turns and telemetry use the same definitions subject to source coverage.",
+                "legacy_heuristics": "Menu detection can misidentify numbered prose or miss menus and continuation lines. Legacy narrative metrics inherit that uncertainty; choice statistics describe recovered menus only, not equivalent coverage to structured menus.",
+                "shared_heuristics": "Sentence segmentation is punctuation-based; choice first verbs use lexical tokens and speech/change shares use keywords.",
+            },
             "snapshot_sha256": digest,
             "migration": migration,
             "database_chunk_count": total,

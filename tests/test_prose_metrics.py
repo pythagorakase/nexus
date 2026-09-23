@@ -89,6 +89,35 @@ def test_real_excerpt_text_metrics() -> None:
     assert result["negation"]["contraction_ratio"] == 0.5
 
 
+@pytest.mark.parametrize("chunk_id,paragraphs", [(651, 38), (1425, 53)])
+def test_markdown_preserves_real_excerpt_paragraphs(
+    chunk_id: int, paragraphs: int
+) -> None:
+    """Measure the full excerpts to isolate decoration cleanup from menu removal."""
+    cfg = load_config()
+    real = chunk(chunk_id)
+    real["story"], _ = legacy_sections(FIXTURES[str(chunk_id)], chunk_id, cfg)
+    assert measure([real], cfg)["rhythm"]["paragraph_count"] == paragraphs
+
+
+def test_recovered_menus_are_excluded_from_narrative_metrics() -> None:
+    """Real option lines affect choices only; prose before/after them survives."""
+    cfg = load_config().model_copy(update={"motif_min_chunks": 1})
+    real = chunk(2)
+    result = measure([real], cfg)
+    assert result["words_per_chunk"]["mean"] == 173
+    assert result["choices"]["total"] == 3
+    assert real["story"].endswith("What’s the move, corpo?")
+    assert "you don't ask" not in {m["ngram"] for m in result["motifs"]}
+    assert result["negation"]["contractions"] == 1
+    result = measure([chunk(651)], cfg)
+    assert result["closers"]["what_do_you_count"] == 1
+    assert result["rhythm"]["paragraph_count"] == 34
+    assert result["choices"]["total"] == 4
+    story, _ = legacy_sections(FIXTURES["951"], 951, cfg)
+    assert chunk(951)["story"] == story
+
+
 def test_real_excerpt_motifs_and_missing_telemetry() -> None:
     """Chunk occurrence counts must not become token occurrence counts."""
     cfg = load_config().model_copy(update={"motif_min_chunks": 2})
