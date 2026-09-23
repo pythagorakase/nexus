@@ -12,6 +12,8 @@ Example:
     python import_narratives.py ALEX_*_copy_notime.md
 """
 
+from nexus.database import resolved_database_url
+
 import os
 import sys
 import re
@@ -155,7 +157,7 @@ class ChunkMetadata(Base):
 
 class NarrativeImporter:
     """Standalone implementation of narrative importing functionality"""
-    
+
     def __init__(self, db_url: str = None):
         """
         Initialize the importer with database connection.
@@ -164,23 +166,23 @@ class NarrativeImporter:
             db_url: PostgreSQL database URL
         """
         # Set default database URL if not provided
-        default_db_url = SETTINGS.get("database", {}).get("url", "postgresql://pythagor@localhost/NEXUS")
+        default_db_url = SETTINGS.get("database", {}).get("url", None)
         self.db_url = db_url or os.environ.get("NEXUS_DB_URL", default_db_url)
-        
+
         # Initialize database connection
-        self.engine = create_engine(self.db_url)
+        self.engine = create_engine(resolved_database_url(self.db_url))
         self.Session = sessionmaker(bind=self.engine)
-        
+
         # First make sure pgvector extension is available
         with self.engine.connect() as connection:
             connection.execute(sa.text("CREATE EXTENSION IF NOT EXISTS vector;"))
             connection.commit()
             logger.info("Created pgvector extension in database")
-        
+
         # Check if we should drop and recreate tables
         create_tables = SETTINGS.get("database", {}).get("create_tables", True)
         drop_existing = SETTINGS.get("database", {}).get("drop_existing", False)
-        
+
         if drop_existing:
             # Drop existing tables in reverse dependency order
             try:
@@ -191,25 +193,25 @@ class NarrativeImporter:
                 logger.info("Dropped existing tables")
             except Exception as e:
                 logger.warning(f"Error dropping tables: {e}")
-        
+
         if create_tables:
             # Create tables
             Base.metadata.create_all(self.engine)
             logger.info("Created tables with updated schema")
-        
+
         # Initialize embedding models
         self.embedding_models = self._initialize_embedding_models()
-        
-        logger.info(f"Connected to database: {self.db_url}")
+
+        logger.info("Connected to the configured database")
         logger.info(f"Initialized {len(self.embedding_models)} embedding models")
-    
+
     def _initialize_embedding_models(self) -> Dict[str, Any]:
         """Initialize embedding models for semantic retrieval."""
         embedding_models = {}
-        
+
         # Define model paths from settings, falling back to defaults if not available
         settings_models = SETTINGS.get("models", {})
-        
+
         model_paths = {
             "bge-large": [
                 Path(settings_models.get("bge-large", {}).get("local_path", "/Users/pythagor/nexus/models/models--BAAI--bge-large-en")),
@@ -228,16 +230,16 @@ class NarrativeImporter:
                 "BAAI/bge-small-en"
             ]
         }
-        
+
         try:
             # Try to load each model
             for model_key, paths in model_paths.items():
                 local_path, remote_path = paths
-                
+
                 # Skip if this is the standard BGE-small and we already have the custom one
                 if model_key == "bge-small" and "bge-small-custom" in embedding_models:
                     continue
-                
+
                 # Try local path first if it exists
                 if local_path and local_path.exists():
                     try:
@@ -248,7 +250,7 @@ class NarrativeImporter:
                         continue
                     except Exception as e:
                         logger.warning(f"Failed to load {model_key} from local path: {e}")
-                
+
                 # Fall back to remote path if available
                 if remote_path:
                     try:
@@ -258,20 +260,20 @@ class NarrativeImporter:
                         logger.info(f"Successfully loaded {model_key} from HuggingFace")
                     except Exception as e:
                         logger.warning(f"Failed to load {model_key} from HuggingFace: {e}")
-            
+
             # Log summary of loaded models
             if embedding_models:
                 logger.info(f"Loaded {len(embedding_models)} embedding models: {', '.join(embedding_models.keys())}")
             else:
                 logger.error("Failed to load any embedding models")
-            
+
             return embedding_models
-        
+
         except Exception as e:
             logger.error(f"Error in embedding model initialization process: {e}")
             # Return any successfully loaded models rather than failing completely
             return embedding_models
-    
+
     def generate_embedding(self, text: str, model_key: str) -> List[float]:
         """
         Generate an embedding for the given text using the specified model.
@@ -286,12 +288,12 @@ class NarrativeImporter:
         if model_key not in self.embedding_models:
             logger.error(f"Model {model_key} not found in available embedding models")
             raise ValueError(f"Model {model_key} not found in available embedding models")
-        
+
         model = self.embedding_models[model_key]
         embedding = model.encode(text)
-        
+
         return embedding.tolist()
-    
+
     def process_chunked_file(self, file_path: Union[str, Path]) -> int:
         """
         Process a chunked file containing scene breaks and narrative text.
@@ -306,53 +308,53 @@ class NarrativeImporter:
         # Convert to Path if string
         if isinstance(file_path, str):
             file_path = Path(file_path)
-        
+
         # Ensure file exists
         if not file_path.exists():
             logger.error(f"File not found: {file_path}")
             return 0
-        
+
         # Regex for scene breaks
         scene_break_regex = re.compile(r'<!--\s*SCENE BREAK:\s*(S(\d+)E(\d+))_(\d+).*-->')
-        
+
         # Read the file
         with open(file_path, 'r', encoding='utf-8') as f:
             content = f.read()
-        
+
         # Find all scene breaks
         scene_breaks = list(scene_break_regex.finditer(content))
         if not scene_breaks:
             logger.warning(f"No scene breaks found in {file_path}")
             return 0
-        
+
         chunks_processed = 0
-        
+
         # Process each chunk
         for i in range(len(scene_breaks)):
             start_match = scene_breaks[i]
-            
+
             # Extract metadata from the scene break
             episode_str = start_match.group(1)  # e.g., "S01E05"
             season = int(start_match.group(2))
             episode = int(start_match.group(3))
             scene_number = int(start_match.group(4))
-            
+
             # Construct the chunk tag (human-readable ID)
             chunk_tag = f"{episode_str}_{scene_number:03d}"
-            
+
             # Generate a stable UUID based on the chunk tag
             chunk_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, chunk_tag))
-            
+
             # Determine chunk boundaries
             start_pos = start_match.start()
             if i < len(scene_breaks) - 1:
                 end_pos = scene_breaks[i + 1].start()
             else:
                 end_pos = len(content)
-            
+
             # Extract chunk text
             chunk_text = content[start_pos:end_pos]
-            
+
             # Store the chunk with metadata
             try:
                 self.store_narrative_chunk(
@@ -368,13 +370,13 @@ class NarrativeImporter:
                 )
                 chunks_processed += 1
                 logger.info(f"Processed chunk {chunk_id} from {file_path.name}")
-            
+
             except Exception as e:
                 logger.error(f"Error processing chunk {chunk_id} from {file_path.name}: {e}")
-        
+
         logger.info(f"Completed processing {chunks_processed} chunks from {file_path}")
         return chunks_processed
-    
+
     def store_narrative_chunk(self, chunk_text: str, metadata: Dict[str, Any]) -> str:
         """
         Store a narrative chunk with embeddings and metadata in PostgreSQL.
@@ -388,14 +390,14 @@ class NarrativeImporter:
         """
         # Create a session
         session = self.Session()
-        
+
         try:
             # Extract or generate chunk ID
             if "chunk_id" in metadata:
                 chunk_id_str = metadata["chunk_id"]
                 # Convert string to UUID object
                 chunk_id = uuid.UUID(chunk_id_str)
-                
+
                 # Remove any existing chunk with this ID
                 existing = session.query(NarrativeChunk).filter_by(id=chunk_id).first()
                 if existing:
@@ -405,22 +407,22 @@ class NarrativeImporter:
             else:
                 # Generate a UUID for the chunk
                 chunk_id = uuid.uuid4()
-            
+
             # Extract season, episode, and scene number
             season = metadata.get("season", 0)
             episode = metadata.get("episode", 0)
             scene_number = int(metadata.get("scene_number", 0))
-            
+
             # Create tag for logging
             scene_tag = f"S{season:02d}E{episode:02d}_{scene_number:03d}"
-            
+
             # Check if there's already a chunk with this narrative position by looking at the chunk tag
             # Use direct query with regex pattern to match scene markers
             scene_pattern = f"SCENE BREAK: S{season:02d}E{episode:02d}_{scene_number:03d}"
             existing_sequence = session.query(NarrativeChunk.sequence)\
                 .filter(NarrativeChunk.raw_text.like(f"%{scene_pattern}%"))\
                 .first()
-            
+
             if existing_sequence:
                 # Use the existing sequence number for this narrative position
                 global_sequence = existing_sequence[0]
@@ -439,7 +441,7 @@ class NarrativeImporter:
                         ((ChunkMetadata.season < season) |
                          ((ChunkMetadata.season == season) & (ChunkMetadata.episode < episode)))
                     ).scalar() or 0
-                
+
                 # Get the lowest sequence higher than what we need to insert
                 next_lowest_seq = session.query(sa.func.min(NarrativeChunk.sequence))\
                     .join(ChunkMetadata, NarrativeChunk.id == ChunkMetadata.chunk_id)\
@@ -453,7 +455,7 @@ class NarrativeImporter:
                         ((ChunkMetadata.season > season) |
                          ((ChunkMetadata.season == season) & (ChunkMetadata.episode > episode)))
                     ).scalar()
-                
+
                 if next_lowest_seq:
                     # Insert between the previous and next chunks
                     # If there's not enough space, we'll need to resequence
@@ -466,9 +468,9 @@ class NarrativeImporter:
                 else:
                     # This is the highest sequence, just add to the end
                     global_sequence = prev_highest_seq + 1
-                
+
                 logger.info(f"Assigning new sequence {global_sequence} for {scene_tag}")
-            
+
             # Create narrative chunk with calculated sequence
             narrative_chunk = NarrativeChunk(
                 id=chunk_id,
@@ -477,16 +479,16 @@ class NarrativeImporter:
             )
             session.add(narrative_chunk)
             session.flush()  # Flush to ensure the sequence is assigned
-            
+
             # Extract metadata
             season = metadata.get("season")
             episode = metadata.get("episode")
             scene_number = metadata.get("scene_number")
             world_layer = metadata.get("world_layer", "primary")
-            
+
             # Parse characters from chunk content (basic implementation)
             characters_data = self._extract_characters_from_text(chunk_text)
-            
+
             # Create chunk metadata
             chunk_metadata = ChunkMetadata(
                 chunk_id=chunk_id,
@@ -503,21 +505,21 @@ class NarrativeImporter:
                 prose=json.dumps({"style": "default"})
             )
             session.add(chunk_metadata)
-            
+
             # Generate embeddings with all available models
             for model_key in self.embedding_models:
                 try:
                     # Generate embedding
                     embedding = self.generate_embedding(chunk_text, model_key)
-                    
+
                     # We've already verified the pgvector extension is installed during initialization
-                    
+
                     # Pass the embedding as a list directly to pgvector
                     # The Vector type will handle the conversion
                     embedding_data = embedding
                     embedding_dim = len(embedding)
                     logger.debug(f"Storing embedding with length {embedding_dim}")
-                    
+
                     # Create chunk embedding with proper dimension
                     if model_key.startswith("bge-small"):
                         # BGE-Small models have 384 dimensions
@@ -525,7 +527,7 @@ class NarrativeImporter:
                     else:
                         # BGE-Large and E5-Large models have 1024 dimensions
                         dimensions = 1024
-                    
+
                     # Store all embeddings in the unified chunk_embeddings table
                     chunk_embedding = ChunkEmbedding(
                         chunk_id=chunk_id,
@@ -533,28 +535,28 @@ class NarrativeImporter:
                         embedding=embedding_data,
                         dimensions=dimensions
                     )
-                    
+
                     session.add(chunk_embedding)
-                    
+
                 except Exception as e:
                     logger.error(f"Error generating embedding with model {model_key}: {e}")
                     logger.error(f"Exception type: {type(e).__name__}")
                     logger.error(f"Exception details: {str(e)}")
-            
+
             # Commit the transaction
             session.commit()
             logger.info(f"Successfully stored chunk {chunk_id} with embeddings")
-            
+
             return str(chunk_id)
-        
+
         except Exception as e:
             session.rollback()
             logger.error(f"Error storing chunk: {e}")
             raise
-        
+
         finally:
             session.close()
-    
+
     def _extract_characters_from_text(self, text: str) -> List[str]:
         """
         Basic implementation to extract character names from text.
@@ -569,11 +571,11 @@ class NarrativeImporter:
         # This is a very simplified implementation
         common_names = ["Alex", "Emilia", "Victor", "Zoe", "Max", "Raven"]
         found_names = []
-        
+
         for name in common_names:
             if name in text:
                 found_names.append(name)
-        
+
         return found_names
 
 def main():

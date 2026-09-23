@@ -7,6 +7,8 @@ for database-level write protection.
 
 from __future__ import annotations
 
+from nexus.database import connection_kwargs
+
 import logging
 import os
 from typing import Dict, List, Optional
@@ -115,12 +117,7 @@ def _get_slot_metadata(slot_number: int, dbname: str) -> Dict:
 
 def _get_admin_connection():
     """Get connection to postgres admin database for ALTER DATABASE commands."""
-    return psycopg2.connect(
-        dbname="postgres",
-        user=os.environ.get("PGUSER", "pythagor"),
-        host=os.environ.get("PGHOST", "localhost"),
-        port=os.environ.get("PGPORT", "5432"),
-    )
+    return psycopg2.connect(**connection_kwargs("postgres"))
 
 
 def is_slot_locked(slot_number: int, dbname: Optional[str] = None) -> bool:

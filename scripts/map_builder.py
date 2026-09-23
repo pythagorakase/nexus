@@ -25,6 +25,8 @@ Usage Examples:
     python map_builder.py --episode s02e03 --overwrite
 """
 
+from nexus.database import resolved_database_url
+
 import os
 import sys
 import re
@@ -256,9 +258,9 @@ def connect_to_database(db_url: Optional[str] = None) -> Engine:
     # Get connection string if not provided
     if not db_url:
         db_url = get_db_connection_string()
-    
+
     try:
-        engine = create_engine(db_url)
+        engine = create_engine(resolved_database_url(db_url))
         # Test connection
         with engine.connect() as conn:
             result = conn.execute(text("SELECT version()"))
@@ -765,7 +767,7 @@ def format_places_by_zone(places_by_zone: Dict[Zone, List[Place]]) -> str:
         result += "\n"
         
     return result
-        
+
 def format_context_settings(setting_refs: List[Dict[str, Any]], places_by_zone: Dict[Zone, List[Place]]) -> str:
     """
     Format the places used as settings in the context chunk, grouped by zone.

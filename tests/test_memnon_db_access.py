@@ -1,6 +1,7 @@
 """Unit tests for MEMNON database setup helpers."""
 
 from nexus.agents.memnon.utils import db_access
+from nexus.database import database_url
 
 
 class FakeCursor:
@@ -49,7 +50,7 @@ def test_setup_database_indexes_skips_ann_indexes_for_high_dimensions(monkeypatc
         lambda _cursor: ["chunk_embeddings_2560d"],
     )
 
-    assert db_access.setup_database_indexes("postgresql://user:pass@localhost/NEXUS")
+    assert db_access.setup_database_indexes(database_url("save_04"))
 
     statements = "\n".join(cursor.statements).lower()
     assert "chunk_embeddings_2560d_model_idx" in statements
@@ -70,5 +71,5 @@ def test_setup_database_indexes_fails_on_unparseable_embedding_table(monkeypatch
         lambda _cursor: ["chunk_embeddings_bad"],
     )
 
-    assert not db_access.setup_database_indexes("postgresql://user:pass@localhost/NEXUS")
+    assert not db_access.setup_database_indexes(database_url("save_04"))
     assert connection.closed

@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from nexus.database import resolved_database_url
+
+from nexus.database import connection_kwargs
+
 from collections import defaultdict
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -631,11 +635,7 @@ def _short_description(description: str, *, max_length: int = 140) -> str:
 def _connect(dbname: Optional[str]):
     resolved = _resolve_dbname(dbname)
     return psycopg2.connect(
-        dbname=resolved,
-        user=os.environ.get("PGUSER", "pythagor"),
-        host=os.environ.get("PGHOST", "localhost"),
-        port=os.environ.get("PGPORT", "5432"),
-        cursor_factory=RealDictCursor,
+        **connection_kwargs(resolved), cursor_factory=RealDictCursor
     )
 
 
@@ -645,12 +645,7 @@ def _slot_session(dbname: Optional[str]) -> Iterator[Session]:
 
     resolved = _resolve_dbname(dbname)
     engine = create_engine(
-        get_slot_db_url(
-            dbname=resolved,
-            user=os.environ.get("PGUSER", "pythagor"),
-            host=os.environ.get("PGHOST", "localhost"),
-            port=int(os.environ.get("PGPORT", "5432")),
-        ),
+        resolved_database_url(get_slot_db_url(dbname=resolved)),
         future=True,
     )
     try:

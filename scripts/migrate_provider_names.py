@@ -8,13 +8,15 @@ Changes:
 - openrouter -> DeepSeek
 """
 
+from nexus.database import url_connection_kwargs
+
 import psycopg2
 
-DB_URL = "postgresql://pythagor@localhost/NEXUS"
+DB_URL = None
 
 
 def migrate():
-    conn = psycopg2.connect(DB_URL)
+    conn = psycopg2.connect(**url_connection_kwargs(DB_URL))
     cur = conn.cursor()
 
     try:

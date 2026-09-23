@@ -8,6 +8,8 @@ this script populates.
 
 from __future__ import annotations
 
+from nexus.database import connection_kwargs
+
 import argparse
 import json
 import os
@@ -29,12 +31,7 @@ VALID_RISKS = {"low", "moderate", "high", "extreme"}
 def get_connection(dbname: str):
     """Open a PostgreSQL connection using the same defaults as migrations."""
 
-    return psycopg2.connect(
-        dbname=dbname,
-        user=os.environ.get("PGUSER", "pythagor"),
-        host=os.environ.get("PGHOST", "localhost"),
-        port=os.environ.get("PGPORT", "5432"),
-    )
+    return psycopg2.connect(**connection_kwargs(dbname))
 
 
 def import_route_graph(

@@ -6,6 +6,8 @@ It implements functions for normalizing temporal positions, detecting
 temporal queries, and boosting search results based on temporal relevance.
 """
 
+from nexus.database import url_connection_kwargs
+
 import re
 import logging
 from typing import Dict, List, Optional, Any, Tuple, Union, Set
@@ -183,11 +185,11 @@ def execute_time_aware_search(
     from urllib.parse import urlparse
     import psycopg2
     from . import db_access
-    
+
     try:
         # First, classify the query for temporal aspects
         temporal_classification = classify_temporal_query(query_text)
-        
+
         # If query is non-temporal, use the standard hybrid search
         if temporal_classification == QUERY_NON_TEMPORAL:
             logger.debug(f"Query is non-temporal, using standard hybrid search: {query_text}")
@@ -195,31 +197,17 @@ def execute_time_aware_search(
                 db_url, query_text, query_embedding, model_key,
                 vector_weight, text_weight, filters, top_k, idf_dict
             )
-        
+
         # For temporal queries, perform hybrid search but apply temporal boosting
         logger.info(f"Performing time-aware search with classification: {temporal_classification}")
-        
-        # Parse database URL
-        parsed_url = urlparse(db_url)
-        username = parsed_url.username
-        password = parsed_url.password
-        database = parsed_url.path[1:]  # Remove leading slash
-        hostname = parsed_url.hostname
-        port = parsed_url.port or 5432
-        
+
         # Connect to the database
-        conn = psycopg2.connect(
-            host=hostname,
-            port=port,
-            user=username,
-            password=password,
-            database=database
-        )
-        
+        conn = psycopg2.connect(**url_connection_kwargs(db_url))
+
         # Get total number of chunks for normalization
         total_chunks = get_total_chunks(conn)
         logger.debug(f"Total chunks for temporal normalization: {total_chunks}")
-        
+
         # Execute standard hybrid search but with increased result count
         # We'll retrieve more results and rerank them with temporal boosting
         original_results = db_access.execute_hybrid_search(
@@ -228,19 +216,19 @@ def execute_time_aware_search(
             top_k * 2,  # Get more results for reranking
             idf_dict
         )
-        
+
         # Apply temporal boosting to each result
         time_boosted_results = []
         for result in original_results:
             # Get chunk ID and convert to int
             chunk_id = int(result['id'])
-            
+
             # Calculate temporal position
             temporal_position = calculate_temporal_position(chunk_id, total_chunks)
-            
+
             # Get original score
             original_score = result['score']
-            
+
             # Apply temporal boosting
             adjusted_score = apply_temporal_boost(
                 original_score, 
@@ -248,27 +236,27 @@ def execute_time_aware_search(
                 temporal_classification,
                 temporal_boost_factor
             )
-            
+
             # Create a copy of the result with adjusted score
             boosted_result = result.copy()
             boosted_result['score'] = adjusted_score
             boosted_result['original_score'] = original_score  # Keep original for reference
             boosted_result['temporal_position'] = temporal_position  # Store for debugging
             boosted_result['source'] = 'time_aware_search'  # Update source
-            
+
             time_boosted_results.append(boosted_result)
-        
+
         # Sort results by the new adjusted score
         time_boosted_results.sort(key=lambda x: x['score'], reverse=True)
-        
+
         # Return only the requested number of results
         return time_boosted_results[:top_k]
-        
+
     except Exception as e:
         logger.error(f"Error in time-aware search: {e}")
         import traceback
         logger.error(traceback.format_exc())
-        
+
         # Fall back to standard hybrid search
         logger.info("Falling back to standard hybrid search after error")
         return db_access.execute_hybrid_search(

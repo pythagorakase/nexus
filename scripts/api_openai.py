@@ -31,6 +31,8 @@ Processing Options:
     --db-url URL            Database connection URL (optional, defaults to environment variables)
 """
 
+from nexus.database import database_url
+
 import os
 import sys
 import abc
@@ -1062,30 +1064,8 @@ class OpenAIProvider(LLMProvider):
 
 # Database utilities
 def get_db_connection_string() -> str:
-    """
-    Get the database connection string from environment variables or defaults.
-
-    By default, connects to NEXUS database on localhost with the current user.
-    Override with DB_* environment variables or custom URL.
-    """
-    DB_USER = os.environ.get("DB_USER", "pythagor")
-    DB_PASSWORD = os.environ.get("DB_PASSWORD", "")
-    DB_HOST = os.environ.get("DB_HOST", "localhost")
-    DB_PORT = os.environ.get("DB_PORT", "5432")
-    DB_NAME = os.environ.get("DB_NAME", "NEXUS")
-
-    # Build connection string (with password if provided)
-    if DB_PASSWORD:
-        connection_string = (
-            f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-        )
-    else:
-        connection_string = f"postgresql://{DB_USER}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-
-    logger.info(
-        f"Using database connection: {connection_string.replace(DB_PASSWORD, '********' if DB_PASSWORD else '')}"
-    )
-    return connection_string
+    """Resolve the database through the runtime connection contract."""
+    return database_url()
 
 
 def to_json(obj):

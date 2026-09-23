@@ -13,6 +13,8 @@ Example:
     python query_narratives_vector.py "Alex discovers the secret" --model bge-large
 """
 
+from nexus.database import resolved_database_url
+
 import os
 import sys
 import argparse
@@ -122,13 +124,11 @@ class NarrativeSearcher:
             db_url: PostgreSQL database URL
         """
         # Set default database URL if not provided
-        default_db_url = SETTINGS.get("database", {}).get(
-            "url", "postgresql://pythagor@localhost/NEXUS"
-        )
+        default_db_url = SETTINGS.get("database", {}).get("url", None)
         self.db_url = db_url or os.environ.get("NEXUS_DB_URL", default_db_url)
 
         # Initialize database connection
-        self.engine = create_engine(self.db_url)
+        self.engine = create_engine(resolved_database_url(self.db_url))
         self.Session = sessionmaker(bind=self.engine)
 
         # Initialize embedding models
@@ -137,7 +137,7 @@ class NarrativeSearcher:
         # Check pgvector extension
         self._check_pgvector()
 
-        logger.info(f"Connected to database: {self.db_url}")
+        logger.info("Connected to the configured database")
         logger.info(
             f"Available embedding models: {', '.join(self.embedding_models.keys())}"
         )

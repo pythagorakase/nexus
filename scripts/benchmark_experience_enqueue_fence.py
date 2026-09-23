@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from nexus.database import connection_kwargs
+
 import os
 from pathlib import Path
 from statistics import median
@@ -30,13 +32,7 @@ NEW_MEMBERSHIP = "prior_job.experience_ids @> ARRAY[experience.id]::bigint[]"
 def _connect(dbname: str) -> Any:
     """Open a direct PostgreSQL connection."""
 
-    return psycopg2.connect(
-        dbname=dbname,
-        user=os.environ.get("PGUSER", "pythagor"),
-        host=os.environ.get("PGHOST", "localhost"),
-        port=os.environ.get("PGPORT", "5432"),
-        connect_timeout=2,
-    )
+    return psycopg2.connect(**connection_kwargs(dbname))
 
 
 def _index_names(node: dict[str, Any]) -> set[str]:

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from nexus.database import connection_kwargs
+
 import inspect
 import logging
 import os
@@ -232,12 +234,7 @@ def load_accepted_correspondence(
 ) -> str:
     """Read and render only accepted correspondence from the slot database."""
 
-    conn = psycopg2.connect(
-        dbname=dbname,
-        user=os.environ.get("PGUSER", "pythagor"),
-        host=os.environ.get("PGHOST", "localhost"),
-        port=os.environ.get("PGPORT", "5432"),
-    )
+    conn = psycopg2.connect(**connection_kwargs(dbname))
     try:
         conn.set_session(readonly=True, autocommit=True)
         with conn.cursor(cursor_factory=RealDictCursor) as cur:

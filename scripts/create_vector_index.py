@@ -5,6 +5,8 @@ This should be run after data is loaded to avoid index maintenance overhead
 during high-volume inserts.
 """
 
+from nexus.database import resolved_database_url
+
 import os
 import sys
 import argparse
@@ -98,9 +100,7 @@ def create_vector_indexes(model_name: str, db_url: str = None):
     """
     # Set default db_url if not provided
     if not db_url:
-        db_url = SETTINGS.get("database", {}).get(
-            "url", "postgresql://pythagor@localhost/NEXUS"
-        )
+        db_url = SETTINGS.get("database", {}).get("url", None)
 
     # Get dimensions and table name
     dimensions = get_model_dimensions(model_name)
@@ -110,7 +110,7 @@ def create_vector_indexes(model_name: str, db_url: str = None):
     logger.info(f"Table: {table_name}")
 
     # Connect to database
-    engine = create_engine(db_url)
+    engine = create_engine(resolved_database_url(db_url))
 
     # First check if table exists and has data
     with engine.connect() as conn:

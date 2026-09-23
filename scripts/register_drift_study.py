@@ -7,6 +7,8 @@ and a Markdown report, and prints the cross-slot verdict table.
 
 from __future__ import annotations
 
+from nexus.database import connection_kwargs
+
 import argparse
 from collections import deque
 from dataclasses import dataclass
@@ -746,7 +748,7 @@ def load_corpus(slot: int) -> Corpus:
         "COALESCE(NULLIF(BTRIM(nc.storyteller_text), ''), "
         "NULLIF(BTRIM(nc.raw_text), '')) IS NOT NULL"
     )
-    conn = psycopg2.connect(dbname=database, host="localhost")
+    conn = psycopg2.connect(**connection_kwargs(database))
     conn.set_session(readonly=True)
     try:
         with conn.cursor() as cursor:

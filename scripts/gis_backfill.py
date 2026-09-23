@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from nexus.database import url_connection_kwargs
+
 import argparse
 from dataclasses import dataclass
 from typing import Any, Sequence
@@ -266,7 +268,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "GIS backfill is forbidden."
         )
         return 2
-    conn = psycopg2.connect(get_slot_db_url(slot=args.slot))
+    conn = psycopg2.connect(**url_connection_kwargs(get_slot_db_url(slot=args.slot)))
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             zone_assignments = load_zone_assignments(cur)

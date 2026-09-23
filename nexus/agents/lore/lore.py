@@ -318,7 +318,7 @@ class LORE:
                 db_url=db_url,
                 debug=self.debug,
             )
-            logger.info("MEMNON utility initialized with database: %s", db_url)
+            logger.info("MEMNON utility initialized with the configured database")
         except Exception as e:
             logger.error(f"Failed to initialize MEMNON: {e}")
             self.memnon = None

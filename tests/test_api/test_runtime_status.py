@@ -39,7 +39,11 @@ def test_database_status_uses_api_connection_path(monkeypatch):
     monkeypatch.setenv("NEXUS_SLOT", "5")
     monkeypatch.setattr(db_pool, "get_connection", fake_get_connection)
 
-    assert runtime_status._database_status() == {
+    result = runtime_status._database_status()
+    targets = result.pop("targets")
+    assert targets["pooled"] == targets["url"]
+    assert set(targets["pooled"]) == {"host", "port", "user", "dbname"}
+    assert result == {
         "ok": True,
         "slot": 5,
         "dbname": "save_05",

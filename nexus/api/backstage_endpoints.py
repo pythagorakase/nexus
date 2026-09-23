@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from nexus.database import resolved_database_url
+
 from contextlib import contextmanager
 from typing import Iterator, Optional
 
@@ -36,7 +38,7 @@ def _slot_session(slot: int) -> Iterator[Session]:
         raise HTTPException(status_code=400, detail=str(exc))
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail=str(exc))
-    engine = create_engine(db_url)
+    engine = create_engine(resolved_database_url(db_url))
     try:
         with Session(engine) as session:
             yield session

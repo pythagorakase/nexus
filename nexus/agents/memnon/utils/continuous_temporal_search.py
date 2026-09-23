@@ -6,6 +6,8 @@ It implements a continuous approach to analyzing temporal intent in queries and
 applies scaled boosting based on how well a document's temporal position matches the query.
 """
 
+from nexus.database import url_connection_kwargs
+
 import re
 import logging
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
@@ -357,21 +359,7 @@ def execute_time_aware_search(
             f"Performing time-aware search with intent score: {query_temporal_intent:.2f}"
         )
 
-        # Parse database URL
-        parsed_url = urlparse(db_url)
-        username = parsed_url.username
-        password = parsed_url.password
-        database = parsed_url.path[1:]  # Remove leading slash
-        hostname = parsed_url.hostname
-        port = parsed_url.port or 5432
-
-        conn = psycopg2.connect(
-            host=hostname,
-            port=port,
-            user=username,
-            password=password,
-            database=database,
-        )
+        conn = psycopg2.connect(**url_connection_kwargs(db_url))
         conn.set_session(readonly=True)
 
         # Get total number of chunks for normalization
@@ -542,21 +530,7 @@ def execute_multi_model_time_aware_search(
             f"Performing multi-model time-aware search with intent score: {query_temporal_intent:.2f}"
         )
 
-        # Parse database URL
-        parsed_url = urlparse(db_url)
-        username = parsed_url.username
-        password = parsed_url.password
-        database = parsed_url.path[1:]  # Remove leading slash
-        hostname = parsed_url.hostname
-        port = parsed_url.port or 5432
-
-        conn = psycopg2.connect(
-            host=hostname,
-            port=port,
-            user=username,
-            password=password,
-            database=database,
-        )
+        conn = psycopg2.connect(**url_connection_kwargs(db_url))
         conn.set_session(readonly=True)
 
         # Get total number of chunks for normalization

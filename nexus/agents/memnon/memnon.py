@@ -14,6 +14,9 @@ The architecture has been refactored to use modular utility classes:
 - DatabaseManager: Provides database connection and schema management
 - ContentProcessor: Manages content chunking, processing, and storage
 """
+from nexus.database import resolved_database_url
+from nexus.database import verify_database_url
+
 
 import re
 import uuid
@@ -264,7 +267,7 @@ class MEMNON:
         # Set up database connection using DatabaseManager
         # If no db_url provided, use slot-aware resolution
         self.db_url = db_url or get_default_db_url()
-        logger.info(f"Using database URL: {self.db_url}")
+        logger.info("Using the configured database target")
         self.db_manager = DatabaseManager(self.db_url, settings=MEMNON_SETTINGS)
         self.Session = self.db_manager.Session
 
@@ -625,7 +628,8 @@ class MEMNON:
     def _initialize_database_connection(self) -> sa.engine.Engine:
         """Initialize connection to PostgreSQL database."""
         try:
-            engine = create_engine(self.db_url)
+            self.db_url = verify_database_url(self.db_url)
+            engine = create_engine(resolved_database_url(self.db_url))
 
             # Verify connection
             connection = engine.connect()
@@ -661,7 +665,7 @@ class MEMNON:
                 )
                 logger.warning("Please run scripts/install_pgvector_custom.sh first")
 
-            logger.info(f"Successfully connected to database at {self.db_url}")
+            logger.info("Successfully connected to the configured database")
             return engine
 
         except Exception as e:

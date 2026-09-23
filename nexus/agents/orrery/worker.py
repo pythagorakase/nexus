@@ -6,6 +6,8 @@ contain source-linked descriptors; generating unused off-screen prose is retired
 
 from __future__ import annotations
 
+from nexus.database import connection_kwargs
+
 import argparse
 import json
 import logging
@@ -908,15 +910,7 @@ def _connect_for_slot(slot: Optional[int]) -> Any:
     from nexus.api.slot_utils import require_slot_dbname
 
     dbname = require_slot_dbname(slot=slot)
-    return psycopg2.connect(
-        host=os.environ.get("PGHOST", "localhost"),
-        database=dbname,
-        user=os.environ.get("PGUSER", "pythagor"),
-        port=os.environ.get("PGPORT", "5432"),
-        connect_timeout=int(
-            os.environ.get("PGCONNECT_TIMEOUT") or get_connect_timeout_seconds()
-        ),
-    )
+    return psycopg2.connect(**connection_kwargs(dbname))
 
 
 def _slot_label(slot: Optional[int]) -> str:

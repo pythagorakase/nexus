@@ -20,6 +20,8 @@ Example:
     python simple_update.py transcripts/ALEX_4.md --fix-metadata --resequence
 """
 
+from nexus.database import resolved_database_url
+
 import os
 import sys
 import re
@@ -783,22 +785,25 @@ def process_file(engine: Engine, file_path: Path, dry_run: bool, verbose: bool =
 def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(description="Simple script to update raw text in narrative chunks")
-    
+
     parser.add_argument("file_paths", nargs="+", help="Markdown files to process")
-    parser.add_argument("--db-url", default="postgresql://pythagor@localhost/NEXUS",
-                      help="Database URL (default: postgresql://pythagor@localhost/NEXUS)")
+    parser.add_argument(
+        "--db-url",
+        default=None,
+        help="Database URL (default: [api.database] and the active slot)",
+    )
     parser.add_argument("--dry-run", action="store_true", help="Don't actually update the database")
     parser.add_argument("--verbose", "-v", action="store_true", help="Print verbose debug information")
     parser.add_argument("--fix-metadata", action="store_true",
                       help="Find and fix missing metadata entries for chunks")
     parser.add_argument("--resequence", action="store_true", 
                       help="Resequence all chunk IDs in chronological order after updates")
-    
+
     args = parser.parse_args()
-    
+
     # Initialize database connection
-    engine = create_engine(args.db_url)
-    
+    engine = create_engine(resolved_database_url(args.db_url))
+
     # Expand file patterns
     all_files = []
     for pattern in args.file_paths:
@@ -807,16 +812,16 @@ def main():
             all_files.extend(matching)
         else:
             all_files.append(pattern)
-    
+
     if not all_files:
         logger.error(f"No files found matching patterns: {args.file_paths}")
         return 1
-    
+
     # Process files
     total_updated = 0
     total_created = 0
     total_errors = 0
-    
+
     for file_path in all_files:
         logger.info(f"Processing {file_path}")
         try:
@@ -827,11 +832,11 @@ def main():
         except Exception as e:
             logger.error(f"Error processing file {file_path}: {e}")
             total_errors += 1
-    
+
     # Fix missing metadata if requested
     if args.fix_metadata:
         print("\nChecking for chunks without metadata entries...")
-        
+
         # First count how many chunks are missing metadata
         with engine.connect() as conn:
             missing_count = conn.execute(text("""
@@ -840,12 +845,12 @@ def main():
                 LEFT JOIN chunk_metadata cm ON nc.id = cm.chunk_id
                 WHERE cm.chunk_id IS NULL
             """)).scalar()
-        
+
         if missing_count == 0:
             print("All chunks already have metadata entries!")
         else:
             print(f"Found {missing_count} chunks without metadata entries")
-            
+
             if ensure_all_chunks_have_metadata(engine, args.dry_run):
                 if not args.dry_run:
                     print("All chunks now have metadata entries!")
@@ -857,7 +862,7 @@ def main():
                     total_errors += 1
                 else:
                     print("DRY RUN: Would attempt to fix missing metadata entries")
-    
+
     # Resequence all chunks if requested
     if args.resequence and not args.dry_run:
         print("\nResequencing all chunks in chronological order...")
@@ -868,13 +873,13 @@ def main():
             total_errors += 1
     elif args.resequence and args.dry_run:
         print("\nDRY RUN: Would resequence all chunks in chronological order")
-    
+
     # Print summary
     print("\nUpdate Summary:")
     print(f"Files processed: {len(all_files)}")
     print(f"Chunks updated: {total_updated}")
     print(f"Chunks created: {total_created}")
-    
+
     # Report metadata fixes if that option was used
     if args.fix_metadata:
         with engine.connect() as conn:
@@ -884,7 +889,7 @@ def main():
                 LEFT JOIN chunk_metadata cm ON nc.id = cm.chunk_id
                 WHERE cm.chunk_id IS NULL
             """)).scalar()
-            
+
             if not args.dry_run:
                 fixed_count = missing_count - missing_after
                 if fixed_count > 0:
@@ -894,7 +899,7 @@ def main():
             else:
                 if missing_count > 0:
                     print(f"Would create metadata for {missing_count} chunks (dry run)")
-    
+
     # Report resequencing if that option was used
     if args.resequence:
         if not args.dry_run:
@@ -905,12 +910,12 @@ def main():
                 print(f"Metadata records resequenced: {meta_count}")
         else:
             print("Would resequence all chunks and metadata records (dry run)")
-    
+
     print(f"Errors: {total_errors}")
-    
+
     if args.dry_run:
         print("\nDRY RUN: No changes were made to the database")
-    
+
     return 0
 
 if __name__ == "__main__":

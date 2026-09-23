@@ -9,6 +9,8 @@ default, and rejects categories that are not meaningful for the entity kind.
 
 from __future__ import annotations
 
+from nexus.database import url_connection_kwargs
+
 import argparse
 import json
 from collections import Counter
@@ -120,7 +122,7 @@ def main() -> None:
     manifest = _load_manifest(args.manifest)
     database_url = _resolve_database_url(args.slot)
 
-    conn = psycopg2.connect(database_url)
+    conn = psycopg2.connect(**url_connection_kwargs(database_url))
     try:
         with conn.cursor(cursor_factory=DictCursor) as cur:
             tags = _load_tags(cur)

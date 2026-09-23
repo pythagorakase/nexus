@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "Register shared staging validation and choice recovery for issue 801, shared relationship provenance and milestone consumption for issue 790, the evaluation database-name guard, and the read-only prose metrics operator for issue 765.",
+  "reason": "Route runtime and maintenance database clients through nexus.database for issue 880",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -241,6 +241,7 @@
     "nexus/config/preferences.py",
     "nexus/config/settings_models.py",
     "nexus/config/story_model.py",
+    "nexus/database.py",
     "nexus/memory/__init__.py",
     "nexus/memory/context_state.py",
     "nexus/memory/correspondence.py",

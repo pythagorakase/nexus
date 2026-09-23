@@ -6,6 +6,8 @@ This script extracts factual information from narrative chunks and/or
 creates creative expansions of locations based on source material.
 """
 
+from nexus.database import connection_kwargs
+
 import argparse
 import json
 import os
@@ -207,10 +209,7 @@ def parse_arguments():
 def connect_to_db():
     """Connect to the NEXUS database."""
     try:
-        conn = psycopg2.connect(
-            "dbname=NEXUS user=pythagor host=localhost port=5432",
-            cursor_factory=RealDictCursor
-        )
+        conn = psycopg2.connect(**connection_kwargs(), cursor_factory=RealDictCursor)
         return conn
     except psycopg2.Error as e:
         print(f"Error connecting to database: {e}")

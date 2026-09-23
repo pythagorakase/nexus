@@ -2,7 +2,7 @@
 """
 Time Delta Estimation Script for NEXUS
 
-This script processes narrative chunks using an API-based LLM to estimate 
+This script processes narrative chunks using an API-based LLM to estimate
 realistic time_delta values for each chunk. By default, it uses OpenAI GPT-4.1.
 
 Usage:
@@ -18,8 +18,12 @@ Options:
     --auto                  Process all chunks automatically without prompting
 
 Database URL:
-postgresql://pythagor@localhost/NEXUS
+[api.database] and the active slot
 """
+
+from nexus.database import resolved_database_url
+
+from nexus.database import url_connection_kwargs
 
 import os
 import re
@@ -47,7 +51,7 @@ try:
     import openai
 except ImportError:
     openai = None
-    
+
 # For token counting
 try:
     import tiktoken
@@ -82,7 +86,7 @@ except Exception as e:
     TPM_LIMITS = DEFAULT_TPM_LIMITS
 
 # Database configuration
-DB_URL = "postgresql://pythagor@localhost/NEXUS"
+DB_URL = None
 
 
 class NarrativeChunk:
@@ -584,7 +588,7 @@ def parse_arguments() -> argparse.Namespace:
 def get_db_connection() -> Engine:
     """Get database connection using project settings."""
     try:
-        engine = create_engine(DB_URL)
+        engine = create_engine(resolved_database_url(DB_URL))
         # Test connection
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
@@ -1168,22 +1172,22 @@ def update_chunk_metadata(db: Engine, chunk_id: int, time_delta: timedelta, test
         formatted_time = format_timedelta(time_delta)
         logger.info(f"Would update chunk {chunk_id} with time_delta '{formatted_time}'")
         return True
-    
+
     formatted_time = format_timedelta(time_delta)
-    
+
     # Strip formatted_time to ensure there are no extra spaces
     formatted_time = formatted_time.strip()
-    
+
     # Ensure we're not trying to store an empty string
     if not formatted_time:
         formatted_time = "0 minutes"
         logger.warning(f"Empty formatted_time, defaulting to '{formatted_time}'")
-    
+
     try:
         # Use psycopg2 directly for better transaction control
-        conn = psycopg2.connect(DB_URL)
+        conn = psycopg2.connect(**url_connection_kwargs(DB_URL))
         cursor = conn.cursor()
-        
+
         try:
             # Check if metadata record exists
             cursor.execute(
@@ -1191,7 +1195,7 @@ def update_chunk_metadata(db: Engine, chunk_id: int, time_delta: timedelta, test
                 (chunk_id,)
             )
             metadata_exists = cursor.fetchone() is not None
-            
+
             if metadata_exists:
                 # Update existing record
                 cursor.execute(
@@ -1214,35 +1218,35 @@ def update_chunk_metadata(db: Engine, chunk_id: int, time_delta: timedelta, test
                     (chunk_id, chunk_id, formatted_time)
                 )
                 logger.info(f"Created new metadata record for chunk {chunk_id}")
-            
+
             # Verify the update actually happened
             cursor.execute(
                 "SELECT time_delta FROM chunk_metadata WHERE chunk_id = %s",
                 (chunk_id,)
             )
             result = cursor.fetchone()
-            
+
             if result:
                 logger.info(f"Verified database update: time_delta = '{result[0]}'")
             else:
                 logger.warning("Update verification failed - could not find record after update")
-            
+
             # Commit the transaction
             conn.commit()
             logger.info(f"Successfully committed transaction for chunk {chunk_id} with time_delta '{formatted_time}'")
             return True
-        
+
         except Exception as inner_e:
             # Rollback in case of error
             conn.rollback()
             logger.error(f"Database error, transaction rolled back: {str(inner_e)}")
             raise inner_e
-        
+
         finally:
             # Always close cursor and connection
             cursor.close()
             conn.close()
-            
+
     except Exception as e:
         logger.error(f"Error updating chunk metadata for {chunk_id}: {str(e)}")
         return False

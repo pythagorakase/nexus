@@ -222,9 +222,9 @@ def run_golden_queries():
                       help='Output mode: "file" to save to disk, "json" to print to stdout')
     parser.add_argument('--category', type=str, default=None,
                       help='Only run queries from the specified category')
-    
+
     args = parser.parse_args()
-    
+
     # Load golden queries
     try:
         with open(args.input, 'r') as f:
@@ -233,10 +233,10 @@ def run_golden_queries():
     except Exception as e:
         logger.error(f"Error loading golden queries: {e}")
         return 1
-    
+
     # Extract all queries
     all_queries = extract_all_queries(golden_queries_data)
-    
+
     # Filter by category if specified
     if args.category:
         logger.info(f"Filtering queries by category: {args.category}")
@@ -244,20 +244,20 @@ def run_golden_queries():
         if not all_queries:
             logger.error(f"No queries found for category: {args.category}")
             return 1
-    
+
     # Apply query limit if specified
     if args.limit:
         all_queries = all_queries[:args.limit]
-        
+
     logger.info(f"Found {len(all_queries)} queries to process")
-    
+
     # Get the settings and evaluation prompt from the JSON file
     settings = golden_queries_data.get("settings", {})
     evaluation_prompt = settings.get("prompt", golden_queries_data.get("prompt", ""))
     structured_data_enabled = settings.get("structured_data", True)
     logger.info(f"Loaded evaluation prompt from golden_queries.json")
     logger.info(f"Structured data search is {'enabled' if structured_data_enabled else 'disabled'}")
-    
+
     # Import MEMNON and initialize
     try:
         from nexus.agents.memnon.memnon import MEMNON, MEMNON_SETTINGS, GLOBAL_SETTINGS
@@ -265,13 +265,13 @@ def run_golden_queries():
     except ImportError as e:
         logger.error(f"Error importing MEMNON: {e}")
         return 1
-    
+
     # Get database URL from settings
-    db_url = MEMNON_SETTINGS.get("database", {}).get("url", "postgresql://pythagor@localhost/NEXUS")
-    
+    db_url = MEMNON_SETTINGS.get("database", {}).get("url", None)
+
     # Get model from global settings
     model_id = GLOBAL_SETTINGS.get("model", {}).get("default_model", "llama-3.3-70b-instruct@q6_k")
-    
+
     # If hybrid search flag is set, modify settings
     if args.hybrid is not None:
         if "retrieval" not in MEMNON_SETTINGS:
@@ -280,13 +280,13 @@ def run_golden_queries():
             MEMNON_SETTINGS["retrieval"]["hybrid_search"] = {}
         MEMNON_SETTINGS["retrieval"]["hybrid_search"]["enabled"] = args.hybrid
         logger.info(f"Hybrid search {'enabled' if args.hybrid else 'disabled'} by command line flag")
-    
+
     # Apply structured data setting from golden_queries.json
     if "retrieval" not in MEMNON_SETTINGS:
         MEMNON_SETTINGS["retrieval"] = {}
     MEMNON_SETTINGS["retrieval"]["structured_data_enabled"] = structured_data_enabled
     logger.info(f"Structured data search {'enabled' if structured_data_enabled else 'disabled'} from settings")
-    
+
     # Initialize MEMNON
     try:
         logger.info("Initializing MEMNON...")
@@ -304,11 +304,11 @@ def run_golden_queries():
         import traceback
         logger.error(traceback.format_exc())
         return 1
-    
+
     # Get formatted settings summary
     settings_summary = get_memnon_settings_summary(MEMNON_SETTINGS)
     settings_text = format_settings_summary_text(settings_summary)
-    
+
     # Prepare results structure
     results = {
         "timestamp": datetime.datetime.now().isoformat(),
@@ -320,55 +320,55 @@ def run_golden_queries():
         "evaluation_prompt": evaluation_prompt,
         "query_results": []
     }
-    
+
     # Run each query
     for i, query_info in enumerate(all_queries):
         query_text = query_info["query"]
         logger.info(f"Processing query {i+1}/{len(all_queries)}: '{query_text}'")
-        
+
         try:
             # Start timer
             start_time = time.time()
-            
+
             # First determine query type
             query_analysis = memnon._analyze_query(query_text)
             query_type = query_analysis["type"]
             logger.info(f"Query type: {query_type}")
-            
+
             # Get results
             query_result = memnon.query_memory(
                 query=query_text,
                 query_type=query_type,
                 k=args.k
             )
-            
+
             elapsed_time = time.time() - start_time
             logger.info(f"Query completed in {elapsed_time:.2f}s with {len(query_result['results'])} results")
-            
+
             # Ensure the results have proper vector_score and text_score values
             processed_results = []
-            
+
             # Print some debug info for the first few results
             logger.info(f"DEBUG - First few raw results:")
             for i, res in enumerate(query_result["results"][:3]):
                 has_vector = "vector_score" in res
                 vector_val = res.get("vector_score", "MISSING")
                 vector_type = type(vector_val).__name__ if has_vector else "N/A"
-                
+
                 has_text = "text_score" in res
                 text_val = res.get("text_score", "MISSING")
                 text_type = type(text_val).__name__ if has_text else "N/A"
-                
+
                 logger.info(f"Result {i}: id={res.get('id', 'unknown')}, "
                            f"score={res.get('score', 0.0)}, "
                            f"vector_score={vector_val} ({vector_type}), "
                            f"text_score={text_val} ({text_type}), "
                            f"source={res.get('source', 'unknown')}")
-            
+
             for res in query_result["results"]:
                 # Make a copy of the result
                 processed = res.copy()
-                
+
                 # Ensure vector_score is present and is a float
                 if "vector_score" not in processed or processed["vector_score"] is None:
                     processed["vector_score"] = 0.0
@@ -379,7 +379,7 @@ def run_golden_queries():
                     except (ValueError, TypeError) as e:
                         logger.error(f"Error converting vector_score to float: {e}")
                         processed["vector_score"] = 0.0
-                    
+
                 # Ensure text_score is present and is a float
                 if "text_score" not in processed or processed["text_score"] is None:
                     processed["text_score"] = 0.0
@@ -389,9 +389,9 @@ def run_golden_queries():
                     except (ValueError, TypeError) as e:
                         logger.error(f"Error converting text_score to float: {e}")
                         processed["text_score"] = 0.0
-                    
+
                 processed_results.append(processed)
-            
+
             # Record the result with processed scores
             query_data = {
                 "category": query_info["category"],
@@ -406,14 +406,14 @@ def run_golden_queries():
                 "query_analysis": query_analysis,
                 "metadata": query_result.get("metadata", {})
             }
-            
+
             results["query_results"].append(query_data)
-            
+
         except Exception as e:
             logger.error(f"Error processing query '{query_text}': {e}")
             import traceback
             logger.error(traceback.format_exc())
-            
+
             # Record the error
             query_data = {
                 "category": query_info["category"],
@@ -423,7 +423,7 @@ def run_golden_queries():
                 "results": []
             }
             results["query_results"].append(query_data)
-    
+
     # Handle output based on mode
     if args.output == 'file':
         # Generate output filename with timestamp
@@ -432,7 +432,7 @@ def run_golden_queries():
         if args.hybrid is not None:
             hybrid_str = "_hybrid" if args.hybrid else "_nohybrid"
         output_filename = f"golden_query_results{hybrid_str}_{timestamp}.json"
-        
+
         # Save results to file
         try:
             with open(output_filename, 'w') as f:
@@ -441,7 +441,7 @@ def run_golden_queries():
         except Exception as e:
             logger.error(f"Error saving results: {e}")
             return 1
-        
+
         return 0
     else:  # output == 'json'
         # Print JSON directly to stdout for capturing by other scripts

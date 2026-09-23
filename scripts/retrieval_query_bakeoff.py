@@ -23,6 +23,8 @@ check for MEMNON retrieval quality. They are not a fourth contestant.
 
 from __future__ import annotations
 
+from nexus.database import url_connection_kwargs
+
 import argparse
 import json
 import logging
@@ -253,7 +255,7 @@ def load_turn_samples(
 
     for slot in slots:
         db_url = get_slot_db_url(slot=slot)
-        with psycopg2.connect(db_url) as conn:
+        with psycopg2.connect(**url_connection_kwargs(db_url)) as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 clauses = ["o.next_id IS NOT NULL"]
                 params: list[Any] = []
@@ -558,7 +560,7 @@ def _entity_grades(slot: int, sample: TurnSample) -> dict[int, float]:
         return {}
 
     grades: dict[int, float] = defaultdict(float)
-    with psycopg2.connect(get_slot_db_url(slot=slot)) as conn:
+    with psycopg2.connect(**url_connection_kwargs(get_slot_db_url(slot=slot))) as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             if sample.target_refs.characters:
                 cur.execute(

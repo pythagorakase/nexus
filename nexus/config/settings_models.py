@@ -3254,6 +3254,28 @@ class APIDatabaseSettings(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    host: str = Field(default="", description="Empty defers to PGHOST/libpq")
+    port: Optional[int] = Field(default=None, ge=1, le=65535)
+    user: str = Field(default="", description="Empty defers to PGUSER/OS user")
+    password_secret: str = Field(
+        default="", description="Platform secret account; empty defers to PGPASSWORD"
+    )
+    session_timezone: str = Field(
+        default="UTC", description="PostgreSQL session time zone"
+    )
+
+    @field_validator("session_timezone")
+    @classmethod
+    def validate_session_timezone(cls, value: str) -> str:
+        """Require an IANA time zone, excluding libpq option injection."""
+        from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+        try:
+            ZoneInfo(value)
+        except (ValueError, ZoneInfoNotFoundError) as exc:
+            raise ValueError("session_timezone must be an IANA time zone") from exc
+        return value
+
     connect_timeout_seconds: int = Field(
         ...,
         ge=1,

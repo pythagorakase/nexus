@@ -11,6 +11,8 @@ Usage:
     python scripts/propagate_schema.py --db save_01  # Target specific database
 """
 
+from nexus.database import connection_kwargs
+
 import argparse
 import sys
 import tomllib
@@ -24,8 +26,6 @@ SETTINGS_PATH = Path(__file__).parent.parent / "nexus.toml"
 with SETTINGS_PATH.open("rb") as f:
     _settings = tomllib.load(f)
 _db_settings = _settings.get("database", {})
-DB_USER = _db_settings.get("user", "pythagor")
-DB_HOST = _db_settings.get("host", "localhost")
 
 TEMPLATE_DB = "NEXUS_template"
 # Note: NEXUS database intentionally excluded - kept as backup
@@ -35,12 +35,12 @@ MIGRATIONS_DIR = Path(__file__).parent.parent / "migrations"
 
 def get_template_connection() -> PGConnection:
     """Get connection to the template database."""
-    return psycopg2.connect(dbname=TEMPLATE_DB, user=DB_USER, host=DB_HOST)
+    return psycopg2.connect(**connection_kwargs(TEMPLATE_DB))
 
 
 def get_target_connection(db_name: str) -> PGConnection:
     """Get connection to a target database."""
-    return psycopg2.connect(dbname=db_name, user=DB_USER, host=DB_HOST)
+    return psycopg2.connect(**connection_kwargs(db_name))
 
 
 def ensure_schema_migrations_table(conn: PGConnection) -> None:

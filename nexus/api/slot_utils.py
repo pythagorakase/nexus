@@ -131,26 +131,18 @@ def require_slot_dbname(
 def get_slot_db_url(
     dbname: Optional[str] = None,
     slot: Optional[int] = None,
-    user: str = "pythagor",
-    host: str = "localhost",
-    port: int = 5432,
+    user: Optional[str] = None,
+    host: Optional[str] = None,
+    port: Optional[int] = None,
+    password: Optional[str] = None,
 ) -> str:
-    """
-    Build a PostgreSQL connection URL for a slot database.
+    """Build a slot URL through the shared PostgreSQL connection contract."""
+    from nexus.database import database_url
 
-    Args:
-        dbname: Explicit database name (save_01 through save_05)
-        slot: Explicit slot number (1-5)
-        user: Database user (default: pythagor)
-        host: Database host (default: localhost)
-        port: Database port (default: 5432)
-
-    Returns:
-        PostgreSQL connection URL
-
-    Raises:
-        ValueError: If dbname is invalid or slot is out of range
-        RuntimeError: If no slot can be determined
-    """
-    db = require_slot_dbname(dbname=dbname, slot=slot)
-    return f"postgresql://{user}@{host}:{port}/{db}"
+    return database_url(
+        require_slot_dbname(dbname=dbname, slot=slot),
+        user=user,
+        host=host,
+        port=port,
+        password=password,
+    )

@@ -31,6 +31,10 @@ Usage:
     python summarize_narrative.py --season 3 --dry-run
 """
 
+from nexus.database import resolved_database_url
+
+from nexus.database import database_url
+
 import argparse
 import json
 import logging
@@ -235,27 +239,13 @@ class DatabaseManager:
             db_url: Optional database URL. If not provided, will use environment variables.
         """
         self.db_url = db_url or self._get_db_url()
-        self.engine = create_engine(self.db_url)
+        self.engine = create_engine(resolved_database_url(self.db_url))
         self.metadata = MetaData()
         self._init_tables()
 
     def _get_db_url(self) -> str:
-        """Get database URL from environment variables."""
-        DB_USER = os.environ.get("DB_USER", "pythagor")
-        DB_PASSWORD = os.environ.get("DB_PASSWORD", "")
-        DB_HOST = os.environ.get("DB_HOST", "localhost")
-        DB_PORT = os.environ.get("DB_PORT", "5432")
-        DB_NAME = os.environ.get("DB_NAME", "NEXUS")
-
-        # Build connection string (with password if provided)
-        if DB_PASSWORD:
-            connection_string = (
-                f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-            )
-        else:
-            connection_string = f"postgresql://{DB_USER}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-
-        return connection_string
+        """Resolve the database through the runtime connection contract."""
+        return database_url()
 
     def _init_tables(self):
         """Initialize table definitions."""

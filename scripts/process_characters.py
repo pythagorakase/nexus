@@ -60,8 +60,10 @@ Supported Arguments:
       --auto                Process automatically without prompting between batches
 
 Database URL (from api_batch.py):
-postgresql://pythagor@localhost/NEXUS
+[api.database] and the active slot
 """
+
+from nexus.database import resolved_database_url
 
 import os
 import sys
@@ -174,14 +176,14 @@ def parse_arguments() -> argparse.Namespace:
 def get_db_connection(db_url: str) -> Engine:
     """Get database connection using SQLAlchemy."""
     try:
-        engine = create_engine(db_url)
+        engine = create_engine(resolved_database_url(db_url))
         # Test connection
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
         logger.info("Database connection successful.")
         return engine
     except Exception as e:
-        logger.error(f"Database connection error to {db_url}: {str(e)}")
+        logger.error("Database connection failed: %s", e)
         raise
 
 def load_known_characters(db: Engine) -> Dict[str, KnownCharacter]:
@@ -1449,4 +1451,4 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main()) 
+    sys.exit(main())
