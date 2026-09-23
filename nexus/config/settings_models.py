@@ -3775,3 +3775,35 @@ def _validate_model_id(
             "Select an explicit model ID from the registry."
         )
     return value
+
+
+class ProseMetricsSettings(BaseModel):
+    """Read-only QA metrics tuning, loaded from qa_shift.toml, not runtime."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    contraction_pattern: str
+    formal_negations: List[str] = Field(min_length=1)
+    it_is_not_pattern: str
+    closer_pattern: str
+    word_pattern: str
+    sentence_boundary_pattern: str
+    short_sentence_max_words: int = Field(ge=1)
+    motif_ngram_sizes: List[int] = Field(min_length=1)
+    motif_min_chunks: int = Field(ge=2)
+    speech_act_verbs: List[str] = Field(min_length=1)
+    change_keywords: List[str] = Field(min_length=1)
+    setting_reference_type: str
+    legacy_section_pattern: str
+    legacy_choice_pattern: str
+    legacy_menu_min_choices: int = Field(ge=2)
+
+    @model_validator(mode="after")
+    def validate_metrics_tuning(self) -> "ProseMetricsSettings":
+        """Reject impossible n-grams and invalid configurable regexes early."""
+        if any(n < 1 for n in self.motif_ngram_sizes):
+            raise ValueError("motif_ngram_sizes must be positive")
+        for name, value in self.model_dump().items():
+            if name.endswith("_pattern"):
+                re.compile(value)
+        return self

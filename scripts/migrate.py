@@ -10,6 +10,7 @@ Usage:
     python scripts/migrate.py --all             # Apply to all unlocked DBs
     python scripts/migrate.py --slot 5          # Apply to specific slot
     python scripts/migrate.py --template        # Apply to NEXUS_template only
+    python scripts/migrate.py --dbname ref_corpus  # Explicit evaluation DB
     python scripts/migrate.py --all --dry-run   # Show what would be applied
 """
 
@@ -26,6 +27,10 @@ from types import ModuleType
 from typing import List, Optional, Tuple
 
 import psycopg2
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from scripts.database_targets import evaluation_dbname  # noqa: E402
 
 LOG = logging.getLogger("nexus.migrate")
 logging.basicConfig(
@@ -429,6 +434,11 @@ def main():
         help="Apply to NEXUS_template only",
     )
     target_group.add_argument(
+        "--dbname",
+        type=evaluation_dbname,
+        help="Apply only to an explicitly named qa640_* or ref_* database",
+    )
+    target_group.add_argument(
         "--status",
         action="store_true",
         help="Show migration status for all databases",
@@ -443,7 +453,7 @@ def main():
     args = parser.parse_args()
 
     # Default to --status if no target specified
-    if not any([args.all, args.slot, args.template, args.status]):
+    if not any([args.all, args.slot, args.template, args.status, args.dbname]):
         args.status = True
 
     if args.status:
@@ -451,7 +461,18 @@ def main():
         return
 
     # Determine target databases
-    if args.all:
+    if args.dbname:
+        # Establish connectivity loudly before the legacy runner's skip paths.
+        conn = get_connection(args.dbname)
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SHOW default_transaction_read_only")
+                if cur.fetchone()[0] == "on":
+                    parser.error(f"Database {args.dbname} is read-only")
+        finally:
+            conn.close()
+        targets = [args.dbname]
+    elif args.all:
         targets = [TEMPLATE_DB] + SLOT_DBS
     elif args.slot:
         targets = [f"save_{args.slot:02d}"]
@@ -473,6 +494,16 @@ def main():
 
     LOG.info("")
     LOG.info("Summary: %d applied, %d skipped/failed", total_applied, total_skipped)
+
+    if args.dbname and not args.dry_run and total_skipped == 0:
+        conn = get_connection(args.dbname)
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT count(*), max(version) FROM schema_migrations")
+                count, level = cur.fetchone()
+                LOG.info("%s: %s migration stamps; level %s", args.dbname, count, level)
+        finally:
+            conn.close()
 
     sys.exit(0 if total_skipped == 0 else 1)
 

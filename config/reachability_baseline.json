@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "Record the merged explicit-slot mutation helper and declare the PostgreSQL event-source proof dynamic writer.",
+  "reason": "Record the shared evaluation database-name guard imported by migration tooling; register the read-only prose metrics operator for issue 765.",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -258,6 +258,7 @@
     "scripts/__init__.py",
     "scripts/api_anthropic.py",
     "scripts/api_openai.py",
+    "scripts/database_targets.py",
     "scripts/migrate.py",
     "scripts/new_story_setup.py",
     "scripts/summarize_narrative.py"
