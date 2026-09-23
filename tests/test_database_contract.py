@@ -66,6 +66,9 @@ def test_connection_environment_and_url_escaping(contract_config, monkeypatch):
     )
     timed_url = str(make_url(url).set(query={"connect_timeout": "7"}))
     assert url_connection_kwargs(timed_url)["connect_timeout"] == 7
+    assert (
+        url_connection_kwargs(resolved_database_url(timed_url))["connect_timeout"] == 7
+    )
     assert "password" not in connection_target(params)
 
 
@@ -74,11 +77,17 @@ def test_connection_config_and_explicit_override(contract_config, monkeypatch):
         contract_config.read_text()
         .replace('host = ""', 'host = "configured.example"', 1)
         .replace('user = ""', 'user = "configured_role"\nport = 55438', 1)
+        .replace('password_secret = ""', 'password_secret = "qa880_database"', 1)
     )
     monkeypatch.setenv("PGHOST", "environment.example")
     monkeypatch.setenv("PGPORT", "55439")
     monkeypatch.setenv("PGUSER", "environment_role")
+    monkeypatch.setenv("PGPASSWORD", "environment-password")
+    monkeypatch.setenv("NEXUS_KEYRING_DISABLE", "1")
+    monkeypatch.setenv("QA880_DATABASE_API_KEY", "configured@:/% password")
     params = connection_kwargs("save_04")
+    assert params["password"] == "configured@:/% password"
+    assert url_connection_kwargs(database_url("save_04")) == params
     assert connection_target(params) == {
         "host": "configured.example",
         "port": 55438,

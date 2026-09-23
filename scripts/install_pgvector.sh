@@ -4,6 +4,13 @@
 # Ensure script fails on error
 set -e
 
+# Keep connection resolution in the selected worktree even after changing cwd.
+NEXUS_SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+postgres_tool() {
+    PYTHONPATH="$NEXUS_SCRIPT_ROOT${PYTHONPATH:+:$PYTHONPATH}" \
+        "${PYTHON:-python}" -m nexus.database "$@"
+}
+
 echo "===== Installing pgvector extension for PostgreSQL ====="
 
 # Check for Postgres.app
@@ -20,7 +27,7 @@ if [ -d "$POSTGRES_APP_BIN" ]; then
 fi
 
 # Check if PostgreSQL is running
-pg_running=$(pg_isready 2>/dev/null && echo "yes" || echo "no")
+pg_running=$(postgres_tool pg_isready 2>/dev/null && echo "yes" || echo "no")
 if [ "$pg_running" != "yes" ]; then
     echo "Warning: PostgreSQL might not be running or the connection is not working."
     echo "continuing anyway - if you're using Postgres.app, please make sure it's running."
@@ -28,7 +35,7 @@ fi
 
 # Get PostgreSQL version
 echo "Detecting PostgreSQL version..."
-PG_VERSION=$(psql -c "SHOW server_version;" -t 2>/dev/null || echo "")
+PG_VERSION=$(postgres_tool psql -c "SHOW server_version;" -t 2>/dev/null || echo "")
 
 if [ -z "$PG_VERSION" ]; then
     echo "Could not detect PostgreSQL version automatically."
@@ -84,7 +91,7 @@ EOF
 # Try to install in the default database
 echo "Installing extension into PostgreSQL..."
 # First try 'postgres' database
-if psql -d postgres -f create_extension.sql 2>/dev/null; then
+if postgres_tool psql -d postgres -f create_extension.sql 2>/dev/null; then
     echo "Successfully installed extension in 'postgres' database."
 else
     # If that fails, ask the user for the database name
@@ -92,7 +99,7 @@ else
     read -p "Please enter your database name: " DB_NAME
     
     if [ -n "$DB_NAME" ]; then
-        psql -d "$DB_NAME" -f create_extension.sql
+        postgres_tool psql -d "$DB_NAME" -f create_extension.sql
     else
         echo "No database name provided. Skipping extension installation."
     fi

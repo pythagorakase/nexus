@@ -195,6 +195,7 @@ def resolved_database_url(db_url: str | URL | None = None) -> str:
         )
     )
     query = {**make_url(db_url).query, **normalized.query}
+    query["connect_timeout"] = str(params["connect_timeout"])
     query["options"] = params["options"]
     return normalized.set(query=query).render_as_string(hide_password=False)
 
