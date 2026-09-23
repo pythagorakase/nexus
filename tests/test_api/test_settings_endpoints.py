@@ -43,6 +43,8 @@ def test_head_and_get_serve_concrete_selections(client: TestClient) -> None:
     assert response.status_code == 200
     payload = response.json()
     assert "secrets" not in payload
+    assert "typewriter_ms_per_char" not in payload["ui"]
+    assert "typewriter" not in payload["settings_meta"]
     assert payload["apex"]["model"] == load_settings().apex.model
     assert payload["apex"].get("gaia_model") == load_settings().apex.gaia_model
     assert not payload["apex"]["model"].startswith("@")
@@ -62,7 +64,7 @@ def test_picker_lists_every_visible_model() -> None:
     assert {(m["provider"], m["id"]) for m in meta["models"]} == expected
     assert "test" not in meta["apex_allowed_providers"]
     assert {"openai", "anthropic", "local"} <= set(meta["apex_allowed_providers"])
-    assert meta["typewriter"] == {"min": 1, "max": 500}
+    assert "typewriter" not in meta
     assert "model_roles" not in meta
 
 
@@ -71,6 +73,7 @@ def test_picker_lists_every_visible_model() -> None:
     [
         ({}, 400),
         ({"embedding_model": "x"}, 422),
+        ({"typewriter_ms_per_char": 35}, 422),
         ({"apex_model_id": "unregistered-model"}, 422),
         ({"apex_model_id": "@anthropic.deep"}, 422),
         ({"gaia_model_id": "unregistered-model"}, 422),
@@ -93,7 +96,6 @@ def test_patch_maps_supported_fields() -> None:
     patch = SettingsPatchRequest(
         theme="gilded",
         fonts={"vector": FontSlotsPatch(menu="Monaco")},
-        typewriter_ms_per_char=42,
         test_mode=True,
         apex_model_id=model,
         gaia_model_id=model,
@@ -103,7 +105,6 @@ def test_patch_maps_supported_fields() -> None:
     assert _updates_from_patch(patch) == {
         "ui.theme": "gilded",
         "ui.fonts.vector.menu": "Monaco",
-        "ui.typewriter_ms_per_char": 42,
         "global.narrative.test_mode": True,
         "apex.model": model,
         "apex.gaia_model": model,
@@ -134,7 +135,7 @@ def test_picker_write_moves_roster_uses_and_survives_model_upgrade(
     raw = tomllib.loads(config_path.read_text())
     assert "model" not in raw["apex"]
     assert "default_model" not in raw["wizard"]
-    assert "# Typewriter reveal speed" in config_path.read_text()
+    assert "# Active NEXUS IRIS theme" in config_path.read_text()
     entries = [
         e for p in raw["global"]["model"]["api_models"].values() for e in p["models"]
     ]

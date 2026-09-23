@@ -1,0 +1,41 @@
+# Live slots have no restore artifact or restore date. "not_applicable" is
+# deliberate; baseline snapshot_sha256 fingerprints the SELECT result instead.
+
+[[corpora]]
+name = "save_01"
+provenance_tier = "human_play"
+source_kind = "live_slot"
+source_artifact_path = "postgresql:save_01"
+source_sha256 = "not_applicable"
+restore_date = "not_applicable"
+observed_date = "2026-09-23"
+migration_stamp_level = "114"
+migration_stamp_count = 112
+chunk_count = 1425
+description = "Human-play legacy import predating Orrery; taste calibration reference, adapted read-only from raw_text sections."
+
+[[corpora]]
+name = "ref_codex_bakeoff_2026_07"
+provenance_tier = "codex_bakeoff"
+source_kind = "restored_dump"
+source_artifact_path = "/Users/pythagor/nexus/temp/scratchpad_audit_2026-07-30_044920Z/save_05_before.dump"
+source_sha256 = "b128df329f9d5ef5fb40019213dc44e5d85536f1132f768c2aa60c2241ae4db1"
+restore_date = "2026-09-23"
+migration_stamp_level = "114"
+migration_stamp_count = 112
+chunk_count = 111
+read_only = true
+description = "July Codex-driven multi-Skald bakeoff regression artifact, not a taste reference; migrated and Pass-2 stamped before locking."
+
+[[corpora]]
+name = "save_04"
+provenance_tier = "codex_qa"
+source_kind = "live_slot"
+source_artifact_path = "postgresql:save_04"
+source_sha256 = "not_applicable"
+restore_date = "not_applicable"
+observed_date = "2026-09-23"
+migration_stamp_level = "114"
+migration_stamp_count = 112
+chunk_count = 46
+description = "Codex adversarial QA corpus from the Vesper seed; prose contaminated by historical need-clock pressure and QA inputs."

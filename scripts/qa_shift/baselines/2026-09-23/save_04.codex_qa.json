@@ -1,0 +1,279 @@
+{
+  "schema_version": 1,
+  "corpus": "save_04",
+  "provenance_tier": "codex_qa",
+  "provenance": {
+    "manifest": {
+      "name": "save_04",
+      "provenance_tier": "codex_qa",
+      "source_kind": "live_slot",
+      "source_artifact_path": "postgresql:save_04",
+      "source_sha256": "not_applicable",
+      "restore_date": "not_applicable",
+      "observed_date": "2026-09-23",
+      "migration_stamp_level": "114",
+      "migration_stamp_count": 112,
+      "chunk_count": 46,
+      "description": "Codex adversarial QA corpus from the Vesper seed; prose contaminated by historical need-clock pressure and QA inputs."
+    },
+    "measured_at": "2026-09-23T19:31:42.142258+00:00",
+    "text_source": "columns",
+    "text_source_counts": {
+      "columns": 45
+    },
+    "measurement_scope": {
+      "narrative": "Modern storyteller_text; legacy Storyteller section with only recovered menu option lines removed; whole section when no menu is recovered.",
+      "choices": "choice_object.presented when available, otherwise the final recovered sequential numbered legacy menu; missing menus are N/A.",
+      "comparable_metrics": [
+        "closers",
+        "negation",
+        "rhythm",
+        "motifs",
+        "words_per_chunk",
+        "selected_turns",
+        "same_setting_streak",
+        "world_minutes_per_turn"
+      ],
+      "comparability": "Narrative metrics use the same menu-excluding definitions across storage formats, conditional on legacy menu recovery. Selected turns and telemetry use the same definitions subject to source coverage.",
+      "legacy_heuristics": "Menu detection can misidentify numbered prose or miss menus and continuation lines. Legacy narrative metrics inherit that uncertainty; choice statistics describe recovered menus only, not equivalent coverage to structured menus.",
+      "shared_heuristics": "Sentence segmentation is punctuation-based; choice first verbs use lexical tokens and speech/change shares use keywords."
+    },
+    "snapshot_sha256": "b05aedd9688030b352afa3a614d742a4cd4987f404b34b900c16ab853e201596",
+    "migration": {
+      "count": 112,
+      "level": "114"
+    },
+    "database_chunk_count": 46,
+    "from_chunk": 2,
+    "to_chunk": 49,
+    "read_only": true,
+    "order": "playable narrative_chunks.id ASC"
+  },
+  "config": {
+    "contraction_pattern": "\\b\\w+n[’']t\\b",
+    "formal_negations": [
+      "does not",
+      "do not",
+      "is not",
+      "are not",
+      "was not",
+      "were not",
+      "did not",
+      "have not",
+      "has not",
+      "had not",
+      "will not",
+      "would not",
+      "can not",
+      "cannot",
+      "could not",
+      "should not",
+      "must not",
+      "need not",
+      "am not"
+    ],
+    "it_is_not_pattern": "\\bit\\s+is\\s+not\\s+[^.!?]+\\.",
+    "closer_pattern": "\\bwhat\\s+do\\s+you\\b[^?]*\\?$",
+    "word_pattern": "[^\\W\\d_]+(?:[’'][^\\W\\d_]+)*",
+    "sentence_boundary_pattern": "[.!?]+(?:[\"”’']*)(?:\\s+|$)",
+    "short_sentence_max_words": 4,
+    "motif_ngram_sizes": [
+      3,
+      4,
+      5
+    ],
+    "motif_min_chunks": 20,
+    "speech_act_verbs": [
+      "ask",
+      "tell",
+      "say",
+      "demand",
+      "press",
+      "question",
+      "answer",
+      "explain",
+      "convince",
+      "persuade",
+      "request",
+      "warn",
+      "challenge",
+      "confront",
+      "call"
+    ],
+    "change_keywords": [
+      "leave",
+      "go",
+      "follow",
+      "depart",
+      "walk",
+      "return",
+      "cross",
+      "move",
+      "wait",
+      "sleep",
+      "rest",
+      "later",
+      "tomorrow",
+      "alone",
+      "join",
+      "dismiss",
+      "invite",
+      "disengage",
+      "break from"
+    ],
+    "setting_reference_type": "setting",
+    "legacy_section_pattern": "^##[ \\t]+(Storyteller|You)[ \\t]*$",
+    "legacy_choice_pattern": "^\\s*(?:#{1,6}\\s+)?(?:\\*\\*)?(?P<number>[1-9][0-9]*)(?:[.)]|\\uFE0F?\\u20E3)\\s*(?P<text>.+)$",
+    "legacy_menu_min_choices": 2
+  },
+  "metrics": {
+    "chunks": 45,
+    "narrative_chunks": 45,
+    "player_only_chunk_ids": [],
+    "closers": {
+      "question_count": 35,
+      "question_rate": 0.7777777777777778,
+      "what_do_you_count": 34,
+      "what_do_you_rate": 0.7555555555555555
+    },
+    "negation": {
+      "contractions": 53,
+      "formal_counts": {
+        "does not": 138,
+        "do not": 54,
+        "is not": 60,
+        "are not": 8,
+        "was not": 9,
+        "were not": 0,
+        "did not": 19,
+        "have not": 7,
+        "has not": 25,
+        "had not": 1,
+        "will not": 15,
+        "would not": 3,
+        "can not": 0,
+        "cannot": 35,
+        "could not": 8,
+        "should not": 2,
+        "must not": 1,
+        "need not": 0,
+        "am not": 2
+      },
+      "formal_total": 387,
+      "contraction_ratio": 0.12045454545454545,
+      "it_is_not_sentence_count": 22
+    },
+    "rhythm": {
+      "paragraphs_per_chunk": 33.31111111111111,
+      "median_words_per_paragraph": 15,
+      "single_sentence_paragraph_share": 0.400266844563042,
+      "short_sentence_share": 0.22003577817531306,
+      "paragraph_count": 1499,
+      "sentence_count": 3354
+    },
+    "motifs": [
+      {
+        "ngram": "what do you",
+        "chunks": 34
+      },
+      {
+        "ngram": "the brass key",
+        "chunks": 27
+      }
+    ],
+    "choices": {
+      "status": "available",
+      "sources": {
+        "choice_object.presented": 45
+      },
+      "menus": 45,
+      "chunks_without_menu": 0,
+      "count_distribution": {
+        "4": 45
+      },
+      "mean_count": 4,
+      "total": 180,
+      "first_verb_mix": {
+        "accept": 1,
+        "address": 2,
+        "advise": 2,
+        "answer": 1,
+        "apologize": 1,
+        "ask": 40,
+        "break": 2,
+        "call": 3,
+        "challenge": 3,
+        "climb": 1,
+        "confront": 1,
+        "cross": 1,
+        "demand": 7,
+        "draw": 1,
+        "encourage": 1,
+        "end": 1,
+        "enter": 1,
+        "follow": 1,
+        "give": 5,
+        "go": 4,
+        "hand": 3,
+        "have": 15,
+        "insist": 2,
+        "keep": 7,
+        "leave": 6,
+        "let": 2,
+        "make": 4,
+        "offer": 1,
+        "open": 1,
+        "order": 1,
+        "press": 8,
+        "read": 1,
+        "refuse": 2,
+        "remain": 1,
+        "require": 2,
+        "return": 1,
+        "say": 1,
+        "send": 5,
+        "set": 2,
+        "stay": 3,
+        "step": 2,
+        "support": 1,
+        "take": 9,
+        "tell": 13,
+        "turn": 3,
+        "use": 2,
+        "withdraw": 1,
+        "write": 2
+      },
+      "speech_act_share": 0.42777777777777776,
+      "change_place_time_company_share": 0.17777777777777778
+    },
+    "selected_turns": {
+      "count": 45,
+      "words": 1459
+    },
+    "same_setting_streak": {
+      "count": 4,
+      "mean": 11.25,
+      "sd": 7.949056547792323,
+      "median": 12.5,
+      "max": 19,
+      "missing_place_chunks": 0,
+      "ambiguous_place_chunks": 0
+    },
+    "world_minutes_per_turn": {
+      "count": 44,
+      "mean": 4.659090909090909,
+      "sd": 2.0443178659861294,
+      "median": 4.0,
+      "max": 10.0,
+      "missing_pairs": 0,
+      "negative_deltas": 0
+    },
+    "words_per_chunk": {
+      "count": 45,
+      "mean": 727.3555555555556,
+      "sd": 137.6961478611601,
+      "median": 697,
+      "max": 1117
+    }
+  }
+}

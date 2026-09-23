@@ -1,0 +1,2803 @@
+{
+  "schema_version": 1,
+  "corpus": "save_01",
+  "provenance_tier": "human_play",
+  "provenance": {
+    "manifest": {
+      "name": "save_01",
+      "provenance_tier": "human_play",
+      "source_kind": "live_slot",
+      "source_artifact_path": "postgresql:save_01",
+      "source_sha256": "not_applicable",
+      "restore_date": "not_applicable",
+      "observed_date": "2026-09-23",
+      "migration_stamp_level": "114",
+      "migration_stamp_count": 112,
+      "chunk_count": 1425,
+      "description": "Human-play legacy import predating Orrery; taste calibration reference, adapted read-only from raw_text sections."
+    },
+    "measured_at": "2026-09-23T19:31:30.189870+00:00",
+    "text_source": "raw_text_legacy_sections",
+    "text_source_counts": {
+      "raw_text_legacy_sections": 1425
+    },
+    "measurement_scope": {
+      "narrative": "Modern storyteller_text; legacy Storyteller section with only recovered menu option lines removed; whole section when no menu is recovered.",
+      "choices": "choice_object.presented when available, otherwise the final recovered sequential numbered legacy menu; missing menus are N/A.",
+      "comparable_metrics": [
+        "closers",
+        "negation",
+        "rhythm",
+        "motifs",
+        "words_per_chunk",
+        "selected_turns",
+        "same_setting_streak",
+        "world_minutes_per_turn"
+      ],
+      "comparability": "Narrative metrics use the same menu-excluding definitions across storage formats, conditional on legacy menu recovery. Selected turns and telemetry use the same definitions subject to source coverage.",
+      "legacy_heuristics": "Menu detection can misidentify numbered prose or miss menus and continuation lines. Legacy narrative metrics inherit that uncertainty; choice statistics describe recovered menus only, not equivalent coverage to structured menus.",
+      "shared_heuristics": "Sentence segmentation is punctuation-based; choice first verbs use lexical tokens and speech/change shares use keywords."
+    },
+    "snapshot_sha256": "28e625a4a78934d12cc30a502e246a3e855a9dce5b41c53126e2cc6050eb3f64",
+    "migration": {
+      "count": 112,
+      "level": "114"
+    },
+    "database_chunk_count": 1425,
+    "from_chunk": 1,
+    "to_chunk": 1425,
+    "read_only": true,
+    "order": "playable narrative_chunks.id ASC"
+  },
+  "config": {
+    "contraction_pattern": "\\b\\w+n[’']t\\b",
+    "formal_negations": [
+      "does not",
+      "do not",
+      "is not",
+      "are not",
+      "was not",
+      "were not",
+      "did not",
+      "have not",
+      "has not",
+      "had not",
+      "will not",
+      "would not",
+      "can not",
+      "cannot",
+      "could not",
+      "should not",
+      "must not",
+      "need not",
+      "am not"
+    ],
+    "it_is_not_pattern": "\\bit\\s+is\\s+not\\s+[^.!?]+\\.",
+    "closer_pattern": "\\bwhat\\s+do\\s+you\\b[^?]*\\?$",
+    "word_pattern": "[^\\W\\d_]+(?:[’'][^\\W\\d_]+)*",
+    "sentence_boundary_pattern": "[.!?]+(?:[\"”’']*)(?:\\s+|$)",
+    "short_sentence_max_words": 4,
+    "motif_ngram_sizes": [
+      3,
+      4,
+      5
+    ],
+    "motif_min_chunks": 20,
+    "speech_act_verbs": [
+      "ask",
+      "tell",
+      "say",
+      "demand",
+      "press",
+      "question",
+      "answer",
+      "explain",
+      "convince",
+      "persuade",
+      "request",
+      "warn",
+      "challenge",
+      "confront",
+      "call"
+    ],
+    "change_keywords": [
+      "leave",
+      "go",
+      "follow",
+      "depart",
+      "walk",
+      "return",
+      "cross",
+      "move",
+      "wait",
+      "sleep",
+      "rest",
+      "later",
+      "tomorrow",
+      "alone",
+      "join",
+      "dismiss",
+      "invite",
+      "disengage",
+      "break from"
+    ],
+    "setting_reference_type": "setting",
+    "legacy_section_pattern": "^##[ \\t]+(Storyteller|You)[ \\t]*$",
+    "legacy_choice_pattern": "^\\s*(?:#{1,6}\\s+)?(?:\\*\\*)?(?P<number>[1-9][0-9]*)(?:[.)]|\\uFE0F?\\u20E3)\\s*(?P<text>.+)$",
+    "legacy_menu_min_choices": 2
+  },
+  "metrics": {
+    "chunks": 1425,
+    "narrative_chunks": 1423,
+    "player_only_chunk_ids": [
+      686,
+      1383
+    ],
+    "closers": {
+      "question_count": 930,
+      "question_rate": 0.6535488404778637,
+      "what_do_you_count": 193,
+      "what_do_you_rate": 0.13562895291637386
+    },
+    "negation": {
+      "contractions": 3193,
+      "formal_counts": {
+        "does not": 404,
+        "do not": 125,
+        "is not": 299,
+        "are not": 83,
+        "was not": 44,
+        "were not": 5,
+        "did not": 73,
+        "have not": 14,
+        "has not": 37,
+        "had not": 3,
+        "will not": 49,
+        "would not": 9,
+        "can not": 0,
+        "cannot": 74,
+        "could not": 2,
+        "should not": 6,
+        "must not": 2,
+        "need not": 0,
+        "am not": 14
+      },
+      "formal_total": 1243,
+      "contraction_ratio": 0.7197926059513075,
+      "it_is_not_sentence_count": 99
+    },
+    "rhythm": {
+      "paragraphs_per_chunk": 23.74068868587491,
+      "median_words_per_paragraph": 7,
+      "single_sentence_paragraph_share": 0.7529230678151733,
+      "short_sentence_share": 0.4039581611882545,
+      "paragraph_count": 33783,
+      "sentence_count": 49619
+    },
+    "motifs": [
+      {
+        "ngram": "a pause then",
+        "chunks": 433
+      },
+      {
+        "ngram": "aboard the ghost",
+        "chunks": 396
+      },
+      {
+        "ngram": "what do you",
+        "chunks": 220
+      },
+      {
+        "ngram": "tilts her head",
+        "chunks": 206
+      },
+      {
+        "ngram": "how does alex",
+        "chunks": 203
+      },
+      {
+        "ngram": "her head slightly",
+        "chunks": 176
+      },
+      {
+        "ngram": "does alex respond",
+        "chunks": 168
+      },
+      {
+        "ngram": "alex corpo snake",
+        "chunks": 167
+      },
+      {
+        "ngram": "how does alex respond",
+        "chunks": 165
+      },
+      {
+        "ngram": "a beat then",
+        "chunks": 151
+      },
+      {
+        "ngram": "the ghost bridge",
+        "chunks": 147
+      },
+      {
+        "ngram": "aboard the ghost bridge",
+        "chunks": 146
+      },
+      {
+        "ngram": "next objective decision",
+        "chunks": 145
+      },
+      {
+        "ngram": "next objective decision point",
+        "chunks": 145
+      },
+      {
+        "ngram": "objective decision point",
+        "chunks": 145
+      },
+      {
+        "ngram": "the weight of",
+        "chunks": 136
+      },
+      {
+        "ngram": "and you you",
+        "chunks": 134
+      },
+      {
+        "ngram": "how do you",
+        "chunks": 121
+      },
+      {
+        "ngram": "location the ghost",
+        "chunks": 115
+      },
+      {
+        "ngram": "the first time",
+        "chunks": 114
+      },
+      {
+        "ngram": "tilts her head slightly",
+        "chunks": 114
+      },
+      {
+        "ngram": "do you do",
+        "chunks": 109
+      },
+      {
+        "ngram": "for the first",
+        "chunks": 109
+      },
+      {
+        "ngram": "what do you do",
+        "chunks": 107
+      },
+      {
+        "ngram": "for the first time",
+        "chunks": 105
+      },
+      {
+        "ngram": "shaking her head",
+        "chunks": 102
+      },
+      {
+        "ngram": "the team reacts",
+        "chunks": 101
+      },
+      {
+        "ngram": "ghost submarine operations",
+        "chunks": 99
+      },
+      {
+        "ngram": "the ghost submarine",
+        "chunks": 99
+      },
+      {
+        "ngram": "the ghost submarine operations",
+        "chunks": 99
+      },
+      {
+        "ngram": "she tilts her",
+        "chunks": 97
+      },
+      {
+        "ngram": "she tilts her head",
+        "chunks": 94
+      },
+      {
+        "ngram": "lets out a",
+        "chunks": 92
+      },
+      {
+        "ngram": "and that that",
+        "chunks": 86
+      },
+      {
+        "ngram": "for a moment",
+        "chunks": 79
+      },
+      {
+        "ngram": "do you say",
+        "chunks": 77
+      },
+      {
+        "ngram": "this is a",
+        "chunks": 73
+      },
+      {
+        "ngram": "because this is",
+        "chunks": 71
+      },
+      {
+        "ngram": "what do you say",
+        "chunks": 70
+      },
+      {
+        "ngram": "this is the",
+        "chunks": 69
+      },
+      {
+        "ngram": "shaking his head",
+        "chunks": 68
+      },
+      {
+        "ngram": "aboard the ghost galley",
+        "chunks": 66
+      },
+      {
+        "ngram": "it is not",
+        "chunks": 66
+      },
+      {
+        "ngram": "the ghost galley",
+        "chunks": 66
+      },
+      {
+        "ngram": "land rig mobile",
+        "chunks": 64
+      },
+      {
+        "ngram": "land rig mobile nexus",
+        "chunks": 64
+      },
+      {
+        "ngram": "land rig mobile nexus operations",
+        "chunks": 64
+      },
+      {
+        "ngram": "mobile nexus operations",
+        "chunks": 64
+      },
+      {
+        "ngram": "rig mobile nexus",
+        "chunks": 64
+      },
+      {
+        "ngram": "rig mobile nexus operations",
+        "chunks": 64
+      },
+      {
+        "ngram": "pause then a",
+        "chunks": 63
+      },
+      {
+        "ngram": "research bay objective",
+        "chunks": 62
+      },
+      {
+        "ngram": "raises an eyebrow",
+        "chunks": 59
+      },
+      {
+        "ngram": "it does not",
+        "chunks": 58
+      },
+      {
+        "ngram": "pete leans back",
+        "chunks": 58
+      },
+      {
+        "ngram": "she tilts her head slightly",
+        "chunks": 57
+      },
+      {
+        "ngram": "what this means",
+        "chunks": 57
+      },
+      {
+        "ngram": "and emilia emilia",
+        "chunks": 56
+      },
+      {
+        "ngram": "and now you",
+        "chunks": 56
+      },
+      {
+        "ngram": "you are not",
+        "chunks": 56
+      },
+      {
+        "ngram": "you want to",
+        "chunks": 56
+      },
+      {
+        "ngram": "and now now",
+        "chunks": 55
+      },
+      {
+        "ngram": "i don't know",
+        "chunks": 55
+      },
+      {
+        "ngram": "a pause then a",
+        "chunks": 54
+      },
+      {
+        "ngram": "hum of the",
+        "chunks": 53
+      },
+      {
+        "ngram": "ghost north atlantic",
+        "chunks": 52
+      },
+      {
+        "ngram": "ghost north atlantic ridge",
+        "chunks": 52
+      },
+      {
+        "ngram": "north atlantic ridge",
+        "chunks": 52
+      },
+      {
+        "ngram": "the ghost north",
+        "chunks": 52
+      },
+      {
+        "ngram": "the ghost north atlantic",
+        "chunks": 52
+      },
+      {
+        "ngram": "the ghost north atlantic ridge",
+        "chunks": 52
+      },
+      {
+        "ngram": "alex corpo snake calm",
+        "chunks": 51
+      },
+      {
+        "ngram": "and for the",
+        "chunks": 51
+      },
+      {
+        "ngram": "corpo snake calm",
+        "chunks": 51
+      },
+      {
+        "ngram": "secure research bay",
+        "chunks": 51
+      },
+      {
+        "ngram": "another pause then",
+        "chunks": 50
+      },
+      {
+        "ngram": "secure research bay objective",
+        "chunks": 50
+      },
+      {
+        "ngram": "staring at the",
+        "chunks": 50
+      },
+      {
+        "ngram": "your voice is",
+        "chunks": 50
+      },
+      {
+        "ngram": "and that that is",
+        "chunks": 49
+      },
+      {
+        "ngram": "decision point alex's",
+        "chunks": 49
+      },
+      {
+        "ngram": "decision point alex's choice",
+        "chunks": 49
+      },
+      {
+        "ngram": "for a second",
+        "chunks": 49
+      },
+      {
+        "ngram": "next objective decision point alex's",
+        "chunks": 49
+      },
+      {
+        "ngram": "objective decision point alex's",
+        "chunks": 49
+      },
+      {
+        "ngram": "objective decision point alex's choice",
+        "chunks": 49
+      },
+      {
+        "ngram": "point alex's choice",
+        "chunks": 49
+      },
+      {
+        "ngram": "that that is",
+        "chunks": 49
+      },
+      {
+        "ngram": "tilting her head",
+        "chunks": 49
+      },
+      {
+        "ngram": "you need to",
+        "chunks": 49
+      },
+      {
+        "ngram": "and for the first",
+        "chunks": 48
+      },
+      {
+        "ngram": "and for the first time",
+        "chunks": 48
+      },
+      {
+        "ngram": "ghost submarine operations the",
+        "chunks": 48
+      },
+      {
+        "ngram": "submarine operations the",
+        "chunks": 48
+      },
+      {
+        "ngram": "the ghost submarine operations the",
+        "chunks": 48
+      },
+      {
+        "ngram": "what does alex",
+        "chunks": 48
+      },
+      {
+        "ngram": "would you like",
+        "chunks": 48
+      },
+      {
+        "ngram": "just enough to",
+        "chunks": 47
+      },
+      {
+        "ngram": "the hum of",
+        "chunks": 46
+      },
+      {
+        "ngram": "alina tilts her",
+        "chunks": 45
+      },
+      {
+        "ngram": "alina tilts her head",
+        "chunks": 45
+      },
+      {
+        "ngram": "pause then with",
+        "chunks": 45
+      },
+      {
+        "ngram": "she does not",
+        "chunks": 45
+      },
+      {
+        "ngram": "weight of the",
+        "chunks": 45
+      },
+      {
+        "ngram": "for a long",
+        "chunks": 44
+      },
+      {
+        "ngram": "ghost running silent",
+        "chunks": 44
+      },
+      {
+        "ngram": "location the ghost running",
+        "chunks": 44
+      },
+      {
+        "ngram": "location the ghost running silent",
+        "chunks": 44
+      },
+      {
+        "ngram": "pete lets out",
+        "chunks": 44
+      },
+      {
+        "ngram": "the bridge is",
+        "chunks": 44
+      },
+      {
+        "ngram": "the ghost running",
+        "chunks": 44
+      },
+      {
+        "ngram": "the ghost running silent",
+        "chunks": 44
+      },
+      {
+        "ngram": "is not a",
+        "chunks": 43
+      },
+      {
+        "ngram": "the weight of the",
+        "chunks": 43
+      },
+      {
+        "ngram": "the next move",
+        "chunks": 42
+      },
+      {
+        "ngram": "through her nose",
+        "chunks": 42
+      },
+      {
+        "ngram": "we need to",
+        "chunks": 42
+      },
+      {
+        "ngram": "a pause then with",
+        "chunks": 41
+      },
+      {
+        "ngram": "do you say next",
+        "chunks": 41
+      },
+      {
+        "ngram": "en route to",
+        "chunks": 41
+      },
+      {
+        "ngram": "pete lets out a",
+        "chunks": 41
+      },
+      {
+        "ngram": "team reacts pete",
+        "chunks": 41
+      },
+      {
+        "ngram": "the team reacts pete",
+        "chunks": 41
+      },
+      {
+        "ngram": "this is not",
+        "chunks": 41
+      },
+      {
+        "ngram": "waiting to see",
+        "chunks": 41
+      },
+      {
+        "ngram": "what do you say next",
+        "chunks": 41
+      },
+      {
+        "ngram": "you say next",
+        "chunks": 41
+      },
+      {
+        "ngram": "against the console",
+        "chunks": 40
+      },
+      {
+        "ngram": "in the air",
+        "chunks": 40
+      },
+      {
+        "ngram": "oh my god",
+        "chunks": 40
+      },
+      {
+        "ngram": "then as if",
+        "chunks": 40
+      },
+      {
+        "ngram": "and alex alex",
+        "chunks": 39
+      },
+      {
+        "ngram": "first time in",
+        "chunks": 39
+      },
+      {
+        "ngram": "for the first time in",
+        "chunks": 39
+      },
+      {
+        "ngram": "not just a",
+        "chunks": 39
+      },
+      {
+        "ngram": "the first time in",
+        "chunks": 39
+      },
+      {
+        "ngram": "this this is",
+        "chunks": 39
+      },
+      {
+        "ngram": "if this is",
+        "chunks": 38
+      },
+      {
+        "ngram": "shakes her head",
+        "chunks": 38
+      },
+      {
+        "ngram": "you let the",
+        "chunks": 38
+      },
+      {
+        "ngram": "corpo snake the",
+        "chunks": 37
+      },
+      {
+        "ngram": "her voice is",
+        "chunks": 37
+      },
+      {
+        "ngram": "let's see if",
+        "chunks": 37
+      },
+      {
+        "ngram": "mobile nexus operations you",
+        "chunks": 37
+      },
+      {
+        "ngram": "nexus operations you",
+        "chunks": 37
+      },
+      {
+        "ngram": "now now you",
+        "chunks": 37
+      },
+      {
+        "ngram": "rig mobile nexus operations you",
+        "chunks": 37
+      },
+      {
+        "ngram": "there is no",
+        "chunks": 37
+      },
+      {
+        "ngram": "in real time",
+        "chunks": 36
+      },
+      {
+        "ngram": "this isn't just",
+        "chunks": 36
+      },
+      {
+        "ngram": "to see if",
+        "chunks": 36
+      },
+      {
+        "ngram": "a pause a",
+        "chunks": 35
+      },
+      {
+        "ngram": "because she knows",
+        "chunks": 35
+      },
+      {
+        "ngram": "emilia is still",
+        "chunks": 35
+      },
+      {
+        "ngram": "i want to",
+        "chunks": 35
+      },
+      {
+        "ngram": "just a little",
+        "chunks": 35
+      },
+      {
+        "ngram": "she wants to",
+        "chunks": 35
+      },
+      {
+        "ngram": "at the screen",
+        "chunks": 34
+      },
+      {
+        "ngram": "be able to",
+        "chunks": 34
+      },
+      {
+        "ngram": "but she doesn't",
+        "chunks": 34
+      },
+      {
+        "ngram": "closes her eyes",
+        "chunks": 34
+      },
+      {
+        "ngram": "end fashion district",
+        "chunks": 34
+      },
+      {
+        "ngram": "her head emilia",
+        "chunks": 34
+      },
+      {
+        "ngram": "high end fashion",
+        "chunks": 34
+      },
+      {
+        "ngram": "high end fashion district",
+        "chunks": 34
+      },
+      {
+        "ngram": "need to know",
+        "chunks": 34
+      },
+      {
+        "ngram": "nyati arms crossed",
+        "chunks": 34
+      },
+      {
+        "ngram": "what happens next",
+        "chunks": 34
+      },
+      {
+        "ngram": "you do next",
+        "chunks": 34
+      },
+      {
+        "ngram": "you do not",
+        "chunks": 34
+      },
+      {
+        "ngram": "a long moment",
+        "chunks": 33
+      },
+      {
+        "ngram": "and for a",
+        "chunks": 33
+      },
+      {
+        "ngram": "don't know what",
+        "chunks": 33
+      },
+      {
+        "ngram": "ghost running silent objective",
+        "chunks": 33
+      },
+      {
+        "ngram": "head slightly watching",
+        "chunks": 33
+      },
+      {
+        "ngram": "it is a",
+        "chunks": 33
+      },
+      {
+        "ngram": "looks at you",
+        "chunks": 33
+      },
+      {
+        "ngram": "raising an eyebrow",
+        "chunks": 33
+      },
+      {
+        "ngram": "running silent objective",
+        "chunks": 33
+      },
+      {
+        "ngram": "the ghost running silent objective",
+        "chunks": 33
+      },
+      {
+        "ngram": "a slow breath",
+        "chunks": 32
+      },
+      {
+        "ngram": "because this isn't",
+        "chunks": 32
+      },
+      {
+        "ngram": "doesn't say anything",
+        "chunks": 32
+      },
+      {
+        "ngram": "folds her arms",
+        "chunks": 32
+      },
+      {
+        "ngram": "in a way",
+        "chunks": 32
+      },
+      {
+        "ngram": "is not just",
+        "chunks": 32
+      },
+      {
+        "ngram": "it's not just",
+        "chunks": 32
+      },
+      {
+        "ngram": "out a slow",
+        "chunks": 32
+      },
+      {
+        "ngram": "pause then you",
+        "chunks": 32
+      },
+      {
+        "ngram": "shaking her head emilia",
+        "chunks": 32
+      },
+      {
+        "ngram": "the team is",
+        "chunks": 32
+      },
+      {
+        "ngram": "you you are",
+        "chunks": 32
+      },
+      {
+        "ngram": "a long pause",
+        "chunks": 31
+      },
+      {
+        "ngram": "alina registers the",
+        "chunks": 31
+      },
+      {
+        "ngram": "alina would you",
+        "chunks": 31
+      },
+      {
+        "ngram": "alina would you like",
+        "chunks": 31
+      },
+      {
+        "ngram": "back to the",
+        "chunks": 31
+      },
+      {
+        "ngram": "bougie mall high",
+        "chunks": 31
+      },
+      {
+        "ngram": "bougie mall high end",
+        "chunks": 31
+      },
+      {
+        "ngram": "bougie mall high end fashion",
+        "chunks": 31
+      },
+      {
+        "ngram": "do you want",
+        "chunks": 31
+      },
+      {
+        "ngram": "don't know if",
+        "chunks": 31
+      },
+      {
+        "ngram": "mall high end",
+        "chunks": 31
+      },
+      {
+        "ngram": "mall high end fashion",
+        "chunks": 31
+      },
+      {
+        "ngram": "mall high end fashion district",
+        "chunks": 31
+      },
+      {
+        "ngram": "on the screen",
+        "chunks": 31
+      },
+      {
+        "ngram": "pause then softer",
+        "chunks": 31
+      },
+      {
+        "ngram": "tilt your head",
+        "chunks": 31
+      },
+      {
+        "ngram": "what the hell",
+        "chunks": 31
+      },
+      {
+        "ngram": "you tilt your",
+        "chunks": 31
+      },
+      {
+        "ngram": "you tilt your head",
+        "chunks": 31
+      },
+      {
+        "ngram": "a pause then you",
+        "chunks": 30
+      },
+      {
+        "ngram": "aboard the ghost bridge alina",
+        "chunks": 30
+      },
+      {
+        "ngram": "below deck secure",
+        "chunks": 30
+      },
+      {
+        "ngram": "below deck secure research",
+        "chunks": 30
+      },
+      {
+        "ngram": "below deck secure research bay",
+        "chunks": 30
+      },
+      {
+        "ngram": "deck secure research",
+        "chunks": 30
+      },
+      {
+        "ngram": "deck secure research bay",
+        "chunks": 30
+      },
+      {
+        "ngram": "deck secure research bay objective",
+        "chunks": 30
+      },
+      {
+        "ngram": "ghost below deck",
+        "chunks": 30
+      },
+      {
+        "ngram": "ghost below deck secure",
+        "chunks": 30
+      },
+      {
+        "ngram": "ghost below deck secure research",
+        "chunks": 30
+      },
+      {
+        "ngram": "ghost bridge alina",
+        "chunks": 30
+      },
+      {
+        "ngram": "location mothership rig",
+        "chunks": 30
+      },
+      {
+        "ngram": "location the ghost below",
+        "chunks": 30
+      },
+      {
+        "ngram": "location the ghost below deck",
+        "chunks": 30
+      },
+      {
+        "ngram": "the ghost below",
+        "chunks": 30
+      },
+      {
+        "ngram": "the ghost below deck",
+        "chunks": 30
+      },
+      {
+        "ngram": "the ghost below deck secure",
+        "chunks": 30
+      },
+      {
+        "ngram": "the ghost bridge alina",
+        "chunks": 30
+      },
+      {
+        "ngram": "the hum of the",
+        "chunks": 30
+      },
+      {
+        "ngram": "what comes next",
+        "chunks": 30
+      },
+      {
+        "ngram": "alina logs the",
+        "chunks": 29
+      },
+      {
+        "ngram": "alina's voice filters",
+        "chunks": 29
+      },
+      {
+        "ngram": "and that means",
+        "chunks": 29
+      },
+      {
+        "ngram": "and then you",
+        "chunks": 29
+      },
+      {
+        "ngram": "because this this",
+        "chunks": 29
+      },
+      {
+        "ngram": "exhales through her",
+        "chunks": 29
+      },
+      {
+        "ngram": "exhales through her nose",
+        "chunks": 29
+      },
+      {
+        "ngram": "his voice is",
+        "chunks": 29
+      },
+      {
+        "ngram": "pause then as",
+        "chunks": 29
+      },
+      {
+        "ngram": "the edge of",
+        "chunks": 29
+      },
+      {
+        "ngram": "the rest of",
+        "chunks": 29
+      },
+      {
+        "ngram": "a pause then softer",
+        "chunks": 28
+      },
+      {
+        "ngram": "alina executing voice",
+        "chunks": 28
+      },
+      {
+        "ngram": "atlantic ridge bridge",
+        "chunks": 28
+      },
+      {
+        "ngram": "do you do next",
+        "chunks": 28
+      },
+      {
+        "ngram": "emilia tilts her",
+        "chunks": 28
+      },
+      {
+        "ngram": "emilia tilts her head",
+        "chunks": 28
+      },
+      {
+        "ngram": "ghost north atlantic ridge bridge",
+        "chunks": 28
+      },
+      {
+        "ngram": "lets out a slow",
+        "chunks": 28
+      },
+      {
+        "ngram": "north atlantic ridge bridge",
+        "chunks": 28
+      },
+      {
+        "ngram": "pause then as if",
+        "chunks": 28
+      },
+      {
+        "ngram": "team reacts nyati",
+        "chunks": 28
+      },
+      {
+        "ngram": "the team reacts nyati",
+        "chunks": 28
+      },
+      {
+        "ngram": "then after a",
+        "chunks": 28
+      },
+      {
+        "ngram": "then with a",
+        "chunks": 28
+      },
+      {
+        "ngram": "what do you do next",
+        "chunks": 28
+      },
+      {
+        "ngram": "and for now",
+        "chunks": 27
+      },
+      {
+        "ngram": "and then a",
+        "chunks": 27
+      },
+      {
+        "ngram": "for a long moment",
+        "chunks": 27
+      },
+      {
+        "ngram": "her head slightly watching",
+        "chunks": 27
+      },
+      {
+        "ngram": "sam does not",
+        "chunks": 27
+      },
+      {
+        "ngram": "she doesn't say",
+        "chunks": 27
+      },
+      {
+        "ngram": "the kind of",
+        "chunks": 27
+      },
+      {
+        "ngram": "the real question",
+        "chunks": 27
+      },
+      {
+        "ngram": "tilting her head slightly",
+        "chunks": 27
+      },
+      {
+        "ngram": "under his breath",
+        "chunks": 27
+      },
+      {
+        "ngram": "what to do",
+        "chunks": 27
+      },
+      {
+        "ngram": "you don't know",
+        "chunks": 27
+      },
+      {
+        "ngram": "a long silence",
+        "chunks": 26
+      },
+      {
+        "ngram": "aboard the ghost bridge emilia",
+        "chunks": 26
+      },
+      {
+        "ngram": "aboard the ghost private",
+        "chunks": 26
+      },
+      {
+        "ngram": "aboard the ghost private quarters",
+        "chunks": 26
+      },
+      {
+        "ngram": "and now now you",
+        "chunks": 26
+      },
+      {
+        "ngram": "away from the",
+        "chunks": 26
+      },
+      {
+        "ngram": "district dressing room",
+        "chunks": 26
+      },
+      {
+        "ngram": "district dressing room zone",
+        "chunks": 26
+      },
+      {
+        "ngram": "does alex do",
+        "chunks": 26
+      },
+      {
+        "ngram": "dressing room zone",
+        "chunks": 26
+      },
+      {
+        "ngram": "emilia watches you",
+        "chunks": 26
+      },
+      {
+        "ngram": "end fashion district dressing",
+        "chunks": 26
+      },
+      {
+        "ngram": "end fashion district dressing room",
+        "chunks": 26
+      },
+      {
+        "ngram": "fashion district dressing",
+        "chunks": 26
+      },
+      {
+        "ngram": "fashion district dressing room",
+        "chunks": 26
+      },
+      {
+        "ngram": "fashion district dressing room zone",
+        "chunks": 26
+      },
+      {
+        "ngram": "ghost bridge emilia",
+        "chunks": 26
+      },
+      {
+        "ngram": "ghost private quarters",
+        "chunks": 26
+      },
+      {
+        "ngram": "high end fashion district dressing",
+        "chunks": 26
+      },
+      {
+        "ngram": "i do not",
+        "chunks": 26
+      },
+      {
+        "ngram": "in the dark",
+        "chunks": 26
+      },
+      {
+        "ngram": "move how do",
+        "chunks": 26
+      },
+      {
+        "ngram": "move how do you",
+        "chunks": 26
+      },
+      {
+        "ngram": "or does she",
+        "chunks": 26
+      },
+      {
+        "ngram": "pete raises an",
+        "chunks": 26
+      },
+      {
+        "ngram": "pete raises an eyebrow",
+        "chunks": 26
+      },
+      {
+        "ngram": "something else something",
+        "chunks": 26
+      },
+      {
+        "ngram": "the ghost bridge emilia",
+        "chunks": 26
+      },
+      {
+        "ngram": "the ghost private",
+        "chunks": 26
+      },
+      {
+        "ngram": "the ghost private quarters",
+        "chunks": 26
+      },
+      {
+        "ngram": "the way she",
+        "chunks": 26
+      },
+      {
+        "ngram": "then a slow",
+        "chunks": 26
+      },
+      {
+        "ngram": "unknown trench region",
+        "chunks": 26
+      },
+      {
+        "ngram": "what does alex do",
+        "chunks": 26
+      },
+      {
+        "ngram": "your next move",
+        "chunks": 26
+      },
+      {
+        "ngram": "aboard the ghost galley you",
+        "chunks": 25
+      },
+      {
+        "ngram": "after a long",
+        "chunks": 25
+      },
+      {
+        "ngram": "alex corpo snake cold",
+        "chunks": 25
+      },
+      {
+        "ngram": "and you you are",
+        "chunks": 25
+      },
+      {
+        "ngram": "because she is",
+        "chunks": 25
+      },
+      {
+        "ngram": "but it is",
+        "chunks": 25
+      },
+      {
+        "ngram": "corpo snake cold",
+        "chunks": 25
+      },
+      {
+        "ngram": "do you respond",
+        "chunks": 25
+      },
+      {
+        "ngram": "emilia emilia is",
+        "chunks": 25
+      },
+      {
+        "ngram": "ghost galley you",
+        "chunks": 25
+      },
+      {
+        "ngram": "how do you respond",
+        "chunks": 25
+      },
+      {
+        "ngram": "if you want",
+        "chunks": 25
+      },
+      {
+        "ngram": "knows exactly what",
+        "chunks": 25
+      },
+      {
+        "ngram": "out of the",
+        "chunks": 25
+      },
+      {
+        "ngram": "the bridge of",
+        "chunks": 25
+      },
+      {
+        "ngram": "the ghost galley you",
+        "chunks": 25
+      },
+      {
+        "ngram": "to be a",
+        "chunks": 25
+      },
+      {
+        "ngram": "what does she",
+        "chunks": 25
+      },
+      {
+        "ngram": "and emilia she",
+        "chunks": 24
+      },
+      {
+        "ngram": "and so you",
+        "chunks": 24
+      },
+      {
+        "ngram": "and that that's",
+        "chunks": 24
+      },
+      {
+        "ngram": "because this this is",
+        "chunks": 24
+      },
+      {
+        "ngram": "bridge of her",
+        "chunks": 24
+      },
+      {
+        "ngram": "bridge of her nose",
+        "chunks": 24
+      },
+      {
+        "ngram": "encoding surveyor transmission",
+        "chunks": 24
+      },
+      {
+        "ngram": "in her tone",
+        "chunks": 24
+      },
+      {
+        "ngram": "led eyes flicker",
+        "chunks": 24
+      },
+      {
+        "ngram": "narrows her eyes",
+        "chunks": 24
+      },
+      {
+        "ngram": "of her nose",
+        "chunks": 24
+      },
+      {
+        "ngram": "shaking her head slightly",
+        "chunks": 24
+      },
+      {
+        "ngram": "that is the",
+        "chunks": 24
+      },
+      {
+        "ngram": "that means something",
+        "chunks": 24
+      },
+      {
+        "ngram": "the bridge of her",
+        "chunks": 24
+      },
+      {
+        "ngram": "the bridge of her nose",
+        "chunks": 24
+      },
+      {
+        "ngram": "the characters resolve",
+        "chunks": 24
+      },
+      {
+        "ngram": "then a small",
+        "chunks": 24
+      },
+      {
+        "ngram": "tilts her head slightly watching",
+        "chunks": 24
+      },
+      {
+        "ngram": "to see what",
+        "chunks": 24
+      },
+      {
+        "ngram": "voice is quiet",
+        "chunks": 24
+      },
+      {
+        "ngram": "want to be",
+        "chunks": 24
+      },
+      {
+        "ngram": "a long time",
+        "chunks": 23
+      },
+      {
+        "ngram": "a slow sip",
+        "chunks": 23
+      },
+      {
+        "ngram": "a way to",
+        "chunks": 23
+      },
+      {
+        "ngram": "and you don't",
+        "chunks": 23
+      },
+      {
+        "ngram": "ghost submarine operations sam's",
+        "chunks": 23
+      },
+      {
+        "ngram": "half a second",
+        "chunks": 23
+      },
+      {
+        "ngram": "is going to",
+        "chunks": 23
+      },
+      {
+        "ngram": "just for a",
+        "chunks": 23
+      },
+      {
+        "ngram": "looking at you",
+        "chunks": 23
+      },
+      {
+        "ngram": "next move how",
+        "chunks": 23
+      },
+      {
+        "ngram": "next move how do",
+        "chunks": 23
+      },
+      {
+        "ngram": "next move how do you",
+        "chunks": 23
+      },
+      {
+        "ngram": "of her drink",
+        "chunks": 23
+      },
+      {
+        "ngram": "of the bridge",
+        "chunks": 23
+      },
+      {
+        "ngram": "pete leans forward",
+        "chunks": 23
+      },
+      {
+        "ngram": "point with sam",
+        "chunks": 23
+      },
+      {
+        "ngram": "region rendezvous point",
+        "chunks": 23
+      },
+      {
+        "ngram": "region rendezvous point with",
+        "chunks": 23
+      },
+      {
+        "ngram": "region rendezvous point with sam",
+        "chunks": 23
+      },
+      {
+        "ngram": "rendezvous point with",
+        "chunks": 23
+      },
+      {
+        "ngram": "rendezvous point with sam",
+        "chunks": 23
+      },
+      {
+        "ngram": "shakes his head",
+        "chunks": 23
+      },
+      {
+        "ngram": "she leans back",
+        "chunks": 23
+      },
+      {
+        "ngram": "sip of her",
+        "chunks": 23
+      },
+      {
+        "ngram": "slow sip of",
+        "chunks": 23
+      },
+      {
+        "ngram": "staring at the screen",
+        "chunks": 23
+      },
+      {
+        "ngram": "submarine operations sam's",
+        "chunks": 23
+      },
+      {
+        "ngram": "that is enough",
+        "chunks": 23
+      },
+      {
+        "ngram": "the ghost is",
+        "chunks": 23
+      },
+      {
+        "ngram": "the ghost submarine operations sam's",
+        "chunks": 23
+      },
+      {
+        "ngram": "trench region rendezvous",
+        "chunks": 23
+      },
+      {
+        "ngram": "trench region rendezvous point",
+        "chunks": 23
+      },
+      {
+        "ngram": "trench region rendezvous point with",
+        "chunks": 23
+      },
+      {
+        "ngram": "unknown trench region rendezvous",
+        "chunks": 23
+      },
+      {
+        "ngram": "unknown trench region rendezvous point",
+        "chunks": 23
+      },
+      {
+        "ngram": "voice is steady",
+        "chunks": 23
+      },
+      {
+        "ngram": "we don't know",
+        "chunks": 23
+      },
+      {
+        "ngram": "who has been",
+        "chunks": 23
+      },
+      {
+        "ngram": "without looking at",
+        "chunks": 23
+      },
+      {
+        "ngram": "you don't need",
+        "chunks": 23
+      },
+      {
+        "ngram": "aboard the ghost alex's",
+        "chunks": 22
+      },
+      {
+        "ngram": "aboard the ghost alex's quarters",
+        "chunks": 22
+      },
+      {
+        "ngram": "aboard the ghost bridge you",
+        "chunks": 22
+      },
+      {
+        "ngram": "back to alex",
+        "chunks": 22
+      },
+      {
+        "ngram": "but you you",
+        "chunks": 22
+      },
+      {
+        "ngram": "corpo snake a",
+        "chunks": 22
+      },
+      {
+        "ngram": "for half a",
+        "chunks": 22
+      },
+      {
+        "ngram": "for half a second",
+        "chunks": 22
+      },
+      {
+        "ngram": "ghost alex's quarters",
+        "chunks": 22
+      },
+      {
+        "ngram": "ghost bridge you",
+        "chunks": 22
+      },
+      {
+        "ngram": "glancing at alex",
+        "chunks": 22
+      },
+      {
+        "ngram": "is no longer",
+        "chunks": 22
+      },
+      {
+        "ngram": "let the moment",
+        "chunks": 22
+      },
+      {
+        "ngram": "let's see what",
+        "chunks": 22
+      },
+      {
+        "ngram": "need to be",
+        "chunks": 22
+      },
+      {
+        "ngram": "now it is",
+        "chunks": 22
+      },
+      {
+        "ngram": "now you are",
+        "chunks": 22
+      },
+      {
+        "ngram": "on the table",
+        "chunks": 22
+      },
+      {
+        "ngram": "or at least",
+        "chunks": 22
+      },
+      {
+        "ngram": "out a slow breath",
+        "chunks": 22
+      },
+      {
+        "ngram": "rest of the",
+        "chunks": 22
+      },
+      {
+        "ngram": "the ghost alex's",
+        "chunks": 22
+      },
+      {
+        "ngram": "the ghost alex's quarters",
+        "chunks": 22
+      },
+      {
+        "ngram": "the ghost bridge you",
+        "chunks": 22
+      },
+      {
+        "ngram": "the rest of the",
+        "chunks": 22
+      },
+      {
+        "ngram": "the room is",
+        "chunks": 22
+      },
+      {
+        "ngram": "then her voice",
+        "chunks": 22
+      },
+      {
+        "ngram": "then tilting her",
+        "chunks": 22
+      },
+      {
+        "ngram": "then tilting her head",
+        "chunks": 22
+      },
+      {
+        "ngram": "then without looking",
+        "chunks": 22
+      },
+      {
+        "ngram": "there is a",
+        "chunks": 22
+      },
+      {
+        "ngram": "tilts his head",
+        "chunks": 22
+      },
+      {
+        "ngram": "to do with",
+        "chunks": 22
+      },
+      {
+        "ngram": "a brief pause",
+        "chunks": 21
+      },
+      {
+        "ngram": "a flicker of",
+        "chunks": 21
+      },
+      {
+        "ngram": "aboard the ghost bridge pete",
+        "chunks": 21
+      },
+      {
+        "ngram": "alina does not",
+        "chunks": 21
+      },
+      {
+        "ngram": "alina's led eyes",
+        "chunks": 21
+      },
+      {
+        "ngram": "as if this",
+        "chunks": 21
+      },
+      {
+        "ngram": "atlantic ridge secure",
+        "chunks": 21
+      },
+      {
+        "ngram": "atlantic ridge secure research",
+        "chunks": 21
+      },
+      {
+        "ngram": "atlantic ridge secure research bay",
+        "chunks": 21
+      },
+      {
+        "ngram": "back into the",
+        "chunks": 21
+      },
+      {
+        "ngram": "beach karaoke bar",
+        "chunks": 21
+      },
+      {
+        "ngram": "because you are",
+        "chunks": 21
+      },
+      {
+        "ngram": "characters resolve alina",
+        "chunks": 21
+      },
+      {
+        "ngram": "does that mean",
+        "chunks": 21
+      },
+      {
+        "ngram": "for a while",
+        "chunks": 21
+      },
+      {
+        "ngram": "ghost bridge pete",
+        "chunks": 21
+      },
+      {
+        "ngram": "ghost north atlantic ridge secure",
+        "chunks": 21
+      },
+      {
+        "ngram": "if this thing",
+        "chunks": 21
+      },
+      {
+        "ngram": "in front of",
+        "chunks": 21
+      },
+      {
+        "ngram": "it's not a",
+        "chunks": 21
+      },
+      {
+        "ngram": "it's time to",
+        "chunks": 21
+      },
+      {
+        "ngram": "leaning against the",
+        "chunks": 21
+      },
+      {
+        "ngram": "leans against the",
+        "chunks": 21
+      },
+      {
+        "ngram": "north atlantic ridge secure",
+        "chunks": 21
+      },
+      {
+        "ngram": "north atlantic ridge secure research",
+        "chunks": 21
+      },
+      {
+        "ngram": "now you have",
+        "chunks": 21
+      },
+      {
+        "ngram": "ridge secure research",
+        "chunks": 21
+      },
+      {
+        "ngram": "ridge secure research bay",
+        "chunks": 21
+      },
+      {
+        "ngram": "sip of her drink",
+        "chunks": 21
+      },
+      {
+        "ngram": "the characters resolve alina",
+        "chunks": 21
+      },
+      {
+        "ngram": "the ghost bridge pete",
+        "chunks": 21
+      },
+      {
+        "ngram": "to know what",
+        "chunks": 21
+      },
+      {
+        "ngram": "virginia beach karaoke",
+        "chunks": 21
+      },
+      {
+        "ngram": "virginia beach karaoke bar",
+        "chunks": 21
+      },
+      {
+        "ngram": "want to know",
+        "chunks": 21
+      },
+      {
+        "ngram": "where do you",
+        "chunks": 21
+      },
+      {
+        "ngram": "you glance at",
+        "chunks": 21
+      },
+      {
+        "ngram": "you lean back",
+        "chunks": 21
+      },
+      {
+        "ngram": "a fraction of",
+        "chunks": 20
+      },
+      {
+        "ngram": "a little longer",
+        "chunks": 20
+      },
+      {
+        "ngram": "a little too",
+        "chunks": 20
+      },
+      {
+        "ngram": "a moment of",
+        "chunks": 20
+      },
+      {
+        "ngram": "alright let's see",
+        "chunks": 20
+      },
+      {
+        "ngram": "and emilia emilia is",
+        "chunks": 20
+      },
+      {
+        "ngram": "but there's something",
+        "chunks": 20
+      },
+      {
+        "ngram": "doesn't pull away",
+        "chunks": 20
+      },
+      {
+        "ngram": "don't need to",
+        "chunks": 20
+      },
+      {
+        "ngram": "emilia tilts her head slightly",
+        "chunks": 20
+      },
+      {
+        "ngram": "ghost coastal drift",
+        "chunks": 20
+      },
+      {
+        "ngram": "glances at you",
+        "chunks": 20
+      },
+      {
+        "ngram": "her fingers tighten",
+        "chunks": 20
+      },
+      {
+        "ngram": "i need to",
+        "chunks": 20
+      },
+      {
+        "ngram": "in the way",
+        "chunks": 20
+      },
+      {
+        "ngram": "isn't just a",
+        "chunks": 20
+      },
+      {
+        "ngram": "just like that",
+        "chunks": 20
+      },
+      {
+        "ngram": "leans back slightly",
+        "chunks": 20
+      },
+      {
+        "ngram": "needs to be",
+        "chunks": 20
+      },
+      {
+        "ngram": "no hesitation no",
+        "chunks": 20
+      },
+      {
+        "ngram": "of the ghost's",
+        "chunks": 20
+      },
+      {
+        "ngram": "on the console",
+        "chunks": 20
+      },
+      {
+        "ngram": "pete is still",
+        "chunks": 20
+      },
+      {
+        "ngram": "ridge secure research bay objective",
+        "chunks": 20
+      },
+      {
+        "ngram": "send this exactly",
+        "chunks": 20
+      },
+      {
+        "ngram": "the ghost coastal",
+        "chunks": 20
+      },
+      {
+        "ngram": "the ghost coastal drift",
+        "chunks": 20
+      },
+      {
+        "ngram": "the ghost inside",
+        "chunks": 20
+      },
+      {
+        "ngram": "the next step",
+        "chunks": 20
+      },
+      {
+        "ngram": "the weight of it",
+        "chunks": 20
+      },
+      {
+        "ngram": "this is going",
+        "chunks": 20
+      },
+      {
+        "ngram": "to the bridge",
+        "chunks": 20
+      },
+      {
+        "ngram": "we have to",
+        "chunks": 20
+      },
+      {
+        "ngram": "weight of it",
+        "chunks": 20
+      },
+      {
+        "ngram": "what happens if",
+        "chunks": 20
+      },
+      {
+        "ngram": "what kind of",
+        "chunks": 20
+      },
+      {
+        "ngram": "you have to",
+        "chunks": 20
+      },
+      {
+        "ngram": "you keep going",
+        "chunks": 20
+      }
+    ],
+    "choices": {
+      "status": "available",
+      "sources": {
+        "legacy_numbered_lines_heuristic": 828
+      },
+      "menus": 828,
+      "chunks_without_menu": 597,
+      "count_distribution": {
+        "2": 17,
+        "3": 424,
+        "4": 383,
+        "5": 3,
+        "6": 1
+      },
+      "mean_count": 3.4528985507246377,
+      "total": 2859,
+      "first_verb_mix": {
+        "a": 35,
+        "abandon": 1,
+        "abduct": 1,
+        "abort": 5,
+        "accept": 6,
+        "access": 1,
+        "acknowledge": 14,
+        "active": 1,
+        "actually": 1,
+        "address": 1,
+        "addresses": 1,
+        "adjust": 1,
+        "admit": 1,
+        "agree": 2,
+        "ai": 1,
+        "alex": 3,
+        "alina": 9,
+        "alina's": 1,
+        "alright": 1,
+        "alter": 2,
+        "am": 1,
+        "an": 5,
+        "analyze": 10,
+        "and": 3,
+        "announce": 1,
+        "answer": 5,
+        "any": 1,
+        "approach": 3,
+        "approve": 4,
+        "are": 7,
+        "ascend": 3,
+        "ascension": 1,
+        "ask": 109,
+        "assign": 1,
+        "assist": 4,
+        "attempt": 15,
+        "await": 1,
+        "back": 5,
+        "backpedal": 1,
+        "badge": 1,
+        "bait": 4,
+        "based": 1,
+        "be": 10,
+        "before": 1,
+        "begin": 8,
+        "black": 4,
+        "blackmail": 1,
+        "blend": 2,
+        "block": 1,
+        "boiler": 1,
+        "book": 1,
+        "boot": 2,
+        "breach": 1,
+        "break": 16,
+        "breathe": 2,
+        "bribe": 1,
+        "bridge": 1,
+        "bring": 5,
+        "brush": 3,
+        "brute": 2,
+        "bug": 1,
+        "burn": 1,
+        "but": 1,
+        "buy": 3,
+        "by": 1,
+        "bypass": 2,
+        "calculated": 1,
+        "call": 16,
+        "can": 1,
+        "case": 1,
+        "casual": 1,
+        "casually": 2,
+        "catch": 2,
+        "cautious": 1,
+        "celebrate": 1,
+        "challenge": 23,
+        "challenging": 1,
+        "change": 9,
+        "check": 55,
+        "cheer": 1,
+        "clarify": 3,
+        "close": 3,
+        "coastal": 1,
+        "coerce": 1,
+        "cognitive": 1,
+        "cold": 2,
+        "command": 1,
+        "compromise": 1,
+        "conditionally": 1,
+        "conduct": 2,
+        "confirm": 8,
+        "confront": 3,
+        "consolidate": 1,
+        "consult": 2,
+        "contact": 9,
+        "contained": 1,
+        "continue": 6,
+        "controlled": 2,
+        "corpo": 1,
+        "corporate": 4,
+        "corrupt": 1,
+        "corrupted": 1,
+        "could": 1,
+        "count": 1,
+        "counter": 3,
+        "crack": 1,
+        "craft": 1,
+        "create": 1,
+        "cross": 7,
+        "culinary": 1,
+        "custom": 1,
+        "cut": 8,
+        "cutting": 1,
+        "cyberclinic": 1,
+        "cyberpet": 1,
+        "cyberpunk": 1,
+        "cybersecurity": 1,
+        "cyberware": 1,
+        "data": 2,
+        "debrief": 11,
+        "decide": 6,
+        "decipher": 2,
+        "declare": 1,
+        "decline": 3,
+        "decode": 2,
+        "decrypt": 6,
+        "deep": 3,
+        "deepen": 2,
+        "deeper": 1,
+        "defectors": 1,
+        "defer": 1,
+        "define": 5,
+        "deflect": 8,
+        "delay": 4,
+        "deletion": 1,
+        "demand": 4,
+        "deny": 3,
+        "depart": 2,
+        "deploy": 7,
+        "descend": 1,
+        "describe": 3,
+        "desert": 1,
+        "designer": 1,
+        "destroy": 7,
+        "determine": 2,
+        "detour": 1,
+        "did": 2,
+        "dig": 11,
+        "direct": 3,
+        "directed": 1,
+        "directly": 3,
+        "disconnect": 2,
+        "discuss": 4,
+        "disrupt": 1,
+        "dissect": 1,
+        "dive": 1,
+        "do": 11,
+        "dock": 1,
+        "does": 3,
+        "double": 7,
+        "dramatically": 1,
+        "draw": 2,
+        "dreams": 1,
+        "drone": 1,
+        "drop": 8,
+        "duet": 1,
+        "ease": 5,
+        "echo": 1,
+        "eject": 1,
+        "elaborate": 1,
+        "eliminate": 1,
+        "emergency": 1,
+        "emilia": 6,
+        "enables": 1,
+        "encrypt": 1,
+        "end": 5,
+        "engage": 12,
+        "enough": 1,
+        "erase": 1,
+        "escalate": 3,
+        "establish": 1,
+        "evolution": 1,
+        "ex": 1,
+        "examine": 2,
+        "excavate": 2,
+        "executive": 1,
+        "exfiltrate": 2,
+        "exhale": 4,
+        "expand": 2,
+        "experiment": 1,
+        "experimental": 1,
+        "explain": 2,
+        "explore": 1,
+        "expose": 2,
+        "external": 1,
+        "extract": 7,
+        "fake": 4,
+        "fashion": 1,
+        "feed": 3,
+        "feign": 5,
+        "figure": 6,
+        "final": 1,
+        "finalize": 1,
+        "find": 30,
+        "finish": 1,
+        "first": 1,
+        "focus": 10,
+        "follow": 8,
+        "force": 3,
+        "forget": 2,
+        "formal": 1,
+        "forward": 1,
+        "frame": 2,
+        "full": 6,
+        "future": 1,
+        "gather": 2,
+        "gauge": 2,
+        "gear": 3,
+        "get": 14,
+        "ghost": 1,
+        "give": 20,
+        "glance": 5,
+        "go": 44,
+        "good": 1,
+        "gradually": 1,
+        "grease": 1,
+        "greet": 1,
+        "grow": 1,
+        "gut": 2,
+        "hack": 7,
+        "halcyon's": 1,
+        "hang": 2,
+        "has": 2,
+        "have": 15,
+        "he": 5,
+        "he's": 1,
+        "head": 7,
+        "help": 2,
+        "here": 1,
+        "hesitate": 2,
+        "high": 3,
+        "hijack": 2,
+        "hint": 1,
+        "historical": 1,
+        "hit": 3,
+        "hold": 28,
+        "honor": 1,
+        "how": 6,
+        "hybrid": 2,
+        "hyper": 1,
+        "i": 40,
+        "i'm": 4,
+        "identify": 4,
+        "identity": 1,
+        "if": 8,
+        "ignore": 5,
+        "immediately": 3,
+        "incorporates": 1,
+        "increase": 1,
+        "increased": 1,
+        "infiltrate": 1,
+        "inject": 1,
+        "inside": 1,
+        "install": 1,
+        "instinctive": 1,
+        "integrate": 1,
+        "integration": 1,
+        "intercept": 8,
+        "interrogate": 19,
+        "interrupt": 2,
+        "intervene": 1,
+        "introduce": 4,
+        "investigate": 11,
+        "is": 7,
+        "isolate": 3,
+        "it": 11,
+        "it's": 5,
+        "join": 1,
+        "jump": 1,
+        "juno": 1,
+        "just": 11,
+        "keep": 36,
+        "kickstart": 2,
+        "kill": 1,
+        "lansky's": 1,
+        "last": 1,
+        "launch": 1,
+        "lay": 5,
+        "leak": 2,
+        "lean": 7,
+        "leaning": 1,
+        "leave": 9,
+        "left": 1,
+        "legit": 1,
+        "let": 73,
+        "let's": 2,
+        "lie": 1,
+        "lighten": 1,
+        "linger": 1,
+        "listen": 1,
+        "live": 1,
+        "lock": 5,
+        "look": 19,
+        "loop": 1,
+        "lower": 1,
+        "loyalty": 1,
+        "lucid": 1,
+        "maintain": 4,
+        "make": 12,
+        "manually": 1,
+        "mark": 2,
+        "match": 5,
+        "mathematical": 1,
+        "maybe": 3,
+        "meet": 3,
+        "memory": 2,
+        "mentally": 1,
+        "mentorship": 1,
+        "mimic": 2,
+        "minimal": 1,
+        "mirrormind": 1,
+        "modify": 9,
+        "monitor": 1,
+        "mouth": 1,
+        "move": 15,
+        "multi": 1,
+        "near": 2,
+        "nebula": 1,
+        "new": 2,
+        "nexus": 3,
+        "no": 13,
+        "noctis": 1,
+        "nomad": 2,
+        "not": 7,
+        "noted": 1,
+        "now": 4,
+        "nyati": 5,
+        "obey": 1,
+        "observe": 2,
+        "of": 1,
+        "off": 1,
+        "offer": 7,
+        "oh": 1,
+        "okay": 3,
+        "old": 1,
+        "one": 4,
+        "only": 1,
+        "open": 6,
+        "optical": 1,
+        "order": 2,
+        "out": 1,
+        "overengineered": 1,
+        "override": 2,
+        "oversee": 2,
+        "pass": 1,
+        "passive": 3,
+        "pause": 13,
+        "perform": 2,
+        "persist": 1,
+        "personal": 1,
+        "pete": 4,
+        "petty": 1,
+        "physical": 1,
+        "physically": 2,
+        "pick": 4,
+        "ping": 5,
+        "pivot": 4,
+        "plan": 4,
+        "plant": 2,
+        "play": 8,
+        "pose": 1,
+        "preliminary": 1,
+        "prep": 2,
+        "prepare": 7,
+        "press": 16,
+        "pretend": 1,
+        "probe": 4,
+        "proceed": 15,
+        "promise": 1,
+        "propose": 2,
+        "prototype": 1,
+        "provides": 1,
+        "proxy": 1,
+        "public": 1,
+        "pull": 16,
+        "pure": 1,
+        "purely": 1,
+        "purge": 1,
+        "pursue": 1,
+        "push": 40,
+        "question": 1,
+        "quick": 1,
+        "radiation": 1,
+        "raise": 1,
+        "re": 1,
+        "reach": 11,
+        "read": 2,
+        "realize": 1,
+        "reassess": 2,
+        "reassure": 3,
+        "recon": 1,
+        "recover": 1,
+        "recruit": 1,
+        "redirect": 6,
+        "reel": 1,
+        "reevaluate": 1,
+        "refine": 2,
+        "refining": 1,
+        "reflex": 1,
+        "refocus": 6,
+        "reframe": 3,
+        "refuse": 2,
+        "regroup": 1,
+        "reinforce": 4,
+        "remain": 5,
+        "remove": 1,
+        "repeat": 1,
+        "reply": 1,
+        "report": 1,
+        "reposition": 1,
+        "reprogram": 1,
+        "repurpose": 1,
+        "request": 1,
+        "research": 4,
+        "respect": 1,
+        "respond": 2,
+        "rest": 1,
+        "resume": 1,
+        "retrieve": 2,
+        "return": 8,
+        "reverse": 2,
+        "review": 4,
+        "revisit": 1,
+        "ride": 3,
+        "rip": 1,
+        "rise": 1,
+        "risk": 3,
+        "robotic": 1,
+        "rogue": 1,
+        "rollback": 2,
+        "roof": 2,
+        "roomba": 1,
+        "run": 31,
+        "rushed": 1,
+        "sabotage": 1,
+        "sam": 1,
+        "satellite": 1,
+        "sato's": 1,
+        "say": 120,
+        "scan": 3,
+        "scout": 2,
+        "scouting": 1,
+        "search": 3,
+        "second": 1,
+        "secure": 9,
+        "see": 11,
+        "seek": 1,
+        "self": 1,
+        "send": 26,
+        "server": 1,
+        "service": 1,
+        "set": 10,
+        "she": 3,
+        "shift": 26,
+        "shore": 1,
+        "should": 1,
+        "show": 2,
+        "shut": 4,
+        "signal": 1,
+        "signs": 1,
+        "simulate": 4,
+        "sit": 1,
+        "six's": 1,
+        "skip": 5,
+        "skyfire": 1,
+        "sleek": 1,
+        "slip": 1,
+        "slow": 1,
+        "smile": 1,
+        "smirk": 1,
+        "smuggler": 1,
+        "sneak": 1,
+        "so": 7,
+        "social": 2,
+        "soft": 2,
+        "something": 6,
+        "somewhere": 1,
+        "sovereignty": 1,
+        "speak": 5,
+        "specter": 1,
+        "spend": 1,
+        "spin": 1,
+        "split": 4,
+        "spoof": 2,
+        "sprint": 1,
+        "squeeze": 1,
+        "stabilize": 2,
+        "stage": 3,
+        "stall": 2,
+        "start": 11,
+        "stay": 45,
+        "steady": 2,
+        "steal": 6,
+        "stealth": 2,
+        "steer": 2,
+        "step": 66,
+        "stick": 3,
+        "stock": 1,
+        "stop": 4,
+        "store": 2,
+        "straight": 2,
+        "strategic": 1,
+        "street": 1,
+        "streetwear": 1,
+        "strengthening": 1,
+        "structural": 1,
+        "study": 1,
+        "subdermal": 1,
+        "sublevel": 2,
+        "subtle": 2,
+        "supervise": 1,
+        "surface": 1,
+        "surgically": 1,
+        "surrender": 1,
+        "surveillance": 1,
+        "survivor": 2,
+        "swap": 5,
+        "tactical": 2,
+        "take": 16,
+        "talk": 18,
+        "tap": 1,
+        "tease": 1,
+        "tell": 19,
+        "terminate": 2,
+        "test": 41,
+        "that's": 8,
+        "the": 25,
+        "theatrical": 1,
+        "then": 91,
+        "think": 1,
+        "this": 2,
+        "threaten": 2,
+        "throw": 1,
+        "tiered": 1,
+        "tilt": 3,
+        "time": 2,
+        "to": 3,
+        "too": 3,
+        "touch": 3,
+        "trace": 2,
+        "track": 9,
+        "tracking": 1,
+        "trade": 1,
+        "transfer": 1,
+        "trigger": 3,
+        "truth": 1,
+        "try": 46,
+        "turn": 29,
+        "undercover": 1,
+        "underground": 1,
+        "underwater": 1,
+        "unsettled": 1,
+        "upgrade": 3,
+        "use": 14,
+        "utterly": 1,
+        "very": 1,
+        "vigil": 1,
+        "wait": 14,
+        "wake": 4,
+        "walk": 5,
+        "was": 2,
+        "watch": 2,
+        "we": 21,
+        "we're": 1,
+        "weapons": 1,
+        "weird": 1,
+        "welcome": 1,
+        "what": 49,
+        "what's": 2,
+        "whatever": 1,
+        "when": 1,
+        "where": 3,
+        "which": 1,
+        "who": 14,
+        "why": 5,
+        "withdraw": 8,
+        "withhold": 1,
+        "would": 1,
+        "wraith": 2,
+        "wrap": 2,
+        "yeah": 2,
+        "yes": 15,
+        "you": 26,
+        "you'll": 2,
+        "you're": 2,
+        "you've": 1,
+        "yourself": 1
+      },
+      "speech_act_share": 0.11157747464148303,
+      "change_place_time_company_share": 0.15180132913606156
+    },
+    "selected_turns": {
+      "count": 1388,
+      "words": 46369
+    },
+    "same_setting_streak": {
+      "count": 86,
+      "mean": 14.523255813953488,
+      "sd": 44.969686623113915,
+      "median": 4.5,
+      "max": 387,
+      "missing_place_chunks": 0,
+      "ambiguous_place_chunks": 176
+    },
+    "world_minutes_per_turn": {
+      "count": 1424,
+      "mean": 17.877106741573034,
+      "sd": 181.26344485910792,
+      "median": 4.0,
+      "max": 5285.0,
+      "missing_pairs": 0,
+      "negative_deltas": 0
+    },
+    "words_per_chunk": {
+      "count": 1423,
+      "mean": 236.67252283907237,
+      "sd": 115.75583566092634,
+      "median": 220,
+      "max": 773
+    }
+  }
+}

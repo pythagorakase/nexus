@@ -125,10 +125,6 @@ test_database_suffix = "_test"
 # =============================================================================
 
 [ui]
-# Typewriter reveal speed for incoming narrative chunks (NEXUS IRIS design
-# system specifies 30-50 ms/char).
-typewriter_ms_per_char = 35
-
 # Active NEXUS IRIS theme, persisted across sessions via PATCH /api/settings.
 theme = "veil"
 

@@ -475,15 +475,6 @@
   background: linear-gradient(to right, transparent, var(--border-strong), transparent);
 }
 
-/* Typewriter caret while a chunk is revealing. */
-.type-caret {
-  display: inline-block;
-  width: 0.55em;
-  margin-left: 1px;
-  border-bottom: 2px solid var(--brass);
-  animation: nexus-pulse 0.9s ease-in-out infinite;
-}
-
 /* ─── Choices block ─── */
 .choices {
   margin: 36px auto 0;
@@ -2077,7 +2068,7 @@
   letter-spacing: .08em;
 }
 
-/* ─── 6. Context length + typewriter readouts ─── */
+/* ─── 6. Context length readout ─── */
 .lore-readout {
   display: flex; align-items: baseline; gap: 18px;
   padding: 18px 22px;

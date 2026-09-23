@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reason": "Register the shared relationship provenance and milestone consumer introduced by issue 790",
+  "reason": "Register the shared relationship provenance and milestone consumer for issue 790, the evaluation database-name guard, and the read-only prose metrics operator for issue 765.",
   "unreachable": [
     "ir_eval/db.py",
     "ir_eval/evaluate_query_classifier.py",
@@ -259,6 +259,7 @@
     "scripts/__init__.py",
     "scripts/api_anthropic.py",
     "scripts/api_openai.py",
+    "scripts/database_targets.py",
     "scripts/migrate.py",
     "scripts/new_story_setup.py",
     "scripts/summarize_narrative.py"
